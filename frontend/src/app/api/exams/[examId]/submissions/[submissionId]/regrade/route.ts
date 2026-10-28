@@ -43,7 +43,7 @@ export async function POST(
     })
     if (!submission) return apiNotFound('Submission not found')
 
-    const preflightError = await ensureAiGenerationReady()
+    const preflightError = await ensureAiGenerationReady(session.user.id)
     if (preflightError) return preflightError
 
     const grading = await startGrading(session.user.id, exam, submission.id)

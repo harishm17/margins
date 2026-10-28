@@ -68,7 +68,7 @@ export async function POST(
       return apiNotFound('Topic not found')
     }
 
-    const preflightError = await ensureAiGenerationReady()
+    const preflightError = await ensureAiGenerationReady(session.user.id)
     if (preflightError) {
       return preflightError
     }

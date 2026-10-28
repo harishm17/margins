@@ -58,11 +58,12 @@ export async function POST(
 
     // An attempt that is past its time is submitted as saved, whatever the AI service state:
     // that must not be blocked by a health check. Otherwise check first, so a student who
-    // still has time can retry the submit instead of losing the attempt.
+    // still has time can retry the submit instead of losing the attempt. The daily allowance is
+    // not checked: the answers are saved and the student grades again after it resets.
     const now = new Date()
     const late = attempt.deadlineAt ? isExpired(attempt.deadlineAt, now) : false
     if (!late) {
-      const preflightError = await ensureAiGenerationReady()
+      const preflightError = await ensureAiGenerationReady(session.user.id, { checkAllowance: false })
       if (preflightError) return preflightError
     }
 
