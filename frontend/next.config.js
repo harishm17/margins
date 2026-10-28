@@ -37,6 +37,8 @@ const nextConfig = {
         destination: 'https://studymargins.com/:path*',
         permanent: true,
       },
+      // Sign-in is Google only: one page for new and returning students. The query (?next=) is kept.
+      course('/signup', '/login'),
       course('/dashboard', '/home'),
       // Specific old pages first, then the generic prefix rule.
       tab('materials', 'materials'),
