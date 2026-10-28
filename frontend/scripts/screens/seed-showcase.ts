@@ -16,7 +16,7 @@ import { hashSync } from 'bcryptjs'
  */
 export const SHOWCASE_EMAIL = 'showcase@example.com'
 export const SHOWCASE_PASSWORD = 'showcase-demo-pass'
-const SHOWCASE_NAME = 'Maya Chen'
+const SHOWCASE_NAME = 'Jane Doe'
 const COURSE_NAME = 'CS 161 Algorithms'
 
 type Json = Record<string, any>
