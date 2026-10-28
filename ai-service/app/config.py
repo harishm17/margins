@@ -108,6 +108,9 @@ class Settings(BaseSettings):
     # re-dispatches it is failed with JOB_DISPATCH_FAILED.
     JOB_PENDING_REDISPATCH_SECONDS: float = 120.0
     JOB_MAX_REDISPATCHES: int = 3
+    # Jobs that wait for AI instead of failing (exam grading: the answers are the student's work)
+    # wait at most this long, then fail with the reason they were waiting for.
+    JOB_AI_WAIT_MAX_SECONDS: float = 7 * 24 * 3600.0
     # Most a user's LLM-backed jobs and chat answers may cost per UTC day, from the stored
     # costs. 0 turns the cap off.
     DAILY_LLM_BUDGET_USD: float = 8.00

@@ -836,6 +836,8 @@ async def generate_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     default_error_code="EXAM_GRADING_FAILED",
     stage="grading",
     uses_llm=True,
+    # The answers are the student's work: grading waits for the AI instead of failing.
+    wait_for_ai=True,
 )
 async def grade_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     """Grade an exam submission. The task carries only the submission id."""

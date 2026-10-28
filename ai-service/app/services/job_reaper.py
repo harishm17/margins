@@ -14,6 +14,10 @@ dispatcher's to retry. `lease_until` on it marks when the reaper takes over if n
 it: the reaper dispatches it again then, and after JOB_MAX_REDISPATCHES fails it with its last
 error.
 
+A job waiting for the AI (stage `waiting_for_ai`, see job_runner._defer) is sent again once its
+`lease_until` has passed and the AI status reads available, or, when it waits for the daily
+allowance, once the allowance has reset. Waiting does not count towards JOB_MAX_REDISPATCHES.
+
 On a failed job, `retryable` says whether starting the same work again may help, so a job lost
 to a dead worker or a dispatch that never arrived is retryable: the student can start it again.
 
@@ -26,7 +30,9 @@ from typing import Any, Dict
 
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_query
+from app.services import ai_status
 from app.services.cloud_tasks import JOB_ENDPOINTS, enqueue_job
+from app.services.job_runner import WAITING_FOR_AI
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +138,7 @@ async def reap_expired_jobs() -> Dict[str, int]:
     retry_due = f"""
         status = 'pending'
         AND started_at IS NOT NULL
+        AND stage IS DISTINCT FROM '{WAITING_FOR_AI}'
         AND (lease_until IS NULL OR lease_until < {UTC_NOW})
     """
     retry_failed = await execute_query(
@@ -161,6 +168,30 @@ async def reap_expired_jobs() -> Dict[str, int]:
     )
     retries_redispatched = await _redispatch(retries)
 
+    # Jobs waiting for the AI: sent again once the AI reads available (the status expires after
+    # AI_STATUS_TTL_S, so during a long outage one real call per TTL tests it), or for the
+    # allowance, once it has reset (their lease_until is the reset).
+    ai_available = (await ai_status.get_status()).available
+    waiting = await execute_query(
+        f"""
+        UPDATE processing_jobs
+        SET lease_until = {UTC_NOW} + make_interval(secs => $1::float8)
+        WHERE id IN (
+            SELECT id FROM processing_jobs
+            WHERE status = 'pending'
+              AND stage = '{WAITING_FOR_AI}'
+              AND (lease_until IS NULL OR lease_until < {UTC_NOW})
+              AND (error_code = 'LLM_DAILY_BUDGET' OR $2::boolean)
+            ORDER BY created_at
+            LIMIT 100
+        )
+        RETURNING id, job_type, input_data
+        """,
+        threshold,
+        ai_available,
+    )
+    waiting_redispatched = await _redispatch(waiting)
+
     counts = {
         "failed": len(failed),
         "redispatched": redispatched,
@@ -168,6 +199,7 @@ async def reap_expired_jobs() -> Dict[str, int]:
         "pending_redispatched": pending_redispatched,
         "retry_failed": len(retry_failed),
         "retry_redispatched": retries_redispatched,
+        "waiting_redispatched": waiting_redispatched,
     }
     if any(counts.values()):
         logger.warning("Job reaper: %s", counts)

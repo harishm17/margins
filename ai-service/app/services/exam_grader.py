@@ -10,7 +10,8 @@ import re
 from typing import Any, Dict, List, Optional
 from datetime import UTC, datetime
 
-from app.services.llm.base import LLMMessage
+from app.services.ai_status import PROVIDER_DOWN_CODES, TRANSIENT_CODES
+from app.services.llm.base import LLMError, LLMMessage
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import ShortAnswerGrade
 
@@ -103,10 +104,20 @@ class ExamGrader:
             Dict with grading results and feedback
         """
         semaphore = asyncio.Semaphore(GRADING_CONCURRENCY)
+        # A short answer the model could not reach (AI unavailable, out of credit, overloaded) is
+        # not graded at all: the whole grading fails with that error, so the caller can wait and
+        # grade later instead of storing a 0.
+        unavailable: List[LLMError] = []
 
         async def grade_short(question: Dict, answer: Any) -> Dict:
             async with semaphore:
-                return await self._grade_short_answer(question, str(answer))
+                if unavailable:
+                    return {'points_earned': 0, 'is_correct': False, 'feedback': ''}
+                try:
+                    return await self._grade_short_answer(question, str(answer))
+                except LLMError as error:
+                    unavailable.append(error)
+                    return {'points_earned': 0, 'is_correct': False, 'feedback': ''}
 
         pending: Dict[int, asyncio.Task] = {}
         results: Dict[int, Dict] = {}
@@ -126,6 +137,8 @@ class ExamGrader:
                     pending[idx] = group.create_task(grade_short(question, answer))
                 else:
                     results[idx] = {'points_earned': 0, 'is_correct': False, 'feedback': 'Unknown question type'}
+        if unavailable:
+            raise unavailable[0]
         for idx, task in pending.items():
             results[idx] = task.result()
 
@@ -260,6 +273,17 @@ Key point checks: one entry for each key point above, in the same order, saying 
                 max_tokens=2000,
                 purpose="grade_short_answer",
             )
+        except LLMError as e:
+            if e.code in PROVIDER_DOWN_CODES or e.code in TRANSIENT_CODES:
+                raise
+            logger.error("Error grading short answer: %s", e)
+            return {
+                'points_earned': 0,
+                'is_correct': False,
+                'needs_review': True,
+                'feedback': 'This answer could not be graded automatically, so it scored 0 '
+                            'for now. Try grading the exam again.',
+            }
         except Exception as e:
             logger.error("Error grading short answer: %s", e)
             # No free credit on failure; flag the answer so it can be regraded.

@@ -515,7 +515,7 @@ class TestReaper:
 
         assert counts == {
             "failed": 1, "redispatched": 1, "pending_failed": 0, "pending_redispatched": 0,
-            "retry_failed": 0, "retry_redispatched": 0,
+            "retry_failed": 0, "retry_redispatched": 0, "waiting_redispatched": 0,
         }
         job = await get_job(db, exhausted)
         # Final, but starting the work again may well succeed.

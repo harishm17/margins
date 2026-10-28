@@ -202,6 +202,47 @@ class TestGradeExam:
         assert "questions" not in submission.seen
         assert await db.fetchval("SELECT ai_grading FROM exam_submissions WHERE id = $1", submission.id) is None
 
+    async def test_while_the_ai_is_out_of_credit_grading_waits_and_then_catches_up(
+        self, db, world, submission, monkeypatch
+    ):
+        from app.services.llm.base import LLMCreditError
+
+        state = {"down": True}
+        working = jobs.ExamGrader
+
+        class Grader:
+            async def grade_submission(self, *args, **kwargs):
+                if state["down"]:
+                    raise LLMCreditError("credit balance is too low")
+                return await working().grade_submission(*args, **kwargs)
+
+        monkeypatch.setattr(jobs, "ExamGrader", Grader)
+        job_id = await seed_job(
+            db, world.user_id, "grade_exam", project_id=world.project_id,
+            input_data={"submissionId": submission.id},
+        )
+        payload = JobPayload(jobId=job_id, jobType="grade_exam", data={"submissionId": submission.id})
+
+        result = await jobs.grade_exam_job(payload)
+
+        # Not failed and no score stored: the job waits, and no attempt was used.
+        assert result["status"] == "deferred"
+        job = await get_job(db, job_id)
+        assert (job["status"], job["stage"], job["attempt_count"]) == ("pending", "waiting_for_ai", 0)
+        assert job["error_code"] == "LLM_CREDIT_EXHAUSTED"
+        assert await db.fetchval("SELECT ai_grading FROM exam_submissions WHERE id = $1", submission.id) is None
+
+        # Many more tries during the outage still use no attempts.
+        for _ in range(5):
+            assert (await jobs.grade_exam_job(payload))["status"] == "deferred"
+        assert (await get_job(db, job_id))["attempt_count"] == 0
+
+        state["down"] = False
+        assert (await jobs.grade_exam_job(payload))["status"] == "success"
+        assert (await get_job(db, job_id))["status"] == "completed"
+        graded = await db.fetchval("SELECT ai_grading FROM exam_submissions WHERE id = $1", submission.id)
+        assert json.loads(graded)["overall_score"] == 50
+
     async def test_regrading_replaces_the_learning_signals(self, db, world, submission):
         await self.grade(db, world, submission)
         await self.grade(db, world, submission)

@@ -12,6 +12,11 @@ Every job endpoint is wrapped in `@job_handler`. The wrapper
 5. marks the job completed, or classifies the failure and answers 400 (permanent, do not
    retry) or 5xx (transient, retry).
 
+A job made with `wait_for_ai` (exam grading: the answers are the student's work) does not fail
+while the AI is unavailable or the user's allowance is used: it goes back to `pending` at the
+stage `waiting_for_ai`, without using an attempt, and the reaper sends it again once the AI is
+available (or the allowance has reset). See `_defer`.
+
 A transient failure with attempts left puts the job back to `pending`, keeping the error as its
 last one, so the dispatcher's retry (or the reaper) runs it again and the one-active-job-per-target
 index still covers it. `failed` is final: no worker will run the job again. On a failed job,
@@ -73,6 +78,28 @@ class PermanentJobError(Exception):
 
 class DailyBudgetExceeded(PermanentJobError):
     code = "LLM_DAILY_BUDGET"
+
+
+# The stage of a job that is waiting for the AI (or the allowance) instead of failing.
+WAITING_FOR_AI = "waiting_for_ai"
+# How soon the reaper may look at a job that is waiting for the AI again.
+AI_WAIT_RECHECK_SECONDS = 30.0
+
+
+def waits_for_ai(exc: Exception) -> bool:
+    """Whether this failure means "the AI cannot run now" rather than "this job is broken"."""
+    if isinstance(exc, DailyBudgetExceeded):
+        return True
+    return isinstance(exc, LLMError) and (
+        exc.code in ai_status.PROVIDER_DOWN_CODES or exc.code in ai_status.TRANSIENT_CODES
+    )
+
+
+def _seconds_until_reset() -> float:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    return max(1.0, (ai_status.next_reset_utc(now) - now).total_seconds())
 
 
 @dataclass
@@ -358,6 +385,51 @@ async def _fail(
     return row["status"] if row else None
 
 
+async def _defer(job: JobContext, exc: Exception, usages) -> bool:
+    """Put a job that is waiting for the AI back in pending, giving back the attempt it used.
+
+    The error stays as its reason. `lease_until` is when the reaper may send it again: after the
+    allowance resets for LLM_DAILY_BUDGET; otherwise soon, and the reaper sends it only once the
+    AI status reads available. False (and nothing changes) when the job has already waited
+    JOB_AI_WAIT_MAX_SECONDS: then it fails like any other job.
+    """
+    summary, input_tokens, output_tokens, cost = _usage_columns(usages)
+    await _record_ledger(job, summary, input_tokens, output_tokens, cost)
+    budget = isinstance(exc, DailyBudgetExceeded)
+    wait = _seconds_until_reset() + 60 if budget else AI_WAIT_RECHECK_SECONDS
+    code = exc.code if isinstance(exc, (LLMError, PermanentJobError)) else "LLM_UNAVAILABLE"
+    row = await execute_one(
+        f"""
+        UPDATE processing_jobs
+        SET status = 'pending',
+            stage = '{WAITING_FOR_AI}',
+            attempt_count = attempt_count - 1,
+            error_code = $3,
+            error_message = $4,
+            retryable = TRUE,
+            progress_percent = 0,
+            completed_at = NULL,
+            lease_until = {UTC_NOW} + make_interval(secs => $5),
+            llm_input_tokens = llm_input_tokens + $6,
+            llm_output_tokens = llm_output_tokens + $7,
+            llm_cost_usd = llm_cost_usd + $8
+        WHERE id = $1 AND status = 'processing' AND attempt_count = $2
+          AND created_at > {UTC_NOW} - make_interval(secs => $9)
+        RETURNING id
+        """,
+        job.id,
+        job.attempt,
+        code,
+        str(exc)[:2000],
+        float(wait),
+        input_tokens,
+        output_tokens,
+        cost,
+        float(settings.JOB_AI_WAIT_MAX_SECONDS),
+    )
+    return row is not None
+
+
 Handler = Callable[[JobPayload, JobContext], Awaitable[JobOutcome]]
 
 
@@ -369,12 +441,14 @@ def job_handler(
     stage: Optional[str] = None,
     uses_llm: bool = False,
     lease_seconds: Optional[float] = None,
+    wait_for_ai: bool = False,
 ):
     """Wrap a job handler with claim, lease, usage tracking and failure handling.
 
     `job_type` picks the default lease length. `label` names the job in error messages
     ("Content generation failed: ...").
-    `uses_llm` makes the handler subject to the per-user daily budget.
+    `uses_llm` makes the handler subject to the AI status and the per-user daily budget.
+    `wait_for_ai` makes it wait (see `_defer`) instead of failing when the AI cannot run.
     """
 
     def decorator(handler: Handler):
@@ -405,6 +479,10 @@ def job_handler(
                             await _enforce_ai_ready(job)
                         outcome = await handler(payload, job)
                     except Exception as exc:
+                        if wait_for_ai and waits_for_ai(exc) and await _defer(job, exc, usages):
+                            logger.warning("%s job %s is waiting for the AI: %s", label, job.id, exc)
+                            # 200: nothing for the dispatcher to retry; the reaper sends it later.
+                            return {"status": "deferred", "jobId": job.id, "reason": getattr(exc, "code", None)}
                         logger.error("%s job %s failed: %s", label, job.id, exc)
                         error_code, retryable, status_code = classify_failure(exc, default_error_code)
                         wait = retry_after(exc)
