@@ -3,6 +3,7 @@ calls that are refused while it is down (jobs, chat, voice).
 
 The status lives in the test Postgres (see conftest.py), like the job tests.
 """
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -162,6 +163,52 @@ class TestMarking:
         await ai_status.record_failure(LLMCreditError("credit"))
         await ai_status.record_success()
         assert (await ai_status.get_status()).available
+
+
+class TestRecoveryAlert:
+    async def test_one_alert_when_it_goes_down_and_one_when_it_comes_back_with_how_long(self, db, alerts):
+        await ai_status.record_failure(LLMCreditError("credit"))
+        # It went down 2 h 5 min ago.
+        await db.execute(
+            "UPDATE ai_status SET since = (NOW() AT TIME ZONE 'UTC') - interval '2 hours 5 minutes'"
+        )
+
+        await ai_status.record_success()
+        await ai_status.record_success()
+        await ai_status.wait_for_alerts()
+
+        assert len(alerts) == 2
+        assert "unavailable" in alerts[0][1]
+        assert "available again after 2 h 5 min" in alerts[1][1]
+        assert "LLM_CREDIT_EXHAUSTED" in alerts[1][1]
+
+    async def test_only_the_process_that_makes_the_change_alerts(self, db, alerts):
+        await ai_status.record_failure(LLMCreditError("credit"))
+        await ai_status.wait_for_alerts()
+
+        # Two processes that both last saw it down get a success at the same time.
+        await asyncio.gather(ai_status.record_success(), _other_process_success())
+        await ai_status.wait_for_alerts()
+
+        assert len([text for _, text in alerts if "available again" in text]) == 1
+
+    async def test_no_recovery_alert_without_an_outage(self, db, alerts):
+        ai_status.reset_local_state()
+        await ai_status.record_success()
+        await ai_status.wait_for_alerts()
+        assert alerts == []
+
+    def test_durations_read_plainly(self):
+        assert ai_status.format_duration(40) == "40 s"
+        assert ai_status.format_duration(12 * 60 + 5) == "12 min"
+        assert ai_status.format_duration(3600) == "1 h"
+        assert ai_status.format_duration(2 * 3600 + 5 * 60) == "2 h 5 min"
+
+
+async def _other_process_success():
+    # A second process: its own memory says the AI may be down, so it tries to clear the row too.
+    ai_status._local["state"] = None
+    await ai_status.record_success()
 
 
 class TestObservedProvider:

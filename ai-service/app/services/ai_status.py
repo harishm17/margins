@@ -12,8 +12,9 @@ shared answer in the `ai_status` table (one row, id 'global'; the schema is a Pr
 - An unavailable row older than AI_STATUS_TTL_S counts as unknown, and `get_status` reports
   available: the next real call tests the provider again. There is no paid probe.
 
-The change from available to unavailable is logged and, when OPS_ALERT_WEBHOOK_URL is set, posted
-to that webhook (Discord, Slack or ntfy) once. Writing the row is best effort: a database problem
+The change from available to unavailable, and back, is logged and, when OPS_ALERT_WEBHOOK_URL is
+set, posted to that webhook (Discord, Slack or ntfy) once per change: the row is locked while it is
+changed, so only the process that made the change sends the alert. Writing the row is best effort: a database problem
 here never fails the call it describes.
 """
 import asyncio
@@ -132,14 +133,14 @@ async def record_success() -> None:
         row = await execute_one(
             f"""
             WITH previous AS (
-                SELECT since FROM ai_status WHERE id = 'global' AND state = '{UNAVAILABLE}' FOR UPDATE
+                SELECT since, reason FROM ai_status WHERE id = 'global' AND state = '{UNAVAILABLE}' FOR UPDATE
             )
             UPDATE ai_status
             SET state = '{AVAILABLE}', reason = NULL, detail = NULL,
                 since = {UTC_NOW}, checked_at = {UTC_NOW}
             FROM previous
             WHERE ai_status.id = 'global'
-            RETURNING previous.since AS down_since
+            RETURNING previous.since AS down_since, previous.reason AS down_reason, ai_status.since AS up_since
             """
         )
     except Exception:
@@ -147,7 +148,25 @@ async def record_success() -> None:
         return
     _local["state"] = AVAILABLE
     if row is not None:
-        logger.warning("AI status: available again (unavailable since %s)", _utc(row["down_since"]))
+        down_since, up_since = _utc(row["down_since"]), _utc(row["up_since"])
+        down_for = format_duration((up_since - down_since).total_seconds()) if down_since and up_since else "unknown"
+        logger.warning(
+            "AI status: available again reason_was=%s down_since=%s down_for=%s",
+            row["down_reason"], down_since, down_for,
+        )
+        _alert(f"Margins: AI is available again after {down_for} ({row['down_reason']}).")
+
+
+def format_duration(seconds: float) -> str:
+    """'2 h 5 min', '12 min', '40 s' for the alert."""
+    seconds = max(0, int(seconds))
+    hours, rest = divmod(seconds, 3600)
+    minutes, secs = divmod(rest, 60)
+    if hours:
+        return f"{hours} h {minutes} min" if minutes else f"{hours} h"
+    if minutes:
+        return f"{minutes} min"
+    return f"{secs} s"
 
 
 async def _mark_unavailable(reason: str, detail: str) -> None:
