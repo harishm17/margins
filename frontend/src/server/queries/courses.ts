@@ -210,6 +210,7 @@ export const getCourseShell = cache(async (userId: string, courseId: string): Pr
 
 export type NavTopic = { id: string; name: string; mastery: number | null; unitId: string | null }
 export type NavUnit = { id: string; title: string; weekLabel: string | null; orderIndex: number }
+export type NavFile = { id: string; filename: string }
 
 export type NavCourse = {
   id: string
@@ -225,6 +226,8 @@ export type NavCourse = {
   /** In course order; empty for a flat course. */
   units: NavUnit[]
   topics: NavTopic[]
+  /** The course's files, newest first, so search finds a file by its name. */
+  files: NavFile[]
 }
 
 /**
@@ -246,6 +249,10 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
       units: {
         orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
         select: { id: true, title: true, weekLabel: true, orderIndex: true },
+      },
+      materials: {
+        orderBy: { uploadedAt: 'desc' },
+        select: { id: true, filename: true },
       },
       topics: {
         orderBy: { orderIndex: 'asc' },
@@ -280,6 +287,7 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
       needsTopicReview: project.topics.length > 0 && confirmed < project.topics.length,
       active: setup.mode === 'active',
       units: project.units,
+      files: project.materials,
       topics: project.topics.map((topic) => ({
         id: topic.id,
         name: topic.name,

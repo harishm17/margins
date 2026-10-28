@@ -28,7 +28,7 @@ export default async function NewExamPage({ params }: { params: Promise<{ course
   ])
 
   return (
-    <Page className="max-w-[704px] pt-8">
+    <Page width="medium">
       <PageIntro title="New mock exam" description="Choose what to cover and how it should feel." />
       {topics.length === 0 ? (
         <EmptyState

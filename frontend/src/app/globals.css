@@ -450,6 +450,37 @@
   }
 }
 
+/* Every <details> (the FAQ, plan days and folded weeks) opens and closes with a height transition,
+   so what sits below it slides instead of jumping; the FAQ closes the open item as another opens,
+   and that one jumped the page above it. CSS only: browsers without ::details-content or
+   interpolate-size stay instant, and so does everyone who asks for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (interpolate-size: allow-keywords) {
+    details {
+      interpolate-size: allow-keywords;
+    }
+    details::details-content {
+      block-size: 0;
+      overflow-y: clip;
+      transition:
+        block-size 180ms var(--ease-leave),
+        content-visibility 180ms var(--ease-leave) allow-discrete;
+    }
+    details[open]::details-content {
+      block-size: auto;
+      transition-duration: 240ms;
+      transition-timing-function: var(--ease-enter);
+    }
+  }
+}
+
+/* The landing loop's timer: the open step's line fills from top to bottom (loop.tsx). */
+@keyframes loop-fill {
+  from {
+    transform: scaleY(0);
+  }
+}
+
 /* Everything collapses to instant when the system asks for less motion. Spinners keep
    turning (they carry meaning) but slower. */
 @media (prefers-reduced-motion: reduce) {

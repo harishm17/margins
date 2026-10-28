@@ -19,14 +19,17 @@ export default async function ExamsPage({ params }: { params: Promise<{ courseId
 
   const exams = await listExams(user.id, courseId)
   const canCreate = course.topics.some((topic) => topic.confirmed)
+  const hasExams = exams.length > 0
 
+  // One primary action per state: with no exams the empty state holds "New mock exam" (or the way to
+  // topics, with its reason), so the header has no second copy of it.
   return (
-    <Page className="pt-8">
+    <Page>
       <PageIntro
         title="Mock exams"
         description="Timed practice exams built from your topics."
         actions={
-          canCreate ? (
+          !hasExams ? null : canCreate ? (
             <Button asChild variant="primary" icon={<Plus />}>
               <Link href={`/courses/${courseId}/exams/new`}>New mock exam</Link>
             </Button>
@@ -37,8 +40,8 @@ export default async function ExamsPage({ params }: { params: Promise<{ courseId
           )
         }
       />
-      {exams.length > 0 ? <ExamList courseId={courseId} exams={exams} /> : <NoExams courseId={courseId} canCreate={canCreate} />}
-      {!canCreate ? (
+      {hasExams ? <ExamList courseId={courseId} exams={exams} /> : <NoExams courseId={courseId} canCreate={canCreate} />}
+      {hasExams && !canCreate ? (
         <p id="exams-disabled-reason" className="mt-4 text-small text-fg-2">
           Confirm your topics to build new mock exams.
         </p>

@@ -17,7 +17,7 @@ import { groupTopicsByUnit, unitMastery, type UnitGroup as UnitGroupOf } from '@
 import { cn } from '@/lib/utils'
 import type { GenerationState, TopicsData } from '@/server/queries/course'
 import { BuildingContent } from './building-content'
-import { needsWorkOrder, type GlyphState } from './summary'
+import { needsWorkOrder, topicRowLabel, type GlyphState } from './summary'
 
 export type ListTopic = {
   id: string
@@ -76,6 +76,7 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
     <li>
       <Link
         href={`/courses/${courseId}/topics/${topic.id}`}
+        aria-label={topicRowLabel(topic)}
         className="group flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 rounded-control px-2 py-2.5 transition-colors duration-120 hover:bg-surface-2 sm:flex-nowrap"
       >
         <ProgressRing

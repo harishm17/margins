@@ -78,12 +78,12 @@ export function ShortcutsDialog() {
                           <span className="flex items-center gap-1">
                             {'range' in keys ? (
                               <>
-                                <Kbd>{keys.range[0]}</Kbd>
+                                <Kbd persistent>{keys.range[0]}</Kbd>
                                 <span className="text-caption font-normal text-fg-3">to</span>
-                                <Kbd>{keys.range[1]}</Kbd>
+                                <Kbd persistent>{keys.range[1]}</Kbd>
                               </>
                             ) : (
-                              keys.chord.map((key) => <Kbd key={key}>{key}</Kbd>)
+                              keys.chord.map((key) => <Kbd key={key} persistent>{key}</Kbd>)
                             )}
                           </span>
                         </React.Fragment>

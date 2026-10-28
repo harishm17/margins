@@ -11,7 +11,7 @@ test('the landing page tells the loop from files to exam day', async ({ page }) 
   await expect(page.getByRole('heading', { level: 1, name: 'Your course files, planned to exam day.' })).toBeVisible()
   await expect(nav(page).getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '/signup')
   await expect(nav(page).getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login')
-  await expect(page.getByRole('link', { name: 'See how it works' })).toHaveAttribute('href', '#how-it-works')
+  await expect(page.getByRole('link', { name: 'See how it works' })).toHaveAttribute('href', '/#how-it-works')
 
   // The hero shows the plan, and it is the current app (Plan and Review in the navigation).
   await expect(page.getByRole('img', { name: /The Margins plan page/ })).toBeVisible()
