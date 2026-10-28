@@ -7,24 +7,30 @@ import { localDateParts } from './study-plan-time'
  * 14 days when there is no exam date. It is recomputed from the student's state on every load, so
  * "done" always comes from real progress and the plan never drifts from what happened.
  *
+ * The daily minutes are a hard cap: no day holds more than that, today's finished work included. The
+ * one exception is a full mock exam longer than the whole day: it sits alone on its day, marked
+ * `overBudget`, and the page says it is longer than the usual time.
+ *
  * What goes where, in the order it is placed on each day:
- *   - Mock exams. One after each unit that is fully learned (units with 3 or more topics), and two
- *     full mock exams in the final week, the second at least 2 days before the exam. They are always
- *     placed, even when they are longer than the day's time.
+ *   - Full mock exams: two before the exam, the second at least 2 days before it. The first goes the
+ *     day after the last first quiz when 7 or more days are left then (a first look at what is still
+ *     weak), else 5 days before the exam.
  *   - Reviews at the review schedule's due day (overdue ones today) and the first quiz the day after
  *     a topic is learned. These come before new learning; whatever does not fit moves to the next day.
+ *   - A unit mock exam after each unit that is fully learned (units with 3 or more topics): on the
+ *     first day after its topics' first quizzes (that day included) with room for it, one a day.
  *   - Spaced reviews beyond the ones already scheduled: after a topic's first quiz (and after each
  *     review) the next review is projected forward on the app's own interval ladder (1, 3, 7, 14
  *     days, starting from the rung its mastery earns, or 0.6 when it has not been quizzed), up to the
- *     last day before the final review days, so a learned topic is always reviewed before the exam.
+ *     last day before the final review days that has room, so a learned topic is reviewed before the
+ *     exam. A last review that would crowd that day is booked on an earlier day with room instead.
  *     A real due date wins over a projection. Projected reviews are `projected: true`.
  *   - Learn blocks, in course order but never before a prerequisite, each `estimatedMinutes` long
- *     (35 when unknown), packed into the daily minutes. A block may run a little over (15% of the
- *     day) rather than wait, and one that is longer than a whole day is split across days (parts of
- *     at least 15 minutes).
+ *     (35 when unknown), packed into the daily minutes. A topic that does not fit what is left of a
+ *     day is split: a part today and the rest the next day, every part at least 15 minutes.
  *   - Once everything is learned and an exam date is set, free time goes to "Mixed practice": a mock
  *     exam on 2-3 topics, weighted to the weakest and those on past exams, up to the daily minutes,
- *     with the 7th day of each run left free to rest.
+ *     never the same topics twice on one day, with the 7th day of each run left free to rest.
  *   - The last 2 days (the day before the exam and the exam day) hold only reviews of the weakest topics.
  *
  * When the exam is too close for everything to fit, the plan says so and chooses: the optional unit
@@ -40,19 +46,19 @@ export const UNIT_MOCK_MINUTES = 30
 export const FULL_MOCK_MINUTES = 60
 /** A topic is only split across days into parts of at least this long. */
 export const MIN_PART_MINUTES = 15
-/** A whole learn block may run this share of the daily minutes over, rather than be split in two. */
-export const OVERRUN_SHARE = 0.15
 export const ROLLING_DAYS = 14
 /** The longest stretch laid out, however far away the exam is. */
 export const MAX_PLAN_DAYS = 120
 export const MIN_DAILY_MINUTES = 10
 export const MAX_DAILY_MINUTES = 600
 export const UNIT_MOCK_MIN_TOPICS = 3
-/** The first full mock goes the day after everything is learned when at least this many days remain. */
+/** The first full mock goes the day after the last first quiz when at least this many days remain. */
 export const EARLY_MOCK_DAYS = 7
 export const MIXED_MIN_MINUTES = 15
 export const MIXED_MAX_MINUTES = 30
 export const MIXED_MAX_PER_DAY = 3
+/** Topics in one mixed practice set (at least 2: one topic is a review, not mixed practice). */
+export const MIXED_SET_SIZE = 3
 /** One rest day in every run of this many days once learning is done. */
 export const REST_EVERY = 7
 /** The review intervals, in days, from the app's own ladder (see intervalFromMastery). */
@@ -89,7 +95,8 @@ export type PlanUnit = { id: string; title: string; weekLabel: string | null; or
 /** Something finished today, shown ticked on today's list and taking its time out of today. */
 export type DoneToday =
   | { kind: 'learn' | 'quiz' | 'review'; topicId: string }
-  | { kind: 'mock'; examId: string; name: string }
+  /** A mock exam submitted today, with the minutes it took (see mockMinutesSpent in server/queries/plan.ts). */
+  | { kind: 'mock'; examId: string; name: string; minutes: number }
 
 export type PlanInput = {
   now: Date
@@ -130,6 +137,8 @@ export type PlanItem = {
   projected: boolean
   /** The topic's mastery (0..1) when the plan was made, for reviews: it lets the copy say something specific. */
   mastery?: number | null
+  /** A full mock exam longer than the time its day has: it is alone on the day (the one exception to the cap). */
+  overBudget?: boolean
 }
 
 export type PlanDay = {
@@ -299,7 +308,8 @@ const itemId = (kind: PlanItemKind, key: string, date: string, part?: number) =>
 function simulate(options: SimOptions): Simulation {
   const { dates, examDay, input, topics, unitMocks, singleMock, excluded, doneMinutes } = options
   const daily = clampMinutes(input.dailyMinutes)
-  const overrun = Math.max(5, Math.round(daily * OVERRUN_SHARE))
+  /** The minutes a day has for planned work: the daily minutes, less what is already done today. */
+  const capOf = (index: number) => daily - (index === 0 ? doneMinutes : 0)
   const today = dates[0]
   const orderRank = new Map(topics.map((topic, index) => [topic.id, index]))
   const lastIndex = dates.length - 1
@@ -348,8 +358,10 @@ function simulate(options: SimOptions): Simulation {
     list.push(item)
     fixed.set(index, list)
   }
-  const hasUnitMock = (index: number) => (fixed.get(index) ?? []).some((item) => item.kind === 'unit_mock')
   const isFullMockDay = (index: number) => fullMockIndexes.includes(index)
+  /** Minutes of a day left after its mock exams (none on a day a mock fills or overfills). */
+  const roomOf = (index: number) =>
+    Math.max(0, capOf(index) - (fixed.get(index) ?? []).reduce((sum, item) => sum + item.minutes, 0))
   const allTopicIds = topics.map((topic) => topic.id)
   for (const index of fullMockIndexes) {
     addFixed(index, {
@@ -365,69 +377,74 @@ function simulate(options: SimOptions): Simulation {
       part: null,
       projected: false,
       note: index === fullMockIndexes[fullMockIndexes.length - 1] ? 'Last full practice before the exam' : null,
+      // Longer than the day: it is alone on it (nothing else fits, since the cap holds for the rest).
+      overBudget: FULL_MOCK_MINUTES > capOf(index),
     })
   }
 
-  /** The first day from `from` on that can hold a unit mock exam, or null. */
-  const mockDayFrom = (from: number): number | null => {
-    for (let index = Math.max(0, from); index <= lastIndex; index += 1) {
-      if (finalIndexes.has(index) || isFullMockDay(index) || hasUnitMock(index)) continue
-      return index
-    }
-    return null
-  }
+  // Unit mock exams are placed as the days are walked: a unit's mock is ready once all its topics are
+  // learned (from the next day, or today for a unit learned already), and goes on the first day from
+  // then on whose quizzes on its topics are done (that day's included) and that has room for it.
   let unitMockCount = 0
-  const placeUnitMock = (unitId: string, from: number) => {
-    const members = mockUnits.get(unitId)
-    const unit = units.find((item) => item.id === unitId)
-    if (!members || !unit) return
-    mockUnits.delete(unitId)
-    const index = mockDayFrom(from)
-    if (index === null) return
-    unitMockCount += 1
-    addFixed(index, {
-      id: itemId('unit_mock', unitId, dates[index]),
-      kind: 'unit_mock',
-      date: dates[index],
-      title: `Mock exam: ${unit.title}`,
-      topicId: null,
-      unitId,
-      topicIds: members.map((topic) => topic.id),
-      minutes: UNIT_MOCK_MINUTES,
-      done: false,
-      part: null,
-      projected: false,
-      note: null,
-    })
-  }
-  // With 7 or more days to spare the first full mock goes the day after everything is learned (rather
-  // than 5 days before the exam), as a first look at what is still weak.
+  const unitMockReady = new Map<string, number>()
+  const unitMockDays = new Set<number>()
+  // With 7 or more days to spare the first full mock goes the day after the last first quiz (rather
+  // than 5 days before the exam), as a first look at what is still weak. It waits for the quizzes
+  // as they are actually placed, so a quiz pushed back by a full day never lands after it.
   const firstMock = fixed.get(fullMockIndexes[0])?.find((item) => item.kind === 'full_mock')
-  const moveFirstMockAfter = (learnedIndex: number) => {
-    if (singleMock || fullMockIndexes.length !== 2 || !firstMock) return
-    let target = learnedIndex + 1
-    while (target <= lastIndex && (finalIndexes.has(target) || hasUnitMock(target))) target += 1
+  let firstMockSettled = singleMock || fullMockIndexes.length !== 2 || !firstMock
+  /** A day the floating first mock may take: not a final or unit mock day, and one it fits when any day could. */
+  const firstMockFits = (index: number) =>
+    !finalIndexes.has(index) && !unitMockDays.has(index) && (FULL_MOCK_MINUTES <= capOf(index) || FULL_MOCK_MINUTES > daily)
+  const moveFirstMockAfter = (quizzedIndex: number) => {
+    if (firstMockSettled || !firstMock) return
+    firstMockSettled = true
+    let target = quizzedIndex + 1
+    while (target <= lastIndex && !firstMockFits(target)) target += 1
     if (target > lastIndex || examIndex - target < EARLY_MOCK_DAYS || target >= fullMockIndexes[1]) return
     const from = fullMockIndexes[0]
     fixed.set(from, (fixed.get(from) ?? []).filter((item) => item !== firstMock))
     firstMock.date = dates[target]
     firstMock.id = itemId('full_mock', 'course', dates[target])
     firstMock.note = 'A first full practice now that you have learned everything'
+    firstMock.overBudget = FULL_MOCK_MINUTES > capOf(target)
     addFixed(target, firstMock)
     fullMockIndexes[0] = target
   }
-  if (topics.every((topic) => topic.learned)) moveFirstMockAfter(-1)
 
   // A unit that is already fully learned gets its mock as soon as there is room.
   for (const unit of units) {
-    if ((mockUnits.get(unit.id) ?? [null]).every((topic) => topic?.learned)) placeUnitMock(unit.id, 0)
+    if ((mockUnits.get(unit.id) ?? [null]).every((topic) => topic?.learned)) unitMockReady.set(unit.id, 0)
   }
 
   /** The ladder step a topic's mastery earns (0.6 when it has none). */
   const rungOf = (topic: PlanTopic) =>
     Math.max(0, REVIEW_LADDER.indexOf(intervalFromMastery(topic.mastery ?? ASSUMED_MASTERY) as (typeof REVIEW_LADDER)[number]))
-  // The last day a projected review may take: the day before the final review days.
-  const deadline = examIndex >= 0 ? examIndex - 2 : lastIndex
+  /**
+   * The last day a projected review may take: the latest day before the final review days with room
+   * for one after its mock exams (a full mock day may have none), or -1 when there is none. Without
+   * an exam date, the last day of the plan.
+   */
+  const reviewDeadline = (): number => {
+    if (examIndex < 0) return lastIndex
+    for (let index = Math.min(examIndex - 2, lastIndex); index >= 0; index -= 1) {
+      if (!finalIndexes.has(index) && roomOf(index) >= REVIEW_MINUTES) return index
+    }
+    return -1
+  }
+  // A topic's last review is booked on a day with room for it, not forced over the cap on the
+  // deadline: the minutes of last reviews booked on each day.
+  const lastReviewMinutes = new Map<number, number>()
+  const bookLastReview = (preferred: number, earliest: number, deadline: number): number => {
+    const free = (index: number) => (lastReviewMinutes.get(index) ?? 0) + REVIEW_MINUTES <= roomOf(index)
+    let chosen = -1
+    // The preferred day or the nearest earlier one with room; failing that, the nearest later one.
+    for (let index = preferred; index >= earliest && chosen < 0; index -= 1) if (free(index)) chosen = index
+    for (let index = preferred + 1; index <= deadline && chosen < 0; index += 1) if (free(index)) chosen = index
+    if (chosen < 0) chosen = preferred
+    lastReviewMinutes.set(chosen, (lastReviewMinutes.get(chosen) ?? 0) + REVIEW_MINUTES)
+    return chosen
+  }
 
   // Reviews at their due day, first quizzes for what is learned but never quizzed.
   const spaced: Spaced[] = []
@@ -456,6 +473,9 @@ function simulate(options: SimOptions): Simulation {
   // Topics learned now or by an earlier day of the plan.
   const learnedSet = new Set(topics.filter((topic) => topic.learned).map((topic) => topic.id))
   let partial: PlanTopic | null = null
+  /** Every topic is learned (by now or by the plan) and every first quiz has its day. */
+  const allFirstQuizzesPlaced = () => topics.every((topic) => learnedSet.has(topic.id)) && !spaced.some((entry) => entry.kind === 'quiz')
+  if (allFirstQuizzesPlaced()) moveFirstMockAfter(-1)
 
   const days: PlanDay[] = []
   // Days since learning ended (for the rest day), and how often a topic has been in a mixed practice.
@@ -473,9 +493,9 @@ function simulate(options: SimOptions): Simulation {
     const isToday = index === 0
 
     if (finalIndexes.has(index)) {
-      // Reviews of the weakest topics only: those learned, or learned by the plan.
+      // Reviews of the weakest topics only: those learned, or learned by the plan, as many as fit.
       const learnedByNow = topics.filter((topic) => learnedSet.has(topic.id))
-      const share = Math.min(5, Math.max(1, Math.floor(daily / REVIEW_MINUTES)))
+      const share = Math.max(0, Math.min(5, Math.max(1, Math.floor(daily / REVIEW_MINUTES)), Math.floor(capOf(index) / REVIEW_MINUTES)))
       const count = index === examIndex ? Math.min(2, share) : share
       for (const topic of weakestOrder(learnedByNow).slice(0, count)) {
         items.push({
@@ -495,43 +515,45 @@ function simulate(options: SimOptions): Simulation {
         })
       }
     } else {
-      let capacity = daily - (isToday ? doneMinutes : 0)
+      // A mock exam longer than the day leaves the capacity below zero, so nothing else joins it.
+      let capacity = capOf(index)
 
       for (const mock of fixed.get(index) ?? []) {
         items.push(mock)
         capacity -= mock.minutes
       }
 
-      // Reviews and quizzes due by now, oldest first and weakest first.
+      // Reviews and quizzes due by now, oldest first and weakest first (projected ones after the rest).
       const due = spaced
         .filter((entry) => entry.target <= index)
         .sort(
           (a, b) =>
+            Number(a.projected) - Number(b.projected) ||
             a.target - b.target ||
             (a.topic.mastery ?? 0) - (b.topic.mastery ?? 0) ||
             (orderRank.get(a.topic.id) ?? 0) - (orderRank.get(b.topic.id) ?? 0)
         )
-      for (const entry of due) {
+      const placeDue = (entry: Spaced) => {
         const minutes = entry.kind === 'quiz' ? QUIZ_MINUTES : REVIEW_MINUTES
-        // A review on its last possible day is placed even when the day is full: it is the topic's
-        // last look before the final review days.
-        const lastChance = examIndex >= 0 && entry.kind === 'review' && index >= deadline
-        if (minutes > capacity && !lastChance) continue
+        if (minutes > capacity) return
         capacity -= minutes
         spaced.splice(spaced.indexOf(entry), 1)
         // The next review of this topic, one step up the ladder from this one. One that would fall past
-        // the deadline moves up to it, staggered by topic so the last days are not one heap, and is the
-        // last: it is only added when the topic has had no review since its quiz or this one is 4+ days back.
+        // the deadline moves up to it, staggered by topic so the last days are not one heap, onto a day
+        // with room for it, and is the last: it is only added when the topic has had no review since
+        // its quiz or this one is 4+ days back.
         if (!entry.last) {
+          const deadline = reviewDeadline()
           const nextRung = Math.min(entry.rung + 1, REVIEW_LADDER.length - 1)
           const nextTarget = index + REVIEW_LADDER[nextRung]
           const clamped = examIndex >= 0 && nextTarget > deadline
           const wanted = examIndex >= 0 ? index < deadline && (!clamped || entry.kind === 'quiz' || deadline - index >= 4) : nextTarget <= lastIndex
           if (wanted) {
+            const staggered = Math.max(index + 1, deadline - ((orderRank.get(entry.topic.id) ?? 0) % 4))
             spaced.push({
               kind: 'review',
               topic: entry.topic,
-              target: clamped ? Math.max(index + 1, deadline - ((orderRank.get(entry.topic.id) ?? 0) % 4)) : nextTarget,
+              target: clamped ? bookLastReview(staggered, index + 1, deadline) : nextTarget,
               note: null,
               rung: nextRung,
               projected: true,
@@ -556,6 +578,44 @@ function simulate(options: SimOptions): Simulation {
         })
       }
 
+      // One unit mock exam a day, after its topics' quizzes, when the day has room (not a full mock day).
+      const placeUnitMock = () => {
+        if (isFullMockDay(index)) return
+        for (const unit of units) {
+          const members = mockUnits.get(unit.id)
+          const from = unitMockReady.get(unit.id)
+          if (!members || from === undefined || from > index) continue
+          if (spaced.some((entry) => entry.kind === 'quiz' && members.includes(entry.topic))) continue
+          if (capacity < UNIT_MOCK_MINUTES) break
+          mockUnits.delete(unit.id)
+          unitMockDays.add(index)
+          unitMockCount += 1
+          capacity -= UNIT_MOCK_MINUTES
+          items.push({
+            id: itemId('unit_mock', unit.id, date),
+            kind: 'unit_mock',
+            date,
+            title: `Mock exam: ${unit.title}`,
+            topicId: null,
+            unitId: unit.id,
+            topicIds: members.map((topic) => topic.id),
+            minutes: UNIT_MOCK_MINUTES,
+            done: false,
+            part: null,
+            projected: false,
+            note: null,
+          })
+          break
+        }
+      }
+
+      // Quizzes and scheduled reviews, then a unit mock that is ready, then projected reviews: a
+      // projection is a suggestion, and must not crowd out a quiz or a unit mock now that a day
+      // cannot run over.
+      for (const entry of due.filter((item) => !item.projected)) placeDue(entry)
+      placeUnitMock()
+      for (const entry of due.filter((item) => item.projected)) placeDue(entry)
+
       // New learning in what is left of the day.
       while (queue.length > 0) {
         const topic = queue[0]
@@ -564,12 +624,10 @@ function simulate(options: SimOptions): Simulation {
           queue.shift()
           continue
         }
-        // The whole topic if it fits; else a part, leaving a remainder that is not tiny.
+        // The whole topic if it fits; else a part of what is left of the day, leaving a remainder that
+        // is not tiny (both at least MIN_PART_MINUTES). The day never runs over.
         let take = 0
-        if (need <= capacity + overrun) take = need
-        // A block that is shorter than a whole day waits for a day with room; only one longer than a
-        // whole day is split, so the plan never cuts a normal topic into scraps.
-        else if (need <= daily + overrun) break
+        if (need <= capacity) take = need
         else if (capacity >= MIN_PART_MINUTES) take = need - capacity >= MIN_PART_MINUTES ? capacity : need - MIN_PART_MINUTES
         if (take < MIN_PART_MINUTES && take < need) break
 
@@ -600,15 +658,17 @@ function simulate(options: SimOptions): Simulation {
         }
         queue.shift()
         learnedSet.add(topic.id)
-        if (topics.every((item) => learnedSet.has(item.id))) moveFirstMockAfter(index)
         // Learned by the plan: its first quiz is the next day.
         if (!topic.reviewDueAt) spaced.push({ kind: 'quiz', topic, target: index + 1, note: null, rung: rungOf(topic) - 1, projected: false })
-        // The last topic of a unit to be learned brings the unit's mock exam, the next day.
+        // The last topic of a unit to be learned makes the unit's mock exam ready, from the next day.
         const members = topic.unitId ? mockUnits.get(topic.unitId) : undefined
-        if (topic.unitId && members && members.every((member) => learnedSet.has(member.id))) {
-          placeUnitMock(topic.unitId, index + 1)
+        if (topic.unitId && members && !unitMockReady.has(topic.unitId) && members.every((member) => learnedSet.has(member.id))) {
+          unitMockReady.set(topic.unitId, index + 1)
         }
       }
+
+      // The first full mock follows the last first quiz, once that quiz has its day.
+      if (allFirstQuizzesPlaced()) moveFirstMockAfter(index)
 
       // Everything is learned and the exam has a date: the free time goes to mixed practice, except the
       // 7th day of each run, which is left free to rest.
@@ -617,15 +677,24 @@ function simulate(options: SimOptions): Simulation {
         const rest = phaseDays % REST_EVERY === 0
         const pool = topics.filter((topic) => learnedSet.has(topic.id))
         let blocks = 0
+        // The sets already on this day, and the topics in them: a day never holds the same set twice.
+        const setsToday = new Set<string>()
+        const mixedToday = new Set<string>()
         while (!rest && pool.length >= 2 && capacity >= MIXED_MIN_MINUTES && blocks < MIXED_MAX_PER_DAY) {
           // The weakest topics first (not yet quizzed counts as middling), those on past exams ahead,
           // and ones not practised lately ahead of ones that were.
           const score = (topic: PlanTopic) =>
             1 - (topic.mastery ?? 0.5) + (topic.examRelevant ? 0.3 : 0) - 0.2 * (mixedUses.get(topic.id) ?? 0)
-          const picked = [...pool]
-            .sort((a, b) => score(b) - score(a) || (orderRank.get(a.id) ?? 0) - (orderRank.get(b.id) ?? 0))
-            .slice(0, 3)
-            .sort((a, b) => (orderRank.get(a.id) ?? 0) - (orderRank.get(b.id) ?? 0))
+          const ranked = [...pool].sort((a, b) => score(b) - score(a) || (orderRank.get(a.id) ?? 0) - (orderRank.get(b.id) ?? 0))
+          const setKey = (list: PlanTopic[]) => list.map((topic) => topic.id).sort().join()
+          // The best set; if the day already has it, the best of the topics not yet mixed today.
+          let picked = ranked.slice(0, MIXED_SET_SIZE)
+          if (setsToday.has(setKey(picked))) picked = ranked.filter((topic) => !mixedToday.has(topic.id)).slice(0, MIXED_SET_SIZE)
+          // No other set: the one block keeps the day's mixed practice (up to MIXED_MAX_MINUTES).
+          if (picked.length < 2 || setsToday.has(setKey(picked))) break
+          setsToday.add(setKey(picked))
+          for (const topic of picked) mixedToday.add(topic.id)
+          picked.sort((a, b) => (orderRank.get(a.id) ?? 0) - (orderRank.get(b.id) ?? 0))
           const minutes = Math.min(capacity, MIXED_MAX_MINUTES)
           blocks += 1
           capacity -= minutes
@@ -695,7 +764,8 @@ function doneItems(input: PlanInput, today: string, topicById: Map<string, PlanT
         topicId: null,
         unitId: null,
         topicIds: [],
-        minutes: UNIT_MOCK_MINUTES,
+        // The time it took, so today's room is what is really left.
+        minutes: Math.max(0, Math.round(entry.minutes)),
         done: true,
         part: null,
         projected: false,
@@ -809,7 +879,8 @@ export function buildPlan(input: PlanInput): Plan {
   // is inside the plan, the time is tight and mock exams give way to learning, in this order: the
   // optional unit mock exams, then the earlier of the two full mocks (one stays, at least 2 days
   // before the exam). If topics are still left out, the time is short: past-exam topics go first.
-  const eligibleUnitMocks = input.units.some(
+  // A unit mock needs a day with room for it: below UNIT_MOCK_MINUTES a day, none are planned.
+  const eligibleUnitMocks = dailyMinutes >= UNIT_MOCK_MINUTES && input.units.some(
     (unit) =>
       !input.unitMocksDone.includes(unit.id) &&
       topics.filter((topic) => topic.unitId === unit.id).length >= UNIT_MOCK_MIN_TOPICS
