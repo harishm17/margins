@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { JobStatus } from '@/components/ui/job-status'
 import { toast } from '@/components/ui/toaster'
+import { useAiStatus } from '@/features/ai/ai-status'
 import { useJob } from '@/features/jobs/use-job'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { pluralize } from '@/lib/format'
@@ -20,26 +21,35 @@ export function useExtraction(courseId: string, initial: JobRef | null) {
   const router = useRouter()
   const [started, setStarted] = React.useState<{ id: string; since: string } | null>(null)
   const [starting, setStarting] = React.useState(false)
+  const { blocked, report } = useAiStatus()
   const jobId = started?.id ?? initial?.id ?? null
   const since = started?.since ?? initial?.createdAt ?? null
   const { job, timedOut } = useJob(jobId, { timeoutMs: 240_000, onSettled: () => router.refresh() })
 
   const start = React.useCallback(async () => {
+    if (blocked) {
+      // The button should be off already; say why rather than send a request that is refused.
+      toast.error(blocked.text)
+      return
+    }
     setStarting(true)
     try {
       const result = await apiFetch<{ jobId: string }>(`/api/projects/${courseId}/extract-topics`, { method: 'POST' })
       setStarted({ id: result.jobId, since: new Date().toISOString() })
       router.refresh()
     } catch (error) {
+      if (isApiError(error)) report(error.code)
       toast.error(isApiError(error) ? error.message : "Couldn't start finding topics. Try again.")
     } finally {
       setStarting(false)
     }
-  }, [courseId, router])
+  }, [courseId, router, blocked, report])
 
   const running = !!jobId && job?.status !== 'completed' && job?.status !== 'failed'
   const failed = job?.status === 'failed' ? job : null
-  return { jobId, job, since, timedOut, running, failed, starting, start }
+  // `blocked`: AI is unavailable or the allowance is used; Find topics buttons should be off, with
+  // blocked.text beside them.
+  return { jobId, job, since, timedOut, running, failed, starting, start, blocked }
 }
 
 type ExtractionBannerProps = {

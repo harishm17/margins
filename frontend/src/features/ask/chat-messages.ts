@@ -35,7 +35,11 @@ export type StoredMessage = {
   citations: StoredCitations | null
 }
 
-export const STORED_FAILURE_TEXT = 'This question could not be answered. Ask it again to retry.'
+/**
+ * Failures are no longer stored (the question is removed instead), but conversations from before
+ * that may hold a failure note. It reads like a live failure and offers the same retry.
+ */
+export const STORED_FAILURE_TEXT = "This question wasn't answered."
 
 /** The messages of a stored conversation, oldest first. */
 export function toChatMessages(stored: readonly StoredMessage[]): ChatMessage[] {
@@ -56,12 +60,13 @@ export function toChatMessages(stored: readonly StoredMessage[]): ChatMessage[] 
         stopped: false,
       })
     } else if (message.role === 'error') {
+      const previous = messages[messages.length - 1]
       messages.push({
         kind: 'failure',
         id: message.id,
         message: STORED_FAILURE_TEXT,
-        retryable: false,
-        question: null,
+        retryable: previous?.kind === 'user',
+        question: previous?.kind === 'user' ? previous.text : null,
       })
     }
   }

@@ -19,6 +19,7 @@ import { mergeSources, type SourceRef } from '@/lib/topics/sources'
 import { PRACTICE_DONE_SHARE } from '@/features/topic/practice-keys'
 import { getCourseShell, type CourseShell, type ShellTopic, type ShellUnit } from '@/server/queries/courses'
 import { getPlanData } from '@/server/queries/plan'
+import { deriveExamStyleState, examProfileTarget, materialIdFromProfileTarget } from '@/lib/exams/style-state'
 
 /**
  * Read models for the course pages: overview (setup guide and Today view), materials and
@@ -73,6 +74,8 @@ export type MaterialRow = {
   uploadedAt: string
   /** The validate or chunk job to follow while the file is being processed. */
   job: (JobRef & { jobType: string }) | null
+  /** A past exam whose style analysis failed: the job's error code (null when it did not fail). */
+  examAnalysisFailure: { errorCode: string | null } | null
 }
 
 export type MaterialsData = {
@@ -125,6 +128,7 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
         validationStatus: true,
         validationNotes: true,
         uploadedAt: true,
+        styleProfile: true,
       },
     }),
     prisma.processingJob.findMany({
@@ -150,6 +154,35 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
     prisma.topic.count({ where: { projectId: courseId, project: { userId } } }),
     typicalReadSeconds(),
   ])
+
+  // Past exams: the latest style analysis of each, so a failed one shows on its row with a retry.
+  const examIds = materials.filter((material) => material.role === 'exam').map((material) => material.id)
+  const profileJobs = examIds.length
+    ? await prisma.processingJob.findMany({
+        where: { projectId: courseId, userId, jobType: 'profile_exam', targetKey: { in: examIds.map(examProfileTarget) } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: { targetKey: true, status: true, errorCode: true },
+      })
+    : []
+  const examState = deriveExamStyleState(
+    materials
+      .filter((material) => material.role === 'exam')
+      .map((material) => ({
+        id: material.id,
+        validationStatus: material.validationStatus,
+        hasProfile: material.styleProfile !== null,
+      })),
+    profileJobs.flatMap((job) => {
+      const materialId = materialIdFromProfileTarget(job.targetKey)
+      return materialId ? [{ materialId, status: job.status, errorCode: job.errorCode }] : []
+    })
+  )
+  const examFailureCode = new Map<string, string | null>()
+  for (const job of profileJobs) {
+    const materialId = materialIdFromProfileTarget(job.targetKey)
+    if (materialId && !examFailureCode.has(materialId)) examFailureCode.set(materialId, job.errorCode)
+  }
 
   const jobsByMaterial = new Map<string, typeof pipelineJobs>()
   for (const job of pipelineJobs) {
@@ -181,6 +214,9 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
       notes: material.validationNotes,
       uploadedAt: material.uploadedAt.toISOString(),
       job: active ? { ...toJobRef(active), jobType: active.jobType } : null,
+      examAnalysisFailure: examState.failedFileIds.includes(material.id)
+        ? { errorCode: examFailureCode.get(material.id) ?? null }
+        : null,
     }
   })
 

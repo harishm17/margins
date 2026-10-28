@@ -24,6 +24,8 @@ export type NormalizedJob = {
   errorMessage?: string | null
   errorCode?: string | null
   retryable?: boolean
+  /** Attempts made so far. A queued job with attempts made is waiting for its retry. */
+  attemptCount?: number
   resultData?: Record<string, unknown> | null
   raw: Record<string, unknown>
 }
@@ -77,6 +79,7 @@ export const normalizeJob = (data: Record<string, unknown>): NormalizedJob => ({
   errorMessage: data.errorMessage ? String(data.errorMessage) : null,
   errorCode: data.errorCode ? String(data.errorCode) : null,
   retryable: typeof data.retryable === 'boolean' ? data.retryable : undefined,
+  attemptCount: typeof data.attemptCount === 'number' ? data.attemptCount : undefined,
   resultData:
     data.resultData && typeof data.resultData === 'object' && !Array.isArray(data.resultData)
       ? (data.resultData as Record<string, unknown>)

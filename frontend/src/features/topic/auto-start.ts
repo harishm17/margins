@@ -14,6 +14,8 @@ export type AutoStartInput = {
   notesPresent: boolean
   /** A notes job is running (found on the server, or started here). */
   notesRunning: boolean
+  /** AI is unavailable or the allowance is used: the request would be refused, so do not send it. */
+  aiBlocked?: boolean
 }
 
 /** 'wait' keeps the generating state up, 'start' sends the request, 'skip' leaves it alone. */
@@ -22,6 +24,6 @@ export function autoStartDecision(input: AutoStartInput): 'wait' | 'start' | 'sk
   // Started from this page already: the request settles on its own (React runs effects twice in
   // development), so keep waiting rather than send it again or drop the generating state early.
   if (input.alreadyStarted || !input.activeChecked) return 'wait'
-  if (input.notesPresent || input.notesRunning) return 'skip'
+  if (input.notesPresent || input.notesRunning || input.aiBlocked) return 'skip'
   return 'start'
 }

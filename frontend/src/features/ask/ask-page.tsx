@@ -53,6 +53,10 @@ export default function AskPage({
       setThreads((current) => [{ id, title, updatedAt: new Date().toISOString() }, ...current.filter((t) => t.id !== id)])
       window.history.replaceState(null, '', `${base}?thread=${id}`)
     },
+    onThreadDiscarded: (id) => {
+      setThreads((current) => current.filter((t) => t.id !== id))
+      window.history.replaceState(null, '', base)
+    },
     onThreadActive: (id) => {
       setThreads((current) => {
         const found = current.find((t) => t.id === id)

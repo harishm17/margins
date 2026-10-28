@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { toast } from '@/components/ui/toaster'
+import { useAiStatus } from '@/features/ai/ai-status'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { parseStoredCitations } from '@/lib/chat/citations'
 import { applyChatEvent, INITIAL_ANSWER, type AnswerState } from '@/lib/chat/events'
@@ -29,6 +30,8 @@ type Options = {
   onThreadStarted?: (thread: { id: string; title: string | null }) => void
   /** The conversation got a new answer (or a stopped one): move it to the top of the list. */
   onThreadActive?: (threadId: string) => void
+  /** The first question of a new conversation failed, so the server removed the conversation. */
+  onThreadDiscarded?: (threadId: string) => void
 }
 
 /**
@@ -42,6 +45,7 @@ export function useAskChat({
   initialMessages = [],
   onThreadStarted,
   onThreadActive,
+  onThreadDiscarded,
 }: Options) {
   const [threadId, setThreadId] = React.useState<string | null>(initialThreadId)
   const [messages, setMessages] = React.useState<ChatMessage[]>(initialMessages)
@@ -53,14 +57,17 @@ export function useAskChat({
   const threadRef = React.useRef(threadId)
   const loadTokenRef = React.useRef(0)
   const idCounter = React.useRef(0)
-  const callbacks = React.useRef({ onThreadStarted, onThreadActive })
+  const callbacks = React.useRef({ onThreadStarted, onThreadActive, onThreadDiscarded })
 
   React.useEffect(() => {
-    callbacks.current = { onThreadStarted, onThreadActive }
+    callbacks.current = { onThreadStarted, onThreadActive, onThreadDiscarded }
     threadRef.current = threadId
   })
 
   const nextId = React.useCallback(() => `local-${Date.now()}-${(idCounter.current += 1)}`, [])
+  // A refusal or failure that means AI is unavailable (or the allowance is used) turns the
+  // composer and every other AI button off at once.
+  const { report } = useAiStatus()
 
   const sending = live !== null
 
@@ -84,6 +91,8 @@ export function useAskChat({
       let answer: AnswerState = INITIAL_ANSWER
       let doneStopReason = null as string | null
       let notSaved = false
+      // The conversation this question started, if it started one.
+      let startedThread: string | null = null
       setLive({ question, answer })
 
       const finish = (message: ChatMessage | null) => {
@@ -110,8 +119,20 @@ export function useAskChat({
             if (event.type === 'thread') {
               threadRef.current = event.threadId
               setThreadId(event.threadId)
-              if (event.isNew) callbacks.current.onThreadStarted?.({ id: event.threadId, title: event.title })
+              if (event.isNew) {
+                startedThread = event.threadId
+                callbacks.current.onThreadStarted?.({ id: event.threadId, title: event.title })
+              }
               return
+            }
+            // The server removed the failed question; a conversation it started is gone too, so
+            // the retry starts a new one.
+            if (event.type === 'error' && event.discarded && startedThread) {
+              const gone = startedThread
+              startedThread = null
+              threadRef.current = null
+              setThreadId(null)
+              callbacks.current.onThreadDiscarded?.(gone)
             }
             if (event.type === 'user_message') return
             if (event.type === 'done') doneStopReason = event.stopReason
@@ -139,6 +160,7 @@ export function useAskChat({
           finish(message)
           if (threadRef.current) callbacks.current.onThreadActive?.(threadRef.current)
         } else if (answer.status === 'error' && answer.error) {
+          report(answer.error.code)
           finish(failure(answer.error.message, answer.error.retryable))
         } else {
           const info = chatErrorMessage('CHAT_INTERRUPTED')
@@ -162,6 +184,7 @@ export function useAskChat({
           finish(partial)
           if (threadRef.current) callbacks.current.onThreadActive?.(threadRef.current)
         } else if (error instanceof ChatRequestError) {
+          report(error.code)
           finish(failure(error.message, error.retryable))
         } else {
           const info = chatErrorMessage('CHAT_FAILED')
@@ -169,7 +192,7 @@ export function useAskChat({
         }
       }
     },
-    [courseId, topicId, nextId]
+    [courseId, topicId, nextId, report]
   )
 
   /** Stop the answer. The server keeps writing it to the conversation. */
