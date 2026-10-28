@@ -3,8 +3,9 @@ everyone together.
 
 Spend is read from the `llm_usage_events` ledger, which is append-only: a row is written when a
 job attempt or a chat answer has cost something, and nothing deletes it when the job, thread or
-project it came from is deleted (only deleting the user does). So removing things cannot lower
-the day's total. A "day" is the current UTC day. The check runs before a call starts, so one
+project it came from is deleted. Deleting an account unlinks its rows (user_id becomes NULL)
+rather than deleting them, so they still count toward the global cap. So removing things cannot
+lower the day's total. A "day" is the current UTC day. The check runs before a call starts, so one
 call can end a little over the cap.
 
 Sign-up is open and the API key is shared, so on top of the per-user cap there is a global one
@@ -16,6 +17,8 @@ import logging
 import time
 import uuid
 from typing import Optional
+
+import asyncpg
 
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_one, execute_update
@@ -34,12 +37,18 @@ async def record_usage_event(
     output_tokens: int,
     cost_usd: float,
 ) -> None:
-    """Append one row to the ledger. `source` is 'job' or 'chat'; nothing is written for a call
-    that cost nothing. Never raises: a ledger failure must not fail the work that was billed
-    (a retry would bill it again), so it is logged loudly instead."""
+    """Append one row to the ledger. `source` is 'job', 'chat' or 'voice'; nothing is written for
+    a call that cost nothing. Never raises: a ledger failure must not fail the work that was billed
+    (a retry would bill it again), so it is logged loudly instead.
+
+    A call that finishes after its account was deleted (a job that was already running) cannot
+    name the user any more: the foreign key refuses the row. It is written unlinked instead, the
+    way account deletion leaves that account's other rows, so the money still counts toward the
+    global daily cap."""
     if cost_usd <= 0 and input_tokens <= 0 and output_tokens <= 0:
         return
-    try:
+
+    async def insert(owner: Optional[str], project: Optional[str], source_ref: str) -> None:
         await execute_update(
             f"""
             INSERT INTO llm_usage_events
@@ -48,15 +57,25 @@ async def record_usage_event(
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, {UTC_NOW})
             """,
             uuid.uuid4().hex,
-            user_id,
-            project_id,
+            owner,
+            project,
             source,
-            source_id,
+            source_ref,
             models,
             input_tokens,
             output_tokens,
             cost_usd,
         )
+
+    try:
+        try:
+            await insert(user_id, project_id, source_id)
+        except asyncpg.ForeignKeyViolationError:
+            logger.info(
+                "Usage for %s %s arrived after its account was deleted; recording it unlinked",
+                source, source_id,
+            )
+            await insert(None, None, "")
     except Exception:
         logger.exception(
             "Could not record %s usage (user %s, source %s, $%.6f): it will not count toward the daily budget",

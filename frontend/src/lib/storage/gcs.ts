@@ -280,6 +280,26 @@ export async function deleteProjectFolder(userId: string, projectId: string): Pr
 }
 
 /**
+ * Delete everything stored for a user: every file under `<userId>/`, in every storage the app can
+ * use, including files whose database rows are already gone. Unlike deleteProjectFolder this
+ * throws when a storage fails, so account deletion can stop and be retried; files that are already
+ * gone count as deleted, so a retry only finishes the job.
+ */
+export async function deleteUserFiles(userId: string): Promise<void> {
+  // Ids are UUIDs. Anything else could name a folder outside the user's own.
+  if (!/^[A-Za-z0-9-]+$/.test(userId)) throw new Error(`Refusing to delete files for user id "${userId}"`)
+  const folder = `${userId}/`
+  await deleteLocalFolder(folder)
+  if (s3Configured()) {
+    await deleteS3Prefix(folder)
+  }
+  const storage = await getStorage()
+  if (storage) {
+    await storage.bucket(BUCKET_NAME).deleteFiles({ prefix: folder, force: true })
+  }
+}
+
+/**
  * Generate GCS path for a material upload
  * @param userId - User ID
  * @param projectId - Project ID

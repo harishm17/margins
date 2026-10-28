@@ -86,8 +86,13 @@ export async function uploadStreamToS3(
 export async function deleteS3Object(bucket: string, key: string): Promise<void> {
   const { DeleteObjectCommand } = await import('@aws-sdk/client-s3')
   const client = await getClient()
-  // S3 answers a delete of a missing key with success, so a repeat delete is harmless.
-  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+  // S3 answers a delete of a missing key with success, so a repeat delete is harmless. Some
+  // S3-compatible stores answer 404 instead: that also means the object is gone.
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+  } catch (error) {
+    if (!isNotFound(error)) throw error
+  }
 }
 
 /** Delete every object under `prefix` in the configured bucket. */
