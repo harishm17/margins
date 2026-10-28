@@ -1,6 +1,7 @@
 # Deploying on Railway
 
-Margins (studymargins.com) runs as one Railway project, `study-buddy`, in the `us-west2` region:
+Margins (studymargins.com) runs as one Railway project in the `us-west2` region. The project is still
+named `study-buddy`, from before the app was renamed:
 
 | Resource | What it is |
 |---|---|
@@ -76,7 +77,6 @@ Optional:
   Add them to `railway.ts` as `preserve()`, or the next apply removes them. Then add
   `https://<web domain>/api/auth/callback/google` as a redirect URI on the OAuth client in
   Google Cloud. Without them the login page shows only email and password.
-- **Voice coach.** Set `OPENAI_API_KEY` on `ai` (also as `preserve()` in `railway.ts`).
 
 ## Database
 

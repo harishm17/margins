@@ -21,32 +21,46 @@ Upload your lecture notes, textbook chapters and past exams. Margins splits them
 
 1. **Upload** PDF, DOCX, PPTX or DOC files: lecture notes, book chapters, sample exams.
 2. **Review the course plan** Margins proposes: units (the syllabus's chapters or weeks) of topics, each tied to the pages that teach it, with learning objectives, prerequisites and an estimated time. Rename, merge, move, add or remove topics before anything is generated.
-3. **Study each topic** in four views:
+3. **Study each topic** in five views:
    - **Notes**: a lesson (what you'll learn, the idea, key concepts, a worked example, a check-yourself question, pitfalls and a summary), rendered with KaTeX math and highlighted code, written from that topic's own pages and listing the files and pages it came from.
-   - **Examples**: solved problems with step-by-step reasoning, and interactive problems you solve one step at a time with hints.
+   - **Worked examples**: solved problems with step-by-step reasoning.
+   - **Practice**: problems you solve one step at a time, with hints and a check for each step.
    - **Quiz**: multiple choice, true/false, numerical and short answer. Scores are computed on the server; short answers are graded by the model with partial credit.
    - **Voice practice**: a spoken session with three styles (quiz me, walk me through it, just talk) in ten languages.
 4. **Take practice exams** across topics: timed, autosaved, with per-question feedback and regrading. Upload past exams and **Match my past exams** writes new ones in their style (question mix, points, phrasing, conventions); the topics those exams test are flagged.
 5. **Plan to your exam date.** Give the date and your daily minutes and Margins lays out each day: new topics in prerequisite order, a quiz the next day, spaced reviews, a mock exam after each unit and two full mocks before the exam. Mastery comes from quizzes, exams, voice and practice; **Retry what you missed** and **Fresh review** target weak spots.
 6. **Ask your materials**: a chat that answers from your files with numbered citations, and says so when the files don't cover the question.
 
-| | |
-|---|---|
-| <img src="frontend/public/screens/topics-edit-light.webp" alt="The course plan: units and topics, each tied to the file and pages it is taught from"> | <img src="frontend/public/screens/notes-detail-light.webp" alt="Topic notes with code, an outline and the source files and pages"> |
-| <img src="frontend/public/screens/practice-light.webp" alt="Interactive practice problem, one step at a time"> | <img src="frontend/public/screens/exam-light.webp" alt="A timed mock exam with its question navigator"> |
-| <img src="frontend/public/screens/exam-new-light.webp" alt="New mock exam with Match my past exams ticked"> | <img src="frontend/public/screens/ask-light.webp" alt="Ask your materials, with a citation open"> |
-| <img src="frontend/public/screens/quiz-results-light.webp" alt="Quiz results with the right answer, an explanation and the source page"> | <img src="frontend/public/screens/plan-exam-day-light.webp" alt="The last days of a plan: a final review, then exam day"> |
+<img src="frontend/public/screens/topics-edit-light.webp" alt="The course plan: units and topics, each tied to the file and pages it is taught from" width="860">
 
-Every image here and on [the landing page](https://studymargins.com) comes from the real app, with a hand-written showcase course, in light and dark. `npm run screens` in `frontend/` refreshes them (see [Screenshots](#screenshots)).
+*The course plan Margins proposes. Each topic lists the file and pages it is taught from, and you can rename, move, merge or remove topics before anything is written.*
+
+<img src="frontend/public/screens/notes-detail-light.webp" alt="Topic notes with code, an outline and the source files and pages" width="860">
+
+*Notes for one topic, with an outline and the source pages they were written from.*
+
+<img src="frontend/public/screens/practice-light.webp" alt="A practice problem solved one step at a time, with a hint open" width="860">
+
+*Practice: a problem broken into steps, each checked as you go, with a hint.*
+
+<img src="frontend/public/screens/ask-light.webp" alt="Ask your materials, with a citation open on the page it quotes" width="860">
+
+*Ask your materials: answers cite numbered passages from your files, and each citation opens the page.*
+
+Every image here and on [the landing page](https://studymargins.com) comes from the real app, with a hand-written showcase course. `npm run screens` in `frontend/` refreshes them (see [Screenshots](#screenshots)).
 
 ## How it works
 
 ```
 Browser ──▶ Next.js 16 (web) ──────────────▶ FastAPI (ai) ──▶ Claude (Anthropic API)
-            UI, auth, API routes,             parsing, chunking,
-            jobs, voice turn loop             embeddings, generation, grading
-                 │                                  │
-                 └──────────▶ Postgres + pgvector ◀─┘        S3-compatible bucket (uploads)
+            UI, auth, API routes,            parsing, chunking,
+            jobs, voice turn loop            embeddings, generation, grading
+              │          │                     │          │
+              │          │ stores and          │ reads    │
+              │          ▼ serves files        │ files    │
+              │     S3-compatible bucket ◀─────┘          │
+              │                                           │
+              └───────────▶ Postgres + pgvector ◀─────────┘
 ```
 
 - **Parsing and chunking.** Files are read as markdown (PDFs with pymupdf4llm; DOCX, PPTX, and DOC through LibreOffice when installed) and split at headings and paragraphs into chunks of about 350 tokens, each tagged with its heading path and pages.
@@ -56,6 +70,7 @@ Browser ──▶ Next.js 16 (web) ──────────────▶
 - **Voice without a speech API.** The browser does speech-to-text and text-to-speech (Web Speech API). The server runs Claude with drill tools (next question, record answer, hint) and streams each turn back as NDJSON.
 - **Jobs.** Long tasks run as jobs that are claimed with one atomic update and hold a lease; a reaper re-dispatches jobs whose worker died. Each job records its tokens and cost; a per-user daily budget and a site-wide daily cap bound spend.
 - **Isolation.** Only the web service can call the AI service (shared internal token), which is reachable only on Railway's private network.
+- **Storage.** The web app streams each upload through size and file-type checks into an S3-compatible bucket (a Railway bucket in production); the AI service downloads it from there to process it. Without a bucket, both use a local uploads folder.
 
 ## Evals
 
@@ -72,18 +87,31 @@ Full results are in [`evals/results/`](evals/results/).
 
 ### Generation
 
-The [generation eval](evals/README.md#generation-eval) runs the app's own generators (notes, worked examples, practice problems, quizzes) on two real MIT OpenCourseWare courses, 18.05 (probability and statistics) and 6.006 (algorithms), then checks the output with code and grades it with an Opus judge that does not know which model wrote it. It makes paid API calls behind a spend cap.
+The [generation eval](evals/README.md#generation-eval) runs the app's own generators (notes, worked examples, practice problems, quizzes) on two real MIT OpenCourseWare courses, 18.05 (probability and statistics) and 6.006 (algorithms), then checks the output two ways: automatic checks in code, and scores from a model judge. It makes paid API calls behind a spend cap.
 
-| Latest run ([2026-10-21](evals/results/2026-10-21-structure.md), 8 topics, Opus) | |
+The judge is the same model that wrote the content (Claude Opus at medium effort). It sees the source excerpts and is not told which model wrote what, but a model grading its own output is not an independent reviewer, so read the judge scores as limited evidence. The automatic checks involve no model. The ones below include every check the output failed; the report has the rest.
+
+Latest run: [2026-10-21](evals/results/2026-10-21-structure.md), 8 topics, Opus writing and judging.
+
+| Judge scores (out of 5) | |
 |---|---|
-| Correctness (judge, out of 5) | 4.88 |
+| Correctness | 4.88 |
 | Grounding in the source pages | 4.91 |
 | Teaching quality | 4.78 |
 | Quiz question quality | 4.50 |
+| Errors the judge listed, over 32 items | 8 (2 mathematical) |
+
+| Automatic checks | Result |
+|---|---|
+| Notes with all expected sections | **0 of 8 (failed)** |
+| Notes inside the requested word band | **0 of 8 (failed; mean 1,749 words)** |
+| Plain-text fields with stray `$` or backslash sequences (flagged for reading) | 38 |
 | Quiz questions that restate a worked example | 12% (4 of 32) |
+| Notes with 5-8 recap bullets | 8 of 8 |
+| Worked-example, practice and quiz sets with the requested count | 8 of 8 each |
 | Cost per topic (all four types) | $0.585 |
 
-It also picked the model: [Sonnet and Haiku made maths errors and fell short of the bar set before the run](evals/results/2026-10-21-model-decision.md), so generation stays on Opus and cost is held down by generating each topic only when it is opened.
+The same judge also picked the model: [Sonnet and Haiku made maths errors and fell short of the bar set before the run](evals/results/2026-10-21-model-decision.md), so generation stays on Opus and cost is held down by generating each topic only when it is opened.
 
 ## Screenshots
 
@@ -101,41 +129,56 @@ It only runs against a local web app and a local database (the showcase password
 
 ## Run it locally
 
-You need Node 24+, Python 3.13+ with [uv](https://docs.astral.sh/uv/), Postgres 15+ with pgvector 0.5+, and an [Anthropic API key](https://console.anthropic.com/settings/keys). Set `LLM_PROVIDER=mock` in the AI service to run everything without API calls.
+Everything runs without an API key: the `.env.example` files set `LLM_PROVIDER=mock`, which returns placeholder notes, quizzes and grades with no API calls. For real output, set `LLM_PROVIDER=anthropic` and an [Anthropic API key](https://console.anthropic.com/settings/keys) (`ANTHROPIC_API_KEY`).
+
+With Docker (Postgres, the migrations, the web app on :3000 and the AI service on :8000):
 
 ```bash
 git clone https://github.com/harishm17/margins.git
 cd margins
-cp .env.example .env            # add ANTHROPIC_API_KEY and AI_INTERNAL_TOKEN
-docker compose up --build       # Postgres, web on :3000, ai on :8000
-
-cd frontend && npm install && npx prisma migrate deploy
+cp .env.example .env
+echo "NEXTAUTH_SECRET=$(openssl rand -base64 32)" >> .env
+echo "AI_INTERNAL_TOKEN=$(openssl rand -hex 32)" >> .env
+docker compose up --build
 ```
+
+Compose applies the database migrations in a one-shot `migrate` service before the web app and the AI service start. Then open http://localhost:3000 and sign up.
 
 <details>
 <summary>Without Docker</summary>
 
+You need Node 24+, Python 3.13+ with [uv](https://docs.astral.sh/uv/), and Postgres 15+ with pgvector 0.5+. The `.env.example` files connect as user `dev`, password `devpass`, to the database `margins`; to use another, change `DATABASE_URL` in `frontend/.env` and `ai-service/.env`.
+
 ```bash
-# Database
-createdb margins && psql margins -c 'CREATE EXTENSION vector;'
-
-# Web
-cd frontend && cp .env.example .env && npm install && npx prisma migrate deploy && npm run dev
-
-# AI service
-cd ai-service && cp .env.example .env && uv sync && uv run uvicorn app.main:app --reload
+# From the repository root: the database, then the migrations
+psql -d postgres -c "CREATE ROLE dev LOGIN PASSWORD 'devpass'"
+createdb -O dev margins
+psql -d margins -c 'CREATE EXTENSION IF NOT EXISTS vector'
+(cd frontend && cp .env.example .env && npm install && npx prisma migrate deploy)
+(cd ai-service && cp .env.example .env && uv sync)
 ```
+
+```bash
+# Terminal 1, from the repository root: the AI service on :8000
+cd ai-service && uv run uvicorn app.main:app --reload
+```
+
+```bash
+# Terminal 2, from the repository root: the web app on :3000
+cd frontend && npm run dev
+```
+
+Then open http://localhost:3000 and sign up. Uploads go to `/data/uploads`, or `/tmp/margins-uploads` when that folder is not writable; both services look in the same two places. The first upload downloads the small embedding model, so it takes longer than the rest.
 
 </details>
 
 <details>
 <summary>Environment variables</summary>
 
-Required:
+Required (the `.env.example` files have working local values):
 
 ```env
-ANTHROPIC_API_KEY=sk-ant-...
-DATABASE_URL=postgresql://user:pass@localhost:5432/margins
+DATABASE_URL=postgresql://dev:devpass@localhost:5432/margins
 NEXTAUTH_SECRET=...              # openssl rand -base64 32
 NEXTAUTH_URL=http://localhost:3000
 AI_SERVICE_URL=http://localhost:8000
@@ -147,18 +190,19 @@ Optional:
 ```env
 GOOGLE_OAUTH_CLIENT_ID=...       # Google sign-in
 GOOGLE_OAUTH_CLIENT_SECRET=...
-LLM_PROVIDER=anthropic           # or mock
+LLM_PROVIDER=mock                # or anthropic, with ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_MODEL=claude-opus-5-5
 ANTHROPIC_FAST_MODEL=claude-haiku-5-5
-MODEL_QUIZ=claude-sonnet-5-5:medium  # one model per purpose ("<model>:<effort>"): MODEL_NOTES, _EXAMPLES,
-                                     # _PRACTICE, _QUIZ, _EXAM, _GRADING, _TOPICS, _CHAT, _VOICE, _VALIDATION
+MODEL_CHAT=:low                  # one model per purpose, "<model>:<effort>" (":low" keeps the default model at low
+                                 # effort): MODEL_NOTES, _EXAMPLES, _PRACTICE, _QUIZ, _EXAM, _GRADING, _TOPICS,
+                                 # _CHAT, _VOICE, _VALIDATION. ai-service/.env.example lists the defaults.
 LLM_MAX_CONCURRENCY=4            # model calls at once in the AI service
 VOICE_DAILY_MINUTES=30           # per user per 24 hours
 MAX_UPLOAD_MB=25
 S3_BUCKET=... S3_ENDPOINT=... S3_REGION=auto S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=...
 ```
 
-Without `S3_BUCKET`, uploads go to local disk (Google Cloud Storage also works).
+Without `S3_BUCKET`, uploads go to the local uploads folder (`LOCAL_UPLOADS_DIR`).
 
 </details>
 
@@ -174,11 +218,21 @@ Migration `20261022000000_retrieval_indexes` makes embeddings `vector(384)` and 
 ## Tests
 
 ```bash
-cd frontend && npm run lint && npm test && npm run build && npm run test:e2e
-cd ai-service && uv run pytest
+(cd frontend && npm run lint && npx tsc --noEmit && npm test && npm run build)
+(cd ai-service && uv run pytest -q)
 ```
 
-CI (`.github/workflows/ci.yml`) runs Prisma validation, lint, unit tests and a production build for the web app, the pytest suite for the AI service, and the Playwright specs against Postgres with pgvector, the AI service on the mock LLM and the production build (`scripts/e2e-stack.sh` starts the services; run it the same way locally with `DATABASE_URL` set to a migrated database).
+The Playwright specs run against the production build, the AI service on the mock LLM and a migrated database:
+
+```bash
+export DATABASE_URL=postgresql://dev:devpass@localhost:5432/margins
+(cd frontend && npx playwright install chromium)   # once
+scripts/e2e-stack.sh start            # after the build above
+(cd frontend && PLAYWRIGHT_BASE_URL=http://localhost:3000 npx playwright test)
+scripts/e2e-stack.sh stop
+```
+
+CI (`.github/workflows/ci.yml`) runs the same steps: Prisma validation, lint, type check, unit tests and a production build for the web app, the pytest suite for the AI service, and the Playwright specs against Postgres with pgvector.
 
 ## Deployment
 
@@ -191,7 +245,7 @@ Hosted on [Railway](https://railway.com/): the web and AI services, Postgres wit
 frontend/             Next.js app: pages, API routes, Prisma schema, Playwright e2e
 ai-service/           FastAPI service: parsing, embeddings, generation, grading
 evals/                retrieval and generation evals, results
-docs/                 design spec and deployment guide
+docs/                 deployment guide (RAILWAY.md) and old design screenshots
 ```
 
 ## License
