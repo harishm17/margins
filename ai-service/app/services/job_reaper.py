@@ -9,6 +9,14 @@ delivered. It is dispatched again, with growing gaps (the Nth re-dispatch waits 
 threshold since creation), and failed with JOB_DISPATCH_FAILED after JOB_MAX_REDISPATCHES.
 The claim means a duplicate dispatch can never run a job twice.
 
+A job back in `pending` after a retryable failure (it has started, and has attempts left) is the
+dispatcher's to retry. `lease_until` on it marks when the reaper takes over if nothing has claimed
+it: the reaper dispatches it again then, and after JOB_MAX_REDISPATCHES fails it with its last
+error.
+
+On a failed job, `retryable` says whether starting the same work again may help, so a job lost
+to a dead worker or a dispatch that never arrived is retryable: the student can start it again.
+
 The reaper is the only owner of both cases; the frontend does not close stuck jobs itself.
 """
 import asyncio
@@ -57,7 +65,7 @@ async def reap_expired_jobs() -> Dict[str, int]:
         SET status = 'failed',
             error_code = 'JOB_LEASE_EXPIRED',
             error_message = 'The worker running this job stopped responding.',
-            retryable = FALSE,
+            retryable = TRUE,
             completed_at = {UTC_NOW},
             lease_until = NULL
         WHERE status = 'processing'
@@ -94,7 +102,7 @@ async def reap_expired_jobs() -> Dict[str, int]:
             error_code = 'JOB_DISPATCH_FAILED',
             error_message = 'The job could not be started: it was dispatched ' || dispatch_count
                 || ' more times and nothing picked it up.',
-            retryable = FALSE,
+            retryable = TRUE,
             completed_at = {UTC_NOW}
         WHERE {due} AND dispatch_count >= $2
         RETURNING id
@@ -119,11 +127,47 @@ async def reap_expired_jobs() -> Dict[str, int]:
     )
     pending_redispatched = await _redispatch(pending)
 
+    # Jobs back in pending for a retry that nothing claimed by their lease_until mark (the
+    # dispatcher gave up or died). The error they keep is their last attempt's.
+    retry_due = f"""
+        status = 'pending'
+        AND started_at IS NOT NULL
+        AND (lease_until IS NULL OR lease_until < {UTC_NOW})
+    """
+    retry_failed = await execute_query(
+        f"""
+        UPDATE processing_jobs
+        SET status = 'failed', completed_at = {UTC_NOW}, lease_until = NULL
+        WHERE {retry_due} AND dispatch_count >= $1
+        RETURNING id
+        """,
+        settings.JOB_MAX_REDISPATCHES,
+    )
+    retries = await execute_query(
+        f"""
+        UPDATE processing_jobs
+        SET dispatch_count = dispatch_count + 1,
+            lease_until = {UTC_NOW} + make_interval(secs => $1::float8)
+        WHERE id IN (
+            SELECT id FROM processing_jobs
+            WHERE {retry_due} AND dispatch_count < $2
+            ORDER BY created_at
+            LIMIT 100
+        )
+        RETURNING id, job_type, input_data
+        """,
+        threshold,
+        settings.JOB_MAX_REDISPATCHES,
+    )
+    retries_redispatched = await _redispatch(retries)
+
     counts = {
         "failed": len(failed),
         "redispatched": redispatched,
         "pending_failed": len(undelivered),
         "pending_redispatched": pending_redispatched,
+        "retry_failed": len(retry_failed),
+        "retry_redispatched": retries_redispatched,
     }
     if any(counts.values()):
         logger.warning("Job reaper: %s", counts)

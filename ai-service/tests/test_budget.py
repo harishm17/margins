@@ -177,7 +177,7 @@ class TestGlobalBudget:
         assert "$6.00 of $5.00" in lines[0]
 
     async def test_the_job_runner_fails_the_job_with_the_allowance_code(self, db):
-        from app.services.job_runner import DailyBudgetExceeded, _enforce_daily_budget, JobContext
+        from app.services.job_runner import DailyBudgetExceeded, _enforce_ai_ready, JobContext
 
         spender, _ = await user_with_project(db)
         await seed_usage(db, spender, 6.00)
@@ -186,7 +186,7 @@ class TestGlobalBudget:
                          attempt=1, max_attempts=3, lease_seconds=60)
 
         with pytest.raises(DailyBudgetExceeded) as raised:
-            await _enforce_daily_budget(job)
+            await _enforce_ai_ready(job)
         assert raised.value.code == "LLM_DAILY_BUDGET"
 
 
