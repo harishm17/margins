@@ -108,7 +108,7 @@ function Trust() {
                   name="ask"
                   desktop={{ width: 1000, height: 1022 }}
                   mobile={{ width: 780, height: 1400 }}
-                  alt="An answer in Ask your materials with a citation open: the quoted passage, the file name and the page"
+                  alt="An answer in Ask with a citation open: the quoted passage, the file name and the page"
                   sizes="(min-width: 1280px) 620px, (min-width: 1024px) 55vw, 704px"
                   className="absolute inset-0 h-full w-full object-cover object-[50%_32%] md:object-[50%_38%]"
                 />
@@ -120,7 +120,10 @@ function Trust() {
             <li className="pb-8">
               <h3 className="text-heading text-fg">Quality is measured</h3>
               <p className="mt-2 text-reading text-fg-2">
-                We run the generators on two MIT OpenCourseWare courses and have a judge model, which does not know which model wrote the text, score the output. In the latest run on {EVAL_FACTS.topics} topics, correctness scored {EVAL_FACTS.correctness} out of 5 and grounding in the source pages {EVAL_FACTS.grounding}. The judge also listed {EVAL_FACTS.errors} errors, {EVAL_FACTS.mathErrors} of them mathematical, and we publish them.
+                We run the generators on two MIT OpenCourseWare courses and have a judge model score the output. The judge is {EVAL_FACTS.judge}, the same model that writes the text, so its scores are a limited check. In the latest run on {EVAL_FACTS.topics} topics, it scored correctness {EVAL_FACTS.correctness} out of 5 and grounding in the source pages {EVAL_FACTS.grounding}, and listed {EVAL_FACTS.errors} errors, {EVAL_FACTS.mathErrors} of them mathematical.
+              </p>
+              <p className="mt-3 text-reading text-fg-2">
+                Automatic checks, with no model involved, found failures too: {EVAL_FACTS.notesWithAllSections} notes had all the expected sections, and {EVAL_FACTS.notesInWordBand} stayed within the requested length. We publish all of it.
               </p>
               <a href={LINKS.eval} target="_blank" rel="noopener noreferrer" className={`${link} mt-3`}>
                 Read the evaluation <ArrowUpRight aria-hidden="true" className="size-3.5" />
@@ -138,7 +141,7 @@ function Trust() {
             <li className="pt-8">
               <h3 className="text-heading text-fg">Your files stay yours</h3>
               <p className="mt-2 text-reading text-fg-2">
-                Your files stay in your account. Delete a course and its files, and everything made from them, go with it. We do not sell your data or use your files to train AI models.
+                Your files stay in your account. When you delete a course, its files and everything made from them are deleted. We do not sell your data or use your files to train AI models.
               </p>
               <Link href="/privacy" className={`${link} mt-3`}>
                 Read the privacy policy

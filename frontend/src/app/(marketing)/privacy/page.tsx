@@ -41,7 +41,7 @@ export default function PrivacyPage() {
       </LegalSection>
       <LegalSection heading="Your choices">
         <p>
-          Delete a course and its files and everything created from them are deleted. To delete your account
+          When you delete a course, its files and everything created from them are deleted. To delete your account
           entirely, email {CONTACT_EMAIL} from the address you signed up with and we&apos;ll remove it within 30
           days.
         </p>

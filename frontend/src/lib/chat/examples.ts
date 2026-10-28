@@ -1,9 +1,16 @@
 /** Example questions for the empty chat, built from the project's topic names. */
 
+/**
+ * The topic name goes in quotes. Names are written as titles ("Conditional probability", "TCP
+ * handshake"), so pasted mid-sentence as they are they read like a capitalisation slip, and
+ * lower-casing them would break acronyms and proper names. Quoted, any name reads correctly.
+ */
+const quoted = (topic: string) => `“${topic}”`
+
 const TOPIC_TEMPLATES = [
-  (topic: string) => `Explain ${topic} in simple terms.`,
-  (topic: string) => `What are the key points about ${topic}?`,
-  (topic: string) => `Give me an example that shows ${topic}.`,
+  (topic: string) => `Explain ${quoted(topic)} in simple terms.`,
+  (topic: string) => `What are the key points about ${quoted(topic)}?`,
+  (topic: string) => `Give me an example that shows ${quoted(topic)}.`,
 ]
 
 const GENERIC_QUESTIONS = [

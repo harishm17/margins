@@ -12,7 +12,7 @@ import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { LobbyAlert } from './errors'
-import { minutesLeftLabel } from './format'
+import { focusPlaceholder, minutesLeftLabel } from './format'
 import { defaultLanguageCode, VOICE_LANGUAGES } from './speech'
 import type { StartConfig } from './use-voice-session'
 import type { VoiceUsage, VoiceStyle } from './voice-api'
@@ -28,7 +28,7 @@ const LANGUAGE_OPTIONS = VOICE_LANGUAGES.map((language) => ({ value: language.co
 type LobbyProps = {
   courseId: string
   mode: 'topic' | 'sprint'
-  topic?: { id: string; name: string }
+  topic?: { id: string; name: string; keywords?: string[] }
   /** null while loading, 'unavailable' when the usage request failed. */
   usage: VoiceUsage | 'unavailable' | null
   limitReached: boolean
@@ -125,7 +125,7 @@ export function Lobby({
           <Input
             value={focus}
             onChange={(event) => setFocus(event.target.value)}
-            placeholder={mode === 'topic' ? 'e.g. edge cases in Dijkstra' : 'e.g. the definitions I keep mixing up'}
+            placeholder={focusPlaceholder(mode === 'topic' ? topic?.keywords : undefined)}
             maxLength={280}
             disabled={starting}
           />
@@ -176,7 +176,7 @@ function LobbyAlertView({
         }
       >
         {mode === 'sprint'
-          ? "Your weakest topics don't have quiz questions yet. Create their notes and a quiz, then come back."
+          ? "These topics don't have quiz questions yet. Create their notes and a quiz, then come back."
           : "There are no questions to ask yet. Create this topic's notes and a quiz, then come back. Walk me through it and Just talk work without them."}
       </InlineAlert>
     )
