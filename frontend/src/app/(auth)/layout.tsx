@@ -14,9 +14,9 @@ import { AiStatusBanner, AiStatusProvider } from '@/features/ai/ai-status'
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <AiStatusProvider>
+      <SkipLink />
+      <AiStatusBanner />
       <div className="grid min-h-dvh lg:grid-cols-[minmax(440px,480px)_1fr]">
-        <SkipLink />
-        <AiStatusBanner className="lg:col-span-2" />
         <div className="flex flex-col px-6 py-5 sm:px-12">
           <header className="flex items-center justify-between">
             <Link href="/" className="rounded-chip" aria-label={`${BRAND_NAME} home`}>

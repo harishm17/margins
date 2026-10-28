@@ -129,7 +129,7 @@ export default function AskPage({
   }
 
   return (
-    <div className="flex h-[calc(100dvh-var(--topbar-height)-var(--tabbar-height,0px))] min-h-0">
+    <div className="flex h-[calc(100dvh-var(--topbar-height)-var(--tabbar-height,0px)-var(--ai-banner-height,0px))] min-h-0">
       <h1 className="sr-only">Ask your materials</h1>
       <aside className="hidden w-[248px] shrink-0 border-r border-border bg-surface lg:block">
         <ThreadList {...listProps} hrefFor={(id) => `${base}?thread=${id}`} />

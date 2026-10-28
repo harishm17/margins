@@ -141,13 +141,34 @@ export function AiStatusBanner({ className }: { className?: string }) {
     () => null
   )
   const [dismissedKey, setDismissedKey] = React.useState<string | null>(null)
+  const visible = !status.available && dismissedKey !== key && storedKey !== key
+  const ref = React.useRef<HTMLDivElement>(null)
 
-  if (status.available) return null
-  if (dismissedKey === key || storedKey === key) return null
+  // Pages that fill the screen (Ask) subtract --ai-banner-height, so the banner never pushes
+  // their bottom edge out of view.
+  React.useLayoutEffect(() => {
+    const root = document.documentElement
+    const element = ref.current
+    if (!visible || !element) {
+      root.style.removeProperty('--ai-banner-height')
+      return
+    }
+    const update = () => root.style.setProperty('--ai-banner-height', `${element.offsetHeight}px`)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+      root.style.removeProperty('--ai-banner-height')
+    }
+  }, [visible])
+
+  if (!visible) return null
 
   const message = BANNER
   return (
     <div
+      ref={ref}
       role="status"
       className={cn('flex items-start gap-3 border-b border-border bg-warning-soft px-4 py-2.5 text-warning-soft-fg md:px-6', className)}
     >
