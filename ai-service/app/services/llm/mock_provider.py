@@ -168,8 +168,11 @@ def _mock_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> t
 
 
 # End-to-end tests make the mock fail like the real API by putting "MOCK_LLM_FAIL:<code>" in a
-# prompt (a question, a topic name). Only the mock reads it; the real provider never sees it.
-_FAILURE_MARKER = re.compile(r"MOCK_LLM_FAIL:([A-Z_]+)")
+# prompt (a question, a topic name, an answer). "MOCK_LLM_FAIL:<code>x<n>@<id>" fails only the
+# first n calls that carry it, then the "outage" is over: a test can watch the app catch up.
+# Only the mock reads it; the real provider never sees it.
+_FAILURE_MARKER = re.compile(r"MOCK_LLM_FAIL:([A-Z_]+?)(?:x(\d+)@([A-Za-z0-9_-]+))?(?![A-Z_])")
+_failures_left: Dict[str, int] = {}
 _SIMULATED_FAILURES: Dict[str, type] = {
     LLMCreditError.code: LLMCreditError,
     LLMAuthError.code: LLMAuthError,
@@ -183,9 +186,16 @@ _SIMULATED_FAILURES: Dict[str, type] = {
 def _raise_if_asked(*texts: str) -> None:
     for text in texts:
         match = _FAILURE_MARKER.search(text or "")
-        if match:
-            error_type = _SIMULATED_FAILURES.get(match.group(1), LLMError)
-            raise error_type(f"Simulated by the mock provider ({match.group(1)})")
+        if not match:
+            continue
+        code, times, key = match.groups()
+        if times is not None:
+            left = _failures_left.setdefault(key, int(times))
+            if left <= 0:
+                continue
+            _failures_left[key] = left - 1
+        error_type = _SIMULATED_FAILURES.get(code, LLMError)
+        raise error_type(f"Simulated by the mock provider ({code})")
 
 
 class MockProvider(LLMProvider):

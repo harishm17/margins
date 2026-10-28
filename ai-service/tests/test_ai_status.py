@@ -225,6 +225,17 @@ class TestObservedProvider:
         await provider.generate_text([LLMMessage(role="user", content="Notes")], purpose="notes")
         assert (await ai_status.get_status()).available
 
+    def test_the_mock_can_fail_a_set_number_of_times_then_recover(self):
+        from app.services.llm.mock_provider import _raise_if_asked
+
+        marker = "answer MOCK_LLM_FAIL:LLM_CREDIT_EXHAUSTEDx2@t1 here"
+        for _ in range(2):
+            with pytest.raises(LLMCreditError):
+                _raise_if_asked(marker)
+        _raise_if_asked(marker)  # the outage is over
+        with pytest.raises(LLMCreditError):
+            _raise_if_asked("MOCK_LLM_FAIL:LLM_CREDIT_EXHAUSTED")  # without a count: always
+
     async def test_streams_report_too(self, db, alerts):
         provider = ObservedProvider(MockProvider())
 

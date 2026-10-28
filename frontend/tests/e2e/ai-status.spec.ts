@@ -93,6 +93,64 @@ test('ask: a failed first answer leaves no conversation behind and turns AI off 
   await expect(page.getByRole('button', { name: 'Send question' })).toBeDisabled()
 })
 
+test('mock exam: submitted during an outage, the answers are saved and graded once AI is back', async ({ page }) => {
+  test.setTimeout(300_000)
+  await signIn(page)
+  await page.goto(`${course}/exams/new`)
+  await page.getByRole('radio', { name: '10', exact: true }).click()
+  await page.getByRole('button', { name: 'Create exam' }).click()
+  await expect(page).toHaveURL(/\/exams\/[0-9a-f-]{36}$/, { timeout: 180_000 })
+  const examId = page.url().split('/').pop()!
+  await page.getByRole('button', { name: /^(Start exam|Resume)/ }).click()
+  await expect(page).toHaveURL(/\/take$/)
+
+  // Every written answer carries the mock's trigger: the first grading call fails as out of
+  // credit, as the real API would during an outage; the next one works (the outage is over).
+  const questions = await withPrisma(async (prisma) => {
+    const exam = await prisma.sampleExam.findUniqueOrThrow({ where: { id: examId }, select: { questions: true } })
+    return exam.questions as Array<{ question_type: string; correct_answer?: unknown }>
+  })
+  expect(questions.some((q) => q.question_type === 'short_answer')).toBe(true)
+  const trigger = `MOCK_LLM_FAIL:LLM_CREDIT_EXHAUSTEDx1@grade${Date.now()}`
+  const answers = Object.fromEntries(
+    questions.map((q, index) => [String(index), q.question_type === 'short_answer' ? `Caching keeps data close. ${trigger}` : String(q.correct_answer ?? 'A')])
+  )
+  const submitted = await page.request.post(`/api/exams/${examId}/submit`, { data: { answers } })
+  expect(submitted.status()).toBe(200)
+  const { submissionId } = await submitted.json()
+
+  await page.goto(`${course}/exams/${examId}/results/${submissionId}`)
+  await expect(page.getByRole('heading', { name: 'Your answers are saved' })).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText('Grading will finish when AI is available again.')).toBeVisible()
+  const waiting = await withPrisma((prisma) =>
+    prisma.processingJob.findFirstOrThrow({
+      where: { jobType: 'grade_exam', targetKey: `grade:${submissionId}` },
+      select: { status: true, stage: true, attemptCount: true },
+    })
+  )
+  expect(waiting).toEqual({ status: 'pending', stage: 'waiting_for_ai', attemptCount: 0 })
+  const stored = await withPrisma((prisma) =>
+    prisma.examSubmission.findUniqueOrThrow({ where: { id: submissionId }, select: { answers: true, aiGrading: true } })
+  )
+  expect(stored.answers).toEqual(answers)
+  expect(stored.aiGrading).toBeNull()
+  // The failure marked AI unavailable for everyone; submitting again now would still be accepted.
+  const status = await withPrisma((prisma) => prisma.aiStatus.findUnique({ where: { id: 'global' } }))
+  expect(status?.state).toBe('unavailable')
+
+  // The real outage ends (credit topped up): the shared status clears and the reaper sends the
+  // grading again; this time the model answers, and the page shows the score by itself.
+  await markAvailable()
+  await expect(page.getByRole('region', { name: 'Your score' })).toBeVisible({ timeout: 150_000 })
+  const graded = await withPrisma((prisma) =>
+    prisma.processingJob.findFirstOrThrow({
+      where: { jobType: 'grade_exam', targetKey: `grade:${submissionId}` },
+      select: { status: true },
+    })
+  )
+  expect(graded.status).toBe('completed')
+})
+
 test('mock exam: a failed exam goes back to the form with every choice kept', async ({ page }) => {
   test.setTimeout(240_000)
   await signIn(page)
