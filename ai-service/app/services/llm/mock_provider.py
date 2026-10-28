@@ -6,6 +6,12 @@ import re
 from typing import Any, AsyncIterator, Dict, List, Optional, Type
 
 from app.services.llm.base import (
+    LLMAuthError,
+    LLMCreditError,
+    LLMError,
+    LLMRateLimitError,
+    LLMRefusalError,
+    LLMUnavailableError,
     AnswerCitation,
     AnswerDone,
     AnswerEvent,
@@ -161,6 +167,27 @@ def _mock_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> t
     return "Hi, I am your mock coach. What would you like to talk about?", None
 
 
+# End-to-end tests make the mock fail like the real API by putting "MOCK_LLM_FAIL:<code>" in a
+# prompt (a question, a topic name). Only the mock reads it; the real provider never sees it.
+_FAILURE_MARKER = re.compile(r"MOCK_LLM_FAIL:([A-Z_]+)")
+_SIMULATED_FAILURES: Dict[str, type] = {
+    LLMCreditError.code: LLMCreditError,
+    LLMAuthError.code: LLMAuthError,
+    LLMRateLimitError.code: LLMRateLimitError,
+    LLMUnavailableError.code: LLMUnavailableError,
+    LLMRefusalError.code: LLMRefusalError,
+    LLMOutputError.code: LLMOutputError,
+}
+
+
+def _raise_if_asked(*texts: str) -> None:
+    for text in texts:
+        match = _FAILURE_MARKER.search(text or "")
+        if match:
+            error_type = _SIMULATED_FAILURES.get(match.group(1), LLMError)
+            raise error_type(f"Simulated by the mock provider ({match.group(1)})")
+
+
 class MockProvider(LLMProvider):
     """Returns each schema's `example()` and fixed markdown, and records zero usage."""
 
@@ -181,6 +208,7 @@ class MockProvider(LLMProvider):
         purpose: str,
         max_tokens: int = 16000,
     ) -> LLMResponse:
+        _raise_if_asked(*(message.content for message in messages))
         async with llm_slot():
             await self._simulate_call()
         usage = LLMUsage(model=self.model_for(purpose), purpose=purpose)
@@ -198,6 +226,7 @@ class MockProvider(LLMProvider):
         example = getattr(schema, "example", None)
         if example is None:
             raise LLMOutputError(f"MockProvider has no example for {schema.__name__}")
+        _raise_if_asked(*(message.content for message in messages))
         async with llm_slot():
             await self._simulate_call()
         record_usage(LLMUsage(model=self.model_for(purpose), purpose=purpose))
@@ -221,6 +250,7 @@ class MockProvider(LLMProvider):
         """A fixed-shape answer that quotes the first two excerpts and cites each."""
         if not excerpts:
             raise LLMOutputError("The mock provider needs at least one excerpt")
+        _raise_if_asked(question)
         async with llm_slot():  # the wait for the first token
             await self._simulate_call()
         parts: List[tuple[str, Optional[Excerpt]]] = [
@@ -262,6 +292,7 @@ class MockProvider(LLMProvider):
         purpose: str = "voice",
     ) -> AsyncIterator[TurnEvent]:
         """A scripted reply (see _mock_turn). Reports a few nominal tokens, at no cost."""
+        _raise_if_asked(system, json.dumps(messages))
         async with llm_slot():  # the wait for the first token
             await self._simulate_call()
         text, call = _mock_turn(messages, tools)

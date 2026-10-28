@@ -728,3 +728,23 @@ model LlmUsageEvent {
   @@index([createdAt])
   @@map("llm_usage_events")
 }
+
+// Whether the AI provider can be used right now, for every user at once. One row, id "global",
+// written by the AI service (raw SQL, like every other table it touches): a provider-level failure
+// (out of credit, rejected key, no key, or repeated overload past the SDK's own retries) sets it
+// to "unavailable" with the error code as `reason`; any successful model call sets it back to
+// "available". `since` is when the current state began, `checkedAt` when a call last confirmed
+// it. An "unavailable" row older than AI_STATUS_TTL_S counts as unknown, so the next real call
+// tests the provider again (there is no paid probe). The web app reads it through the AI
+// service's GET /status/ai.
+model AiStatus {
+  id        String    @id @default("global")
+  state     String    @default("available") // available|unavailable
+  reason    String? // the LLM error code that set "unavailable"
+  since     DateTime?
+  checkedAt DateTime  @default(now()) @map("checked_at")
+  // The provider's own words, for logs and the owner alert. Never shown to students.
+  detail    String?
+
+  @@map("ai_status")
+}

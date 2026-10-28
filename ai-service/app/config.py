@@ -115,6 +115,15 @@ class Settings(BaseSettings):
     # the API key is shared, so this is the ceiling on the day's bill. 0 turns it off.
     GLOBAL_DAILY_LLM_BUDGET_USD: float = 40.00
 
+    # The shared AI status (app/services/ai_status.py). An "unavailable" status older than this
+    # many seconds counts as unknown, so the next real call tests the provider again.
+    AI_STATUS_TTL_S: float = 300.0
+    # Rate limits or outages in a row (each after the SDK's own retries) that mark the AI
+    # unavailable. Credit, key and configuration errors mark it at once.
+    AI_STATUS_TRANSIENT_THRESHOLD: int = 3
+    # Optional webhook (Discord, Slack or ntfy) told once when the AI becomes unavailable.
+    OPS_ALERT_WEBHOOK_URL: str = ""
+
     # Dispatching jobs to this service. With ENABLE_CLOUD_TASKS the service creates Cloud
     # Tasks (project, location and queue below); otherwise it posts to AI_SERVICE_URL itself.
     ENABLE_CLOUD_TASKS: bool = False

@@ -18,6 +18,13 @@ class LLMFactory:
 
     @classmethod
     def _create_provider(cls) -> LLMProvider:
+        from app.services.llm.observed import ObservedProvider
+
+        # Every call reports to the shared AI status (app/services/ai_status.py).
+        return ObservedProvider(cls._create_inner())
+
+    @classmethod
+    def _create_inner(cls) -> LLMProvider:
         provider_name = settings.LLM_PROVIDER.lower()
 
         if provider_name == "anthropic":
