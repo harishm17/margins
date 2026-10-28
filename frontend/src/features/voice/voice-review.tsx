@@ -34,7 +34,7 @@ const VoiceReviewImpl = dynamic(() => import('./voice-review-impl').then((module
 })
 
 /**
- * Voice practice (docs/design/DESIGN.md 6.12): lobby, live session, summary. Render it inside the
+ * Voice practice: lobby, live session, summary. Render it inside the
  * topic page's Voice practice view (mode "topic") or on the sprint page (mode "sprint").
  */
 export function VoiceReview(props: VoiceReviewProps) {

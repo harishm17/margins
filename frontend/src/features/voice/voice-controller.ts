@@ -3,7 +3,7 @@
  * speech output, heartbeat and idle handling. It reports what happens to the UI through
  * `dispatch` (see session-state.ts). No React in here, so the hook stays small.
  *
- * Rules it keeps (docs/design/VOICE_API.md):
+ * Rules it keeps:
  * - never two turns at once: turns run one after another on a promise chain
  * - barge-in cancels speech at once, aborts the open request and clears the sentence chunker
  * - a failed turn is retried with the same words, or with "" when a tool already ran

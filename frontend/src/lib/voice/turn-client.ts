@@ -1,7 +1,7 @@
 /**
  * Browser-side helpers for POST /api/voice/turn. Pure TypeScript: no React, no server imports.
  *
- * The turn answers with newline-delimited JSON (see docs in /tmp/sb-design/VOICE_API.md).
+ * The turn answers with newline-delimited JSON.
  * `readVoiceEvents` turns a fetch response into typed events, and `createSentenceChunker`
  * turns the streamed text deltas into whole sentences that speechSynthesis can start on
  * while the rest of the reply is still being written.

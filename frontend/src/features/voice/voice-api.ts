@@ -1,4 +1,4 @@
-/** The voice routes, as the browser calls them (docs/design/VOICE_API.md). */
+/** The voice routes, as the browser calls them. */
 import { apiFetch, ApiError, isApiError, parseApiError } from '@/lib/api/client'
 
 export type VoiceUsage = {

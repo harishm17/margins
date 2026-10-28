@@ -1,5 +1,5 @@
 /*
- * The voice orb (docs/design/DESIGN.md 6.12): a 128px accent-soft circle with an inner accent
+ * The voice orb: a 128px accent-soft circle with an inner accent
  * circle. While listening the inner circle's scale follows --orb-level (0..1), written from
  * requestAnimationFrame in voice-orb.tsx, never through React state. Thinking shows a slow
  * rotating conic ring, speaking a gentle pulse, paused and idle are static and muted.

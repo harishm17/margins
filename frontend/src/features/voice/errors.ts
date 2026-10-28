@@ -1,6 +1,6 @@
 /**
- * Friendly copy for every way a voice turn can fail (docs/design/VOICE_API.md, "Errors before
- * the stream starts" and the `error` event). The server's own `message` is safe to show, but it
+ * Friendly copy for every way a voice turn can fail (the errors before
+ * the stream starts and the `error` event). The server's own `message` is safe to show, but it
  * is written for any client; these lines say what the student can do about it.
  */
 
