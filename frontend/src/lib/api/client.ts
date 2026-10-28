@@ -1,7 +1,7 @@
 /**
  * The one way the browser calls the app's own API.
  *
- * The routes answer errors in three shapes (see docs/design/BACKEND_CONTRACT.md section 0):
+ * The routes answer errors in three shapes:
  *   A  { error: "message", details? }
  *   B  { error: { code, message, details? } }
  *   C  B with a more specific code in details.code (ATTEMPT_EXPIRED, LLM_DAILY_BUDGET, ...)

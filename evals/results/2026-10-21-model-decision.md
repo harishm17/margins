@@ -6,7 +6,7 @@ effort; MIT 18.05 and 6.006, 4 topics each, all four content types, Opus judge) 
 code before the option-letter fix (PR #21), so the judge's "explanation names the wrong option"
 errors are counted against every model; that bug is fixed.
 
-## Rule (set before the run, docs/design/LEARNING_V2.md)
+## Rule (set before the run)
 
 Per purpose, the cheapest model whose judge correctness mean is at least 4.5 with no mathematical
 error, and whose teaching/question-quality mean is within 0.3 of Opus.

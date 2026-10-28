@@ -8,7 +8,7 @@
 @custom-variant rail ([data-sidebar='collapsed'] .sidebar-desktop &);
 
 /* ---------------------------------------------------------------------------------------
-   Design tokens (docs/design/DESIGN.md section 3). Components use the semantic names only.
+   Design tokens. Components use the semantic names only.
    Neutrals are a cool grey at hue 255; the one accent is fern at hue 168.
    --------------------------------------------------------------------------------------- */
 
