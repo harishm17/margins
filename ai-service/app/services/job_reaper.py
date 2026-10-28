@@ -18,7 +18,7 @@ from typing import Any, Dict
 
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_query
-from app.services.cloud_tasks import JOB_ENDPOINTS, enqueue_job
+from app.services.dispatch import JOB_ENDPOINTS, enqueue_job
 
 logger = logging.getLogger(__name__)
 

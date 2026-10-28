@@ -12,7 +12,7 @@ from app.api.routes import jobs
 from app.config import settings
 from app.models.jobs import JobPayload
 from app.services import generation_chain
-from app.services.cloud_tasks import retry_delay_seconds
+from app.services.dispatch import retry_delay_seconds
 from app.services.content_generator.context import NoSourceMaterialError, content_messages
 from app.services.llm import limiter
 from app.services.llm.anthropic_provider import AnthropicProvider, _translate_api_error

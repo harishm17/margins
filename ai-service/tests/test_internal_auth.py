@@ -106,7 +106,7 @@ def test_health_needs_no_token(client, token):
 
 @pytest.mark.asyncio
 async def test_self_calls_send_the_token(monkeypatch):
-    from app.services import cloud_tasks
+    from app.services import dispatch
 
     sent = {}
 
@@ -128,7 +128,7 @@ async def test_self_calls_send_the_token(monkeypatch):
 
     monkeypatch.setattr(settings, "AI_INTERNAL_TOKEN", "s3cret-token")
     monkeypatch.setattr(settings, "ENVIRONMENT", "development")
-    monkeypatch.setattr(cloud_tasks.httpx, "AsyncClient", lambda *a, **k: FakeClient())
-    await cloud_tasks.enqueue_task("/jobs/extract-topics", {"jobId": "j1", "data": {}})
-    await cloud_tasks.wait_for_background_tasks()
+    monkeypatch.setattr(dispatch.httpx, "AsyncClient", lambda *a, **k: FakeClient())
+    await dispatch.enqueue_task("/jobs/extract-topics", {"jobId": "j1", "data": {}})
+    await dispatch.wait_for_background_tasks()
     assert sent["headers"][HEADER] == "s3cret-token"
