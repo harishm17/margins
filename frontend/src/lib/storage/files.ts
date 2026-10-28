@@ -1,6 +1,12 @@
 /**
- * Material file storage: an S3-compatible bucket (S3_BUCKET set), Google Cloud Storage
- * (ENABLE_GCS_STORAGE=true) or the local uploads folder.
+ * Material file storage: an S3-compatible bucket (S3_BUCKET set; production) or the local
+ * uploads folder (local runs, e2e).
+ *
+ * Stored paths, as recorded in `materials.gcs_path`:
+ * - `s3://bucket/key` for the bucket;
+ * - `local://path` for the local uploads folder;
+ * - `gs://bucket/path` for local uploads made before `local://` existed. The bucket name was
+ *   never used for them, so they are read and deleted exactly like `local://path`.
  */
 
 import type { Readable, Transform } from 'stream'
@@ -13,13 +19,33 @@ import {
   uploadStreamToS3,
 } from './s3'
 
-// Lazy-load Storage to avoid credential errors in development
-let storageInstance: any = null
-const CLOUD_STORAGE_ENABLED = process.env.ENABLE_GCS_STORAGE === 'true'
-const ALLOW_LOCAL_FALLBACK = process.env.ALLOW_GCS_LOCAL_FALLBACK !== 'false'
-const BUCKET_NAME = process.env.GCS_BUCKET || 'margins-materials'
 const LOCAL_UPLOAD_BASE = process.env.LOCAL_UPLOADS_DIR || '/data/uploads'
 const LOCAL_UPLOAD_FALLBACK_BASE = '/tmp/margins-uploads'
+const LOCAL_PREFIX = 'local://'
+
+/**
+ * The path inside the uploads folder of a local material (`local://path`, or the older
+ * `gs://bucket/path`), or null for any other stored path.
+ */
+export function parseLocalPath(storagePath: string): string | null {
+  if (storagePath.startsWith(LOCAL_PREFIX)) {
+    return storagePath.slice(LOCAL_PREFIX.length) || null
+  }
+  const legacy = /^gs:\/\/[^/]+\/(.+)$/.exec(storagePath)
+  return legacy ? legacy[1] : null
+}
+
+/**
+ * A file inside one upload folder, or null when the relative path would leave it. Paths come
+ * from the database, but nothing outside the upload folder is ever read or removed.
+ */
+async function insideUploads(base: string, relativePath: string): Promise<string | null> {
+  const pathModule = await import('path')
+  // Runtime upload folder, not project files: keep Turbopack from tracing the whole project.
+  const root = pathModule.resolve(/* turbopackIgnore: true */ base)
+  const candidate = pathModule.resolve(/* turbopackIgnore: true */ root, relativePath)
+  return candidate.startsWith(root + pathModule.sep) ? candidate : null
+}
 
 /**
  * Stream a file to local disk. The first writable upload folder is chosen before any byte is
@@ -49,7 +75,7 @@ async function writeLocalStream(
     try {
       await pipeline([source, ...transforms, fs.createWriteStream(localFilePath)])
       console.log('[LOCAL_STORAGE] File stored successfully')
-      return `gs://${BUCKET_NAME}/${storagePath}`
+      return `${LOCAL_PREFIX}${storagePath}`
     } catch (error) {
       fs.rmSync(localFilePath, { force: true })
       throw error
@@ -61,13 +87,9 @@ async function writeLocalStream(
 
 async function deleteLocalFile(relativePath: string): Promise<void> {
   const fs = await import('fs')
-  const pathModule = await import('path')
-  const bases = [LOCAL_UPLOAD_BASE, LOCAL_UPLOAD_FALLBACK_BASE]
-
-  for (const base of bases) {
-    // Runtime upload folder, not project files: keep Turbopack from tracing the whole project.
-    const localFilePath = pathModule.join(/* turbopackIgnore: true */ base, relativePath)
-    if (fs.existsSync(localFilePath)) {
+  for (const base of [LOCAL_UPLOAD_BASE, LOCAL_UPLOAD_FALLBACK_BASE]) {
+    const localFilePath = await insideUploads(base, relativePath)
+    if (localFilePath && fs.existsSync(localFilePath)) {
       fs.unlinkSync(localFilePath)
       return
     }
@@ -76,40 +98,12 @@ async function deleteLocalFile(relativePath: string): Promise<void> {
 
 async function deleteLocalFolder(relativeFolder: string): Promise<void> {
   const fs = await import('fs')
-  const pathModule = await import('path')
   for (const base of [LOCAL_UPLOAD_BASE, LOCAL_UPLOAD_FALLBACK_BASE]) {
-    const root = pathModule.resolve(/* turbopackIgnore: true */ base)
-    const folder = pathModule.resolve(/* turbopackIgnore: true */ root, relativeFolder)
     // Never remove the upload root itself or anything outside it.
-    if (folder === root || !folder.startsWith(root + pathModule.sep)) continue
+    const folder = await insideUploads(base, relativeFolder)
+    if (!folder) continue
     fs.rmSync(folder, { recursive: true, force: true })
   }
-}
-
-async function getStorage() {
-  if (!CLOUD_STORAGE_ENABLED) {
-    return null
-  }
-
-  if (!process.env.GCS_PROJECT_ID) {
-    console.warn('[GCS] ENABLE_GCS_STORAGE=true but GCS_PROJECT_ID is missing. Falling back to local storage.')
-    return null
-  }
-
-  // In production, lazy-load Storage only when needed
-  if (!storageInstance) {
-    try {
-      const { Storage } = await import('@google-cloud/storage')
-      storageInstance = new Storage({
-        projectId: process.env.GCS_PROJECT_ID,
-      })
-    } catch (error) {
-      console.warn('[GCS] Failed to initialize Storage client:', error)
-      return null
-    }
-  }
-
-  return storageInstance
 }
 
 function inferContentType(storagePath: string, provided?: string): string {
@@ -130,12 +124,10 @@ function inferContentType(storagePath: string, provided?: string): string {
 
 /**
  * Upload a file as a stream: the bytes go through `transforms` (size limit, signature check)
- * and straight to GCS or disk without being held in memory. If a transform rejects the
- * stream, or the upload fails part way, nothing is left in storage.
- *
- * There is no fallback from GCS to local disk after a failure, because the source has already
- * been read. The client simply uploads again.
- * @returns GCS path (gs://bucket/path)
+ * and on to the bucket or disk without being held in memory. If a transform rejects the
+ * stream, or the upload fails part way, nothing is left in storage. There is no retry here,
+ * because the source has already been read; the client simply uploads again.
+ * @returns The stored path (`s3://bucket/key` or `local://path`)
  */
 export async function uploadStream(
   source: Readable,
@@ -146,93 +138,22 @@ export async function uploadStream(
   if (s3Configured()) {
     return uploadStreamToS3(source, storagePath, inferContentType(storagePath, contentType), transforms)
   }
-
-  const storage = await getStorage()
-
-  if (!storage) {
-    return writeLocalStream(source, transforms, storagePath)
-  }
-
-  const { pipeline } = await import('stream/promises')
-  const blob = storage.bucket(BUCKET_NAME).file(storagePath)
-  try {
-    await pipeline([
-      source,
-      ...transforms,
-      blob.createWriteStream({
-        resumable: false,
-        metadata: { contentType: inferContentType(storagePath, contentType) },
-      }),
-    ])
-    return `gs://${BUCKET_NAME}/${storagePath}`
-  } catch (error) {
-    await blob.delete({ ignoreNotFound: true }).catch(() => undefined)
-    throw error
-  }
+  return writeLocalStream(source, transforms, storagePath)
 }
 
 /**
- * Generate a signed URL for downloading a file
- * @param gcsPath - Full GCS path (gs://bucket/path)
- * @param expiresInMinutes - URL expiration time (default: 60 minutes)
- * @returns Signed URL
+ * Delete one stored file. A path that is neither in the bucket nor in the upload folder is
+ * ignored.
  */
-export async function getSignedUrl(
-  gcsPath: string,
-  expiresInMinutes = 60
-): Promise<string> {
-  const storage = await getStorage()
-  
-  if (!storage) {
-    // Development mode - return a mock URL
-    return `http://localhost:4566/${gcsPath.replace('gs://', '')}`
-  }
-
-  // Extract path from gs://bucket/path
-  const path = gcsPath.replace(`gs://${BUCKET_NAME}/`, '')
-
-  const bucket = storage.bucket(BUCKET_NAME)
-  const file = bucket.file(path)
-
-  const [url] = await file.getSignedUrl({
-    version: 'v4',
-    action: 'read',
-    expires: Date.now() + expiresInMinutes * 60 * 1000,
-  })
-
-  return url
-}
-
-/**
- * Delete a file from GCS
- * @param gcsPath - Full GCS path (gs://bucket/path)
- */
-export async function deleteFile(gcsPath: string): Promise<void> {
-  const s3Path = parseS3Path(gcsPath)
+export async function deleteFile(storagePath: string): Promise<void> {
+  const s3Path = parseS3Path(storagePath)
   if (s3Path) {
     await deleteS3Object(s3Path.bucket, s3Path.key)
     return
   }
-
-  const storage = await getStorage()
-  
-  if (!storage) {
-    const relativePath = gcsPath.replace(`gs://${BUCKET_NAME}/`, '')
-    await deleteLocalFile(relativePath)
-    return
-  }
-
-  const path = gcsPath.replace(`gs://${BUCKET_NAME}/`, '')
-  const bucket = storage.bucket(BUCKET_NAME)
-  try {
-    await bucket.file(path).delete()
-  } catch (error) {
-    if (ALLOW_LOCAL_FALLBACK) {
-      console.warn(`[GCS] Delete of ${path} failed, trying local storage instead:`, error)
-      await deleteLocalFile(path)
-      return
-    }
-    throw error
+  const localPath = parseLocalPath(storagePath)
+  if (localPath) {
+    await deleteLocalFile(localPath)
   }
 }
 
@@ -242,15 +163,15 @@ export async function deleteFile(gcsPath: string): Promise<void> {
  * succeeded and must not turn into an error because storage hiccuped.
  * Returns the paths that could not be deleted.
  */
-export async function deleteFilesBestEffort(gcsPaths: string[]): Promise<string[]> {
+export async function deleteFilesBestEffort(storagePaths: string[]): Promise<string[]> {
   const failed: string[] = []
-  for (const gcsPath of gcsPaths) {
-    if (!gcsPath) continue
+  for (const storagePath of storagePaths) {
+    if (!storagePath) continue
     try {
-      await deleteFile(gcsPath)
+      await deleteFile(storagePath)
     } catch (error) {
-      failed.push(gcsPath)
-      console.error(`[STORAGE] Could not delete ${gcsPath}; remove it by hand:`, error)
+      failed.push(storagePath)
+      console.error(`[STORAGE] Could not delete ${storagePath}; remove it by hand:`, error)
     }
   }
   return failed
@@ -263,14 +184,11 @@ export async function deleteFilesBestEffort(gcsPaths: string[]): Promise<string[
 export async function deleteProjectFolder(userId: string, projectId: string): Promise<boolean> {
   const folder = `${userId}/${projectId}/`
   try {
-    // Uploads can be on local disk even with GCS on (the upload fallback), so sweep both.
+    // Sweep the local folder even with a bucket: uploads made before the bucket was set
+    // up stay on disk.
     await deleteLocalFolder(folder)
     if (s3Configured()) {
       await deleteS3Prefix(folder)
-    }
-    const storage = await getStorage()
-    if (storage) {
-      await storage.bucket(BUCKET_NAME).deleteFiles({ prefix: folder, force: true })
     }
     return true
   } catch (error) {
@@ -280,12 +198,7 @@ export async function deleteProjectFolder(userId: string, projectId: string): Pr
 }
 
 /**
- * Generate GCS path for a material upload
- * @param userId - User ID
- * @param projectId - Project ID
- * @param materialId - Material ID
- * @param filename - Original filename
- * @returns GCS path
+ * The storage path for a material upload: user/project/materials/material/filename.
  */
 export function generateMaterialPath(
   userId: string,
@@ -305,28 +218,22 @@ export type StoredFile = {
 }
 
 /**
- * Open a stored material for reading. Like the AI service, a `gs://` path is looked up in
- * the local upload folders first (uploads can be on disk even with GCS on), then in the
- * bucket. Returns null when the file is in neither place.
+ * Open a stored material for reading, from the bucket or the local upload folders (the
+ * same lookup the AI service makes). Returns null when the file is not there.
  */
-export async function openStoredFile(gcsPath: string): Promise<StoredFile | null> {
-  const s3Path = parseS3Path(gcsPath)
+export async function openStoredFile(storagePath: string): Promise<StoredFile | null> {
+  const s3Path = parseS3Path(storagePath)
   if (s3Path) {
     return openS3Object(s3Path.bucket, s3Path.key)
   }
 
-  const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(gcsPath)
-  if (!match) return null
-  const [, bucketName, blobPath] = match
+  const localPath = parseLocalPath(storagePath)
+  if (!localPath) return null
 
   const fs = await import('fs')
-  const pathModule = await import('path')
   for (const base of [LOCAL_UPLOAD_BASE, LOCAL_UPLOAD_FALLBACK_BASE]) {
-    // Runtime upload folder, not project files: keep Turbopack from tracing the whole project.
-    const root = pathModule.resolve(/* turbopackIgnore: true */ base)
-    const candidate = pathModule.resolve(/* turbopackIgnore: true */ root, blobPath)
-    // The path comes from the database, but never read outside the upload folder.
-    if (!candidate.startsWith(root + pathModule.sep)) continue
+    const candidate = await insideUploads(base, localPath)
+    if (!candidate) continue
     let stat
     try {
       stat = fs.statSync(candidate)
@@ -339,18 +246,5 @@ export async function openStoredFile(gcsPath: string): Promise<StoredFile | null
       stream: (range) => fs.createReadStream(candidate, range),
     }
   }
-
-  const storage = await getStorage()
-  if (!storage) return null
-  const file = storage.bucket(bucketName).file(blobPath)
-  try {
-    const [metadata] = await file.getMetadata()
-    return {
-      size: Number(metadata.size),
-      stream: (range) => file.createReadStream(range),
-    }
-  } catch (error) {
-    if ((error as { code?: number })?.code === 404) return null
-    throw error
-  }
+  return null
 }

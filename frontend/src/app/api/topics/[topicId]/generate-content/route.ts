@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
-import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/cloud-tasks'
+import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/dispatch'
 import { z } from 'zod'
 import {
   apiInternal,

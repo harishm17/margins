@@ -126,7 +126,7 @@ export async function startGrading(
   if (!created) return { submissionId, jobId: job.id, started: true }
 
   try {
-    const { enqueueExamGradingJob } = await import('@/lib/tasks/cloud-tasks')
+    const { enqueueExamGradingJob } = await import('@/lib/tasks/dispatch')
     await enqueueExamGradingJob(job.id, submissionId, exam.id)
     return { submissionId, jobId: job.id, started: true }
   } catch (error) {

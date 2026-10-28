@@ -12,7 +12,7 @@ import { Readable } from 'stream'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
-import { uploadStream, generateMaterialPath, deleteFile } from '@/lib/storage/gcs'
+import { uploadStream, generateMaterialPath, deleteFile } from '@/lib/storage/files'
 import {
   IncompleteUploadError,
   InvalidSignatureError,
@@ -22,7 +22,7 @@ import {
   createSizeLimiter,
   maxUploadBytes,
 } from '@/lib/storage/upload-limits'
-import { enqueueValidationJob, TaskEnqueueError } from '@/lib/tasks/cloud-tasks'
+import { enqueueValidationJob, TaskEnqueueError } from '@/lib/tasks/dispatch'
 import { z } from 'zod'
 import { roleForCategory } from '@/lib/materials/role'
 

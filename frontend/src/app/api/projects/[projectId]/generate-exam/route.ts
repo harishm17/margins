@@ -162,7 +162,7 @@ export async function POST(
 
     // Enqueue task via Cloud Tasks (or direct call in dev)
     try {
-      const { enqueueTask } = await import('@/lib/tasks/cloud-tasks');
+      const { enqueueTask } = await import('@/lib/tasks/dispatch');
       await enqueueTask('/jobs/generate-exam', {
         jobId: job.id,
         jobType: 'generate_exam',
