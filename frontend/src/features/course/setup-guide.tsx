@@ -98,14 +98,15 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
               courseId={courseId}
               extractJob={materials.extractJob}
               extractFailure={materials.extractFailure}
-              topicCount={setup.topicCount}
+              topics={setup.topics}
+              label={setup.label}
               filesProcessing={filesProcessing}
               filesRead={materials.readyCount}
               filesTotal={materials.materials.length}
             />
           ) : step > 2 ? (
             <p className={description}>
-              {pluralize(setup.confirmedTopicCount, 'topic')} confirmed.{' '}
+              {pluralize(setup.topics.confirmed, 'topic')} confirmed.{' '}
               <Link href={`/courses/${courseId}/topics?edit=1`} className={link}>
                 Edit topics
               </Link>

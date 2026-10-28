@@ -9,7 +9,7 @@ import { JobStatus } from '@/components/ui/job-status'
 import { toast } from '@/components/ui/toaster'
 import { useJob } from '@/features/jobs/use-job'
 import { apiFetch, isApiError } from '@/lib/api/client'
-import { pluralize } from '@/lib/format'
+import { needsTopicReview, topicOriginSentence, type CourseSetup } from '@/lib/course-setup'
 import type { JobRef } from '@/server/queries/course'
 
 /**
@@ -46,20 +46,18 @@ type ExtractionBannerProps = {
   courseId: string
   extractJob: JobRef | null
   extractFailure: string | null
-  topicCount: number
-  /** Topics exist that the student has not confirmed yet. */
-  unconfirmed: boolean
+  /** The course's setup state (lib/course-setup.ts). */
+  setup: CourseSetup
   /** Every file has been read. */
   filesReady: boolean
 }
 
-/** The Materials page banner: topics being found, failed, or ready to review. */
+/** The Materials page banner: topics being found, failed, or waiting for the student to confirm. */
 export function ExtractionBanner({
   courseId,
   extractJob,
   extractFailure,
-  topicCount,
-  unconfirmed,
+  setup,
   filesReady,
 }: ExtractionBannerProps) {
   const extraction = useExtraction(courseId, extractJob)
@@ -93,14 +91,14 @@ export function ExtractionBanner({
       </InlineAlert>
     )
   }
-  if (filesReady && topicCount > 0 && unconfirmed) {
+  if (filesReady && needsTopicReview(setup) && setup.mode === 'setup') {
     return (
       <InlineAlert
         tone="accent"
-        title={`${pluralize(topicCount, 'topic')} found`}
+        title={topicOriginSentence(setup.topics)}
         action={
           <Button asChild size="sm" variant="primary">
-            <Link href={`/courses/${courseId}/topics?edit=1`}>Review topics</Link>
+            <Link href={`/courses/${courseId}/topics?edit=1`}>{setup.label}</Link>
           </Button>
         }
       >
