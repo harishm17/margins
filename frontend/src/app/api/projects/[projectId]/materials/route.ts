@@ -124,9 +124,9 @@ export async function POST(
     const gcsPath = generateMaterialPath(session.user.id, projectId, materialId, filename)
     const limiter = createSizeLimiter(maxBytes, lengthCheck.length)
 
-    let fullGcsPath: string
+    let storedPath: string
     try {
-      fullGcsPath = await uploadStream(
+      storedPath = await uploadStream(
         Readable.fromWeb(request.body as import('stream/web').ReadableStream),
         gcsPath,
         mimeType,
@@ -146,7 +146,7 @@ export async function POST(
     }
     const fileSize = limiter.bytesSeen()
 
-    // 8. Create material record with correct GCS path
+    // 8. Create material record with the stored path
     // Only after successful upload to prevent orphaned records
     const material = await prisma.material.create({
       data: {
@@ -158,7 +158,7 @@ export async function POST(
         filename,
         sizeBytes: BigInt(fileSize),
         validationStatus: 'pending',
-        gcsPath: fullGcsPath,
+        gcsPath: storedPath,
         metadata: {
           mimeType: mimeType || null,
           extension,
@@ -199,7 +199,7 @@ export async function POST(
 
       // Best-effort cleanup to avoid keeping unprocessable artifacts.
       try {
-        await deleteFile(fullGcsPath)
+        await deleteFile(storedPath)
       } catch (cleanupError) {
         console.warn('Failed to delete uploaded file after enqueue failure:', cleanupError)
       }

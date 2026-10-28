@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class JobPayload(BaseModel):
-    """Payload for Cloud Tasks."""
+    """Payload the dispatcher posts to a job endpoint."""
 
     jobId: str
     jobType: str

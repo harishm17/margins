@@ -160,7 +160,7 @@ export async function POST(
       },
     });
 
-    // Enqueue task via Cloud Tasks (or direct call in dev)
+    // Send the job to the AI service
     try {
       const { enqueueTask } = await import('@/lib/tasks/dispatch');
       await enqueueTask('/jobs/generate-exam', {
