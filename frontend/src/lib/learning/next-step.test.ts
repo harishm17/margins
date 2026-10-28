@@ -168,15 +168,20 @@ test('exam soon: the countdown and the plan warning travel with the step', () =>
   assert.equal(step(topics).exam.label, null)
 })
 
-test('exam soon with reviews overdue: the overdue review is still what the card says', () => {
+test('exam soon with reviews overdue: the full mock has the day, and the card counts the reviews waiting', () => {
   const topics = [
     topic('graphs', { orderIndex: 0, reviewDueAt: daysAgo(2) }),
     topic('hashing', { orderIndex: 1, reviewDueAt: daysAgo(1) }),
   ]
+  // Two days out, today is the last full mock: 60 minutes on a 45-minute day, alone and marked. The
+  // overdue reviews no longer pile on top of it; they wait (tomorrow is the final review of both).
   const result = step(topics, { examDate: '2026-10-23' })
   assert.equal(result.exam.label, 'Exam in 2 days')
   assert.equal(result.dueCount, 2)
-  assert.match(result.title, /^Review /)
+  assert.equal(result.title, 'Full mock exam')
+  assert.equal(result.overBudgetLabel, 'Longer than your usual 45 minutes')
+  assert.equal(result.minutesLeft, 60)
+  assert.equal(result.deferredDue, 2)
 })
 
 test('exam date passed: reviews still due come first, otherwise the date is asked for', () => {

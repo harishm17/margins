@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildPlan, type PlanItem, type PlanTopic } from './plan'
-import { dayLabel, describePlanItem, planItemHref, upNextFromPlan, weekLabel } from './plan-copy'
+import { dayLabel, daySummary, describePlanItem, overBudgetLabel, planItemHref, upNextFromPlan, weekLabel } from './plan-copy'
 import { nextActionsFromPlan, setupNextAction } from './next-actions'
 
 const item = (over: Partial<PlanItem>): PlanItem => ({
@@ -57,6 +57,39 @@ test('items are described in plain words with a button and a time', () => {
     const described = describePlanItem(item({ kind }), 'c1')
     assert.doesNotMatch(`${described.title} ${described.reason} ${described.verb}`, /generate|\$|undefined|null/i, kind)
   }
+})
+
+test("a closed day's line counts the other tasks, so it does not read as more topics", () => {
+  assert.equal(daySummary([]), 'Nothing planned')
+  assert.equal(daySummary(['Quiz: Graphs']), 'Quiz: Graphs')
+  assert.equal(daySummary(['Quiz: Graphs', 'Learn Trees']), 'Quiz: Graphs and 1 more task')
+  assert.equal(daySummary(['Quiz: Graphs', 'Learn Trees', 'Review Heaps']), 'Quiz: Graphs and 2 more tasks')
+})
+
+test('a full mock longer than the day says so, against the daily minutes or the time left today', () => {
+  const mock = item({ kind: 'full_mock', topicId: null, topicIds: ['a'], minutes: 60, title: 'Full mock exam' })
+  assert.equal(overBudgetLabel(mock, 45), null)
+  assert.equal(overBudgetLabel({ ...mock, overBudget: true }, 45), 'Longer than your usual 45 minutes')
+  assert.equal(overBudgetLabel({ ...mock, overBudget: true }, 90), 'Longer than the time left today')
+  assert.equal(overBudgetLabel({ ...mock, overBudget: true }), 'Longer than your usual study time')
+  assert.equal(describePlanItem({ ...mock, overBudget: true }, 'c1', { dailyMinutes: 45 }).overBudgetLabel, 'Longer than your usual 45 minutes')
+  assert.equal(describePlanItem(item({}), 'c1', { dailyMinutes: 45 }).overBudgetLabel, null)
+})
+
+test("Up next marks today's mock exam when it is longer than the day", () => {
+  const plan = buildPlan({
+    now: new Date('2026-10-21T15:00:00Z'),
+    timeZone: 'UTC',
+    examDate: '2026-11-20',
+    dailyMinutes: 45,
+    topics: [topic('a', { orderIndex: 0, learned: true, quizzed: true, mastery: 0.5 }), topic('b', { orderIndex: 1, learned: true, quizzed: true, mastery: 0.5 })],
+    units: [],
+    unitMocksDone: [],
+    fullMocksDoneInFinalWeek: 0,
+    doneToday: [],
+  })
+  const { upNext } = upNextFromPlan(plan, 'c1')
+  assert.deepEqual(upNext.map((entry) => [entry.kind, entry.overBudgetLabel]), [['full_mock', 'Longer than your usual 45 minutes']])
 })
 
 test('day and week labels do not depend on a time zone', () => {
