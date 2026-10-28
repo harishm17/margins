@@ -69,7 +69,6 @@ start() {
         AI_INTERNAL_TOKEN="$TOKEN" \
         NEXTAUTH_URL="http://localhost:$WEB_PORT" \
         NEXTAUTH_SECRET="e2e-secret-e2e-secret-e2e-secret-32" \
-        ENABLE_GCS_STORAGE=false \
         SIGNUP_RATE_LIMIT=1000 \
         LOCAL_UPLOADS_DIR="$RUN/uploads" \
         NEXT_TELEMETRY_DISABLED=1 \

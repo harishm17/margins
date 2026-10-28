@@ -1,4 +1,4 @@
-// Railway project for StudyBuddy: the Next.js app (web), the Python AI service (ai), Postgres
+// Railway project for Margins: the Next.js app (web), the Python AI service (ai), Postgres
 // with pgvector, and a bucket for uploaded materials. `railway config plan` previews changes to
 // the live project and `railway config apply` makes them; see docs/deployment/RAILWAY.md.
 import { bucket, defineRailway, github, postgres, preserve, project, ref, service, volume } from "railway/iac";
@@ -75,8 +75,6 @@ export default defineRailway(() => {
       PORT: "3000",
       AI_SERVICE_URL: aiServiceUrl,
       AI_INTERNAL_TOKEN: "${{ai.AI_INTERNAL_TOKEN}}",
-      ENABLE_GCS_STORAGE: "false",
-      ENABLE_CLOUD_TASKS: "false",
       ...s3,
     },
   });
