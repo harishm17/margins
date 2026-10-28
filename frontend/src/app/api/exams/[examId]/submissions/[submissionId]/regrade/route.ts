@@ -16,7 +16,6 @@ import {
   apiUpstream,
   isUnauthorizedError,
 } from '@/lib/api/errors'
-import { ensureAiGenerationReady } from '@/lib/api/ai-preflight'
 import { ATTEMPT_SUBMITTED, findExamForUser, startGrading } from '@/lib/exams/attempts'
 
 export const dynamic = 'force-dynamic'
@@ -43,9 +42,7 @@ export async function POST(
     })
     if (!submission) return apiNotFound('Submission not found')
 
-    const preflightError = await ensureAiGenerationReady(session.user.id)
-    if (preflightError) return preflightError
-
+    // Not refused while the AI is unavailable: the grading job waits for it, like the first one.
     const grading = await startGrading(session.user.id, exam, submission.id)
     if (!grading.started) return apiUpstream('Grading could not start. Please try again.')
 

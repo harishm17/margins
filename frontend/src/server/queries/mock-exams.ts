@@ -1,6 +1,7 @@
 import { areRecordIds } from '@/lib/ids'
 import { prisma } from '@/lib/db/prisma'
 import { gradeExamTarget } from '@/lib/jobs/active-jobs'
+import { isWaitingForAi } from '@/lib/jobs/poll-job'
 import {
   ATTEMPT_IN_PROGRESS,
   ATTEMPT_SUBMITTED,
@@ -235,6 +236,8 @@ export type ExamResult =
       status: 'grading' | 'failed'
       /** The grading job to follow, when there is one. */
       jobId: string | null
+      /** Grading is waiting for the AI to be available again (the answers are saved). */
+      waitingForAi: boolean
       errorCode: string | null
       errorMessage: string | null
     })
@@ -248,6 +251,8 @@ export type ExamResult =
       topics: ResultTopic[]
       /** A second grading of this attempt is running (the student asked for one): the job to follow. */
       regradeJobId: string | null
+      /** That second grading is waiting for the AI. */
+      regradeWaitingForAi: boolean
     })
 
 /**
@@ -287,13 +292,14 @@ export async function getExamResult(
     const job = await prisma.processingJob.findFirst({
       where: { userId, jobType: 'grade_exam', targetKey: gradeExamTarget(submission.id) },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true, errorCode: true, errorMessage: true },
+      select: { id: true, status: true, stage: true, errorCode: true, errorMessage: true },
     })
     const running = job?.status === 'pending' || job?.status === 'processing'
     return {
       ...base,
       status: running ? 'grading' : 'failed',
       jobId: running ? (job?.id ?? null) : null,
+      waitingForAi: isWaitingForAi(job),
       errorCode: job?.errorCode ?? null,
       errorMessage: job?.errorMessage ?? null,
     }
@@ -324,13 +330,14 @@ export async function getExamResult(
       status: { in: ['pending', 'processing'] },
     },
     orderBy: { createdAt: 'desc' },
-    select: { id: true },
+    select: { id: true, status: true, stage: true },
   })
 
   return {
     ...base,
     status: 'graded',
     regradeJobId: regrading?.id ?? null,
+    regradeWaitingForAi: isWaitingForAi(regrading),
     score: overall.score,
     earnedPoints: overall.earned,
     totalPoints: overall.total,

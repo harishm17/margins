@@ -14,6 +14,7 @@ import { Spinner } from './spinner'
 export const STAGE_LABELS: Record<string, string> = {
   pending: 'Waiting to start',
   retrying: 'Trying again',
+  waiting_for_ai: 'Waiting for AI to be available',
   validating: 'Checking the file',
   chunking: 'Reading pages',
   embedding: 'Indexing for search',
@@ -29,6 +30,7 @@ export const STAGE_LABELS: Record<string, string> = {
  */
 export function stageLabel(stage: string | null | undefined, status?: string, attemptCount?: number): string {
   if (status === 'queued' || status === 'pending') {
+    if (stage === 'waiting_for_ai') return STAGE_LABELS.waiting_for_ai
     return attemptCount && attemptCount > 0 ? STAGE_LABELS.retrying : STAGE_LABELS.pending
   }
   return (stage && STAGE_LABELS[stage]) || 'Working on it'
@@ -120,7 +122,7 @@ export function JobStatus({
   } else {
     icon = <Spinner className="text-accent" />
     text =
-      job?.status === 'queued' && job.attemptCount
+      job?.status === 'queued' && (job.attemptCount || job.stage === 'waiting_for_ai')
         ? stageLabel(job.stage, job.status, job.attemptCount)
         : (label ?? stageLabel(job?.stage, job?.status ?? 'queued'))
     if (elapsed !== null) {
