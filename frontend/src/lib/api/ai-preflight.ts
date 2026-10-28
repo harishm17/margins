@@ -9,14 +9,12 @@ import { getAiStatus } from '@/server/ai-status'
  * unavailable (the shared status) or the user has used today's allowance, with a typed code in
  * `error.details.code` and the shared student-facing text (lib/ai/messages); never the AI
  * service's own words. Null when the job may start.
+ *
+ * Not for grading a student's work (exam submit, Grade again): that is always accepted and the
+ * grading job waits for the AI instead.
  */
-export async function ensureAiGenerationReady(
-  userId: string,
-  options: { checkAllowance?: boolean } = {}
-): Promise<NextResponse | null> {
-  const { checkAllowance = true } = options
-  const status = await getAiStatus(userId)
-  const code = checkAllowance ? blockedCode(status) : status.available ? null : status.reason
+export async function ensureAiGenerationReady(userId: string): Promise<NextResponse | null> {
+  const code = blockedCode(await getAiStatus(userId))
   if (!code) return null
   return aiRefusal(code)
 }
