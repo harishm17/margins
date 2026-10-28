@@ -1,12 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
-import { DEMO_EMAIL, DEMO_PASSWORD, FIXTURE_DOCX, FIXTURE_PDF } from './helpers/seed-demo'
+import { signIn } from './helpers/auth'
+import { DEMO_EMAIL, FIXTURE_DOCX, FIXTURE_PDF } from './helpers/seed-demo'
 
 // Course setup end to end: materials, topic editor, content build, topics list, then Home and
 // the Today view. One account per run so it can run again against the same database.
 // Test files: tests/e2e/fixtures/algorithms.pdf and hashing.docx.
 const stamp = Date.now()
 const email = `course-${stamp}@example.com`
-const password = 'course-test-password'
 const courseName = `Course spec ${stamp}`
 const PDF = FIXTURE_PDF
 const DOCX = FIXTURE_DOCX
@@ -16,21 +16,10 @@ test.setTimeout(180_000)
 
 let courseUrl = ''
 
-async function signIn(page: Page, address: string, secret: string) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(address)
-  await page.getByLabel('Password', { exact: true }).fill(secret)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/)
-}
-
 async function signUpAndCreateCourse(page: Page) {
-  await page.goto('/signup')
-  await page.getByLabel('Name').fill('Course Tester')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/courses\/new\?welcome=1$/)
+  // The first sign-in makes the account.
+  await signIn(page, email)
+  await page.goto('/courses/new')
   await page.getByLabel('Course name').fill(courseName)
   await page.getByRole('button', { name: 'Create course' }).click()
   await expect(page).toHaveURL(/\/courses\/[0-9a-f-]{36}$/)
@@ -72,7 +61,7 @@ test('setup guide: upload materials and wait for topics', async ({ page }) => {
 })
 
 test('topic editor: rename, add, reorder, merge, delete, confirm', async ({ page }) => {
-  await signIn(page, email, password)
+  await signIn(page, email)
 
   await page.goto(`${courseUrl}/topics`)
   await expect(page.getByRole('heading', { level: 1, name: 'Check the topics' })).toBeVisible()
@@ -140,7 +129,7 @@ test('topic editor: rename, add, reorder, merge, delete, confirm', async ({ page
 })
 
 test('starting the first topic writes its notes, then topics list and materials', async ({ page }) => {
-  await signIn(page, email, password)
+  await signIn(page, email)
 
   // Opening a topic with no notes starts them. The dev AI service may have no chunked text for
   // these files, so the job can fail with a reason and a way to try again (it is not started a
@@ -173,7 +162,7 @@ test('starting the first topic writes its notes, then topics list and materials'
 })
 
 test('Home has no dashed new course tile and never says 0 strong; the demo course shows Today', async ({ page }) => {
-  await signIn(page, DEMO_EMAIL, DEMO_PASSWORD)
+  await signIn(page, DEMO_EMAIL)
   await page.goto('/home')
 
   // The header button stays; the tile is gone.
