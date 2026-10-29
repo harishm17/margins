@@ -12,7 +12,7 @@ import { Readable } from 'stream'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
-import { uploadStream, generateMaterialPath, deleteFile } from '@/lib/storage/files'
+import { uploadStream, generateMaterialPath, deleteFile, recordStoredFile } from '@/lib/storage/files'
 import {
   IncompleteUploadError,
   InvalidSignatureError,
@@ -146,38 +146,43 @@ export async function POST(
     }
     const fileSize = limiter.bytesSeen()
 
-    // 8. Create material record with the stored path
-    // Only after successful upload to prevent orphaned records
-    const material = await prisma.material.create({
-      data: {
-        id: materialId,
-        projectId,
-        category: validation.data.category,
-        // Past exams and syllabi are known now; the validator sets the role of everything else.
-        role: roleForCategory(validation.data.category),
-        filename,
-        sizeBytes: BigInt(fileSize),
-        validationStatus: 'pending',
-        gcsPath: storedPath,
-        metadata: {
-          mimeType: mimeType || null,
-          extension,
-        },
-      },
-    })
+    // 8. The material and its validation job, together, only after the upload succeeded. If they
+    // can't be written (the course or the account was deleted meanwhile, or anything else), the
+    // stored file is deleted too, so nothing is left that no row points at.
+    const { material, job } = await recordStoredFile(storedPath, () =>
+      prisma.$transaction(async (tx) => {
+        const material = await tx.material.create({
+          data: {
+            id: materialId,
+            projectId,
+            category: validation.data.category,
+            // Past exams and syllabi are known now; the validator sets the role of everything else.
+            role: roleForCategory(validation.data.category),
+            filename,
+            sizeBytes: BigInt(fileSize),
+            validationStatus: 'pending',
+            gcsPath: storedPath,
+            metadata: {
+              mimeType: mimeType || null,
+              extension,
+            },
+          },
+        })
 
-    // 9. Create processing job
-    const job = await prisma.processingJob.create({
-      data: {
-        userId: session.user.id,
-        projectId,
-        jobType: 'validate_material',
-        status: 'pending',
-        stage: 'validating',
-        inputData: { materialId: material.id },
-        progressPercent: 0,
-      },
-    })
+        const job = await tx.processingJob.create({
+          data: {
+            userId: session.user.id,
+            projectId,
+            jobType: 'validate_material',
+            status: 'pending',
+            stage: 'validating',
+            inputData: { materialId: material.id },
+            progressPercent: 0,
+          },
+        })
+        return { material, job }
+      })
+    )
 
     // 10. Enqueue validation task
     try {

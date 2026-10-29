@@ -12,6 +12,7 @@ import { QuizResults, type QuizResult } from './quiz-results'
 import { useQuizSession } from './quiz-session'
 import { QuizTaking } from './quiz-taking'
 import { useGeneration, useTopic } from './topic-provider'
+import { useAiStatus } from '@/features/ai/ai-status'
 
 type SubmitResponse = {
   score: number
@@ -78,6 +79,7 @@ export function QuizView({ courseId, topicId, sets, attempts, voiceHref, review,
   }, [taking, setKeysSuspended])
 
   const answers = session?.answers ?? {}
+  const { report } = useAiStatus()
 
   function start() {
     setError(null)
@@ -112,6 +114,7 @@ export function QuizView({ courseId, topicId, sets, attempts, voiceHref, review,
       clear()
       React.startTransition(() => router.refresh())
     } catch (caught) {
+      if (isApiError(caught)) report(caught.code)
       setError(
         isApiError(caught)
           ? caught.message

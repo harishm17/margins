@@ -73,7 +73,7 @@ export async function POST(
       )
     }
 
-    const preflightError = await ensureAiGenerationReady()
+    const preflightError = await ensureAiGenerationReady(session.user.id)
     if (preflightError) {
       return preflightError
     }

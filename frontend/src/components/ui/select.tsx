@@ -31,7 +31,10 @@ type SelectProps = {
   'aria-describedby'?: string
 }
 
-/** A Radix select styled like Input. */
+/**
+ * A Radix select styled like Input. The list box gets the trigger's name too (`aria-labelledby`, which
+ * `Field` passes, or `aria-label`), so the open list is named. A select outside a Field needs one of them.
+ */
 export function Select({
   options,
   placeholder = 'Select',
@@ -72,6 +75,8 @@ export function Select({
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
           position="popper"
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledby}
           sideOffset={6}
           collisionPadding={12}
           className={cn(

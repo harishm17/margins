@@ -57,6 +57,3 @@ export const KIND_COPY: Record<
     replaces: 'This adds a new quiz set. Your earlier sets and attempts stay.',
   },
 }
-
-/** Shown when the AI service cannot be reached before a job starts (preflight 503). */
-export const PREFLIGHT_MESSAGE = "Study content can't be created right now. Try again in a few minutes."

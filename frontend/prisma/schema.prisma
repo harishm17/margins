@@ -706,13 +706,17 @@ model ChatMessage {
 // ============================================
 
 // Append-only: one row per LLM spend (a job attempt, a chat answer or a billed chat failure),
-// written when the cost is known and never updated or deleted by the app. The per-user daily
-// budget sums this table, so deleting a thread, a project or its jobs cannot lower it. Only
-// deleting the user removes their rows. projectId and sourceId are plain columns on purpose:
-// they have no foreign keys, so they outlive what they point at.
+// written when the cost is known and never deleted by the app. The per-user daily budget sums
+// this table, so deleting a thread, a project or its jobs cannot lower it. projectId and sourceId
+// are plain columns on purpose: they have no foreign keys, so they outlive what they point at.
+//
+// Deleting an account does not delete its rows: delete_user_account() unlinks them (userId,
+// projectId and sourceId cleared), and a trigger does the same for spend recorded after the
+// account is gone, by any writer (both in migration 20261121000000_account_deletion). The global
+// daily cap sums every row of the day, so deleting an account cannot lower it.
 model LlmUsageEvent {
   id           String   @id @default(uuid())
-  userId       String   @map("user_id")
+  userId       String?  @map("user_id")
   projectId    String?  @map("project_id")
   source       String // job|chat|voice
   sourceId     String   @map("source_id") // processing job id, chat message id or voice session id
@@ -722,9 +726,29 @@ model LlmUsageEvent {
   costUsd      Decimal  @default(0) @map("cost_usd") @db.Decimal(12, 6)
   createdAt    DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([createdAt])
   @@map("llm_usage_events")
+}
+
+// Whether the AI provider can be used right now, for every user at once. One row, id "global",
+// written by the AI service (raw SQL, like every other table it touches): a provider-level failure
+// (out of credit, rejected key, no key, or repeated overload past the SDK's own retries) sets it
+// to "unavailable" with the error code as `reason`; any successful model call sets it back to
+// "available". `since` is when the current state began, `checkedAt` when a call last confirmed
+// it. An "unavailable" row older than AI_STATUS_TTL_S counts as unknown, so the next real call
+// tests the provider again (there is no paid probe). The web app reads it through the AI
+// service's GET /status/ai.
+model AiStatus {
+  id        String    @id @default("global")
+  state     String    @default("available") // available|unavailable
+  reason    String? // the LLM error code that set "unavailable"
+  since     DateTime?
+  checkedAt DateTime  @default(now()) @map("checked_at")
+  // The provider's own words, for logs and the owner alert. Never shown to students.
+  detail    String?
+
+  @@map("ai_status")
 }

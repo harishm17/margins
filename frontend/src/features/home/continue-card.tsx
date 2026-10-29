@@ -32,6 +32,7 @@ export function ContinueCard({ data }: { data: ContinueAction }) {
         <p className="mt-1 text-small text-fg-2">
           {step.reason}
           {step.etaLabel && step.kind !== 'clear' ? ` ${step.etaLabel}.` : ''}
+          {step.overBudgetLabel ? ` ${step.overBudgetLabel}.` : ''}
         </p>
         {step.exam.label ? <p className="mt-1 text-caption font-normal text-fg-3">{step.exam.label}</p> : null}
       </div>

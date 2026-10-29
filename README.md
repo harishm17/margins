@@ -115,7 +115,7 @@ The same judge also picked the model: [Sonnet and Haiku made maths errors and fe
 
 ## Screenshots
 
-The product screenshots on the landing page, on the sign-in and sign-up pages and in this README are generated from the running app, so they never show an old navigation. [`frontend/scripts/capture-screens.ts`](frontend/scripts/capture-screens.ts) seeds a showcase student and course (written by hand in [`frontend/scripts/screens/`](frontend/scripts/screens/), no model output), signs in, and captures each screen in light and dark as WebP into `frontend/public/screens/`, with phone-sized crops for the landing page.
+The product screenshots on the landing page, on the sign-in page and in this README are generated from the running app, so they never show an old navigation. [`frontend/scripts/capture-screens.ts`](frontend/scripts/capture-screens.ts) seeds a showcase student and course (written by hand in [`frontend/scripts/screens/`](frontend/scripts/screens/), no model output), signs in, and captures each screen in light and dark as WebP into `frontend/public/screens/`, with phone-sized crops for the landing page.
 
 ```bash
 # a migrated database and the e2e stack (scripts/e2e-stack.sh start), then:
@@ -125,7 +125,7 @@ npm run screens -- --only plan,ask      # a few screens
 npm run screens -- --no-seed            # reuse the showcase account already in the database
 ```
 
-It only runs against a local web app and a local database (the showcase password is public), and needs no AI calls: nothing is generated while it runs.
+It only runs against a local web app and a local database, signs in with the test sign-in (below), and needs no AI calls: nothing is generated while it runs.
 
 ## Run it locally
 
@@ -138,11 +138,14 @@ git clone https://github.com/harishm17/margins.git
 cd margins
 cp .env.example .env
 echo "NEXTAUTH_SECRET=$(openssl rand -base64 32)" >> .env
+echo "ENABLE_TEST_LOGIN=true" >> .env   # local test sign-in; or set the Google variables instead
 echo "AI_INTERNAL_TOKEN=$(openssl rand -hex 32)" >> .env
 docker compose up --build
 ```
 
-Compose applies the database migrations in a one-shot `migrate` service before the web app and the AI service start. Then open http://localhost:3000 and sign up.
+Compose applies the database migrations in a one-shot `migrate` service before the web app and the AI service start. Then open http://localhost:3000 and sign in with the test sign-in (`you@example.com`, any `@example.com` address, no password).
+
+Students sign in with Google only. The `ENABLE_TEST_LOGIN=true` line above turns on a test sign-in on `/login` that takes any `@example.com` address with no password; the e2e stack and the screenshot script use it. To use Google instead, set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` (an OAuth client with `http://localhost:3000/api/auth/callback/google` as a redirect URI). The test sign-in only works while `NEXTAUTH_URL` is on localhost, and the web app refuses to start with it set on any other site or on Railway.
 
 <details>
 <summary>Without Docker</summary>
@@ -154,7 +157,7 @@ You need Node 24+, Python 3.13+ with [uv](https://docs.astral.sh/uv/), and Postg
 psql -d postgres -c "CREATE ROLE dev LOGIN PASSWORD 'devpass'"
 createdb -O dev margins
 psql -d margins -c 'CREATE EXTENSION IF NOT EXISTS vector'
-(cd frontend && cp .env.example .env && npm install && npx prisma migrate deploy)
+(cd frontend && cp .env.example .env && echo 'ENABLE_TEST_LOGIN="true"' >> .env && npm install && npx prisma migrate deploy)
 (cd ai-service && cp .env.example .env && uv sync)
 ```
 
@@ -168,7 +171,7 @@ cd ai-service && uv run uvicorn app.main:app --reload
 cd frontend && npm run dev
 ```
 
-Then open http://localhost:3000 and sign up. Uploads go to `/data/uploads`, or `/tmp/margins-uploads` when that folder is not writable; both services look in the same two places. The first upload downloads the small embedding model, so it takes longer than the rest.
+Then open http://localhost:3000 and use the test sign-in (any `@example.com` address, no password). Uploads go to `/data/uploads`, or `/tmp/margins-uploads` when that folder is not writable; both services look in the same two places. The first upload downloads the small embedding model, so it takes longer than the rest.
 
 </details>
 
@@ -183,13 +186,14 @@ NEXTAUTH_SECRET=...              # openssl rand -base64 32
 NEXTAUTH_URL=http://localhost:3000
 AI_SERVICE_URL=http://localhost:8000
 AI_INTERNAL_TOKEN=...            # openssl rand -hex 32, same value in both services
+GOOGLE_OAUTH_CLIENT_ID=...       # Google sign-in, the only way to sign in: production will not start without it
+GOOGLE_OAUTH_CLIENT_SECRET=...
 ```
 
 Optional:
 
 ```env
-GOOGLE_OAUTH_CLIENT_ID=...       # Google sign-in
-GOOGLE_OAUTH_CLIENT_SECRET=...
+ENABLE_TEST_LOGIN=true           # local only: a test sign-in for @example.com addresses, instead of Google
 LLM_PROVIDER=mock                # or anthropic, with ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_MODEL=claude-opus-5-5
 ANTHROPIC_FAST_MODEL=claude-haiku-5-5

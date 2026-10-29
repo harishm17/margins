@@ -6,10 +6,21 @@ Every job endpoint is wrapped in `@job_handler`. The wrapper
    is never run twice (a second delivery gets 200 {"status": "skipped"}),
 2. keeps the lease alive while the handler works, so a crashed worker's job becomes
    claimable again once the lease runs out,
-3. refuses LLM-backed jobs when the user is over the daily budget,
+3. refuses LLM-backed jobs while the AI is known to be unavailable (app/services/ai_status.py)
+   or the user is over the daily budget,
 4. collects LLM usage while the handler runs and stores it on the job,
 5. marks the job completed, or classifies the failure and answers 400 (permanent, do not
-   retry) or 500 (transient, retry).
+   retry) or 5xx (transient, retry).
+
+A job made with `wait_for_ai` (exam grading: the answers are the student's work) does not fail
+while the AI is unavailable or the user's allowance is used: it goes back to `pending` at the
+stage `waiting_for_ai`, without using an attempt, and the reaper sends it again once the AI is
+available (or the allowance has reset). See `_defer`.
+
+A transient failure with attempts left puts the job back to `pending`, keeping the error as its
+last one, so the dispatcher's retry (or the reaper) runs it again and the one-active-job-per-target
+index still covers it. `failed` is final: no worker will run the job again. On a failed job,
+`retryable` says whether starting the same work again (a new job) may help.
 
 A handler is `async def handler(payload, job: JobContext) -> JobOutcome`.
 """
@@ -25,8 +36,10 @@ from typing import Any, Awaitable, Callable, Dict, Optional, Type, TypeVar
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
 
+from app.config import settings
 from app.db.connection import UTC_NOW, execute_one
 from app.models.jobs import JobPayload
+from app.services import ai_status
 from app.services.budget import over_budget_message, record_usage_event
 from app.services.content_generator.context import NoSourceMaterialError
 from app.services.document_processor.chunker import NoContentError
@@ -65,6 +78,28 @@ class PermanentJobError(Exception):
 
 class DailyBudgetExceeded(PermanentJobError):
     code = "LLM_DAILY_BUDGET"
+
+
+# The stage of a job that is waiting for the AI (or the allowance) instead of failing.
+WAITING_FOR_AI = "waiting_for_ai"
+# How soon the reaper may look at a job that is waiting for the AI again.
+AI_WAIT_RECHECK_SECONDS = 30.0
+
+
+def waits_for_ai(exc: Exception) -> bool:
+    """Whether this failure means "the AI cannot run now" rather than "this job is broken"."""
+    if isinstance(exc, DailyBudgetExceeded):
+        return True
+    return isinstance(exc, LLMError) and (
+        exc.code in ai_status.PROVIDER_DOWN_CODES or exc.code in ai_status.TRANSIENT_CODES
+    )
+
+
+def _seconds_until_reset() -> float:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    return max(1.0, (ai_status.next_reset_utc(now) - now).total_seconds())
 
 
 @dataclass
@@ -152,8 +187,9 @@ def retry_after(exc: Exception) -> Optional[int]:
 async def claim_job(job_id: str, lease_seconds: float, stage: Optional[str]):
     """Take the job if nobody else has it. Returns the row, or None.
 
-    Claimable: pending; failed with retries left; processing with an expired lease and
-    attempts left (a job that used them all is failed by the reaper, never run again).
+    Claimable: pending (new, or back for a retry); processing with an expired lease and
+    attempts left (a job that used them all is failed by the reaper, never run again). A failed
+    job is final and never claimed.
     """
     return await execute_one(
         f"""
@@ -170,7 +206,6 @@ async def claim_job(job_id: str, lease_seconds: float, stage: Optional[str]):
         WHERE id = $1
           AND (
             status = 'pending'
-            OR (status = 'failed' AND retryable AND attempt_count < max_attempts)
             OR (
                 status = 'processing'
                 AND attempt_count < max_attempts
@@ -202,9 +237,7 @@ async def _skip_reason(job_id: str) -> str:
             return "Job used all its attempts"
         return "Job is already running"
     if row["status"] == "failed":
-        if row["attempt_count"] >= row["max_attempts"]:
-            return "Job used all its attempts"
-        return "Job failed permanently"
+        return "Job failed"
     return f"Job is {row['status']}"
 
 
@@ -233,7 +266,12 @@ async def _heartbeat(job: JobContext) -> None:
             return
 
 
-async def _enforce_daily_budget(job: JobContext) -> None:
+async def _enforce_ai_ready(job: JobContext) -> None:
+    """Refuse before the handler runs: the AI is known to be down, or the user is over budget.
+    The refusal is typed like the failure it stands for, so it is classified the same way."""
+    unavailable = (await ai_status.get_status()).as_error()
+    if unavailable is not None:
+        raise unavailable
     message = await over_budget_message(job.user_id)
     if message:
         raise DailyBudgetExceeded(message)
@@ -299,23 +337,40 @@ async def _complete(job: JobContext, outcome: JobOutcome, usages) -> None:
         logger.warning("Job %s finished but no longer holds the claim; result not recorded", job.id)
 
 
-async def _fail(job: JobContext, error_code: str, retryable: bool, message: str, usages) -> None:
+async def _fail(
+    job: JobContext,
+    error_code: str,
+    retryable: bool,
+    message: str,
+    usages,
+    retry_in: Optional[float] = None,
+) -> Optional[str]:
+    """Record a failed attempt. A retryable one with attempts left goes back to `pending` (the
+    error stays as the last one); otherwise the job is `failed`, for good. Returns the new status,
+    or None when the job no longer holds the claim.
+
+    A job back in `pending` gets `lease_until` set to when the reaper should send it again if
+    nothing has claimed it by then: after the dispatcher's own wait (`retry_in`) plus the pending
+    re-dispatch threshold, so the reaper never races a dispatcher that is still retrying.
+    """
     summary, input_tokens, output_tokens, cost = _usage_columns(usages)
     await _record_ledger(job, summary, input_tokens, output_tokens, cost)
-    await execute_one(
+    redispatch_after = float(retry_in or 0) + settings.JOB_PENDING_REDISPATCH_SECONDS
+    row = await execute_one(
         f"""
         UPDATE processing_jobs
-        SET status = 'failed',
+        SET status = CASE WHEN $5 AND attempt_count < max_attempts THEN 'pending' ELSE 'failed' END,
             error_code = $3,
             error_message = $4,
-            retryable = ($5 AND attempt_count < max_attempts),
-            completed_at = {UTC_NOW},
-            lease_until = NULL,
+            retryable = $5,
+            completed_at = CASE WHEN $5 AND attempt_count < max_attempts THEN NULL ELSE {UTC_NOW} END,
+            lease_until = CASE WHEN $5 AND attempt_count < max_attempts
+                THEN {UTC_NOW} + make_interval(secs => $9) ELSE NULL END,
             llm_input_tokens = llm_input_tokens + $6,
             llm_output_tokens = llm_output_tokens + $7,
             llm_cost_usd = llm_cost_usd + $8
         WHERE id = $1 AND status = 'processing' AND attempt_count = $2
-        RETURNING id
+        RETURNING status
         """,
         job.id,
         job.attempt,
@@ -325,7 +380,54 @@ async def _fail(job: JobContext, error_code: str, retryable: bool, message: str,
         input_tokens,
         output_tokens,
         cost,
+        redispatch_after,
     )
+    return row["status"] if row else None
+
+
+async def _defer(job: JobContext, exc: Exception, usages) -> bool:
+    """Put a job that is waiting for the AI back in pending, giving back the attempt it used.
+
+    The error stays as its reason. `lease_until` is when the reaper may send it again: after the
+    allowance resets for LLM_DAILY_BUDGET; otherwise soon, and the reaper sends it only once the
+    AI status reads available. False (and nothing changes) when the job has already waited
+    JOB_AI_WAIT_MAX_SECONDS: then it fails like any other job.
+    """
+    summary, input_tokens, output_tokens, cost = _usage_columns(usages)
+    await _record_ledger(job, summary, input_tokens, output_tokens, cost)
+    budget = isinstance(exc, DailyBudgetExceeded)
+    wait = _seconds_until_reset() + 60 if budget else AI_WAIT_RECHECK_SECONDS
+    code = exc.code if isinstance(exc, (LLMError, PermanentJobError)) else "LLM_UNAVAILABLE"
+    row = await execute_one(
+        f"""
+        UPDATE processing_jobs
+        SET status = 'pending',
+            stage = '{WAITING_FOR_AI}',
+            attempt_count = attempt_count - 1,
+            error_code = $3,
+            error_message = $4,
+            retryable = TRUE,
+            progress_percent = 0,
+            completed_at = NULL,
+            lease_until = {UTC_NOW} + make_interval(secs => $5),
+            llm_input_tokens = llm_input_tokens + $6,
+            llm_output_tokens = llm_output_tokens + $7,
+            llm_cost_usd = llm_cost_usd + $8
+        WHERE id = $1 AND status = 'processing' AND attempt_count = $2
+          AND created_at > {UTC_NOW} - make_interval(secs => $9)
+        RETURNING id
+        """,
+        job.id,
+        job.attempt,
+        code,
+        str(exc)[:2000],
+        float(wait),
+        input_tokens,
+        output_tokens,
+        cost,
+        float(settings.JOB_AI_WAIT_MAX_SECONDS),
+    )
+    return row is not None
 
 
 Handler = Callable[[JobPayload, JobContext], Awaitable[JobOutcome]]
@@ -339,12 +441,14 @@ def job_handler(
     stage: Optional[str] = None,
     uses_llm: bool = False,
     lease_seconds: Optional[float] = None,
+    wait_for_ai: bool = False,
 ):
     """Wrap a job handler with claim, lease, usage tracking and failure handling.
 
     `job_type` picks the default lease length. `label` names the job in error messages
     ("Content generation failed: ...").
-    `uses_llm` makes the handler subject to the per-user daily budget.
+    `uses_llm` makes the handler subject to the AI status and the per-user daily budget.
+    `wait_for_ai` makes it wait (see `_defer`) instead of failing when the AI cannot run.
     """
 
     def decorator(handler: Handler):
@@ -372,13 +476,17 @@ def job_handler(
                 with track_llm_usage() as usages:
                     try:
                         if uses_llm:
-                            await _enforce_daily_budget(job)
+                            await _enforce_ai_ready(job)
                         outcome = await handler(payload, job)
                     except Exception as exc:
+                        if wait_for_ai and waits_for_ai(exc) and await _defer(job, exc, usages):
+                            logger.warning("%s job %s is waiting for the AI: %s", label, job.id, exc)
+                            # 200: nothing for the dispatcher to retry; the reaper sends it later.
+                            return {"status": "deferred", "jobId": job.id, "reason": getattr(exc, "code", None)}
                         logger.error("%s job %s failed: %s", label, job.id, exc)
                         error_code, retryable, status_code = classify_failure(exc, default_error_code)
-                        await _fail(job, error_code, retryable, str(exc), usages)
                         wait = retry_after(exc)
+                        await _fail(job, error_code, retryable, str(exc), usages, retry_in=wait)
                         raise HTTPException(
                             status_code=status_code,
                             detail=f"{label} failed: {exc}",

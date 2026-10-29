@@ -7,6 +7,7 @@
 
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 import { retryDelayMs } from './retry-delay'
+import { undeliveredWhere } from './undelivered'
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 const parsePositiveInt = (value: string | undefined, fallback: number): number => {
@@ -97,24 +98,22 @@ async function callAiServiceWithRetry(endpoint: string, payload: TaskPayload): P
   throw lastError || new TaskEnqueueError('Unknown task enqueue failure')
 }
 
-async function markJobFailed(
+type JobFailureStore = {
+  processingJob: { updateMany: (args: { where: object; data: object }) => Promise<unknown> }
+}
+
+/** Exported for its test; `store` defaults to the real database. */
+export async function markJobFailed(
   payload: TaskPayload,
-  error: TaskEnqueueError
+  error: TaskEnqueueError,
+  store?: JobFailureStore
 ): Promise<void> {
   try {
-    const { prisma } = await import('@/lib/db/prisma')
-    // Only a job the AI service has not recorded a result for: never started, or running
-    // on a lease that has run out. A terminal state it wrote itself is left alone, and so
-    // is a job still working under a live lease.
-    const now = new Date()
+    const prisma = store ?? (await import('@/lib/db/prisma')).prisma
+    // Only a job no handler has touched (see ./undelivered): a job waiting for its retry, or one
+    // whose worker died, is the AI service reaper's to send again.
     await prisma.processingJob.updateMany({
-      where: {
-        id: payload.jobId,
-        OR: [
-          { status: 'pending' },
-          { status: 'processing', OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }] },
-        ],
-      },
+      where: undeliveredWhere(payload.jobId),
       data: {
         status: 'failed',
         errorCode: error.retryable ? 'ENQUEUE_FAILED' : 'ENQUEUE_PERMANENT',

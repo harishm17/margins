@@ -60,6 +60,10 @@ services:
       - DATABASE_URL=postgresql://dev:devpass@postgres:5432/margins
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-change-in-production}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # Local only: the test sign-in (frontend/src/lib/auth/test-login.ts)
+      - ENABLE_TEST_LOGIN=${ENABLE_TEST_LOGIN:-false}
       - AI_SERVICE_URL=http://ai-service:8000
       - AI_INTERNAL_TOKEN=${AI_INTERNAL_TOKEN:-dev-internal-token}
       # Uploads go to the shared uploads_data volume (no S3 bucket locally)

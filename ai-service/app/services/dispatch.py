@@ -27,7 +27,8 @@ _background_tasks: Set["asyncio.Task[None]"] = set()
 
 
 async def mark_undelivered(job_id: str, message: str) -> None:
-    """The service never answered: fail the job if no handler has touched it."""
+    """The service never answered: fail the job if no handler has touched it. A job that has
+    started and is pending again is waiting for a retry, which the reaper owns."""
     try:
         await execute_update(
             f"""
@@ -37,7 +38,7 @@ async def mark_undelivered(job_id: str, message: str) -> None:
                 error_message = $2,
                 retryable = TRUE,
                 completed_at = {UTC_NOW}
-            WHERE id = $1 AND status = 'pending'
+            WHERE id = $1 AND status = 'pending' AND started_at IS NULL
             """,
             job_id,
             message[:1000],

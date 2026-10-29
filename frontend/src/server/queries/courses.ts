@@ -1,13 +1,65 @@
 import { areRecordIds } from '@/lib/ids'
 import { cache } from 'react'
 import { prisma } from '@/lib/db/prisma'
-import { deriveSetup, type CourseSetup } from '@/lib/course-setup'
+import { deriveSetup, needsTopicReview, type CourseSetup, type ExtractionOutcome } from '@/lib/course-setup'
+import { ACTIVE_JOB_STATUSES } from '@/lib/jobs/active-jobs'
 import { applyPendingExamResults } from '@/lib/learning/exam-mastery'
 import { displayMastery } from '@/lib/learning/mastery-math'
 import { dueBoundary, isReviewDue } from '@/lib/learning/next-step'
 import { masteryLevel, type MasteryLevel } from '@/lib/mastery'
 
 /** Everything here is filtered by the user id; an id that is not theirs is simply not found. */
+
+// ---------------------------------------------------------------------------------------
+// Setup state: every loader below builds it the same way (lib/course-setup.ts has the rules).
+
+/** The topic fields setup needs; every loader selects them. */
+const SETUP_TOPIC_FIELDS = {
+  userConfirmed: true,
+  sourceMaterialIds: true,
+  _count: { select: { content: true, sources: true } },
+} as const
+
+type SetupTopicRow = { userConfirmed: boolean; sourceMaterialIds: string[]; _count: { content: number; sources: number } }
+
+/** A topic found in the files has sources (or, for courses planned before sources existed, source files). */
+const isExtracted = (topic: Pick<SetupTopicRow, 'sourceMaterialIds' | '_count'>) =>
+  topic._count.sources > 0 || topic.sourceMaterialIds.length > 0
+
+function extractionOutcome(status: string | undefined): ExtractionOutcome {
+  if (!status) return 'none'
+  if (ACTIVE_JOB_STATUSES.includes(status)) return 'running'
+  return status === 'failed' ? 'failed' : 'done'
+}
+
+/** The latest topic-finding job of each course, by course id. */
+async function latestExtractions(userId: string, courseIds: string[]): Promise<Map<string, ExtractionOutcome>> {
+  if (courseIds.length === 0) return new Map()
+  const jobs = await prisma.processingJob.findMany({
+    where: { userId, jobType: 'extract_topics', projectId: { in: courseIds } },
+    orderBy: [{ projectId: 'asc' }, { createdAt: 'desc' }],
+    distinct: ['projectId'],
+    select: { projectId: true, status: true },
+  })
+  return new Map(jobs.map((job) => [job.projectId as string, extractionOutcome(job.status)]))
+}
+
+function setupOf(
+  project: { status: string; _count: { materials: number }; topics: SetupTopicRow[] },
+  extraction: ExtractionOutcome
+): CourseSetup {
+  const extracted = project.topics.filter(isExtracted)
+  return deriveSetup({
+    status: project.status,
+    materialCount: project._count.materials,
+    topicCount: project.topics.length,
+    confirmedTopicCount: project.topics.filter((topic) => topic.userConfirmed).length,
+    extractedTopicCount: extracted.length,
+    confirmedExtractedTopicCount: extracted.filter((topic) => topic.userConfirmed).length,
+    contentBlockCount: project.topics.reduce((sum, topic) => sum + topic._count.content, 0),
+    extraction,
+  })
+}
 
 export type CourseListItem = {
   id: string
@@ -36,8 +88,7 @@ export async function listCourses(userId: string): Promise<CourseListItem[]> {
       topics: {
         orderBy: { orderIndex: 'asc' },
         select: {
-          userConfirmed: true,
-          _count: { select: { content: true } },
+          ...SETUP_TOPIC_FIELDS,
           reviewSchedules: { where: { userId }, take: 1, select: { mastery: true, dueAt: true, intervalDays: true } },
         },
       },
@@ -45,6 +96,7 @@ export async function listCourses(userId: string): Promise<CourseListItem[]> {
   })
 
   const now = Date.now()
+  const extractions = await latestExtractions(userId, projects.map((project) => project.id))
   return projects.map((project) => {
     const levels = project.topics.map((topic) => masteryLevel(displayMastery(topic.reviewSchedules[0]?.mastery, topic.reviewSchedules[0], now)))
     return {
@@ -56,13 +108,7 @@ export async function listCourses(userId: string): Promise<CourseListItem[]> {
       topicCount: project.topics.length,
       strongCount: levels.filter((level) => level === 'strong').length,
       levels,
-      setup: deriveSetup({
-        status: project.status,
-        materialCount: project._count.materials,
-        topicCount: project.topics.length,
-        confirmedTopicCount: project.topics.filter((topic) => topic.userConfirmed).length,
-        contentBlockCount: project.topics.reduce((sum, topic) => sum + topic._count.content, 0),
-      }),
+      setup: setupOf(project, extractions.get(project.id) ?? 'none'),
     }
   })
 }
@@ -148,7 +194,7 @@ export const getCourseShell = cache(async (userId: string, courseId: string): Pr
           description: true,
           orderIndex: true,
           unitId: true,
-          userConfirmed: true,
+          ...SETUP_TOPIC_FIELDS,
           content: { select: { contentType: true } },
           progress: {
             where: { userId },
@@ -163,6 +209,7 @@ export const getCourseShell = cache(async (userId: string, courseId: string): Pr
   if (!project) return null
 
   const now = Date.now()
+  const extraction = (await latestExtractions(userId, [project.id])).get(project.id) ?? 'none'
   const topics: ShellTopic[] = project.topics.map((topic) => {
     const progress = topic.progress[0]
     const schedule = topic.reviewSchedules[0]
@@ -196,13 +243,7 @@ export const getCourseShell = cache(async (userId: string, courseId: string): Pr
     examDate: toExamDate(project.examDate),
     dailyMinutes: project.dailyMinutes,
     examPromptDismissed: project.examPromptDismissed,
-    setup: deriveSetup({
-      status: project.status,
-      materialCount: project._count.materials,
-      topicCount: topics.length,
-      confirmedTopicCount: topics.filter((topic) => topic.confirmed).length,
-      contentBlockCount: topics.reduce((sum, topic) => sum + topic.content.length, 0),
-    }),
+    setup: setupOf(project, extraction),
     units: project.units,
     topics,
   }
@@ -210,6 +251,7 @@ export const getCourseShell = cache(async (userId: string, courseId: string): Pr
 
 export type NavTopic = { id: string; name: string; mastery: number | null; unitId: string | null }
 export type NavUnit = { id: string; title: string; weekLabel: string | null; orderIndex: number }
+export type NavFile = { id: string; filename: string }
 
 export type NavCourse = {
   id: string
@@ -218,13 +260,15 @@ export type NavCourse = {
   updatedAt: string
   /** Confirmed topics whose review is due by the end of the student's today. */
   dueCount: number
-  /** Topics exist but are not confirmed yet: the sidebar shows a dot on "Topics". */
+  /** Topics exist but the student has not confirmed the list yet: the sidebar shows a dot on "Topics". */
   needsTopicReview: boolean
   /** The course is past setup, so the sidebar lists its topics. */
   active: boolean
   /** In course order; empty for a flat course. */
   units: NavUnit[]
   topics: NavTopic[]
+  /** The course's files, newest first, so search finds a file by its name. */
+  files: NavFile[]
 }
 
 /**
@@ -247,29 +291,26 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
         orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
         select: { id: true, title: true, weekLabel: true, orderIndex: true },
       },
+      materials: {
+        orderBy: { uploadedAt: 'desc' },
+        select: { id: true, filename: true },
+      },
       topics: {
         orderBy: { orderIndex: 'asc' },
         select: {
           id: true,
           name: true,
           unitId: true,
-          userConfirmed: true,
-          _count: { select: { content: true } },
+          ...SETUP_TOPIC_FIELDS,
           reviewSchedules: { where: { userId }, take: 1, select: { mastery: true, dueAt: true, intervalDays: true } },
         },
       },
     },
   })
 
+  const extractions = await latestExtractions(userId, projects.map((project) => project.id))
   return projects.map((project) => {
-    const confirmed = project.topics.filter((topic) => topic.userConfirmed).length
-    const setup = deriveSetup({
-      status: project.status,
-      materialCount: project._count.materials,
-      topicCount: project.topics.length,
-      confirmedTopicCount: confirmed,
-      contentBlockCount: project.topics.reduce((sum, topic) => sum + topic._count.content, 0),
-    })
+    const setup = setupOf(project, extractions.get(project.id) ?? 'none')
     return {
       id: project.id,
       name: project.name,
@@ -277,9 +318,10 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
       updatedAt: project.updatedAt.toISOString(),
       // The same meaning of "due" as the Review page, Home and the overview (lib/learning/next-step.ts).
       dueCount: project.topics.filter((topic) => topic.userConfirmed && isReviewDue(topic.reviewSchedules[0]?.dueAt, boundary)).length,
-      needsTopicReview: project.topics.length > 0 && confirmed < project.topics.length,
+      needsTopicReview: needsTopicReview(setup),
       active: setup.mode === 'active',
       units: project.units,
+      files: project.materials,
       topics: project.topics.map((topic) => ({
         id: topic.id,
         name: topic.name,

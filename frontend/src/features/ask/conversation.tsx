@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { Composer } from './composer'
 import { AssistantBlock, FailureBlock, LiveAnswer, UserBubble } from './messages'
 import type { AskChat } from './use-ask-chat'
+import { useAiStatus } from '@/features/ai/ai-status'
 
 type ConversationProps = {
   chat: AskChat
@@ -46,6 +47,7 @@ export function Conversation({
   topicName,
 }: ConversationProps) {
   const { messages, live, sending, loadingThread, loadError, send, stop, retry } = chat
+  const { blocked } = useAiStatus()
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const stickRef = React.useRef(true)
   const isSheet = variant === 'sheet'
@@ -142,7 +144,7 @@ export function Conversation({
                 ) : message.kind === 'assistant' ? (
                   <AssistantBlock key={message.id} message={message} />
                 ) : (
-                  <FailureBlock key={message.id} message={message} disabled={sending} onRetry={() => retry(message.id)} />
+                  <FailureBlock key={message.id} message={message} disabled={sending || !!blocked} onRetry={() => retry(message.id)} />
                 )
               )}
               {live ? <LiveAnswer turn={live} /> : null}

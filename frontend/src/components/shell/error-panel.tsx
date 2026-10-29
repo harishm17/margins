@@ -21,18 +21,21 @@ export function ErrorPanel({
     console.error(error)
   }, [error])
 
+  // An alert, so a screen reader says the page failed instead of leaving silence where the page was.
   return (
-    <EmptyState
-      className={className}
-      icon={<WarningCircle />}
-      title={title}
-      action={
-        <Button variant="primary" onClick={reset}>
-          Try again
-        </Button>
-      }
-    >
-      This page could not load. Try again, and if it keeps happening, reload the page.
-    </EmptyState>
+    <div role="alert">
+      <EmptyState
+        className={className}
+        icon={<WarningCircle />}
+        title={title}
+        action={
+          <Button variant="primary" onClick={reset}>
+            Try again
+          </Button>
+        }
+      >
+        This page could not load. Try again, and if it keeps happening, reload the page.
+      </EmptyState>
+    </div>
   )
 }

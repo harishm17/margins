@@ -108,12 +108,24 @@ class Settings(BaseSettings):
     # re-dispatches it is failed with JOB_DISPATCH_FAILED.
     JOB_PENDING_REDISPATCH_SECONDS: float = 120.0
     JOB_MAX_REDISPATCHES: int = 3
+    # Jobs that wait for AI instead of failing (exam grading: the answers are the student's work)
+    # wait at most this long, then fail with the reason they were waiting for.
+    JOB_AI_WAIT_MAX_SECONDS: float = 7 * 24 * 3600.0
     # Most a user's LLM-backed jobs and chat answers may cost per UTC day, from the stored
     # costs. 0 turns the cap off.
     DAILY_LLM_BUDGET_USD: float = 8.00
     # Most ALL users together may cost per UTC day, from the same ledger. Sign-up is open and
     # the API key is shared, so this is the ceiling on the day's bill. 0 turns it off.
     GLOBAL_DAILY_LLM_BUDGET_USD: float = 40.00
+
+    # The shared AI status (app/services/ai_status.py). An "unavailable" status older than this
+    # many seconds counts as unknown, so the next real call tests the provider again.
+    AI_STATUS_TTL_S: float = 300.0
+    # Rate limits or outages in a row (each after the SDK's own retries) that mark the AI
+    # unavailable. Credit, key and configuration errors mark it at once.
+    AI_STATUS_TRANSIENT_THRESHOLD: int = 3
+    # Optional webhook (Discord, Slack or ntfy) told once when the AI becomes unavailable.
+    OPS_ALERT_WEBHOOK_URL: str = ""
 
     # S3-compatible bucket (Railway Buckets, AWS S3, R2, MinIO) for `s3://` material paths.
     S3_ENDPOINT: str = ""

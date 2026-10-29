@@ -1,61 +1,31 @@
 import { NextResponse } from 'next/server'
 import { ApiErrorCode, apiError } from '@/lib/api/errors'
-import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { aiMessage, refusalStatus } from '@/lib/ai/messages'
+import { blockedCode } from '@/lib/ai/status'
+import { getAiStatus } from '@/server/ai-status'
 
-type DependencyCheck = {
-  name?: string
-  status?: string
-  message?: string
+/**
+ * Call before creating any job that runs the model. Refuses, before anything is stored, when AI is
+ * unavailable (the shared status) or the user has used today's allowance, with a typed code in
+ * `error.details.code` and the shared student-facing text (lib/ai/messages); never the AI
+ * service's own words. Null when the job may start.
+ *
+ * Not for grading a student's work (exam submit, Grade again): that is always accepted and the
+ * grading job waits for the AI instead.
+ */
+export async function ensureAiGenerationReady(userId: string): Promise<NextResponse | null> {
+  const code = blockedCode(await getAiStatus(userId))
+  if (!code) return null
+  return aiRefusal(code)
 }
 
-export async function ensureAiGenerationReady(): Promise<NextResponse | null> {
-  const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000'
-
-  try {
-    const response = await fetch(`${aiServiceUrl}/health/dependencies`, {
-      headers: aiServiceHeaders(),
-      signal: AbortSignal.timeout(4000),
-    })
-
-    if (!response.ok) {
-      return apiError(
-        ApiErrorCode.UPSTREAM_ERROR,
-        'AI service is unavailable. Please try again in a moment.',
-        undefined,
-        503
-      )
-    }
-
-    const payload = await response.json()
-    const checks = Array.isArray(payload?.checks) ? (payload.checks as DependencyCheck[]) : []
-
-    const llmCheck = checks.find((check) => check.name === 'llm_key')
-    if (llmCheck?.status === 'fail') {
-      return apiError(
-        ApiErrorCode.UPSTREAM_ERROR,
-        'AI service is missing ANTHROPIC_API_KEY. Configure it before generating content.',
-        undefined,
-        503
-      )
-    }
-
-    const dbCheck = checks.find((check) => check.name === 'database')
-    if (dbCheck?.status === 'fail') {
-      return apiError(
-        ApiErrorCode.UPSTREAM_ERROR,
-        'AI service database dependency is unavailable.',
-        undefined,
-        503
-      )
-    }
-
-    return null
-  } catch {
-    return apiError(
-      ApiErrorCode.UPSTREAM_ERROR,
-      'AI service health check failed. Please verify service availability.',
-      undefined,
-      503
-    )
-  }
+/** The refusal response for `code` (also used when the AI service refuses a call itself). */
+export function aiRefusal(code: string): NextResponse {
+  const message = aiMessage(code)
+  return apiError(
+    code === 'LLM_DAILY_BUDGET' ? ApiErrorCode.RATE_LIMITED : ApiErrorCode.UPSTREAM_ERROR,
+    message.text,
+    { code, retryable: message.retry },
+    refusalStatus(code)
+  )
 }

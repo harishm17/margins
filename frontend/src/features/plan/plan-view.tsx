@@ -8,7 +8,10 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { weekStart, type Plan, type PlanDay } from '@/lib/learning/plan'
 import {
   dayLabel,
+  daySummary,
   describePlanItem,
+  reviewsNotScheduledText,
+  tooLongText,
   weekLabel,
   type DescribeContext,
   type DescribedPlanItem,
@@ -41,14 +44,7 @@ export function groupWeeks(days: PlanDay[]): Week[] {
   return weeks
 }
 
-/** "Learn Sorting", or "Learn Sorting and 2 more". */
-export function daySummary(titles: string[]): string {
-  if (titles.length === 0) return 'Nothing planned'
-  if (titles.length === 1) return titles[0]
-  return `${titles[0]} and ${titles.length - 1} more`
-}
-
-const toContext = (unitTitles: Record<string, string>): DescribeContext => ({ unitTitles })
+const toContext = (unitTitles: Record<string, string>, dailyMinutes: number): DescribeContext => ({ unitTitles, dailyMinutes })
 
 function ItemRow({ item, today }: { item: DescribedPlanItem; today: boolean }) {
   const meta = [item.partLabel, item.done ? null : item.etaLabel.replace('About ', '')].filter(Boolean).join(', ')
@@ -77,6 +73,11 @@ function ItemRow({ item, today }: { item: DescribedPlanItem; today: boolean }) {
         </Link>
         {!item.done ? <p className="text-small text-fg-2">{item.reason}</p> : null}
         {meta ? <p className="text-caption font-normal text-fg-3">{meta}</p> : null}
+        {item.overBudgetLabel && !item.done ? (
+          <Badge tone="warning" className="mt-1">
+            {item.overBudgetLabel}
+          </Badge>
+        ) : null}
       </div>
       {showButton ? (
         <Button asChild size="sm" variant="secondary" className="relative z-10 shrink-0">
@@ -91,12 +92,14 @@ function ItemRow({ item, today }: { item: DescribedPlanItem; today: boolean }) {
   )
 }
 
-function DayBadges({ day }: { day: PlanDay }) {
+function DayBadges({ day, collapsed = false }: { day: PlanDay; collapsed?: boolean }) {
   return (
     <>
       {day.isToday ? <Badge tone="accent">Today</Badge> : null}
       {day.isExamDay ? <Badge tone="warning">Exam day</Badge> : null}
       {day.isFinalReview && !day.isExamDay ? <Badge tone="neutral">Final review</Badge> : null}
+      {/* A closed day line hides its rows, so the longer-than-usual mock shows on the line itself. */}
+      {collapsed && day.items.some((item) => item.overBudget && !item.done) ? <Badge tone="warning">Longer than usual</Badge> : null}
     </>
   )
 }
@@ -169,7 +172,7 @@ function DayLine({ day, items }: { day: PlanDay; items: DescribedPlanItem[] }) {
             {dayLabel(day.date)}
           </h3>
           <span className="flex shrink-0 items-center gap-1.5 sm:order-last">
-            <DayBadges day={day} />
+            <DayBadges day={day} collapsed />
             <span className="tabular text-caption font-normal text-fg-3">{minutes} min</span>
             <CaretDown aria-hidden="true" className="size-4 text-fg-3 transition-transform duration-180 group-open:rotate-180" />
           </span>
@@ -267,7 +270,7 @@ export function PlanView({
   unitTitles?: Record<string, string>
 }) {
   const base = `/courses/${courseId}`
-  const context = toContext(unitTitles)
+  const context = toContext(unitTitles, plan.dailyMinutes)
   const describe = (day: PlanDay) => day.items.map((item) => describePlanItem(item, courseId, context))
   const settings = (
     <Button asChild variant="secondary" icon={<Gear />}>
@@ -324,6 +327,21 @@ export function PlanView({
   const open = new Set(plan.days.slice(0, OPEN_DAYS).map((day) => day.date))
   const anyItems = plan.days.some((day) => day.items.length > 0)
   const notScheduled = plan.notScheduled
+  const tooLong = plan.tooLongForDay
+  const topicChips = (topics: { id: string; name: string }[]) => (
+    <ul className="mt-2 flex flex-wrap gap-1.5">
+      {topics.map((topic) => (
+        <li key={topic.id}>
+          <Link
+            href={`${base}/topics/${topic.id}`}
+            className="inline-flex min-h-7 items-center rounded-chip bg-surface-2 px-2 text-small text-fg-2 hover:text-fg max-sm:min-h-11"
+          >
+            {topic.name}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
 
   return (
     <Page>
@@ -351,19 +369,26 @@ export function PlanView({
                 ? 'There is not enough time before your exam for these. Add study time or move the date to fit them in.'
                 : 'These come after the days shown here.'}
             </p>
-            <ul className="mt-2 flex flex-wrap gap-1.5">
-              {notScheduled.topics.map((topic) => (
-                <li key={topic.id}>
-                  <Link
-                    href={`${base}/topics/${topic.id}`}
-                    className="inline-flex min-h-7 items-center rounded-chip bg-surface-2 px-2 text-small text-fg-2 hover:text-fg max-sm:min-h-11"
-                  >
-                    {topic.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            {topicChips(notScheduled.topics)}
           </section>
+        ) : null}
+        {tooLong ? (
+          <section aria-labelledby="too-long-heading" className="rounded-card border border-border bg-surface p-4">
+            <h2 id="too-long-heading" className="text-body-strong text-fg">
+              Longer than your daily time: {pluralize(tooLong.topics.length, 'topic')}
+            </h2>
+            <p className="mt-1 text-small text-fg-2">{tooLongText(plan.dailyMinutes, tooLong.topics.length)}</p>
+            {topicChips(tooLong.topics)}
+            {tooLong.dependents.length > 0 ? (
+              <>
+                <p className="mt-3 text-small text-fg-2">{tooLong.topics.length === 1 ? 'Waiting on it:' : 'Waiting on them:'}</p>
+                {topicChips(tooLong.dependents)}
+              </>
+            ) : null}
+          </section>
+        ) : null}
+        {plan.reviewsNotScheduled ? (
+          <InlineAlert tone="neutral">{reviewsNotScheduledText(plan.reviewsNotScheduled)}</InlineAlert>
         ) : null}
       </div>
 

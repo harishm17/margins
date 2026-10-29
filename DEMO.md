@@ -4,15 +4,13 @@ Everything needed to run a live demo or record a video.
 
 ---
 
-## Demo Credentials
+## Demo Account
 
 Local development only. `frontend/scripts/seed-demo.ts` refuses to run against anything but a local
 database (this machine or docker compose), so this account never exists on studymargins.com.
 
-| Field    | Value                  |
-|----------|------------------------|
-| Email    | demo@studymargins.com |
-| Password | demo1234               |
+Students sign in with Google. For the demo, start the web app with `ENABLE_TEST_LOGIN=true` (and
+`NEXTAUTH_URL` on localhost) and use the test sign-in on `/login` with `demo@example.com`. No password.
 
 ---
 
@@ -45,6 +43,8 @@ LLM_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
 
+For the test sign-in, also `export ENABLE_TEST_LOGIN=true` before `docker compose up`.
+
 The voice coach runs on the same Claude key; the browser does the speech. All other variables are configured in `docker-compose.yml`. Key defaults:
 
 | Variable            | Value                |
@@ -62,8 +62,8 @@ The voice coach runs on the same Claude key; the browser does the speech. All ot
 
 ### Scene 1 — Login
 1. Open `http://localhost:3000`
-2. Click **Log in**
-3. Enter `demo@studymargins.com` / `demo1234`
+2. Click **Sign in**
+3. In the test sign-in, enter `demo@example.com`
 4. Land on the dashboard — the seeded project is visible immediately
 
 ### Scene 2 — Project Overview

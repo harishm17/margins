@@ -22,6 +22,7 @@ from app.services.llm.base import (
     LLMUnavailableError,
 )
 from app.services.llm.factory import LLMFactory
+from app.services.llm.observed import ObservedProvider
 from app.services.llm.mock_provider import MockProvider
 from app.services.llm.schemas import MaterialCheck, QuestionSet
 from app.services.llm.usage import summarize_usage, track_llm_usage
@@ -246,7 +247,9 @@ class TestFactory:
             settings.LLM_MAX_RETRIES = 2
             LLMFactory.reset()
             provider = LLMFactory.get_provider()
-            assert isinstance(provider, AnthropicProvider)
+            # Every caller gets the configured provider wrapped so its calls feed the AI status.
+            assert isinstance(provider, ObservedProvider)
+            assert isinstance(provider.inner, AnthropicProvider)
             assert provider.model_for("validate_material") == "claude-haiku-5-5"
             assert LLMFactory.get_provider() is provider
 
@@ -254,7 +257,7 @@ class TestFactory:
         with patch("app.services.llm.factory.settings") as settings:
             settings.LLM_PROVIDER = "mock"
             LLMFactory.reset()
-            assert isinstance(LLMFactory.get_provider(), MockProvider)
+            assert isinstance(LLMFactory.get_provider().inner, MockProvider)
 
     def test_unknown_provider(self):
         with patch("app.services.llm.factory.settings") as settings:

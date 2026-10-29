@@ -102,6 +102,11 @@ export const EVAL_FACTS = {
   grounding: '4.91',
   errors: 8,
   mathErrors: 2,
+  // "Models: opus:medium" and "Judge: opus:medium": the judge is the model that wrote the text.
+  judge: 'Claude Opus',
+  // "Automatic checks" table: the two checks that failed on every topic.
+  notesWithAllSections: '0 of 8',
+  notesInWordBand: '0 of 8',
 }
 
 export type Faq = { id: string; question: string; answer: string[] }
@@ -123,7 +128,7 @@ export const FAQ: Faq[] = [
     // Upload copy: "PDF, DOCX, PPTX or DOC, up to 25 MB each"; the validator rejects scanned PDFs (no OCR).
     answer: [
       'PDF, Word (DOCX or DOC) and PowerPoint (PPTX) files, up to 25 MB each. A PDF needs selectable text: scanned pages are not read yet.',
-      'Mark past exams as Past exams when you upload them. That is what lets mock exams match their style.',
+      'When you upload past exams, choose Past exams. That is what lets mock exams match their style.',
     ],
   },
   {
@@ -132,7 +137,7 @@ export const FAQ: Faq[] = [
     // Terms: "can contain mistakes"; README: generators only see the topic's own excerpts; Ask says when the files
     // do not cover the question; the eval lists every error the judge found.
     answer: [
-      'It can make mistakes, like any AI. Notes and quizzes are written from excerpts of your own files and point back to them, so you can check a claim against the page. Ask your materials answers only from your files, and says so when they do not cover your question.',
+      'It can make mistakes, like any AI. Notes and quizzes are written from excerpts of your own files and point back to them, so you can check a claim against the page. Answers in Ask come only from your files, and Ask says so when they do not cover your question.',
       'We measure this and publish the errors the judge found, not only the scores. For anything that matters, check it against your course materials and your instructor.',
     ],
   },
@@ -142,7 +147,7 @@ export const FAQ: Faq[] = [
     // Privacy page, "What we store", "How it's used", "Services we use", "Your choices".
     answer: [
       'They stay in your account and are used only to run Margins for you. The text of your files and your questions are sent to Anthropic to write study material and answers; Anthropic does not use this data to train its models by default. We do not sell your data, show ads or use your files to train AI models.',
-      `Delete a course and its files, and everything made from them, are deleted. To delete your account, email ${CONTACT_EMAIL}. Voice practice uses your browser's speech recognition, which may send audio to Google (Chrome) or Apple (Safari).`,
+      `When you delete a course, its files and everything made from them are deleted. You can delete your whole account yourself in Settings; if you need help, email ${CONTACT_EMAIL}. Voice practice uses your browser's speech recognition, which may send audio to Google (Chrome) or Apple (Safari).`,
     ],
   },
   {

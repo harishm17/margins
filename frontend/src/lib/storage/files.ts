@@ -89,10 +89,8 @@ async function deleteLocalFile(relativePath: string): Promise<void> {
   const fs = await import('fs')
   for (const base of [LOCAL_UPLOAD_BASE, LOCAL_UPLOAD_FALLBACK_BASE]) {
     const localFilePath = await insideUploads(base, relativePath)
-    if (localFilePath && fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath)
-      return
-    }
+    // force: a file that is already gone (or went between two calls) counts as deleted.
+    if (localFilePath) fs.rmSync(localFilePath, { force: true })
   }
 }
 
@@ -142,7 +140,8 @@ export async function uploadStream(
 }
 
 /**
- * Delete one stored file. A path that is neither in the bucket nor in the upload folder is
+ * Delete one stored file. A file that is already gone counts as deleted, on every backend, so
+ * cleanup can be retried; a path that is neither in the bucket nor in the upload folder is
  * ignored.
  */
 export async function deleteFile(storagePath: string): Promise<void> {
@@ -154,6 +153,29 @@ export async function deleteFile(storagePath: string): Promise<void> {
   const localPath = parseLocalPath(storagePath)
   if (localPath) {
     await deleteLocalFile(localPath)
+  }
+}
+
+/**
+ * Record a file that was just stored. `record` makes the database rows that point at it; if it
+ * fails for any reason (the course or the account was deleted meanwhile, the database refused the
+ * row), the stored file is deleted before the error goes on, so a failed upload never leaves a file
+ * that nothing points at. Every write-then-record path goes through this.
+ */
+export async function recordStoredFile<T>(
+  storedPath: string,
+  record: () => Promise<T>,
+  remove: (path: string) => Promise<void> = deleteFile
+): Promise<T> {
+  try {
+    return await record()
+  } catch (error) {
+    try {
+      await remove(storedPath)
+    } catch (cleanupError) {
+      console.error(`[STORAGE] Could not delete ${storedPath} after its record failed; remove it by hand:`, cleanupError)
+    }
+    throw error
   }
 }
 
@@ -194,6 +216,22 @@ export async function deleteProjectFolder(userId: string, projectId: string): Pr
   } catch (error) {
     console.error(`[STORAGE] Could not delete the folder ${folder}; remove it by hand:`, error)
     return false
+  }
+}
+
+/**
+ * Delete everything stored for a user: every file under `<userId>/`, in the bucket and in the
+ * local uploads folder, including files whose database rows are already gone. Unlike
+ * deleteProjectFolder this throws when a storage fails, so account deletion can stop and be
+ * retried; files that are already gone count as deleted, so a retry only finishes the job.
+ */
+export async function deleteUserFiles(userId: string): Promise<void> {
+  // Ids are UUIDs. Anything else could name a folder outside the user's own.
+  if (!/^[A-Za-z0-9-]+$/.test(userId)) throw new Error(`Refusing to delete files for user id "${userId}"`)
+  const folder = `${userId}/`
+  await deleteLocalFolder(folder)
+  if (s3Configured()) {
+    await deleteS3Prefix(folder)
   }
 }
 

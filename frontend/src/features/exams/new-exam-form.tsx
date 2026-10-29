@@ -11,8 +11,13 @@ import { MasteryIndicator } from '@/components/ui/mastery-indicator'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Skeleton, SkeletonText } from '@/components/ui/skeleton'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { AiBlockedNote, useAiStatus } from '@/features/ai/ai-status'
 import { useJob } from '@/features/jobs/use-job'
-import { pollFailureMessage } from '@/lib/jobs/poll-job'
+import { aiMessage, isKnownAiCode, type AiMessage } from '@/lib/ai/messages'
+import { fillResetTime } from '@/lib/budget/copy'
+import type { ExamStyleState } from '@/lib/exams/style-state'
+import { jobFailureMessage } from '@/lib/jobs/failure-message'
+import { pollFailureMessage, type PollResult } from '@/lib/jobs/poll-job'
 import { cn } from '@/lib/utils'
 import {
   DEFAULT_EXAM_CONFIG,
@@ -34,8 +39,36 @@ type Props = {
   preselected: string[]
   /** An exam being written already, found on the server after a refresh. */
   activeJob: { id: string; startedAt: string } | null
-  /** The course has a past exam with a style profile, so there is something to match. */
-  hasExamStyle: boolean
+  /** Whether the course's past exams have a style to match, and if not, why. */
+  examStyle: ExamStyleState
+}
+
+/**
+ * The form's states. A failure goes back to the form with every choice kept, says why, and offers
+ * Try again when that may help; it never keeps the "writing" wait on screen.
+ */
+type Phase =
+  | { kind: 'idle' }
+  | { kind: 'writing'; jobId: string; startedAt: string }
+  | { kind: 'failed'; message: AiMessage }
+
+const FAILED_TITLE = "Your exam couldn't be written"
+
+/** What a finished poll that did not complete says. */
+function failureFromPoll(result: PollResult): AiMessage {
+  const job = result.job
+  if (job?.status === 'failed') {
+    const message = jobFailureMessage(job.errorCode, 'generate_exam')
+    // On a failed job, `retryable` says whether starting again may help.
+    return { ...message, retry: job.retryable ?? message.retry }
+  }
+  return { ...aiMessage(null), text: pollFailureMessage(result, 'The exam could not be written. Try again.') }
+}
+
+/** What a refused or failed start says. */
+function failureFromRequest(caught: unknown): AiMessage {
+  if (isApiError(caught) && isKnownAiCode(caught.code)) return aiMessage(caught.code)
+  return { ...aiMessage(null), text: isApiError(caught) ? caught.message : 'Could not start your exam. Try again.' }
 }
 
 // Exams can take a couple of minutes to write.
@@ -53,7 +86,7 @@ function SectionLabel({ id, children, hint }: { id: string; children: React.Reac
 }
 
 /** The mock exam form, then the "Writing your exam" wait, then the lobby of the new exam. */
-export function NewExamForm({ courseId, topics, preselected, activeJob, hasExamStyle }: Props) {
+export function NewExamForm({ courseId, topics, preselected, activeJob, examStyle }: Props) {
   const router = useRouter()
   const [selected, setSelected] = React.useState<Set<string>>(() => new Set(preselected))
   const [totalQuestions, setTotalQuestions] = React.useState<number>(DEFAULT_EXAM_CONFIG.totalQuestions)
@@ -61,24 +94,36 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, hasExamS
   const [difficulty, setDifficulty] = React.useState<Difficulty>(DEFAULT_EXAM_CONFIG.difficultyLevel)
   const [mix, setMix] = React.useState<QuestionMix>(DEFAULT_EXAM_CONFIG.mix)
   const [matchPastExams, setMatchPastExams] = React.useState(true)
-  const [jobId, setJobId] = React.useState<string | null>(activeJob?.id ?? null)
-  const [startedAt, setStartedAt] = React.useState<string | null>(activeJob?.startedAt ?? null)
+  const [phase, setPhase] = React.useState<Phase>(() =>
+    activeJob ? { kind: 'writing', jobId: activeJob.id, startedAt: activeJob.startedAt } : { kind: 'idle' }
+  )
   const [submitting, setSubmitting] = React.useState(false)
-  const [error, setError] = React.useState<string | null>(null)
+  const { blocked, report } = useAiStatus()
+  const failureRef = React.useRef<HTMLDivElement>(null)
 
-  const { job, timedOut } = useJob(jobId, {
+  const fail = React.useCallback((message: AiMessage) => {
+    setPhase({ kind: 'failed', message })
+  }, [])
+
+  // A failure shows at the top of the form: bring it into view.
+  React.useEffect(() => {
+    if (phase.kind === 'failed') failureRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [phase])
+
+  const { job, timedOut } = useJob(phase.kind === 'writing' ? phase.jobId : null, {
     timeoutMs: EXAM_JOB_TIMEOUT_MS,
     onSettled: (result) => {
       if (result.state === 'completed') {
         const examId = result.job?.resultData?.exam_id
         router.push(typeof examId === 'string' ? `/courses/${courseId}/exams/${examId}` : `/courses/${courseId}/exams`)
-      } else if (result.state === 'failed' && result.job?.status !== 'failed') {
-        // The poll itself broke (not a failed job): back to the form with the reason.
-        setJobId(null)
-        setError(pollFailureMessage(result, 'The exam could not be written. Try again.'))
+      } else if (result.state === 'failed') {
+        report(result.job?.errorCode)
+        fail(failureFromPoll(result))
       }
     },
   })
+
+  const matchStyle = examStyle.kind === 'ready' && matchPastExams
 
   const toggle = (id: string, checked: boolean) =>
     setSelected((current) => {
@@ -89,7 +134,6 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, hasExamS
     })
 
   async function create() {
-    setError(null)
     setSubmitting(true)
     try {
       const result = await apiFetch<{ jobId: string }>(`/api/projects/${courseId}/generate-exam`, {
@@ -100,31 +144,23 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, hasExamS
           durationMinutes,
           difficultyLevel: difficulty,
           questionTypeDistribution: QUESTION_MIXES[mix].distribution,
-          ...(hasExamStyle && matchPastExams ? { matchPastExams: true } : {}),
+          ...(matchStyle ? { matchPastExams: true } : {}),
         },
       })
-      setStartedAt(new Date().toISOString())
-      setJobId(result.jobId)
+      setPhase({ kind: 'writing', jobId: result.jobId, startedAt: new Date().toISOString() })
     } catch (caught) {
-      setError(isApiError(caught) ? caught.message : 'Could not start your exam. Try again.')
+      if (isApiError(caught)) report(caught.code)
+      fail(failureFromRequest(caught))
     } finally {
       setSubmitting(false)
     }
   }
 
-  if (jobId !== null) {
+  if (phase.kind === 'writing') {
     return (
       <div aria-live="polite">
         <div className="rounded-card border border-border bg-surface p-5">
-          <JobStatus
-            job={job}
-            label="Writing your exam"
-            since={startedAt}
-            timedOut={timedOut}
-            onRetry={() => void create()}
-            retrying={submitting}
-          />
-          {error ? <InlineAlert className="mt-3" tone="danger">{error}</InlineAlert> : null}
+          <JobStatus job={job} label="Writing your exam" since={phase.startedAt} timedOut={timedOut} />
           <p className="mt-3 text-small text-fg-2">
             This takes about a minute or two. You can leave this page and come back, your exam will be in the list.
           </p>
@@ -149,16 +185,35 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, hasExamS
 
   const allSelected = selected.size === topics.length
   const distribution = QUESTION_MIXES[mix].distribution
+  const failure = phase.kind === 'failed' ? phase.message : null
 
   return (
     <form
       noValidate
       onSubmit={(event) => {
         event.preventDefault()
-        if (selected.size > 0 && !submitting) void create()
+        if (selected.size > 0 && !submitting && !blocked) void create()
       }}
       className="flex flex-col gap-8"
     >
+      {failure ? (
+        <div ref={failureRef} className="scroll-mt-20">
+          <InlineAlert
+            tone={failure.tone === 'neutral' ? 'warning' : failure.tone}
+            title={FAILED_TITLE}
+            action={
+              failure.retry && !blocked ? (
+                <Button type="button" size="sm" variant="secondary" loading={submitting} onClick={() => void create()}>
+                  Try again
+                </Button>
+              ) : undefined
+            }
+          >
+            {fillResetTime(failure.text)}
+          </InlineAlert>
+        </div>
+      ) : null}
+
       <section aria-labelledby="exam-topics" className="flex flex-col gap-3">
         <div className="flex items-end justify-between gap-3">
           <SectionLabel id="exam-topics" hint="Topics that are due or still being learned are ticked for you.">
@@ -244,7 +299,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, hasExamS
         />
       </section>
 
-      {hasExamStyle ? (
+      {examStyle.kind === 'ready' ? (
         <section aria-labelledby="exam-style" className="flex flex-col gap-2">
           <SectionLabel id="exam-style">Style</SectionLabel>
           <label
@@ -267,19 +322,91 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, hasExamS
             </span>
           </label>
         </section>
+      ) : examStyle.kind !== 'none' ? (
+        <ExamStyleStatus courseId={courseId} state={examStyle} />
       ) : null}
 
-      {error ? <InlineAlert tone="danger">{error}</InlineAlert> : null}
-
-      <div className="flex flex-wrap items-center gap-3 border-t border-border pt-6">
-        <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={selected.size === 0}>
-          Create exam
-        </Button>
-        <Button asChild variant="ghost" size="lg">
-          <Link href={`/courses/${courseId}/exams`}>Cancel</Link>
-        </Button>
-        {selected.size === 0 ? <span className="text-small text-fg-2">Pick at least one topic.</span> : null}
+      <div className="flex flex-col gap-3 border-t border-border pt-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={selected.size === 0 || !!blocked}>
+            Create exam
+          </Button>
+          <Button asChild variant="ghost" size="lg">
+            <Link href={`/courses/${courseId}/exams`}>Cancel</Link>
+          </Button>
+          {selected.size === 0 ? <span className="text-small text-fg-2">Pick at least one topic.</span> : null}
+        </div>
+        <AiBlockedNote />
       </div>
     </form>
+  )
+}
+
+const STYLE_COPY: Record<Exclude<ExamStyleState['kind'], 'ready' | 'none'>, { title: string; text: string }> = {
+  analysing: {
+    title: 'Your past exams are being analysed',
+    text: 'Matching their style will be an option here once that is done, usually within a minute.',
+  },
+  failed: { title: "We couldn't analyse your past exams", text: '' },
+  unavailable: {
+    title: 'No exam style found',
+    text: "We couldn't find a style to match in the past exams you uploaded. Questions will use the default style.",
+  },
+}
+
+/** The Style section when there is no style to match yet: why, and a way to analyse again. */
+function ExamStyleStatus({ courseId, state }: { courseId: string; state: ExamStyleState }) {
+  const router = useRouter()
+  const { blocked, report } = useAiStatus()
+  const [starting, setStarting] = React.useState(false)
+  const [startError, setStartError] = React.useState<string | null>(null)
+  const kind = state.kind as keyof typeof STYLE_COPY
+  const copy = STYLE_COPY[kind]
+
+  // While analysing, look again every few seconds (for about three minutes).
+  React.useEffect(() => {
+    if (kind !== 'analysing') return
+    let count = 0
+    const timer = setInterval(() => {
+      count += 1
+      if (count > 18) clearInterval(timer)
+      else router.refresh()
+    }, 10_000)
+    return () => clearInterval(timer)
+  }, [kind, router])
+
+  async function retry() {
+    setStarting(true)
+    setStartError(null)
+    try {
+      await apiFetch(`/api/projects/${courseId}/exam-style`, { method: 'POST' })
+      router.refresh()
+    } catch (caught) {
+      if (isApiError(caught)) report(caught.code)
+      setStartError(failureFromRequest(caught).text)
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  const text =
+    kind === 'failed' ? jobFailureMessage(state.errorCode, 'profile_exam').text : copy.text
+  return (
+    <section aria-labelledby="exam-style" className="flex flex-col gap-2">
+      <SectionLabel id="exam-style">Style</SectionLabel>
+      <InlineAlert
+        tone={kind === 'failed' ? 'warning' : 'neutral'}
+        title={copy.title}
+        action={
+          kind === 'analysing' ? undefined : (
+            <Button type="button" size="sm" variant="secondary" loading={starting} disabled={!!blocked} onClick={() => void retry()}>
+              Analyse again
+            </Button>
+          )
+        }
+      >
+        {fillResetTime(startError ?? text)}
+      </InlineAlert>
+    </section>
   )
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { clip, minutesLabel, minutesLeftLabel } from './format'
+import { clip, focusPlaceholder, minutesLabel, minutesLeftLabel } from './format'
 
 describe('minutesLeftLabel', () => {
   it('rounds down to whole minutes and handles the edges', () => {
@@ -27,5 +27,17 @@ describe('clip', () => {
     assert.ok(out.endsWith('...'))
     assert.ok(out.length <= 60)
     assert.doesNotMatch(out, /\s\.\.\.$/)
+  })
+})
+
+describe('focusPlaceholder', () => {
+  it("uses the topic's first key term that fits", () => {
+    assert.equal(focusPlaceholder(['Bayes rule', 'priors']), 'e.g. Bayes rule')
+    assert.equal(focusPlaceholder(['  ', 'a key term written as a whole long sentence of words', '  base  rates ']), 'e.g. base rates')
+  })
+
+  it('falls back to an example that suits any course', () => {
+    assert.equal(focusPlaceholder([]), 'e.g. the definitions I keep mixing up')
+    assert.equal(focusPlaceholder(), 'e.g. the definitions I keep mixing up')
   })
 })

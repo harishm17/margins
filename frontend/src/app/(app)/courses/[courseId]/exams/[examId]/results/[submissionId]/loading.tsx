@@ -3,7 +3,7 @@ import { Skeleton, SkeletonPage, SkeletonRows, SkeletonSection, SkeletonText } f
 /** Results: the score ring and points, where to focus, then the questions. */
 export default function ExamResultsLoading() {
   return (
-    <SkeletonPage className="max-w-[848px] pt-8">
+    <SkeletonPage width="medium">
       <div aria-hidden="true" className="flex flex-col gap-12">
         <div className="flex items-center gap-6">
           <Skeleton className="size-24 shrink-0 rounded-full" />

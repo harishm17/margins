@@ -1,19 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
-import { DEMO_EMAIL, DEMO_PASSWORD, demoIds } from './helpers/seed-demo'
-import { addContent, createCourse, dayIn, makeDue, quizQuestions, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
+import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
+import { addContent, createCourse, dayIn, makeDue, quizQuestions, setZoneCookie, signIn, signUpAndIn, ZONE } from './helpers/loop'
 
 // No page may scroll sideways on a phone. Every main page is loaded at 390 x 844 (the mock LLM's
 // demo course, seeded by global-setup.ts) and the document must be no wider than the window.
 // Desktop-only layouts count: they are still opened on a phone sometimes.
 test.use({ viewport: { width: 390, height: 844 } })
-
-const signIn = async (page: Page) => {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(DEMO_EMAIL)
-  await page.getByLabel('Password', { exact: true }).fill(DEMO_PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/, { timeout: 60_000 })
-}
 
 /** The elements that stick out past the right edge, for the failure message. */
 const overflowing = (page: Page) =>
@@ -77,7 +69,7 @@ const PAGES: [string, string][] = [
 
 test.describe('signed in', () => {
   test.beforeEach(async ({ page }) => {
-    await signIn(page)
+    await signIn(page, DEMO_EMAIL)
   })
 
   for (const [name, url] of PAGES) {
@@ -139,7 +131,7 @@ test.describe('learning loop pages', () => {
 })
 
 test.describe('signed out', () => {
-  for (const url of ['/', '/login', '/signup', '/privacy', '/terms']) {
+  for (const url of ['/', '/login', '/privacy', '/terms']) {
     test(`${url} fits the window`, async ({ page }) => {
       await expectNoSidewaysScroll(page, url)
     })

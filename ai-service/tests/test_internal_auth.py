@@ -42,7 +42,8 @@ def test_job_and_voice_routes_are_all_listed():
     assert "/jobs/reap" in paths
     assert "/chat/answer" in paths
     assert {"/jobs/profile-exam", "/jobs/exam-relevance"} <= paths
-    assert len(PROTECTED) == 13
+    assert "/status/ai" in paths
+    assert len(PROTECTED) == 14
 
 
 @pytest.mark.parametrize("method,path", PROTECTED)
@@ -57,8 +58,8 @@ def test_wrong_token_is_refused(client, token, method, path):
     assert resp.status_code == 401
 
 
-# /jobs/reap takes no body, so there is no validation step to stop at.
-BODY_ROUTES = [route for route in PROTECTED if route[1] != "/jobs/reap"]
+# /jobs/reap and /status/ai take no body, so there is no validation step to stop at.
+BODY_ROUTES = [route for route in PROTECTED if route[1] not in {"/jobs/reap", "/status/ai"}]
 
 
 def test_right_token_reaches_the_reaper(client, token, monkeypatch):

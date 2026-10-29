@@ -7,7 +7,8 @@ export type VoiceReviewProps = {
   courseId: string
   /** `topic`: a drill on one topic (needs `topic`). `sprint`: the course's 3 weakest topics. */
   mode: 'topic' | 'sprint'
-  topic?: { id: string; name: string }
+  /** `keywords`: the topic's key terms, for the Focus field's example. */
+  topic?: { id: string; name: string; keywords?: string[] }
 }
 
 function LobbySkeleton() {

@@ -26,6 +26,10 @@ type ShotProps = {
 }
 
 const THEMES = ['light', 'dark'] as const
+export type ShotTheme = (typeof THEMES)[number]
+
+/** The file of one theme's version: `plan` and `dark` give /screens/plan-dark.webp. */
+export const shotSrc = (name: string, theme: ShotTheme) => `/screens/${name}-${theme}.webp`
 
 /** The stem of the phone version: `plan` becomes `plan-mobile`, `notes-detail` becomes `notes-detail-mobile`. */
 export const mobileStem = (name: string) => `${name}-mobile`
@@ -41,12 +45,12 @@ export function Shot({ name, desktop, mobile, alt, sizes, desktopMedia = '(min-w
       {THEMES.map((theme) => {
         const priority = eager && theme === 'light'
         const common = { alt, loading: priority ? ('eager' as const) : ('lazy' as const), fetchPriority: priority ? ('high' as const) : ('auto' as const) }
-        const wide = getImageProps({ ...common, src: `/screens/${name}-${theme}.webp`, ...desktop, sizes })
+        const wide = getImageProps({ ...common, src: shotSrc(name, theme), ...desktop, sizes })
         const themeClass = theme === 'light' ? 'dark:hidden' : 'hidden dark:block'
         if (!mobile) {
           return <img key={theme} {...wide.props} alt={alt} className={`${themeClass} ${className ?? ''}`} />
         }
-        const narrow = getImageProps({ ...common, src: `/screens/${mobileStem(name)}-${theme}.webp`, ...mobile, sizes: '(min-width: 640px) 390px, calc(100vw - 32px)' })
+        const narrow = getImageProps({ ...common, src: shotSrc(mobileStem(name), theme), ...mobile, sizes: '(min-width: 640px) 390px, calc(100vw - 32px)' })
         return (
           <picture key={theme} className={themeClass}>
             <source media={desktopMedia} srcSet={wide.props.srcSet} sizes={sizes} width={desktop.width} height={desktop.height} />

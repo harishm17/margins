@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
+import { getCourseShell } from '@/server/queries/courses'
+import { healthReadiness } from '@/lib/project-health'
 import { extractQuestionsFromContent, filterConceptQuestions } from '@/lib/voice/concept'
 import {
   apiInternal,
@@ -55,6 +57,10 @@ export async function GET(
 
     const topicCount = project.topics.length
     const confirmedTopics = project.topics.filter((topic) => topic.userConfirmed).length
+    // "Confirmed" means what it means on every screen: the student confirmed the list (lib/course-setup.ts),
+    // not that some topics are confirmed (a topic added by hand is, before the list is).
+    const shell = await getCourseShell(auth.user.id, projectId)
+    const listConfirmed = shell?.setup.topics.listConfirmed ?? false
     const contentReadyTopics = project.topics.filter((topic) =>
       REQUIRED_CONTENT.every((type) =>
         topic.content.some((item) => item.contentType === type)
@@ -84,20 +90,15 @@ export async function GET(
     ).length
     const voiceReady = conceptualQuestionCount > 0 || notesTopicCount > 0
 
-    const blockers: string[] = []
-    if (materialHealth.valid === 0) blockers.push('No validated materials')
-    if (confirmedTopics === 0) blockers.push('Topics not confirmed')
-    if (contentReadyTopics === 0) blockers.push('No fully generated learning content')
-    if (!voiceReady) blockers.push('Voice drill has no conceptual questions')
-
-    const readiness =
-      blockers.length === 0
-        ? 'ready'
-        : materialHealth.valid === 0
-          ? 'needs_materials'
-          : confirmedTopics === 0
-            ? 'needs_topic_confirmation'
-            : 'in_progress'
+    // Materials are missing only where every other screen says so: setup at step 1 (a course that has
+    // content stays set up after its files are deleted).
+    const materialsMissing = shell ? shell.setup.mode === 'setup' && shell.setup.step === 1 : materialHealth.valid === 0
+    const { blockers, readiness } = healthReadiness({
+      materialsMissing,
+      listConfirmed,
+      contentReady: contentReadyTopics > 0,
+      voiceReady,
+    })
 
     return NextResponse.json({
       generatedAt: new Date().toISOString(),
@@ -108,6 +109,7 @@ export async function GET(
         topics: {
           total: topicCount,
           confirmed: confirmedTopics,
+          listConfirmed,
           withAllCoreContent: contentReadyTopics,
           quizCompleted: quizReadyTopics,
           averageQuizScore,

@@ -14,6 +14,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { useJob } from '@/features/jobs/use-job'
 import { explainMistakeHref } from '@/lib/ask/explain'
 import { describeJobFailure } from '@/lib/jobs/failure-message'
+import { isWaitingForAi } from '@/lib/jobs/poll-job'
 import { cn } from '@/lib/utils'
 import type { ExamResult } from '@/server/queries/mock-exams'
 import { DisagreeButton, GradeAgainButton, StartExamButton } from './exam-actions'
@@ -26,20 +27,39 @@ type Filter = 'all' | 'missed' | 'review'
 
 const pointsText = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1))
 
-/** Grading in progress: a calm panel that refreshes the page when the job finishes. */
+/** The page says this while grading waits for the AI (copy for review). */
+export const WAITING_TITLE = 'Your answers are saved'
+export const WAITING_TEXT = 'Grading will finish when AI is available again. You can leave this page and come back.'
+
+/**
+ * Grading in progress: a calm panel that refreshes the page when the job finishes. While the AI is
+ * unavailable the grading job waits instead of failing, and the panel says the answers are saved.
+ */
 export function GradingPanel({ result }: { result: NotGraded }) {
   const router = useRouter()
   const { job, timedOut } = useJob(result.jobId, {
     timeoutMs: 300_000,
     onSettled: () => router.refresh(),
   })
+  const waiting = job ? isWaitingForAi(job) : result.waitingForAi
 
-  // With no job to follow (it was just created), look again every few seconds.
+  // With no job to follow (it was just created), or while it waits for the AI (which can take
+  // longer than the poller waits), look again now and then.
+  const slow = waiting || timedOut
   React.useEffect(() => {
-    if (result.jobId) return
-    const timer = setInterval(() => router.refresh(), 4000)
+    if (result.jobId && !slow) return
+    const timer = setInterval(() => router.refresh(), slow ? 20_000 : 4000)
     return () => clearInterval(timer)
-  }, [result.jobId, router])
+  }, [result.jobId, slow, router])
+
+  if (waiting) {
+    return (
+      <div role="status" aria-live="polite" className="mx-auto flex max-w-[480px] flex-col items-center py-16 text-center">
+        <h2 className="text-heading text-fg">{WAITING_TITLE}</h2>
+        <p className="mt-1.5 text-small text-fg-2">{WAITING_TEXT}</p>
+      </div>
+    )
+  }
 
   return (
     <div role="status" aria-live="polite" className="mx-auto flex max-w-[480px] flex-col items-center py-16 text-center">
@@ -106,13 +126,23 @@ function FocusRow({ topic, courseId }: { topic: Graded['topics'][number]; course
 }
 
 /** A second grading is running: the page keeps the earlier results and refreshes when the new ones land. */
-function RegradeBanner({ jobId }: { jobId: string }) {
+function RegradeBanner({ jobId, waitingForAi }: { jobId: string; waitingForAi: boolean }) {
   const router = useRouter()
-  useJob(jobId, { timeoutMs: 300_000, onSettled: () => router.refresh() })
+  const { job } = useJob(jobId, { timeoutMs: 300_000, onSettled: () => router.refresh() })
+  const waiting = job ? isWaitingForAi(job) : waitingForAi
+  React.useEffect(() => {
+    if (!waiting) return
+    const timer = setInterval(() => router.refresh(), 20_000)
+    return () => clearInterval(timer)
+  }, [waiting, router])
   return (
     <div role="status" className="flex items-center gap-2.5 rounded-control bg-surface-2 px-3.5 py-3 text-small text-fg">
       <Spinner className="text-accent" />
-      <span>Grading again. These results stay until the new ones are ready, and this page updates by itself.</span>
+      <span>
+        {waiting
+          ? 'Grading again will finish when AI is available again. These results stay until then.'
+          : 'Grading again. These results stay until the new ones are ready, and this page updates by itself.'}
+      </span>
     </div>
   )
 }
@@ -132,7 +162,7 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
 
   return (
     <div className="flex flex-col gap-12">
-      {result.regradeJobId ? <RegradeBanner jobId={result.regradeJobId} /> : null}
+      {result.regradeJobId ? <RegradeBanner jobId={result.regradeJobId} waitingForAi={result.regradeWaitingForAi} /> : null}
       <section aria-label="Your score" className="flex flex-wrap items-center gap-x-6 gap-y-4">
         <ProgressRing
           size={96}

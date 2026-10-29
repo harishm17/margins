@@ -14,7 +14,7 @@ export default async function CourseSettingsPage({ params }: { params: Promise<{
   if (!course) notFound()
 
   return (
-    <Page width="narrow" className="pt-8">
+    <Page width="narrow">
       <h1 className="text-title text-fg">Course settings</h1>
       <p className="mt-1.5 text-body text-fg-2">Rename the course, set your exam date and how long you can study each day.</p>
       <div className="mt-8">

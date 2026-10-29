@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { expect, type BrowserContext, type Page } from '@playwright/test'
 import { withPrisma } from './db'
 import { FIXTURE_PDF } from './seed-demo'
+import { signIn } from './auth'
 
 /** Helpers for the learning loop specs: a fresh account and course per spec, built through the app's own API. */
 
@@ -21,31 +22,19 @@ export async function setZoneCookie(context: BrowserContext, zone = ZONE) {
   await context.addCookies([{ name: 'margins_tz', value: encodeURIComponent(zone), domain: 'localhost', path: '/' }])
 }
 
-let account: { email: string; password: string } | null = null
+let account: { email: string } | null = null
 
 /**
- * Signs in as the spec file's account, creating it the first time. One account serves every spec
- * (each makes its own course): sign-up is rate limited to 5 a minute per address.
+ * Signs in as the spec file's account; the first sign-in makes it. One account serves every spec in
+ * the file (each makes its own course).
  */
-export async function signUpAndIn(page: Page, label: string): Promise<{ email: string; password: string }> {
-  if (!account) {
-    const email = `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`
-    const password = 'loop-test-password'
-    const signup = await page.request.post('/api/auth/signup', { data: { email, password, name: 'Loop Tester' } })
-    expect(signup.status()).toBe(201)
-    account = { email, password }
-  }
-  await signIn(page, account.email, account.password)
+export async function signUpAndIn(page: Page, label: string): Promise<{ email: string }> {
+  account ??= { email: `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com` }
+  await signIn(page, account.email)
   return account
 }
 
-export async function signIn(page: Page, email: string, password: string) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/, { timeout: 60_000 })
-}
+export { signIn }
 
 export type TopicSpec = {
   name: string
@@ -73,6 +62,10 @@ export async function createCourse(
     const created = await page.request.post('/api/projects', { data: { name, ...settings } })
     expect(created.ok()).toBeTruthy()
     courseId = (await created.json()).project.id as string
+    // A confirmed course has files: with none and nothing written there is nothing to study from, so
+    // setup is back at step 1 and there is no plan (lib/course-setup.ts). A file row is enough for the
+    // specs that write their content straight into the database; addMaterial is for real text.
+    await addFileRow(courseId)
   } else if (settings.examDate || settings.dailyMinutes) {
     const patched = await page.request.patch(`/api/projects/${courseId}`, { data: settings })
     expect(patched.ok()).toBeTruthy()
@@ -104,6 +97,15 @@ export async function createCourse(
   }
   expect((await page.request.post(`/api/projects/${courseId}/topics/confirm`)).ok()).toBeTruthy()
   return { courseId, topics: ids, units }
+}
+
+/** A read file in the course, written straight into the database (no upload, no text to teach from). */
+export async function addFileRow(courseId: string, filename = 'notes.pdf') {
+  await withPrisma(async (prisma) => {
+    await prisma.material.create({
+      data: { projectId: courseId, category: 'lecture_notes', filename, gcsPath: `e2e/${courseId}/${filename}`, sizeBytes: BigInt(1024), validationStatus: 'valid' },
+    })
+  })
 }
 
 /** Writes study content straight into the database, so a spec does not wait for the model. */

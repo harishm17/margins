@@ -28,7 +28,14 @@ export type ChatEvent =
       retrieved: number
       stopReason: string
     }
-  | { type: 'error'; code: string; message: string; retryable: boolean }
+  | {
+      type: 'error'
+      code: string
+      message: string
+      retryable: boolean
+      /** The server removed the question (and a conversation it had just started). */
+      discarded?: boolean
+    }
   | { type: 'saved'; messageId: string }
 
 /** Parse one line of the stream. Lines that are not a known event give null. */
@@ -84,6 +91,7 @@ export function parseChatEvent(line: string): ChatEvent | null {
         code: typeof raw.code === 'string' ? raw.code : 'CHAT_FAILED',
         message: typeof raw.message === 'string' ? raw.message : '',
         retryable: raw.retryable !== false,
+        ...(raw.discarded === true ? { discarded: true } : {}),
       }
     case 'saved':
       return typeof raw.messageId === 'string' ? { type: 'saved', messageId: raw.messageId } : null
