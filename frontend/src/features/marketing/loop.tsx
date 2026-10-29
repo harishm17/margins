@@ -4,6 +4,7 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 import { type LoopStep } from './content'
 import { Shot } from './shot'
+import { SLOT_SIZES } from './shot-sources'
 
 const FRAME = 'overflow-hidden rounded-card border border-border bg-surface'
 
@@ -81,9 +82,8 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
               {visited.has(index) ? (
                 <Shot
                   name={step.shot}
-                  desktop={step.desktop}
                   alt={step.alt}
-                  sizes="(min-width: 1280px) 650px, 55vw"
+                  sizes={SLOT_SIZES.loopPanel}
                   className="h-full w-full object-cover object-left-top"
                 />
               ) : null}
@@ -100,11 +100,10 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
             <div className={cn(FRAME, 'mx-auto mt-5 max-w-[420px] md:max-w-none')}>
               <Shot
                 name={step.shot}
-                desktop={step.desktop}
-                mobile={step.mobile}
+                mobile
                 desktopMedia="(min-width: 768px) and (max-width: 1023px)"
                 alt={step.alt}
-                sizes="(min-width: 768px) 704px, 100vw"
+                sizes={SLOT_SIZES.loopList}
                 className="h-auto w-full"
               />
             </div>
