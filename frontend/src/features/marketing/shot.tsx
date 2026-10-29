@@ -43,7 +43,6 @@ export function Shot({ name, mobile, alt, sizes, mobileSizes = SLOT_SIZES.phone,
         // fetch `src` before they know the image is lazy and before `srcSet` and `sizes` are set
         // (facebook/react#25883).
         const common = {
-          alt,
           loading: priority ? ('eager' as const) : ('lazy' as const),
           fetchPriority: priority ? ('high' as const) : ('auto' as const),
           decoding: 'async' as const,
@@ -55,13 +54,14 @@ export function Shot({ name, mobile, alt, sizes, mobileSizes = SLOT_SIZES.phone,
           return (
             <picture key={theme} className={themeClass}>
               <source media={desktopMedia} srcSet={wide.srcSet} sizes={sizes} width={wide.width} height={wide.height} />
-              <img {...common} srcSet={narrow.srcSet} sizes={mobileSizes} width={narrow.width} height={narrow.height} className={className} src={narrow.src} />
+              <img alt={alt} {...common} srcSet={narrow.srcSet} sizes={mobileSizes} width={narrow.width} height={narrow.height} className={className} src={narrow.src} />
             </picture>
           )
         }
         return (
           <img
             key={theme}
+            alt={alt}
             {...common}
             srcSet={wide.srcSet}
             sizes={sizes}
