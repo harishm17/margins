@@ -38,7 +38,7 @@ import { toast } from '@/components/ui/toaster'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { pluralize } from '@/lib/format'
 import { moveInOrder } from '@/lib/topics/ordering'
-import { groupTopicsByUnit } from '@/lib/topics/units'
+import { groupTopicsByUnit, unitForRetry } from '@/lib/topics/units'
 import { topicOriginSentence, type TopicListState } from '@/lib/course-setup'
 import type { JobRef } from '@/server/queries/course'
 import type { ShellUnit } from '@/server/queries/courses'
@@ -50,7 +50,7 @@ const NO_UNIT = 'none'
 const LAST = Number.MAX_SAFE_INTEGER
 
 /** A name typed into "Add a topic" that the server does not have yet. */
-type PendingAdd = { key: number; name: string; unitId: string | null; state: 'adding' | 'failed' }
+type PendingAdd = { key: number; name: string; unitId: string | null; state: 'adding' | 'failed'; reason?: string }
 
 const byOrder =<T extends { orderIndex: number }>(list: T[]) => [...list].sort((a, b) => a.orderIndex - b.orderIndex)
 
@@ -341,8 +341,10 @@ export function TopicEditor({
   }
 
   function retryAdd(pending: PendingAdd) {
-    updateAdds((current) => current.map((item) => (item.key === pending.key ? { ...item, state: 'adding' } : item)))
-    sendAdd(pending)
+    // The unit it was typed for may have been deleted since: send it to the current target then.
+    const unitId = unitForRetry(pending.unitId, unitItems.map((unit) => unit.id), hasUnits && addTarget !== NO_UNIT ? addTarget : null)
+    updateAdds((current) => current.map((item) => (item.key === pending.key ? { ...item, state: 'adding', unitId, reason: undefined } : item)))
+    sendAdd({ ...pending, unitId })
   }
 
   function removeAdd(pending: PendingAdd) {
@@ -379,8 +381,9 @@ export function TopicEditor({
         updateAdds((current) => current.filter((item) => item.key !== key))
         setAnnouncement(`Added ${topic.name}`)
         router.refresh()
-      } catch {
-        updateAdds((current) => current.map((item) => (item.key === key ? { ...item, state: 'failed' } : item)))
+      } catch (error) {
+        const reason = isApiError(error) ? error.message : "Couldn't add the topic. Try again."
+        updateAdds((current) => current.map((item) => (item.key === key ? { ...item, state: 'failed', reason } : item)))
         setAnnouncement(`Couldn't add ${name}`)
       }
     })
@@ -693,6 +696,7 @@ export function TopicEditor({
             <li key={item.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-danger-soft px-3.5 py-2 text-danger-soft-fg">
               <span className="min-w-0 flex-1 text-small">
                 <span className="text-body-strong">{item.name}</span> was not added.
+                {item.reason ? <span className="block text-caption">{item.reason}</span> : null}
               </span>
               <span className="flex shrink-0 gap-2">
                 <Button size="sm" variant="secondary" aria-label={`Retry ${item.name}`} onClick={() => retryAdd(item)}>
