@@ -93,7 +93,7 @@ export function PlanSkeleton() {
     <Page key="loading-shape">
       <div aria-busy="true" aria-label="Loading">
         <div className="mb-8 flex items-start justify-between gap-6">
-          <div>
+          <div className="min-w-0 flex-1">
             <Skeleton className="h-8 w-24 rounded-chip" />
             <Skeleton className="mt-1 h-[22px] w-96 max-w-full rounded-chip" />
           </div>
