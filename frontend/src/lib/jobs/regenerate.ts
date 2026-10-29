@@ -42,7 +42,7 @@ export async function startRegeneration(input: {
 }): Promise<NextResponse> {
   const { userId, topic, contentType, preferences } = input
 
-  const preflightError = await ensureAiGenerationReady()
+  const preflightError = await ensureAiGenerationReady(userId)
   if (preflightError) return preflightError
 
   // A prerequisite to draw review questions from must be another topic of the same course.

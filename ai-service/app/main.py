@@ -139,6 +139,10 @@ app.include_router(grading.router, tags=["Grading"], dependencies=internal_only)
 from app.api.routes import chat
 app.include_router(chat.router, tags=["Chat"], dependencies=internal_only)
 
+# Whether AI features can be used now, and a user's allowance (read by the Next.js server)
+from app.api.routes import status
+app.include_router(status.router, tags=["Status"], dependencies=internal_only)
+
 if __name__ == "__main__":
     import uvicorn
 

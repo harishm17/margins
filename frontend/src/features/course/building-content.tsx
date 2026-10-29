@@ -8,13 +8,13 @@ import { Card } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from '@/components/ui/toaster'
+import { useAiStatus } from '@/features/ai/ai-status'
 import { useActiveJobs } from '@/features/jobs/use-active-jobs'
+import { aiMessage } from '@/lib/ai/messages'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { useResetTime } from '@/lib/budget/use-reset-time'
 import { cn } from '@/lib/utils'
 import type { GenerationState } from '@/server/queries/course'
-
-const UNAVAILABLE = "Study content can't be created right now. Try again in a few minutes."
 
 /** "Writing content, 18 of 48 ready" from the running jobs plus what already exists. */
 export function useGenerationProgress(courseId: string, generation: GenerationState) {
@@ -70,6 +70,7 @@ function FailureRow({
 }) {
   const router = useRouter()
   const [pending, setPending] = React.useState(false)
+  const { blocked, report } = useAiStatus()
   const message = useResetTime(failure.message)
 
   async function retry() {
@@ -82,7 +83,9 @@ function FailureRow({
       onRetried()
       router.refresh()
     } catch (error) {
-      toast.error(isApiError(error) ? (error.status === 503 ? UNAVAILABLE : error.message) : UNAVAILABLE)
+      if (isApiError(error)) report(error.code)
+      // A refusal's message is already the shared text (lib/ai/messages).
+      toast.error(isApiError(error) ? error.message : aiMessage(null).text)
     } finally {
       setPending(false)
     }
@@ -92,9 +95,11 @@ function FailureRow({
     <li className="flex items-start gap-2.5 py-2.5">
       <WarningCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-danger" />
       <p className="min-w-0 flex-1 text-small text-fg-2">{message}</p>
-      <Button size="sm" variant="secondary" onClick={retry} loading={pending}>
-        Try again
-      </Button>
+      {blocked ? null : (
+        <Button size="sm" variant="secondary" onClick={retry} loading={pending}>
+          Try again
+        </Button>
+      )}
     </li>
   )
 }

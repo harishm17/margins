@@ -7,6 +7,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { MAX_QUESTION_CHARS } from '@/lib/ask/explain'
 import { cn } from '@/lib/utils'
+import { AiBlockedNote, useAiStatus } from '@/features/ai/ai-status'
 
 export { MAX_QUESTION_CHARS }
 const COUNT_FROM = 1800
@@ -66,7 +67,10 @@ export function Composer({
   }, [autoFocus])
 
   const trimmed = value.trim()
-  const canSend = trimmed.length > 0 && !sending && !disabled
+  // While AI is unavailable or the allowance is used the question can still be typed; sending is
+  // off, and the line under the box says why.
+  const { blocked } = useAiStatus()
+  const canSend = trimmed.length > 0 && !sending && !disabled && !blocked
 
   const submit = () => {
     if (!canSend) return
@@ -146,6 +150,7 @@ export function Composer({
           />
         )}
       </div>
+      <AiBlockedNote className="px-2 pb-1 pt-1.5" />
     </form>
   )
 }

@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { readFileSync } from 'node:fs'
 import { request, type APIRequestContext } from '@playwright/test'
+import { signInApi } from './auth'
 import { withPrisma } from './db'
 
 /**
@@ -10,8 +11,8 @@ import { withPrisma } from './db'
  * chat answer, and a second, empty course that stays on the setup guide. Idempotent: each step
  * looks at what exists first. `global-setup.ts` runs it once per Playwright run.
  */
-export const DEMO_EMAIL = 'demo@studymargins.com'
-export const DEMO_PASSWORD = 'study-buddy-demo'
+// An @example.com address: the only kind the test sign-in accepts (src/lib/auth/test-login.ts).
+export const DEMO_EMAIL = 'demo@example.com'
 const DEMO_NAME = 'Demo Student'
 export const DEMO_COURSE = 'CS 161 Algorithms'
 const DEMO_COURSE_DESCRIPTION = 'Midterm and final prep: sorting, graphs, hashing and dynamic programming.'
@@ -120,18 +121,6 @@ async function waitFor<T>(check: () => Promise<T | null | false>, what: string, 
   throw new Error(`timed out waiting for ${what}`)
 }
 
-async function signIn(api: APIRequestContext, baseURL: string) {
-  const signup = await api.post('/api/auth/signup', { data: { email: DEMO_EMAIL, password: DEMO_PASSWORD, name: DEMO_NAME } })
-  if (signup.status() !== 201 && signup.status() !== 409) {
-    throw new Error(`signup: HTTP ${signup.status()} ${(await signup.text()).slice(0, 300)}`)
-  }
-  const { csrfToken } = await json(await api.get('/api/auth/csrf'), 'csrf')
-  await api.post('/api/auth/callback/credentials', {
-    form: { csrfToken, email: DEMO_EMAIL, password: DEMO_PASSWORD, json: 'true', callbackUrl: baseURL },
-  })
-  const session = await json(await api.get('/api/auth/session'), 'session')
-  if (!session.user) throw new Error('the demo account could not sign in')
-}
 
 async function ensureCourse(api: APIRequestContext, name: string, description?: string): Promise<string> {
   const existing = await withPrisma((prisma) =>
@@ -383,20 +372,20 @@ async function ensureMathTopic(api: APIRequestContext, courseId: string): Promis
   return topicId
 }
 
-// The demo password is in this public repo, so the account may only ever exist on a local stack.
+// The specs sign in with the local-only test sign-in, and the demo data is made up: local stacks only.
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
 
 export async function seedDemo(baseURL: string): Promise<DemoIds> {
   const host = new URL(baseURL).hostname.replace(/^\[|\]$/g, '')
   if (!LOCAL_HOSTS.has(host)) {
     throw new Error(
-      `Refusing to seed the demo account on ${host}: its password is public. Run the e2e suite ` +
+      `Refusing to seed the demo account on ${host}: the e2e specs only run ` +
         'against a local stack (PLAYWRIGHT_BASE_URL=http://localhost:<port>).',
     )
   }
   const api = await request.newContext({ baseURL, timeout: 120_000 })
   try {
-    await signIn(api, baseURL)
+    await signInApi(api, DEMO_EMAIL, DEMO_NAME)
     const course = await ensureCourse(api, DEMO_COURSE, DEMO_COURSE_DESCRIPTION)
     await ensureMaterials(api, course)
     // Later runs find the math topic too; it is not one of the four mock-content topics.

@@ -290,8 +290,9 @@ class TestValidateJob:
 
         assert raised.value.status_code == 500
         job = await s.job()
+        # Back in pending for the dispatcher's retry.
         assert (job["status"], job["error_code"], job["retryable"]) == (
-            "failed", "STORAGE_UNAVAILABLE", True,
+            "pending", "STORAGE_UNAVAILABLE", True,
         )
         assert (await s.material())["validation_status"] == "pending"
 
@@ -464,7 +465,7 @@ class TestChunkJob:
         assert raised.value.status_code == 500
         assert await db.fetchval("SELECT count(*) FROM material_chunks") == 0
         job = await setup.job()
-        assert (job["status"], job["retryable"]) == ("failed", True)
+        assert (job["status"], job["retryable"]) == ("pending", True)
 
     async def test_wrong_number_of_vectors_fails_the_job(self, setup, db, monkeypatch):
         async def short(texts):

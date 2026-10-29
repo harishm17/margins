@@ -19,6 +19,7 @@ import {
   type GenerateMode,
   type QuestionType,
 } from './generate-preferences'
+import { AiBlockedNote, useAiStatus } from '@/features/ai/ai-status'
 import { useGeneration } from './topic-provider'
 import type { ContentKind } from './types'
 
@@ -64,6 +65,7 @@ type GenerateFormProps = {
  */
 export function GenerateForm({ kind, mode, submitLabel, onStarted, note, focusPlaceholder }: GenerateFormProps) {
   const { generate, starting, startError } = useGeneration(kind)
+  const { blocked } = useAiStatus()
   const [form, setForm] = React.useState<FormState>(() => defaultForm(mode))
   const [showErrors, setShowErrors] = React.useState(false)
   const errors = validateForm(kind, form)
@@ -165,7 +167,7 @@ export function GenerateForm({ kind, mode, submitLabel, onStarted, note, focusPl
 
       {startError ? <InlineAlert tone={startError.tone}>{startError.message}</InlineAlert> : null}
 
-      <Button type="submit" variant="primary" loading={starting} fullWidth>
+      <Button type="submit" variant="primary" loading={starting} disabled={!!blocked} fullWidth>
         {submitLabel}
       </Button>
     </form>
