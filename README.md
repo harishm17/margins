@@ -69,10 +69,14 @@ Browser ──▶ Next.js 16 (web) ──────────────▶
 - **Models.** Claude Opus writes notes, examples, quizzes and exams, plans each course in one low-effort call and answers Ask questions; Claude Haiku handles file validation, short-answer grading and the voice coach.
 - **Voice without a speech API.** The browser does speech-to-text and text-to-speech (Web Speech API). The server runs Claude with drill tools (next question, record answer, hint) and streams each turn back as NDJSON.
 - **Jobs.** Long tasks run as jobs that are claimed with one atomic update and hold a lease; a reaper re-dispatches jobs whose worker died. Each job records its tokens and cost; a per-user daily budget and a site-wide daily cap bound spend.
+- **AI outages and the daily allowance.** One shared status record (`ai_status`, read at `GET /status/ai`) says whether the AI is available. Out-of-credit, key and configuration errors mark it unavailable at once; rate limits and overloads do so after three in a row. While it is down, the app shows a site-wide notice and turns the AI buttons off with the reason. The daily allowance is checked before a job is created, not after. A failure that can be retried puts the job back to `pending`; `failed` is final. Mock exam answers are always saved, and grading waits for the AI to come back, for up to 7 days. If `OPS_ALERT_WEBHOOK_URL` is set, the owner gets a message when the AI goes down and when it comes back.
+- **Account deletion.** Settings has a Delete account button. It stops the account's jobs, deletes its files, then deletes the account and everything made from it. Spend rows are kept without any link to the person, so the site-wide daily cap still holds.
 - **Isolation.** Only the web service can call the AI service (shared internal token), which is reachable only on Railway's private network.
 - **Storage.** The web app streams each upload through size and file-type checks into an S3-compatible bucket (a Railway bucket in production); the AI service downloads it from there to process it. Without a bucket, both use a local uploads folder.
 
 ## Evals
+
+The method and latest results are also on [studymargins.com/evaluation](https://studymargins.com/evaluation).
 
 ### Retrieval
 
