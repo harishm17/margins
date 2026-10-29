@@ -41,9 +41,10 @@ import { localDateParts } from './study-plan-time'
  * A topic longer than the daily minutes that cannot be split into parts that each fit a day (every part
  * at least 15 minutes, the last at least 10) is never scheduled, however many days there are. It, and what needs it first, is
  * listed apart (tooLongForDay) and does not hold up the topics after it or count as time being short.
- * A review that finds no day with room before the exam goes to the final review days if it can, then to
- * the latest earlier day with room, and is otherwise listed (reviewsNotScheduled) with the real reason:
- * no room in the minutes, or the limit on reviews in the last two days.
+ * A review that is due and finds no day with room before the exam goes to the final review days if it
+ * can, then to the latest earlier day with room, and is otherwise listed (reviewsNotScheduled) with the
+ * real reason: no room in the minutes, or the limit on reviews in the last two days. A suggested
+ * (projected) review is not a promise: when it finds no day it is simply not planned.
  */
 
 export const DEFAULT_TOPIC_MINUTES = 35
@@ -200,7 +201,8 @@ export type Plan = {
    */
   tooLongForDay: { topics: { id: string; name: string }[]; dependents: { id: string; name: string }[] } | null
   /**
-   * Learned topics whose review before the exam found no day with room (exam plans only), with why: the
+   * Topics with a review that is actually due (from real progress, never a suggested one) that found no
+   * day with room before the exam (exam plans only), with why: the
    * minutes of every day are used (more study time helps), or the last two days hold only so many reviews
    * and no earlier day exists (it does not). Null when none.
    */
@@ -828,12 +830,13 @@ function simulate(options: SimOptions): Simulation {
   const unplaced = queue.filter((topic) => (left.get(topic.id) ?? 0) > 0)
   // A review still waiting at the end, with no review of the topic on or after its day. It goes to the
   // latest day before the final days with room for it (not before its topic was learned or the review
-  // that led to it); only when there is none is it lost, and the reason says which limit was hit.
+  // that led to it); only when there is none is it lost, and the reason says which limit was hit. Only
+  // reviews that are actually due can be lost: a projected (suggested) one that finds no day is not planned.
   const reviewsLost: Simulation['reviewsLost'] = []
   if (examIndex >= 0) {
     const waiting = spaced
       .filter((entry) => entry.kind === 'review')
-      .sort((a, b) => (a.topic.mastery ?? 0) - (b.topic.mastery ?? 0) || (orderRank.get(a.topic.id) ?? 0) - (orderRank.get(b.topic.id) ?? 0))
+      .sort((a, b) => Number(a.projected) - Number(b.projected) || (a.topic.mastery ?? 0) - (b.topic.mastery ?? 0) || (orderRank.get(a.topic.id) ?? 0) - (orderRank.get(b.topic.id) ?? 0))
     const seen = new Set<string>()
     for (const entry of waiting) {
       if (seen.has(entry.topic.id)) continue
@@ -871,7 +874,8 @@ function simulate(options: SimOptions): Simulation {
       // limit on reviews (and no earlier day to turn to) that cost it, and more study time would not help.
       const finalRoom = [...finalIndexes].some((index) => index >= entry.target && capOf(index) - days[index].minutes >= REVIEW_MINUTES)
       const reason: ReviewLossReason = finalRoom && eligible.length === 0 ? 'final_limit' : 'minutes'
-      reviewsLost.push({ topic: entry.topic, reason })
+      // Only a review that is actually due is reported; a suggested one that finds no slot is just not planned.
+      if (!entry.projected) reviewsLost.push({ topic: entry.topic, reason })
     }
   }
   return { days, unplaced, reviewsLost, unitMocks: unitMockCount, fullMockDays: fullMockIndexes.map((i) => dates[i]), partial }

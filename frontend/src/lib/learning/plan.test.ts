@@ -747,30 +747,21 @@ test('invariants hold for many generated courses', () => {
           assert.ok(quiz.date <= mock.date, `unit mock after the ${quiz.topicId} quiz, ${label}`)
         }
       }
-      // No review is lost silently. A scheduled review due before the final days, and the review a
-      // first quiz brings (when the quiz is before the last day with room for a review), are in the
-      // plan on or after their day, or listed in reviewsNotScheduled.
+      // No due review is lost silently. A scheduled review due before the final days is in the plan on
+      // or after its day, or listed in reviewsNotScheduled. A suggested (projected) review is not a
+      // promise: it may go unplanned, and it is never reported.
       const reported = new Set((result.reviewsNotScheduled ?? []).map((entry) => entry.id))
       const finalStart = addDays(examDate, -1)
       const reviewedFrom = (id: string, from: string) => items(result, 'review').some((item) => item.topicId === id && !item.done && item.date >= from)
       for (const entry of topics.filter((t) => t.reviewDueAt)) {
         const due = localDay(entry.reviewDueAt as Date, 'UTC')
         const from = due < TODAY ? TODAY : due
-        if (from < finalStart) assert.ok(reviewedFrom(entry.id, from) || reported.has(entry.id), `${entry.id}'s review due ${due} is planned or reported, ${label}`)
+        if (due <= examDate) assert.ok(reviewedFrom(entry.id, from) || reported.has(entry.id), `${entry.id}'s review due ${due} is planned or reported, ${label}`)
       }
-      const lastRoom = result.days
-        .filter((day) => day.date < addDays(examDate, -1) && day.date <= addDays(examDate, -2))
-        .filter((day) => !day.items.some((item) => item.overBudget) && day.items.filter((item) => item.kind.endsWith('mock') && !item.done).reduce((sum, item) => sum + item.minutes, 0) + day.doneMinutes + 10 <= daily)
-        .map((day) => day.date)
-        .pop()
-      for (const quiz of items(result, 'quiz').filter((item) => !item.done && lastRoom !== undefined && item.date < lastRoom)) {
-        const id = quiz.topicId as string
-        assert.ok(reviewedFrom(id, addDays(quiz.date, 1)) || reported.has(id), `${id} quizzed ${quiz.date} is reviewed after or reported, ${label}`)
-      }
-      // Reported reviews really are of learned topics, and too-long topics' dependents need one of them.
+      // Only topics with a real due date are ever reported: never one that only had a projected review.
       for (const id of reported) {
         const entry = topics.find((t) => t.id === id)
-        assert.ok(entry && (entry.reviewDueAt || entry.learned || learnTopics.has(id)), `${id} is reported but had no review, ${label}`)
+        assert.ok(entry?.reviewDueAt, `${id} is reported but had no review due, ${label}`)
       }
       // A reported review really had no room: no day between the topic's latest learning, quiz or review
       // and the final days could take another, and the reason given is true.
@@ -1152,7 +1143,7 @@ test('a review that cannot be placed says why: no room, or the limit on the last
   const result = plan({ topics, examDate: '2026-10-22', dailyMinutes: 600 })
   assert.deepEqual(result.reviewsNotScheduled?.map((entry) => `${entry.id}:${entry.reason}`), ['h:final_limit', 'i:final_limit'])
   // Tight days: every day before the exam is full, so more study time would help.
-  const tight = plan({ topics, examDate: '2026-10-27', dailyMinutes: 20 })
+  const tight = plan({ topics, examDate: '2026-10-25', dailyMinutes: 20 })
   assert.ok((tight.reviewsNotScheduled ?? []).length > 0)
   assert.ok((tight.reviewsNotScheduled ?? []).every((entry) => entry.reason === 'minutes'))
 })
