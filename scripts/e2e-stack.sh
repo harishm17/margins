@@ -11,6 +11,8 @@
 # The web app runs with ENABLE_TEST_LOGIN=true, the local-only test sign-in the specs use (students sign in
 # with Google only, which a test cannot do; frontend/src/lib/auth/test-login.ts), and with a made-up Google
 # client so the sign-in page shows its Google button. NEXTAUTH_URL is on localhost, which the test sign-in needs.
+# It reads the AI status uncached (AI_STATUS_CACHE_MS=0), so a spec that marks AI unavailable sees it at once,
+# and the AI service reaps every 5 seconds, so a job that waited for the AI is sent again soon after it is back.
 # Settings, all optional except DATABASE_URL:
 #   E2E_WEB_PORT (3000)  E2E_AI_PORT (8000)  E2E_RUN_DIR (.e2e in the repo: logs, pids, uploads)
 # Then run the specs with PLAYWRIGHT_BASE_URL=http://localhost:$E2E_WEB_PORT and the same DATABASE_URL.
@@ -51,6 +53,7 @@ start() {
         LLM_PROVIDER=mock \
         AI_INTERNAL_TOKEN="$TOKEN" \
         ENVIRONMENT=development \
+        JOB_REAPER_INTERVAL_SECONDS=5 \
         LOCAL_UPLOADS_DIR="$RUN/uploads" \
         FRONTEND_URL="http://localhost:$WEB_PORT" \
         AI_SERVICE_URL="http://127.0.0.1:$AI_PORT" \
@@ -74,6 +77,7 @@ start() {
         ENABLE_TEST_LOGIN=true \
         GOOGLE_OAUTH_CLIENT_ID="e2e-not-a-real-client.apps.googleusercontent.com" \
         GOOGLE_OAUTH_CLIENT_SECRET="e2e-not-a-real-google-secret" \
+        AI_STATUS_CACHE_MS=0 \
         LOCAL_UPLOADS_DIR="$RUN/uploads" \
         NEXT_TELEMETRY_DISABLED=1 \
         npx next start --port "$WEB_PORT" \

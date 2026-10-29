@@ -189,34 +189,21 @@ export async function POST(
         return message.id
       })
     },
-    async recordFailure(code, usage) {
-      if (usage && usage.costUsd > 0) {
-        // The model ran and was billed. Keep a note, and a ledger row, so the cost counts
-        // toward the daily budget.
-        await prisma.$transaction(async (tx) => {
-          const note = await tx.chatMessage.create({
-            data: {
-              threadId: activeThread.id,
-              role: 'error',
-              content: chatErrorMessage(code).message,
-              llmInputTokens: usage.inputTokens,
-              llmOutputTokens: usage.outputTokens,
-              llmCostUsd: usage.costUsd.toFixed(6),
-            },
-            select: { id: true },
-          })
-          await tx.llmUsageEvent.create({ data: ledgerRow(usage, note.id) })
-        })
-        return
-      }
-      // Nothing was billed: drop the question so the thread has no unanswered turn (and a new
-      // thread that never got an answer goes with it).
-      await prisma.chatMessage.delete({ where: { id: userMessageId } }).catch(() => {})
-      if (isNewThread) {
-        await prisma.chatThread
-          .deleteMany({ where: { id: activeThread.id, messages: { none: {} } } })
-          .catch(() => {})
-      }
+    async recordFailure(_code, usage) {
+      // A failure is never kept in the conversation: the question goes (and a new thread that
+      // never got an answer goes with it), and the browser shows the failure with a retry. A
+      // billed call still gets its ledger row, so the cost counts toward the daily budget; the
+      // ledger has no foreign keys, so the row outlives the question it names.
+      await prisma.$transaction(async (tx) => {
+        if (usage && (usage.costUsd > 0 || usage.inputTokens > 0 || usage.outputTokens > 0)) {
+          await tx.llmUsageEvent.create({ data: ledgerRow(usage, userMessageId) })
+        }
+        await tx.chatMessage.deleteMany({ where: { id: userMessageId } })
+        if (isNewThread) {
+          await tx.chatThread.deleteMany({ where: { id: activeThread.id, messages: { none: {} } } })
+        }
+      })
+      return { discarded: true }
     },
   }
 

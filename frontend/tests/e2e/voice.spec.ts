@@ -256,7 +256,8 @@ test('turn errors: a retryable failure keeps the session and Try again recovers'
   })
   await startButton(page).click()
   const alert = page.getByTestId('voice-alert')
-  await expect(alert).toContainText('The coach is busy', { timeout: 30_000 })
+  // The shared words for a busy AI (lib/ai/messages).
+  await expect(alert).toContainText('The AI is busy right now', { timeout: 30_000 })
   await alert.getByRole('button', { name: 'Try again' }).click()
   await expect(page.getByTestId('voice-question')).toBeVisible({ timeout: 30_000 })
   await expect(page.getByTestId('voice-alert')).toHaveCount(0)

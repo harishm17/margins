@@ -1,3 +1,4 @@
+import { aiMessage } from '@/lib/ai/messages'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { describeTurnFailure } from './errors'
@@ -81,7 +82,8 @@ describe('sessionReducer', () => {
     const alert = describeTurnFailure({ code: 'LLM_UNAVAILABLE', message: '', retryable: true }).alert
     const state = run([{ type: 'turn-started' }, { type: 'turn-failed', alert }], live())
     assert.equal(state.entries.length, 0)
-    assert.equal(state.alert?.title, 'The coach is busy')
+    // The shared words for a busy AI (lib/ai/messages), as on every other surface.
+    assert.equal(state.alert?.title, aiMessage('LLM_UNAVAILABLE').title)
     assert.equal(state.turnActive, false)
   })
 

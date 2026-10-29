@@ -67,7 +67,7 @@ export async function POST(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    const preflightError = await ensureAiGenerationReady();
+    const preflightError = await ensureAiGenerationReady(session.user.id);
     if (preflightError) {
       return preflightError;
     }

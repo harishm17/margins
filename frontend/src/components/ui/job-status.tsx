@@ -2,6 +2,8 @@
 
 import * as React from 'react'
 import { CheckCircle, Info, WarningCircle } from '@phosphor-icons/react/dist/ssr'
+import { useAiStatus } from '@/features/ai/ai-status'
+import { fillResetTime } from '@/lib/budget/copy'
 import { describeJobFailure } from '@/lib/jobs/failure-message'
 import { formatElapsed } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -11,6 +13,8 @@ import { Spinner } from './spinner'
 
 export const STAGE_LABELS: Record<string, string> = {
   pending: 'Waiting to start',
+  retrying: 'Trying again',
+  waiting_for_ai: 'Waiting for AI to be available',
   validating: 'Checking the file',
   chunking: 'Reading pages',
   embedding: 'Indexing for search',
@@ -20,9 +24,15 @@ export const STAGE_LABELS: Record<string, string> = {
   grading: 'Grading answers',
 }
 
-/** The words for a job stage, or a neutral fallback for one we do not know. */
-export function stageLabel(stage: string | null | undefined, status?: string): string {
-  if (status === 'queued' || status === 'pending') return STAGE_LABELS.pending
+/**
+ * The words for a job stage, or a neutral fallback for one we do not know. A queued job that has
+ * already run is waiting for its retry (the AI service puts it back after a passing failure).
+ */
+export function stageLabel(stage: string | null | undefined, status?: string, attemptCount?: number): string {
+  if (status === 'queued' || status === 'pending') {
+    if (stage === 'waiting_for_ai') return STAGE_LABELS.waiting_for_ai
+    return attemptCount && attemptCount > 0 ? STAGE_LABELS.retrying : STAGE_LABELS.pending
+  }
   return (stage && STAGE_LABELS[stage]) || 'Working on it'
 }
 
@@ -34,6 +44,7 @@ export type JobStatusJob = {
   errorCode?: string | null
   errorMessage?: string | null
   retryable?: boolean
+  attemptCount?: number
   jobType?: string
 }
 
@@ -83,6 +94,7 @@ export function JobStatus({
 }: JobStatusProps) {
   const running = !job || job.status === 'queued' || job.status === 'processing'
   const elapsed = useElapsed(since, running && !timedOut)
+  const { blocked } = useAiStatus()
 
   let icon: React.ReactNode
   let text: React.ReactNode
@@ -92,8 +104,9 @@ export function JobStatus({
 
   if (job?.status === 'failed') {
     icon = <WarningCircle aria-hidden="true" className="size-4 shrink-0 text-danger" />
-    text = describeJobFailure(job.errorCode, job.errorMessage, job.jobType)
-    if (job.retryable !== false && onRetry) {
+    text = fillResetTime(describeJobFailure(job.errorCode, job.errorMessage, job.jobType))
+    // Not while AI is unavailable or the allowance is used: the banner or the note says why.
+    if (job.retryable !== false && onRetry && !blocked) {
       action = (
         <Button size="sm" variant="secondary" onClick={onRetry} loading={retrying}>
           Try again
@@ -108,7 +121,10 @@ export function JobStatus({
     text = <span className="font-normal text-fg-2">{TIMEOUT_NOTE}</span>
   } else {
     icon = <Spinner className="text-accent" />
-    text = label ?? stageLabel(job?.stage, job?.status ?? 'queued')
+    text =
+      job?.status === 'queued' && (job.attemptCount || job.stage === 'waiting_for_ai')
+        ? stageLabel(job.stage, job.status, job.attemptCount)
+        : (label ?? stageLabel(job?.stage, job?.status ?? 'queued'))
     if (elapsed !== null) {
       meta = (
         <span aria-hidden="true" className="tabular text-caption font-normal text-fg-3">

@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from app.db.connection import execute_one, execute_query
+from app.services import ai_status
 from app.services.budget import over_budget_message
 from app.services.cloud_tasks import enqueue_job, mark_undelivered
 from app.services.job_runner import create_job
@@ -138,6 +139,10 @@ async def plan_next_job(
         return None
     if await over_budget_message(user_id):
         logger.info("Stopping the generation chain for project %s: the daily allowance is used up", project_id)
+        return None
+    if not (await ai_status.get_status()).available:
+        # The student starts the rest again once the AI is back; a queued job would only fail.
+        logger.info("Stopping the generation chain for project %s: the AI is unavailable", project_id)
         return None
 
     if not skip_topic:

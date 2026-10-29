@@ -1,7 +1,7 @@
 import { areRecordIds } from '@/lib/ids'
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { gradeExamTarget } from '@/lib/jobs/active-jobs'
+import { isWaitingForAi } from '@/lib/jobs/poll-job'
 import {
   ATTEMPT_IN_PROGRESS,
   ATTEMPT_SUBMITTED,
@@ -18,6 +18,12 @@ import {
 import { toPublicQuestions, type PublicQuizQuestion } from '@/lib/learning/quiz-questions'
 import { examTitle } from '@/lib/exams/display'
 import { getExamTitles } from '@/server/queries/exams'
+import {
+  deriveExamStyleState,
+  examProfileTarget,
+  materialIdFromProfileTarget,
+  type ExamStyleState,
+} from '@/lib/exams/style-state'
 
 /** Everything here is filtered by the user id; an id that is not theirs is simply not found. */
 
@@ -230,6 +236,8 @@ export type ExamResult =
       status: 'grading' | 'failed'
       /** The grading job to follow, when there is one. */
       jobId: string | null
+      /** Grading is waiting for the AI to be available again (the answers are saved). */
+      waitingForAi: boolean
       errorCode: string | null
       errorMessage: string | null
     })
@@ -243,6 +251,8 @@ export type ExamResult =
       topics: ResultTopic[]
       /** A second grading of this attempt is running (the student asked for one): the job to follow. */
       regradeJobId: string | null
+      /** That second grading is waiting for the AI. */
+      regradeWaitingForAi: boolean
     })
 
 /**
@@ -282,13 +292,14 @@ export async function getExamResult(
     const job = await prisma.processingJob.findFirst({
       where: { userId, jobType: 'grade_exam', targetKey: gradeExamTarget(submission.id) },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true, errorCode: true, errorMessage: true },
+      select: { id: true, status: true, stage: true, errorCode: true, errorMessage: true },
     })
     const running = job?.status === 'pending' || job?.status === 'processing'
     return {
       ...base,
       status: running ? 'grading' : 'failed',
       jobId: running ? (job?.id ?? null) : null,
+      waitingForAi: isWaitingForAi(job),
       errorCode: job?.errorCode ?? null,
       errorMessage: job?.errorMessage ?? null,
     }
@@ -319,13 +330,14 @@ export async function getExamResult(
       status: { in: ['pending', 'processing'] },
     },
     orderBy: { createdAt: 'desc' },
-    select: { id: true },
+    select: { id: true, status: true, stage: true },
   })
 
   return {
     ...base,
     status: 'graded',
     regradeJobId: regrading?.id ?? null,
+    regradeWaitingForAi: isWaitingForAi(regrading),
     score: overall.score,
     earnedPoints: overall.earned,
     totalPoints: overall.total,
@@ -349,16 +361,32 @@ export async function findActiveExamJob(
   return job ? { id: job.id, startedAt: job.createdAt.toISOString() } : null
 }
 
-/** Whether any past exam of the course has a style profile, so "Match my past exams" has something to match. */
-export async function courseHasExamStyle(userId: string, courseId: string): Promise<boolean> {
-  if (!areRecordIds(courseId)) return false
-  const count = await prisma.material.count({
-    where: {
-      role: 'exam',
-      validationStatus: 'valid',
-      styleProfile: { not: Prisma.DbNull },
-      project: { id: courseId, userId },
-    },
+/**
+ * Whether "Match my past exams" has a style to match, and if not, why (see lib/exams/style-state):
+ * from the course's past-exam files and the latest profile_exam job of each.
+ */
+export async function getExamStyleState(userId: string, courseId: string): Promise<ExamStyleState> {
+  if (!areRecordIds(courseId)) return deriveExamStyleState([], [])
+  const files = await prisma.material.findMany({
+    where: { role: 'exam', project: { id: courseId, userId } },
+    select: { id: true, validationStatus: true, styleProfile: true },
   })
-  return count > 0
+  if (files.length === 0) return deriveExamStyleState([], [])
+  const jobs = await prisma.processingJob.findMany({
+    where: { userId, projectId: courseId, jobType: 'profile_exam', targetKey: { in: files.map((f) => examProfileTarget(f.id)) } },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+    select: { targetKey: true, status: true, errorCode: true },
+  })
+  return deriveExamStyleState(
+    files.map((file) => ({
+      id: file.id,
+      validationStatus: file.validationStatus,
+      hasProfile: file.validationStatus === 'valid' && file.styleProfile !== null,
+    })),
+    jobs.flatMap((job) => {
+      const materialId = materialIdFromProfileTarget(job.targetKey)
+      return materialId ? [{ materialId, status: job.status, errorCode: job.errorCode }] : []
+    })
+  )
 }
