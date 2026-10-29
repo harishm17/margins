@@ -80,3 +80,13 @@ test('getAiStatus asks the AI service with the user, caches briefly and does not
   assert.equal(calls.length, 3)
   assert.match(calls[0], /\/status\/ai\?user_id=u1$/)
 })
+
+test('a fresh read skips the cache and refreshes it for the next readers', async () => {
+  clearAiStatusCache()
+  const { impl, calls } = fakeFetch([{ available: true }, { available: false, reason: 'LLM_CREDIT_EXHAUSTED' }])
+  const options = { fetchImpl: impl, now: () => 1_000 }
+  assert.equal((await getAiStatus('u2', options)).available, true)
+  assert.equal((await getAiStatus('u2', { ...options, fresh: true })).reason, 'LLM_CREDIT_EXHAUSTED')
+  assert.equal((await getAiStatus('u2', options)).reason, 'LLM_CREDIT_EXHAUSTED', 'cached fresh answer')
+  assert.equal(calls.length, 2)
+})

@@ -10,8 +10,10 @@ import { getSessionUser } from '@/server/session'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getSessionUser().catch(() => null)
-  const status = toClientStatus(await getAiStatus(user?.id ?? null))
+  // ?fresh=1: the page was just refused because AI is unavailable, so skip the short cache.
+  const fresh = new URL(request.url).searchParams.get('fresh') === '1'
+  const status = toClientStatus(await getAiStatus(user?.id ?? null, { fresh }))
   return NextResponse.json(status, { headers: { 'Cache-Control': 'no-store' } })
 }

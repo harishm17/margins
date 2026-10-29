@@ -5,6 +5,7 @@ import { X } from '@phosphor-icons/react/dist/ssr'
 import { IconButton } from '@/components/ui/icon-button'
 import { aiMessage, isUnavailableCode, type AiMessage } from '@/lib/ai/messages'
 import { AVAILABLE, type AiStatus } from '@/lib/ai/status'
+import { createStatusTracker, statusUrl } from '@/lib/ai/status-tracker'
 import { fillResetTime } from '@/lib/budget/copy'
 import { cn } from '@/lib/utils'
 
@@ -29,21 +30,29 @@ const POLL_MS = 60_000
 
 export function AiStatusProvider({ initial, children }: { initial?: AiStatus; children: React.ReactNode }) {
   const [status, setStatus] = React.useState<AiStatus>(initial ?? AVAILABLE)
+  // Older or cached answers never undo a failure the page just reported (lib/ai/status-tracker).
+  const [tracker] = React.useState(() => createStatusTracker())
 
-  const refresh = React.useCallback(() => {
-    fetch('/api/ai-status', { cache: 'no-store', credentials: 'same-origin' })
-      .then((response) => (response.ok ? (response.json() as Promise<AiStatus>) : null))
-      .then((next) => {
-        if (next && typeof next.available === 'boolean') setStatus(next)
-      })
-      .catch(() => {})
-  }, [])
+  const load = React.useCallback(
+    (fresh: boolean) => {
+      const ticket = tracker.begin(fresh)
+      fetch(statusUrl(fresh), { cache: 'no-store', credentials: 'same-origin' })
+        .then((response) => (response.ok ? (response.json() as Promise<AiStatus>) : null))
+        .then((next) => {
+          if (next && typeof next.available === 'boolean' && tracker.accepts(ticket)) setStatus(next)
+        })
+        .catch(() => {})
+    },
+    [tracker]
+  )
+  const refresh = React.useCallback(() => load(false), [load])
 
-  // A server render (a refresh) brings a newer status.
+  // A server render (a refresh) brings a newer status, unless the page has just reported a
+  // failure that the server's cache may not know about yet.
   const [seenInitial, setSeenInitial] = React.useState(initial)
   if (initial !== seenInitial) {
     setSeenInitial(initial)
-    if (initial) setStatus(initial)
+    if (initial && tracker.acceptsServerRender()) setStatus(initial)
   }
 
   const hasInitial = !!initial
@@ -86,9 +95,11 @@ export function AiStatusProvider({ initial, children }: { initial?: AiStatus; ch
       } else if (code === 'LLM_DAILY_BUDGET') {
         setStatus((current) => ({ ...current, blocked: code }))
       } else return
-      refresh()
+      tracker.noteReport()
+      // Ask again past the server's cache, so the answer is newer than the failure.
+      load(true)
     },
-    [refresh]
+    [tracker, load]
   )
 
   const value = React.useMemo(() => ({ status, refresh, report }), [status, refresh, report])
