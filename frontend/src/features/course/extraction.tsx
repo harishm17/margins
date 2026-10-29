@@ -60,6 +60,8 @@ type ExtractionBannerProps = {
   setup: CourseSetup
   /** Every file has been read. */
   filesReady: boolean
+  /** Some files are ready and a new one is still being read: the alert stays, its button waits. */
+  reading?: boolean
 }
 
 /** The Materials page banner: topics being found, failed, or waiting for the student to confirm. */
@@ -69,6 +71,7 @@ export function ExtractionBanner({
   extractFailure,
   setup,
   filesReady,
+  reading = false,
 }: ExtractionBannerProps) {
   const extraction = useExtraction(courseId, extractJob)
 
@@ -101,15 +104,23 @@ export function ExtractionBanner({
       </InlineAlert>
     )
   }
-  if (filesReady && needsTopicReview(setup) && setup.mode === 'setup') {
+  // The alert holds its place while a new file is read (button off), so the page below does not jump up
+  // when the upload starts and back down when the file is ready.
+  if ((filesReady || reading) && needsTopicReview(setup) && setup.mode === 'setup') {
     return (
       <InlineAlert
         tone="accent"
         title={topicOriginSentence(setup.topics)}
         action={
-          <Button asChild size="sm" variant="primary">
-            <Link href={`/courses/${courseId}/topics?edit=1`}>{setup.label}</Link>
-          </Button>
+          reading && !filesReady ? (
+            <Button size="sm" variant="primary" disabled>
+              {setup.label}
+            </Button>
+          ) : (
+            <Button asChild size="sm" variant="primary">
+              <Link href={`/courses/${courseId}/topics?edit=1`}>{setup.label}</Link>
+            </Button>
+          )
         }
       >
         Check the list before Margins builds your study content.

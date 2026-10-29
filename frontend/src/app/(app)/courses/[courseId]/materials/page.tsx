@@ -30,6 +30,7 @@ export default async function MaterialsPage({ params }: { params: Promise<{ cour
             extractFailure={data.extractFailure}
             setup={course.setup}
             filesReady={data.readyCount > 0 && data.processingCount === 0}
+            reading={data.readyCount > 0 && data.processingCount > 0}
           />
         }
       />

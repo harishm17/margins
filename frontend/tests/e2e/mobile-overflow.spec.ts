@@ -78,6 +78,28 @@ test.describe('signed in', () => {
     })
   }
 
+  // The loading screens count too: while a section's data is held back, its skeleton is the page. The
+  // plan's used to be 400px wide on a 390px phone, which pushed the fixed tab bar's labels off screen.
+  // These three are the phone's bottom tabs, so they can be tapped.
+  for (const section of ['plan', 'topics', 'ask']) {
+    test(`the ${section} loading screen fits the window`, async ({ page }) => {
+      await page.goto(`/courses/${course}`, { waitUntil: 'networkidle' })
+      await page.route('**/*', async (route) => {
+        const headers = route.request().headers()
+        if (headers['rsc'] === '1' && !headers['next-router-prefetch']) await new Promise((resolve) => setTimeout(resolve, 1500))
+        await route.continue()
+      })
+      await page.locator(`a[href$="/courses/${course}/${section}"]:visible`).first().click()
+      await expect(page.locator('main [aria-busy="true"]').first()).toBeVisible()
+      const { scrollWidth, innerWidth } = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+      }))
+      expect(scrollWidth, `the ${section} skeleton is ${scrollWidth}px wide in a ${innerWidth}px window`).toBeLessThanOrEqual(innerWidth)
+      await expect(page).toHaveURL(new RegExp(`/${section}$`))
+    })
+  }
+
   test('the objectives open on a phone without widening the page', async ({ page }) => {
     await page.goto(topic + '?view=notes', { waitUntil: 'networkidle' })
     const toggle = page.getByRole('button', { name: /By the end you can/ })

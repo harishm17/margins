@@ -70,7 +70,9 @@ export default async function TopicLayout({
           previousId={data.previous?.id ?? null}
           nextId={data.next?.id ?? null}
         />
-        <div className="pt-8">{children}</div>
+        <div data-tab-panel="" className="pt-8">
+          {children}
+        </div>
       </Page>
     </TopicProvider>
   )

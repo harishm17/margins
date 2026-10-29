@@ -25,7 +25,7 @@ export function Progress({ value = 0, indeterminate, tone = 'accent', className,
         className={cn(
           'h-full rounded-full',
           tone === 'accent' ? 'bg-accent' : 'bg-learning',
-          indeterminate ? 'w-[30%] animate-indeterminate' : 'transition-[width] duration-300 ease-enter'
+          indeterminate ? 'w-[30%] animate-indeterminate' : 'transition-[width] duration-240 ease-enter'
         )}
         style={indeterminate ? undefined : { width: `${clamped}%` }}
       />

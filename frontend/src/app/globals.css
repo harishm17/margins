@@ -216,6 +216,7 @@
   --animate-sheet-in-bottom: sheet-in-bottom 240ms var(--ease-enter) both;
   --animate-sheet-out-bottom: sheet-out-bottom 180ms var(--ease-leave) both;
   --animate-slide-in: slide-in 240ms var(--ease-enter) both;
+  --animate-slide-in-back: slide-in-back 240ms var(--ease-enter) both;
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
   --animate-indeterminate: indeterminate 1.4s var(--ease-enter) infinite;
   --animate-spin: spin 0.8s linear infinite;
@@ -294,6 +295,12 @@
   @keyframes slide-in {
     from {
       transform: translateX(12px);
+      opacity: 0;
+    }
+  }
+  @keyframes slide-in-back {
+    from {
+      transform: translateX(-12px);
       opacity: 0;
     }
   }
@@ -470,6 +477,47 @@
       block-size: auto;
       transition-duration: 240ms;
       transition-timing-function: var(--ease-enter);
+    }
+  }
+}
+
+/* Study tabs (components/ui/tabs.tsx): a clicked tab draws its underline at once (its own span, shown
+   while the link is pending), and the old active underline steps aside so only one shows. The panel
+   dims only if the answer takes longer than 120 ms, so a fast load never flickers; its normal state has
+   no transition, so the new view appears at full opacity in the frame it arrives. Under reduced motion
+   the dim is still there (state, not motion), just without the fade. */
+[data-tabs]:has([data-tab-pending]) a[aria-current='page']::after {
+  opacity: 0;
+}
+main:has([data-tabs] [data-tab-pending]) [data-tab-panel] {
+  opacity: 0.55;
+  transition: opacity 180ms var(--ease-leave) 120ms;
+}
+
+/* The sidebar's unit groups (components/shell/sidebar.tsx) slide like the <details> above: the same
+   guard, and the same 240 ms open and 180 ms close. They keep the hidden attribute for semantics, so
+   display is part of the transition. Only after the student has toggled a group (data-toggled): a group
+   that is rendered open on a page load or when the menu sheet mounts is simply there, not grown from 0.
+   The clip margin leaves room for the 2px focus ring (offset 2px) of the first and last link. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (interpolate-size: allow-keywords) {
+    [data-collapsible][data-toggled] {
+      interpolate-size: allow-keywords;
+      overflow-y: clip;
+      overflow-clip-margin: 4px;
+      block-size: auto;
+      transition:
+        block-size 240ms var(--ease-enter),
+        display 240ms var(--ease-enter) allow-discrete;
+      @starting-style {
+        block-size: 0;
+      }
+    }
+    [data-collapsible][data-toggled][hidden] {
+      display: none;
+      block-size: 0;
+      transition-duration: 180ms;
+      transition-timing-function: var(--ease-leave);
     }
   }
 }

@@ -85,7 +85,7 @@ export function ProgressRing({ value, size = 28, tone = 'accent', label, classNa
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={`${circumference * clamped} ${circumference}`}
-            className={cn('transition-[stroke-dasharray] duration-500 ease-enter', tone === 'accent' ? 'stroke-accent' : 'stroke-warning')}
+            className={cn('transition-[stroke-dasharray] duration-240 ease-enter', tone === 'accent' ? 'stroke-accent' : 'stroke-warning')}
           />
         )}
       </svg>

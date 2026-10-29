@@ -75,7 +75,7 @@ export function ThreadList({ threads, activeId, now, hrefFor, onSelect, onNew, o
                             size="sm"
                             noTooltip
                             className={cn(
-                              'absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity',
+                              'absolute right-1 top-1/2 -translate-y-1/2 opacity-0 transition-opacity duration-120',
                               'focus-visible:opacity-100 group-hover/row:opacity-100 data-[state=open]:opacity-100 max-lg:opacity-100'
                             )}
                           />

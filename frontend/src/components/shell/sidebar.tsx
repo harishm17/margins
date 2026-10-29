@@ -100,6 +100,8 @@ const unitMasteryOf = (topics: NavTopic[]): number | null =>
 function TopicList({ course, activeTopicId }: { course: NavCourse; activeTopicId: string | undefined }) {
   const { choices, setOpen } = useUnitState(course.units.length > 0 ? course.id : null)
   const idPrefix = React.useId()
+  // Units the student has opened or closed here: only those slide (globals.css, data-toggled).
+  const [toggled, setToggled] = React.useState<ReadonlySet<string>>(() => new Set())
   // The nav list is already in course order; groupTopicsByUnit wants that order as a number.
   const groups = React.useMemo(
     () => groupTopicsByUnit(course.topics.map((topic, orderIndex) => ({ ...topic, orderIndex })), course.units),
@@ -147,7 +149,10 @@ function TopicList({ course, activeTopicId }: { course: NavCourse; activeTopicId
               type="button"
               aria-expanded={open}
               aria-controls={panelId}
-              onClick={() => setOpen(unit.id, !open)}
+              onClick={() => {
+                setToggled((previous) => new Set(previous).add(unit.id))
+                setOpen(unit.id, !open)
+              }}
               title={unit.weekLabel ? `${unit.weekLabel}: ${unit.title}` : unit.title}
               className={cn(
                 'flex h-8 w-full max-lg:h-11 items-center gap-2 rounded-control px-2.5 text-left text-[13.5px] font-medium text-fg',
@@ -165,7 +170,7 @@ function TopicList({ course, activeTopicId }: { course: NavCourse; activeTopicId
               </span>
               <MasteryIndicator mastery={unitMasteryOf(group.topics)} variant="ring" />
             </button>
-            <ul id={panelId} hidden={!open} className="ml-[15px] border-l border-border pl-1.5">
+            <ul id={panelId} hidden={!open} data-collapsible="" data-toggled={toggled.has(unit.id) ? '' : undefined} className="ml-[15px] border-l border-border pl-1.5">
               {group.topics.map((topic) => (
                 <TopicLink key={topic.id} courseId={course.id} topic={topic} active={activeTopicId === topic.id} />
               ))}

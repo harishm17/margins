@@ -149,7 +149,8 @@ export function StudyTabs({
       aria-label="Study path"
       items={items}
       activeId={view}
-      className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 max-sm:[&_a::after]:inset-x-1.5 max-sm:[&_a]:gap-1 max-sm:[&_a]:px-1.5 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
+      stickyPanel="[data-tab-panel]"
+      className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 max-sm:[&_a::after]:inset-x-1.5 max-sm:[&_[data-tab-indicator]]:inset-x-1.5 max-sm:[&_a]:gap-1 max-sm:[&_a]:px-1.5 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
     />
   )
 }
