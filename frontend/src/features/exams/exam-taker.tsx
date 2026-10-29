@@ -15,6 +15,7 @@ import { apiFetch, isApiError } from '@/lib/api/client'
 import type { AttemptView } from '@/lib/exams/attempts'
 import { formatClock, pluralize } from '@/lib/format'
 import type { PublicQuizQuestion } from '@/lib/learning/quiz-questions'
+import { useQuestionMotion } from '@/lib/question-motion'
 import { cn } from '@/lib/utils'
 import { ExamNavigator } from './exam-navigator'
 import { parseFlagState, timeNotice, timerTone, type FlagState } from './exam-timer'
@@ -103,6 +104,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
   const { flags, position }: FlagState = React.useMemo(() => parseFlagState(storedState, total), [storedState, total])
   const flagged = React.useMemo(() => new Set(flags), [flags])
   const current = position
+  const motion = useQuestionMotion(current)
   const question = questions[current]
 
   const answeredSet = React.useMemo(() => {
@@ -317,7 +319,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
           </div>
           <Progress aria-label="Questions answered" className="mt-3" value={total ? (answeredSet.size / total) * 100 : 0} />
 
-          <div key={current} className="mt-8 animate-slide-in">
+          <div key={current} className={cn('mt-8', motion)}>
             <QuestionRenderer
               question={question}
               value={answers[String(current)]}

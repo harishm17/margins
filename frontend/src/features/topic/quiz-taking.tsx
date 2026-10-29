@@ -8,6 +8,7 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import type { PublicQuizQuestion } from '@/lib/learning/quiz-questions'
+import { useQuestionMotion } from '@/lib/question-motion'
 import { cn } from '@/lib/utils'
 
 type QuizTakingProps = {
@@ -37,6 +38,7 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onIndex
   const [confirmExit, setConfirmExit] = React.useState(false)
   const total = questions.length
   const current = Math.min(index, total - 1)
+  const motion = useQuestionMotion(current)
   const question = questions[current]
   const answeredCount = questions.filter((_q, position) => isAnswered(answers, position)).length
   const unanswered = total - answeredCount
@@ -110,7 +112,7 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onIndex
 
       <Progress aria-label="Questions answered" className="mt-4" value={(answeredCount / total) * 100} />
 
-      <div key={current} className="mt-8 animate-slide-in">
+      <div key={current} className={cn('mt-8', motion)}>
         <QuestionRenderer
           question={question}
           value={answers[String(current)]}
