@@ -50,3 +50,14 @@ test('markJobFailed filters with the shared rule, the same as the AI service dis
   // ai-service app/services/dispatch.py mark_undelivered: status = 'pending' AND started_at IS NULL
   assert.deepEqual(seen, { id: 'j1', status: 'pending', startedAt: null })
 })
+
+test('a stored quiz whose dispatch could not reach the AI service is left pending for the reaper', async () => {
+  let touched = false
+  const store = { processingJob: { async updateMany() { touched = true } } }
+  const quiz = { jobId: 'q1', jobType: 'grade_quiz' } as unknown as TaskPayload
+  await markJobFailed(quiz, new TaskEnqueueError('unreachable', true), store)
+  assert.equal(touched, false)
+  // A refusal no retry can fix still fails it.
+  await markJobFailed(quiz, new TaskEnqueueError('refused', false), store)
+  assert.equal(touched, true)
+})

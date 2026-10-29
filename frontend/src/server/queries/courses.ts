@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db/prisma'
 import { deriveSetup, needsTopicReview, type CourseSetup, type ExtractionOutcome } from '@/lib/course-setup'
 import { ACTIVE_JOB_STATUSES } from '@/lib/jobs/active-jobs'
 import { applyPendingExamResults } from '@/lib/learning/exam-mastery'
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { displayMastery } from '@/lib/learning/mastery-math'
 import { dueBoundary, isReviewDue } from '@/lib/learning/next-step'
 import { masteryLevel, type MasteryLevel } from '@/lib/mastery'
@@ -75,6 +76,7 @@ export type CourseListItem = {
 }
 
 export async function listCourses(userId: string): Promise<CourseListItem[]> {
+  await applyPendingQuizResults(userId)
   const projects = await prisma.project.findMany({
     where: { userId },
     orderBy: { updatedAt: 'desc' },
@@ -170,9 +172,11 @@ export type CourseShell = {
 /** A course with its topics, mastery, progress and content presence. Null when it is not theirs. Applies graded mock exams to mastery first. */
 export const getCourseShell = cache(async (userId: string, courseId: string): Promise<CourseShell | null> => {
   if (!areRecordIds(courseId)) return null
-  // A graded mock exam moves mastery and review dates the first time it is seen (once per grading),
+  // A graded mock exam (or a quiz that waited for the AI) moves mastery and review dates the first time it is seen (once per grading),
   // so it is applied before mastery is read anywhere on a course page.
   await applyPendingExamResults(userId, courseId)
+  // Likewise a quiz that waited for the AI and has been graded since.
+  await applyPendingQuizResults(userId)
   const project = await prisma.project.findFirst({
     where: { id: courseId, userId },
     select: {
@@ -279,6 +283,7 @@ export type NavCourse = {
  * names and mastery, for the sidebar, the course switcher and the command palette.
  */
 export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promise<NavCourse[]> => {
+  await applyPendingQuizResults(userId)
   const now = new Date()
   const boundary = dueBoundary(now, timeZone)
   const projects = await prisma.project.findMany({

@@ -1,3 +1,4 @@
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 /**
  * The voice coach's three tools, run on the server inside the turn loop.
  *
@@ -9,7 +10,7 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { createRateLimiter } from '@/lib/api/rate-limit'
-import { gradeAnswers, GradingUnavailableError } from '@/lib/ai-service/grading'
+import { gradeAnswers, GradingRejectedError, GradingUnavailableError } from '@/lib/ai-service/grading'
 import { computeTopicMastery, recordLearningSignal, upsertReviewSchedule } from '@/lib/learning/mastery'
 import { VoiceQuestion } from '@/lib/voice/concept'
 import { buildHint, toGradableQuestion } from '@/lib/voice/grading'
@@ -168,7 +169,7 @@ export async function executeVoiceTool(
           ungraded: false,
         }
       } catch (gradeError) {
-        if (gradeError instanceof GradingUnavailableError) {
+        if (gradeError instanceof GradingUnavailableError || gradeError instanceof GradingRejectedError) {
           // Nothing is stored: a failed grading call must not become a score.
           return finish({
             error: 'Grading is unavailable right now. Do not give a score. Tell the student and offer to try again.',
@@ -224,6 +225,7 @@ export async function executeVoiceTool(
         score: grading.score,
         metadata: { sessionId, questionIndex },
       })
+      await applyPendingQuizResults(userId)
       const mastery = await computeTopicMastery(userId, session.projectId, inferredTopicId)
       await upsertReviewSchedule({
         userId,

@@ -62,6 +62,7 @@ LEASE_SECONDS = {
     "generate_content": 300,
     "generate_exam": 600,
     "grade_exam": 300,
+    "grade_quiz": 300,
 }
 
 

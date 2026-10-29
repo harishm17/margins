@@ -1,3 +1,4 @@
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { areRecordIds } from '@/lib/ids'
 import { prisma } from '@/lib/db/prisma'
 import { hasStudyData, rankWeakestTopics, SPRINT_TOPIC_COUNT } from './voice-rank'
@@ -16,6 +17,7 @@ export type Sprint = { topics: SprintTopic[]; studied: boolean }
  * topics without one, and ties keep that order.
  */
 export async function getSprintTopics(userId: string, courseId: string): Promise<Sprint> {
+  await applyPendingQuizResults(userId)
   if (!areRecordIds(courseId)) return { topics: [], studied: false }
   const topics = await prisma.topic.findMany({
     where: { projectId: courseId, project: { userId }, userConfirmed: true },

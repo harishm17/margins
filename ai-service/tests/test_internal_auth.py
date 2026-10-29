@@ -36,6 +36,7 @@ def token(monkeypatch):
 def test_job_and_voice_routes_are_all_listed():
     paths = {path for _, path in PROTECTED}
     assert "/jobs/grade-exam" in paths
+    assert "/jobs/grade-quiz" in paths
     assert "/voice/turn" in paths
     assert "/voice/realtime/token" not in paths
     assert "/grade/quiz" in paths
@@ -43,7 +44,7 @@ def test_job_and_voice_routes_are_all_listed():
     assert "/chat/answer" in paths
     assert {"/jobs/profile-exam", "/jobs/exam-relevance"} <= paths
     assert "/status/ai" in paths
-    assert len(PROTECTED) == 14
+    assert len(PROTECTED) == 15
 
 
 @pytest.mark.parametrize("method,path", PROTECTED)

@@ -22,7 +22,8 @@ export type GradeResult = {
 
 /**
  * The AI service could not grade (down, over capacity, or a short answer failed). Nothing is
- * stored: a grading the model could not do must never become a 0. `code` is the AI service's
+ * scored: a grading the model could not do must never become a 0. A topic quiz is stored and graded
+ * when the AI is back (lib/learning/quiz-submissions); a voice drill says so. `code` is the AI service's
  * error code when it gave one (LLM_CREDIT_EXHAUSTED, ...).
  */
 export class GradingUnavailableError extends Error {
@@ -34,11 +35,37 @@ export class GradingUnavailableError extends Error {
   }
 }
 
-/** Shown when short answers cannot be graded because the AI cannot run (copy for review). */
-export const GRADING_WAITS_FOR_AI =
-  'Your answers are still here. Short answers need AI to grade, so submit again when AI is available.'
-/** Shown when the model answered but could not grade some short answers. */
-export const GRADING_RETRY = 'Some short answers could not be graded just now. Your answers are still here, so submit again.'
+/**
+ * The AI service refused the request itself (a question it cannot read, a bad token, a bug): not a
+ * matter of waiting for the AI, so nothing is queued and the caller reports an error. `status` is
+ * the HTTP status it answered with.
+ */
+export class GradingRejectedError extends Error {
+  readonly status: number
+  constructor(status: number) {
+    super(`The grading request was rejected (${status})`)
+    this.name = 'GradingRejectedError'
+    this.status = status
+  }
+}
+
+/** The AI service's codes for "the AI cannot run now": the ones exam grading waits on (ai-service job_runner waits_for_ai). */
+const WAIT_CODES = new Set([
+  'LLM_CREDIT_EXHAUSTED',
+  'LLM_AUTH_FAILED',
+  'LLM_NOT_CONFIGURED',
+  'LLM_RATE_LIMITED',
+  'LLM_UNAVAILABLE',
+  'LLM_DAILY_BUDGET',
+  'AI_UNREACHABLE',
+])
+
+/** Whether a failed grading call means the AI is unavailable (worth waiting for) rather than that the request was refused. */
+export function isAiUnavailableOutcome(status: number, code: string | null): boolean {
+  if (code && WAIT_CODES.has(code)) return true
+  // No code: a gateway or the service itself is down or restarting.
+  return !code && (status === 429 || status === 502 || status === 503 || status === 504)
+}
 
 async function errorCode(response: Response): Promise<string | null> {
   try {
@@ -71,16 +98,17 @@ export async function gradeAnswers(
     })
   } catch (error) {
     console.error('Grading request failed:', error)
-    throw new GradingUnavailableError(GRADING_WAITS_FOR_AI, 'AI_UNREACHABLE')
+    throw new GradingUnavailableError(undefined, 'AI_UNREACHABLE')
   }
 
   if (!response.ok) {
     const code = await errorCode(response)
     console.error('Grading request returned', response.status, code)
-    throw new GradingUnavailableError(GRADING_WAITS_FOR_AI, code)
+    if (!isAiUnavailableOutcome(response.status, code)) throw new GradingRejectedError(response.status)
+    throw new GradingUnavailableError(undefined, code)
   }
 
   const result = (await response.json()) as GradeResult
-  if (result.needs_review) throw new GradingUnavailableError(GRADING_RETRY)
+  if (result.needs_review) throw new GradingUnavailableError('Some short answers could not be graded just now')
   return result
 }

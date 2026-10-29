@@ -13,6 +13,7 @@ import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Spinner } from '@/components/ui/spinner'
 import { useJob } from '@/features/jobs/use-job'
 import { explainMistakeHref } from '@/lib/ask/explain'
+import { GRADING_WAITING_TEXT, GRADING_WAITING_TITLE } from '@/lib/ai/messages'
 import { describeJobFailure } from '@/lib/jobs/failure-message'
 import { isWaitingForAi } from '@/lib/jobs/poll-job'
 import { cn } from '@/lib/utils'
@@ -28,8 +29,8 @@ type Filter = 'all' | 'missed' | 'review'
 const pointsText = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1))
 
 /** The page says this while grading waits for the AI (copy for review). */
-export const WAITING_TITLE = 'Your answers are saved'
-export const WAITING_TEXT = 'Grading will finish when AI is available again. You can leave this page and come back.'
+export const WAITING_TITLE = GRADING_WAITING_TITLE
+export const WAITING_TEXT = GRADING_WAITING_TEXT
 
 /**
  * Grading in progress: a calm panel that refreshes the page when the job finishes. While the AI is

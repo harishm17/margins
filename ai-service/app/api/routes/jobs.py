@@ -9,6 +9,8 @@ import logging
 import json
 from typing import Optional
 from fastapi import APIRouter, HTTPException
+from pydantic import ValidationError
+from app.api.routes.grading import GradeQuizRequest
 from app.models.jobs import JobPayload, MaterialValidationInput, ContentGenerationInput, ExamGenerationInput
 from app.services.document_processor.validator import material_role, validate_material
 from app.services.document_processor.chunker import chunk_document, NoContentError
@@ -951,6 +953,83 @@ async def grade_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     await execute_in_transaction(store_grading)
 
     logger.info(f"Completed exam grading: {grading_result['overall_score']}%")
+    return JobOutcome(
+        result={
+            "submission_id": submission_id,
+            "overall_score": grading_result["overall_score"],
+            "earned_points": grading_result["earned_points"],
+            "total_points": grading_result["total_points"],
+        },
+        response={"overallScore": grading_result["overall_score"]},
+    )
+
+
+@router.post("/jobs/grade-quiz")
+@job_handler(
+    job_type="grade_quiz",
+    label="Quiz grading",
+    default_error_code="QUIZ_GRADING_FAILED",
+    stage="grading",
+    uses_llm=True,
+    # The answers are the student's work: grading waits for the AI instead of failing.
+    wait_for_ai=True,
+)
+async def grade_quiz_job(payload: JobPayload, job: JobContext) -> JobOutcome:
+    """Grade a topic quiz that was submitted while the AI could not run.
+
+    The submission holds the answers and the questions as they were answered. The grading is
+    stored on it; the web app turns it into the student's attempt and applies it to mastery and
+    the review schedule (once), so a score is never applied before it is complete.
+    """
+    submission_id = payload.data.get("submissionId")
+    if not isinstance(submission_id, str) or not submission_id:
+        raise PermanentJobError("Missing submissionId", "INVALID_INPUT")
+
+    submission = await execute_one(
+        "SELECT status, answers, questions FROM quiz_submissions WHERE id = $1 AND user_id = $2",
+        submission_id,
+        job.user_id,
+    )
+    if not submission:
+        # Deleted with the account or the topic while it waited.
+        raise PermanentJobError("Quiz submission not found", "QUIZ_SUBMISSION_NOT_FOUND")
+    if submission["status"] == "graded":
+        # A second delivery of work that is done (a retry and the reaper both fired): nothing to do.
+        return JobOutcome(result={"submission_id": submission_id, "already_graded": True})
+
+    # The stored snapshot goes through the same model the immediate path (POST /grade/quiz) uses, so
+    # a malformed question or answer is refused or normalised the same way in both.
+    try:
+        request = GradeQuizRequest.model_validate({
+            "questions": _json_value(submission["questions"]),
+            "answers": _json_value(submission["answers"]),
+        })
+    except ValidationError as exc:
+        raise PermanentJobError("The stored quiz is not valid", "INVALID_INPUT") from exc
+    questions = [question.model_dump() for question in request.questions]
+    answers = dict(request.answers)
+
+    grading_result = await ExamGrader().grade_submission(
+        submission_id=submission_id,
+        questions=questions,
+        answers=answers,
+    )
+    if any(question.get("needs_review") for question in grading_result["graded_questions"]):
+        # The model answered, but not usefully: a score with a 0 in it must not be stored. Failing
+        # lets the job retry; after its attempts the student can grade it again.
+        raise RuntimeError("A short answer could not be graded")
+
+    stored = await execute_one(
+        f"""
+        UPDATE quiz_submissions
+        SET ai_grading = $1, status = 'graded', graded_at = {UTC_NOW}
+        WHERE id = $2 AND status = 'pending'
+        RETURNING id
+        """,
+        json.dumps(grading_result),
+        submission_id,
+    )
+    logger.info("Completed quiz grading: %s%%%s", grading_result["overall_score"], "" if stored else " (already stored)")
     return JobOutcome(
         result={
             "submission_id": submission_id,

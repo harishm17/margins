@@ -116,6 +116,7 @@ JOB_ENDPOINTS = {
     "generate_content": "/jobs/generate-content",
     "generate_exam": "/jobs/generate-exam",
     "grade_exam": "/jobs/grade-exam",
+    "grade_quiz": "/jobs/grade-quiz",
 }
 
 

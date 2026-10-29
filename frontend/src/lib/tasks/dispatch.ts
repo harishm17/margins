@@ -108,6 +108,10 @@ export async function markJobFailed(
   error: TaskEnqueueError,
   store?: JobFailureStore
 ): Promise<void> {
+  // A stored quiz is the student's work and its job is made to wait: when the AI service cannot be
+  // reached right now, the job stays pending and never started, and the AI service's reaper sends it
+  // once it is back (and fails it, retryable, only after its re-dispatch limit).
+  if (payload.jobType === 'grade_quiz' && error.retryable) return
   try {
     const prisma = store ?? (await import('@/lib/db/prisma')).prisma
     // Only a job no handler has touched (see ./undelivered): a job waiting for its retry, or one
@@ -254,5 +258,17 @@ export async function enqueueExamGradingJob(
     jobId,
     jobType: 'grade_exam',
     data: { submissionId, examId },
+  })
+}
+
+/**
+ * Enqueue the grading of a topic quiz that was submitted while the AI could not run. The AI
+ * service loads the questions and answers from the submission.
+ */
+export async function enqueueQuizGradingJob(jobId: string, submissionId: string): Promise<string> {
+  return enqueueTask('/jobs/grade-quiz', {
+    jobId,
+    jobType: 'grade_quiz',
+    data: { submissionId },
   })
 }
