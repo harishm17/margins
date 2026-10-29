@@ -92,7 +92,7 @@ type Shot = {
   /** Default: both. A screen only the README shows needs only the light version. */
   themes?: Theme[]
   /** Also write the light version as a PNG of this size for the social card (next/og cannot read WebP). */
-  og?: { file: string; width: number; height: number }
+  og?: { file: string; /** Write only the PNG, no WebP files and no manifest entry. */ only?: boolean }
 }
 
 /**
@@ -159,7 +159,7 @@ async function openThread(page: Page) {
 /** Opens the plan's folded days whose line carries one of these labels (the final review and exam day by default). */
 async function openLastDays(page: Page, labels = ['Final review', 'Exam day']) {
   for (const label of labels) {
-    await page.locator('main details > summary', { hasText: label }).first().click()
+    await page.locator('main details > summary', { hasText: label }).last().click()
   }
   // Park the pointer in a corner, so no row is drawn in its hover state.
   await page.mouse.move(2, 2)
@@ -337,8 +337,22 @@ const SHOTS: Shot[] = [
     },
     crop: async (page) => [0, 0, 1024, page.viewportSize()!.height],
     widths: [960, 1500, 1920, 2592],
-    // The social card draws it at 900x615 (app/opengraph-image.tsx): written at that size, nothing rescales it.
-    og: { file: 'plan-og.png', width: 900, height: 615 },
+  },
+  {
+    // The social card (app/opengraph-image.tsx) draws this picture whole, 592px wide, beside the headline, at the
+    // height its own proportions give. It is the plan's main column (no sidebar: the card has the brand) from the top
+    // bar down to the bottom of Today's card, so nothing is cut at any edge. 1184px is 2x of what the card draws.
+    name: 'plan-og',
+    viewport: { width: 1024, height: 800 },
+    url: (ids) => `${course(ids)}/plan`,
+    prepare: assertToday,
+    crop: async (page) => {
+      const today = await box(page, page.locator('li[aria-current="date"]').first(), 'Today')
+      return [250, 0, 774, Math.round(today.y + today.height + 12)]
+    },
+    widths: [1184],
+    themes: ['light'],
+    og: { file: 'plan-og.png', only: true },
   },
   {
     name: 'plan-mobile',
@@ -350,10 +364,10 @@ const SHOTS: Shot[] = [
     name: 'plan-exam-day',
     viewport: { width: 1180, height: 1000 },
     url: (ids) => `${course(ids)}/plan`,
-    // The last week before the exam, with exam day opened. The page ends under exam day, so the crop is
+    // The last week before the exam, with the full mock exam day and exam day opened (the list fills the 4:3 frame). The page ends under exam day, so the crop is
     // shorter than 4:3 and `padTo` fills the rest with the page's own background.
     prepare: async (page) => {
-      await openLastDays(page, ['Exam day'])
+      await openLastDays(page, ['Full mock exam', 'Exam day'])
       await scrollMainTo(page, 'bottom')
     },
     crop: async (page) => {
@@ -719,21 +733,18 @@ async function capture(session: Session, shot: Shot, theme: Theme): Promise<Writ
       fs.mkdirSync(RAW, { recursive: true })
       fs.writeFileSync(path.join(RAW, `${shot.name}-${theme}-${target}.png`), png)
     }
+    largest = png
+    size = { width: target, height: meta.height as number }
+    if (shot.og?.only) continue
     const result = await encode(png, target, meta.height as number)
     fs.writeFileSync(path.join(OUT, `${shot.name}-${theme}-${target}.webp`), result.data)
-    size = { width: target, height: meta.height as number }
-    largest = png
     const bpp = ((result.data.length * 8) / (target * (meta.height as number))).toFixed(2)
     const over = result.over ? `  OVER BUDGET (${Math.round(result.budget / 1024)} KB)` : ''
     console.log(`${shot.name}-${theme}-${target}.webp  ${target}x${meta.height}  ${Math.round(result.data.length / 1024)} KB  ${bpp} bpp  ${result.mode}${over}`)
   }
   if (theme === 'light' && shot.og && largest) {
-    const { file, width: ogWidth, height: ogHeight } = shot.og
-    await sharp(largest)
-      .resize({ width: ogWidth, height: ogHeight, fit: 'cover', position: 'top', kernel: 'lanczos3' })
-      .png({ compressionLevel: 9 })
-      .toFile(path.join(OUT, file))
-    console.log(`${file}  ${ogWidth}x${ogHeight}`)
+    await sharp(largest).png({ compressionLevel: 9 }).toFile(path.join(OUT, shot.og.file))
+    console.log(`${shot.og.file}  ${size.width}x${size.height}`)
   }
   return { widths, ...size }
 }
@@ -791,7 +802,7 @@ async function main() {
         if (other && (other.width !== result.width || other.height !== result.height)) {
           throw new Error(`${shot.name}: light is ${other.width}x${other.height} but ${theme} is ${result.width}x${result.height}`)
         }
-        written[shot.name] = result
+        if (!shot.og?.only) written[shot.name] = result
       }
       if (shot.name === 'exam') await clearExamAttempt(prisma, ids)
       if (shot.name === 'practice') await prisma.practiceProgress.deleteMany({ where: { userId: ids.userId } })
