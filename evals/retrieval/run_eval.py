@@ -1,4 +1,4 @@
-"""Retrieval eval for StudyBuddy topic-to-chunk mapping.
+"""Retrieval eval for Margins topic-to-chunk mapping.
 
     cd ai-service
     uv run python -I ../evals/retrieval/run_eval.py --db postgresql://postgres@127.0.0.1:5544/sb_evals --label baseline
