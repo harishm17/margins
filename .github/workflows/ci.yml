@@ -153,6 +153,20 @@ jobs:
           done
           docker logs web
           exit 1
+      - name: Image refuses to start on a public URL without Google sign-in, or with the test sign-in on
+        run: |
+          refuses() {
+            if out="$(timeout 60 docker run --rm \
+                -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e NEXTAUTH_SECRET=ci-secret \
+                -e NEXTAUTH_URL=https://studymargins.com "$@" margins-frontend 2>&1)"; then
+              echo "started, but should have refused: $*"; echo "$out"; exit 1
+            fi
+            echo "$out" | grep -q "Refusing to start" || { echo "no refusal message: $*"; echo "$out"; exit 1; }
+          }
+          refuses
+          refuses -e GOOGLE_OAUTH_CLIENT_ID=your-google-client-id -e GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
+          refuses -e GOOGLE_OAUTH_CLIENT_ID=1-ci.apps.googleusercontent.com -e GOOGLE_OAUTH_CLIENT_SECRET=ci-not-a-real-google-secret \
+            -e ENABLE_TEST_LOGIN=true
 
   ai-service-image:
     runs-on: ubuntu-latest
