@@ -33,7 +33,10 @@ test('each kind of item links to its action', () => {
 
 test('mixed practice and projected reviews link to their actions', () => {
   const mixed = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes: 30 })
-  assert.equal(planItemHref(mixed, 'c1'), '/courses/c1/exams/new?topics=a,b')
+  assert.equal(planItemHref(mixed, 'c1'), '/courses/c1/exams/new?topics=a,b&minutes=30&questions=10')
+  const short = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes: 20 })
+  assert.equal(planItemHref(short, 'c1'), '/courses/c1/exams/new?topics=a,b&minutes=20&questions=5')
+  assert.equal(planItemHref({ ...short, topicIds: [] }, 'c1'), '/courses/c1/exams/new?minutes=20&questions=5')
   const described = describePlanItem(mixed, 'c1')
   assert.equal(described.verb, 'Create')
   assert.match(described.reason, /mixed together/)
