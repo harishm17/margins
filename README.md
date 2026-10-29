@@ -176,7 +176,7 @@ NEXTAUTH_SECRET=...              # openssl rand -base64 32
 NEXTAUTH_URL=http://localhost:3000
 AI_SERVICE_URL=http://localhost:8000
 AI_INTERNAL_TOKEN=...            # openssl rand -hex 32, same value in both services
-GOOGLE_OAUTH_CLIENT_ID=...       # Google sign-in, the only way to sign in: production will not start without it
+GOOGLE_OAUTH_CLIENT_ID=...       # production only: Google sign-in, the only way students sign in (locally the test sign-in replaces it)
 GOOGLE_OAUTH_CLIENT_SECRET=...
 ```
 
@@ -254,7 +254,7 @@ frontend/             Next.js app: pages, API routes, Prisma schema, Playwright 
 ai-service/           FastAPI service: parsing, embeddings, generation, grading
 evals/                retrieval and generation evals, results
 scripts/              e2e-stack.sh, the stack the Playwright specs run against
-docs/                 deployment guide (RAILWAY.md) and old design screenshots
+docs/                 deployment guide (RAILWAY.md) and old design screenshots (`design/`)
 ```
 
 ## License

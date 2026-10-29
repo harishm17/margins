@@ -93,7 +93,7 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://dev:devpass@postgres:5432/margins
-      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - LLM_PROVIDER=${LLM_PROVIDER:-mock}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-opus-5-5}
       - ANTHROPIC_FAST_MODEL=${ANTHROPIC_FAST_MODEL:-claude-haiku-5-5}
