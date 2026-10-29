@@ -1,8 +1,8 @@
 /** The choices on the new mock exam form, and the rules that turn them into a request. */
+import { DEFAULT_DURATION_MINUTES, DEFAULT_TOTAL_QUESTIONS } from '@/lib/exams/form-defaults'
 import { LEARNING_BELOW, STRONG_FROM } from '@/lib/mastery'
 
-export const QUESTION_COUNTS = [10, 20, 30, 40] as const
-export const TIME_LIMITS = [30, 60, 90, 120, 180] as const
+export { DEFAULT_DURATION_MINUTES, DEFAULT_TOTAL_QUESTIONS, QUESTION_COUNTS, TIME_LIMITS, examDefaultsFromParams, questionsForMinutes } from '@/lib/exams/form-defaults'
 export const DIFFICULTIES = ['easy', 'medium', 'hard'] as const
 export type Difficulty = (typeof DIFFICULTIES)[number]
 
@@ -17,8 +17,8 @@ export const QUESTION_MIXES = {
 export type QuestionMix = keyof typeof QUESTION_MIXES
 
 export const DEFAULT_EXAM_CONFIG = {
-  totalQuestions: 20,
-  durationMinutes: 60,
+  totalQuestions: DEFAULT_TOTAL_QUESTIONS,
+  durationMinutes: DEFAULT_DURATION_MINUTES,
   difficultyLevel: 'medium' as Difficulty,
   mix: 'balanced' as QuestionMix,
 }

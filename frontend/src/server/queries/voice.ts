@@ -20,7 +20,7 @@ export async function getSprintTopics(userId: string, courseId: string): Promise
   await applyPendingQuizResults(userId)
   if (!areRecordIds(courseId)) return { topics: [], studied: false }
   const topics = await prisma.topic.findMany({
-    where: { projectId: courseId, project: { userId } },
+    where: { projectId: courseId, project: { userId }, userConfirmed: true },
     select: {
       id: true,
       name: true,

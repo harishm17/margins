@@ -25,6 +25,7 @@ export async function POST(
       },
       select: {
         id: true,
+        status: true,
       },
     })
 
@@ -45,17 +46,22 @@ export async function POST(
       )
     }
 
-    const [confirmedTopics, updatedProject] = await prisma.$transaction([
-      prisma.topic.updateMany({
+    const [confirmedTopics, updatedProject] = await prisma.$transaction(async (tx) => {
+      // The same lock the topic planner takes when it writes, so Confirm never lands in the middle
+      // of a plan being stored (the planner checks the confirmed set under it).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`plan:${projectId}`}))`
+      const topics = await tx.topic.updateMany({
         where: { projectId },
         data: { userConfirmed: true },
-      }),
-      prisma.project.update({
+      })
+      // A completed course stays completed.
+      const updated = await tx.project.update({
         where: { id: projectId },
-        data: { status: 'active' },
+        data: { status: project.status === 'completed' ? 'completed' : 'active' },
         select: { id: true, status: true },
-      }),
-    ])
+      })
+      return [topics, updated] as const
+    })
 
     return NextResponse.json({
       project: updatedProject,

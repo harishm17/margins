@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { deriveSetup, needsTopicReview, topicOriginSentence, readyToStudy, type CourseSetupInput } from './course-setup'
+import { deriveSetup, needsTopicReview, newTopicsLabel, topicOriginSentence, readyToStudy, type CourseSetupInput } from './course-setup'
 
 // An active course with five topics found in the files, all confirmed, and some content.
 const base: CourseSetupInput = {
@@ -75,15 +75,43 @@ test('found and hand-added topics: "found" counts only the found ones', () => {
   assert.equal(setup.topics.newSinceConfirm, 0)
 })
 
-test('new topics found after the list was confirmed: back to step 2 until they are confirmed', () => {
-  // The planner sets topics_pending when it adds topics to a confirmed course.
+test('new topics found on an active course: it stays active, the new ones wait for review', () => {
+  // The planner leaves the status alone once the course is active.
+  const input = { ...base, topicCount: 8, extractedTopicCount: 8 }
+  const setup = deriveSetup(input)
+  assert.deepEqual(shape(input), { mode: 'active', step: null, label: null })
+  assert.equal(readyToStudy(setup), true)
+  assert.equal(setup.topics.listConfirmed, true)
+  assert.equal(setup.topics.unconfirmed, 3)
+  assert.equal(setup.topics.newSinceConfirm, 3)
+  assert.equal(needsTopicReview(setup), true)
+  assert.equal(newTopicsLabel(setup.topics), '3 new topics to review')
+  assert.equal(newTopicsLabel(deriveSetup({ ...input, topicCount: 6, extractedTopicCount: 6 }).topics), '1 new topic to review')
+  assert.equal(topicOriginSentence(setup.topics), 'We found 3 new topics in your files.')
+  // Same while the course is at step 3 (confirmed, nothing written yet) and when it is completed.
+  assert.equal(deriveSetup({ ...input, contentBlockCount: 0 }).step, 3)
+  assert.equal(deriveSetup({ ...input, status: 'completed' }).mode, 'active')
+  // Nothing new: no label, no dot.
+  assert.equal(newTopicsLabel(deriveSetup(base).topics), null)
+  assert.equal(needsTopicReview(deriveSetup(base)), false)
+})
+
+test('an older course still marked topics_pending with new topics is step 2 until confirmed', () => {
   const input = { ...base, status: 'topics_pending', topicCount: 8, confirmedTopicCount: 5, extractedTopicCount: 8 }
   const setup = deriveSetup(input)
   assert.deepEqual(shape(input), { mode: 'setup', step: 2, label: 'Review topics' })
   assert.equal(setup.topics.newSinceConfirm, 3)
-  assert.equal(topicOriginSentence(setup.topics), 'We found 3 new topics in your files.')
-  // A status that says active with an unconfirmed topic still is not a confirmed list.
-  assert.equal(deriveSetup({ ...input, status: 'active' }).step, 2)
+  assert.equal(newTopicsLabel(setup.topics), null)
+})
+
+test('an active course whose confirmed topics are all gone, only new ones left: back to step 2', () => {
+  const input = { ...base, topicCount: 3, confirmedTopicCount: 0, extractedTopicCount: 3, confirmedExtractedTopicCount: 0, contentBlockCount: 0 }
+  const setup = deriveSetup(input)
+  assert.deepEqual(shape(input), { mode: 'setup', step: 2, label: 'Review topics' })
+  assert.equal(setup.topics.listConfirmed, false)
+  assert.equal(readyToStudy(setup), false)
+  assert.equal(needsTopicReview(setup), true)
+  assert.equal(newTopicsLabel(setup.topics), null)
 })
 
 test('a confirmed course whose topics were all deleted is back to step 2', () => {

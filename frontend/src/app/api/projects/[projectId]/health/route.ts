@@ -57,18 +57,20 @@ export async function GET(
       pending: project.materials.filter((material) => material.validationStatus === 'pending').length,
     }
 
+    // New topics waiting for review are not part of readiness: only confirmed topics count.
+    const topics = project.topics.filter((topic) => topic.userConfirmed)
     const topicCount = project.topics.length
-    const confirmedTopics = project.topics.filter((topic) => topic.userConfirmed).length
+    const confirmedTopics = topics.length
     // "Confirmed" means what it means on every screen: the student confirmed the list (lib/course-setup.ts),
     // not that some topics are confirmed (a topic added by hand is, before the list is).
     const shell = await getCourseShell(auth.user.id, projectId)
     const listConfirmed = shell?.setup.topics.listConfirmed ?? false
-    const contentReadyTopics = project.topics.filter((topic) =>
+    const contentReadyTopics = topics.filter((topic) =>
       REQUIRED_CONTENT.every((type) =>
         topic.content.some((item) => item.contentType === type)
       )
     ).length
-    const quizScores = project.topics
+    const quizScores = topics
       .map((topic) => topic.progress[0])
       .filter((progress): progress is { quizCompleted: boolean; quizScore: number | null } =>
         Boolean(progress?.quizCompleted && typeof progress.quizScore === 'number')
@@ -80,14 +82,14 @@ export async function GET(
       ? quizScores.reduce((sum, score) => sum + score, 0) / quizReadyTopics
       : 0
 
-    const conceptualQuestionCount = project.topics.reduce((count, topic) => {
+    const conceptualQuestionCount = topics.reduce((count, topic) => {
       const quizContent = topic.content.find((content) => content.contentType === 'topic_quiz')
       const conceptualQuestions = filterConceptQuestions(
         extractQuestionsFromContent(quizContent?.contentData)
       )
       return count + conceptualQuestions.length
     }, 0)
-    const notesTopicCount = project.topics.filter((topic) =>
+    const notesTopicCount = topics.filter((topic) =>
       topic.content.some((content) => content.contentType === 'section_notes')
     ).length
     const voiceReady = conceptualQuestionCount > 0 || notesTopicCount > 0

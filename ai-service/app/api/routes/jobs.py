@@ -16,7 +16,7 @@ from app.services.document_processor.validator import material_role, validate_ma
 from app.services.document_processor.chunker import chunk_document, NoContentError
 from app.services.document_processor.storage import local_copy
 from app.services.embeddings.generator import embedding_text, generate_embeddings
-from app.services.course_planner import NoPlannableMaterialError, plan_course, write_plan
+from app.services.course_planner import NoPlannableMaterialError, StalePlanError, plan_course, write_plan
 from app.services.content_generator import NotesGenerator, ExamplesGenerator, QuizGenerator
 from app.services.content_generator.context import NoSourceMaterialError
 from app.services.content_generator.examples import ExampleType
@@ -443,15 +443,25 @@ async def extract_topics_job(payload: JobPayload, job: JobContext) -> JobOutcome
     if not project_id:
         raise PermanentJobError("projectId required", "INVALID_INPUT")
 
-    try:
-        plan_job = await plan_course(project_id)
-    except NoPlannableMaterialError as exc:
-        raise PermanentJobError(str(exc), exc.code) from exc
+    # The student can confirm topics while the model is planning; then the plan is stale and is made
+    # again from the confirmed set (a few times at most).
+    written = None
+    for attempt in range(3):
+        try:
+            plan_job = await plan_course(project_id)
+        except NoPlannableMaterialError as exc:
+            raise PermanentJobError(str(exc), exc.code) from exc
 
-    if plan_job.mode == "full" and not plan_job.plan.topics():
-        raise HTTPException(status_code=404, detail="No topics extracted")
+        if plan_job.mode == "full" and not plan_job.plan.topics():
+            raise HTTPException(status_code=404, detail="No topics extracted")
 
-    written = await write_plan(plan_job)
+        try:
+            written = await write_plan(plan_job)
+            break
+        except StalePlanError:
+            logger.info("Project %s: confirmed topics changed during planning (attempt %s)", project_id, attempt + 1)
+    if written is None:
+        raise HTTPException(status_code=409, detail="Topics changed while they were being found. Try again.")
     # Topics whose concepts appear in the past exams are marked; this never fails planning.
     await mark_exam_relevant_topics_quietly(project_id)
     total = await execute_one("SELECT count(*)::int AS n FROM topics WHERE project_id = $1", project_id)

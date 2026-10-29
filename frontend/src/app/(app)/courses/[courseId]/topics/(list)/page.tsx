@@ -4,6 +4,7 @@ import { Page } from '@/components/shell/page'
 import { courseSummary, reviewTiming, studyPath } from '@/features/course/summary'
 import { TopicEditor } from '@/features/course/topic-editor'
 import { TopicsList } from '@/features/course/topics-list'
+import { newTopicsLabel } from '@/lib/course-setup'
 import { countMasteryLevels, masteryLevel } from '@/lib/mastery'
 import { getTopicsData } from '@/server/queries/course'
 import { getCourseShell } from '@/server/queries/courses'
@@ -60,19 +61,22 @@ export default async function TopicsPage({
 
   // eslint-disable-next-line react-hooks/purity -- a server component: one timestamp per request
   const now = Date.now()
-  const counts = countMasteryLevels(data.topics.map((topic) => masteryLevel(topic.mastery)))
+  // New topics found after the list was confirmed are reviewed in the editor, not studied from this list.
+  const listed = data.topics.filter((topic) => topic.confirmed)
+  const counts = countMasteryLevels(listed.map((topic) => masteryLevel(topic.mastery)))
   const timeZone = await getTimeZone()
-  const due = data.topics.filter((topic) => reviewTiming(topic.dueAt, now, timeZone)?.due).length
+  const due = listed.filter((topic) => reviewTiming(topic.dueAt, now, timeZone)?.due).length
 
   return (
     <Page>
       <TopicsList
         courseId={courseId}
-        summary={courseSummary(data.topics.length, counts, due)}
+        summary={courseSummary(listed.length, counts, due)}
         generation={data.generation}
         now={now}
         units={data.units}
-        topics={data.topics.map((topic) => ({
+        newTopics={newTopicsLabel(data.setup.topics)}
+        topics={listed.map((topic) => ({
           id: topic.id,
           name: topic.name,
           description: topic.description,

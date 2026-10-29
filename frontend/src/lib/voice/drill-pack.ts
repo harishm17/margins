@@ -103,6 +103,7 @@ export const buildSprintQuestionSet = async (
     where: {
       projectId,
       project: { userId },
+      userConfirmed: true,
     },
     include: {
       content: true,

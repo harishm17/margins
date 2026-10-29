@@ -4,6 +4,7 @@ import { RelativeTime } from '@/components/ui/relative-time'
 import { countMasteryLevels, MASTERY_LABELS, type MasteryLevel } from '@/lib/mastery'
 import { cn } from '@/lib/utils'
 import type { CourseListItem } from '@/server/queries/courses'
+import { newTopicsLabel } from '@/lib/course-setup'
 import { activeStatusLine } from './status-line'
 
 const MAX_SQUARES = 40
@@ -38,11 +39,13 @@ export function MasteryStrip({ levels }: { levels: MasteryLevel[] }) {
 
 export function CourseCard({ course }: { course: CourseListItem }) {
   const status = course.setup.mode === 'setup' ? course.setup.label : activeStatusLine(course.levels)
+  const newTopics = newTopicsLabel(course.setup.topics)
   return (
     <Card interactive asChild className="flex h-full flex-col gap-3">
       <Link href={`/courses/${course.id}`}>
         <h3 className="truncate text-subheading text-fg">{course.name}</h3>
         <p className="text-small text-fg-2">{status}</p>
+        {newTopics ? <p className="text-small text-accent-soft-fg">{newTopics}</p> : null}
         <MasteryStrip levels={course.levels} />
         <p className="mt-auto pt-1 text-caption font-normal text-fg-3">
           Updated <RelativeTime date={course.updatedAt} />

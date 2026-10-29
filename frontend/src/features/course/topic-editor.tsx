@@ -164,7 +164,9 @@ export function TopicEditor({
   const router = useRouter()
   const extraction = useExtraction(courseId, extractJob)
   // Confirm is the only way to finish the list: adding topics by hand confirms those topics, not the list.
-  const listConfirmed = topicList.listConfirmed
+  // Confirmed lists are edited ("Edit topics"); found topics waiting for the student (a first list, or new
+  // topics on a confirmed course) are reviewed ("Confirm topics").
+  const listConfirmed = topicList.listConfirmed && topicList.unconfirmed === 0
 
   const [items, setItems] = React.useState(() => byOrder(serverTopics))
   const [unitItems, setUnitItems] = React.useState(() => byOrder(serverUnits))

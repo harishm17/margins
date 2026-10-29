@@ -106,7 +106,8 @@ export function ExtractionBanner({
   }
   // The alert holds its place while a new file is read (button off), so the page below does not jump up
   // when the upload starts and back down when the file is ready.
-  if ((filesReady || reading) && needsTopicReview(setup) && setup.mode === 'setup') {
+  if ((filesReady || reading) && needsTopicReview(setup)) {
+    const label = setup.mode === 'setup' ? setup.label : 'Review topics'
     return (
       <InlineAlert
         tone="accent"
@@ -114,16 +115,18 @@ export function ExtractionBanner({
         action={
           reading && !filesReady ? (
             <Button size="sm" variant="primary" disabled>
-              {setup.label}
+              {label}
             </Button>
           ) : (
             <Button asChild size="sm" variant="primary">
-              <Link href={`/courses/${courseId}/topics?edit=1`}>{setup.label}</Link>
+              <Link href={`/courses/${courseId}/topics?edit=1`}>{label}</Link>
             </Button>
           )
         }
       >
-        Check the list before Margins builds your study content.
+        {setup.topics.listConfirmed
+          ? 'They join your plan once you confirm them.'
+          : 'Check the list before Margins builds your study content.'}
       </InlineAlert>
     )
   }
