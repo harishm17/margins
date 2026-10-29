@@ -19,6 +19,18 @@ export const LOOP_AUTOPLAY = true
 /** How long each step stays open, in ms. The open step's line fills over this time. */
 export const LOOP_STEP_MS = 7000
 
+/** At least this share of the loop is on screen before it runs (the observer's threshold too). */
+export const LOOP_IN_VIEW_RATIO = 0.5
+
+/**
+ * Whether an IntersectionObserver entry counts as in view. The ratio decides: by the spec
+ * `isIntersecting` is true for any sliver (Chromium happens to report false below the threshold,
+ * other engines don't), so it alone would start the loop with a sliver showing.
+ */
+export function loopInView(entry: { isIntersecting: boolean; intersectionRatio: number }): boolean {
+  return entry.isIntersecting && entry.intersectionRatio >= LOOP_IN_VIEW_RATIO
+}
+
 export type Clock = {
   now: () => number
   setTimeout: (callback: () => void, ms: number) => unknown

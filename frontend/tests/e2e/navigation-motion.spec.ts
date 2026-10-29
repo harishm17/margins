@@ -1,5 +1,15 @@
+import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { createCourse, signUpAndIn } from './helpers/loop'
+import { FIXTURE_PDF } from './helpers/seed-demo'
+
+/** Scrolls so only the top fifth of the loop (steps and screenshot) shows, at the bottom of the window. */
+const showLoopSliver = (page: Page) =>
+  page.evaluate(() => {
+    const zone = document.querySelector('[role="tablist"]')!.closest('.lg\\:grid') as HTMLElement
+    const rect = zone.getBoundingClientRect()
+    window.scrollBy(0, rect.top - window.innerHeight + rect.height * 0.2)
+  })
 
 // In-page links, the phone menu on the public pages, the landing loop's auto-advance and the toasts'
 // place on a phone.
@@ -151,4 +161,83 @@ test.describe('on a touch phone', () => {
     await expect(dialog.locator('kbd')).toHaveCount(2)
     for (const key of await dialog.locator('kbd').all()) await expect(key).toBeHidden()
   })
+})
+
+test('search keeps two files with the same name apart', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await signUpAndIn(page, 'palette-files')
+  const { courseId } = await createCourse(page, 'Palette course', [{ name: 'Sets' }])
+  await page.goto(`/courses/${courseId}/materials`)
+  const pdf = { name: 'notes.pdf', mimeType: 'application/pdf', buffer: readFileSync(FIXTURE_PDF) }
+  await page.getByLabel('Choose files to upload').setInputFiles([pdf, pdf])
+  await expect(page.getByText('Every file here has been read.')).toBeVisible({ timeout: 60_000 })
+  await page.reload()
+  await expect(page.getByText('notes.pdf', { exact: true })).toHaveCount(2)
+
+  await page.keyboard.press('Control+k')
+  await page.getByPlaceholder(/^Search topics/).fill('notes.pdf')
+  const files = page.locator('[cmdk-group]').filter({ hasText: 'Files' }).locator('[cmdk-item]')
+  await expect(files).toHaveCount(2)
+  const selected = page.locator('[cmdk-item][data-selected="true"]')
+  await expect(selected).toHaveCount(1)
+  await expect(files.nth(0)).toHaveAttribute('data-selected', 'true')
+  await page.keyboard.press('ArrowDown')
+  await expect(selected).toHaveCount(1)
+  await expect(files.nth(1)).toHaveAttribute('data-selected', 'true')
+
+  // Both files remembered under Recent (what opening each one stores): two entries, still apart.
+  const ids = await files.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-value') ?? ''))
+  expect(new Set(ids).size).toBe(2)
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await page.evaluate((recentIds) => localStorage.setItem('margins:recent', JSON.stringify(recentIds)), ids)
+  await page.keyboard.press('Control+k')
+  const recent = page.locator('[cmdk-group]').filter({ hasText: 'Recent' }).locator('[cmdk-item]')
+  await expect(recent).toHaveCount(2)
+  await expect(page.locator('[cmdk-item][data-selected="true"]')).toHaveCount(1)
+})
+
+test('the loop waits until at least half of it is in view, and pauses again below that', async ({ page }) => {
+  await page.clock.install()
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/')
+  const tabs = page.getByRole('tablist', { name: 'From your files to exam day' }).getByRole('tab')
+  const selected = () => tabs.evaluateAll((nodes) => nodes.findIndex((node) => node.getAttribute('aria-selected') === 'true'))
+  await showLoopSliver(page)
+  await page.mouse.move(5, 5)
+  await page.clock.runFor(16_000)
+  expect(await selected()).toBe(0)
+
+  await page.evaluate(() => document.getElementById('how-it-works')!.scrollIntoView())
+  await page.waitForTimeout(200)
+  await page.clock.runFor(7100)
+  await expect.poll(selected).toBe(1)
+  await showLoopSliver(page)
+  await page.waitForTimeout(200)
+  await page.clock.runFor(16_000)
+  expect(await selected()).toBe(1)
+})
+
+test('when the pass ends with focus on Pause, focus moves to the open step', async ({ page }) => {
+  await page.clock.install()
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/')
+  await page.locator('#how-it-works').scrollIntoViewIfNeeded()
+  await page.mouse.move(5, 5)
+  await page.getByRole('button', { name: 'Pause the steps' }).focus()
+  await page.clock.runFor(7000 * 6 + 500)
+  await expect(page.getByRole('button', { name: /the steps$/ })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Upload your files' })).toBeFocused()
+})
+
+test('a fragment that is not a section, or does not decode, is left alone', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  for (const fragment of ['50%', 'nothing-here']) {
+    await page.goto(`/#${fragment}`)
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await page.waitForTimeout(300)
+    expect(new URL(page.url()).hash).toBe(`#${fragment}`)
+  }
+  expect(errors).toEqual([])
 })

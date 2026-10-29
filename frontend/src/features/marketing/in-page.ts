@@ -37,9 +37,17 @@ export function shouldScrollInPage(click: ClickLike, where: { pathname: string |
   return where.pathname === LANDING_PATH
 }
 
-/** The section a URL hash points to (`#faq`), or null when it isn't one of them. */
+/**
+ * The section a URL hash points to (`#faq`), or null when it isn't one of them. The hash comes from
+ * the address bar, so anything goes: one that doesn't decode (`#50%`) is ignored, never thrown.
+ */
 export function sectionFromHash(hash: string): SectionId | null {
-  const id = decodeURIComponent(hash.replace(/^#/, ''))
+  let id: string
+  try {
+    id = decodeURIComponent(hash.replace(/^#/, ''))
+  } catch {
+    return null
+  }
   return (SECTION_IDS as readonly string[]).includes(id) ? (id as SectionId) : null
 }
 

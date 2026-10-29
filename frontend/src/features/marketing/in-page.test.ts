@@ -76,3 +76,11 @@ test('a section that is not on the page reports false, so the link navigates nor
   assert.equal(scrollToSection('faq', env), false)
   assert.equal(calls.scroll.length, 0)
 })
+
+test('a fragment that does not decode, or names no section, is ignored instead of throwing', () => {
+  for (const hash of ['#50%', '#%E0%A4%A', '#%', '#faq%', '#unknown', '#FAQ']) {
+    assert.doesNotThrow(() => sectionFromHash(hash), hash)
+    assert.equal(sectionFromHash(hash), null, hash)
+  }
+  assert.equal(sectionFromHash('#%66aq'), 'faq')
+})

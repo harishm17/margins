@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { LOOP_AUTOPLAY, LOOP_STEP_MS, LoopAutoplay, type AutoplayState, type Clock } from './loop-autoplay'
+import { LOOP_AUTOPLAY, LOOP_STEP_MS, LoopAutoplay, loopInView, type AutoplayState, type Clock } from './loop-autoplay'
 
 /** A clock the test moves by hand. */
 function fakeClock() {
@@ -162,4 +162,12 @@ test('the state tells the UI whether the line is filling', () => {
   assert.deepEqual(states.at(-1), { index: 0, running: true, active: true, userPaused: false })
   autoplay.setHovered(true)
   assert.deepEqual(states.at(-1), { index: 0, running: false, active: true, userPaused: false })
+})
+
+test('in view means at least half shown, whatever isIntersecting says', () => {
+  assert.equal(loopInView({ isIntersecting: true, intersectionRatio: 0.2 }), false)
+  assert.equal(loopInView({ isIntersecting: true, intersectionRatio: 0.49 }), false)
+  assert.equal(loopInView({ isIntersecting: true, intersectionRatio: 0.5 }), true)
+  assert.equal(loopInView({ isIntersecting: true, intersectionRatio: 1 }), true)
+  assert.equal(loopInView({ isIntersecting: false, intersectionRatio: 0.6 }), false)
 })

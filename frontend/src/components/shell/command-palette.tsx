@@ -26,6 +26,7 @@ import {
 import { DialogOverlay } from '@/components/ui/dialog'
 import { Kbd, KeyHint } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
+import { paletteFilter, paletteItem } from './palette-search'
 import { useShell } from './shell-provider'
 
 type Entry = {
@@ -164,8 +165,7 @@ function PaletteBody() {
     return (
       <Command.Item
         key={prefix + entry.id}
-        value={`${prefix}${entry.label} ${entry.hint ?? ''}`}
-        keywords={entry.keywords}
+        {...paletteItem(entry, prefix)}
         onSelect={() => select(entry)}
         className={itemClass}
       >
@@ -178,7 +178,7 @@ function PaletteBody() {
   }
 
   return (
-    <Command loop label="Search and commands">
+    <Command loop label="Search and commands" filter={paletteFilter}>
             <div className="flex h-12 items-center gap-3 border-b border-border px-4">
               <MagnifyingGlass aria-hidden="true" className="size-[18px] shrink-0 text-fg-3" />
               <Command.Input
@@ -198,7 +198,7 @@ function PaletteBody() {
                   {recentEntries.map((entry) => (
                     <Command.Item
                       key={`recent:${entry.id}`}
-                      value={`recent ${entry.label} ${entry.hint ?? ''}`}
+                      {...paletteItem(entry, 'recent:')}
                       onSelect={() => select(entry)}
                       className={itemClass}
                     >

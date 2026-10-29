@@ -7,7 +7,7 @@ import { Pause, Play } from '@phosphor-icons/react/dist/ssr'
 import { IconButton } from '@/components/ui/icon-button'
 import { cn } from '@/lib/utils'
 import { type LoopStep } from './content'
-import { LOOP_AUTOPLAY, LOOP_STEP_MS, LoopAutoplay, type AutoplayState } from './loop-autoplay'
+import { LOOP_AUTOPLAY, LOOP_IN_VIEW_RATIO, LOOP_STEP_MS, LoopAutoplay, loopInView, type AutoplayState } from './loop-autoplay'
 import { Shot, shotSrc } from './shot'
 
 const FRAME = 'overflow-hidden rounded-card border border-border bg-surface'
@@ -56,7 +56,8 @@ function useLoopAutoplay(steps: number, zone: React.RefObject<HTMLElement | null
     controller.current = autoplay
     autoplay.setHidden(document.hidden)
 
-    const observer = new IntersectionObserver(([entry]) => autoplay.setInView(entry.isIntersecting), { threshold: 0.5 })
+    // Thresholds at 0 and at half, so a callback comes both when it reaches half and when it drops below.
+    const observer = new IntersectionObserver(([entry]) => autoplay.setInView(loopInView(entry)), { threshold: [0, LOOP_IN_VIEW_RATIO] })
     observer.observe(element)
     const onVisibility = () => autoplay.setHidden(document.hidden)
     const onMedia = () => {
@@ -115,7 +116,9 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
   const [visited, setVisited] = React.useState<Set<number>>(() => new Set([0]))
   const tabs = React.useRef<(HTMLButtonElement | null)[]>([])
   const zone = React.useRef<HTMLDivElement>(null)
-  const pauseButton = React.useRef<HTMLButtonElement>(null)
+  // Whether the pause button holds focus. Read after it unmounts (removing an element fires no blur), so
+  // it is tracked from its own focus and blur events rather than from document.activeElement.
+  const pauseHadFocus = React.useRef(false)
 
   // Auto-advance shows a step exactly as a click does, but never moves focus.
   const show = React.useCallback((index: number) => {
@@ -133,7 +136,10 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
 
   // The pause button goes when auto-advance ends; focus on it moves to the open step instead of the page.
   React.useEffect(() => {
-    if (!autoplaying && pauseButton.current && document.activeElement === pauseButton.current) tabs.current[active]?.focus()
+    if (autoplaying || !pauseHadFocus.current) return
+    pauseHadFocus.current = false
+    const lost = !document.activeElement || document.activeElement === document.body
+    if (lost) tabs.current[active]?.focus()
   }, [autoplaying, active])
 
   const select = (index: number, focus = false) => {
@@ -223,7 +229,12 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
           </div>
           {autoplaying ? (
             <IconButton
-              ref={pauseButton}
+              onFocus={() => {
+                pauseHadFocus.current = true
+              }}
+              onBlur={() => {
+                pauseHadFocus.current = false
+              }}
               label={userPaused ? 'Play the steps' : 'Pause the steps'}
               icon={userPaused ? <Play weight="fill" /> : <Pause weight="fill" />}
               variant="ghost"
