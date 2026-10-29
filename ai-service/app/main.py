@@ -1,4 +1,4 @@
-"""Main FastAPI application for StudyBuddy AI service."""
+"""Main FastAPI application for Margins AI service."""
 import asyncio
 from contextlib import asynccontextmanager
 import logging
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 async def _run_startup_checks() -> None:
     """Initialize services on startup."""
-    logger.info("StudyBuddy AI Service starting in %s mode", settings.ENVIRONMENT)
+    logger.info("Margins AI service starting in %s mode", settings.ENVIRONMENT)
     logger.info("LLM Provider: %s", settings.LLM_PROVIDER)
     if not settings.llm_configured:
         logger.warning("ANTHROPIC_API_KEY is not set: generation, grading and validation calls will fail")
@@ -57,7 +57,7 @@ async def _run_shutdown() -> None:
     from app.db.connection import close_db_pool
 
     await close_db_pool()
-    logger.info("StudyBuddy AI Service shutting down")
+    logger.info("Margins AI service shutting down")
 
 
 @asynccontextmanager
@@ -78,7 +78,7 @@ async def lifespan(_: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="StudyBuddy AI Service",
+    title="Margins AI service",
     description="AI microservice for document processing, content generation, and exam grading",
     version="0.1.0",
     docs_url="/docs" if settings.is_development else None,

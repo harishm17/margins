@@ -1,1 +1,1 @@
-"""StudyBuddy AI Service."""
+"""Margins AI service."""

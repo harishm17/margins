@@ -113,7 +113,7 @@ async def dependency_health_check():
 async def root():
     """Root endpoint."""
     return {
-        "service": "StudyBuddy AI Service",
+        "service": "Margins AI service",
         "version": "0.1.0",
         "status": "running",
     }

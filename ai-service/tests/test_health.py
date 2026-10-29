@@ -19,5 +19,5 @@ def test_root_endpoint():
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.json()
-    assert body["service"] == "StudyBuddy AI Service"
+    assert body["service"] == "Margins AI service"
     assert body["status"] == "running"

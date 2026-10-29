@@ -1,6 +1,6 @@
 """Shared-secret check for calls into the AI service.
 
-Only the StudyBuddy frontend (and this service calling itself) may start jobs or voice
+Only the Margins web app (and this service calling itself) may start jobs or voice
 sessions. Every router except health checks depends on `require_internal_token`.
 """
 import hmac
