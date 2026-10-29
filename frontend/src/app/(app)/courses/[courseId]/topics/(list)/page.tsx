@@ -1,11 +1,12 @@
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Page } from '@/components/shell/page'
 import { courseSummary, reviewTiming, studyPath } from '@/features/course/summary'
 import { TopicEditor } from '@/features/course/topic-editor'
 import { TopicsList } from '@/features/course/topics-list'
 import { countMasteryLevels, masteryLevel } from '@/lib/mastery'
 import { getTopicsData } from '@/server/queries/course'
+import { getCourseShell } from '@/server/queries/courses'
 import { requireUser } from '@/server/session'
 import { getTimeZone } from '@/server/timezone'
 
@@ -21,12 +22,17 @@ export default async function TopicsPage({
   const user = await requireUser()
   const { courseId } = await params
   const { edit } = await searchParams
+  const course = await getCourseShell(user.id, courseId)
+  if (!course) notFound()
+  // The editor is a place in the URL, not something worked out from the topics: until the list is
+  // confirmed the page sends the student there, so the refresh after adding or merging a topic can
+  // never swap the editor for the list mid-edit. Confirm (not adding topics) finishes the list.
+  if (edit !== '1' && !course.setup.topics.listConfirmed) redirect(`/courses/${courseId}/topics?edit=1`)
+
   const data = await getTopicsData(user.id, courseId)
   if (!data) notFound()
 
-  const editing = data.hasUnconfirmed || edit === '1' || data.topics.length === 0
-
-  if (editing) {
+  if (edit === '1') {
     return (
       <Page>
         <TopicEditor
@@ -46,7 +52,7 @@ export default async function TopicsPage({
           extractFailure={data.extractFailure}
           filesReady={data.materialsReady}
           filesProcessing={data.materialsProcessing}
-          allConfirmed={!data.hasUnconfirmed && data.topics.length > 0}
+          topicList={data.setup.topics}
         />
       </Page>
     )

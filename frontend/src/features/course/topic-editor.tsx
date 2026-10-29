@@ -38,17 +38,22 @@ import { toast } from '@/components/ui/toaster'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { pluralize } from '@/lib/format'
 import { moveInOrder } from '@/lib/topics/ordering'
-import { groupTopicsByUnit } from '@/lib/topics/units'
+import { groupTopicsByUnit, unitForRetry } from '@/lib/topics/units'
+import { topicOriginSentence, type TopicListState } from '@/lib/course-setup'
 import type { JobRef } from '@/server/queries/course'
 import type { ShellUnit } from '@/server/queries/courses'
 import { MoveTopicDialog, UnitDialog } from './editor-dialogs'
 import { useExtraction } from './extraction'
+import { AiBlockedNote } from '@/features/ai/ai-status'
 import { TopicEditorRow, type EditorTopic, type MergeGroup } from './topic-editor-row'
 
 const NO_UNIT = 'none'
 const LAST = Number.MAX_SAFE_INTEGER
 
-const byOrder = <T extends { orderIndex: number }>(list: T[]) => [...list].sort((a, b) => a.orderIndex - b.orderIndex)
+/** A name typed into "Add a topic" that the server does not have yet. */
+type PendingAdd = { key: number; name: string; unitId: string | null; state: 'adding' | 'failed'; reason?: string }
+
+const byOrder =<T extends { orderIndex: number }>(list: T[]) => [...list].sort((a, b) => a.orderIndex - b.orderIndex)
 
 /** Gives every topic its place in the course order: units in order, each unit's topics, then the rest. */
 function renumber(topics: EditorTopic[], units: ShellUnit[]): EditorTopic[] {
@@ -65,8 +70,8 @@ type TopicEditorProps = {
   extractFailure: string | null
   filesReady: number
   filesProcessing: number
-  /** Every topic is confirmed: the editor was opened with ?edit=1. */
-  allConfirmed: boolean
+  /** The course's topic list as setup sees it (lib/course-setup.ts): confirmed or not, and where it came from. */
+  topicList: TopicListState
 }
 
 function SkeletonRows() {
@@ -154,10 +159,12 @@ export function TopicEditor({
   extractFailure,
   filesReady,
   filesProcessing,
-  allConfirmed,
+  topicList,
 }: TopicEditorProps) {
   const router = useRouter()
   const extraction = useExtraction(courseId, extractJob)
+  // Confirm is the only way to finish the list: adding topics by hand confirms those topics, not the list.
+  const listConfirmed = topicList.listConfirmed
 
   const [items, setItems] = React.useState(() => byOrder(serverTopics))
   const [unitItems, setUnitItems] = React.useState(() => byOrder(serverUnits))
@@ -181,11 +188,21 @@ export function TopicEditor({
   const [findAgainOpen, setFindAgainOpen] = React.useState(false)
   const [newName, setNewName] = React.useState('')
   const [newUnit, setNewUnit] = React.useState<string | null>(null)
-  const [adding, setAdding] = React.useState(false)
   const [confirming, setConfirming] = React.useState(false)
   const addRef = React.useRef<HTMLInputElement>(null)
   const refocus = React.useRef<string | null>(null)
   const queue = React.useRef<Promise<unknown>>(Promise.resolve())
+  // Names typed into "Add a topic" that the server does not have yet (being added, or failed).
+  const [adds, setAdds] = React.useState<PendingAdd[]>([])
+  // The same list, readable at once by work that awaits the queue (Confirm), before a re-render.
+  const addsRef = React.useRef<PendingAdd[]>([])
+  const nextAddKey = React.useRef(0)
+  const updateAdds = (change: (current: PendingAdd[]) => PendingAdd[]) => {
+    addsRef.current = change(addsRef.current)
+    setAdds(addsRef.current)
+  }
+  const failedAdds = adds.filter((item) => item.state === 'failed')
+  const addingCount = adds.length - failedAdds.length
 
   const groups = React.useMemo(() => groupTopicsByUnit(items, unitItems, { includeEmpty: true }), [items, unitItems])
   const hasUnits = unitItems.length > 0
@@ -308,44 +325,69 @@ export function TopicEditor({
   // The unit a new topic goes to: the student's pick while it still exists, else the last unit.
   const addTarget = newUnit && unitItems.some((unit) => unit.id === newUnit) ? newUnit : (unitItems[unitItems.length - 1]?.id ?? NO_UNIT)
 
-  async function addTopic(event: React.FormEvent) {
+  // Enter adds the topic and the field stays ready for the next one: it is cleared at once and never
+  // disabled (a disabled field drops focus and whatever is typed next). Each name typed is kept as a
+  // pending add, in the order typed, until the server has it; one that fails stays on screen with
+  // Retry and Remove, so a typed topic is never lost. Adds go to the server one after another.
+  function addTopic(event: React.FormEvent) {
     event.preventDefault()
     const name = newName.trim()
-    if (!name || adding) return
-    setAdding(true)
+    if (!name) return
+    setNewName('')
+    addRef.current?.focus()
     const unitId = hasUnits && addTarget !== NO_UNIT ? addTarget : null
-    try {
-      const result = await apiFetch<{ topic: { id: string; name: string; description: string | null; keywords: string[]; orderIndex: number; userConfirmed: boolean; unitId?: string | null } }>(
-        `/api/projects/${courseId}/topics`,
-        { method: 'POST', json: unitId ? { name, unitId } : { name } }
-      )
-      const topic = result.topic
-      setItems((current) =>
-        renumber(
-          [
-            ...current,
-            {
-              id: topic.id,
-              name: topic.name,
-              description: topic.description,
-              keywords: topic.keywords ?? [],
-              orderIndex: LAST,
-              confirmed: topic.userConfirmed,
-              unitId: topic.unitId ?? unitId,
-              sources: [],
-            },
-          ],
-          unitItems
+    const pending: PendingAdd = { key: nextAddKey.current++, name, unitId, state: 'adding' }
+    updateAdds((current) => [...current, pending])
+    sendAdd(pending)
+  }
+
+  function retryAdd(pending: PendingAdd) {
+    // The unit it was typed for may have been deleted since: send it to the current target then.
+    const unitId = unitForRetry(pending.unitId, unitItems.map((unit) => unit.id), hasUnits && addTarget !== NO_UNIT ? addTarget : null)
+    updateAdds((current) => current.map((item) => (item.key === pending.key ? { ...item, state: 'adding', unitId, reason: undefined } : item)))
+    sendAdd({ ...pending, unitId })
+  }
+
+  function removeAdd(pending: PendingAdd) {
+    updateAdds((current) => current.filter((item) => item.key !== pending.key))
+    addRef.current?.focus()
+  }
+
+  function sendAdd({ key, name, unitId }: PendingAdd) {
+    enqueue(async () => {
+      try {
+        const result = await apiFetch<{ topic: { id: string; name: string; description: string | null; keywords: string[]; orderIndex: number; userConfirmed: boolean; unitId?: string | null } }>(
+          `/api/projects/${courseId}/topics`,
+          { method: 'POST', json: unitId ? { name, unitId } : { name } }
         )
-      )
-      setNewName('')
-      router.refresh()
-      addRef.current?.focus()
-    } catch (error) {
-      toast.error(isApiError(error) ? error.message : "Couldn't add the topic. Try again.")
-    } finally {
-      setAdding(false)
-    }
+        const topic = result.topic
+        setItems((current) =>
+          renumber(
+            [
+              ...current.filter((item) => item.id !== topic.id),
+              {
+                id: topic.id,
+                name: topic.name,
+                description: topic.description,
+                keywords: topic.keywords ?? [],
+                orderIndex: LAST,
+                confirmed: topic.userConfirmed,
+                unitId: topic.unitId ?? unitId,
+                sources: [],
+              },
+            ],
+            unitItems
+          )
+        )
+        updateAdds((current) => current.filter((item) => item.key !== key))
+        setAnnouncement(`Added ${topic.name}`)
+        router.refresh()
+      } catch (error) {
+        const reason = isApiError(error) ? error.message : "Couldn't add the topic. Try again."
+        updateAdds((current) => current.map((item) => (item.key === key ? { ...item, state: 'failed', reason } : item)))
+        setAnnouncement(`Couldn't add ${name}`)
+      }
+    })
   }
 
   async function submitUnit(unit: ShellUnit | null, values: { title: string; weekLabel: string | null }) {
@@ -405,6 +447,14 @@ export function TopicEditor({
   async function confirmTopics() {
     setConfirming(true)
     try {
+      // Topics still being added (or moved) reach the server first, so the list confirmed is the one on screen.
+      await queue.current
+      // A topic that could not be added is still on screen: confirming now would leave it out.
+      if (addsRef.current.some((item) => item.state === 'failed')) {
+        toast.error('Some topics were not added. Retry or remove them, then confirm.')
+        setConfirming(false)
+        return
+      }
       await apiFetch(`/api/projects/${courseId}/topics/confirm`, { method: 'POST' })
       router.push(`/courses/${courseId}`)
       router.refresh()
@@ -428,14 +478,19 @@ export function TopicEditor({
     setArmed(null)
   }
 
-  const title = allConfirmed ? 'Edit topics' : 'Check the topics'
-  const description = hasUnits
-    ? allConfirmed
+  const title = listConfirmed ? 'Edit topics' : 'Check the topics'
+  // "Found" only describes topics that came from the files; a list made by hand says so.
+  const description = listConfirmed
+    ? hasUnits
       ? 'Rename, move, merge or remove topics and units. Changes save as you go.'
-      : 'We grouped what we found into units. Rename, move, merge or remove any. You can change them later.'
-    : allConfirmed
-      ? 'Rename, reorder, merge or remove topics. Changes save as you go.'
-      : 'We found these in your materials. Rename, merge or remove any. You can change them later.'
+      : 'Rename, reorder, merge or remove topics. Changes save as you go.'
+    : topicList.newSinceConfirm > 0
+      ? `${topicOriginSentence(topicList)} Rename, merge or remove any, then confirm.`
+      : topicList.extracted > 0
+        ? hasUnits
+          ? 'We grouped what we found into units. Rename, move, merge or remove any. You can change them later.'
+          : 'We found these in your materials. Rename, merge or remove any. You can change them later.'
+        : 'Add the topics you want to study, then confirm. You can change them later.'
 
   const unitIndex = (unit: ShellUnit) => unitItems.findIndex((item) => item.id === unit.id)
 
@@ -449,7 +504,7 @@ export function TopicEditor({
             <Button
               variant="secondary"
               icon={<ArrowsClockwise />}
-              disabled={running || filesReady === 0}
+              disabled={running || filesReady === 0 || !!extraction.blocked}
               onClick={() => setFindAgainOpen(true)}
             >
               Find again
@@ -491,12 +546,13 @@ export function TopicEditor({
         </div>
       ) : null}
 
-      {!running && !extraction.failed && extractFailure && items.length === 0 ? (
+      {!running && !extraction.failed && extractFailure ? (
         <InlineAlert
           tone="danger"
+          className={items.length > 0 || hasUnits ? 'mb-5' : undefined}
           title="We couldn't find topics"
           action={
-            <Button size="sm" variant="secondary" onClick={extraction.start} loading={extraction.starting}>
+            <Button size="sm" variant="secondary" onClick={extraction.start} loading={extraction.starting} disabled={!!extraction.blocked}>
               Try again
             </Button>
           }
@@ -505,15 +561,18 @@ export function TopicEditor({
         </InlineAlert>
       ) : null}
 
-      {!running && items.length === 0 && !hasUnits && !extractFailure ? (
+      {!running && items.length === 0 && adds.length === 0 && !hasUnits && !extractFailure ? (
         <EmptyState
           icon={<ListBullets />}
           title="No topics yet"
           action={
             filesReady > 0 ? (
-              <Button variant="primary" onClick={extraction.start} loading={extraction.starting}>
-                Find topics
-              </Button>
+              <div className="flex flex-col items-center gap-2">
+                <Button variant="primary" onClick={extraction.start} loading={extraction.starting} disabled={!!extraction.blocked}>
+                  Find topics
+                </Button>
+                <AiBlockedNote />
+              </div>
             ) : (
               <Button asChild variant="primary" icon={<Files />}>
                 <Link href={`/courses/${courseId}/materials`}>Add materials</Link>
@@ -622,6 +681,40 @@ export function TopicEditor({
         </div>
       ) : null}
 
+      {addingCount > 0 ? (
+        <ul aria-label="Topics being added" className="divide-y divide-border border-b border-border">
+          {adds
+            .filter((item) => item.state === 'adding')
+            .map((item) => (
+              <li key={item.key} className="flex items-center gap-3 py-3 text-small text-fg-3">
+                <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                <span className="shrink-0">Adding</span>
+              </li>
+            ))}
+        </ul>
+      ) : null}
+
+      {failedAdds.length > 0 ? (
+        <ul aria-label="Topics not added" className="mt-3 flex flex-col gap-2">
+          {failedAdds.map((item) => (
+            <li key={item.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-danger-soft px-3.5 py-2 text-danger-soft-fg">
+              <span className="min-w-0 flex-1 text-small">
+                <span className="text-body-strong">{item.name}</span> was not added.
+                {item.reason ? <span className="block text-caption">{item.reason}</span> : null}
+              </span>
+              <span className="flex shrink-0 gap-2">
+                <Button size="sm" variant="secondary" aria-label={`Retry ${item.name}`} onClick={() => retryAdd(item)}>
+                  Retry
+                </Button>
+                <Button size="sm" variant="ghost" aria-label={`Remove ${item.name}`} onClick={() => removeAdd(item)}>
+                  Remove
+                </Button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {!running ? (
         <form onSubmit={addTopic} className="mt-3 flex flex-wrap items-center gap-2">
           <Input
@@ -631,7 +724,6 @@ export function TopicEditor({
             icon={<Plus />}
             maxLength={255}
             value={newName}
-            disabled={adding}
             onChange={(event) => setNewName(event.target.value)}
             containerClassName="min-w-0 flex-1 basis-56 border-dashed"
           />
@@ -656,12 +748,12 @@ export function TopicEditor({
           <p className="text-small tabular text-fg-2">
             {running ? 'Finding topics' : hasUnits ? `${pluralize(items.length, 'topic')} in ${pluralize(unitItems.length, 'unit')}` : pluralize(items.length, 'topic')}
           </p>
-          {allConfirmed ? (
+          {listConfirmed ? (
             <Button asChild variant="primary">
               <Link href={`/courses/${courseId}/topics`}>Done</Link>
             </Button>
           ) : (
-            <Button variant="primary" onClick={confirmTopics} loading={confirming} disabled={items.length === 0 || running}>
+            <Button variant="primary" onClick={confirmTopics} loading={confirming} disabled={(items.length === 0 && addingCount === 0) || running || failedAdds.length > 0}>
               Confirm topics
             </Button>
           )}

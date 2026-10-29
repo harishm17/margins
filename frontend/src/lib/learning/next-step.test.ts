@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildPlan, type Plan, type PlanInput, type PlanTopic } from './plan'
 import { dueBoundary, isReviewDue, nextStep, nextStepForCourse, type DueTopic } from './next-step'
+import { deriveSetup, type CourseSetupInput } from '../course-setup'
 
 // Wednesday 21 October 2026, 15:00 UTC: 8:00 in Los Angeles. The student's today ends at 07:00 UTC
 // on the 22nd.
@@ -52,7 +53,20 @@ function dueOf(topics: PlanTopic[]): DueTopic[] {
 }
 
 const COURSE = 'c1'
-const active = { mode: 'active', step: null, label: null } as const
+
+/** Setup states the way the queries build them. */
+const setupOf = (overrides: Partial<CourseSetupInput>) =>
+  deriveSetup({
+    status: 'setup',
+    materialCount: 1,
+    topicCount: 2,
+    confirmedTopicCount: 0,
+    extractedTopicCount: 2,
+    confirmedExtractedTopicCount: 0,
+    contentBlockCount: 0,
+    extraction: 'done',
+    ...overrides,
+  })
 
 function step(topics: PlanTopic[], overrides: Partial<PlanInput> = {}) {
   const built = plan({ topics, ...overrides })
@@ -195,7 +209,7 @@ test('exam date passed: reviews still due come first, otherwise the date is aske
 test('a new course: setup comes first, then confirming topics, then the first topic', () => {
   const setup = nextStepForCourse({
     courseId: COURSE,
-    setup: { mode: 'setup', step: 1, label: 'Upload materials' },
+    setup: setupOf({ materialCount: 0, topicCount: 0, extractedTopicCount: 0, extraction: 'none' }),
     plan: null,
     due: [],
     now: NOW,
@@ -221,6 +235,71 @@ test('a new course: setup comes first, then confirming topics, then the first to
   assert.equal(fresh.action?.verb, 'Start')
 })
 
+test('topics added by hand: setup asks to confirm them, even though a plan could be built from them', () => {
+  const topics = [
+    topic('graphs', { orderIndex: 0, learned: false, started: false, quizzed: false, mastery: null }),
+    topic('hashing', { orderIndex: 1, learned: false, started: false, quizzed: false, mastery: null }),
+  ]
+  const manual = { topicCount: 2, confirmedTopicCount: 2, extractedTopicCount: 0, extraction: 'failed' as const }
+  const before = nextStepForCourse({
+    courseId: COURSE,
+    setup: setupOf(manual),
+    plan: plan({ topics }),
+    due: [],
+    now: NOW,
+    timeZone: ZONE,
+  })
+  assert.equal(before.kind, 'setup')
+  assert.equal(before.title, 'Confirm topics')
+  assert.equal(before.action?.href, '/courses/c1')
+
+  // After Confirm (step 3, no content yet) the plan's first topic is up next: Home moves on.
+  const after = nextStepForCourse({
+    courseId: COURSE,
+    setup: setupOf({ ...manual, status: 'active' }),
+    plan: plan({ topics }),
+    due: [],
+    now: NOW,
+    timeZone: ZONE,
+  })
+  assert.equal(after.kind, 'work')
+  assert.equal(after.title, 'Learn graphs')
+})
+
+test('a failed search for topics is not called "finding"', () => {
+  const failed = nextStepForCourse({
+    courseId: COURSE,
+    setup: setupOf({ topicCount: 0, extractedTopicCount: 0, extraction: 'failed' }),
+    plan: null,
+    due: [],
+    now: NOW,
+    timeZone: ZONE,
+  })
+  assert.equal(failed.kind, 'setup')
+  assert.equal(failed.title, 'Add topics')
+})
+
+test('new topics found in a confirmed course: setup again until they are confirmed', () => {
+  const topics = [topic('graphs', { orderIndex: 0 })]
+  const pending = nextStepForCourse({
+    courseId: COURSE,
+    setup: setupOf({
+      status: 'topics_pending',
+      topicCount: 3,
+      confirmedTopicCount: 1,
+      extractedTopicCount: 3,
+      confirmedExtractedTopicCount: 1,
+      contentBlockCount: 4,
+    }),
+    plan: plan({ topics }),
+    due: [],
+    now: NOW,
+    timeZone: ZONE,
+  })
+  assert.equal(pending.kind, 'setup')
+  assert.equal(pending.title, 'Review topics')
+})
+
 test('the three screens agree: same due count whatever the plan says', () => {
   const topics = [
     topic('graphs', { orderIndex: 0, reviewDueAt: daysAgo(2) }),
@@ -230,4 +309,18 @@ test('the three screens agree: same due count whatever the plan says', () => {
   const spent = step(topics, { dailyMinutes: 10, doneToday: [{ kind: 'quiz', topicId: 'graphs' }] })
   assert.equal(free.dueCount, 2)
   assert.equal(spent.dueCount, 2)
+})
+
+test('the last file deleted after Confirm, nothing written yet: upload comes first, not the plan', () => {
+  const topics = [topic('graphs', { orderIndex: 0, learned: false, started: false, quizzed: false, mastery: null })]
+  const step = nextStepForCourse({
+    courseId: COURSE,
+    setup: setupOf({ status: 'active', materialCount: 0, topicCount: 1, confirmedTopicCount: 1, extractedTopicCount: 1, confirmedExtractedTopicCount: 1 }),
+    plan: plan({ topics }),
+    due: [],
+    now: NOW,
+    timeZone: ZONE,
+  })
+  assert.equal(step.kind, 'setup')
+  assert.equal(step.title, 'Upload materials')
 })
