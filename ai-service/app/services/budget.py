@@ -3,8 +3,9 @@ everyone together.
 
 Spend is read from the `llm_usage_events` ledger, which is append-only: a row is written when a
 job attempt or a chat answer has cost something, and nothing deletes it when the job, thread or
-project it came from is deleted (only deleting the user does). So removing things cannot lower
-the day's total. A "day" is the current UTC day. The check runs before a call starts, so one
+project it came from is deleted. Deleting an account unlinks its rows (user_id becomes NULL)
+rather than deleting them, so they still count toward the global cap. So removing things cannot
+lower the day's total. A "day" is the current UTC day. The check runs before a call starts, so one
 call can end a little over the cap.
 
 Sign-up is open and the API key is shared, so on top of the per-user cap there is a global one
@@ -34,9 +35,14 @@ async def record_usage_event(
     output_tokens: int,
     cost_usd: float,
 ) -> None:
-    """Append one row to the ledger. `source` is 'job' or 'chat'; nothing is written for a call
-    that cost nothing. Never raises: a ledger failure must not fail the work that was billed
-    (a retry would bill it again), so it is logged loudly instead."""
+    """Append one row to the ledger. `source` is 'job', 'chat' or 'voice'; nothing is written for
+    a call that cost nothing. Never raises: a ledger failure must not fail the work that was billed
+    (a retry would bill it again), so it is logged loudly instead.
+
+    A call that finishes after its account was deleted (a job that was already running) is kept
+    too: a trigger on the table (migration 20261121000000_account_deletion) clears the user,
+    project and source ids instead of letting the foreign key refuse the row, the same rule for the
+    web app's chat route. So the money still counts toward the global daily cap."""
     if cost_usd <= 0 and input_tokens <= 0 and output_tokens <= 0:
         return
     try:

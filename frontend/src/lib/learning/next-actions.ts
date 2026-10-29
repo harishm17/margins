@@ -34,7 +34,7 @@ const TYPE_BY_KIND: Record<PlanItem['kind'], NextAction['type']> = {
 }
 
 /** What to do next while the course is being set up, or null once it is set up. */
-export function setupNextAction(courseId: string, setup: CourseSetup, topicCount: number): NextAction | null {
+export function setupNextAction(courseId: string, setup: Omit<CourseSetup, 'topics'>, topicCount: number): NextAction | null {
   if (setup.mode === 'active') return null
   if (setup.step === 1) {
     return {

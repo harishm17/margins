@@ -6,7 +6,6 @@
  * events, then `saved`. Errors before the stream starts are ordinary JSON errors.
  */
 import { NextRequest, NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -14,7 +13,6 @@ import prisma from '@/lib/prisma'
 import { ApiErrorCode, apiError, apiInvalidInput, apiNotFound, apiUnauthorized, zodDetails } from '@/lib/api/errors'
 import { createRateLimiter } from '@/lib/api/rate-limit'
 import { chatErrorMessage } from '@/lib/chat/errors'
-import { toStoredCitations } from '@/lib/chat/citations'
 import {
   MAX_QUESTION_CHARS,
   errorCodeFromResponse,
@@ -22,7 +20,8 @@ import {
   titleFromQuestion,
   toHistoryTurns,
 } from '@/lib/chat/server'
-import { relayChatStream, type ChatStorage, type UsageInfo } from '@/lib/chat/stream'
+import { relayChatStream } from '@/lib/chat/stream'
+import { createChatStorage } from '@/server/chat-storage'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -152,73 +151,13 @@ export async function POST(
     return apiError(ApiErrorCode.INTERNAL_ERROR, 'Could not save your question. Try again.', undefined, 500)
   }
   const activeThread = thread
-
-  // The ledger row is written in the same transaction as the message it pays for. The daily
-  // budget sums the ledger, not the messages, so deleting a thread cannot lower it.
-  const ledgerRow = (usage: UsageInfo, sourceId: string) => ({
+  const storage = createChatStorage(prisma, {
     userId,
     projectId,
-    source: 'chat',
-    sourceId,
-    models: usage.model,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    costUsd: usage.costUsd.toFixed(6),
-    createdAt: new Date(),
+    threadId: activeThread.id,
+    userMessageId,
+    isNewThread,
   })
-
-  const storage: ChatStorage = {
-    async saveAnswer(record) {
-      return prisma.$transaction(async (tx) => {
-        const message = await tx.chatMessage.create({
-          data: {
-            threadId: activeThread.id,
-            role: 'assistant',
-            content: record.text,
-            citations: toStoredCitations(record.sources, record.marks) as unknown as Prisma.InputJsonValue,
-            llmInputTokens: record.usage.inputTokens,
-            llmOutputTokens: record.usage.outputTokens,
-            llmCostUsd: record.usage.costUsd.toFixed(6),
-          },
-          select: { id: true },
-        })
-        if (record.usage.costUsd > 0 || record.usage.inputTokens > 0 || record.usage.outputTokens > 0) {
-          await tx.llmUsageEvent.create({ data: ledgerRow(record.usage, message.id) })
-        }
-        await tx.chatThread.update({ where: { id: activeThread.id }, data: { updatedAt: new Date() } })
-        return message.id
-      })
-    },
-    async recordFailure(code, usage) {
-      if (usage && usage.costUsd > 0) {
-        // The model ran and was billed. Keep a note, and a ledger row, so the cost counts
-        // toward the daily budget.
-        await prisma.$transaction(async (tx) => {
-          const note = await tx.chatMessage.create({
-            data: {
-              threadId: activeThread.id,
-              role: 'error',
-              content: chatErrorMessage(code).message,
-              llmInputTokens: usage.inputTokens,
-              llmOutputTokens: usage.outputTokens,
-              llmCostUsd: usage.costUsd.toFixed(6),
-            },
-            select: { id: true },
-          })
-          await tx.llmUsageEvent.create({ data: ledgerRow(usage, note.id) })
-        })
-        return
-      }
-      // Nothing was billed: drop the question so the thread has no unanswered turn (and a new
-      // thread that never got an answer goes with it).
-      await prisma.chatMessage.delete({ where: { id: userMessageId } }).catch(() => {})
-      if (isNewThread) {
-        await prisma.chatThread
-          .deleteMany({ where: { id: activeThread.id, messages: { none: {} } } })
-          .catch(() => {})
-      }
-    },
-  }
 
   const stream = relayChatStream({
     head: [

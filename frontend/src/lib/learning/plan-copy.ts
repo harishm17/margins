@@ -1,4 +1,5 @@
-import type { Plan, PlanItem } from './plan'
+import { EXAM_DAY_REVIEWS, FINAL_DAY_REVIEWS, MIN_PART_MINUTES, type Plan, type PlanItem } from './plan'
+import { minutesLabel } from './plan-settings'
 
 /** A plan item in the words, button and link the UI shows. */
 export type DescribedPlanItem = {
@@ -19,6 +20,8 @@ export type DescribedPlanItem = {
   done: boolean
   /** "Part 1 of 2", or null. */
   partLabel: string | null
+  /** A full mock exam longer than its day: "Longer than your usual 45 minutes", or null. */
+  overBudgetLabel: string | null
 }
 
 const eta = (minutes: number) => `About ${minutes} min`
@@ -44,8 +47,18 @@ export function planItemHref(item: PlanItem, courseId: string): string {
   }
 }
 
-/** Names the copy can use, so a row says more than "Read the notes". */
-export type DescribeContext = { unitTitles?: Record<string, string> }
+/** Names the copy can use, so a row says more than "Read the notes", and the plan's daily minutes. */
+export type DescribeContext = { unitTitles?: Record<string, string>; dailyMinutes?: number }
+
+/**
+ * Why a mock exam is marked as longer than its day: longer than the daily minutes, or (today, after
+ * other work is done) longer than the time that is left.
+ */
+export function overBudgetLabel(item: Pick<PlanItem, 'overBudget' | 'minutes'>, dailyMinutes?: number): string | null {
+  if (!item.overBudget) return null
+  if (dailyMinutes === undefined) return 'Longer than your usual study time'
+  return item.minutes > dailyMinutes ? `Longer than your usual ${minutesLabel(dailyMinutes)}` : 'Longer than the time left today'
+}
 
 const percent = (mastery: number) => `${Math.round(mastery * 100)}%`
 
@@ -75,6 +88,7 @@ export function describePlanItem(item: PlanItem, courseId: string, context: Desc
     minutes: item.minutes,
     done: item.done,
     partLabel: item.part ? `Part ${item.part.number} of ${item.part.of}` : null,
+    overBudgetLabel: overBudgetLabel(item, context.dailyMinutes),
   }
   switch (item.kind) {
     case 'learn': {
@@ -117,6 +131,39 @@ export function dayLabel(day: string, options: { long?: boolean } = {}): string 
   return `${options.long ? weekday : weekday.slice(0, 3)}, ${MONTHS[month - 1]} ${date}`
 }
 
+/** A closed day's line: "Learn Sorting", or "Quiz: Sorting and 2 more tasks" (the count is of tasks, not topics). */
+export function daySummary(titles: string[]): string {
+  if (titles.length === 0) return 'Nothing planned'
+  if (titles.length === 1) return titles[0]
+  const more = titles.length - 1
+  return `${titles[0]} and ${more} more ${more === 1 ? 'task' : 'tasks'}`
+}
+
+/** Why the too-long topics are not in the plan. */
+export const tooLongText = (dailyMinutes: number, count: number): string =>
+  `${count === 1 ? 'This does' : 'These do'} not fit in ${minutesLabel(dailyMinutes)} a day, even split into parts of at least ${MIN_PART_MINUTES} minutes. Add study time to fit ${count === 1 ? 'it' : 'them'}.`
+
+const nameList = (names: string[]) => (names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`)
+
+/**
+ * The notice for reviews that found no day with room before the exam. The advice matches the cause:
+ * "add study time" only when every day's minutes are used; when the last two days' limit on reviews is
+ * what stopped it, more minutes would not help, so it says so.
+ */
+export function reviewsNotScheduledText(entries: { name: string; reason: 'minutes' | 'final_limit' }[]): string {
+  const named = (reason: 'minutes' | 'final_limit') => entries.filter((entry) => entry.reason === reason).map((entry) => entry.name)
+  const minutes = named('minutes')
+  const limited = named('final_limit')
+  const parts: string[] = []
+  if (minutes.length > 0) parts.push(`No room before your exam to review ${nameList(minutes)}. Add study time to fit ${minutes.length === 1 ? 'it' : 'them'} in.`)
+  if (limited.length > 0) {
+    parts.push(
+      `${nameList(limited)} ${limited.length === 1 ? 'is' : 'are'} not in the plan for review: the day before your exam holds ${FINAL_DAY_REVIEWS} reviews and the exam day ${EXAM_DAY_REVIEWS}, and no earlier day is left. More study time will not change that.`
+    )
+  }
+  return parts.join(' ')
+}
+
 /** "Oct 19 to Oct 25" for a week starting on `start`. */
 export function weekLabel(start: string): string {
   const [year, month, date] = start.split('-').map(Number)
@@ -138,13 +185,14 @@ export type UpNextData = {
 
 export function upNextFromPlan(plan: Plan, courseId: string): UpNextData {
   const today = plan.days.find((day) => day.isToday)
-  const described = (today?.items ?? []).map((item) => describePlanItem(item, courseId))
+  const context: DescribeContext = { dailyMinutes: plan.dailyMinutes }
+  const described = (today?.items ?? []).map((item) => describePlanItem(item, courseId, context))
   const upNext = described.filter((item) => !item.done)
   const next = upNext.length === 0 ? plan.days.find((day) => !day.isToday && day.items.some((item) => !item.done)) : null
   const first = next?.items.find((item) => !item.done)
   return {
     upNext,
     doneToday: described.filter((item) => item.done),
-    later: next && first ? { date: next.date, item: describePlanItem(first, courseId) } : null,
+    later: next && first ? { date: next.date, item: describePlanItem(first, courseId, context) } : null,
   }
 }

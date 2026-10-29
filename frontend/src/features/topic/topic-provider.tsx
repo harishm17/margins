@@ -4,16 +4,20 @@ import * as React from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from '@/components/ui/toaster'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { isKnownAiCode } from '@/lib/ai/messages'
 import { fillResetTime } from '@/lib/budget/copy'
-import { describeJobFailure, parseContentTarget } from '@/lib/jobs/failure-message'
+import { parseContentTarget } from '@/lib/jobs/failure-message'
 import { fetchActiveJobs, type NormalizedJob } from '@/lib/jobs/poll-job'
+import { useAiStatus } from '@/features/ai/ai-status'
 import { useJobPolling } from '@/features/jobs/use-job-polling'
 import { autoStartDecision } from './auto-start'
-import { KIND_COPY, PREFLIGHT_MESSAGE } from './copy'
+import { KIND_COPY } from './copy'
 import { CONTENT_KINDS, CONTENT_TYPE_BY_KIND, KIND_BY_CONTENT_TYPE, type ContentKind } from './types'
 import type { GenerateMode } from './generate-preferences'
+import { noticeForCode, type GenerationNotice } from './notice'
+import { useTopicView } from './use-topic-view'
 
-export type GenerationNotice = { message: string; tone: 'danger' | 'warning' }
+export type { GenerationNotice } from './notice'
 
 export type RunningJob = {
   jobId: string
@@ -76,20 +80,23 @@ export function useGeneration(kind: ContentKind) {
   }
 }
 
+/** A refused start: the shared words for a known code, else what the route said. */
 function toNotice(error: unknown): GenerationNotice {
   if (isApiError(error)) {
+    if (isKnownAiCode(error.code)) {
+      const notice = noticeForCode(error.code)
+      return { ...notice, message: fillResetTime(notice.message) }
+    }
     // error.message is already filled in by apiFetch.
-    if (error.code === 'LLM_DAILY_BUDGET') return { message: error.message, tone: 'warning' }
-    if (error.status === 503) return { message: PREFLIGHT_MESSAGE, tone: 'danger' }
-    return { message: error.message, tone: 'danger' }
+    return { message: error.message, tone: 'danger', retry: true }
   }
-  return { message: 'Something went wrong. Try again.', tone: 'danger' }
+  return { message: 'Something went wrong. Try again.', tone: 'danger', retry: true }
 }
 
-const failureNotice = (job: NormalizedJob): GenerationNotice => ({
-  message: fillResetTime(describeJobFailure(job.errorCode, job.errorMessage, job.jobType ?? 'generate_content')),
-  tone: job.errorCode === 'LLM_DAILY_BUDGET' ? 'warning' : 'danger',
-})
+const failureNotice = (job: NormalizedJob): GenerationNotice => {
+  const notice = noticeForCode(job.errorCode, job.retryable)
+  return { ...notice, message: fillResetTime(notice.message) }
+}
 
 const JOB_TIMEOUT_MS = 180_000
 
@@ -131,6 +138,13 @@ export function TopicProvider({
 }: ProviderProps) {
   const router = useRouter()
   const { pollJob } = useJobPolling({ timeoutMs: JOB_TIMEOUT_MS })
+  const { blocked, report } = useAiStatus()
+  // The view on screen: a failure there shows in the view itself, so it gets no toast.
+  const view = useTopicView()
+  const viewRef = React.useRef(view)
+  React.useEffect(() => {
+    viewRef.current = view
+  })
   const [running, setRunning] = React.useState<TopicContextValue['running']>({})
   const [startError, setStartError] = React.useState<TopicContextValue['startError']>({})
   const [localFailure, setLocalFailure] = React.useState<TopicContextValue['failure']>({})
@@ -188,14 +202,16 @@ export function TopicProvider({
           delete next[kind]
           return next
         })
-        const notice = result.job
-          ? failureNotice(result.job)
-          : { message: describeJobFailure(null, null, 'generate_content'), tone: 'danger' as const }
+        report(result.job?.errorCode)
+        const notice = result.job ? failureNotice(result.job) : noticeForCode(null)
         setLocalFailure((current) => ({ ...current, [kind]: notice }))
-        toast.error(`${KIND_COPY[kind].failed}. Open it to try again.`)
+        // Only for a failure in another view of this topic: this one shows it in place.
+        if (viewRef.current !== kind) {
+          toast.error(`${KIND_COPY[kind].failed}.${notice.retry ? ' Open it to try again.' : ''}`)
+        }
       })
     },
-    [pollJob, router]
+    [pollJob, router, report]
   )
 
   // Follow this topic's jobs that are running on the server: ones started before this page
@@ -265,13 +281,14 @@ export function TopicProvider({
         else React.startTransition(() => router.refresh())
         return true
       } catch (error) {
+        if (isApiError(error)) report(error.code)
         setStartError((current) => ({ ...current, [kind]: toNotice(error) }))
         return false
       } finally {
         setStarting((current) => ({ ...current, [kind]: false }))
       }
     },
-    [topicId, track, router]
+    [topicId, track, router, report]
   )
 
   // A job the address names (?job=, from "Fresh review" on the review page) is followed from the start, so a
@@ -293,12 +310,13 @@ export function TopicProvider({
       else React.startTransition(() => router.refresh())
       return true
     } catch (error) {
+      if (isApiError(error)) report(error.code)
       setStartError((current) => ({ ...current, [kind]: toNotice(error) }))
       return false
     } finally {
       setStarting((current) => ({ ...current, [kind]: false }))
     }
-  }, [topicId, track, router])
+  }, [topicId, track, router, report])
 
   // Start the notes of a topic that has none, once the jobs already running have been found.
   const notesRunning = !!running.notes
@@ -309,6 +327,7 @@ export function TopicProvider({
       alreadyStarted: autoStarted.current,
       notesPresent,
       notesRunning,
+      aiBlocked: !!blocked,
     })
     if (decision === 'wait') return
     if (decision === 'skip') {
@@ -317,7 +336,7 @@ export function TopicProvider({
     }
     autoStarted.current = true
     void generate('notes', 'create', { prepare_rest: true, only_if_missing: true }).finally(() => setPreparingNotes(false))
-  }, [preparingNotes, activeChecked, notesPresent, notesRunning, generate])
+  }, [preparingNotes, activeChecked, notesPresent, notesRunning, blocked, generate])
 
   const prefetchNext = React.useCallback(() => {
     if (!next || next.hasNotes) return

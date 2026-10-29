@@ -218,3 +218,27 @@ describe('parseUsage', () => {
     assert.equal(parseUsage(null), null)
   })
 })
+
+describe('a failed answer leaves no conversation behind', () => {
+  it('tells the browser the question (and a new conversation) was removed', async () => {
+    // The reviewer's "failed chats are saved": the server dropped the question and the new
+    // thread, but the browser had already listed the thread from the `thread` event and was
+    // never told, so the conversation stayed in the list with no answer and no retry.
+    const { storage } = fakeStorage({
+      async recordFailure() {
+        return { discarded: true }
+      },
+    })
+    const events = await readAll(
+      relayChatStream({
+        head,
+        storage,
+        upstream: upstreamOf([{ type: 'error', code: 'LLM_CREDIT_EXHAUSTED', message: 'credit balance is too low', retryable: false }]),
+      })
+    )
+    const error = events.at(-1) as Record<string, unknown>
+    assert.equal(error.type, 'error')
+    assert.equal(error.discarded, true)
+    assert.doesNotMatch(String(error.message), /credit|Anthropic|key/i)
+  })
+})

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type APIResponse, type Page } from '@playwright/test'
+import { signIn } from './helpers/auth'
 import { withPrisma } from './helpers/db'
 import { FIXTURE_DOCX, FIXTURE_PDF } from './helpers/seed-demo'
 
@@ -8,7 +9,6 @@ import { FIXTURE_DOCX, FIXTURE_PDF } from './helpers/seed-demo'
 // the editor routes for units and topics. One account per run.
 const stamp = Date.now()
 const email = `structure-${stamp}@example.com`
-const password = 'structure-test-password'
 
 test.describe.configure({ mode: 'serial' })
 test.setTimeout(240_000)
@@ -32,12 +32,8 @@ async function upload(page: Page, category: string, filename: string, file: stri
 }
 
 test('upload content and a syllabus: roles are set and the plan has units and sources', async ({ page }) => {
-  await page.goto('/signup')
-  await page.getByLabel('Name').fill('Structure Tester')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/courses\/new\?welcome=1$/)
+  // The first sign-in makes the account.
+  await signIn(page, email)
 
   courseId = (await json(await page.request.post('/api/projects', { data: { name: `Structure ${stamp}` } }))).project.id
   // The syllabus goes first, so every other file is chunked before topic finding can start.
@@ -118,11 +114,7 @@ test('upload content and a syllabus: roles are set and the plan has units and so
 })
 
 test('the material role can be changed, and a syllabus or exam stops being a source', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/)
+  await signIn(page, email)
 
   const bad = await page.request.patch(`/api/materials/${materials.docx}`, { data: { role: 'homework' } })
   expect(bad.status()).toBe(400)
@@ -145,11 +137,7 @@ test('the material role can be changed, and a syllabus or exam stops being a sou
 })
 
 test('units: add, rename, move, delete; topics: move between units, prerequisites, add into a unit, merge', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/)
+  await signIn(page, email)
 
   const state = () =>
     withPrisma(async (prisma) => ({
@@ -236,11 +224,7 @@ test('units: add, rename, move, delete; topics: move between units, prerequisite
 })
 
 test('the topic page and the topics list show the course unchanged while it has units', async ({ page }) => {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/)
+  await signIn(page, email)
 
   await page.goto(`/courses/${courseId}/topics`)
   await expect(page.getByRole('heading', { level: 1, name: 'Check the topics' })).toBeVisible()

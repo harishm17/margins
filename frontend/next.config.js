@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  poweredByHeader: false,
   // The dev overlay badge sits on top of the sidebar account row.
   devIndicators: false,
   experimental: {
@@ -37,6 +38,8 @@ const nextConfig = {
         destination: 'https://studymargins.com/:path*',
         permanent: true,
       },
+      // Sign-in is Google only: one page for new and returning students. The query (?next=) is kept.
+      course('/signup', '/login'),
       course('/dashboard', '/home'),
       // Specific old pages first, then the generic prefix rule.
       tab('materials', 'materials'),
@@ -49,6 +52,21 @@ const nextConfig = {
       course('/projects/:id/voice-sprint', '/courses/:id/review'),
       course('/projects/:id', '/courses/:id'),
       course('/projects/:id/:rest*', '/courses/:id/:rest*'),
+    ]
+  },
+  // No CSP yet: inline theme and JSON-LD scripts would need nonces. Microphone stays allowed for voice practice.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), geolocation=(), payment=(), usb=(), browsing-topics=()' },
+        ],
+      },
     ]
   },
 }

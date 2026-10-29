@@ -1,17 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
-import { DEMO_EMAIL, DEMO_PASSWORD, demoIds } from './helpers/seed-demo'
+import { signIn } from './helpers/auth'
+import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
 
 // The accessibility and polish fixes: real 404s, the theme control, the review of a graded exam
 // (what a written answer was graded against, "Explain this mistake", one score everywhere).
 // Runs on the demo account and its graded mock exam, which global-setup.ts seeds.
-
-async function signIn(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(DEMO_EMAIL)
-  await page.getByLabel('Password', { exact: true }).fill(DEMO_PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/, { timeout: 60_000 })
-}
 
 /** Every graded attempt of the demo course's exams: [exam id, submission id]. Other specs add exams too. */
 async function gradedAttempts(page: Page, course: string): Promise<[string, string][]> {
@@ -39,7 +32,7 @@ async function openAttemptWithWrittenAnswer(page: Page, course: string): Promise
 
 test('an address that names nothing answers 404, in the app and in the exam shell', async ({ page }) => {
   const { course } = demoIds()
-  await signIn(page)
+  await signIn(page, DEMO_EMAIL)
   for (const path of [
     '/courses/not-a-uuid',
     `/courses/${course}/exams/not-a-uuid`,
@@ -59,7 +52,7 @@ test('an address that names nothing answers 404, in the app and in the exam shel
 })
 
 test('the theme is a visible choice in the account menu', async ({ page }) => {
-  await signIn(page)
+  await signIn(page, DEMO_EMAIL)
   await page.getByRole('button', { name: /account menu/i }).click()
   // Not behind a submenu: the three choices are in the menu itself.
   for (const name of ['Light', 'Dark', 'System']) {
@@ -74,7 +67,7 @@ test('the theme is a visible choice in the account menu', async ({ page }) => {
 
 test('a graded exam shows what was checked, and asks Ask to explain a miss', async ({ page }) => {
   const { course } = demoIds()
-  await signIn(page)
+  await signIn(page, DEMO_EMAIL)
   await openAttemptWithWrittenAnswer(page, course)
 
   // A written answer: the rubric, the model answer and a way to ask for another grading.
@@ -97,7 +90,7 @@ test('a graded exam shows what was checked, and asks Ask to explain a miss', asy
 
 test('the lobby and the results give the same score for an attempt', async ({ page }) => {
   const { course } = demoIds()
-  await signIn(page)
+  await signIn(page, DEMO_EMAIL)
   const [examId, submissionId] = (await gradedAttempts(page, course))[0]
   await page.goto(`/courses/${course}/exams/${examId}/results/${submissionId}`)
   const resultScore = (await page.getByRole('img', { name: /^Score / }).getAttribute('aria-label'))!.replace('Score ', '')

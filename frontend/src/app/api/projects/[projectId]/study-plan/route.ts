@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { isValidTimeZone } from '@/lib/learning/study-plan-time'
+import { readyToStudy } from '@/lib/course-setup'
 import {
+  ApiErrorCode,
+  apiError,
   apiInternal,
   apiInvalidInput,
   apiNotFound,
@@ -39,6 +42,10 @@ export async function GET(
     const data = await getPlanData(auth.user.id, projectId, timeZone)
     if (!data) {
       return apiNotFound('Project not found')
+    }
+    // Same rule as the Plan page: no plan until setup steps 1 and 2 are done (lib/course-setup.ts).
+    if (!readyToStudy(data.course.setup)) {
+      return apiError(ApiErrorCode.CONFLICT, 'Confirm the course topics to get a study plan', undefined, 409)
     }
     return NextResponse.json({
       generatedAt: new Date().toISOString(),

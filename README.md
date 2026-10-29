@@ -87,7 +87,7 @@ It also picked the model: [Sonnet and Haiku made maths errors and fell short of 
 
 ## Screenshots
 
-The product screenshots on the landing page, on the sign-in and sign-up pages and in this README are generated from the running app, so they never show an old navigation. [`frontend/scripts/capture-screens.ts`](frontend/scripts/capture-screens.ts) seeds a showcase student and course (written by hand in [`frontend/scripts/screens/`](frontend/scripts/screens/), no model output), signs in, and captures each screen in light and dark as WebP into `frontend/public/screens/`, with phone-sized crops for the landing page.
+The product screenshots on the landing page, on the sign-in page and in this README are generated from the running app, so they never show an old navigation. [`frontend/scripts/capture-screens.ts`](frontend/scripts/capture-screens.ts) seeds a showcase student and course (written by hand in [`frontend/scripts/screens/`](frontend/scripts/screens/), no model output), signs in, and captures each screen in light and dark as WebP into `frontend/public/screens/`, with phone-sized crops for the landing page.
 
 ```bash
 # a migrated database and the e2e stack (scripts/e2e-stack.sh start), then:
@@ -97,7 +97,7 @@ npm run screens -- --only plan,ask      # a few screens
 npm run screens -- --no-seed            # reuse the showcase account already in the database
 ```
 
-It only runs against a local web app and a local database (the showcase password is public), and needs no AI calls: nothing is generated while it runs.
+It only runs against a local web app and a local database, signs in with the test sign-in (below), and needs no AI calls: nothing is generated while it runs.
 
 ## Run it locally
 
@@ -111,6 +111,8 @@ docker compose up --build       # Postgres, web on :3000, ai on :8000
 
 cd frontend && npm install && npx prisma migrate deploy
 ```
+
+Students sign in with Google only. Locally, either set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` (an OAuth client with `http://localhost:3000/api/auth/callback/google` as a redirect URI), or set `ENABLE_TEST_LOGIN=true` for a test sign-in on `/login` that takes any `@example.com` address with no password. The e2e stack and the screenshot script use the test sign-in. It only works while `NEXTAUTH_URL` is on localhost, and the web app refuses to start with it set on any other site or on Railway.
 
 <details>
 <summary>Without Docker</summary>
@@ -140,13 +142,14 @@ NEXTAUTH_SECRET=...              # openssl rand -base64 32
 NEXTAUTH_URL=http://localhost:3000
 AI_SERVICE_URL=http://localhost:8000
 AI_INTERNAL_TOKEN=...            # openssl rand -hex 32, same value in both services
+GOOGLE_OAUTH_CLIENT_ID=...       # Google sign-in, the only way to sign in: production will not start without it
+GOOGLE_OAUTH_CLIENT_SECRET=...
 ```
 
 Optional:
 
 ```env
-GOOGLE_OAUTH_CLIENT_ID=...       # Google sign-in
-GOOGLE_OAUTH_CLIENT_SECRET=...
+ENABLE_TEST_LOGIN=true           # local only: a test sign-in for @example.com addresses, instead of Google
 LLM_PROVIDER=anthropic           # or mock
 ANTHROPIC_MODEL=claude-opus-5-5
 ANTHROPIC_FAST_MODEL=claude-haiku-5-5

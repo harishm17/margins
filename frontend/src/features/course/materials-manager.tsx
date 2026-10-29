@@ -56,6 +56,9 @@ import {
   fileProblem,
   problemMessage,
 } from './summary'
+import { useAiStatus } from '@/features/ai/ai-status'
+import { fillResetTime } from '@/lib/budget/copy'
+import { jobFailureMessage } from '@/lib/jobs/failure-message'
 
 type Category = 'lecture_notes' | 'sample_exams' | 'book_chapters' | 'syllabus'
 
@@ -233,7 +236,65 @@ function RowMenu({ filename, children }: { filename: string; children: React.Rea
   )
 }
 
-function ServerRow({ row, onDeleted, typicalSeconds }: { row: MaterialRow; onDeleted: () => void; typicalSeconds: number | null }) {
+/**
+ * A past exam that was read but whose style could not be analysed: say so on its row, with a way
+ * to analyse the course's past exams again.
+ */
+function ExamAnalysisFailed({
+  courseId,
+  errorCode,
+  onRetried,
+}: {
+  courseId: string
+  errorCode: string | null
+  onRetried: () => void
+}) {
+  const { blocked, report } = useAiStatus()
+  const [pending, setPending] = React.useState(false)
+  const text = fillResetTime(jobFailureMessage(errorCode, 'profile_exam').text)
+
+  async function retry() {
+    setPending(true)
+    try {
+      await apiFetch(`/api/projects/${courseId}/exam-style`, { method: 'POST' })
+      onRetried()
+    } catch (error) {
+      if (isApiError(error)) report(error.code)
+      toast.error(isApiError(error) ? error.message : "Couldn't start the analysis. Try again.")
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <div className="flex min-h-[38px] flex-col items-start gap-1">
+      <Tooltip content={text} side="top" align="start">
+        <span className="block min-w-0">
+          <StatusText icon={FAILED_ICON} tone="danger">
+            {"Read, but its exam style couldn't be analysed"}
+          </StatusText>
+        </span>
+      </Tooltip>
+      {blocked ? null : (
+        <Button size="sm" variant="link" className="h-auto p-0 text-small" loading={pending} onClick={() => void retry()}>
+          Analyse again
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function ServerRow({
+  courseId,
+  row,
+  onDeleted,
+  typicalSeconds,
+}: {
+  courseId: string
+  row: MaterialRow
+  onDeleted: () => void
+  typicalSeconds: number | null
+}) {
   const router = useRouter()
   const refreshSoon = useRefreshSoon()
   // The role the student just picked shows at once; the server's value takes over once it is saved.
@@ -255,6 +316,8 @@ function ServerRow({ row, onDeleted, typicalSeconds }: { row: MaterialRow; onDel
         pendingLabel={queued ? stageLabel(stage, 'queued') : undefined}
       />
     )
+  } else if (row.status === 'ready' && row.examAnalysisFailure && role === 'exam') {
+    status = <ExamAnalysisFailed courseId={courseId} errorCode={row.examAnalysisFailure.errorCode} onRetried={refreshSoon} />
   } else if (row.status === 'ready') {
     status = (
       <div className="min-h-[38px]">
@@ -608,7 +671,7 @@ export function MaterialsManager({
                 item.kind === 'local' ? (
                   <LocalRow key={item.upload.key} upload={item.upload} typicalSeconds={typicalReadSeconds} onDismiss={() => removeUpload(item.upload.key)} />
                 ) : (
-                  <ServerRow key={item.row.id} row={item.row} typicalSeconds={typicalReadSeconds} onDeleted={() => router.refresh()} />
+                  <ServerRow key={item.row.id} courseId={courseId} row={item.row} typicalSeconds={typicalReadSeconds} onDeleted={() => router.refresh()} />
                 )
               )}
             </tbody>

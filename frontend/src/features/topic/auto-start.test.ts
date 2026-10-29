@@ -33,3 +33,7 @@ test('it starts once per page: after the first request it only waits for it', ()
 test('a topic with a failed attempt, or one the student dismissed, is not restarted', () => {
   assert.equal(autoStartDecision({ ...base, preparing: false }), 'skip')
 })
+
+test('nothing is started while AI is unavailable or the allowance is used', () => {
+  assert.equal(autoStartDecision({ ...base, aiBlocked: true }), 'skip')
+})

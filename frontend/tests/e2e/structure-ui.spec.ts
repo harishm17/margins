@@ -1,21 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
+import { signIn } from './helpers/auth'
 import { withPrisma } from './helpers/db'
-import { DEMO_EMAIL, DEMO_PASSWORD, FIXTURE_PDF, demoIds } from './helpers/seed-demo'
+import { DEMO_EMAIL, FIXTURE_PDF, demoIds } from './helpers/seed-demo'
 
 // The course structure screens: units on the topics page and in the sidebar, the topic header
 // (objectives, prerequisites, sources, time), "Check yourself", the sources under each example and
 // practice problem, a multiple-choice practice step, the topic editor with units, and file roles.
 // The first group only reads the shared demo course (two units and one topic outside any unit, see
 // helpers/seed-demo.ts). The second builds its own account and course, because it changes things.
-
-async function signIn(page: Page, email: string, password: string) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/, { timeout: 60_000 })
-}
 
 const { course, topics, mathTopic } = demoIds()
 // getByText also sees the hidden copy Next keeps while a page streams in; the page body is one place only.
@@ -24,7 +17,7 @@ const sidebar = (page: Page) => page.getByRole('complementary', { name: 'Sidebar
 
 test.describe('the demo course', () => {
   test.beforeEach(async ({ page }) => {
-    await signIn(page, DEMO_EMAIL, DEMO_PASSWORD)
+    await signIn(page, DEMO_EMAIL)
   })
 
   test('the topics page groups topics by unit, with the rest under "Topics"', async ({ page }) => {
@@ -202,15 +195,12 @@ test.describe('a course built to be edited', () => {
 
   const stamp = Date.now()
   const email = `structure-ui-${stamp}@example.com`
-  const password = 'structure-ui-password'
   let courseId = ''
 
   const rows = (page: Page, unit: string) => page.getByRole('list', { name: `Topics in ${unit}` }).getByRole('listitem')
 
   test('set up', async ({ page }) => {
-    const signup = await page.request.post('/api/auth/signup', { data: { email, password, name: 'Structure UI' } })
-    expect([201, 409]).toContain(signup.status())
-    await signIn(page, email, password)
+    await signIn(page, email)
     courseId = (await (await page.request.post('/api/projects', { data: { name: `Editor ${stamp}` } })).json()).project.id
     const unit = async (title: string, weekLabel: string) =>
       (await (await page.request.post(`/api/projects/${courseId}/units`, { data: { title, weekLabel } })).json()).unit.id as string
@@ -225,7 +215,7 @@ test.describe('a course built to be edited', () => {
   })
 
   test('the editor shows units with their topics; move a topic to another unit with the select', async ({ page }) => {
-    await signIn(page, email, password)
+    await signIn(page, email)
     await page.goto(`/courses/${courseId}/topics?edit=1`)
     await expect(page.getByRole('heading', { level: 1, name: 'Edit topics' })).toBeVisible()
     await expect(page.getByRole('heading', { level: 2, name: 'Arrays' })).toBeVisible()
@@ -254,7 +244,7 @@ test.describe('a course built to be edited', () => {
   })
 
   test('reorder inside a unit with the keyboard; rename a topic', async ({ page }) => {
-    await signIn(page, email, password)
+    await signIn(page, email)
     await page.goto(`/courses/${courseId}/topics?edit=1`)
     const handle = rows(page, 'Arrays').last().getByRole('button', { name: /^Reorder / })
     await handle.focus()
@@ -272,7 +262,7 @@ test.describe('a course built to be edited', () => {
   })
 
   test('add a unit, rename it, move it, and delete an empty one', async ({ page }) => {
-    await signIn(page, email, password)
+    await signIn(page, email)
     await page.goto(`/courses/${courseId}/topics?edit=1`)
 
     await page.getByRole('button', { name: 'Add unit' }).click()
@@ -312,14 +302,14 @@ test.describe('a course built to be edited', () => {
   })
 
   test('the topics page shows the units that were made', async ({ page }) => {
-    await signIn(page, email, password)
+    await signIn(page, email)
     await page.goto(`/courses/${courseId}/topics`)
     await expect(page.getByRole('region', { name: 'Trees' }).getByText('3 topics')).toBeVisible()
     await expect(page.getByRole('region', { name: 'Graph algorithms' }).getByText('1 topic', { exact: true })).toBeVisible()
   })
 
   test('a file role is changed from the file menu and kept', async ({ page }) => {
-    await signIn(page, email, password)
+    await signIn(page, email)
     const upload = await page.request.post(`/api/projects/${courseId}/materials?category=lecture_notes&filename=notes.pdf`, {
       data: readFileSync(FIXTURE_PDF),
       headers: { 'content-type': 'application/pdf' },

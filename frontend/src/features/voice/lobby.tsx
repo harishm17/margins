@@ -16,6 +16,7 @@ import { focusPlaceholder, minutesLeftLabel } from './format'
 import { defaultLanguageCode, VOICE_LANGUAGES } from './speech'
 import type { StartConfig } from './use-voice-session'
 import type { VoiceUsage, VoiceStyle } from './voice-api'
+import { useAiStatus } from '@/features/ai/ai-status'
 
 const STYLE_OPTIONS: { value: VoiceStyle; label: string; hint: string }[] = [
   { value: 'oral_quiz', label: 'Quiz me', hint: 'The coach asks one question at a time and checks each answer.' },
@@ -58,6 +59,8 @@ export function Lobby({
 
   const remaining = usage && usage !== 'unavailable' ? usage.remainingSeconds : null
   const outOfTime = limitReached || remaining === 0
+  // AI unavailable or the day's allowance used: the coach cannot reply, so the session cannot start.
+  const { blocked } = useAiStatus()
   const styleHint = STYLE_OPTIONS.find((option) => option.value === style)?.hint
   const effectiveStyle: VoiceStyle = mode === 'sprint' ? 'oral_quiz' : style
 
@@ -95,7 +98,7 @@ export function Lobby({
         className="flex flex-col gap-5"
         onSubmit={(event) => {
           event.preventDefault()
-          if (!outOfTime && !starting) onStart({ style: effectiveStyle, language, focus })
+          if (!outOfTime && !starting && !blocked) onStart({ style: effectiveStyle, language, focus })
         }}
       >
         {mode === 'topic' ? (
@@ -138,12 +141,14 @@ export function Lobby({
             size="lg"
             icon={<Microphone />}
             loading={starting}
-            disabled={outOfTime || usage === null}
+            disabled={outOfTime || usage === null || !!blocked}
           >
             {mode === 'sprint' ? 'Start sprint' : 'Start voice practice'}
           </Button>
           <p className="max-w-[34ch] text-small text-fg-2">
-            {outOfTime
+            {blocked
+              ? blocked.text
+              : outOfTime
               ? "You've used today's voice time. It resets within 24 hours."
               : recognitionSupported
                 ? 'Works best in Chrome, Edge or Safari with a microphone.'

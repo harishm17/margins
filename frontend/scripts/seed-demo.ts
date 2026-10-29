@@ -1,5 +1,5 @@
 /**
- * Demo seed for StudyBuddy
+ * Demo seed for Margins
  * Pre-populates the database with a complete project so the demo video
  * can skip the upload/processing pipeline entirely.
  *
@@ -12,10 +12,9 @@
  */
 
 import { PrismaClient } from '@prisma/client'
-import { hashSync } from 'bcryptjs'
 
-// The demo account has a published password (DEMO.md), so it must never exist on a deployed
-// site. Refuse to run unless the database is a local one (this machine or docker compose).
+// The demo data is made up and is reached through the local-only test sign-in (DEMO.md), so it
+// belongs on local databases only (this machine or docker compose).
 const LOCAL_DB_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'postgres'])
 
 function assertLocalDatabase(): void {
@@ -34,7 +33,7 @@ function assertLocalDatabase(): void {
         : ''
   if (reason) {
     console.error(
-      `Refusing to seed the demo account: ${reason}. The demo password is public, so this ` +
+      `Refusing to seed the demo account: ${reason}. This ` +
         'script is for local development only.',
     )
     process.exit(1)
@@ -48,15 +47,14 @@ const prisma = new PrismaClient()
 // ─── Entry point ────────────────────────────────────────────────
 
 async function main() {
-  console.log('Seeding StudyBuddy demo data...\n')
+  console.log('Seeding Margins demo data...\n')
 
   // ── User ──────────────────────────────────────────────────────
   const user = await prisma.user.upsert({
-    where: { email: 'demo@studymargins.com' },
+    where: { email: 'demo@example.com' },
     update: {},
     create: {
-      email: 'demo@studymargins.com',
-      passwordHash: hashSync('demo1234', 12),
+      email: 'demo@example.com',
       name: 'Demo User',
     },
   })
@@ -220,7 +218,7 @@ async function main() {
   }
 
   console.log('Done.\n')
-  console.log('  Login:   demo@studymargins.com / demo1234')
+  console.log('  Sign in: demo@example.com with the test sign-in on /login (ENABLE_TEST_LOGIN=true)')
   console.log(`  Project: "${project.name}"\n`)
 }
 

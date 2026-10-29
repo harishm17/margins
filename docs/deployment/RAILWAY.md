@@ -69,13 +69,15 @@ non-interactive sessions unless you add `--confirm-destructive`.
 | `ANTHROPIC_API_KEY` | ai | `railway variable set -s ai ANTHROPIC_API_KEY --stdin` |
 | `AI_INTERNAL_TOKEN` | ai (web references it) | `openssl rand -hex 32`, then as above |
 | `NEXTAUTH_SECRET` | web | `openssl rand -base64 48`, then as above |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | web | The OAuth client in Google Cloud, as above |
+
+Google is the only way to sign in, so `web` refuses to start without a real Google OAuth client
+(placeholders count as missing). The client needs `https://<web domain>/api/auth/callback/google` as a
+redirect URI. Never set `ENABLE_TEST_LOGIN` on Railway: it is a local-only test sign-in, and `web` refuses
+to start with it.
 
 Optional:
 
-- **Google sign-in.** Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` on `web`.
-  Add them to `railway.ts` as `preserve()`, or the next apply removes them. Then add
-  `https://<web domain>/api/auth/callback/google` as a redirect URI on the OAuth client in
-  Google Cloud. Without them the login page shows only email and password.
 - **Voice coach.** Set `OPENAI_API_KEY` on `ai` (also as `preserve()` in `railway.ts`).
 
 ## Database

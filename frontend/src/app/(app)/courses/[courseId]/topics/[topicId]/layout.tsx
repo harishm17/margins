@@ -4,7 +4,8 @@ import { practiceKeys } from '@/features/topic/practice-keys'
 import { PracticeProgressSync } from '@/features/topic/practice-progress'
 import { StudyTabs } from '@/features/topic/study-tabs'
 import { TopicActions, TopicHeader } from '@/features/topic/topic-header'
-import { TopicProvider, type GenerationNotice } from '@/features/topic/topic-provider'
+import { noticeForCode, type GenerationNotice } from '@/features/topic/notice'
+import { TopicProvider } from '@/features/topic/topic-provider'
 import { CONTENT_KINDS, type ContentKind } from '@/features/topic/types'
 import { getTopicPage } from '@/server/queries/topic'
 import { requireUser } from '@/server/session'
@@ -31,10 +32,7 @@ export default async function TopicLayout({
   for (const kind of CONTENT_KINDS) {
     const failure = data.failures[kind]
     if (failure) {
-      initialFailures[kind] = {
-        message: failure.message,
-        tone: failure.errorCode === 'LLM_DAILY_BUDGET' ? 'warning' : 'danger',
-      }
+      initialFailures[kind] = { ...noticeForCode(failure.errorCode), message: failure.message }
     }
   }
 

@@ -198,7 +198,7 @@ test.describe('practice progress', () => {
     // Device two: a browser with nothing stored sees it.
     const other = await browser.newContext({ timezoneId: ZONE })
     const phone = await other.newPage()
-    await signIn(phone, user.email, user.password)
+    await signIn(phone, user.email)
     await phone.goto(squares)
     await expect(phone.getByText('1 of 2 solved').locator('visible=true')).toBeVisible()
     // It resumes at the second step, takes a hint, finishes.
@@ -255,7 +255,7 @@ test.describe('practice progress', () => {
       [course.topics.Cubes]
     )
     const old = await context.newPage()
-    await signIn(old, user.email, user.password)
+    await signIn(old, user.email)
     await old.goto(`/courses/${course.courseId}/topics/${course.topics.Cubes}?view=practice`)
     await expect(old.getByText('Problem complete').locator('visible=true')).toBeVisible()
     await expect

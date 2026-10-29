@@ -147,7 +147,7 @@ export const FAQ: Faq[] = [
     // Privacy page, "What we store", "How it's used", "Services we use", "Your choices".
     answer: [
       'They stay in your account and are used only to run Margins for you. The text of your files and your questions are sent to Anthropic to write study material and answers; Anthropic does not use this data to train its models by default. We do not sell your data, show ads or use your files to train AI models.',
-      `When you delete a course, its files and everything made from them are deleted. To delete your account, email ${CONTACT_EMAIL}. Voice practice uses your browser's speech recognition, which may send audio to Google (Chrome) or Apple (Safari).`,
+      `When you delete a course, its files and everything made from them are deleted. You can delete your whole account yourself in Settings; if you need help, email ${CONTACT_EMAIL}. Voice practice uses your browser's speech recognition, which may send audio to Google (Chrome) or Apple (Safari).`,
     ],
   },
   {
