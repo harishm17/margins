@@ -57,6 +57,13 @@ _ERROR_TYPES = {
 # What this process last knew, so a successful call writes to the database only when the row
 # may say unavailable (every job, chat answer and voice turn reads the row first, so this is fresh).
 _local = {"state": None, "transient_failures": 0}
+
+# The one row, created available if it is not there (the migration seeds it too).
+_ENSURE_ROW = f"""
+    INSERT INTO ai_status (id, state, since, checked_at)
+    VALUES ('global', '{AVAILABLE}', {UTC_NOW}, {UTC_NOW})
+    ON CONFLICT (id) DO NOTHING
+"""
 _background: Set["asyncio.Task[None]"] = set()
 
 
@@ -130,6 +137,8 @@ async def record_success() -> None:
     if _local["state"] == AVAILABLE:
         return
     try:
+        # The update only changes a row that says unavailable, under its lock, so one process
+        # alone sees the change (and alerts) however many succeed at once.
         row = await execute_one(
             f"""
             WITH previous AS (
@@ -171,10 +180,14 @@ def format_duration(seconds: float) -> str:
 
 async def _mark_unavailable(reason: str, detail: str) -> None:
     async def write(conn):
+        # The row must exist before it is locked: locking a missing row locks nothing, and two
+        # first failures at once would both see a change and both alert. The migration seeds it;
+        # this covers a database where it is missing.
+        await conn.execute(_ENSURE_ROW)
         previous = await conn.fetchrow(
             "SELECT state, since FROM ai_status WHERE id = 'global' FOR UPDATE"
         )
-        changed = previous is None or previous["state"] != UNAVAILABLE
+        changed = previous["state"] != UNAVAILABLE
         row = await conn.fetchrow(
             f"""
             INSERT INTO ai_status (id, state, reason, since, checked_at, detail)

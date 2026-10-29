@@ -192,6 +192,16 @@ class TestRecoveryAlert:
 
         assert len([text for _, text in alerts if "available again" in text]) == 1
 
+    async def test_two_first_failures_at_once_alert_once_even_before_the_row_exists(self, db, alerts):
+        # A fresh database: the conftest empties ai_status after each test, like a new deploy
+        # before the migration's row existed.
+        await db.execute("DELETE FROM ai_status")
+
+        await asyncio.gather(*(ai_status._mark_unavailable("LLM_CREDIT_EXHAUSTED", "x") for _ in range(4)))
+        await ai_status.wait_for_alerts()
+
+        assert len([text for _, text in alerts if "unavailable" in text]) == 1
+
     async def test_no_recovery_alert_without_an_outage(self, db, alerts):
         ai_status.reset_local_state()
         await ai_status.record_success()

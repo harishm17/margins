@@ -12,3 +12,9 @@ CREATE TABLE "ai_status" (
 
     CONSTRAINT "ai_status_pkey" PRIMARY KEY ("id")
 );
+
+-- The one row, so the AI service always has a row to lock when the status changes (two first
+-- failures at once must not both see a change and both alert the owner).
+INSERT INTO "ai_status" ("id", "state", "since", "checked_at")
+VALUES ('global', 'available', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT ("id") DO NOTHING;
