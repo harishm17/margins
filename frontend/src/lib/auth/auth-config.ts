@@ -5,64 +5,50 @@
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
-import { compare } from 'bcryptjs'
 import { prisma } from '@/lib/db/prisma'
 import { resolveAuthSecret } from './secret'
 import { decideGoogleSignIn } from './google-link'
 import { ACCOUNT_GONE, assertAccountExists } from './account-check'
+import { googleOAuthSettings } from './google-config'
+import { isLocalRequest, isTestLoginEmail, isTestLoginEnabled, TEST_LOGIN_PROVIDER_ID } from './test-login'
 
 const nextAuthSecret = resolveAuthSecret()
+const google = googleOAuthSettings(process.env)
+const testLogin = isTestLoginEnabled(process.env)
+
+/**
+ * Which ways to sign in this server offers, for the login page. (A credentials provider reports its
+ * id as "credentials" until NextAuth reads its options, so the providers list cannot tell.)
+ */
+export const signInMethods = { google: google !== null, testLogin } as const
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    // Google sign-in only when its OAuth client is configured; the login page asks which
-    // providers exist before showing the button.
-    ...(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET
+    // Google is the only way students sign in. A deployed server refuses to start without it
+    // (startup.ts); locally the login page says it is not set up.
+    ...(google ? [GoogleProvider({ clientId: google.clientId, clientSecret: google.clientSecret })] : []),
+    // The test sign-in for e2e, screenshots and local development: see test-login.ts for its fences.
+    ...(testLogin
       ? [
-          GoogleProvider({
-            clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+          CredentialsProvider({
+            id: TEST_LOGIN_PROVIDER_ID,
+            name: 'Test sign-in',
+            credentials: {
+              email: { label: 'Email', type: 'email' },
+              name: { label: 'Name', type: 'text' },
+            },
+            async authorize(credentials, req) {
+              if (!isTestLoginEnabled(process.env) || !isLocalRequest(req?.headers)) return null
+              const email = credentials?.email?.trim().toLowerCase() ?? ''
+              if (!isTestLoginEmail(email)) return null
+              const name = credentials?.name?.trim() || null
+              // Signs in to the account with this email, making it the first time.
+              const user = await prisma.user.upsert({ where: { email }, update: {}, create: { email, name } })
+              return { id: user.id, email: user.email, name: user.name }
+            },
           }),
         ]
       : []),
-    CredentialsProvider({
-      name: 'Credentials',
-      credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('Email and password are required')
-        }
-
-        // Find user by email
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email.toLowerCase() },
-        })
-
-        if (!user || !user.passwordHash) {
-          throw new Error('Invalid email or password')
-        }
-
-        // Verify password
-        const isPasswordValid = await compare(
-          credentials.password,
-          user.passwordHash
-        )
-
-        if (!isPasswordValid) {
-          throw new Error('Invalid email or password')
-        }
-
-        // Return user object
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        }
-      },
-    }),
   ],
   session: {
     strategy: 'jwt',
@@ -97,7 +83,8 @@ export const authOptions: NextAuthOptions = {
 
         let signedInUser = existingUser
         if (decision.action === 'link' && existingUser) {
-          // A password account the same person is now reaching through Google.
+          // An account made with a password before sign-in became Google only: the same verified
+          // email, so it is the same person.
           await prisma.user.update({
             where: { id: existingUser.id },
             data: {

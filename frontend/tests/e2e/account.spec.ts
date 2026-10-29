@@ -15,10 +15,8 @@ const UPLOADS = path.join(process.env.E2E_RUN_DIR || path.join(__dirname, '..', 
 
 async function newAccount(page: Page) {
   const email = `delete-me-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`
-  const password = 'delete-me-password'
-  const signup = await page.request.post('/api/auth/signup', { data: { email, password, name: 'Leaving Student' } })
-  expect(signup.status()).toBe(201)
-  await signIn(page, email, password)
+  // The first test sign-in with an address makes the account (students sign in with Google only).
+  await signIn(page, email)
   return email
 }
 
@@ -108,12 +106,13 @@ test('settings shows the account and allowance; deleting the account removes its
   await expect(otherPage).toHaveURL(/\/login/)
   await otherDevice.close()
 
-  // The account can't sign in with its old password any more.
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill('delete-me-password')
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/login/)
+  // Signing in again with the same address starts a new, empty account: nothing of the old one is left.
+  await signIn(page, email)
+  const fresh = await withPrisma((prisma) =>
+    prisma.user.findUniqueOrThrow({ where: { email }, include: { projects: true } })
+  )
+  expect(fresh.id).not.toBe(userId)
+  expect(fresh.projects).toHaveLength(0)
 })
 
 test('chat spend recorded while the account is being deleted still counts toward the global total', async () => {

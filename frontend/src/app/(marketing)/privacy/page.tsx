@@ -17,8 +17,9 @@ export default function PrivacyPage() {
       </p>
       <LegalSection heading="What we store">
         <p>
-          Your account: your email address, your name if you give one, and a hashed password (or your Google
-          account ID if you sign in with Google). Your course files and what Margins creates from them: notes,
+          Your account: your email address, your name and your Google account ID, from signing in with Google.
+          Accounts made with a password before Google sign-in also still have that password stored, hashed and no
+          longer used. Your course files and what Margins creates from them: notes,
           examples, practice, quizzes, mock exams, chat answers, your answers and scores, and voice practice
           transcripts. Basic usage records, such as how much AI processing your account used each day, so we can
           keep the service within its limits.

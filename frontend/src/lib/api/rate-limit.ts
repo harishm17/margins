@@ -3,7 +3,7 @@
  *
  * The counts live in one server instance. With several instances (Cloud Run, Vercel) each
  * keeps its own, so the real ceiling is limit x instances. That is enough to slow
- * brute-force signups and runaway grading calls; use a shared store if exact limits matter.
+ * runaway grading, chat and voice calls; use a shared store if exact limits matter.
  */
 export type RateLimiter = {
   /** Records a hit for `key`. `ok` is false once the key is over the limit. */

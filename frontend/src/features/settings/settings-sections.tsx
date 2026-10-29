@@ -51,7 +51,7 @@ export function AccountDetails({ email, signInProvider }: { email: string; signI
           {email}
         </dd>
         <dt className="text-fg-2">Sign-in</dt>
-        <dd className="text-fg">{signInProvider === 'google' ? 'Google account' : 'Email and password'}</dd>
+        <dd className="text-fg">{signInProvider === 'google' ? 'Google account' : 'Test sign-in (this computer only)'}</dd>
       </dl>
       <div>
         <Button icon={<SignOut />} onClick={() => signOut({ callbackUrl: '/login' })}>

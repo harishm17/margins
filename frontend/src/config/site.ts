@@ -6,6 +6,13 @@ export const SITE_HOST = 'studymargins.com'
 export const GITHUB_URL = 'https://github.com/harishm17/margins'
 export const CONTACT_EMAIL = 'hello@studymargins.com'
 
+/** Who built Margins, for structured data. The @id in JSON-LD matches the one on his own site. */
+export const AUTHOR = {
+  name: 'Harish Manoharan',
+  url: 'https://harishmanoharan.com/',
+  sameAs: ['https://github.com/harishm17', 'https://www.linkedin.com/in/harishm17/'],
+}
+
 export const DEFAULT_TITLE = `${BRAND_NAME}: study from your own course files`
 export const DEFAULT_DESCRIPTION =
   'Upload lecture notes and past exams. Margins builds notes, practice, quizzes and timed mock exams from them, with sources for every answer.'

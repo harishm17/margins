@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
-import { clearVoiceSessions, ensureVoiceFixture, VOICE_TEST_EMAIL, VOICE_TEST_PASSWORD, type VoiceFixture } from './helpers/voice-fixture'
+import { signIn as signInAs } from './helpers/auth'
+import { clearVoiceSessions, ensureVoiceFixture, VOICE_TEST_EMAIL, type VoiceFixture } from './helpers/voice-fixture'
 import { installVoiceStubs } from './helpers/voice-stubs'
 
 // Voice practice against the dev stack with the mock LLM (a scripted coach: the first turn asks a
@@ -8,13 +9,7 @@ import { installVoiceStubs } from './helpers/voice-stubs'
 // hand-written ones. Headless Chromium has no microphone, so voice mode runs on stubs
 // (helpers/voice-stubs.ts) and the plain flows run in text mode.
 
-async function signIn(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(VOICE_TEST_EMAIL)
-  await page.getByLabel('Password', { exact: true }).fill(VOICE_TEST_PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.waitForURL('**/home', { timeout: 60_000 })
-}
+const signIn = (page: Page) => signInAs(page, VOICE_TEST_EMAIL)
 
 let fixture: VoiceFixture
 const ids = {

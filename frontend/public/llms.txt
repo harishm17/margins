@@ -1,0 +1,30 @@
+# Margins
+
+> Margins is a free, open-source study app at studymargins.com. Upload lecture notes and past exams. Margins builds notes, practice, quizzes and timed mock exams from them, with sources for every answer.
+
+How it works:
+
+- Upload lecture notes, book chapters and past exams as PDF, Word (DOCX or DOC) or PowerPoint (PPTX) files, up to 25 MB each. PDFs need selectable text.
+- Margins splits the course into units and topics, each tied to the pages that teach it. You can rename, merge or move anything before it writes a word.
+- Give your exam date and the time you have each day. Margins lists what to learn, quiz and review on each day, with spaced reviews and full mock exams before the date.
+- Each topic has notes written from your own pages, worked examples, step-by-step practice and a quiz. Each section names the files and pages it came from.
+- Mock exams are timed and autosaved. With Match my past exams, the questions follow the wording, task verbs and answer length of the exams you uploaded.
+- Ask is a chat that answers only from your files, with numbered citations, and says so when the files do not cover the question.
+
+Margins is free to use, with a daily AI allowance per account. It uses Claude, from Anthropic. The code is MIT licensed and can be self-hosted. Margins was built by Harish Manoharan.
+
+## Pages
+
+- [Home](https://studymargins.com/): what Margins does, how it works, and common questions
+- [Privacy policy](https://studymargins.com/privacy): what Margins stores, why, and the choices you have
+- [Terms of use](https://studymargins.com/terms): the terms for using Margins
+
+## Source code
+
+- [GitHub repository](https://github.com/harishm17/margins): the full code for the web app and the AI service, with a README on how it works and how to run it
+- [Evaluation results](https://github.com/harishm17/margins/blob/main/evals/results/2026-10-21-structure.md): the latest generation eval run, with the errors the judge found
+- [MIT license](https://github.com/harishm17/margins/blob/main/LICENSE)
+
+## Optional
+
+- [Harish Manoharan](https://harishmanoharan.com/): the developer who built Margins
