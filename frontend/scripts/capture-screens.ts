@@ -13,13 +13,15 @@
  *   npm run screens -- --only plan,ask      capture some screens (names below)
  *   npm run screens -- --no-seed            reuse the showcase account already in the database
  *   npm run screens -- --out /tmp/screens   write somewhere else (default: public/screens)
- *   npm run screens -- --raw /tmp/raw       also keep each full 3x capture (to tune a crop) and each crop at 3x
- *                                           (the reference to measure the WebP files against)
+ *   npm run screens -- --raw /tmp/raw       also keep each capture as PNG (the reference the WebP files are
+ *                                           measured against)
  *
- * Image quality. Every screen is captured once at 3x and written at the widths its slots need (the 1x width,
- * 2x of the largest desktop slot, 3x of a 390px phone; see WIDTHS), each a downscale of the capture, as lossless
- * WebP: thin text and 1px coloured lines come out exactly as the browser drew them. The site serves these files
- * as they are (Shot in src/features/marketing/shot.tsx, no image optimizer), so nothing encodes them a second time.
+ * Image quality. Every screen is written at the widths its slots need (the 1x width, 2x of the largest desktop
+ * slot, 3x of a 390px phone; see WIDTHS). The browser draws the page at each width's own density (1920px of a
+ * 928px crop is 2.07 device pixels per CSS pixel), so nothing is resampled, and each file is lossless WebP: text
+ * and 1px coloured lines come out exactly as the browser drew them. A resampled screenshot has many more distinct
+ * pixel values and comes out three to eight times larger as lossless WebP. The site serves these files as they
+ * are (Shot in src/features/marketing/shot.tsx, no image optimizer), so nothing encodes them a second time.
  *
  * Output: public/screens/<name>-<light|dark>-<width>.webp, src/features/marketing/screens.json (the widths and
  * sizes Shot reads) and public/screens/plan-og.png for the social card. Pages are read in the UTC time zone so
