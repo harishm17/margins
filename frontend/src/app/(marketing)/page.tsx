@@ -172,6 +172,9 @@ function Trust() {
               <a href={LINKS.eval} target="_blank" rel="noopener noreferrer" className={`${link} mt-3`}>
                 Read the evaluation <ArrowUpRight aria-hidden="true" className="size-3.5" />
               </a>
+              <Link href="/evaluation" className={`${link} mt-3 ml-4`}>
+                How it is evaluated
+              </Link>
             </li>
             <li className="py-8">
               <h3 className="text-heading text-fg">Open source</h3>

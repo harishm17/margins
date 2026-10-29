@@ -16,6 +16,7 @@ Margins is free to use, with a daily AI allowance per account. It uses Claude, f
 ## Pages
 
 - [Home](https://studymargins.com/): what Margins does, how it works, and common questions
+- [How Margins is evaluated](https://studymargins.com/evaluation): the method and latest results of the retrieval and generation evaluations, with sample sizes, limits and failed checks
 - [Privacy policy](https://studymargins.com/privacy): what Margins stores, why, and the choices you have
 - [Terms of use](https://studymargins.com/terms): the terms for using Margins
 

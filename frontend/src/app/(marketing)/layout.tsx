@@ -54,6 +54,9 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             <Link href="/#faq" className={footerLink}>
               FAQ
             </Link>
+            <Link href="/evaluation" className={footerLink}>
+              How it is evaluated
+            </Link>
             <Link href="/login" className={footerLink}>
               Sign in
             </Link>
