@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { Brand } from '@/components/shell/brand'
 import { SkipLink } from '@/components/shell/skip-link'
 import { BRAND_NAME } from '@/config/brand'
-import { CONTACT_EMAIL } from '@/config/site'
+import { AUTHOR, CONTACT_EMAIL } from '@/config/site'
 import { NavActions } from '@/features/marketing/auth-actions'
 import { LINKS } from '@/features/marketing/content'
 import { MarketingMenu } from '@/features/marketing/marketing-menu'
@@ -89,7 +89,11 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             </nav>
           </div>
           <div className="mx-auto w-full max-w-[1280px] border-t border-border px-4 py-5 text-small text-fg-2 md:px-8">
-            &copy; <span className="tabular">{new Date().getFullYear()}</span> {BRAND_NAME}, built by Harish Manoharan.
+            &copy; <span className="tabular">{new Date().getFullYear()}</span> {BRAND_NAME}, built by{' '}
+            <a href={AUTHOR.url} rel="author" className="underline underline-offset-2 transition-colors duration-120 hover:text-fg">
+              {AUTHOR.name}
+            </a>
+            .
           </div>
         </footer>
       </div>
