@@ -77,7 +77,7 @@ The voice coach runs on the same Claude key; the browser does the speech. All ot
 3. Scroll through the content
 
 ### Scene 4 — Solved Examples
-1. Switch to the **Examples** tab
+1. Switch to the **Worked examples** tab
 2. Show the two solved examples with step-by-step solutions
 3. Highlight the key-concepts tags
 
@@ -87,20 +87,20 @@ The voice coach runs on the same Claude key; the browser does the speech. All ot
 3. Show the score and per-question explanations
 
 ### Scene 6 — Live Upload (optional, requires ANTHROPIC_API_KEY)
-1. Go back to the project dashboard
-2. Click **Upload material** and upload any PDF
+1. Go back to the course
+2. Open **Materials** and upload any PDF
 3. Watch the status change: pending → processing → valid
 4. Topics are automatically re-extracted after all materials are chunked
 5. Generate new content for a topic and show it appear
 
 ### Scene 7 — Sample Exam
-1. Click **Generate Exam** from the project page
+1. Click **New mock exam** from the Mock exams page
 2. Configure: select all topics, medium difficulty, 10 questions
 3. Start the exam, answer a few questions, submit
 4. Show the AI-graded results and feedback
 
 ### Scene 8 — Voice Coach (Concept-Only)
-1. Open a topic page and click **Voice Drill**
+1. Open a topic page and open the **Voice practice** tab
 2. Connect and answer 2–3 questions
 3. Speak over the coach to show barge‑in / interruption
 4. Show the concept-only feedback and hints
