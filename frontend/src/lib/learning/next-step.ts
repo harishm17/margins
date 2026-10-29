@@ -70,6 +70,8 @@ export type NextStep = {
   etaLabel: string | null
   /** "Part 1 of 2", or null. */
   partLabel: string | null
+  /** A full mock exam longer than the day: "Longer than your usual 45 minutes", or null. */
+  overBudgetLabel: string | null
   /** More for today after the first item. */
   then: DescribedPlanItem[]
   /** Items finished today. */
@@ -112,9 +114,10 @@ export function nextStep(input: {
     label: examLabel(plan),
     short: plan.short,
     shortMessage: plan.shortMessage,
-    notScheduledCount: plan.notScheduled?.topics.length ?? 0,
+    notScheduledCount:
+      (plan.notScheduled?.topics.length ?? 0) + (plan.tooLongForDay ? plan.tooLongForDay.topics.length + plan.tooLongForDay.dependents.length : 0),
   }
-  const shared = { dueCount, overdueCount, exam, then: [], doneToday: 0, minutesLeft: 0, later: null, partLabel: null, deferredDue: 0 }
+  const shared = { dueCount, overdueCount, exam, then: [], doneToday: 0, minutesLeft: 0, later: null, partLabel: null, overBudgetLabel: null, deferredDue: 0 }
 
   // The reviews that wait behind a day that is done or has no room.
   const reviewsFirst = (reason: string): NextStep => {
@@ -175,6 +178,7 @@ export function nextStep(input: {
       action: { verb: first.verb, href: first.href, topicId: first.topicId },
       etaLabel: first.etaLabel,
       partLabel: first.partLabel,
+      overBudgetLabel: first.overBudgetLabel,
       then: rest.slice(0, 3),
       doneToday: doneToday.length,
       minutesLeft,
@@ -229,6 +233,7 @@ export function nextStepForCourse(input: {
       action: { verb: 'Continue', href: `/courses/${courseId}`, topicId: null },
       etaLabel: 'A few minutes',
       partLabel: null,
+      overBudgetLabel: null,
       then: [],
       doneToday: 0,
       minutesLeft: 0,

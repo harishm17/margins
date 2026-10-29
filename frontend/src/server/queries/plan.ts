@@ -44,6 +44,18 @@ export function fullMocksSince(exams: MockExamFacts[], topicCount: number, since
   return exams.filter((exam) => exam.day >= since && topicCount > 0 && exam.topicIds.size >= topicCount * FULL_MOCK_COVERAGE).length
 }
 
+/**
+ * The minutes a submitted mock exam took, credited against today's time: from its start to its
+ * submission, never more than its time limit. Attempts from before start times were recorded count
+ * as the time limit.
+ */
+export function mockMinutesSpent(attempt: { startedAt: Date | null; submittedAt: Date; durationMinutes: number }): number {
+  const limit = Math.max(0, attempt.durationMinutes)
+  if (!attempt.startedAt) return limit
+  const taken = Math.ceil((attempt.submittedAt.getTime() - attempt.startedAt.getTime()) / 60_000)
+  return Math.max(0, Math.min(limit, taken))
+}
+
 export type PlanData = {
   course: CourseShell
   plan: Plan
@@ -93,7 +105,11 @@ export async function getPlanData(
       where: { userId, status: 'submitted', sampleExam: { projectId: courseId, project: { userId } } },
       orderBy: { submittedAt: 'desc' },
       take: 40,
-      select: { submittedAt: true, sampleExam: { select: { id: true, name: true, createdAt: true, questions: true } } },
+      select: {
+        submittedAt: true,
+        startedAt: true,
+        sampleExam: { select: { id: true, name: true, createdAt: true, questions: true, durationMinutes: true } },
+      },
     }),
   ])
 
@@ -141,7 +157,10 @@ export async function getPlanData(
       seen.add(exam.id)
       exams.push(facts)
     }
-    if (facts.day === today) doneToday.push({ kind: 'mock', examId: exam.id, name: facts.name })
+    if (facts.day === today) {
+      const minutes = mockMinutesSpent({ startedAt: submission.startedAt, submittedAt: submission.submittedAt, durationMinutes: exam.durationMinutes })
+      doneToday.push({ kind: 'mock', examId: exam.id, name: facts.name, minutes })
+    }
   }
 
   for (const topic of topics) {
