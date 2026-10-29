@@ -18,8 +18,6 @@ import time
 import uuid
 from typing import Optional
 
-import asyncpg
-
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_one, execute_update
 
@@ -41,14 +39,13 @@ async def record_usage_event(
     a call that cost nothing. Never raises: a ledger failure must not fail the work that was billed
     (a retry would bill it again), so it is logged loudly instead.
 
-    A call that finishes after its account was deleted (a job that was already running) cannot
-    name the user any more: the foreign key refuses the row. It is written unlinked instead, the
-    way account deletion leaves that account's other rows, so the money still counts toward the
-    global daily cap."""
+    A call that finishes after its account was deleted (a job that was already running) is kept
+    too: a trigger on the table (migration 20261121000000_account_deletion) clears the user,
+    project and source ids instead of letting the foreign key refuse the row, the same rule for the
+    web app's chat route. So the money still counts toward the global daily cap."""
     if cost_usd <= 0 and input_tokens <= 0 and output_tokens <= 0:
         return
-
-    async def insert(owner: Optional[str], project: Optional[str], source_ref: str) -> None:
+    try:
         await execute_update(
             f"""
             INSERT INTO llm_usage_events
@@ -57,25 +54,15 @@ async def record_usage_event(
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, {UTC_NOW})
             """,
             uuid.uuid4().hex,
-            owner,
-            project,
+            user_id,
+            project_id,
             source,
-            source_ref,
+            source_id,
             models,
             input_tokens,
             output_tokens,
             cost_usd,
         )
-
-    try:
-        try:
-            await insert(user_id, project_id, source_id)
-        except asyncpg.ForeignKeyViolationError:
-            logger.info(
-                "Usage for %s %s arrived after its account was deleted; recording it unlinked",
-                source, source_id,
-            )
-            await insert(None, None, "")
     except Exception:
         logger.exception(
             "Could not record %s usage (user %s, source %s, $%.6f): it will not count toward the daily budget",

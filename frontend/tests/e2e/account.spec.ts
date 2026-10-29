@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { withPrisma } from './helpers/db'
 import { signIn } from './helpers/loop'
@@ -114,4 +114,82 @@ test('settings shows the account and allowance; deleting the account removes its
   await page.getByLabel('Password', { exact: true }).fill('delete-me-password')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/login/)
+})
+
+test('chat spend recorded while the account is being deleted still counts toward the global total', async () => {
+  // The chat route's storage (src/server/chat-storage.ts) against the stack's database. The answer
+  // finishes after the account (and so its conversation) was deleted: the message cannot be saved,
+  // but the billed cost must reach the ledger, unlinked. The same for a billed failure.
+  const { createChatStorage } = await import('../../src/server/chat-storage')
+  await withPrisma(async (prisma) => {
+    const user = await prisma.user.create({ data: { email: `chat-gone-${Date.now()}@example.com` } })
+    const project = await prisma.project.create({ data: { userId: user.id, name: 'Chat course' } })
+    const thread = await prisma.chatThread.create({ data: { userId: user.id, projectId: project.id } })
+    const question = await prisma.chatMessage.create({ data: { threadId: thread.id, role: 'user', content: 'Q?' } })
+    const storage = createChatStorage(prisma, {
+      userId: user.id,
+      projectId: project.id,
+      threadId: thread.id,
+      userMessageId: question.id,
+      isNewThread: true,
+      log: () => {},
+    })
+    await prisma.$queryRaw`SELECT delete_user_account(${user.id})`
+
+    const answerCost = 0.004321
+    const failureCost = 0.001234
+    await expect(
+      storage.saveAnswer({ text: 'A.', sources: [], marks: [], usage: { model: 'm', inputTokens: 10, outputTokens: 5, costUsd: answerCost } })
+    ).rejects.toThrow()
+    await storage.recordFailure('LLM_ERROR', { model: 'm', inputTokens: 10, outputTokens: 5, costUsd: failureCost })
+
+    const rows = await prisma.llmUsageEvent.findMany({
+      where: { costUsd: { in: [answerCost.toFixed(6), failureCost.toFixed(6)] }, createdAt: { gte: user.createdAt } },
+    })
+    expect(rows.map((row) => row.costUsd.toString()).sort()).toEqual([failureCost.toFixed(6), answerCost.toFixed(6)].sort())
+    for (const row of rows) {
+      expect(row.userId).toBeNull()
+      expect(row.projectId).toBeNull()
+      expect(row.sourceId).toBe('')
+    }
+    await prisma.llmUsageEvent.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } })
+  })
+})
+
+test('an upload whose database record fails leaves no stored file behind', async ({ page }) => {
+  // The same leak as an upload finishing while its account is deleted: the file is written, then the
+  // material row is refused. A test-only trigger refuses this one filename.
+  const filename = `refused-by-test-${Date.now()}.pdf`
+  await withPrisma(async (prisma) => {
+    await prisma.$executeRawUnsafe(`
+      CREATE OR REPLACE FUNCTION e2e_refuse_material() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.filename LIKE 'refused-by-test-%' THEN RAISE EXCEPTION 'refused by the e2e test'; END IF;
+        RETURN NEW;
+      END $$ LANGUAGE plpgsql`)
+    await prisma.$executeRawUnsafe(
+      'CREATE OR REPLACE TRIGGER e2e_refuse_material BEFORE INSERT ON materials FOR EACH ROW EXECUTE FUNCTION e2e_refuse_material()'
+    )
+  })
+  try {
+    const email = await newAccount(page)
+    const userId = await withPrisma(async (prisma) => (await prisma.user.findUniqueOrThrow({ where: { email } })).id)
+    const created = await page.request.post('/api/projects', { data: { name: 'Refused upload' } })
+    const courseId = (await created.json()).project.id as string
+
+    const upload = await page.request.post(`/api/projects/${courseId}/materials?category=lecture_notes&filename=${filename}`, {
+      data: readFileSync(FIXTURE_PDF),
+      headers: { 'content-type': 'application/pdf' },
+    })
+    expect(upload.status()).toBe(500)
+    const folder = path.join(UPLOADS, userId, courseId, 'materials')
+    const left = existsSync(folder) ? readdirSync(folder, { recursive: true }).filter((entry) => String(entry).endsWith('.pdf')) : []
+    expect(left).toEqual([])
+    expect(await withPrisma((prisma) => prisma.processingJob.count({ where: { projectId: courseId } }))).toBe(0)
+  } finally {
+    await withPrisma(async (prisma) => {
+      await prisma.$executeRawUnsafe('DROP TRIGGER IF EXISTS e2e_refuse_material ON materials')
+      await prisma.$executeRawUnsafe('DROP FUNCTION IF EXISTS e2e_refuse_material()')
+    })
+  }
 })

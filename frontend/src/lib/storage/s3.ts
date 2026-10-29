@@ -168,3 +168,8 @@ export async function openS3Object(
     },
   }
 }
+
+/** Tests: use this client instead of building one from the environment. */
+export function setS3ClientForTests(client: Pick<S3Client, 'send'> | null) {
+  clientInstance = client as S3Client | null
+}

@@ -72,16 +72,12 @@ const store: DeletionStore = {
   },
 
   async removeAccount(userId) {
-    const [, removed] = await prisma.$transaction([
-      // Kept for the global daily cap, with nothing left that points back at the account.
-      prisma.llmUsageEvent.updateMany({
-        where: { userId },
-        data: { userId: null, projectId: null, sourceId: '' },
-      }),
-      // deleteMany, not delete: a row that is already gone is not an error.
-      prisma.user.deleteMany({ where: { id: userId } }),
-    ])
-    return removed.count > 0
+    // One statement, in the database (migration 20261121000000_account_deletion): lock the user
+    // row, unlink its ledger rows (kept for the global daily cap), delete the row. The lock makes
+    // every concurrent ledger insert for this user wait, then land unlinked, so nothing can slip in
+    // between the unlinking and the delete. False when the row was already gone.
+    const [row] = await prisma.$queryRaw<{ deleted: boolean }[]>`SELECT delete_user_account(${userId}) AS deleted`
+    return row?.deleted === true
   },
 }
 

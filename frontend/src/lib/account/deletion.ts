@@ -6,15 +6,18 @@
  * The order matters:
  * 1. Stop the account's jobs (pending and processing become failed, not retryable), so no worker
  *    claims, retries or re-dispatches them. A worker already running loses its lease; anything it
- *    writes later is refused by the foreign keys once step 3 has run.
+ *    writes later is refused by the foreign keys once step 3 has run (except its spend, which is
+ *    kept unlinked).
  * 2. Delete the stored files: each material's own path, then everything under the user's folder.
  *    A file that is already gone counts as deleted. If any storage fails, stop here: the account
  *    still exists, so the student can try again and the next attempt finishes the job.
  * 3. Delete the account row in one transaction. Every table hangs off it with ON DELETE CASCADE
  *    (directly or through a course), except the spend ledger, whose rows are unlinked and kept so
- *    the global daily cap cannot be lowered by deleting an account.
+ *    the global daily cap cannot be lowered by deleting an account. The row is locked first, so
+ *    spend recorded at the same moment waits and lands unlinked too.
  * 4. Sweep the user's folder once more, best effort: an upload that was mid-way during step 2
- *    lands in the folder, and its row was removed in step 3.
+ *    lands in the folder, and its row was removed in step 3. An upload that finishes later cannot
+ *    write its row (the course is gone), and the upload route deletes its file when that fails.
  *
  * Every step can run twice: a second call after a partial failure picks up where the first stopped,
  * and a call for an account that is already gone succeeds.

@@ -82,8 +82,8 @@ async def test_deleting_a_project_does_not_lower_the_total(db):
 
 
 async def test_deleting_the_user_unlinks_their_ledger_and_the_global_total_keeps_it(db):
-    # Account deletion (web app, src/server/account/delete-account.ts) relies on the foreign key
-    # setting user_id to NULL: the rows stay, so deleting an account cannot lower the global total.
+    # A plain user delete still keeps the rows: the foreign key sets user_id to NULL
+    # (delete_user_account also clears project_id and source_id; test_account_deletion_ledger.py).
     user_id, _ = await user_with_project(db)
     await seed_usage(db, user_id, 2.0)
     await db.execute("DELETE FROM users WHERE id = $1", user_id)

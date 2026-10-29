@@ -14,6 +14,7 @@ import { THEME_OPTIONS, useThemeChoice, type ThemeChoice } from '@/components/ui
 import { useAiStatus } from '@/features/ai/ai-status'
 import { CONFIRM_WORD, confirmsDeletion } from '@/lib/account/deletion'
 import { resetPhrase } from '@/lib/budget/copy'
+import { allowanceView } from './allowance'
 import { CONTACT_EMAIL } from '@/config/site'
 import { deleteAccountAction } from './actions'
 
@@ -67,9 +68,8 @@ export function AccountDetails({ email, signInProvider }: { email: string; signI
  */
 export function AiAllowance({ timeZone }: { timeZone: string }) {
   const { status, blocked } = useAiStatus()
-  const allowance = status.allowance
+  const view = allowanceView(status.allowance)
   const resets = resetPhrase(new Date(), timeZone)
-  const percent = allowance?.usedFraction != null ? Math.round(allowance.usedFraction * 100) : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -78,18 +78,20 @@ export function AiAllowance({ timeZone }: { timeZone: string }) {
         <dt className="text-fg-2">AI features</dt>
         <dd className="text-fg">{status.available ? 'Available' : 'Paused'}</dd>
       </dl>
-      {percent !== null ? (
+      {view.kind === 'used' ? (
         <div className="flex max-w-[420px] flex-col gap-2">
           <div className="flex items-baseline justify-between gap-4 text-small">
-            <span className="text-fg">{allowance?.exhausted ? "You've used today's allowance" : `${percent}% used`}</span>
+            <span className="text-fg">{view.exhausted ? "You've used today's allowance" : `${view.percent}% used`}</span>
             <span className="text-fg-2">Resets {resets}</span>
           </div>
-          <Progress value={percent} tone={allowance?.exhausted ? 'warning' : 'accent'} aria-label="Today's AI allowance used" />
+          <Progress value={view.percent} tone={view.exhausted ? 'warning' : 'accent'} aria-label="Today's AI allowance used" />
         </div>
-      ) : allowance?.exhausted ? (
+      ) : view.kind === 'exhausted' ? (
         <p className="text-small text-fg">You&apos;ve used today&apos;s AI allowance. It resets {resets}.</p>
-      ) : (
+      ) : view.kind === 'unlimited' ? (
         <p className="text-small text-fg-2">No daily limit on this account.</p>
+      ) : (
+        <p className="text-small text-fg-2">Your allowance can&apos;t be shown right now. Try again later.</p>
       )}
     </div>
   )

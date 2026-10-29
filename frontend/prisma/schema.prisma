@@ -710,10 +710,10 @@ model ChatMessage {
 // this table, so deleting a thread, a project or its jobs cannot lower it. projectId and sourceId
 // are plain columns on purpose: they have no foreign keys, so they outlive what they point at.
 //
-// Deleting an account does not delete its rows: it unlinks them (userId, projectId and sourceId
-// cleared; see src/server/account/delete-account.ts). The global daily cap sums every row of the
-// day, so deleting an account cannot lower it. userId is null only on those rows, and on spend the
-// AI service records after the account is gone.
+// Deleting an account does not delete its rows: delete_user_account() unlinks them (userId,
+// projectId and sourceId cleared), and a trigger does the same for spend recorded after the
+// account is gone, by any writer (both in migration 20261121000000_account_deletion). The global
+// daily cap sums every row of the day, so deleting an account cannot lower it.
 model LlmUsageEvent {
   id           String   @id @default(uuid())
   userId       String?  @map("user_id")
