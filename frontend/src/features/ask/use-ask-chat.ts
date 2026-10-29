@@ -8,6 +8,7 @@ import { parseStoredCitations } from '@/lib/chat/citations'
 import { applyChatEvent, INITIAL_ANSWER, type AnswerState } from '@/lib/chat/events'
 import { chatErrorMessage } from '@/lib/chat/errors'
 import {
+  retryPlan,
   toChatMessages,
   type AssistantMessage,
   type ChatMessage,
@@ -202,19 +203,13 @@ export function useAskChat({
     toast('The answer will still be saved.')
   }, [abortCurrent])
 
-  /** Ask a failed question again: the failure and its question are replaced by a fresh try. */
+  /** Ask a failed question again, at the end of the conversation (see retryPlan). */
   const retry = React.useCallback(
     (failureId: string) => {
-      const target = messages.find((m): m is FailureMessage => m.kind === 'failure' && m.id === failureId)
-      if (!target?.question) return
-      setMessages((current) => {
-        const index = current.findIndex((m) => m.id === failureId)
-        if (index < 0) return current
-        const before = current.slice(0, index)
-        const last = before[before.length - 1]
-        return last?.kind === 'user' && last.text === target.question ? before.slice(0, -1) : before
-      })
-      void send(target.question)
+      const plan = retryPlan(messages, failureId)
+      if (!plan) return
+      setMessages(plan.messages)
+      void send(plan.question)
     },
     [messages, send]
   )
