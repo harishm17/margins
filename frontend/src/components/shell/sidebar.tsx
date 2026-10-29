@@ -165,7 +165,7 @@ function TopicList({ course, activeTopicId }: { course: NavCourse; activeTopicId
               </span>
               <MasteryIndicator mastery={unitMasteryOf(group.topics)} variant="ring" />
             </button>
-            <ul id={panelId} hidden={!open} className="ml-[15px] border-l border-border pl-1.5">
+            <ul id={panelId} hidden={!open} data-collapsible="" className="ml-[15px] border-l border-border pl-1.5">
               {group.topics.map((topic) => (
                 <TopicLink key={topic.id} courseId={course.id} topic={topic} active={activeTopicId === topic.id} />
               ))}
