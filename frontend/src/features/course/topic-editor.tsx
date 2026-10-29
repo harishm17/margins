@@ -49,7 +49,10 @@ import { TopicEditorRow, type EditorTopic, type MergeGroup } from './topic-edito
 const NO_UNIT = 'none'
 const LAST = Number.MAX_SAFE_INTEGER
 
-const byOrder = <T extends { orderIndex: number }>(list: T[]) => [...list].sort((a, b) => a.orderIndex - b.orderIndex)
+/** A name typed into "Add a topic" that the server does not have yet. */
+type PendingAdd = { key: number; name: string; unitId: string | null; state: 'adding' | 'failed' }
+
+const byOrder =<T extends { orderIndex: number }>(list: T[]) => [...list].sort((a, b) => a.orderIndex - b.orderIndex)
 
 /** Gives every topic its place in the course order: units in order, each unit's topics, then the rest. */
 function renumber(topics: EditorTopic[], units: ShellUnit[]): EditorTopic[] {
@@ -188,6 +191,17 @@ export function TopicEditor({
   const addRef = React.useRef<HTMLInputElement>(null)
   const refocus = React.useRef<string | null>(null)
   const queue = React.useRef<Promise<unknown>>(Promise.resolve())
+  // Names typed into "Add a topic" that the server does not have yet (being added, or failed).
+  const [adds, setAdds] = React.useState<PendingAdd[]>([])
+  // The same list, readable at once by work that awaits the queue (Confirm), before a re-render.
+  const addsRef = React.useRef<PendingAdd[]>([])
+  const nextAddKey = React.useRef(0)
+  const updateAdds = (change: (current: PendingAdd[]) => PendingAdd[]) => {
+    addsRef.current = change(addsRef.current)
+    setAdds(addsRef.current)
+  }
+  const failedAdds = adds.filter((item) => item.state === 'failed')
+  const addingCount = adds.length - failedAdds.length
 
   const groups = React.useMemo(() => groupTopicsByUnit(items, unitItems, { includeEmpty: true }), [items, unitItems])
   const hasUnits = unitItems.length > 0
@@ -311,7 +325,9 @@ export function TopicEditor({
   const addTarget = newUnit && unitItems.some((unit) => unit.id === newUnit) ? newUnit : (unitItems[unitItems.length - 1]?.id ?? NO_UNIT)
 
   // Enter adds the topic and the field stays ready for the next one: it is cleared at once and never
-  // disabled (a disabled field drops focus and whatever is typed next). Adds go to the server in order.
+  // disabled (a disabled field drops focus and whatever is typed next). Each name typed is kept as a
+  // pending add, in the order typed, until the server has it; one that fails stays on screen with
+  // Retry and Remove, so a typed topic is never lost. Adds go to the server one after another.
   function addTopic(event: React.FormEvent) {
     event.preventDefault()
     const name = newName.trim()
@@ -319,6 +335,22 @@ export function TopicEditor({
     setNewName('')
     addRef.current?.focus()
     const unitId = hasUnits && addTarget !== NO_UNIT ? addTarget : null
+    const pending: PendingAdd = { key: nextAddKey.current++, name, unitId, state: 'adding' }
+    updateAdds((current) => [...current, pending])
+    sendAdd(pending)
+  }
+
+  function retryAdd(pending: PendingAdd) {
+    updateAdds((current) => current.map((item) => (item.key === pending.key ? { ...item, state: 'adding' } : item)))
+    sendAdd(pending)
+  }
+
+  function removeAdd(pending: PendingAdd) {
+    updateAdds((current) => current.filter((item) => item.key !== pending.key))
+    addRef.current?.focus()
+  }
+
+  function sendAdd({ key, name, unitId }: PendingAdd) {
     enqueue(async () => {
       try {
         const result = await apiFetch<{ topic: { id: string; name: string; description: string | null; keywords: string[]; orderIndex: number; userConfirmed: boolean; unitId?: string | null } }>(
@@ -344,12 +376,12 @@ export function TopicEditor({
             unitItems
           )
         )
+        updateAdds((current) => current.filter((item) => item.key !== key))
         setAnnouncement(`Added ${topic.name}`)
         router.refresh()
-      } catch (error) {
-        // Put the name back unless the student is already typing the next one.
-        setNewName((current) => current || name)
-        toast.error(isApiError(error) ? error.message : "Couldn't add the topic. Try again.")
+      } catch {
+        updateAdds((current) => current.map((item) => (item.key === key ? { ...item, state: 'failed' } : item)))
+        setAnnouncement(`Couldn't add ${name}`)
       }
     })
   }
@@ -413,6 +445,12 @@ export function TopicEditor({
     try {
       // Topics still being added (or moved) reach the server first, so the list confirmed is the one on screen.
       await queue.current
+      // A topic that could not be added is still on screen: confirming now would leave it out.
+      if (addsRef.current.some((item) => item.state === 'failed')) {
+        toast.error('Some topics were not added. Retry or remove them, then confirm.')
+        setConfirming(false)
+        return
+      }
       await apiFetch(`/api/projects/${courseId}/topics/confirm`, { method: 'POST' })
       router.push(`/courses/${courseId}`)
       router.refresh()
@@ -519,7 +557,7 @@ export function TopicEditor({
         </InlineAlert>
       ) : null}
 
-      {!running && items.length === 0 && !hasUnits && !extractFailure ? (
+      {!running && items.length === 0 && adds.length === 0 && !hasUnits && !extractFailure ? (
         <EmptyState
           icon={<ListBullets />}
           title="No topics yet"
@@ -636,6 +674,39 @@ export function TopicEditor({
         </div>
       ) : null}
 
+      {addingCount > 0 ? (
+        <ul aria-label="Topics being added" className="divide-y divide-border border-b border-border">
+          {adds
+            .filter((item) => item.state === 'adding')
+            .map((item) => (
+              <li key={item.key} className="flex items-center gap-3 py-3 text-small text-fg-3">
+                <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                <span className="shrink-0">Adding</span>
+              </li>
+            ))}
+        </ul>
+      ) : null}
+
+      {failedAdds.length > 0 ? (
+        <ul aria-label="Topics not added" className="mt-3 flex flex-col gap-2">
+          {failedAdds.map((item) => (
+            <li key={item.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-danger-soft px-3.5 py-2 text-danger-soft-fg">
+              <span className="min-w-0 flex-1 text-small">
+                <span className="text-body-strong">{item.name}</span> was not added.
+              </span>
+              <span className="flex shrink-0 gap-2">
+                <Button size="sm" variant="secondary" aria-label={`Retry ${item.name}`} onClick={() => retryAdd(item)}>
+                  Retry
+                </Button>
+                <Button size="sm" variant="ghost" aria-label={`Remove ${item.name}`} onClick={() => removeAdd(item)}>
+                  Remove
+                </Button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {!running ? (
         <form onSubmit={addTopic} className="mt-3 flex flex-wrap items-center gap-2">
           <Input
@@ -674,7 +745,7 @@ export function TopicEditor({
               <Link href={`/courses/${courseId}/topics`}>Done</Link>
             </Button>
           ) : (
-            <Button variant="primary" onClick={confirmTopics} loading={confirming} disabled={items.length === 0 || running}>
+            <Button variant="primary" onClick={confirmTopics} loading={confirming} disabled={(items.length === 0 && addingCount === 0) || running || failedAdds.length > 0}>
               Confirm topics
             </Button>
           )}

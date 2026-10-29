@@ -42,16 +42,21 @@ async function courseWithFailedDiscovery(page: Page, email: string): Promise<str
   return courseId
 }
 
+async function ownAccount(page: Page): Promise<{ email: string; password: string }> {
+  const user = { email: `setup-state-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`, password: 'setup-state-password' }
+  const signup = await page.request.post('/api/auth/signup', { data: { ...user, name: 'Setup Tester' } })
+  expect(signup.status()).toBe(201)
+  await signIn(page, user.email, user.password)
+  return user
+}
+
 const upNext = (page: Page) => page.getByRole('region', { name: /Up next/ })
 
 test('failed topic finding, topics added by hand, then Confirm finishes setup everywhere', async ({ page, context }) => {
   await setZoneCookie(context)
   // An account of its own: Home's "Up next" follows the account's most recent course, and the shared
   // spec account (helpers/loop.ts) has other courses with study activity.
-  const user = { email: `setup-state-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`, password: 'setup-state-password' }
-  const signup = await page.request.post('/api/auth/signup', { data: { ...user, name: 'Setup Tester' } })
-  expect(signup.status()).toBe(201)
-  await signIn(page, user.email, user.password)
+  const user = await ownAccount(page)
   const courseId = await courseWithFailedDiscovery(page, user.email)
   const base = `/courses/${courseId}`
 
@@ -75,7 +80,7 @@ test('failed topic finding, topics added by hand, then Confirm finishes setup ev
   await page.keyboard.press('Enter')
   await page.keyboard.type('Conditional probability')
   await page.keyboard.press('Enter')
-  const rows = page.getByRole('list', { name: /^Topics/ }).getByRole('listitem')
+  const rows = page.getByRole('list', { name: /^Topics$/ }).getByRole('listitem')
   await expect(rows).toHaveCount(2)
   await expect(page.getByRole('button', { name: 'Rename Bayes rule' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Rename Conditional probability' })).toBeVisible()
@@ -123,4 +128,60 @@ test('failed topic finding, topics added by hand, then Confirm finishes setup ev
   await page.goto(`${base}/topics`)
   await expect(page).toHaveURL(new RegExp(`${base}/topics$`))
   await expect(page.getByRole('heading', { level: 1, name: 'Topics' })).toBeVisible()
+
+  // The only file is deleted before anything was written: every screen asks for files again. The
+  // confirmed list stays a list (no second Confirm), but there is no plan to follow without files.
+  const materialId = await withPrisma(async (prisma) =>
+    (await prisma.material.findFirstOrThrow({ where: { projectId: courseId }, select: { id: true } })).id
+  )
+  expect((await page.request.delete(`/api/materials/${materialId}`)).ok()).toBeTruthy()
+  await page.goto('/home')
+  await expect(upNext(page)).toContainText('Upload materials')
+  await page.goto(`${base}/plan`)
+  await expect(page.getByRole('heading', { level: 2, name: 'Your plan starts with your topics' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Add materials' })).toBeVisible()
+  await page.goto(`${base}/topics`)
+  await expect(page).toHaveURL(new RegExp(`${base}/topics$`))
+  await expect(page.getByRole('heading', { level: 1, name: 'Topics' })).toBeVisible()
+  await page.goto(base)
+  await expect(page.getByRole('heading', { level: 2, name: 'Add your materials' })).toBeVisible()
+})
+
+test('adds that fail while queued are kept, in order, until retried or removed', async ({ page, context }) => {
+  await setZoneCookie(context)
+  const user = await ownAccount(page)
+  const courseId = await courseWithFailedDiscovery(page, user.email)
+
+  // Every add is slow and then fails, so both are queued before the first answer comes back.
+  let fail = true
+  await page.route(`**/api/projects/${courseId}/topics`, async (route) => {
+    if (route.request().method() !== 'POST' || !fail) return route.fallback()
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Failed to create topic' }) })
+  })
+
+  await page.goto(`/courses/${courseId}/topics?edit=1`)
+  const add = page.getByLabel('Add a topic').locator('visible=true')
+  await add.click()
+  await page.keyboard.type('Bayes rule')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Conditional probability')
+  await page.keyboard.press('Enter')
+
+  // Neither name is lost: both stay on screen as topics that were not added, first one first.
+  const notAdded = page.getByRole('list', { name: 'Topics not added' }).getByRole('listitem')
+  await expect(notAdded).toHaveCount(2, { timeout: 10_000 })
+  await expect(notAdded.nth(0)).toContainText('Bayes rule')
+  await expect(notAdded.nth(1)).toContainText('Conditional probability')
+  // Confirm waits until they are dealt with.
+  await expect(page.getByRole('button', { name: 'Confirm topics' })).toBeDisabled()
+
+  // Retry one (now the server takes it), remove the other.
+  fail = false
+  await notAdded.nth(0).getByRole('button', { name: 'Retry Bayes rule' }).click()
+  await expect(page.getByRole('button', { name: 'Rename Bayes rule' })).toBeVisible()
+  await notAdded.getByRole('button', { name: 'Remove Conditional probability' }).click()
+  await expect(notAdded).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Confirm topics' })).toBeEnabled()
+  await expect(page.getByRole('list', { name: /^Topics$/ }).getByRole('listitem')).toHaveCount(1)
 })
