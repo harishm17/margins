@@ -14,7 +14,7 @@ import { Prisma, type PrismaClient } from '@prisma/client'
  * the account again. Local databases only: the screenshot script signs in with the local-only test sign-in.
  */
 export const SHOWCASE_EMAIL = 'showcase@example.com'
-const SHOWCASE_NAME = 'Maya Chen'
+const SHOWCASE_NAME = 'Jane Doe'
 const COURSE_NAME = 'CS 161 Algorithms'
 
 type Json = Record<string, any>

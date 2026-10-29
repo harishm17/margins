@@ -1,19 +1,20 @@
-/* eslint-disable @next/next/no-img-element -- art-directed <picture> built with getImageProps, the pattern the Next docs give for it */
-import { getImageProps } from 'next/image'
-
-type Size = { width: number; height: number }
+/* eslint-disable @next/next/no-img-element -- the screenshots are written at the widths they need (npm run screens) and served as they are, without the image optimizer's second, lossy encode */
+import SCREENS from './screens.json'
+import { SLOT_SIZES, mobileStem, shotSources, type ScreensManifest, type ShotTheme } from './shot-sources'
 
 type ShotProps = {
-  /** File stem in public/screens: `plan` serves plan-light.webp and plan-dark.webp. */
+  /** File stem in public/screens: `plan` serves plan-light-<width>.webp and plan-dark-<width>.webp. */
   name: string
-  desktop: Size
   /**
-   * A phone-sized version of the same screen (`<name>-mobile-light.webp` ...), used below 768px. It is
-   * a real 390px page at its natural size, so the text stays readable.
+   * Use the phone-sized version of the same screen (`<name>-mobile-light-<width>.webp` ...) below `desktopMedia`.
+   * It is a real 390px page at its natural size, so the text stays readable.
    */
-  mobile?: Size
+  mobile?: boolean
   alt: string
+  /** The width the desktop version is drawn at (SLOT_SIZES). */
   sizes: string
+  /** The width the phone version is drawn at. Default: a frame of at most 420px (SLOT_SIZES.phone). */
+  mobileSizes?: string
   /**
    * The media query that picks the desktop crop over the phone one. Default: 768px and up. A block that is
    * hidden above some width should stop at it (`(min-width: 768px) and (max-width: 1023px)`), so the hidden
@@ -25,37 +26,50 @@ type ShotProps = {
   className?: string
 }
 
-const THEMES = ['light', 'dark'] as const
-export type ShotTheme = (typeof THEMES)[number]
-
-/** The file of one theme's version: `plan` and `dark` give /screens/plan-dark.webp. */
-export const shotSrc = (name: string, theme: ShotTheme) => `/screens/${name}-${theme}.webp`
-
-/** The stem of the phone version: `plan` becomes `plan-mobile`, `notes-detail` becomes `notes-detail-mobile`. */
-export const mobileStem = (name: string) => `${name}-mobile`
+const THEMES: ShotTheme[] = ['light', 'dark']
 
 /**
  * A product screenshot in the light or dark version, switched with the theme class on <html>, and
  * optionally a different crop below 768px (art direction with <picture>). Only the visible theme's
  * image is fetched, except for `eager` ones, whose light image is always requested.
  */
-export function Shot({ name, desktop, mobile, alt, sizes, desktopMedia = '(min-width: 768px)', eager, className }: ShotProps) {
+export function Shot({ name, mobile, alt, sizes, mobileSizes = SLOT_SIZES.phone, desktopMedia = '(min-width: 768px)', eager, className }: ShotProps) {
+  const screens = SCREENS as ScreensManifest
   return (
     <>
       {THEMES.map((theme) => {
         const priority = eager && theme === 'light'
-        const common = { alt, loading: priority ? ('eager' as const) : ('lazy' as const), fetchPriority: priority ? ('high' as const) : ('auto' as const) }
-        const wide = getImageProps({ ...common, src: shotSrc(name, theme), ...desktop, sizes })
-        const themeClass = theme === 'light' ? 'dark:hidden' : 'hidden dark:block'
-        if (!mobile) {
-          return <img key={theme} {...wide.props} alt={alt} className={`${themeClass} ${className ?? ''}`} />
+        // React sets attributes in order: `loading` first and `src` last, as next/image does, or Safari and Firefox
+        // fetch `src` before they know the image is lazy and before `srcSet` and `sizes` are set
+        // (facebook/react#25883).
+        const common = {
+          loading: priority ? ('eager' as const) : ('lazy' as const),
+          fetchPriority: priority ? ('high' as const) : ('auto' as const),
+          decoding: 'async' as const,
         }
-        const narrow = getImageProps({ ...common, src: shotSrc(mobileStem(name), theme), ...mobile, sizes: '(min-width: 640px) 390px, calc(100vw - 32px)' })
+        const wide = shotSources(screens, name, theme)
+        const themeClass = theme === 'light' ? 'dark:hidden' : 'hidden dark:block'
+        if (mobile) {
+          const narrow = shotSources(screens, mobileStem(name), theme)
+          return (
+            <picture key={theme} className={themeClass}>
+              <source media={desktopMedia} srcSet={wide.srcSet} sizes={sizes} width={wide.width} height={wide.height} />
+              <img alt={alt} {...common} srcSet={narrow.srcSet} sizes={mobileSizes} width={narrow.width} height={narrow.height} className={className} src={narrow.src} />
+            </picture>
+          )
+        }
         return (
-          <picture key={theme} className={themeClass}>
-            <source media={desktopMedia} srcSet={wide.props.srcSet} sizes={sizes} width={desktop.width} height={desktop.height} />
-            <img {...narrow.props} alt={alt} className={className} />
-          </picture>
+          <img
+            key={theme}
+            alt={alt}
+            {...common}
+            srcSet={wide.srcSet}
+            sizes={sizes}
+            width={wide.width}
+            height={wide.height}
+            className={`${themeClass} ${className ?? ''}`}
+            src={wide.src}
+          />
         )
       })}
     </>

@@ -67,6 +67,14 @@ test('the landing page tells the loop from files to exam day', async ({ page }) 
       )
     )
     .toBe(true)
+  // They are the files npm run screens wrote, served as they are: no image optimizer encodes them again.
+  const sources = await page.evaluate(() =>
+    Array.from(document.images)
+      .filter((image) => image.offsetParent !== null)
+      .map((image) => new URL(image.currentSrc).pathname)
+  )
+  expect(sources.length).toBeGreaterThan(0)
+  expect(sources.filter((source) => !/^\/screens\/[a-z-]+-(light|dark)-\d+\.webp$/.test(source))).toEqual([])
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
   expect(errors).toEqual([])
 

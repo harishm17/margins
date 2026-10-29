@@ -6,16 +6,12 @@ import { CONTACT_EMAIL, GITHUB_URL } from '@/config/site'
  * README or the eval results; the note after each says where. Change a claim here only with its source.
  */
 
-export type Dimensions = { width: number; height: number }
-
 export type LoopStep = {
   id: string
   title: string
   text: string
-  /** Screenshot stem in public/screens, its size, and the size of its phone version. */
+  /** Screenshot stem in public/screens; screens.json has its sizes and those of its phone version. */
   shot: string
-  desktop: Dimensions
-  mobile: Dimensions
   alt: string
 }
 
@@ -26,8 +22,6 @@ export const LOOP_STEPS: LoopStep[] = [
     // Upload accepts PDF, DOCX, PPTX and DOC up to 25 MB (materials page); "Past exams" is a category there.
     text: 'Add lecture notes, book chapters and past exams as PDF, Word or PowerPoint files. Mark the past exams so Margins can learn how they are written.',
     shot: 'materials',
-    desktop: { width: 1200, height: 901 },
-    mobile: { width: 780, height: 1400 },
     alt: 'The Materials page with a drop zone and a list of lecture notes, a book chapter and two past exams',
   },
   {
@@ -36,8 +30,6 @@ export const LOOP_STEPS: LoopStep[] = [
     // README, "What it does" step 2.
     text: 'Margins splits the course into units and topics, each tied to the pages that teach it. Rename, merge or move anything before it writes a word.',
     shot: 'topics-edit',
-    desktop: { width: 1200, height: 901 },
-    mobile: { width: 780, height: 1400 },
     alt: 'The topic editor listing units and topics, each with the file and pages it is taught from',
   },
   {
@@ -46,8 +38,6 @@ export const LOOP_STEPS: LoopStep[] = [
     // README step 5: a quiz the next day, spaced reviews, a mock exam after each unit and full mocks.
     text: 'Give your exam date and the time you have each day. Margins lists what to learn, quiz and review on each day, with spaced reviews and full mock exams before the date.',
     shot: 'plan-exam-day',
-    desktop: { width: 1200, height: 735 },
-    mobile: { width: 780, height: 1400 },
     alt: 'The plan for the last two days before the exam: a final review day and exam day, each with timed review items',
   },
   {
@@ -56,8 +46,6 @@ export const LOOP_STEPS: LoopStep[] = [
     // README step 3: notes, examples, quiz; notes list the files and pages they came from.
     text: 'Read notes written from your own pages, work through examples and practice one step at a time, then take a quiz. Each section names the files and pages it came from.',
     shot: 'notes-detail',
-    desktop: { width: 1200, height: 900 },
-    mobile: { width: 780, height: 1400 },
     alt: 'Topic notes with a Python code block, an outline of the page and a list of the source files and pages',
   },
   {
@@ -66,8 +54,6 @@ export const LOOP_STEPS: LoopStep[] = [
     // new-exam-form.tsx: "Match my past exams", with its own help text.
     text: 'Mock exams are timed and autosaved. Choose Match my past exams and the questions follow the wording, task verbs and answer length of the exams you uploaded.',
     shot: 'exam-new',
-    desktop: { width: 1200, height: 901 },
-    mobile: { width: 780, height: 1400 },
     alt: 'The new mock exam form with question count, time limit, difficulty, question mix and the Match my past exams option ticked',
   },
   {
@@ -76,8 +62,6 @@ export const LOOP_STEPS: LoopStep[] = [
     // Quiz review shows the answer, "Why" and "From <file>, p. N"; Retry what you missed and Voice practice exist.
     text: 'Results show the right answer, why, and the page it is from. Retry what you missed, or answer questions out loud in Voice practice.',
     shot: 'quiz-results',
-    desktop: { width: 1200, height: 901 },
-    mobile: { width: 780, height: 1400 },
     alt: 'Quiz results with a missed question, the correct answer, an explanation and the file and page it is from',
   },
 ]

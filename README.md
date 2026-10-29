@@ -13,7 +13,7 @@ Upload your lecture notes, textbook chapters and past exams. Margins splits them
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Claude](https://img.shields.io/badge/LLM-Claude-D97757)](https://docs.anthropic.com/)
 
-<img src="frontend/public/screens/plan-light.webp" alt="The Margins plan page: Today lists a review and a quiz, and each day after it leads to the exam date" width="860">
+<img src="frontend/public/screens/plan-light-1920.webp" alt="The Margins plan page: Today lists a review and a quiz, and each day after it leads to the exam date" width="860">
 
 </div>
 
@@ -31,19 +31,19 @@ Upload your lecture notes, textbook chapters and past exams. Margins splits them
 5. **Plan to your exam date.** Give the date and your daily minutes and Margins lays out each day: new topics in prerequisite order, a quiz the next day, spaced reviews, a mock exam after each unit and two full mocks before the exam. Mastery comes from quizzes, exams, voice and practice; **Retry what you missed** and **Fresh review** target weak spots.
 6. **Ask your materials**: a chat that answers from your files with numbered citations, and says so when the files don't cover the question.
 
-<img src="frontend/public/screens/topics-edit-light.webp" alt="The course plan: units and topics, each tied to the file and pages it is taught from" width="860">
+<img src="frontend/public/screens/topics-edit-light-1920.webp" alt="The course plan: units and topics, each tied to the file and pages it is taught from" width="860">
 
 *The course plan Margins proposes. Each topic lists the file and pages it is taught from, and you can rename, move, merge or remove topics before anything is written.*
 
-<img src="frontend/public/screens/notes-detail-light.webp" alt="Topic notes with code, an outline and the source files and pages" width="860">
+<img src="frontend/public/screens/notes-detail-light-1920.webp" alt="Topic notes with code, an outline and the source files and pages" width="860">
 
 *Notes for one topic, with an outline and the source pages they were written from.*
 
-<img src="frontend/public/screens/practice-light.webp" alt="A practice problem solved one step at a time, with a hint open" width="860">
+<img src="frontend/public/screens/practice-light-1920.webp" alt="A practice problem solved one step at a time, with a hint open" width="860">
 
 *Practice: a problem broken into steps, each checked as you go, with a hint.*
 
-<img src="frontend/public/screens/ask-light.webp" alt="Ask your materials, with a citation open on the page it quotes" width="860">
+<img src="frontend/public/screens/ask-light-1920.webp" alt="Ask your materials, with a citation open on the page it quotes" width="860">
 
 *Ask your materials: answers cite numbered passages from your files, and each citation opens the page.*
 

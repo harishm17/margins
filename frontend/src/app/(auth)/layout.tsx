@@ -3,6 +3,7 @@ import { Brand } from '@/components/shell/brand'
 import { SkipLink } from '@/components/shell/skip-link'
 import { BRAND_NAME } from '@/config/brand'
 import { Shot } from '@/features/marketing/shot'
+import { SLOT_SIZES } from '@/features/marketing/shot-sources'
 import { ThemeSwitch } from '@/components/ui/theme-switch'
 import { AiStatusBanner, AiStatusProvider } from '@/features/ai/ai-status'
 
@@ -36,9 +37,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             <div className="overflow-hidden rounded-card border border-border bg-surface">
               <Shot
                 name="plan"
-                desktop={{ width: 1400, height: 957 }}
                 alt="The plan page of a course: Today lists a review and a quiz, and the days after it lead to the exam date"
-                sizes="(min-width: 1536px) 960px, 720px"
+                sizes={SLOT_SIZES.auth}
                 className="h-auto w-full"
               />
             </div>

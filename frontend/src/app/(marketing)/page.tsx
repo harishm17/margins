@@ -8,6 +8,7 @@ import { EVAL_FACTS, FAQ, LINKS, LOOP_STEPS } from '@/features/marketing/content
 import { Loop } from '@/features/marketing/loop'
 import { SectionArrival } from '@/features/marketing/section-link'
 import { Shot } from '@/features/marketing/shot'
+import { SLOT_SIZES } from '@/features/marketing/shot-sources'
 
 export const metadata: Metadata = {
   // "Margins" alone is a common word, so the home title also says what the product makes.
@@ -109,11 +110,10 @@ function Hero() {
         <div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-card border border-border bg-surface md:max-w-none">
           <Shot
             name="plan"
-            desktop={{ width: 1400, height: 957 }}
-            mobile={{ width: 780, height: 1400 }}
+            mobile
             eager
             alt="The Margins plan page. Today lists a review and a quiz, and the days after it lead to the exam date."
-            sizes="(min-width: 1280px) 700px, (min-width: 1024px) 55vw, 704px"
+            sizes={SLOT_SIZES.hero}
             className="h-auto w-full"
           />
         </div>
@@ -150,15 +150,16 @@ function Trust() {
                 Notes, worked examples, quiz results and chat answers name the file and page they came from. Select a number in an answer to read the passage itself.
               </p>
             </div>
-            <div className="flex flex-1 px-6 md:px-8">
-              <div className="relative min-h-[400px] flex-1 overflow-hidden rounded-t-control border border-b-0 border-border">
+            {/* The screenshot is drawn whole (4:3 on desktop, the phone page below 768px) at the bottom of the card. */}
+            <div className="mt-auto px-6 md:px-8">
+              <div className="overflow-hidden rounded-t-control border border-b-0 border-border">
                 <Shot
                   name="ask"
-                  desktop={{ width: 1000, height: 1022 }}
-                  mobile={{ width: 780, height: 1400 }}
+                  mobile
                   alt="An answer in Ask with a citation open: the quoted passage, the file name and the page"
-                  sizes="(min-width: 1280px) 620px, (min-width: 1024px) 55vw, 704px"
-                  className="absolute inset-0 h-full w-full object-cover object-[50%_32%] md:object-[50%_38%]"
+                  sizes={SLOT_SIZES.ask}
+                  mobileSizes={SLOT_SIZES.askPhone}
+                  className="h-auto w-full"
                 />
               </div>
             </div>
