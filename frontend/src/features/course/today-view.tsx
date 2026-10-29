@@ -22,6 +22,7 @@ import { BuildingContent } from './building-content'
 import { CourseMenu } from './course-menu'
 import { ExamPromptCard } from './exam-prompt-card'
 import { RefreshOnFocus } from './refresh-on-focus'
+import { newTopicsLabel } from '@/lib/course-setup'
 import { courseSummary } from './summary'
 
 /**
@@ -245,6 +246,7 @@ function RecentExams({ courseId, exams }: { courseId: string; exams: TodayData['
 export function TodayView({ course, today }: { course: CourseShell; today: TodayData }) {
   const base = `/courses/${course.id}`
   const building = today.generation.activeJobs > 0 || today.generation.failures.length > 0
+  const newTopics = newTopicsLabel(course.setup.topics)
 
   return (
     <Page>
@@ -267,6 +269,19 @@ export function TodayView({ course, today }: { course: CourseShell; today: Today
 
       <div className="flex flex-col gap-10">
         <div className="flex flex-col gap-4">
+          {newTopics ? (
+            <InlineAlert
+              tone="accent"
+              title={newTopics}
+              action={
+                <Button asChild size="sm" variant="primary">
+                  <Link href={`${base}/topics?edit=1`}>Review topics</Link>
+                </Button>
+              }
+            >
+              They join your plan once you confirm them.
+            </InlineAlert>
+          ) : null}
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
             <UpNext courseId={course.id} next={today.next} />
             <ProgressCard average={today.averageMastery} counts={today.counts} />

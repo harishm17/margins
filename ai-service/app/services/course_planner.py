@@ -783,9 +783,9 @@ async def plan_course(project_id: str) -> PlanJob:
     syllabus = await _syllabus_text(project_id)
 
     topic_rows = await execute_query(
-        """
-        SELECT id, name, unit_id, user_confirmed, order_index, objectives, created_at
-        FROM topics WHERE project_id = $1 ORDER BY order_index, created_at, id
+        f"""
+        SELECT id, name, unit_id, {KEPT_TOPIC} AS user_confirmed, order_index, objectives, created_at
+        FROM topics t WHERE project_id = $1 ORDER BY order_index, created_at, id
         """,
         project_id,
     )
@@ -858,6 +858,20 @@ async def plan_course(project_id: str) -> PlanJob:
 # Writing the plan
 
 
+# A topic the planner never deletes or replaces: confirmed by the student, or with study activity
+# (content, progress, attempts, a review date), whatever its flag says. Used as a column of `topics t`.
+KEPT_TOPIC = """(t.user_confirmed
+    OR EXISTS (SELECT 1 FROM topic_content x WHERE x.topic_id = t.id)
+    OR EXISTS (SELECT 1 FROM topic_progress x WHERE x.topic_id = t.id)
+    OR EXISTS (SELECT 1 FROM quiz_attempts x WHERE x.topic_id = t.id)
+    OR EXISTS (SELECT 1 FROM practice_progress x WHERE x.topic_id = t.id)
+    OR EXISTS (SELECT 1 FROM review_schedules x WHERE x.topic_id = t.id))"""
+
+
+class StalePlanError(Exception):
+    """The confirmed topics changed while the plan was being made (the student pressed Confirm)."""
+
+
 def normalize_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).strip()
 
@@ -878,10 +892,17 @@ async def write_plan(job: PlanJob) -> Dict[str, int]:
     async def write(conn) -> Dict[str, int]:
         await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", f"plan:{project_id}")
         existing = await conn.fetch(
-            "SELECT id, name, user_confirmed, unit_id FROM topics WHERE project_id = $1 ORDER BY order_index, created_at, id",
+            f"SELECT id, name, {KEPT_TOPIC} AS user_confirmed, unit_id FROM topics t "
+            "WHERE project_id = $1 ORDER BY order_index, created_at, id",
             project_id,
         )
         confirmed_ids = [row["id"] for row in existing if row["user_confirmed"]]
+        # The plan was made from the confirmed topics at that time (a full plan from none). If Confirm
+        # (or a first study step) changed them while the model was working, what was placed as new may
+        # now be covered: nothing is written, and the caller plans again.
+        planned_from = {topic.id for topic in job.existing_topics}
+        if set(confirmed_ids) != planned_from:
+            raise StalePlanError(project_id)
         unconfirmed = [row for row in existing if not row["user_confirmed"]]
         reusable = {} if job.mode == "incremental" else {
             normalize_name(row["name"]): row["id"] for row in reversed(unconfirmed) if normalize_name(row["name"])
@@ -1005,7 +1026,11 @@ async def write_plan(job: PlanJob) -> Dict[str, int]:
         await _place_in_existing_units(conn, project_id, created_topics)
 
         if plan.units or job.mode == "full":
-            await conn.execute("UPDATE projects SET status = 'topics_pending' WHERE id = $1", project_id)
+            # A course the student already confirmed stays active: its new topics wait for review.
+            await conn.execute(
+                "UPDATE projects SET status = 'topics_pending' WHERE id = $1 AND status NOT IN ('active', 'completed')",
+                project_id,
+            )
         return {
             "topics": len(planned),
             "units": len(plan.units),

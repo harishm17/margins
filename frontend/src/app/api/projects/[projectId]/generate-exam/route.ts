@@ -87,18 +87,19 @@ export async function POST(
     const uniqueTopicIds = Array.from(new Set(validation.data.topicIds));
     const { totalQuestions, durationMinutes, difficultyLevel, questionTypeDistribution, matchPastExams } = validation.data;
 
-    // Verify all topics belong to this project
+    // Verify all topics belong to this project and are confirmed (new topics wait for review)
     const topics = await prisma.topic.findMany({
       where: {
         id: { in: uniqueTopicIds },
         projectId,
+        userConfirmed: true,
       },
       select: { id: true },
     });
 
     if (topics.length !== uniqueTopicIds.length) {
       return NextResponse.json(
-        { error: 'Some topics not found or do not belong to this project' },
+        { error: 'Some topics were not found, are not confirmed, or do not belong to this project' },
         { status: 400 }
       );
     }

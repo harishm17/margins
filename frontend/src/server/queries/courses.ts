@@ -98,17 +98,20 @@ export async function listCourses(userId: string): Promise<CourseListItem[]> {
   const now = Date.now()
   const extractions = await latestExtractions(userId, projects.map((project) => project.id))
   return projects.map((project) => {
-    const levels = project.topics.map((topic) => masteryLevel(displayMastery(topic.reviewSchedules[0]?.mastery, topic.reviewSchedules[0], now)))
+    const setup = setupOf(project, extractions.get(project.id) ?? 'none')
+    // New topics waiting for review do not count as part of a confirmed course.
+    const shown = project.topics.filter((topic) => !setup.topics.listConfirmed || topic.userConfirmed)
+    const levels = shown.map((topic) => masteryLevel(displayMastery(topic.reviewSchedules[0]?.mastery, topic.reviewSchedules[0], now)))
     return {
       id: project.id,
       name: project.name,
       description: project.description,
       status: project.status,
       updatedAt: project.updatedAt.toISOString(),
-      topicCount: project.topics.length,
+      topicCount: shown.length,
       strongCount: levels.filter((level) => level === 'strong').length,
       levels,
-      setup: setupOf(project, extractions.get(project.id) ?? 'none'),
+      setup,
     }
   })
 }
@@ -322,7 +325,9 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
       active: setup.mode === 'active',
       units: project.units,
       files: project.materials,
-      topics: project.topics.map((topic) => ({
+      // New topics found after the student confirmed wait for review: the sidebar, the command palette and
+      // search list only the confirmed ones.
+      topics: project.topics.filter((topic) => !setup.topics.listConfirmed || topic.userConfirmed).map((topic) => ({
         id: topic.id,
         name: topic.name,
         mastery: displayMastery(topic.reviewSchedules[0]?.mastery, topic.reviewSchedules[0], now),

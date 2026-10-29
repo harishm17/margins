@@ -73,6 +73,8 @@ export type TopicStructure = {
 
 export type TopicPageData = {
   course: { id: string; name: string }
+  /** A new topic on a confirmed list: not studied until the student confirms it in the topic editor. */
+  awaitingReview: boolean
   topic: {
     id: string
     name: string
@@ -137,6 +139,10 @@ export const getTopicPage = cache(async function getTopicPage(
   const index = course?.topics.findIndex((item) => item.id === topicId) ?? -1
   if (!course || index < 0) return null
   const shellTopic = course.topics[index]
+  // On a confirmed list, new topics waiting for review are not part of the course path yet.
+  const hidden = course.setup.topics.listConfirmed && !shellTopic.confirmed
+  const visible = course.topics.filter((item) => item.id === topicId || !course.setup.topics.listConfirmed || item.confirmed)
+  const position = visible.findIndex((item) => item.id === topicId)
 
   const [contentRows, quizRows, attemptRows, jobRows, structureRow, sourceRows, practiceRows] = await Promise.all([
     prisma.topicContent.findMany({
@@ -276,6 +282,7 @@ export const getTopicPage = cache(async function getTopicPage(
 
   return {
     course: { id: course.id, name: course.name },
+    awaitingReview: hidden,
     topic: {
       id: shellTopic.id,
       name: shellTopic.name,
@@ -289,8 +296,8 @@ export const getTopicPage = cache(async function getTopicPage(
       structure,
       keywords: structureRow?.keywords ?? [],
     },
-    previous: index > 0 ? neighbour(course.topics[index - 1]) : null,
-    next: index < course.topics.length - 1 ? neighbour(course.topics[index + 1]) : null,
+    previous: position > 0 ? neighbour(visible[position - 1]) : null,
+    next: position < visible.length - 1 ? neighbour(visible[position + 1]) : null,
     content,
     present,
     contentVersion,

@@ -18,7 +18,7 @@ export type Sprint = { topics: SprintTopic[]; studied: boolean }
 export async function getSprintTopics(userId: string, courseId: string): Promise<Sprint> {
   if (!areRecordIds(courseId)) return { topics: [], studied: false }
   const topics = await prisma.topic.findMany({
-    where: { projectId: courseId, project: { userId } },
+    where: { projectId: courseId, project: { userId }, userConfirmed: true },
     select: {
       id: true,
       name: true,

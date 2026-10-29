@@ -41,6 +41,8 @@ type Props = {
   activeJob: { id: string; startedAt: string } | null
   /** Whether the course's past exams have a style to match, and if not, why. */
   examStyle: ExamStyleState
+  /** The time limit and number of questions to start with (a link from the plan sets them); both stay changeable. */
+  initial?: { durationMinutes: number; totalQuestions: number }
 }
 
 /**
@@ -86,11 +88,11 @@ function SectionLabel({ id, children, hint }: { id: string; children: React.Reac
 }
 
 /** The mock exam form, then the "Writing your exam" wait, then the lobby of the new exam. */
-export function NewExamForm({ courseId, topics, preselected, activeJob, examStyle }: Props) {
+export function NewExamForm({ courseId, topics, preselected, activeJob, examStyle, initial }: Props) {
   const router = useRouter()
   const [selected, setSelected] = React.useState<Set<string>>(() => new Set(preselected))
-  const [totalQuestions, setTotalQuestions] = React.useState<number>(DEFAULT_EXAM_CONFIG.totalQuestions)
-  const [durationMinutes, setDurationMinutes] = React.useState<number>(DEFAULT_EXAM_CONFIG.durationMinutes)
+  const [totalQuestions, setTotalQuestions] = React.useState<number>(initial?.totalQuestions ?? DEFAULT_EXAM_CONFIG.totalQuestions)
+  const [durationMinutes, setDurationMinutes] = React.useState<number>(initial?.durationMinutes ?? DEFAULT_EXAM_CONFIG.durationMinutes)
   const [difficulty, setDifficulty] = React.useState<Difficulty>(DEFAULT_EXAM_CONFIG.difficultyLevel)
   const [mix, setMix] = React.useState<QuestionMix>(DEFAULT_EXAM_CONFIG.mix)
   const [matchPastExams, setMatchPastExams] = React.useState(true)

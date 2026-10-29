@@ -1,3 +1,4 @@
+import { examDefaultsFromParams, questionsForMinutes } from '../exams/form-defaults'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildPlan, type PlanItem, type PlanTopic } from './plan'
@@ -33,7 +34,10 @@ test('each kind of item links to its action', () => {
 
 test('mixed practice and projected reviews link to their actions', () => {
   const mixed = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes: 30 })
-  assert.equal(planItemHref(mixed, 'c1'), '/courses/c1/exams/new?topics=a,b')
+  assert.equal(planItemHref(mixed, 'c1'), '/courses/c1/exams/new?topics=a,b&minutes=30&questions=10')
+  const short = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes: 20 })
+  assert.equal(planItemHref(short, 'c1'), '/courses/c1/exams/new?topics=a,b&minutes=20&questions=5')
+  assert.equal(planItemHref({ ...short, topicIds: [] }, 'c1'), '/courses/c1/exams/new?minutes=20&questions=5')
   const described = describePlanItem(mixed, 'c1')
   assert.equal(described.verb, 'Create')
   assert.match(described.reason, /mixed together/)
@@ -201,4 +205,20 @@ test('rows that used to repeat the same sentence say something specific', () => 
   assert.equal(inUnit.reason, 'Sorting and graphs: read the notes, then work through the examples.')
   assert.equal(describePlanItem(item({ part: { number: 2, of: 2 } }), 'c1').reason, 'Pick up where you stopped.')
   assert.match(describePlanItem(item({ note: 'You have started this one' }), 'c1').reason, /started/)
+})
+
+test('the mixed practice link and the exam form agree for every block length', () => {
+  for (let minutes = 15; minutes <= 30; minutes += 1) {
+    const block = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes })
+    const query = new URL(planItemHref(block, 'c1'), 'http://x').searchParams
+    const linked = { minutes: Number(query.get('minutes')), questions: Number(query.get('questions')) }
+    const form = examDefaultsFromParams({ minutes: query.get('minutes') ?? undefined, questions: query.get('questions') ?? undefined })
+    assert.equal(form.durationMinutes, linked.minutes, `${minutes} min`)
+    assert.equal(form.totalQuestions, linked.questions, `${minutes} min`)
+    // The form shows the snapped time with the questions that fit that time.
+    assert.equal(linked.questions, questionsForMinutes(linked.minutes), `${minutes} min`)
+  }
+  // 25 minutes: the form offers 20 min, so the link says 20 min with 5 questions (not 10).
+  const block = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes: 25 })
+  assert.equal(planItemHref(block, 'c1'), '/courses/c1/exams/new?topics=a,b&minutes=20&questions=5')
 })
