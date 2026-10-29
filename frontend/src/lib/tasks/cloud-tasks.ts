@@ -5,6 +5,7 @@
 
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 import { retryDelayMs } from './retry-delay'
+import { undeliveredWhere } from './undelivered'
 
 let CloudTasksClient: any
 let client: any = null
@@ -119,18 +120,10 @@ async function markJobFailed(
 ): Promise<void> {
   try {
     const { prisma } = await import('@/lib/db/prisma')
-    // Only a job the AI service has not recorded a result for: never started, or running
-    // on a lease that has run out. A terminal state it wrote itself is left alone, and so
-    // is a job still working under a live lease.
-    const now = new Date()
+    // Only a job no handler has touched (see ./undelivered): a job waiting for its retry, or one
+    // whose worker died, is the AI service reaper's to send again.
     await prisma.processingJob.updateMany({
-      where: {
-        id: payload.jobId,
-        OR: [
-          { status: 'pending' },
-          { status: 'processing', OR: [{ leaseUntil: null }, { leaseUntil: { lt: now } }] },
-        ],
-      },
+      where: undeliveredWhere(payload.jobId),
       data: {
         status: 'failed',
         errorCode: error.retryable ? 'ENQUEUE_FAILED' : 'ENQUEUE_PERMANENT',
