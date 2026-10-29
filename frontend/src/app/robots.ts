@@ -20,7 +20,7 @@ export default function robots(): MetadataRoute.Robots {
   return {
     rules: [{
       userAgent: '*',
-      allow: ['/', '/privacy', '/terms', '/login'],
+      allow: ['/', '/evaluation', '/privacy', '/terms', '/login'],
       disallow: ['/api/', '/home', '/courses/'],
     }, {
       // A crawler that matches a named group skips the * group, so the same private paths are repeated.
