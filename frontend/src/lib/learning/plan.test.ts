@@ -1068,7 +1068,8 @@ test("a topic's last review is not booked on a day other reviews already fill, a
   ]
   const result = plan({ topics, examDate: '2026-10-31', dailyMinutes: 20 })
   const aReviews = items(result, 'review').filter((item) => item.topicId === 'a').map((item) => item.date)
-  assert.ok(aReviews.some((date) => date > TODAY && date < '2026-10-30'), `a reviewed on ${aReviews}`)
+  // Its last review is booked on the 27th, the empty day before B and C's; the 28th stays theirs.
+  assert.ok(aReviews.includes('2026-10-27'), `a reviewed on ${aReviews}`)
   assert.deepEqual(result.days.find((day) => day.date === '2026-10-28')?.items.map((item) => item.topicId), ['b', 'c'])
   assert.equal(result.reviewsNotScheduled, null)
   assert.ok(result.days.every((day) => day.minutes <= 20 || day.items.every((item) => item.overBudget)))
