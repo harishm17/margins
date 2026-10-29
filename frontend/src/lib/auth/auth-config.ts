@@ -8,6 +8,7 @@ import GoogleProvider from 'next-auth/providers/google'
 import { prisma } from '@/lib/db/prisma'
 import { resolveAuthSecret } from './secret'
 import { decideGoogleSignIn } from './google-link'
+import { ACCOUNT_GONE, assertAccountExists } from './account-check'
 import { googleOAuthSettings } from './google-config'
 import { isLocalRequest, isTestLoginEmail, isTestLoginEnabled, TEST_LOGIN_PROVIDER_ID } from './test-login'
 
@@ -108,12 +109,15 @@ export const authOptions: NextAuthOptions = {
       }
       return true
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id
         token.email = user.email
         token.name = user.name
+        return token
       }
+      // Every later read: a token for a deleted account signs out (see account-check).
+      await assertAccountExists(token.id, async (id) => (await prisma.user.count({ where: { id } })) > 0)
       return token
     },
     async session({ session, token }) {
@@ -141,6 +145,10 @@ export const authOptions: NextAuthOptions = {
         code === 'JWT_SESSION_ERROR' &&
         metadataMessage.toLowerCase().includes('decryption operation failed')
       ) {
+        return
+      }
+      // A session of a deleted account, signed out on purpose (see account-check).
+      if (code === 'JWT_SESSION_ERROR' && metadataMessage === ACCOUNT_GONE) {
         return
       }
       if (

@@ -81,11 +81,15 @@ async def test_deleting_a_project_does_not_lower_the_total(db):
     assert await over_budget_message(user_id) is not None
 
 
-async def test_deleting_the_user_removes_their_ledger(db):
+async def test_deleting_the_user_unlinks_their_ledger_and_the_global_total_keeps_it(db):
+    # A plain user delete still keeps the rows: the foreign key sets user_id to NULL
+    # (delete_user_account also clears project_id and source_id; test_account_deletion_ledger.py).
     user_id, _ = await user_with_project(db)
     await seed_usage(db, user_id, 2.0)
     await db.execute("DELETE FROM users WHERE id = $1", user_id)
-    assert await db.fetchval("SELECT count(*) FROM llm_usage_events") == 0
+    assert await db.fetchval("SELECT count(*) FROM llm_usage_events WHERE user_id IS NULL") == 1
+    assert await spent_today_usd(user_id) == 0
+    assert await global_spent_today_usd() == pytest.approx(2.0)
 
 
 async def test_other_users_and_earlier_days_do_not_count(db):
@@ -200,10 +204,30 @@ async def test_record_usage_event_appends_and_skips_free_calls(db):
     assert await spent_today_usd(user_id) == pytest.approx(0.25)
 
 
-async def test_a_ledger_failure_is_logged_not_raised(db):
-    # No such user: the foreign key rejects the row. The work that was billed must not fail.
+async def test_spend_after_the_account_was_deleted_is_kept_unlinked(db):
+    # A job that was running when its account was deleted: the foreign key refuses the user, so the
+    # row is written without one, and the money still counts toward the global cap.
     await record_usage_event(
-        user_id="nobody", project_id=None, source="job", source_id="j", models="", input_tokens=1,
-        output_tokens=1, cost_usd=1.0,
+        user_id="deleted-user", project_id="gone", source="job", source_id="j", models="m",
+        input_tokens=1, output_tokens=1, cost_usd=1.0,
     )
+    row = await db.fetchrow("SELECT user_id, project_id, source_id, cost_usd FROM llm_usage_events")
+    assert row["user_id"] is None and row["project_id"] is None and row["source_id"] == ""
+    assert float(row["cost_usd"]) == pytest.approx(1.0)
+    assert await global_spent_today_usd() == pytest.approx(1.0)
+
+
+async def test_a_ledger_failure_is_logged_not_raised(db, monkeypatch, caplog):
+    # The database refuses the row: the work that was billed must not fail.
+    async def broken(*args, **kwargs):
+        raise RuntimeError("database is down")
+
+    monkeypatch.setattr(budget_module, "execute_update", broken)
+    user_id, _ = await user_with_project(db)
+    with caplog.at_level("ERROR", logger="app.services.budget"):
+        await record_usage_event(
+            user_id=user_id, project_id=None, source="job", source_id="j", models="", input_tokens=1,
+            output_tokens=1, cost_usd=1.0,
+        )
+    assert any("Could not record job usage" in r.getMessage() for r in caplog.records)
     assert await db.fetchval("SELECT count(*) FROM llm_usage_events") == 0

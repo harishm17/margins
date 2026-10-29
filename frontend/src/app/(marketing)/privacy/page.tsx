@@ -42,9 +42,10 @@ export default function PrivacyPage() {
       </LegalSection>
       <LegalSection heading="Your choices">
         <p>
-          Delete a course and its files and everything created from them are deleted. To delete your account
-          entirely, email {CONTACT_EMAIL} from the address you signed up with and we&apos;ll remove it within 30
-          days.
+          When you delete a course, its files and everything created from them are deleted. To delete your account
+          entirely, open Settings and choose Delete account: your account, your courses, your files and everything
+          made from them are deleted straight away. We keep only anonymous AI usage totals (cost and token counts,
+          with nothing that identifies you). If you can&apos;t sign in or need help, email {CONTACT_EMAIL}.
         </p>
       </LegalSection>
       <LegalSection heading="Contact">
