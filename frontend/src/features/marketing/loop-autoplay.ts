@@ -31,6 +31,25 @@ export function loopInView(entry: { isIntersecting: boolean; intersectionRatio: 
   return entry.isIntersecting && entry.intersectionRatio >= LOOP_IN_VIEW_RATIO
 }
 
+/**
+ * Whether the pause button still counts as holding focus after it fires blur. When the whole window
+ * loses focus (the visitor switched application) the button blurs too, but as far as the page is
+ * concerned it still holds focus and gets it back on return, so the flag must survive that blur. When
+ * the document still has focus, focus moved elsewhere in the page and the flag clears.
+ */
+export function pauseKeepsFocusOnBlur(documentHasFocus: boolean): boolean {
+  return !documentHasFocus
+}
+
+/**
+ * Whether, once the pause button is gone, focus should move to the open step. Only when the button held
+ * focus and focus has since dropped to the page body: focus the visitor moved to another element is
+ * never taken.
+ */
+export function shouldRestoreFocusToStep(pauseHadFocus: boolean, focusIsOnBody: boolean): boolean {
+  return pauseHadFocus && focusIsOnBody
+}
+
 export type Clock = {
   now: () => number
   setTimeout: (callback: () => void, ms: number) => unknown

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { LOOP_AUTOPLAY, LOOP_STEP_MS, LoopAutoplay, loopInView, type AutoplayState, type Clock } from './loop-autoplay'
+import { LOOP_AUTOPLAY, LOOP_STEP_MS, LoopAutoplay, loopInView, pauseKeepsFocusOnBlur, shouldRestoreFocusToStep, type AutoplayState, type Clock } from './loop-autoplay'
 
 /** A clock the test moves by hand. */
 function fakeClock() {
@@ -170,4 +170,20 @@ test('in view means at least half shown, whatever isIntersecting says', () => {
   assert.equal(loopInView({ isIntersecting: true, intersectionRatio: 0.5 }), true)
   assert.equal(loopInView({ isIntersecting: true, intersectionRatio: 1 }), true)
   assert.equal(loopInView({ isIntersecting: false, intersectionRatio: 0.6 }), false)
+})
+
+test('a blur keeps the pause button focused only when the whole window lost focus', () => {
+  // Switching to another application: the document no longer has focus, the button still holds it.
+  assert.equal(pauseKeepsFocusOnBlur(false), true)
+  // Focus moved to another element in the page: the document still has focus.
+  assert.equal(pauseKeepsFocusOnBlur(true), false)
+})
+
+test('focus moves to the open step only from the pause button and only when it fell to the body', () => {
+  assert.equal(shouldRestoreFocusToStep(true, true), true)
+  // The visitor moved focus to another element: never take it.
+  assert.equal(shouldRestoreFocusToStep(true, false), false)
+  // The button never held focus.
+  assert.equal(shouldRestoreFocusToStep(false, true), false)
+  assert.equal(shouldRestoreFocusToStep(false, false), false)
 })

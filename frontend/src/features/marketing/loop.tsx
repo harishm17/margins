@@ -7,7 +7,7 @@ import { Pause, Play } from '@phosphor-icons/react/dist/ssr'
 import { IconButton } from '@/components/ui/icon-button'
 import { cn } from '@/lib/utils'
 import { type LoopStep } from './content'
-import { LOOP_AUTOPLAY, LOOP_IN_VIEW_RATIO, LOOP_STEP_MS, LoopAutoplay, loopInView, type AutoplayState } from './loop-autoplay'
+import { LOOP_AUTOPLAY, LOOP_IN_VIEW_RATIO, LOOP_STEP_MS, LoopAutoplay, loopInView, pauseKeepsFocusOnBlur, shouldRestoreFocusToStep, type AutoplayState } from './loop-autoplay'
 import { Shot, shotSrc } from './shot'
 
 const FRAME = 'overflow-hidden rounded-card border border-border bg-surface'
@@ -136,10 +136,11 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
 
   // The pause button goes when auto-advance ends; focus on it moves to the open step instead of the page.
   React.useEffect(() => {
-    if (autoplaying || !pauseHadFocus.current) return
-    pauseHadFocus.current = false
+    if (autoplaying) return
     const lost = !document.activeElement || document.activeElement === document.body
-    if (lost) tabs.current[active]?.focus()
+    const restore = shouldRestoreFocusToStep(pauseHadFocus.current, lost)
+    pauseHadFocus.current = false
+    if (restore) tabs.current[active]?.focus()
   }, [autoplaying, active])
 
   const select = (index: number, focus = false) => {
@@ -233,7 +234,8 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
                 pauseHadFocus.current = true
               }}
               onBlur={() => {
-                pauseHadFocus.current = false
+                // Switching to another application also blurs the button; it keeps focus then.
+                pauseHadFocus.current = pauseKeepsFocusOnBlur(document.hasFocus())
               }}
               label={userPaused ? 'Play the steps' : 'Pause the steps'}
               icon={userPaused ? <Play weight="fill" /> : <Pause weight="fill" />}
