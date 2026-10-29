@@ -5,17 +5,15 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 // Deleting a stored file that is already gone counts as deleted, in every backend, so account
-// deletion (and any other cleanup) can be retried after a partial failure. Local disk and S3 here;
-// Cloud Storage in storage-delete-gcs.test.ts (it needs its own environment).
+// deletion (and any other cleanup) can be retried after a partial failure.
 const uploads = mkdtempSync(path.join(tmpdir(), 'margins-delete-'))
 process.env.LOCAL_UPLOADS_DIR = uploads
-process.env.ENABLE_GCS_STORAGE = 'false'
 process.env.S3_BUCKET = 'materials'
 
 const notFound = Object.assign(new Error('NoSuchKey'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } })
 
 test('local: a missing file is deleted; a present one is removed', async () => {
-  const { deleteFile } = await import('./gcs')
+  const { deleteFile } = await import('./files')
   await deleteFile('gs://margins-materials/u1/p1/materials/m1/gone.pdf')
   const present = path.join(uploads, 'u1/p1/materials/m2/here.pdf')
   mkdirSync(path.dirname(present), { recursive: true })
@@ -26,20 +24,20 @@ test('local: a missing file is deleted; a present one is removed', async () => {
 
 test('S3: a store that answers 404 for a missing key counts as deleted', async () => {
   const { setS3ClientForTests } = await import('./s3')
-  const { deleteFile } = await import('./gcs')
+  const { deleteFile } = await import('./files')
   setS3ClientForTests({ send: async () => Promise.reject(notFound) } as never)
   await deleteFile('s3://materials/u1/p1/materials/m1/gone.pdf')
 })
 
 test('S3: any other error still fails, so the caller can retry', async () => {
   const { setS3ClientForTests } = await import('./s3')
-  const { deleteFile } = await import('./gcs')
+  const { deleteFile } = await import('./files')
   setS3ClientForTests({ send: async () => Promise.reject(Object.assign(new Error('denied'), { $metadata: { httpStatusCode: 403 } })) } as never)
   await assert.rejects(deleteFile('s3://materials/u1/p1/materials/m1/a.pdf'), /denied/)
 })
 
 test('recordStoredFile: a failed record deletes the stored file and keeps its own error', async () => {
-  const { recordStoredFile } = await import('./gcs')
+  const { recordStoredFile } = await import('./files')
   const removed: string[] = []
   const remove = async (path: string) => {
     removed.push(path)

@@ -9,14 +9,6 @@ const nextConfig = {
       bodySizeLimit: '10mb',
     },
   },
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'storage.googleapis.com',
-      },
-    ],
-  },
   // Old URLs from before the course rebuild. `/exams/:examId` is not here: it needs the
   // course id, so src/app/exams/[examId] looks it up and redirects.
   async redirects() {

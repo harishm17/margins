@@ -38,7 +38,7 @@ test('settings shows the account and allowance; deleting the account removes its
   })
   expect(upload.ok()).toBeTruthy()
   const material = await withPrisma((prisma) => prisma.material.findFirstOrThrow({ where: { projectId: courseId } }))
-  const storedFile = path.join(UPLOADS, material.gcsPath.replace(/^gs:\/\/[^/]+\//, ''))
+  const storedFile = path.join(UPLOADS, material.gcsPath.replace(/^(local:\/\/|gs:\/\/[^/]+\/)/, ''))
   expect(existsSync(storedFile)).toBe(true)
   // Something the account spent today, which must keep counting toward the global cap.
   const ledgerId = `e2e-ledger-${Date.now()}`

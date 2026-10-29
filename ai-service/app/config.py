@@ -127,13 +127,6 @@ class Settings(BaseSettings):
     # Optional webhook (Discord, Slack or ntfy) told once when the AI becomes unavailable.
     OPS_ALERT_WEBHOOK_URL: str = ""
 
-    # Dispatching jobs to this service. With ENABLE_CLOUD_TASKS the service creates Cloud
-    # Tasks (project, location and queue below); otherwise it posts to AI_SERVICE_URL itself.
-    ENABLE_CLOUD_TASKS: bool = False
-    CLOUD_TASKS_PROJECT_ID: str = ""  # falls back to GCS_PROJECT_ID
-    CLOUD_TASKS_LOCATION: str = "us-central1"
-    CLOUD_TASKS_QUEUE: str = "margins-jobs"
-
     # S3-compatible bucket (Railway Buckets, AWS S3, R2, MinIO) for `s3://` material paths.
     S3_ENDPOINT: str = ""
     S3_REGION: str = "auto"
@@ -141,11 +134,7 @@ class Settings(BaseSettings):
     S3_SECRET_ACCESS_KEY: str = ""
     S3_FORCE_PATH_STYLE: bool = False
 
-    # GCP (optional, can use local storage)
-    GCS_BUCKET: str = ""
-    GCS_BUCKET_NAME: str = ""  # Alternative name used in some configs
-    GCS_PROJECT_ID: str = ""
-    # Where the frontend writes uploads when GCS is off (or an upload fell back to local disk).
+    # Where the frontend writes uploads when it has no S3 bucket (`local://` material paths).
     LOCAL_UPLOADS_DIR: str = "/data/uploads"
 
     # Service Configuration
@@ -175,15 +164,6 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         """Check if running in development."""
         return self.ENVIRONMENT == "development"
-
-    @property
-    def cloud_tasks_project(self) -> str:
-        return self.CLOUD_TASKS_PROJECT_ID or self.GCS_PROJECT_ID
-
-    @property
-    def gcs_configured(self) -> bool:
-        """Whether uploads can be fetched from a GCS bucket."""
-        return bool(self.GCS_BUCKET or self.GCS_BUCKET_NAME)
 
     @property
     def llm_configured(self) -> bool:

@@ -165,7 +165,7 @@ export async function DELETE(
     // Then the uploaded files. Best effort: the project is already deleted, so a storage
     // error is logged for manual cleanup instead of failing the request.
     try {
-      const { deleteFilesBestEffort, deleteProjectFolder } = await import('@/lib/storage/gcs')
+      const { deleteFilesBestEffort, deleteProjectFolder } = await import('@/lib/storage/files')
       await deleteFilesBestEffort(materials.map((material) => material.gcsPath))
       await deleteProjectFolder(session.user.id, projectId)
     } catch (storageError) {

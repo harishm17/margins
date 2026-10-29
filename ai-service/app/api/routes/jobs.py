@@ -23,7 +23,7 @@ from app.services.exam_generator import ExamGenerator
 from app.services.exam_relevance import mark_exam_relevant_topics, mark_exam_relevant_topics_quietly
 from app.services.exam_style import profile_exam_material
 from app.services.exam_grader import ExamGrader
-from app.services.cloud_tasks import (
+from app.services.dispatch import (
     enqueue_chunking_job,
     enqueue_exam_profile_job,
     enqueue_exam_relevance_job,
@@ -96,7 +96,7 @@ async def validate_material_job(payload: JobPayload, job: JobContext) -> JobOutc
     # content can make a material invalid.
     validation_result = await validate_material(
         material_id=material["id"],
-        gcs_path=material["gcs_path"],
+        storage_path=material["gcs_path"],
         filename=material["filename"],
         category=material["category"],
     )

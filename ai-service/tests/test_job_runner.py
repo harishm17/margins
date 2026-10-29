@@ -643,7 +643,7 @@ class TestReaper:
         assert len(dispatched) == 1
 
     async def test_a_dispatcher_that_gives_up_leaves_a_waiting_retry_to_the_reaper(self, db, user_id):
-        from app.services.cloud_tasks import mark_undelivered
+        from app.services.dispatch import mark_undelivered
 
         never_started = await seed_job(db, user_id)
         waiting = await seed_job(db, user_id, status="pending", attempt_count=1, started_at=self.OLD,

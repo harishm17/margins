@@ -1,6 +1,6 @@
 /**
  * Which job a dispatch that never reached the AI service may fail (ENQUEUE_FAILED). The same rule
- * as the AI service's own dispatcher (ai-service app/services/cloud_tasks.py `mark_undelivered`):
+ * as the AI service's own dispatcher (ai-service app/services/dispatch.py `mark_undelivered`):
  * only a job no handler has touched, pending and never started.
  *
  * Everything else belongs to the AI service's reaper. A job back in `pending` after a passing

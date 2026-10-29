@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
-import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/cloud-tasks'
+import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/dispatch'
 import { apiInvalidInput, apiUpstream } from '@/lib/api/errors'
 import { ensureAiGenerationReady } from '@/lib/api/ai-preflight'
 import { createJobOrFindActive, generateContentTarget } from '@/lib/jobs/active-jobs'

@@ -11,7 +11,7 @@
 
 import { prisma } from '@/lib/db/prisma'
 import { createJobOrFindActive } from '@/lib/jobs/active-jobs'
-import { enqueueTask } from '@/lib/tasks/cloud-tasks'
+import { enqueueTask } from '@/lib/tasks/dispatch'
 import { examProfileTarget } from './style-state'
 
 type Started = { jobId: string }

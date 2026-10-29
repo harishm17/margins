@@ -83,24 +83,18 @@ async def dependency_health_check():
             "message": "AI_INTERNAL_TOKEN not set (allowed in local/dev, not recommended in production)",
         })
 
-    # Cloud storage mode sanity
+    # Storage mode sanity
     if settings.S3_ACCESS_KEY_ID and settings.S3_SECRET_ACCESS_KEY:
         checks.append({
             "name": "s3_config",
             "status": "pass",
             "message": "S3 credentials configured",
         })
-    elif settings.GCS_PROJECT_ID:
-        checks.append({
-            "name": "gcs_config",
-            "status": "pass",
-            "message": "GCS_PROJECT_ID configured",
-        })
     else:
         checks.append({
-            "name": "gcs_config",
+            "name": "s3_config",
             "status": "warn",
-            "message": "No S3 credentials or GCS_PROJECT_ID (local file mode expected if frontend uses local storage)",
+            "message": "No S3 credentials (local file mode expected if frontend uses local storage)",
         })
 
     has_fail = any(check["status"] == "fail" for check in checks)

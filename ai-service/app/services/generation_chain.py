@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 from app.db.connection import execute_one, execute_query
 from app.services import ai_status
 from app.services.budget import over_budget_message
-from app.services.cloud_tasks import enqueue_job, mark_undelivered
+from app.services.dispatch import enqueue_job, mark_undelivered
 from app.services.job_runner import create_job
 
 logger = logging.getLogger(__name__)

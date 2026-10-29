@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { markJobFailed, TaskEnqueueError, type TaskPayload } from './cloud-tasks'
+import { markJobFailed, TaskEnqueueError, type TaskPayload } from './dispatch'
 import { undeliveredWhere } from './undelivered'
 
 type Row = { id: string; status: string; startedAt: Date | null }
@@ -47,6 +47,6 @@ test('markJobFailed filters with the shared rule, the same as the AI service dis
   }
   await markJobFailed(payloadFor('j1'), new TaskEnqueueError('x', false), store)
   assert.deepEqual(seen, undeliveredWhere('j1'))
-  // ai-service app/services/cloud_tasks.py mark_undelivered: status = 'pending' AND started_at IS NULL
+  // ai-service app/services/dispatch.py mark_undelivered: status = 'pending' AND started_at IS NULL
   assert.deepEqual(seen, { id: 'j1', status: 'pending', startedAt: null })
 })

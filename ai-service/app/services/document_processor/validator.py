@@ -83,7 +83,7 @@ def _empty_page_check(extracted: ExtractedDocument, extension: str) -> tuple[Opt
 
 async def validate_material(
     material_id: str,
-    gcs_path: str,
+    storage_path: str,
     filename: str,
     category: str,
 ) -> ValidationResult:
@@ -100,7 +100,7 @@ async def validate_material(
 
     Args:
         material_id: Material ID
-        gcs_path: Storage path of the uploaded file (gs://bucket/path or a local path)
+        storage_path: Where the file is stored (s3://bucket/key, local://path or a filesystem path)
         filename: Original filename
         category: Material category (lecture_notes, sample_exams, book_chapters, syllabus)
 
@@ -127,7 +127,7 @@ async def validate_material(
             ),
         )
 
-    async with local_copy(gcs_path) as local_path:
+    async with local_copy(storage_path) as local_path:
         try:
             extracted = await asyncio.to_thread(
                 extract_document, local_path, filename, markdown=False

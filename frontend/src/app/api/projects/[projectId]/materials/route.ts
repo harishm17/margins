@@ -12,7 +12,7 @@ import { Readable } from 'stream'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
-import { uploadStream, generateMaterialPath, deleteFile, recordStoredFile } from '@/lib/storage/gcs'
+import { uploadStream, generateMaterialPath, deleteFile, recordStoredFile } from '@/lib/storage/files'
 import {
   IncompleteUploadError,
   InvalidSignatureError,
@@ -22,7 +22,7 @@ import {
   createSizeLimiter,
   maxUploadBytes,
 } from '@/lib/storage/upload-limits'
-import { enqueueValidationJob, TaskEnqueueError } from '@/lib/tasks/cloud-tasks'
+import { enqueueValidationJob, TaskEnqueueError } from '@/lib/tasks/dispatch'
 import { z } from 'zod'
 import { roleForCategory } from '@/lib/materials/role'
 
@@ -124,9 +124,9 @@ export async function POST(
     const gcsPath = generateMaterialPath(session.user.id, projectId, materialId, filename)
     const limiter = createSizeLimiter(maxBytes, lengthCheck.length)
 
-    let fullGcsPath: string
+    let storedPath: string
     try {
-      fullGcsPath = await uploadStream(
+      storedPath = await uploadStream(
         Readable.fromWeb(request.body as import('stream/web').ReadableStream),
         gcsPath,
         mimeType,
@@ -149,7 +149,7 @@ export async function POST(
     // 8. The material and its validation job, together, only after the upload succeeded. If they
     // can't be written (the course or the account was deleted meanwhile, or anything else), the
     // stored file is deleted too, so nothing is left that no row points at.
-    const { material, job } = await recordStoredFile(fullGcsPath, () =>
+    const { material, job } = await recordStoredFile(storedPath, () =>
       prisma.$transaction(async (tx) => {
         const material = await tx.material.create({
           data: {
@@ -161,7 +161,7 @@ export async function POST(
             filename,
             sizeBytes: BigInt(fileSize),
             validationStatus: 'pending',
-            gcsPath: fullGcsPath,
+            gcsPath: storedPath,
             metadata: {
               mimeType: mimeType || null,
               extension,
@@ -204,7 +204,7 @@ export async function POST(
 
       // Best-effort cleanup to avoid keeping unprocessable artifacts.
       try {
-        await deleteFile(fullGcsPath)
+        await deleteFile(storedPath)
       } catch (cleanupError) {
         console.warn('Failed to delete uploaded file after enqueue failure:', cleanupError)
       }

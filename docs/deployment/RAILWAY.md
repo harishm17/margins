@@ -1,6 +1,7 @@
 # Deploying on Railway
 
-Margins (studymargins.com) runs as one Railway project, `study-buddy`, in the `us-west2` region:
+Margins (studymargins.com) runs as one Railway project in the `us-west2` region. The project is still
+named `study-buddy`, from before the app was renamed:
 
 | Resource | What it is |
 |---|---|
@@ -75,10 +76,6 @@ Google is the only way to sign in, so `web` refuses to start without a real Goog
 (placeholders count as missing). The client needs `https://<web domain>/api/auth/callback/google` as a
 redirect URI. Never set `ENABLE_TEST_LOGIN` on Railway: it is a local-only test sign-in, and `web` refuses
 to start with it.
-
-Optional:
-
-- **Voice coach.** Set `OPENAI_API_KEY` on `ai` (also as `preserve()` in `railway.ts`).
 
 ## Database
 

@@ -1,30 +1,14 @@
 /**
- * Google Cloud Tasks client wrapper
- * Handles enqueueing async jobs to the AI service
+ * Dispatch jobs to the AI service: each job is posted to AI_SERVICE_URL with the internal
+ * token, in the background (or inline for the job types in DIRECT_INLINE_JOB_TYPES), and
+ * retried on network errors and 5xx answers. A job that is never delivered is marked failed;
+ * one that is delivered but never claimed is picked up by the AI service's reaper.
  */
 
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 import { retryDelayMs } from './retry-delay'
 import { undeliveredWhere } from './undelivered'
 
-let CloudTasksClient: any
-let client: any = null
-
-try {
-  const tasks = require('@google-cloud/tasks')
-  CloudTasksClient = tasks.CloudTasksClient
-  const cloudTasksEnabled = process.env.ENABLE_CLOUD_TASKS === 'true'
-  client = cloudTasksEnabled ? new CloudTasksClient() : null
-  if (!cloudTasksEnabled) {
-    console.log('Cloud Tasks disabled, using direct HTTP calls')
-  }
-} catch (error) {
-  console.warn('Cloud Tasks not available, using direct HTTP calls')
-}
-
-const PROJECT_ID = process.env.GCS_PROJECT_ID || 'margins-dev'
-const LOCATION = process.env.CLOUD_TASKS_LOCATION || 'us-central1'
-const QUEUE = process.env.CLOUD_TASKS_QUEUE || 'margins-jobs'
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 const parsePositiveInt = (value: string | undefined, fallback: number): number => {
   const parsed = Number.parseInt(String(value || ''), 10)
@@ -167,14 +151,14 @@ async function runInlineDirectTask(endpoint: string, payload: TaskPayload): Prom
   }
 }
 
-if (!client && INLINE_DIRECT_JOB_TYPES.size > 0) {
+if (INLINE_DIRECT_JOB_TYPES.size > 0) {
   console.warn(
     `[DEV] Inline direct tasks enabled for: ${Array.from(INLINE_DIRECT_JOB_TYPES).join(', ')}`
   )
 }
 
 /**
- * Enqueue a task to Cloud Tasks
+ * Send a job to the AI service
  * @param endpoint - AI service endpoint (e.g., /jobs/validate-material)
  * @param payload - Task payload
  * @returns Task name
@@ -183,36 +167,19 @@ export async function enqueueTask(
   endpoint: string,
   payload: TaskPayload
 ): Promise<string> {
-  if (!client) {
-    if (INLINE_DIRECT_JOB_TYPES.has(payload.jobType)) {
-      // For user-driven short tasks, run inline in direct mode to reduce queue lag.
-      console.log(`[DEV] Running inline task ${payload.jobType} (${payload.jobId})`)
-      await runInlineDirectTask(endpoint, payload)
-    } else {
-      // Heavy/background tasks remain non-blocking.
-      console.log(`[DEV] Enqueueing background task ${payload.jobType} (${payload.jobId})`)
-      queueMicrotask(() => {
-        void dispatchDirectTask(endpoint, payload)
-      })
-    }
-
-    return `dev-task-${payload.jobId}`
+  if (INLINE_DIRECT_JOB_TYPES.has(payload.jobType)) {
+    // For user-driven short tasks, run inline in direct mode to reduce queue lag.
+    console.log(`[DEV] Running inline task ${payload.jobType} (${payload.jobId})`)
+    await runInlineDirectTask(endpoint, payload)
+  } else {
+    // Heavy/background tasks remain non-blocking.
+    console.log(`[DEV] Enqueueing background task ${payload.jobType} (${payload.jobId})`)
+    queueMicrotask(() => {
+      void dispatchDirectTask(endpoint, payload)
+    })
   }
 
-  // Production mode - use Cloud Tasks
-  const parent = client.queuePath(PROJECT_ID, LOCATION, QUEUE)
-
-  const task = {
-    httpRequest: {
-      httpMethod: 'POST' as const,
-      url: `${AI_SERVICE_URL}${endpoint}`,
-      headers: aiServiceHeaders(),
-      body: Buffer.from(JSON.stringify(payload)).toString('base64'),
-    },
-  }
-
-  const [response] = await client.createTask({ parent, task })
-  return response.name || `task-${payload.jobId}`
+  return `dev-task-${payload.jobId}`
 }
 
 /**

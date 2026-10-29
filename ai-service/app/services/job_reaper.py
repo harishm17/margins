@@ -32,7 +32,7 @@ from typing import Any, Dict
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_query
 from app.services import ai_status
-from app.services.cloud_tasks import JOB_ENDPOINTS, enqueue_job
+from app.services.dispatch import JOB_ENDPOINTS, enqueue_job
 from app.services.job_runner import WAITING_FOR_AI
 
 logger = logging.getLogger(__name__)

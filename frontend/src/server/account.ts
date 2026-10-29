@@ -20,7 +20,7 @@
 
 import { prisma } from '@/lib/db/prisma'
 import { deleteAccount, type DeletionResult, type DeletionStore } from '@/lib/account/deletion'
-import { deleteFile, deleteUserFiles } from '@/lib/storage/gcs'
+import { deleteFile, deleteUserFiles } from '@/lib/storage/files'
 
 export type AccountDetails = {
   email: string

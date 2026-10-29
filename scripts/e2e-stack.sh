@@ -73,7 +73,6 @@ start() {
         AI_INTERNAL_TOKEN="$TOKEN" \
         NEXTAUTH_URL="http://localhost:$WEB_PORT" \
         NEXTAUTH_SECRET="e2e-secret-e2e-secret-e2e-secret-32" \
-        ENABLE_GCS_STORAGE=false \
         ENABLE_TEST_LOGIN=true \
         GOOGLE_OAUTH_CLIENT_ID="e2e-not-a-real-client.apps.googleusercontent.com" \
         GOOGLE_OAUTH_CLIENT_SECRET="e2e-not-a-real-google-secret" \
