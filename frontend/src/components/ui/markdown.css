@@ -212,7 +212,7 @@
 }
 .md-code pre {
   margin: 0;
-  padding: 14px 16px;
+  padding: 0 16px 14px;
   overflow-x: auto;
 }
 .md-code pre code {
@@ -225,14 +225,14 @@
   white-space: pre;
   color: var(--fg);
 }
+/* The bar is a row above the code, so the button can never cover code text. */
 .md-code-bar {
-  position: absolute;
-  top: 6px;
-  right: 10px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  pointer-events: none;
+  min-height: 34px;
+  padding: 2px 6px 2px 16px;
 }
 .md-code-lang {
   font-size: 12px;
@@ -241,12 +241,13 @@
   color: var(--fg-3);
 }
 .md-code-copy {
-  pointer-events: auto;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  height: 22px;
-  padding: 0 6px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 8px;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
@@ -262,9 +263,16 @@
 .md-code-copy:hover {
   color: var(--fg);
 }
-@media (hover: none) {
+@media (hover: none), (pointer: coarse) {
+  .md-code-bar {
+    min-height: 48px;
+    padding-right: 2px;
+  }
   .md-code-copy {
     opacity: 1;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 12px;
   }
 }
 

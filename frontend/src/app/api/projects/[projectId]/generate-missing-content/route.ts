@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
 import { ensureAiGenerationReady } from '@/lib/api/ai-preflight'
-import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/cloud-tasks'
+import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/dispatch'
 import {
   ACTIVE_JOB_STATUSES,
   createJobOrFindActive,
@@ -48,7 +48,7 @@ export async function POST(
     })
     if (!project) return apiNotFound('Project not found')
 
-    const preflightError = await ensureAiGenerationReady()
+    const preflightError = await ensureAiGenerationReady(auth.user.id)
     if (preflightError) return preflightError
 
     const [topics, activeJobs] = await Promise.all([

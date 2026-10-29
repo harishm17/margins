@@ -3,6 +3,7 @@ from fastapi import APIRouter
 
 from app.config import settings
 from app.db.connection import get_db_pool
+from app.services.ai_status import get_status as get_ai_status
 
 router = APIRouter()
 
@@ -46,6 +47,18 @@ async def dependency_health_check():
     else:
         checks.append({"name": "llm_key", "status": "fail", "message": "ANTHROPIC_API_KEY missing"})
 
+    # Whether the provider is usable: a key being set says nothing about credit (see
+    # app/services/ai_status.py; the status comes from real calls, not a probe).
+    status = await get_ai_status()
+    if status.available:
+        checks.append({"name": "llm_status", "status": "pass", "message": "No provider failure on record"})
+    else:
+        checks.append({
+            "name": "llm_status",
+            "status": "warn",
+            "message": f"AI marked unavailable ({status.reason}) since {status.since}",
+        })
+
     # The voice coach is a Claude conversation: it is on whenever the LLM is configured
     if settings.voice_enabled:
         checks.append({"name": "voice", "status": "pass", "message": "Voice coach available (LLM configured)"})
@@ -70,24 +83,18 @@ async def dependency_health_check():
             "message": "AI_INTERNAL_TOKEN not set (allowed in local/dev, not recommended in production)",
         })
 
-    # Cloud storage mode sanity
+    # Storage mode sanity
     if settings.S3_ACCESS_KEY_ID and settings.S3_SECRET_ACCESS_KEY:
         checks.append({
             "name": "s3_config",
             "status": "pass",
             "message": "S3 credentials configured",
         })
-    elif settings.GCS_PROJECT_ID:
-        checks.append({
-            "name": "gcs_config",
-            "status": "pass",
-            "message": "GCS_PROJECT_ID configured",
-        })
     else:
         checks.append({
-            "name": "gcs_config",
+            "name": "s3_config",
             "status": "warn",
-            "message": "No S3 credentials or GCS_PROJECT_ID (local file mode expected if frontend uses local storage)",
+            "message": "No S3 credentials (local file mode expected if frontend uses local storage)",
         })
 
     has_fail = any(check["status"] == "fail" for check in checks)

@@ -1,18 +1,14 @@
 """Dispatch jobs to this service's own job endpoints.
 
-One path, chosen by configuration:
-
-- ENABLE_CLOUD_TASKS=true: create a Cloud Task that posts to AI_SERVICE_URL. Cloud Tasks does
-  the retrying; a failure to create the task is raised to the caller.
-- otherwise: post to AI_SERVICE_URL from a background asyncio task, with the internal token
-  header, retrying network errors and 5xx answers.
+Each job is posted to AI_SERVICE_URL from a background asyncio task, with the internal token
+header, retrying network errors and 5xx answers. A job that is never delivered is failed with
+ENQUEUE_FAILED; one that is delivered but never claimed is picked up by the reaper
+(app/services/job_reaper.py).
 
 The job endpoints answer 400 for failures a retry cannot fix and 200 {"status": "skipped"}
 for jobs that were already handled, so neither is retried here.
 """
 import asyncio
-import base64
-import json
 import logging
 from typing import Any, Dict, Optional, Set
 
@@ -27,45 +23,12 @@ logger = logging.getLogger(__name__)
 DIRECT_MAX_ATTEMPTS = 3
 DIRECT_TIMEOUT_SECONDS = 600.0
 
-_client: Optional[Any] = None
 _background_tasks: Set["asyncio.Task[None]"] = set()
 
 
-class TaskDispatchError(RuntimeError):
-    """The task could not be handed to Cloud Tasks."""
-
-
-def _cloud_tasks_client():
-    global _client
-    if _client is None:
-        from google.cloud import tasks_v2
-
-        _client = tasks_v2.CloudTasksClient()
-    return _client
-
-
-def _create_cloud_task(endpoint: str, payload: Dict[str, Any]) -> str:
-    from google.cloud import tasks_v2
-
-    project = settings.cloud_tasks_project
-    if not project:
-        raise TaskDispatchError("ENABLE_CLOUD_TASKS is set but no project id is configured")
-    client = _cloud_tasks_client()
-    parent = client.queue_path(project, settings.CLOUD_TASKS_LOCATION, settings.CLOUD_TASKS_QUEUE)
-    task = {
-        "http_request": {
-            "http_method": tasks_v2.HttpMethod.POST,
-            "url": f"{settings.AI_SERVICE_URL}{endpoint}",
-            "headers": internal_headers(),
-            "body": base64.b64encode(json.dumps(payload).encode()).decode(),
-        }
-    }
-    response = client.create_task(request={"parent": parent, "task": task})
-    return response.name
-
-
 async def mark_undelivered(job_id: str, message: str) -> None:
-    """The service never answered: fail the job if no handler has touched it."""
+    """The service never answered: fail the job if no handler has touched it. A job that has
+    started and is pending again is waiting for a retry, which the reaper owns."""
     try:
         await execute_update(
             f"""
@@ -75,7 +38,7 @@ async def mark_undelivered(job_id: str, message: str) -> None:
                 error_message = $2,
                 retryable = TRUE,
                 completed_at = {UTC_NOW}
-            WHERE id = $1 AND status = 'pending'
+            WHERE id = $1 AND status = 'pending' AND started_at IS NULL
             """,
             job_id,
             message[:1000],
@@ -127,20 +90,10 @@ async def _post_with_retries(endpoint: str, payload: Dict[str, Any]) -> None:
 
 
 async def enqueue_task(endpoint: str, payload: Dict[str, Any]) -> str:
-    """Hand a job to the job endpoint. Returns a task name or id.
+    """Hand a job to the job endpoint. Returns a task id.
 
-    Direct dispatch returns at once and runs in the background.
+    Returns at once; the post runs in the background.
     """
-    if settings.ENABLE_CLOUD_TASKS:
-        try:
-            name = await asyncio.to_thread(_create_cloud_task, endpoint, payload)
-        except TaskDispatchError:
-            raise
-        except Exception as exc:
-            raise TaskDispatchError(f"Could not create Cloud Task: {exc}") from exc
-        logger.info("Created Cloud Task %s", name)
-        return name
-
     task = asyncio.create_task(_post_with_retries(endpoint, payload))
     # The loop keeps only weak references to tasks.
     _background_tasks.add(task)

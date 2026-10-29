@@ -1,4 +1,4 @@
-"""Voice coach endpoints for StudyBuddy.
+"""Voice coach endpoints for Margins.
 
 The browser does speech-to-text and text-to-speech, so the model only ever sees text:
 POST /voice/turn is one model call of that conversation, streamed back as newline-delimited
@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.db.connection import execute_one
+from app.services import ai_status
 from app.services.budget import over_budget_message, record_usage_event
 from app.services.chat import usage_payload
 from app.services.llm.base import (
@@ -186,6 +187,11 @@ async def turn(payload: VoiceTurnRequest) -> Union[StreamingResponse, JSONRespon
     if project is None:
         return _fail(404, "PROJECT_NOT_FOUND", "Project not found")
 
+    # Known to be down (out of credit, say): refuse before anything is stored or streamed.
+    unavailable = (await ai_status.get_status()).as_error()
+    if unavailable is not None:
+        return _fail(503, unavailable.code, str(unavailable), unavailable.retryable)
+
     over_budget = await over_budget_message(payload.user_id)
     if over_budget:
         return _fail(429, "LLM_DAILY_BUDGET", over_budget)
@@ -207,7 +213,7 @@ async def generate_concept_drill(
     topic_label = payload.topic or "the study topic"
 
     system_prompt = (
-        "You are StudyBuddy's oral exam coach. Generate conceptual questions only. "
+        "You are the oral exam coach in Margins, a study app. Generate conceptual questions only. "
         "Do NOT include calculations, equations, formulas, or numeric problem solving. "
         "Focus on definitions, intuition, relationships, trade-offs, comparisons, and reasoning."
     )

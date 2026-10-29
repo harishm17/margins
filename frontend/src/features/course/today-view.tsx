@@ -56,6 +56,11 @@ function UpNext({ courseId, next }: { courseId: string; next: TodayData['next'] 
                 {[next.partLabel, next.etaLabel].filter(Boolean).join(', ')}
               </p>
             ) : null}
+            {next.overBudgetLabel ? (
+              <Badge tone="warning" className="mt-1.5">
+                {next.overBudgetLabel}
+              </Badge>
+            ) : null}
           </div>
           {next.action ? (
             <Button

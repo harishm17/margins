@@ -39,12 +39,6 @@ export async function GET() {
   const aiServiceUrl = process.env.AI_SERVICE_URL || ''
   const s3Bucket = process.env.S3_BUCKET || ''
   const s3CredentialsSet = Boolean(process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY)
-  const cloudStorageEnabled = process.env.ENABLE_GCS_STORAGE === 'true'
-  const cloudTasksEnabled = process.env.ENABLE_CLOUD_TASKS === 'true'
-  const gcsProjectId = process.env.GCS_PROJECT_ID || ''
-  const gcsBucket = process.env.GCS_BUCKET || ''
-  const cloudTasksQueue = process.env.CLOUD_TASKS_QUEUE || ''
-  const cloudTasksLocation = process.env.CLOUD_TASKS_LOCATION || ''
   const nextAuthSecret = process.env.NEXTAUTH_SECRET || ''
   const localUploadsDir = process.env.LOCAL_UPLOADS_DIR || '/data/uploads'
 
@@ -97,20 +91,6 @@ export async function GET() {
             message: 'S3_BUCKET is set but S3_ACCESS_KEY_ID or S3_SECRET_ACCESS_KEY is missing.',
           }
     )
-  } else if (cloudStorageEnabled) {
-    if (gcsProjectId && gcsBucket) {
-      checks.push({
-        name: 'gcs_config',
-        status: 'pass',
-        message: 'GCS storage is enabled and configuration is present.',
-      })
-    } else {
-      checks.push({
-        name: 'gcs_config',
-        status: 'fail',
-        message: 'ENABLE_GCS_STORAGE=true requires both GCS_PROJECT_ID and GCS_BUCKET.',
-      })
-    }
   } else {
     const primaryWritable = canWriteDir(localUploadsDir)
     const fallbackWritable = canWriteDir('/tmp/margins-uploads')
@@ -127,28 +107,6 @@ export async function GET() {
         message: `Local storage is not writable in ${localUploadsDir} or /tmp/margins-uploads.`,
       })
     }
-  }
-
-  if (cloudTasksEnabled) {
-    if (gcsProjectId && cloudTasksQueue && cloudTasksLocation) {
-      checks.push({
-        name: 'cloud_tasks_config',
-        status: 'pass',
-        message: 'Cloud Tasks is enabled and configuration is present.',
-      })
-    } else {
-      checks.push({
-        name: 'cloud_tasks_config',
-        status: 'fail',
-        message: 'ENABLE_CLOUD_TASKS=true requires GCS_PROJECT_ID, CLOUD_TASKS_QUEUE, and CLOUD_TASKS_LOCATION.',
-      })
-    }
-  } else {
-    checks.push({
-      name: 'cloud_tasks_config',
-      status: 'pass',
-      message: 'Cloud Tasks is off; jobs are sent to the AI service over direct HTTP.',
-    })
   }
 
   if (isDeploymentProduction) {

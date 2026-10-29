@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { signIn } from './helpers/auth'
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Account' })
 
@@ -9,9 +10,9 @@ test('the landing page tells the loop from files to exam day', async ({ page }) 
   await page.goto('/')
 
   await expect(page.getByRole('heading', { level: 1, name: 'Your course files, planned to exam day.' })).toBeVisible()
-  await expect(nav(page).getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '/signup')
+  await expect(nav(page).getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '/login')
   await expect(nav(page).getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login')
-  await expect(page.getByRole('link', { name: 'See how it works' })).toHaveAttribute('href', '#how-it-works')
+  await expect(page.getByRole('link', { name: 'See how it works' })).toHaveAttribute('href', '/#how-it-works')
 
   // The hero shows the plan, and it is the current app (Plan and Review in the navigation).
   await expect(page.getByRole('img', { name: /The Margins plan page/ })).toBeVisible()
@@ -37,7 +38,10 @@ test('the landing page tells the loop from files to exam day', async ({ page }) 
   // Trust: claims with their links.
   await expect(page.getByRole('link', { name: /Read the evaluation/ })).toHaveAttribute('href', /evals\/results\/2026-10-21-structure\.md$/)
   await expect(page.getByRole('link', { name: /View the code on GitHub/ })).toHaveAttribute('href', 'https://github.com/harishm17/margins')
-  await expect(page.getByText('correctness scored 4.88 out of 5 and grounding in the source pages 4.91')).toBeVisible()
+  await expect(page.getByText('it scored correctness 4.88 out of 5 and grounding in the source pages 4.91')).toBeVisible()
+  // The judge is the same model as the writer, and the automatic checks that failed are shown next to the scores.
+  await expect(page.getByText('The judge is Claude Opus, the same model that writes the text')).toBeVisible()
+  await expect(page.getByText('0 of 8 notes had all the expected sections, and 0 of 8 stayed within the requested length')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Read the privacy policy' })).toHaveAttribute('href', '/privacy')
 
   // The questions: the first is open, the free answer says what is true, and opening another closes it.
@@ -94,7 +98,7 @@ test('on a phone every step shows its own phone-sized screenshot', async ({ page
 })
 
 test('the theme can be switched on the public pages', async ({ page }) => {
-  for (const url of ['/', '/login', '/signup', '/privacy']) {
+  for (const url of ['/', '/login', '/privacy']) {
     await page.goto(url)
     await page.getByRole('button', { name: 'Theme' }).click()
     await page.getByRole('menuitemradio', { name: 'Dark' }).click()
@@ -108,15 +112,8 @@ test('the theme can be switched on the public pages', async ({ page }) => {
 test('a signed-in visitor sees Open Margins instead of sign in', async ({ page }) => {
   const stamp = Date.now()
   const email = `landing-${stamp}@example.com`
-  const password = 'landing-test-password'
-  const signup = await page.request.post('/api/auth/signup', { data: { email, password, name: 'Landing Tester' } })
-  expect(signup.ok()).toBeTruthy()
 
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/)
+  await signIn(page, email)
 
   await page.goto('/')
   await expect(page).toHaveURL(/\/$/)
@@ -127,7 +124,7 @@ test('a signed-in visitor sees Open Margins instead of sign in', async ({ page }
 
 test('the auth pages show the whole plan screen, not a crop of it', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
-  for (const url of ['/login', '/signup']) {
+  for (const url of ['/login']) {
     await page.goto(url)
     const image = page.getByRole('complementary').getByRole('img')
     await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0)).toBe(true)
@@ -141,14 +138,9 @@ test('the auth pages show the whole plan screen, not a crop of it', async ({ pag
   }
 })
 
-test('on a phone the sign-in form starts at the top, with its button above the fold', async ({ page }) => {
+test('on a phone the sign-in page starts at the top, with the Google button above the fold', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  for (const [url, button] of [
-    ['/login', 'Sign in'],
-    ['/signup', 'Create account'],
-  ] as const) {
-    await page.goto(url)
-    const box = await page.getByRole('button', { name: button }).boundingBox()
-    expect(box!.y + box!.height).toBeLessThan(844)
-  }
+  await page.goto('/login')
+  const box = await page.getByRole('button', { name: 'Continue with Google' }).boundingBox()
+  expect(box!.y + box!.height).toBeLessThan(844)
 })

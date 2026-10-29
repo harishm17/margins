@@ -11,7 +11,8 @@
 
 import { prisma } from '@/lib/db/prisma'
 import { createJobOrFindActive } from '@/lib/jobs/active-jobs'
-import { enqueueTask } from '@/lib/tasks/cloud-tasks'
+import { enqueueTask } from '@/lib/tasks/dispatch'
+import { examProfileTarget } from './style-state'
 
 type Started = { jobId: string }
 
@@ -57,7 +58,7 @@ async function start(
   }
 }
 
-export const examProfileTarget = (materialId: string) => `profile:${materialId}`
+export { examProfileTarget }
 export const examRelevanceTarget = (projectId: string) => `exam-relevance:${projectId}`
 
 export const startExamProfileJob = (userId: string, projectId: string, materialId: string) =>

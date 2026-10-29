@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type APIResponse, type Page } from '@playwright/test'
+import { signIn } from './helpers/auth'
 import { withPrisma } from './helpers/db'
 import { FIXTURE_PDF } from './helpers/seed-demo'
 
@@ -8,7 +9,6 @@ import { FIXTURE_PDF } from './helpers/seed-demo'
 // profile goes away (and the toggle with it) when the file stops being an exam.
 const stamp = Date.now()
 const email = `past-exams-${stamp}@example.com`
-const password = 'past-exams-test-password'
 
 test.describe.configure({ mode: 'serial' })
 test.setTimeout(240_000)
@@ -27,14 +27,6 @@ async function upload(page: Page, category: string, filename: string) {
   return (await json(response)).material as Record<string, any>
 }
 
-async function signIn(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/)
-}
-
 const styleProfile = () =>
   withPrisma(async (prisma) => (await prisma.material.findUnique({ where: { id: examId }, select: { styleProfile: true } }))?.styleProfile ?? null)
 
@@ -42,12 +34,8 @@ const completedJobs = (jobType: string) =>
   withPrisma((prisma) => prisma.processingJob.count({ where: { projectId: courseId, jobType, status: 'completed' } }))
 
 test('a past exam gets a style profile and the new-exam form offers to match it', async ({ page }) => {
-  await page.goto('/signup')
-  await page.getByLabel('Name').fill('Past Exams Tester')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page).toHaveURL(/\/courses\/new\?welcome=1$/)
+  // The first sign-in makes the account.
+  await signIn(page, email)
 
   courseId = (await json(await page.request.post('/api/projects', { data: { name: `Past exams ${stamp}` } }))).project.id
   await upload(page, 'lecture_notes', 'algorithms.pdf')
@@ -87,7 +75,7 @@ test('a past exam gets a style profile and the new-exam form offers to match it'
 })
 
 test('the form shows "Match my past exams" on, and the choice reaches the exam job', async ({ page }) => {
-  await signIn(page)
+  await signIn(page, email)
   await page.goto(`/courses/${courseId}/exams/new`)
   const toggle = page.getByRole('checkbox', { name: /Match my past exams/ })
   await expect(toggle).toBeChecked()
@@ -120,7 +108,7 @@ test('the form shows "Match my past exams" on, and the choice reaches the exam j
 })
 
 test('when the file stops being an exam the profile and the toggle go; making it one again brings them back', async ({ page }) => {
-  await signIn(page)
+  await signIn(page, email)
   const relevanceJobs = await completedJobs('exam_relevance')
 
   const away = await json(await page.request.patch(`/api/materials/${examId}`, { data: { role: 'content' } }))

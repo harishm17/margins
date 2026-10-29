@@ -1,9 +1,18 @@
 import * as React from 'react'
 import { cn } from '@/lib/utils'
 
+const WIDTHS = {
+  default: 'max-w-[1120px]',
+  /** One reading column: the mock exam pages (new, lobby, results). */
+  medium: 'max-w-[784px]',
+  /** A centred 520px column for short forms (new course, course settings). */
+  narrow: 'max-w-[584px]',
+} as const
+
 /**
- * The page container: up to 1120px wide, padded 32 / 24 / 16 by screen size. `narrow` is a
- * centred 520px column for forms.
+ * The page container: padded 32 / 24 / 16 by screen size, with the same top padding at every width,
+ * so the h1 sits at the same height on every page. Pick a width here; don't override the padding or
+ * the max width with classes.
  */
 export function Page({
   children,
@@ -11,19 +20,11 @@ export function Page({
   className,
 }: {
   children: React.ReactNode
-  width?: 'default' | 'narrow' | 'form'
+  width?: keyof typeof WIDTHS
   className?: string
 }) {
   return (
-    <div
-      className={cn(
-        'mx-auto w-full px-4 pb-16 pt-4 md:px-6 lg:px-8',
-        width === 'default' && 'max-w-[1120px]',
-        width === 'form' && 'max-w-[1120px]',
-        width === 'narrow' && 'max-w-[584px]',
-        className
-      )}
-    >
+    <div className={cn('mx-auto w-full px-4 pb-16 pt-4 md:px-6 lg:px-8', WIDTHS[width], className)}>
       {children}
     </div>
   )

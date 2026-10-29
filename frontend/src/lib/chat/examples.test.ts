@@ -12,6 +12,13 @@ describe('exampleQuestions', () => {
     assert.equal(new Set(questions).size, 3)
   })
 
+  it('quotes the topic name as written, so a title-cased name reads correctly mid-sentence', () => {
+    const [first, second, third] = exampleQuestions(['Conditional probability', 'TCP handshake', "Bayes' theorem"])
+    assert.equal(first, 'Explain “Conditional probability” in simple terms.')
+    assert.equal(second, 'What are the key points about “TCP handshake”?')
+    assert.equal(third, 'Give me an example that shows “Bayes\' theorem”.')
+  })
+
   it('fills up with generic questions when there are few topics', () => {
     const questions = exampleQuestions(['Hash tables'])
     assert.equal(questions.length, 3)

@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.config import settings
 from app.db.connection import execute_one
 from app.services import chat as chat_service
+from app.services import ai_status
 from app.services.budget import over_budget_message
 from app.services.llm.base import LLMNotConfiguredError
 from app.services.llm.factory import LLMFactory
@@ -71,6 +72,11 @@ async def answer(payload: ChatAnswerRequest) -> Union[StreamingResponse, JSONRes
     )
     if project is None:
         return _fail(404, "PROJECT_NOT_FOUND", "Project not found")
+
+    # Known to be down (out of credit, say): refuse before anything is stored or streamed.
+    unavailable = (await ai_status.get_status()).as_error()
+    if unavailable is not None:
+        return _fail(503, unavailable.code, str(unavailable), unavailable.retryable)
 
     over_budget = await over_budget_message(payload.user_id)
     if over_budget:

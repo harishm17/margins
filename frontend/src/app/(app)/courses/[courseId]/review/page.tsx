@@ -41,7 +41,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
       ) : (
         <div className="flex flex-col gap-10">
           <ReviewList data={data} />
-          {sprint.length > 0 ? (
+          {sprint.topics.length > 0 ? (
             // The session itself has its own screen: it runs full height and does not scroll under this list.
             <section
               aria-labelledby="voice-heading"
@@ -51,7 +51,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
                 <h2 id="voice-heading" className="text-heading text-fg">
                   Voice practice
                 </h2>
-                <p className="mt-1 text-small text-fg-2">{describeSprintTopics(sprint)}</p>
+                <p className="mt-1 text-small text-fg-2">{describeSprintTopics(sprint.topics, sprint.studied)}</p>
               </div>
               <Button asChild variant="secondary" icon={<Microphone />} className="shrink-0 self-start sm:self-center">
                 <Link href={`/courses/${courseId}/review/voice`}>Start voice practice</Link>

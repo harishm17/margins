@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
-import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/cloud-tasks'
+import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/dispatch'
 import { apiInvalidInput, apiUpstream } from '@/lib/api/errors'
 import { ensureAiGenerationReady } from '@/lib/api/ai-preflight'
 import { createJobOrFindActive, generateContentTarget } from '@/lib/jobs/active-jobs'
@@ -42,7 +42,7 @@ export async function startRegeneration(input: {
 }): Promise<NextResponse> {
   const { userId, topic, contentType, preferences } = input
 
-  const preflightError = await ensureAiGenerationReady()
+  const preflightError = await ensureAiGenerationReady(userId)
   if (preflightError) return preflightError
 
   // A prerequisite to draw review questions from must be another topic of the same course.

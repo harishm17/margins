@@ -1,4 +1,4 @@
-import type { CourseSetup } from '@/lib/course-setup'
+import { readyToStudy, type CourseSetup } from '../course-setup'
 import { addDays, daysBetween, localDay, REVIEW_MINUTES, type Plan } from './plan'
 import { dayLabel, upNextFromPlan, type DescribedPlanItem } from './plan-copy'
 import { zonedTimeToUtc } from './study-plan-time'
@@ -70,6 +70,8 @@ export type NextStep = {
   etaLabel: string | null
   /** "Part 1 of 2", or null. */
   partLabel: string | null
+  /** A full mock exam longer than the day: "Longer than your usual 45 minutes", or null. */
+  overBudgetLabel: string | null
   /** More for today after the first item. */
   then: DescribedPlanItem[]
   /** Items finished today. */
@@ -112,9 +114,10 @@ export function nextStep(input: {
     label: examLabel(plan),
     short: plan.short,
     shortMessage: plan.shortMessage,
-    notScheduledCount: plan.notScheduled?.topics.length ?? 0,
+    notScheduledCount:
+      (plan.notScheduled?.topics.length ?? 0) + (plan.tooLongForDay ? plan.tooLongForDay.topics.length + plan.tooLongForDay.dependents.length : 0),
   }
-  const shared = { dueCount, overdueCount, exam, then: [], doneToday: 0, minutesLeft: 0, later: null, partLabel: null, deferredDue: 0 }
+  const shared = { dueCount, overdueCount, exam, then: [], doneToday: 0, minutesLeft: 0, later: null, partLabel: null, overBudgetLabel: null, deferredDue: 0 }
 
   // The reviews that wait behind a day that is done or has no room.
   const reviewsFirst = (reason: string): NextStep => {
@@ -175,6 +178,7 @@ export function nextStep(input: {
       action: { verb: first.verb, href: first.href, topicId: first.topicId },
       etaLabel: first.etaLabel,
       partLabel: first.partLabel,
+      overBudgetLabel: first.overBudgetLabel,
       then: rest.slice(0, 3),
       doneToday: doneToday.length,
       minutesLeft,
@@ -204,7 +208,11 @@ export function nextStep(input: {
   }
 }
 
-/** The next step of a course, which may still be in setup (no plan yet). */
+/**
+ * The next step of a course. Until setup steps 1 and 2 are done (`readyToStudy`) there is no
+ * plan and the step is the setup step. Once they are, the plan says what is next, also in step 3,
+ * where its first item is the first topic to learn.
+ */
 export function nextStepForCourse(input: {
   courseId: string
   setup: CourseSetup
@@ -214,7 +222,7 @@ export function nextStepForCourse(input: {
   timeZone: string
 }): NextStep {
   const { courseId, setup, plan } = input
-  if (setup.mode === 'setup' || !plan) {
+  if (!readyToStudy(setup) || !plan) {
     return {
       kind: 'setup',
       dueCount: 0,
@@ -225,6 +233,7 @@ export function nextStepForCourse(input: {
       action: { verb: 'Continue', href: `/courses/${courseId}`, topicId: null },
       etaLabel: 'A few minutes',
       partLabel: null,
+      overBudgetLabel: null,
       then: [],
       doneToday: 0,
       minutesLeft: 0,

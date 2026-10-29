@@ -152,25 +152,29 @@ class TestClaim:
         job = await get_job(db, job_id)
         assert (job["status"], job["attempt_count"]) == ("processing", 3)
 
-    async def test_failed_retryable_job_is_claimed_until_it_runs_out_of_attempts(self, db, user_id):
-        job_id = await seed_job(db, user_id, status="failed", retryable=True, attempt_count=2)
-        assert await claim_job(job_id, 60, None) is not None
+    async def test_a_job_waiting_for_its_retry_is_claimed(self, db, user_id):
+        job_id = await seed_job(db, user_id, status="pending", retryable=True, attempt_count=2,
+                                error_code="LLM_UNAVAILABLE", started_at=datetime(2026, 1, 1))
 
-        spent = await seed_job(db, user_id, status="failed", retryable=True, attempt_count=3)
-        assert await claim_job(spent, 60, None) is None
-        skipped = await make_handler(ok)(payload(spent))
-        assert skipped["reason"] == "Job used all its attempts"
+        row = await claim_job(job_id, 60, None)
 
-    async def test_failed_permanent_job_is_never_claimed(self, db, user_id):
-        job_id = await seed_job(db, user_id, status="failed", retryable=False, attempt_count=1)
+        assert row is not None and row["attempt_count"] == 3
+        job = await get_job(db, job_id)
+        assert (job["status"], job["error_code"]) == ("processing", None)
 
-        result = await make_handler(ok)(payload(job_id))
+    async def test_a_failed_job_is_final_even_when_retryable(self, db, user_id):
+        # `failed` means no worker runs the job again; retryable only says a new job may help.
+        for retryable in (True, False):
+            job_id = await seed_job(db, user_id, status="failed", retryable=retryable, attempt_count=1)
 
-        assert result["status"] == "skipped"
-        assert result["reason"] == "Job failed permanently"
+            result = await make_handler(ok)(payload(job_id))
+
+            assert result["status"] == "skipped"
+            assert result["reason"] == "Job failed"
+            assert (await get_job(db, job_id))["attempt_count"] == 1
 
     async def test_started_at_is_kept_across_attempts(self, db, user_id):
-        job_id = await seed_job(db, user_id, status="failed", retryable=True, attempt_count=1,
+        job_id = await seed_job(db, user_id, status="pending", retryable=True, attempt_count=1,
                                 started_at=datetime(2026, 1, 1))
 
         await claim_job(job_id, 60, None)
@@ -217,12 +221,21 @@ class TestFailureHandling:
         assert raised.value.status_code == status_code
         assert raised.value.detail.startswith("Test job failed: ")
         job = await get_job(db, job_id)
-        assert (job["status"], job["error_code"], job["retryable"]) == ("failed", code, retryable)
-        assert job["lease_until"] is None
-        assert job["completed_at"] is not None
+        assert (job["error_code"], job["retryable"]) == (code, retryable)
+        if retryable:
+            # Attempts left: back in pending for the dispatcher's retry, still the target's
+            # active job, with a mark for the reaper should that retry never come.
+            assert job["status"] == "pending"
+            assert job["completed_at"] is None
+            assert job["lease_until"] is not None
+        else:
+            assert job["status"] == "failed"
+            assert job["lease_until"] is None
+            assert job["completed_at"] is not None
 
-    async def test_the_last_attempt_is_not_retryable(self, db, user_id):
-        job_id = await seed_job(db, user_id, status="failed", retryable=True, attempt_count=2)
+    async def test_the_last_attempt_fails_for_good_and_says_a_new_try_may_help(self, db, user_id):
+        job_id = await seed_job(db, user_id, status="pending", retryable=True, attempt_count=2,
+                                started_at=datetime(2026, 1, 1))
 
         async def body(payload, job):
             raise RuntimeError("still broken")
@@ -232,7 +245,23 @@ class TestFailureHandling:
 
         assert raised.value.status_code == 500
         job = await get_job(db, job_id)
-        assert (job["attempt_count"], job["retryable"]) == (3, False)
+        assert (job["status"], job["attempt_count"], job["retryable"]) == ("failed", 3, True)
+        assert job["error_code"] == "TEST_FAILED" and job["completed_at"] is not None
+
+    async def test_a_retry_keeps_one_active_job_for_its_target(self, db, user_id):
+        target = "content:t1:section_notes"
+        job_id = await seed_job(db, user_id, target_key=target)
+
+        async def body(payload, job):
+            raise LLMRateLimitError("slow down")
+
+        with pytest.raises(HTTPException):
+            await make_handler(body)(payload(job_id))
+
+        # A second request for the same work gets the job that is waiting for its retry.
+        again, created = await create_job(user_id=user_id, project_id=None, job_type="generate_content",
+                                          stage="generating", input_data={}, target_key=target)
+        assert (again, created) == (job_id, False)
 
     async def test_a_handler_that_lost_its_claim_does_not_overwrite_the_new_owner(self, db, user_id):
         job_id = await seed_job(db, user_id)
@@ -484,9 +513,13 @@ class TestReaper:
 
         counts = await job_reaper.reap_expired_jobs()
 
-        assert counts == {"failed": 1, "redispatched": 1, "pending_failed": 0, "pending_redispatched": 0}
+        assert counts == {
+            "failed": 1, "redispatched": 1, "pending_failed": 0, "pending_redispatched": 0,
+            "retry_failed": 0, "retry_redispatched": 0, "waiting_redispatched": 0, "waiting_expired": 0,
+        }
         job = await get_job(db, exhausted)
-        assert (job["status"], job["error_code"], job["retryable"]) == ("failed", "JOB_LEASE_EXPIRED", False)
+        # Final, but starting the work again may well succeed.
+        assert (job["status"], job["error_code"], job["retryable"]) == ("failed", "JOB_LEASE_EXPIRED", True)
         assert dispatched == [(retryable, "extract_topics", {"projectId": "p1"})]
         assert (await get_job(db, running))["status"] == "processing"
         assert (await get_job(db, pending))["status"] == "pending"
@@ -522,7 +555,8 @@ class TestReaper:
             db, user_id, "extract_topics", created_at=self.OLD, input_data={"projectId": "p1"}
         )
         await seed_job(db, user_id, created_at=self.FRESH)  # not old enough
-        await seed_job(db, user_id, created_at=self.OLD, started_at="SQL:NOW()")  # was claimed once
+        # Was claimed once and is waiting for the dispatcher's retry.
+        await seed_job(db, user_id, created_at=self.OLD, started_at="SQL:NOW()", lease_until=self.LIVE)
 
         counts = await job_reaper.reap_expired_jobs()
 
@@ -556,7 +590,7 @@ class TestReaper:
         assert second["pending_redispatched"] == 0
         job = await get_job(db, job_id)
         assert (job["status"], job["error_code"], job["retryable"]) == (
-            "failed", "JOB_DISPATCH_FAILED", False,
+            "failed", "JOB_DISPATCH_FAILED", True,
         )
         assert job["completed_at"] is not None
         assert len(dispatched) == 1
@@ -586,6 +620,53 @@ class TestReaper:
         await asyncio.gather(handler(payload(job_id)), handler(payload(job_id)))
 
         assert runs == [1]
+
+    async def test_a_retry_the_dispatcher_never_made_is_sent_by_the_reaper(self, db, user_id, dispatched):
+        waiting = await seed_job(
+            db, user_id, "extract_topics", status="pending", attempt_count=1, started_at=self.OLD,
+            error_code="LLM_UNAVAILABLE", lease_until=self.EXPIRED, input_data={"projectId": "p1"},
+        )
+        not_yet = await seed_job(db, user_id, status="pending", attempt_count=1, started_at=self.OLD,
+                                 lease_until=self.LIVE)
+
+        counts = await job_reaper.reap_expired_jobs()
+
+        assert counts["retry_redispatched"] == 1
+        assert dispatched == [(waiting, "extract_topics", {"projectId": "p1"})]
+        job = await get_job(db, waiting)
+        # Still pending, its mark pushed forward so the next sweep does not send it again.
+        assert (job["status"], job["dispatch_count"], job["error_code"]) == ("pending", 1, "LLM_UNAVAILABLE")
+        assert job["lease_until"] > datetime.now(UTC).replace(tzinfo=None)
+        assert (await get_job(db, not_yet))["dispatch_count"] == 0
+
+        await job_reaper.reap_expired_jobs()
+        assert len(dispatched) == 1
+
+    async def test_a_dispatcher_that_gives_up_leaves_a_waiting_retry_to_the_reaper(self, db, user_id):
+        from app.services.dispatch import mark_undelivered
+
+        never_started = await seed_job(db, user_id)
+        waiting = await seed_job(db, user_id, status="pending", attempt_count=1, started_at=self.OLD,
+                                 error_code="LLM_UNAVAILABLE", lease_until=self.LIVE)
+
+        await mark_undelivered(never_started, "unreachable")
+        await mark_undelivered(waiting, "unreachable")
+
+        assert (await get_job(db, never_started))["error_code"] == "ENQUEUE_FAILED"
+        job = await get_job(db, waiting)
+        assert (job["status"], job["error_code"]) == ("pending", "LLM_UNAVAILABLE")
+
+    async def test_a_retry_that_is_never_claimed_fails_with_its_last_error(self, db, user_id, dispatched):
+        job_id = await seed_job(db, user_id, status="pending", attempt_count=1, started_at=self.OLD,
+                                error_code="LLM_UNAVAILABLE", retryable=True, lease_until=self.EXPIRED,
+                                dispatch_count=3)
+
+        counts = await job_reaper.reap_expired_jobs()
+
+        assert counts["retry_failed"] == 1
+        job = await get_job(db, job_id)
+        assert (job["status"], job["error_code"], job["retryable"]) == ("failed", "LLM_UNAVAILABLE", True)
+        assert dispatched == []
 
     async def test_reap_endpoint_runs_the_reaper(self, db, user_id, dispatched, monkeypatch):
         from fastapi.testclient import TestClient

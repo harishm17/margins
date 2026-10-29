@@ -86,6 +86,8 @@ export type TopicPageData = {
     daysUntilDue: number | null
     progress: { notes: boolean; examples: boolean; quiz: boolean; quizScore: number | null }
     structure: TopicStructure
+    /** Key terms from topic finding (empty for topics added by hand). The voice Focus field's example uses one. */
+    keywords: string[]
   }
   previous: TopicNeighbour | null
   next: TopicNeighbour | null
@@ -160,7 +162,7 @@ export const getTopicPage = cache(async function getTopicPage(
     }),
     prisma.topic.findUnique({
       where: { id: topicId },
-      select: { objectives: true, prerequisiteIds: true, estimatedMinutes: true },
+      select: { objectives: true, prerequisiteIds: true, estimatedMinutes: true, keywords: true },
     }),
     prisma.topicSource.findMany({
       where: { topicId, role: 'primary' },
@@ -285,6 +287,7 @@ export const getTopicPage = cache(async function getTopicPage(
       daysUntilDue: shellTopic.dueAt ? (Date.parse(shellTopic.dueAt) - Date.now()) / 86_400_000 : null,
       progress: shellTopic.progress,
       structure,
+      keywords: structureRow?.keywords ?? [],
     },
     previous: index > 0 ? neighbour(course.topics[index - 1]) : null,
     next: index < course.topics.length - 1 ? neighbour(course.topics[index + 1]) : null,

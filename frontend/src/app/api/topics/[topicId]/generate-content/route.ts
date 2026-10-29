@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
-import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/cloud-tasks'
+import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/dispatch'
 import { z } from 'zod'
 import {
   apiInternal,
@@ -68,7 +68,7 @@ export async function POST(
       return apiNotFound('Topic not found')
     }
 
-    const preflightError = await ensureAiGenerationReady()
+    const preflightError = await ensureAiGenerationReady(session.user.id)
     if (preflightError) {
       return preflightError
     }

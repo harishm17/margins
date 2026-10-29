@@ -23,7 +23,7 @@ from app.services.exam_generator import ExamGenerator
 from app.services.exam_relevance import mark_exam_relevant_topics, mark_exam_relevant_topics_quietly
 from app.services.exam_style import profile_exam_material
 from app.services.exam_grader import ExamGrader
-from app.services.cloud_tasks import (
+from app.services.dispatch import (
     enqueue_chunking_job,
     enqueue_exam_profile_job,
     enqueue_exam_relevance_job,
@@ -34,6 +34,7 @@ from app.services.generation_chain import content_exists, continue_chain, dispat
 from app.services.job_reaper import reap_expired_jobs
 from app.services.llm.base import LLMRefusalError
 from app.services.llm.limiter import topic_lock
+from app.services import ai_status
 from app.services.budget import over_budget_message
 from app.services.job_runner import (
     DailyBudgetExceeded,
@@ -95,7 +96,7 @@ async def validate_material_job(payload: JobPayload, job: JobContext) -> JobOutc
     # content can make a material invalid.
     validation_result = await validate_material(
         material_id=material["id"],
-        gcs_path=material["gcs_path"],
+        storage_path=material["gcs_path"],
         filename=material["filename"],
         category=material["category"],
     )
@@ -410,6 +411,9 @@ async def exam_relevance_job(payload: JobPayload, job: JobContext) -> JobOutcome
     async def within_budget() -> None:
         if not settings.llm_configured:
             raise PermanentJobError("No model is configured", "LLM_NOT_CONFIGURED")
+        unavailable = (await ai_status.get_status()).as_error()
+        if unavailable is not None:
+            raise unavailable
         message = await over_budget_message(job.user_id)
         if message:
             raise DailyBudgetExceeded(message)
@@ -832,6 +836,8 @@ async def generate_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     default_error_code="EXAM_GRADING_FAILED",
     stage="grading",
     uses_llm=True,
+    # The answers are the student's work: grading waits for the AI instead of failing.
+    wait_for_ai=True,
 )
 async def grade_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     """Grade an exam submission. The task carries only the submission id."""

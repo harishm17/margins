@@ -15,9 +15,11 @@ type PopoverContentProps = React.ComponentProps<typeof PopoverPrimitive.Content>
   padding?: 'default' | 'menu' | 'none'
 }
 
+/** Centred on its trigger unless the caller lines it up with an edge (`align="end"` for a button at the right). */
+
 export function PopoverContent({
   className,
-  align = 'start',
+  align = 'center',
   sideOffset = 6,
   padding = 'default',
   ...props

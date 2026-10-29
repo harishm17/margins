@@ -9,14 +9,6 @@ const nextConfig = {
       bodySizeLimit: '10mb',
     },
   },
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'storage.googleapis.com',
-      },
-    ],
-  },
   // Old URLs from before the course rebuild. `/exams/:examId` is not here: it needs the
   // course id, so src/app/exams/[examId] looks it up and redirects.
   async redirects() {
@@ -38,6 +30,8 @@ const nextConfig = {
         destination: 'https://studymargins.com/:path*',
         permanent: true,
       },
+      // Sign-in is Google only: one page for new and returning students. The query (?next=) is kept.
+      course('/signup', '/login'),
       course('/dashboard', '/home'),
       // Specific old pages first, then the generic prefix rule.
       tab('materials', 'materials'),

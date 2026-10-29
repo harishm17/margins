@@ -12,7 +12,7 @@ from app.api.routes import jobs
 from app.config import settings
 from app.models.jobs import JobPayload
 from app.services import generation_chain
-from app.services.cloud_tasks import retry_delay_seconds
+from app.services.dispatch import retry_delay_seconds
 from app.services.content_generator.context import NoSourceMaterialError, content_messages
 from app.services.llm import limiter
 from app.services.llm.anthropic_provider import AnthropicProvider, _translate_api_error
@@ -248,7 +248,7 @@ class TestRateLimitedJobs:
         monkeypatch.setattr(jobs, "ExamplesGenerator", Generator)
         return provider
 
-    async def test_a_rate_limit_answers_503_with_retry_after_and_the_job_stays_retryable(self, db, course, llm):
+    async def test_a_rate_limit_answers_503_with_retry_after_and_the_job_waits_for_its_retry(self, db, course, llm):
         job_id = await seed_job(db, course.user_id, project_id=course.project_id)
         payload = JobPayload(jobId=job_id, jobType="generate_content",
                              data={"topicId": course.topics[0], "contentType": "solved_examples", "preferences": {}})
@@ -259,7 +259,8 @@ class TestRateLimitedJobs:
         assert raised.value.status_code == 503  # 5xx: the dispatcher retries
         assert raised.value.headers == {"Retry-After": "7"}
         job = await get_job(db, job_id)
-        assert (job["status"], job["error_code"], job["retryable"]) == ("failed", "LLM_RATE_LIMITED", True)
+        # Back in pending with attempts left, so it still counts as the target's active job.
+        assert (job["status"], job["error_code"], job["retryable"]) == ("pending", "LLM_RATE_LIMITED", True)
         assert job["attempt_count"] == 1 and job["max_attempts"] == 3
 
         # The retry the dispatcher makes goes through once the limit has passed.
