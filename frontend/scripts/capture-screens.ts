@@ -299,15 +299,43 @@ async function previousBottom(locator: import('@playwright/test').Locator) {
   })
 }
 
+/**
+ * The bottom (CSS px) of the last whole list row that ends within `limit`, for a crop that stops on a row
+ * boundary instead of cutting a row. Only top-level list items count (not the chips inside a row).
+ */
+async function lastWholeRow(page: Page, limit: number, what: string, rows: string) {
+  const bottoms = await page
+    .locator(rows)
+    .evaluateAll((items) => items.filter((item) => item.getBoundingClientRect().height > 40).map((item) => item.getBoundingClientRect().bottom))
+  const fits = bottoms.filter((value) => value <= limit)
+  if (!fits.length) throw new Error(`${what}: no whole row ends above ${limit}px`)
+  return Math.round(Math.max(...fits))
+}
+
+/** The crop of the main column from the top of the page to the last whole row, padded to 4:3 (`padTo`). */
+async function rowsCrop(page: Page, what: string, rows: string): Promise<Crop> {
+  const limit = Math.round(MAIN.width / FRAME)
+  const bottom = await lastWholeRow(page, limit - 12, what, rows)
+  return [MAIN.left, 0, MAIN.width, bottom + 12]
+}
+
 const SHOTS: Shot[] = [
   // The hero: the plan to the exam, with Today on top. Desktop keeps the sidebar, mobile keeps the top of the page.
   // Its largest slot is the sign-in page's panel, drawn at 100vw - 626px above 1280px: 1294px on a 1920px screen,
   // so 2592 is 2x of it there (and a little under 2x on wider screens).
   {
     name: 'plan',
-    viewport: { width: 1024, height: 700 },
+    viewport: { width: 1024, height: 800 },
     url: (ids) => `${course(ids)}/plan`,
-    prepare: assertToday,
+    // The window is made as tall as the second day's card ends (plus 6px, short of the next card), so Today and the day after it are both
+    // whole, and the sidebar's account row, pinned to the window's bottom, is the last thing in the picture.
+    prepare: async (page) => {
+      await assertToday(page)
+      const next = await box(page, page.locator('li[aria-current="date"] + li').first(), 'the day after Today')
+      await page.setViewportSize({ width: 1024, height: Math.round(next.y + next.height + 6) })
+      await page.waitForTimeout(300)
+    },
+    crop: async (page) => [0, 0, 1024, page.viewportSize()!.height],
     widths: [960, 1500, 1920, 2592],
     // The social card draws it at 900x615 (app/opengraph-image.tsx): written at that size, nothing rescales it.
     og: { file: 'plan-og.png', width: 900, height: 615 },
@@ -354,8 +382,9 @@ const SHOTS: Shot[] = [
     name: 'topics-edit',
     viewport: { width: 1180, height: 760 },
     url: (ids) => `${course(ids)}/topics?edit=1`,
-    prepare: (page) => clearEdge(page, MAIN.width / FRAME),
-    crop: async (page) => fitRatio(page, [MAIN.left, 0, MAIN.width, 600], FRAME),
+    // From the top of the page to the last whole topic row, on the page's background down to 4:3.
+    crop: (page) => rowsCrop(page, 'the topic list', 'main li:not(li li)'),
+    padTo: FRAME,
   },
   // The part of the notes with code, the outline and the sources: from "How it works" to the end of the
   // breadth-first search section, so no heading is cut in half.
@@ -412,10 +441,11 @@ const SHOTS: Shot[] = [
       const missed = page.getByText('During a depth-first search')
       await missed.waitFor()
       await scrollTo(missed, 124)
-      await clearEdge(page, MAIN.width / FRAME)
+      await clearEdge(page)
     },
-    // From the top of the page, with the top bar and the topic tabs, to the bottom of the 4:3 frame.
-    crop: async (page) => fitRatio(page, [MAIN.left, 0, MAIN.width, 600], FRAME),
+    // From the top of the page, with the top bar and the topic tabs, to the last whole question that fits in 4:3.
+    crop: (page) => rowsCrop(page, 'the quiz review', 'main ol.divide-y > li'),
+    padTo: FRAME,
   },
   // Only in the README.
   {
