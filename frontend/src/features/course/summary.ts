@@ -33,14 +33,13 @@ export function problemMessage(problem: FileProblem, maxUploadMb: number): strin
   return `Files can be up to ${maxUploadMb} MB.`
 }
 
+/** The upload picker's words ("Use these as:"). They only set a file's starting role (lib/materials/role.ts). */
 export const CATEGORY_LABELS: Record<string, string> = {
   lecture_notes: 'Lecture notes',
   sample_exams: 'Past exams',
   book_chapters: 'Book chapters',
   syllabus: 'Syllabus or schedule',
 }
-
-export const categoryLabel = (category: string): string => CATEGORY_LABELS[category] ?? 'Materials'
 
 /** The sort used by "Needs work": due topics first, then the lowest mastery, not started included. */
 export function needsWorkOrder<T extends { mastery: number | null; dueAt: string | null; orderIndex: number }>(

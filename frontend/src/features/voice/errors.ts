@@ -4,7 +4,8 @@
  * is written for any client; these lines say what the student can do about it.
  */
 
-import { resetPhrase } from '@/lib/budget/copy'
+import { aiMessage } from '@/lib/ai/messages'
+import { fillResetTime } from '@/lib/budget/copy'
 
 export type TurnFailure = {
   /** `error.details.code` when there is one, else `error.code`, or the stream's `code`. */
@@ -81,16 +82,13 @@ export function describeTurnFailure(failure: TurnFailure): TurnFailureView {
           action: 'retry',
         },
       }
-    case 'LLM_DAILY_BUDGET':
+    case 'LLM_DAILY_BUDGET': {
+      const message = aiMessage(failure.code)
       return {
         fate: 'summary',
-        alert: {
-          tone: 'warning',
-          title: "You've used today's AI allowance",
-          text: `Voice practice is paused. It resets ${resetPhrase()}.`,
-          action: 'none',
-        },
+        alert: { tone: 'warning', title: message.title, text: fillResetTime(message.text), action: 'none' },
       }
+    }
     case 'VOICE_UNAVAILABLE':
       return {
         fate: 'continue',
@@ -103,27 +101,22 @@ export function describeTurnFailure(failure: TurnFailure): TurnFailureView {
       }
     case 'LLM_NOT_CONFIGURED':
     case 'LLM_AUTH_FAILED':
-    case 'LLM_CREDIT_EXHAUSTED':
+    case 'LLM_CREDIT_EXHAUSTED': {
+      // The same words as every other surface (lib/ai/messages).
+      const message = aiMessage(failure.code)
       return {
         fate: 'summary',
-        alert: {
-          tone: 'danger',
-          title: "Voice practice isn't available right now",
-          text: 'Something is wrong on our side. Try again later.',
-          action: 'none',
-        },
+        alert: { tone: message.tone, title: message.title, text: message.text, action: 'none' },
       }
+    }
     case 'LLM_RATE_LIMITED':
-    case 'LLM_UNAVAILABLE':
+    case 'LLM_UNAVAILABLE': {
+      const message = aiMessage(failure.code)
       return {
         fate: 'continue',
-        alert: {
-          tone: 'warning',
-          title: 'The coach is busy',
-          text: 'Give it a few seconds, then try again.',
-          action: 'retry',
-        },
+        alert: { tone: message.tone, title: message.title, text: message.text, action: 'retry' },
       }
+    }
     case 'LLM_REFUSED':
       return {
         fate: 'continue',

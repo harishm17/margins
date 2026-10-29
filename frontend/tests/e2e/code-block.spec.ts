@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
-import { DEMO_EMAIL, DEMO_PASSWORD, demoIds } from './helpers/seed-demo'
+import { signIn as testSignIn } from './helpers/auth'
+import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
 
 // A code block's Copy button sits in a bar above the code. On a phone it used to float over the
 // first line. The math topic's notes hold a short block and a block with one very long line.
@@ -8,11 +9,7 @@ test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true
 const { course, mathTopic } = demoIds()
 
 async function signIn(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(DEMO_EMAIL)
-  await page.getByLabel('Password', { exact: true }).fill(DEMO_PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/, { timeout: 60_000 })
+  await testSignIn(page, DEMO_EMAIL)
 }
 
 test('the Copy button never covers code, is a 44px target, and long lines scroll inside the block', async ({ page }) => {

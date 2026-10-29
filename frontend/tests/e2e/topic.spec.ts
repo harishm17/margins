@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
+import { signIn } from './helpers/auth'
 import { withPrisma } from './helpers/db'
 import { FIXTURE_PDF } from './helpers/seed-demo'
 
@@ -7,7 +8,6 @@ import { FIXTURE_PDF } from './helpers/seed-demo'
 // free and fast; the spec writes every kind of content through the page itself.
 const stamp = Date.now()
 const email = `topic-${stamp}@example.com`
-const password = 'topic-test-password'
 // Content is written from uploaded files, so the course needs one. Set E2E_PDF to use another.
 const pdfPath = process.env.E2E_PDF ?? FIXTURE_PDF
 const TOPICS = ['Graph traversal', 'Sorting algorithms', 'Dynamic programming']
@@ -71,12 +71,7 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   test.skip(!existsSync(pdfPath), `needs ${pdfPath}`)
   test.setTimeout(300_000)
 
-  await page.request.post('/api/auth/signup', { data: { email, password, name: 'Topic Tester' } })
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.waitForURL('**/home')
+  await signIn(page, email)
 
   const { courseId, ids } = (course = await createCourse(page))
   const base = `/courses/${courseId}/topics/${ids[0]}`
@@ -194,11 +189,7 @@ test('Prepare all topics now writes the rest of the course, one topic at a time'
   test.setTimeout(300_000)
   const { courseId, ids } = course!
 
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.waitForURL('**/home')
+  await signIn(page, email)
 
   // The overview has no bulk "build" action any more; it is a course menu item with an estimate.
   await page.goto(`/courses/${courseId}`)

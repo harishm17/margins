@@ -17,8 +17,10 @@ import { readRole, type MaterialRole } from '@/lib/materials/role'
 import { parsePracticeProblems } from '@/features/topic/content'
 import { mergeSources, type SourceRef } from '@/lib/topics/sources'
 import { PRACTICE_DONE_SHARE } from '@/features/topic/practice-keys'
+import type { CourseSetup, TopicListState } from '@/lib/course-setup'
 import { getCourseShell, type CourseShell, type ShellTopic, type ShellUnit } from '@/server/queries/courses'
 import { getPlanData } from '@/server/queries/plan'
+import { deriveExamStyleState, examProfileTarget, materialIdFromProfileTarget } from '@/lib/exams/style-state'
 
 /**
  * Read models for the course pages: overview (setup guide and Today view), materials and
@@ -73,6 +75,8 @@ export type MaterialRow = {
   uploadedAt: string
   /** The validate or chunk job to follow while the file is being processed. */
   job: (JobRef & { jobType: string }) | null
+  /** A past exam whose style analysis failed: the job's error code (null when it did not fail). */
+  examAnalysisFailure: { errorCode: string | null } | null
 }
 
 export type MaterialsData = {
@@ -82,7 +86,7 @@ export type MaterialsData = {
   processingCount: number
   /** A topic-finding job that is running now. */
   extractJob: JobRef | null
-  /** The latest topic-finding job failed and there are no topics to show for it. */
+  /** Why the latest topic-finding job failed, when it did and none is running; shown even when topics exist. */
   extractFailure: string | null
   /**
    * How long a file usually takes from upload to read, in seconds: the median of recently finished
@@ -112,7 +116,7 @@ async function typicalReadSeconds(): Promise<number | null> {
 export async function getMaterialsData(userId: string, courseId: string): Promise<MaterialsData> {
   // The materials page checks the course first, but runs this at the same time: an unusable id is a 404 either way.
   if (!areRecordIds(courseId)) notFound()
-  const [materials, pipelineJobs, extractJobs, topicCount, typicalSeconds] = await Promise.all([
+  const [materials, pipelineJobs, extractJobs, typicalSeconds] = await Promise.all([
     prisma.material.findMany({
       where: { projectId: courseId, project: { userId } },
       orderBy: { uploadedAt: 'desc' },
@@ -125,6 +129,7 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
         validationStatus: true,
         validationNotes: true,
         uploadedAt: true,
+        styleProfile: true,
       },
     }),
     prisma.processingJob.findMany({
@@ -147,9 +152,37 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
       take: 3,
       select: { id: true, status: true, stage: true, progressPercent: true, createdAt: true, errorCode: true, errorMessage: true },
     }),
-    prisma.topic.count({ where: { projectId: courseId, project: { userId } } }),
     typicalReadSeconds(),
   ])
+
+  // Past exams: the latest style analysis of each, so a failed one shows on its row with a retry.
+  const examIds = materials.filter((material) => material.role === 'exam').map((material) => material.id)
+  const profileJobs = examIds.length
+    ? await prisma.processingJob.findMany({
+        where: { projectId: courseId, userId, jobType: 'profile_exam', targetKey: { in: examIds.map(examProfileTarget) } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: { targetKey: true, status: true, errorCode: true },
+      })
+    : []
+  const examState = deriveExamStyleState(
+    materials
+      .filter((material) => material.role === 'exam')
+      .map((material) => ({
+        id: material.id,
+        validationStatus: material.validationStatus,
+        hasProfile: material.styleProfile !== null,
+      })),
+    profileJobs.flatMap((job) => {
+      const materialId = materialIdFromProfileTarget(job.targetKey)
+      return materialId ? [{ materialId, status: job.status, errorCode: job.errorCode }] : []
+    })
+  )
+  const examFailureCode = new Map<string, string | null>()
+  for (const job of profileJobs) {
+    const materialId = materialIdFromProfileTarget(job.targetKey)
+    if (materialId && !examFailureCode.has(materialId)) examFailureCode.set(materialId, job.errorCode)
+  }
 
   const jobsByMaterial = new Map<string, typeof pipelineJobs>()
   for (const job of pipelineJobs) {
@@ -181,6 +214,9 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
       notes: material.validationNotes,
       uploadedAt: material.uploadedAt.toISOString(),
       job: active ? { ...toJobRef(active), jobType: active.jobType } : null,
+      examAnalysisFailure: examState.failedFileIds.includes(material.id)
+        ? { errorCode: examFailureCode.get(material.id) ?? null }
+        : null,
     }
   })
 
@@ -193,7 +229,7 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
     processingCount: rows.filter((row) => row.status === 'processing').length,
     extractJob: activeExtract ? toJobRef(activeExtract) : null,
     extractFailure:
-      !activeExtract && topicCount === 0 && latestExtract?.status === 'failed'
+      !activeExtract && latestExtract?.status === 'failed'
         ? describeJobFailure(latestExtract.errorCode, latestExtract.errorMessage, 'extract_topics')
         : null,
     typicalReadSeconds: typicalSeconds,
@@ -330,8 +366,10 @@ export type SetupData = {
   /** The step to show as current: 1 add, 2 check, 3 build. */
   step: 1 | 2 | 3
   materials: MaterialsData
-  topicCount: number
-  confirmedTopicCount: number
+  /** The topic list and where it came from (lib/course-setup.ts). */
+  topics: TopicListState
+  /** What step 2 asks for: "Review topics", "Confirm topics", "Add topics". */
+  label: string
   /** The first confirmed topic in course order, where "Start studying" goes. */
   firstTopic: { id: string; name: string } | null
   generation: GenerationState
@@ -376,20 +414,20 @@ export async function getCourseOverview(
 
   if (course.setup.mode === 'setup') {
     const [materials, generation] = await Promise.all([getMaterialsData(userId, courseId), getGenerationState(userId, course)])
-    const confirmedTopicCount = course.topics.filter((topic) => topic.confirmed).length
     // The files step stays open while no file is usable yet or one is still being read, unless
-    // topic finding has already started.
+    // topic finding has already started. A course with no files at all is in step 2 only when it has
+    // content (lib/course-setup.ts), so there is nothing being read to wait for.
     const filesDone =
       materials.readyCount > 0 && (materials.processingCount === 0 || !!materials.extractJob || course.topics.length > 0)
-    const step = course.setup.step === 2 && !filesDone ? 1 : course.setup.step
+    const step = course.setup.step === 2 && course.materialCount > 0 && !filesDone ? 1 : course.setup.step
     return {
       mode: 'setup',
       course,
       setup: {
         step,
         materials,
-        topicCount: course.topics.length,
-        confirmedTopicCount,
+        topics: course.setup.topics,
+        label: course.setup.label,
         firstTopic: course.topics.find((topic) => topic.confirmed) ?? null,
         generation,
       },
@@ -491,8 +529,8 @@ export type TopicsData = {
   /** In course order; empty for a flat course. */
   units: ShellUnit[]
   topics: TopicRow[]
-  /** At least one topic is not confirmed yet. */
-  hasUnconfirmed: boolean
+  /** The course's setup state: the Topics page stays in the editor until the list is confirmed. */
+  setup: CourseSetup
   materialsReady: number
   materialsProcessing: number
   extractJob: JobRef | null
@@ -576,7 +614,7 @@ export async function getTopicsData(userId: string, courseId: string): Promise<T
     courseName: course.name,
     units: course.units,
     topics,
-    hasUnconfirmed: topics.some((topic) => !topic.confirmed),
+    setup: course.setup,
     materialsReady: materials.readyCount,
     materialsProcessing: materials.processingCount,
     extractJob: materials.extractJob,

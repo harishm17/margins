@@ -16,6 +16,7 @@ import {
   Clock,
   Exam,
   FileText,
+  GearSix,
   ListBullets,
   MagnifyingGlass,
   Microphone,
@@ -136,6 +137,7 @@ function PaletteBody() {
         keywords: ['dark', 'light'],
         run: () => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'),
       },
+      { id: 'action:settings', label: 'Settings', icon: GearSix, group: 'Actions', keywords: ['account', 'allowance', 'delete'], run: ({ router }) => router.push('/settings') },
       { id: 'action:sign-out', label: 'Sign out', icon: SignOut, group: 'Actions', run: () => void signOut({ callbackUrl: '/login' }) }
     )
     return list

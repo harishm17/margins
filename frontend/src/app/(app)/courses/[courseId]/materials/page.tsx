@@ -28,8 +28,7 @@ export default async function MaterialsPage({ params }: { params: Promise<{ cour
             courseId={courseId}
             extractJob={data.extractJob}
             extractFailure={data.extractFailure}
-            topicCount={course.topics.length}
-            unconfirmed={course.topics.some((topic) => !topic.confirmed)}
+            setup={course.setup}
             filesReady={data.readyCount > 0 && data.processingCount === 0}
           />
         }

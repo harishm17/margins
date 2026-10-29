@@ -33,11 +33,27 @@ export function rankWeakestTopics<T extends RankableTopic>(topics: T[], limit = 
     .map((entry) => entry.topic)
 }
 
-/** "Covers your 3 weakest topics: A, B and C." The count follows the list. */
-export function describeSprintTopics(topics: { name: string }[]): string {
+/**
+ * Whether the ranking has anything to go on: at least one topic has a quiz score. Before that,
+ * every topic ties and the sprint takes the first ones in input order, so they are not "weakest".
+ */
+export function hasStudyData(topics: RankableTopic[]): boolean {
+  return topics.some((topic) => topic.progress?.quizScore != null)
+}
+
+/**
+ * "Covers your 3 weakest topics: A, B and C." once a topic has a quiz score; before that
+ * "Covers 3 of your topics: A, B and C. After your first quiz it picks your weakest."
+ * The count follows the list.
+ */
+export function describeSprintTopics(topics: { name: string }[], studied: boolean): string {
   const names = topics.map((topic) => topic.name)
   if (names.length === 0) return ''
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  if (!studied) {
+    const some = names.length === 1 ? 'one of your topics' : `${names.length} of your topics`
+    return `Covers ${some}: ${list}. After your first quiz it picks your weakest.`
+  }
   const what = names.length === 1 ? 'your weakest topic' : `your ${names.length} weakest topics`
   return `Covers ${what}: ${list}.`
 }

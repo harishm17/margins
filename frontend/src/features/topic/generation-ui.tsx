@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { JobStatus } from '@/components/ui/job-status'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { AiBlockedNote, useAiStatus } from '@/features/ai/ai-status'
 import { useResetTime } from '@/lib/budget/use-reset-time'
 import { KIND_COPY } from './copy'
 import { GenerateForm } from './generate-form'
@@ -89,33 +90,21 @@ export function RegenerateDialog({
   )
 }
 
-/** The notice for a failed or refused job, with a retry. */
+/** The notice for a failed or refused job, with its actions. */
 function FailureAlert({
   kind,
   message,
   tone,
-  onRetry,
-  retrying,
+  action,
 }: {
   kind: ContentKind
   message: string
   tone: 'danger' | 'warning'
-  onRetry?: () => void
-  retrying?: boolean
+  action?: React.ReactNode
 }) {
   const text = useResetTime(message)
   return (
-    <InlineAlert
-      tone={tone}
-      title={KIND_COPY[kind].failed}
-      action={
-        onRetry ? (
-          <Button size="sm" variant="secondary" onClick={onRetry} loading={retrying}>
-            Try again
-          </Button>
-        ) : undefined
-      }
-    >
+    <InlineAlert tone={tone} title={KIND_COPY[kind].failed} action={action}>
       {text}
     </InlineAlert>
   )
@@ -134,10 +123,12 @@ type ContentGateProps = {
  * failed. With content present it shows the view, plus a status line while a replacement or
  * an addition is being written. Without it: the empty state, the generating state (a job
  * status and a skeleton of the final layout; also while a just-opened topic's notes are being
- * started) or the failure with a retry.
+ * started) or the failure. A failure is shown once, as an alert with its actions, in place of
+ * the empty state (the page sends no toast for the view on screen).
  */
 export function ContentGate({ kind, topicName, present, children }: ContentGateProps) {
   const { running, failure, startError, starting, preparing, generate } = useGeneration(kind)
+  const { blocked } = useAiStatus()
   const copy = KIND_COPY[kind]
 
   const status = running ? (
@@ -179,24 +170,48 @@ export function ContentGate({ kind, topicName, present, children }: ContentGateP
   }
 
   const notice = startError ?? failure
-  return (
-    <div className="flex flex-col gap-2">
-      {notice ? (
+  if (notice) {
+    // Try again only when it may work now; Options stays for a retry with different settings.
+    const canRetry = notice.retry && !blocked
+    return (
+      <div className="max-w-[720px]">
         <FailureAlert
           kind={kind}
           message={notice.message}
           tone={notice.tone}
-          onRetry={retry}
-          retrying={starting}
+          action={
+            <div className="flex items-center gap-1">
+              {canRetry ? (
+                <Button size="sm" variant="secondary" onClick={retry} loading={starting}>
+                  Try again
+                </Button>
+              ) : null}
+              {blocked ? null : (
+                <GenerateOptions kind={kind} mode="create" submitLabel={copy.create} align="end">
+                  <Button size="sm" variant="ghost">
+                    Options
+                  </Button>
+                </GenerateOptions>
+              )}
+            </div>
+          }
         />
-      ) : null}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
       <EmptyState
         icon={KIND_ICONS[kind]}
         title={copy.emptyTitle}
         action={
-          <Button variant="primary" loading={starting} onClick={retry}>
-            {copy.create}
-          </Button>
+          <div className="flex flex-col items-center gap-2">
+            <Button variant="primary" loading={starting} disabled={!!blocked} onClick={retry}>
+              {copy.create}
+            </Button>
+            <AiBlockedNote className="max-w-[40ch] text-center" />
+          </div>
         }
         secondary={
           <GenerateOptions kind={kind} mode="create" submitLabel={copy.create}>

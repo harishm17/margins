@@ -15,6 +15,15 @@ import { allowanceMessage } from '@/lib/budget/copy'
 
 export type NormalizedJobState = 'queued' | 'processing' | 'completed' | 'failed'
 
+/**
+ * The stage the AI service gives a queued job that waits for the AI (or the daily allowance)
+ * instead of failing: exam grading, whose answers are the student's work.
+ */
+export const WAITING_FOR_AI_STAGE = 'waiting_for_ai'
+
+export const isWaitingForAi = (job: { status: string; stage?: string | null } | null | undefined): boolean =>
+  !!job && (job.status === 'queued' || job.status === 'pending') && job.stage === WAITING_FOR_AI_STAGE
+
 export type NormalizedJob = {
   id: string
   jobType?: string
@@ -24,6 +33,8 @@ export type NormalizedJob = {
   errorMessage?: string | null
   errorCode?: string | null
   retryable?: boolean
+  /** Attempts made so far. A queued job with attempts made is waiting for its retry. */
+  attemptCount?: number
   resultData?: Record<string, unknown> | null
   raw: Record<string, unknown>
 }
@@ -77,6 +88,7 @@ export const normalizeJob = (data: Record<string, unknown>): NormalizedJob => ({
   errorMessage: data.errorMessage ? String(data.errorMessage) : null,
   errorCode: data.errorCode ? String(data.errorCode) : null,
   retryable: typeof data.retryable === 'boolean' ? data.retryable : undefined,
+  attemptCount: typeof data.attemptCount === 'number' ? data.attemptCount : undefined,
   resultData:
     data.resultData && typeof data.resultData === 'object' && !Array.isArray(data.resultData)
       ? (data.resultData as Record<string, unknown>)

@@ -52,11 +52,13 @@ import type { MaterialRow } from '@/server/queries/course'
 import { useRefreshSoon } from './use-refresh-soon'
 import {
   ACCEPT_ATTRIBUTE,
-  categoryLabel,
   CATEGORY_LABELS,
   fileProblem,
   problemMessage,
 } from './summary'
+import { useAiStatus } from '@/features/ai/ai-status'
+import { fillResetTime } from '@/lib/budget/copy'
+import { jobFailureMessage } from '@/lib/jobs/failure-message'
 
 type Category = 'lecture_notes' | 'sample_exams' | 'book_chapters' | 'syllabus'
 
@@ -186,16 +188,19 @@ function RoleBadge({ role }: { role: MaterialRole }) {
   return <Badge tone={role === 'syllabus' || role === 'exam' ? 'accent' : 'neutral'}>{ROLE_LABELS[role]}</Badge>
 }
 
+/**
+ * One file. It shows one label for what the file is for: its role, which decides how the file is
+ * used and which the student can change. The upload category is not shown: it only sets the
+ * starting role, so after a change the two can disagree.
+ */
 function RowShell({
   filename,
-  category,
   role,
   size,
   status,
   menu,
 }: {
   filename: string
-  category: string
   role: MaterialRole
   size: number
   status: React.ReactNode
@@ -209,15 +214,12 @@ function RowShell({
           <div className="min-w-0">
             <p className="truncate text-body-strong text-fg">{filename}</p>
             <p className="flex min-w-0 items-center gap-2 text-caption font-normal text-fg-3 md:hidden">
-              <span className="truncate">
-                {categoryLabel(category)}, {formatBytes(size)}
-              </span>
+              <span className="truncate">{formatBytes(size)}</span>
               <RoleBadge role={role} />
             </p>
           </div>
         </div>
       </td>
-      <td className="truncate whitespace-nowrap px-3 py-2.5 text-small text-fg-2 max-md:hidden">{categoryLabel(category)}</td>
       <td className="whitespace-nowrap px-3 py-2.5 max-md:hidden">
         <RoleBadge role={role} />
       </td>
@@ -241,7 +243,65 @@ function RowMenu({ filename, children }: { filename: string; children: React.Rea
   )
 }
 
-function ServerRow({ row, onDeleted, typicalSeconds }: { row: MaterialRow; onDeleted: () => void; typicalSeconds: number | null }) {
+/**
+ * A past exam that was read but whose style could not be analysed: say so on its row, with a way
+ * to analyse the course's past exams again.
+ */
+function ExamAnalysisFailed({
+  courseId,
+  errorCode,
+  onRetried,
+}: {
+  courseId: string
+  errorCode: string | null
+  onRetried: () => void
+}) {
+  const { blocked, report } = useAiStatus()
+  const [pending, setPending] = React.useState(false)
+  const text = fillResetTime(jobFailureMessage(errorCode, 'profile_exam').text)
+
+  async function retry() {
+    setPending(true)
+    try {
+      await apiFetch(`/api/projects/${courseId}/exam-style`, { method: 'POST' })
+      onRetried()
+    } catch (error) {
+      if (isApiError(error)) report(error.code)
+      toast.error(isApiError(error) ? error.message : "Couldn't start the analysis. Try again.")
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <div className="flex min-h-[38px] flex-col items-start gap-1">
+      <Tooltip content={text} side="top" align="start">
+        <span className="block min-w-0">
+          <StatusText icon={FAILED_ICON} tone="danger">
+            {"Read, but its exam style couldn't be analysed"}
+          </StatusText>
+        </span>
+      </Tooltip>
+      {blocked ? null : (
+        <Button size="sm" variant="link" className="h-auto p-0 text-small" loading={pending} onClick={() => void retry()}>
+          Analyse again
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function ServerRow({
+  courseId,
+  row,
+  onDeleted,
+  typicalSeconds,
+}: {
+  courseId: string
+  row: MaterialRow
+  onDeleted: () => void
+  typicalSeconds: number | null
+}) {
   const router = useRouter()
   const refreshSoon = useRefreshSoon()
   // The role the student just picked shows at once; the server's value takes over once it is saved.
@@ -263,6 +323,8 @@ function ServerRow({ row, onDeleted, typicalSeconds }: { row: MaterialRow; onDel
         pendingLabel={queued ? stageLabel(stage, 'queued') : undefined}
       />
     )
+  } else if (row.status === 'ready' && row.examAnalysisFailure && role === 'exam') {
+    status = <ExamAnalysisFailed courseId={courseId} errorCode={row.examAnalysisFailure.errorCode} onRetried={refreshSoon} />
   } else if (row.status === 'ready') {
     status = (
       // The height of a file being read (two lines), with the word centred in it, so it sits on the row's middle line.
@@ -319,7 +381,7 @@ function ServerRow({ row, onDeleted, typicalSeconds }: { row: MaterialRow; onDel
       router.refresh()
     } catch {
       setPicked(null)
-      toast.error("Couldn't change the file's role. Try again.")
+      toast.error("Couldn't save the change. Try again.")
     }
   }
 
@@ -327,7 +389,6 @@ function ServerRow({ row, onDeleted, typicalSeconds }: { row: MaterialRow; onDel
     <>
       <RowShell
         filename={row.filename}
-        category={row.category}
         role={role}
         size={row.sizeBytes}
         status={status}
@@ -395,7 +456,6 @@ function LocalRow({ upload, onDismiss, typicalSeconds }: { upload: LocalUpload; 
   return (
     <RowShell
       filename={upload.filename}
-      category={upload.category}
       role={roleForCategory(upload.category)}
       size={upload.size}
       status={status}
@@ -568,10 +628,12 @@ export function MaterialsManager({
             browse
           </Button>
         </p>
-        <p className="text-small text-fg-2">PDF, DOCX, PPTX or DOC, up to {maxUploadMb} MB each.</p>
+        <p className="text-small text-fg-2">
+          PDF, DOCX, PPTX or DOC, up to {maxUploadMb} MB each. PDFs need selectable text. Scans can&apos;t be read.
+        </p>
         <div className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-2">
           <span id={`category-label-${variant}`} className="text-small text-fg-2">
-            These are:
+            Use these as:
           </span>
           <SegmentedControl
             aria-labelledby={`category-label-${variant}`}
@@ -614,7 +676,6 @@ export function MaterialsManager({
             <thead className="max-md:hidden">
               <tr className="border-b border-border text-caption text-fg-3">
                 <th scope="col" className="py-2 pr-3 font-medium">Name</th>
-                <th scope="col" className="px-3 py-2 font-medium">Type</th>
                 <th scope="col" className="px-3 py-2 font-medium">Used as</th>
                 <th scope="col" className="px-3 py-2 font-medium">Size</th>
                 <th scope="col" className="px-3 py-2 font-medium">Status</th>
@@ -628,7 +689,7 @@ export function MaterialsManager({
                 item.kind === 'local' ? (
                   <LocalRow key={item.upload.key} upload={item.upload} typicalSeconds={typicalSeconds} onDismiss={() => removeUpload(item.upload.key)} />
                 ) : (
-                  <ServerRow key={item.row.id} row={item.row} typicalSeconds={typicalSeconds} onDeleted={() => router.refresh()} />
+                  <ServerRow key={item.row.id} courseId={courseId} row={item.row} typicalSeconds={typicalSeconds} onDeleted={() => router.refresh()} />
                 )
               )}
             </tbody>

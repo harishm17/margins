@@ -1,7 +1,8 @@
 'use client'
 
 import { signOut } from 'next-auth/react'
-import { CaretUpDown, SignOut } from '@phosphor-icons/react/dist/ssr'
+import { useRouter } from 'next/navigation'
+import { CaretUpDown, GearSix, SignOut } from '@phosphor-icons/react/dist/ssr'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,9 +33,10 @@ export function Avatar({ name, email, className }: { name: string | null; email:
   )
 }
 
-/** Avatar, name and a menu: email, theme (System, Light, Dark), sign out. */
+/** Avatar, name and a menu: email, Settings, theme (System, Light, Dark), sign out. */
 export function AccountMenu({ rail }: { rail?: boolean }) {
   const { user } = useShell()
+  const router = useRouter()
   const label = user.name || user.email
 
   const trigger = (
@@ -67,7 +69,9 @@ export function AccountMenu({ rail }: { rail?: boolean }) {
       )}
       <DropdownMenuContent side="top" align="start" className="min-w-[232px]">
         <DropdownMenuLabel className="truncate">{user.email}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
+        <DropdownMenuItem icon={<GearSix />} onSelect={() => router.push('/settings')}>
+          Settings
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuLabel>Theme</DropdownMenuLabel>
         <ThemeMenuRadios />

@@ -75,3 +75,8 @@ export function reachesPrerequisite(
   }
   return false
 }
+
+/** The unit a failed add is retried into: the one it was typed for while it exists, else the current target. */
+export function unitForRetry(unitId: string | null, existingUnitIds: readonly string[], fallback: string | null): string | null {
+  return unitId && existingUnitIds.includes(unitId) ? unitId : fallback
+}
