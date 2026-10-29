@@ -105,12 +105,13 @@ type Shot = {
  */
 const WIDTHS = { desktop: [960, 1500, 1920], phone: [390, 780, 1170] }
 /**
- * The largest a lossless file may be, in bits per pixel, before it is written near-lossless instead. UI
- * screenshots are mostly flat colour and come out at 0.5-1.5 bits per pixel; one far above that is mostly
- * photo or noise, where near-lossless (lossless coding of a lightly quantised image, still no chroma
- * subsampling) costs nothing visible. Lossy WebP, which halves the colour resolution, is never used.
+ * The largest a lossless file may be, in bits per pixel, before it is written near-lossless instead. Drawn at
+ * their own density these screenshots come out at 0.1-0.8 bits per pixel (the densest is a 390px phone page at
+ * 1x); 1.5 is about twice that, so only a screen that is mostly photo or noise goes over, where near-lossless
+ * (lossless coding of a lightly quantised image, still no chroma subsampling) costs nothing visible. Lossy WebP,
+ * which halves the colour resolution, is never used.
  */
-const BITS_PER_PIXEL_BUDGET = 2.5
+const BITS_PER_PIXEL_BUDGET = 1.5
 
 const SIDEBAR = 248
 /**
@@ -188,59 +189,68 @@ async function assertToday(page: Page) {
 }
 
 /**
- * Nudges the page's scroller so no line of text is cut by the top of what scrolls (under the top bar, a sticky
- * tab row, or the top of a scrolling panel): cut lines go up under the bar, or, at the end of the page, down
- * below it. One direction throughout, so it cannot swing back and forth.
+ * Nudges the page's scroller so no line of text is cut by an edge of the picture: by default the top of what
+ * scrolls (under the top bar, a sticky tab row, or the top of a scrolling panel), or the line `at` (CSS px from
+ * the top of the viewport, the bottom of a crop). The cut line goes past the edge, out of the picture: up under
+ * a top edge, down below a bottom one (the other way at the end or the start of the page). Once a direction is
+ * taken it is kept, so it cannot swing back and forth.
  */
-async function clearTopEdge(page: Page) {
+async function clearEdge(page: Page, at?: number) {
   let direction: 'up' | 'down' | null = null
   let last = ''
   for (let attempt = 0; attempt < 8; attempt++) {
-    const moved: { way: 'up' | 'down'; text: string } | null = await page.evaluate((way: 'up' | 'down' | null) => {
-      const scrollers = Array.from(document.querySelectorAll<HTMLElement>('*')).filter(
-        (node) => node.scrollHeight > node.clientHeight + 40 && /(auto|scroll)/.test(getComputedStyle(node).overflowY)
-      )
-      const main = scrollers.sort((a, b) => b.scrollHeight - a.scrollHeight)[0]
-      let edge = main ? Math.max(0, main.getBoundingClientRect().top) : 0
-      for (const element of Array.from(document.querySelectorAll<HTMLElement>('body *'))) {
-        if (!['sticky', 'fixed'].includes(getComputedStyle(element).position)) continue
-        const rect = element.getBoundingClientRect()
-        if (rect.height > 0 && rect.height < 200 && rect.top <= edge + 1 && rect.bottom > edge) edge = rect.bottom
-      }
-      const walker = document.createTreeWalker(main ?? document.body, NodeFilter.SHOW_TEXT)
-      let cut: { rect: DOMRect; text: string } | null = null
-      while (!cut && walker.nextNode()) {
-        const node = walker.currentNode
-        const parent = node.parentElement
-        // Text that scrolls and can be seen: not hidden, not in a pinned bar, not visually hidden (sr-only is 1px).
-        // (checkVisibility is false inside a closed <details>, whose text still has boxes.)
-        if (!node.textContent?.trim() || !parent || !parent.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue
-        let ancestor: Element | null = parent
-        while (ancestor && ancestor !== main && !['sticky', 'fixed'].includes(getComputedStyle(ancestor).position)) ancestor = ancestor.parentElement
-        if (ancestor && ancestor !== main) continue
-        const range = document.createRange()
-        range.selectNodeContents(node)
-        const rect = Array.from(range.getClientRects()).find((box) => box.height > 4 && box.width > 2 && box.top < edge - 0.5 && box.bottom > edge + 0.5)
-        if (rect) cut = { rect, text: `${node.textContent.trim().slice(0, 40)} (${Math.round(rect.top)}-${Math.round(rect.bottom)} across ${Math.round(edge)}, in ${main ? main.tagName + '.' + main.className.slice(0, 40) : 'the page'})` }
-      }
-      if (!cut) return null
-      const scroller = main ?? document.scrollingElement!
-      const before = scroller.scrollTop
-      if (way !== 'down') {
-        scroller.scrollTop += Math.ceil(cut.rect.bottom - edge) + 1
-        // At the end of the page it cannot go up (scrollTop may still move a fraction of a pixel).
-        if (scroller.scrollTop - before >= 1) return { way: 'up' as const, text: cut.text }
-        scroller.scrollTop = before
-      }
-      scroller.scrollTop -= Math.ceil(edge - cut.rect.top) + 1
-      return { way: 'down' as const, text: cut.text }
-    }, direction)
+    const moved: { way: 'up' | 'down'; text: string } | null = await page.evaluate(
+      ({ way, at }: { way: 'up' | 'down' | null; at: number | null }) => {
+        const scrollers = Array.from(document.querySelectorAll<HTMLElement>('*')).filter(
+          (node) => node.scrollHeight > node.clientHeight + 40 && /(auto|scroll)/.test(getComputedStyle(node).overflowY)
+        )
+        const main = scrollers.sort((a, b) => b.scrollHeight - a.scrollHeight)[0]
+        let edge = at ?? (main ? Math.max(0, main.getBoundingClientRect().top) : 0)
+        if (at === null) {
+          for (const element of Array.from(document.querySelectorAll<HTMLElement>('body *'))) {
+            if (!['sticky', 'fixed'].includes(getComputedStyle(element).position)) continue
+            const rect = element.getBoundingClientRect()
+            if (rect.height > 0 && rect.height < 200 && rect.top <= edge + 1 && rect.bottom > edge) edge = rect.bottom
+          }
+        }
+        const walker = document.createTreeWalker(main ?? document.body, NodeFilter.SHOW_TEXT)
+        let cut: { rect: DOMRect; text: string } | null = null
+        while (!cut && walker.nextNode()) {
+          const node = walker.currentNode
+          const parent = node.parentElement
+          // Text that scrolls and can be seen: not hidden (checkVisibility is false inside a closed <details>,
+          // whose text still has boxes), not in a pinned bar, not visually hidden (sr-only is 1px).
+          if (!node.textContent?.trim() || !parent || !parent.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue
+          let ancestor: Element | null = parent
+          while (ancestor && ancestor !== main && !['sticky', 'fixed'].includes(getComputedStyle(ancestor).position)) ancestor = ancestor.parentElement
+          if (ancestor && ancestor !== main) continue
+          const range = document.createRange()
+          range.selectNodeContents(node)
+          const rect = Array.from(range.getClientRects()).find((box) => box.height > 4 && box.width > 2 && box.top < edge - 0.5 && box.bottom > edge + 0.5)
+          if (rect) cut = { rect, text: `${node.textContent.trim().slice(0, 40)} (${Math.round(rect.top)}-${Math.round(rect.bottom)} across ${Math.round(edge)})` }
+        }
+        if (!cut) return null
+        const scroller = main ?? document.scrollingElement!
+        // Up moves the content up (scrollTop grows) until the line is above the edge; down, until it is below.
+        const deltas = { up: Math.ceil(cut.rect.bottom - edge) + 1, down: -(Math.ceil(edge - cut.rect.top) + 1) }
+        const order: ('up' | 'down')[] = way ? [way] : at === null ? ['up', 'down'] : ['down', 'up']
+        for (const option of order) {
+          const before = scroller.scrollTop
+          scroller.scrollTop += deltas[option]
+          // At the end (or start) of the page it cannot move, though scrollTop may change by a fraction of a pixel.
+          if (Math.abs(scroller.scrollTop - before) >= 1) return { way: option, text: cut.text }
+          scroller.scrollTop = before
+        }
+        return { way: order[0], text: `${cut.text}, and the page cannot scroll` }
+      },
+      { way: direction, at: at ?? null }
+    )
     if (!moved) return
     direction = moved.way
     last = moved.text
     await page.waitForTimeout(150)
   }
-  throw new Error(`"${last}" is still cut at the top of the page`)
+  throw new Error(`"${last}" is still cut at the edge of the picture`)
 }
 
 async function box(page: Page, locator: import('@playwright/test').Locator, what: string) {
@@ -344,6 +354,7 @@ const SHOTS: Shot[] = [
     name: 'topics-edit',
     viewport: { width: 1180, height: 760 },
     url: (ids) => `${course(ids)}/topics?edit=1`,
+    prepare: (page) => clearEdge(page, MAIN.width / FRAME),
     crop: async (page) => fitRatio(page, [MAIN.left, 0, MAIN.width, 600], FRAME),
   },
   // The part of the notes with code, the outline and the sources: from "How it works" to the end of the
@@ -401,8 +412,10 @@ const SHOTS: Shot[] = [
       const missed = page.getByText('During a depth-first search')
       await missed.waitFor()
       await scrollTo(missed, 124)
+      await clearEdge(page, MAIN.width / FRAME)
     },
-    crop: async (page) => fitRatio(page, [MAIN.left, 100, MAIN.width, 600], FRAME),
+    // From the top of the page, with the top bar and the topic tabs, to the bottom of the 4:3 frame.
+    crop: async (page) => fitRatio(page, [MAIN.left, 0, MAIN.width, 600], FRAME),
   },
   // Only in the README.
   {
@@ -616,7 +629,7 @@ async function load(session: Session, shot: Shot, theme: Theme, scale: number) {
   await settle(page)
   await page.addStyleTag({ content: STILL_CSS })
   if (shot.prepare) await shot.prepare(page, session.ids)
-  if (phone) await clearTopEdge(page)
+  if (phone) await clearEdge(page)
   await page.waitForTimeout(300)
   let crop: Crop | undefined = typeof shot.crop === 'function' ? await shot.crop(page) : shot.crop
   if (!crop && phone) {
