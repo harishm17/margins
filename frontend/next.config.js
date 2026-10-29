@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  poweredByHeader: false,
   // The dev overlay badge sits on top of the sidebar account row.
   devIndicators: false,
   experimental: {
@@ -51,6 +52,21 @@ const nextConfig = {
       course('/projects/:id/voice-sprint', '/courses/:id/review'),
       course('/projects/:id', '/courses/:id'),
       course('/projects/:id/:rest*', '/courses/:id/:rest*'),
+    ]
+  },
+  // No CSP yet: inline theme and JSON-LD scripts would need nonces. Microphone stays allowed for voice practice.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), geolocation=(), payment=(), usb=(), browsing-topics=()' },
+        ],
+      },
     ]
   },
 }

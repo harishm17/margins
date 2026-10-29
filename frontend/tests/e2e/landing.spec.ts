@@ -67,11 +67,13 @@ test('the landing page tells the loop from files to exam day', async ({ page }) 
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
   expect(errors).toEqual([])
 
-  // Structured data (the app, the organisation and the questions) and the canonical link are present.
+  // Structured data (one graph: the site, the organisation, its author, the app, its code and the questions) and the canonical link are present.
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://studymargins.com')
   expect(await page.locator('script[type="application/ld+json"]').count()).toBe(1)
-  const types = await page.evaluate(() => JSON.parse(document.querySelector('script[type="application/ld+json"]')?.textContent ?? '[]').map((item: { '@type': string }) => item['@type']))
-  expect(types).toEqual(['SoftwareApplication', 'Organization', 'FAQPage'])
+  const types = await page.evaluate(() =>
+    (JSON.parse(document.querySelector('script[type="application/ld+json"]')?.textContent ?? '{}')['@graph'] ?? []).map((item: { '@type': string }) => item['@type'])
+  )
+  expect(types).toEqual(['WebSite', 'Organization', 'Person', 'SoftwareApplication', 'SoftwareSourceCode', 'FAQPage'])
 })
 
 test('on a phone every step shows its own phone-sized screenshot', async ({ page }) => {
