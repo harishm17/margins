@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
 import { withPrisma } from './helpers/db'
-import { addContent, addMaterial, createCourse, createEmptyCourse, signUpAndIn } from './helpers/loop'
+import { addContent, addMaterial, createCourse, createEmptyCourse, signIn } from './helpers/loop'
 
 // A topic quiz submitted while the AI is unavailable is stored, its short answers wait for the AI like
 // an exam's do, and it is graded and applied (mastery, review date, plan) once the AI is back.
 // The mock LLM fails like the real API when out of credit if an answer carries MOCK_LLM_FAIL.
 
+// Each test signs in as its own account: the learning-loop specs share one, and a course made here would change what Home continues.
 const markAvailable = () => withPrisma((prisma) => prisma.aiStatus.deleteMany({}))
 
 test.afterEach(async () => {
@@ -14,7 +15,7 @@ test.afterEach(async () => {
 
 test('quiz: submitted during an outage, the answers are saved and graded once AI is back', async ({ page }) => {
   test.setTimeout(240_000)
-  await signUpAndIn(page, 'quizwait')
+  await signIn(page, `quizwait-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`)
   const courseId = await createEmptyCourse(page, 'Quiz wait course')
   await addMaterial(page, courseId)
   const course = await createCourse(page, 'Quiz wait course', [{ name: 'Graph traversal', minutes: 30 }], { existingCourseId: courseId })
@@ -102,7 +103,7 @@ test('quiz: submitted during an outage, the answers are saved and graded once AI
 
 test('quiz: a waiting quiz whose grading did not finish offers Grade again', async ({ page }) => {
   test.setTimeout(180_000)
-  await signUpAndIn(page, 'quizwait')
+  await signIn(page, `quizwait-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`)
   const courseId = await createEmptyCourse(page, 'Quiz expiry course')
   await addMaterial(page, courseId)
   const course = await createCourse(page, 'Quiz expiry course', [{ name: 'Hashing', minutes: 30 }], { existingCourseId: courseId })
