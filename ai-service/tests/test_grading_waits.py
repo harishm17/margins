@@ -196,6 +196,29 @@ class TestReaperSendsWaitingJobs:
 
         assert dispatched == [job_id]
 
+    @pytest.mark.parametrize("reason", ["LLM_NOT_CONFIGURED", "LLM_CREDIT_EXHAUSTED", "LLM_DAILY_BUDGET"])
+    async def test_a_job_past_the_wait_limit_fails_with_its_reason_even_while_the_ai_stays_down(
+        self, db, monkeypatch, dispatched, reason
+    ):
+        # With no key the AI never comes back, so no handler runs to notice the limit.
+        monkeypatch.setattr(settings, "LLM_PROVIDER", "anthropic")
+        monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
+        user_id = await seed_user(db)
+        overdue = await self.waiting(
+            db, user_id, error_code=reason, lease_until=self.FUTURE,
+            created_at="SQL:(NOW() AT TIME ZONE 'UTC') - interval '8 days'",
+        )
+        recent = await self.waiting(db, user_id, error_code=reason, lease_until=self.FUTURE)
+
+        counts = await job_reaper.reap_expired_jobs()
+
+        assert counts["waiting_expired"] == 1
+        job = await get_job(db, overdue)
+        assert (job["status"], job["error_code"], job["lease_until"]) == ("failed", reason, None)
+        assert job["completed_at"] is not None
+        assert (await get_job(db, recent))["status"] == "pending"
+        assert dispatched == []
+
     async def test_waiting_for_the_allowance_is_sent_after_the_reset_only(self, db, anthropic, dispatched):
         user_id = await seed_user(db)
         later = await self.waiting(db, user_id, error_code="LLM_DAILY_BUDGET", lease_until=self.FUTURE)

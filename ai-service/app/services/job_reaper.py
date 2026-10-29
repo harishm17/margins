@@ -16,7 +16,8 @@ error.
 
 A job waiting for the AI (stage `waiting_for_ai`, see job_runner._defer) is sent again once its
 `lease_until` has passed and the AI status reads available, or, when it waits for the daily
-allowance, once the allowance has reset. Waiting does not count towards JOB_MAX_REDISPATCHES.
+allowance, once the allowance has reset. Waiting does not count towards JOB_MAX_REDISPATCHES; a job
+that has waited JOB_AI_WAIT_MAX_SECONDS fails with its reason, whether or not the AI came back.
 
 On a failed job, `retryable` says whether starting the same work again may help, so a job lost
 to a dead worker or a dispatch that never arrived is retryable: the student can start it again.
@@ -168,6 +169,21 @@ async def reap_expired_jobs() -> Dict[str, int]:
     )
     retries_redispatched = await _redispatch(retries)
 
+    # Jobs that have waited for the AI longer than JOB_AI_WAIT_MAX_SECONDS fail, whatever the AI
+    # status: with no key, or an account never topped up, no handler would run to notice. The
+    # reason they waited for stays as the failure reason; retryable says Grade again may work later.
+    waiting_expired = await execute_query(
+        f"""
+        UPDATE processing_jobs
+        SET status = 'failed', retryable = TRUE, completed_at = {UTC_NOW}, lease_until = NULL
+        WHERE status = 'pending'
+          AND stage = '{WAITING_FOR_AI}'
+          AND created_at < {UTC_NOW} - make_interval(secs => $1::float8)
+        RETURNING id
+        """,
+        float(settings.JOB_AI_WAIT_MAX_SECONDS),
+    )
+
     # Jobs waiting for the AI: sent again once the AI reads available (the status expires after
     # AI_STATUS_TTL_S, so during a long outage one real call per TTL tests it), or for the
     # allowance, once it has reset (their lease_until is the reset).
@@ -200,6 +216,7 @@ async def reap_expired_jobs() -> Dict[str, int]:
         "retry_failed": len(retry_failed),
         "retry_redispatched": retries_redispatched,
         "waiting_redispatched": waiting_redispatched,
+        "waiting_expired": len(waiting_expired),
     }
     if any(counts.values()):
         logger.warning("Job reaper: %s", counts)
