@@ -1,3 +1,5 @@
+import { request } from '@playwright/test'
+import { signInApi } from './auth'
 import { withPrisma } from './db'
 
 /**
@@ -12,8 +14,7 @@ import { withPrisma } from './db'
  * Progress is set so the sprint's three weakest topics are known: Recursion basics (no data),
  * Graph search (40, unfinished), Sorting by comparison (70); Hash tables (90) is left out.
  */
-export const VOICE_TEST_EMAIL = 'voice-test@studymargins.com'
-export const VOICE_TEST_PASSWORD = 'voice-test-password'
+export const VOICE_TEST_EMAIL = 'voice-test@example.com'
 const COURSE_NAME = 'Voice practice'
 
 type Question = {
@@ -124,12 +125,13 @@ export type VoiceFixture = {
 }
 
 export async function ensureVoiceFixture(baseURL: string): Promise<VoiceFixture> {
-  const signup = await fetch(`${baseURL}/api/auth/signup`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: VOICE_TEST_EMAIL, password: VOICE_TEST_PASSWORD, name: 'Voice Tester' }),
-  })
-  if (signup.status !== 201 && signup.status !== 409) throw new Error(`signup failed: HTTP ${signup.status}`)
+  // The first test sign-in makes the account.
+  const api = await request.newContext({ baseURL })
+  try {
+    await signInApi(api, VOICE_TEST_EMAIL, 'Voice Tester')
+  } finally {
+    await api.dispose()
+  }
 
   return withPrisma(async (prisma) => {
     const user = await prisma.user.findUniqueOrThrow({ where: { email: VOICE_TEST_EMAIL } })

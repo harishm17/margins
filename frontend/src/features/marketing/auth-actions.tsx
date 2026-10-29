@@ -48,7 +48,7 @@ export function NavActions() {
         <Link href="/login">Sign in</Link>
       </Button>
       <Button asChild variant="primary">
-        <Link href="/signup">Get started</Link>
+        <Link href="/login">Get started</Link>
       </Button>
     </>
   )
@@ -66,7 +66,7 @@ export function HeroActions() {
       ) : (
         <>
           <Button asChild variant="primary" size="lg">
-            <Link href="/signup">Get started</Link>
+            <Link href="/login">Get started</Link>
           </Button>
           <Button asChild variant="secondary" size="lg">
             <a href="#how-it-works">See how it works</a>
@@ -82,7 +82,7 @@ export function FinalCta() {
   const signedIn = useSignedIn()
   return (
     <Button asChild variant="primary" size="lg">
-      <Link href={signedIn ? '/home' : '/signup'}>{signedIn ? `Open ${BRAND_NAME}` : 'Get started'}</Link>
+      <Link href={signedIn ? '/home' : '/login'}>{signedIn ? `Open ${BRAND_NAME}` : 'Get started'}</Link>
     </Button>
   )
 }

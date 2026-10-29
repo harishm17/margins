@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideGoogleSignIn } from './google-link'
+import { decideGoogleSignIn, GOOGLE_SIGN_IN_ERRORS } from './google-link'
 
 const unlinked = { oauthProvider: null, oauthId: null }
 
@@ -40,4 +40,22 @@ test('an account linked to a different Google login is refused', () => {
     action: 'refuse',
     error: 'GoogleAccountMismatch',
   })
+})
+
+test('a password account made before Google-only sign-in links on its first verified Google sign-in, then stays linked', () => {
+  // The stored row of an old password account: a hash, but no OAuth login.
+  const passwordAccount = { oauthProvider: null, oauthId: null }
+  assert.deepEqual(decideGoogleSignIn({ emailVerified: true, providerAccountId: 'g1', existing: passwordAccount }), {
+    action: 'link',
+  })
+  const linked = { oauthProvider: 'google', oauthId: 'g1' }
+  assert.deepEqual(decideGoogleSignIn({ emailVerified: true, providerAccountId: 'g1', existing: linked }), { action: 'allow' })
+})
+
+test('every refusal has a message, and none of them points to a password', () => {
+  for (const error of ['GoogleEmailNotVerified', 'GoogleAccountMismatch'] as const) {
+    const message = GOOGLE_SIGN_IN_ERRORS[error]
+    assert.ok(message, error)
+    assert.doesNotMatch(message, /password/i)
+  }
 })
