@@ -218,3 +218,12 @@ describe('pollJobUntilDone', () => {
     assert.equal(b.state, 'completed')
   })
 })
+
+it('a queued job at the waiting_for_ai stage is waiting for the AI', async () => {
+  const { isWaitingForAi } = await import('./poll-job')
+  assert.equal(isWaitingForAi({ status: 'queued', stage: 'waiting_for_ai' }), true)
+  assert.equal(isWaitingForAi({ status: 'pending', stage: 'waiting_for_ai' }), true)
+  assert.equal(isWaitingForAi({ status: 'processing', stage: 'grading' }), false)
+  assert.equal(isWaitingForAi({ status: 'failed', stage: 'waiting_for_ai' }), false)
+  assert.equal(isWaitingForAi(null), false)
+})

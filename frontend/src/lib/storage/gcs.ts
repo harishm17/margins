@@ -66,11 +66,11 @@ async function deleteLocalFile(relativePath: string): Promise<void> {
 
   for (const base of bases) {
     // Runtime upload folder, not project files: keep Turbopack from tracing the whole project.
-    const localFilePath = pathModule.join(/* turbopackIgnore: true */ base, relativePath)
-    if (fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath)
-      return
-    }
+    const root = pathModule.resolve(/* turbopackIgnore: true */ base)
+    const localFilePath = pathModule.resolve(/* turbopackIgnore: true */ root, relativePath)
+    if (!localFilePath.startsWith(root + pathModule.sep)) continue
+    // force: a file that is already gone (or went between two calls) counts as deleted.
+    fs.rmSync(localFilePath, { force: true })
   }
 }
 
@@ -172,6 +172,29 @@ export async function uploadStream(
 }
 
 /**
+ * Record a file that was just stored. `record` makes the database rows that point at it; if it
+ * fails for any reason (the course or the account was deleted meanwhile, the database refused the
+ * row), the stored file is deleted before the error goes on, so a failed upload never leaves a file
+ * that nothing points at. Every write-then-record path goes through this.
+ */
+export async function recordStoredFile<T>(
+  storedPath: string,
+  record: () => Promise<T>,
+  remove: (path: string) => Promise<void> = deleteFile
+): Promise<T> {
+  try {
+    return await record()
+  } catch (error) {
+    try {
+      await remove(storedPath)
+    } catch (cleanupError) {
+      console.error(`[STORAGE] Could not delete ${storedPath} after its record failed; remove it by hand:`, cleanupError)
+    }
+    throw error
+  }
+}
+
+/**
  * Generate a signed URL for downloading a file
  * @param gcsPath - Full GCS path (gs://bucket/path)
  * @param expiresInMinutes - URL expiration time (default: 60 minutes)
@@ -225,7 +248,8 @@ export async function deleteFile(gcsPath: string): Promise<void> {
   const path = gcsPath.replace(`gs://${BUCKET_NAME}/`, '')
   const bucket = storage.bucket(BUCKET_NAME)
   try {
-    await bucket.file(path).delete()
+    // An object that is already gone counts as deleted, as on S3 and local disk.
+    await bucket.file(path).delete({ ignoreNotFound: true })
   } catch (error) {
     if (ALLOW_LOCAL_FALLBACK) {
       console.warn(`[GCS] Delete of ${path} failed, trying local storage instead:`, error)
@@ -270,12 +294,32 @@ export async function deleteProjectFolder(userId: string, projectId: string): Pr
     }
     const storage = await getStorage()
     if (storage) {
-      await storage.bucket(BUCKET_NAME).deleteFiles({ prefix: folder, force: true })
+      await storage.bucket(BUCKET_NAME).deleteFiles({ prefix: folder, force: true, ignoreNotFound: true })
     }
     return true
   } catch (error) {
     console.error(`[STORAGE] Could not delete the folder ${folder}; remove it by hand:`, error)
     return false
+  }
+}
+
+/**
+ * Delete everything stored for a user: every file under `<userId>/`, in every storage the app can
+ * use, including files whose database rows are already gone. Unlike deleteProjectFolder this
+ * throws when a storage fails, so account deletion can stop and be retried; files that are already
+ * gone count as deleted, so a retry only finishes the job.
+ */
+export async function deleteUserFiles(userId: string): Promise<void> {
+  // Ids are UUIDs. Anything else could name a folder outside the user's own.
+  if (!/^[A-Za-z0-9-]+$/.test(userId)) throw new Error(`Refusing to delete files for user id "${userId}"`)
+  const folder = `${userId}/`
+  await deleteLocalFolder(folder)
+  if (s3Configured()) {
+    await deleteS3Prefix(folder)
+  }
+  const storage = await getStorage()
+  if (storage) {
+    await storage.bucket(BUCKET_NAME).deleteFiles({ prefix: folder, force: true, ignoreNotFound: true })
   }
 }
 
@@ -353,4 +397,9 @@ export async function openStoredFile(gcsPath: string): Promise<StoredFile | null
     if ((error as { code?: number })?.code === 404) return null
     throw error
   }
+}
+
+/** Tests: use this Cloud Storage client instead of loading the real one. */
+export function setGcsStorageForTests(storage: unknown) {
+  storageInstance = storage
 }

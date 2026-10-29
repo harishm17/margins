@@ -17,14 +17,13 @@ import {
   apiUnauthorized,
   isUnauthorizedError,
 } from '@/lib/api/errors'
-import { ensureAiGenerationReady } from '@/lib/api/ai-preflight'
 import {
   countQuestions,
   finalizeAttempt,
   findExamForUser,
   findInProgressAttempt,
 } from '@/lib/exams/attempts'
-import { isExpired, sanitizeAnswers, type AnswerMap } from '@/lib/exams/attempt-timing'
+import { sanitizeAnswers, type AnswerMap } from '@/lib/exams/attempt-timing'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,15 +55,10 @@ export async function POST(
       if (!submitted) return apiInvalidInput('answers must be an object')
     }
 
-    // An attempt that is past its time is submitted as saved, whatever the AI service state:
-    // that must not be blocked by a health check. Otherwise check first, so a student who
-    // still has time can retry the submit instead of losing the attempt.
+    // The answers are the student's work: a submission is always accepted and stored, whatever
+    // the AI status or the allowance. Grading is queued; while the AI cannot run, the grading job
+    // waits (ai-service job_runner `wait_for_ai`) and the results page says so.
     const now = new Date()
-    const late = attempt.deadlineAt ? isExpired(attempt.deadlineAt, now) : false
-    if (!late) {
-      const preflightError = await ensureAiGenerationReady()
-      if (preflightError) return preflightError
-    }
 
     const result = await finalizeAttempt(session.user.id, exam, attempt, submitted, now)
 

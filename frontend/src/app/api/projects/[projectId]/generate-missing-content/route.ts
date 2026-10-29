@@ -48,7 +48,7 @@ export async function POST(
     })
     if (!project) return apiNotFound('Project not found')
 
-    const preflightError = await ensureAiGenerationReady()
+    const preflightError = await ensureAiGenerationReady(auth.user.id)
     if (preflightError) return preflightError
 
     const [topics, activeJobs] = await Promise.all([

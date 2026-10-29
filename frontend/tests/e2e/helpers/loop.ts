@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { expect, type BrowserContext, type Page } from '@playwright/test'
 import { withPrisma } from './db'
 import { FIXTURE_PDF } from './seed-demo'
+import { signIn } from './auth'
 
 /** Helpers for the learning loop specs: a fresh account and course per spec, built through the app's own API. */
 
@@ -21,31 +22,19 @@ export async function setZoneCookie(context: BrowserContext, zone = ZONE) {
   await context.addCookies([{ name: 'margins_tz', value: encodeURIComponent(zone), domain: 'localhost', path: '/' }])
 }
 
-let account: { email: string; password: string } | null = null
+let account: { email: string } | null = null
 
 /**
- * Signs in as the spec file's account, creating it the first time. One account serves every spec
- * (each makes its own course): sign-up is rate limited to 5 a minute per address.
+ * Signs in as the spec file's account; the first sign-in makes it. One account serves every spec in
+ * the file (each makes its own course).
  */
-export async function signUpAndIn(page: Page, label: string): Promise<{ email: string; password: string }> {
-  if (!account) {
-    const email = `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`
-    const password = 'loop-test-password'
-    const signup = await page.request.post('/api/auth/signup', { data: { email, password, name: 'Loop Tester' } })
-    expect(signup.status()).toBe(201)
-    account = { email, password }
-  }
-  await signIn(page, account.email, account.password)
+export async function signUpAndIn(page: Page, label: string): Promise<{ email: string }> {
+  account ??= { email: `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com` }
+  await signIn(page, account.email)
   return account
 }
 
-export async function signIn(page: Page, email: string, password: string) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/, { timeout: 60_000 })
-}
+export { signIn }
 
 export type TopicSpec = {
   name: string

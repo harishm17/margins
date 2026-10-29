@@ -23,11 +23,13 @@ export type ChatStorage = {
   /** Store the assistant message; resolves to its id. */
   saveAnswer(record: AnswerRecord): Promise<string>
   /**
-   * The answer failed. `usage` is set when the model was called and billed. The storage
-   * keeps a note of the failure for a billed call, so the cost counts toward the daily
-   * budget, and otherwise removes the question so the thread has no unanswered turn.
+   * The answer failed. `usage` is set when the model was called and billed: its cost still goes
+   * on the ledger, so it counts toward the daily budget. A failure is never kept in the
+   * conversation: the question is removed (and a conversation it started, now empty), so the
+   * thread has no unanswered turn and the browser offers the retry. `discarded` says the
+   * question is gone.
    */
-  recordFailure(code: string, usage: UsageInfo | null): Promise<void>
+  recordFailure(code: string, usage: UsageInfo | null): Promise<{ discarded: boolean } | void>
 }
 
 export function parseUsage(value: unknown): UsageInfo | null {
@@ -66,9 +68,17 @@ export function relayChatStream(args: {
           clientGone = true
         }
       }
-      const sendError = (code: string) => {
+      const sendError = (code: string, discarded = false) => {
         const info = chatErrorMessage(code)
-        send({ type: 'error', code, message: info.message, retryable: info.retryable })
+        send({ type: 'error', code, message: info.message, retryable: info.retryable, ...(discarded ? { discarded } : {}) })
+      }
+      // Record the failure, then tell the browser, including whether the question was removed.
+      const fail = async (code: string, usage: UsageInfo | null) => {
+        let discarded = false
+        await safely('recording the failure', async () => {
+          discarded = (await storage.recordFailure(code, usage))?.discarded === true
+        })
+        sendError(code, discarded)
       }
       const safely = async (what: string, work: () => Promise<unknown>): Promise<boolean> => {
         try {
@@ -116,8 +126,7 @@ export function relayChatStream(args: {
               const usage = parseUsage(raw.usage)
               // The AI service's message can carry internal detail; the browser gets ours.
               log(`AI service reported ${event.code}: ${event.message}`)
-              await safely('recording the failure', () => storage.recordFailure(event.code, usage))
-              sendError(event.code)
+              await fail(event.code, usage)
             } else {
               send({ ...raw, usage: undefined })
             }
@@ -134,15 +143,13 @@ export function relayChatStream(args: {
 
           if (!finished) {
             finished = true
-            await safely('recording the failure', () => storage.recordFailure('CHAT_INTERRUPTED', null))
-            sendError('CHAT_INTERRUPTED')
+            await fail('CHAT_INTERRUPTED', null)
           }
         } catch (error) {
           log('the AI service stream broke', error)
           if (!finished) {
             finished = true
-            await safely('recording the failure', () => storage.recordFailure('CHAT_INTERRUPTED', null))
-            sendError('CHAT_INTERRUPTED')
+            await fail('CHAT_INTERRUPTED', null)
           }
         } finally {
           try {
