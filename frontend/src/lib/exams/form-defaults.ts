@@ -22,6 +22,22 @@ function wholeNumber(raw: string | string[] | undefined): number | null {
   return value > 0 ? value : null
 }
 
+/** The time limit the form offers for a block of this many minutes (the nearest choice). */
+export const snapMinutes = (minutes: number): number => nearest(TIME_LIMITS, minutes)
+
+/**
+ * The topics a link asks for (`topics=a,b` or `all`), as the ids to tick: only ids in `valid` (the
+ * course's confirmed topics, in course order). Null when none remain, so the form keeps its default.
+ */
+export function topicsFromParam(raw: string | string[] | undefined, valid: readonly string[]): string[] | null {
+  const text = Array.isArray(raw) ? raw[0] : raw
+  if (typeof text !== 'string' || text === '') return null
+  if (text === 'all') return valid.length > 0 ? [...valid] : null
+  const wanted = new Set(text.split(',').map((id) => id.trim()).filter(Boolean))
+  const picked = valid.filter((id) => wanted.has(id))
+  return picked.length > 0 ? picked : null
+}
+
 /** About as many questions as the time allows at the form's default pace, as one of the choices. */
 export function questionsForMinutes(minutes: number): number {
   return nearest(QUESTION_COUNTS, minutes / MINUTES_PER_QUESTION)
@@ -38,7 +54,7 @@ export function examDefaultsFromParams(params: { minutes?: string | string[]; qu
 } {
   const minutes = wholeNumber(params.minutes)
   const questions = wholeNumber(params.questions)
-  const durationMinutes = minutes === null ? DEFAULT_DURATION_MINUTES : nearest(TIME_LIMITS, minutes)
+  const durationMinutes = minutes === null ? DEFAULT_DURATION_MINUTES : snapMinutes(minutes)
   const totalQuestions =
     questions !== null
       ? nearest(QUESTION_COUNTS, questions)

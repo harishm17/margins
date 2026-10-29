@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Page } from '@/components/shell/page'
 import { practiceKeys } from '@/features/topic/practice-keys'
 import { PracticeProgressSync } from '@/features/topic/practice-progress'
@@ -26,6 +26,8 @@ export default async function TopicLayout({
   const { courseId, topicId } = await params
   const data = await getTopicPage(user.id, courseId, topicId)
   if (!data) notFound()
+  // A new topic is reviewed in the editor first, so it cannot gain content or progress meanwhile.
+  if (data.awaitingReview) redirect(`/courses/${courseId}/topics?edit=1`)
   const { topic, content } = data
 
   const initialFailures: Partial<Record<ContentKind, GenerationNotice>> = {}

@@ -97,3 +97,65 @@ test('a course whose topics were all deleted goes back to step 2', async ({ page
   await expect(page.getByRole('heading', { level: 2, name: 'Check the topics' })).toBeVisible()
   await expect(page.getByRole('status').filter({ hasText: 'new topics to review' })).toHaveCount(0)
 })
+
+test('merging, topic pages, health and exam creation treat new topics as waiting for review', async ({ page, context }) => {
+  await setZoneCookie(context)
+  await signUpAndIn(page, 'new-topics')
+  const course = await createCourse(page, 'Merge and guard', [
+    { name: 'Counting', minutes: 30 },
+    { name: 'Sets', minutes: 30 },
+  ])
+  await addContent(course.topics.Counting, { section_notes: '# Counting\n\nNotes.' })
+  const base = `/courses/${course.courseId}`
+  const [newA, newB] = await withPrisma(async (prisma) => {
+    const rows = await Promise.all(
+      ['New A', 'New B'].map((name, index) =>
+        prisma.topic.create({ data: { projectId: course.courseId, name, orderIndex: 2 + index, userConfirmed: false, sourceMaterialIds: [] } })
+      )
+    )
+    return rows.map((row) => row.id)
+  })
+  const confirmedOf = (id: string) => withPrisma((prisma) => prisma.topic.findUniqueOrThrow({ where: { id }, select: { userConfirmed: true } }).then((row) => row.userConfirmed))
+  const merge = (sourceTopicId: string, targetTopicId: string) =>
+    page.request.post(`/api/projects/${course.courseId}/topics/merge`, { data: { sourceTopicId, targetTopicId } })
+
+  // A new topic merged into a confirmed one: the confirmed topic stays confirmed (and visible).
+  expect((await merge(newA, course.topics.Counting)).ok()).toBeTruthy()
+  expect(await confirmedOf(course.topics.Counting)).toBe(true)
+  // A confirmed topic merged into a new one: the result is confirmed too.
+  expect((await merge(course.topics.Sets, newB)).ok()).toBeTruthy()
+  expect(await confirmedOf(newB)).toBe(true)
+  await page.goto(base)
+  await expect(page.getByRole('status').filter({ hasText: 'new topics to review' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { level: 2, name: 'Check the topics' })).toHaveCount(0)
+
+  // A fresh new topic: prev/next skip it, its page goes to the editor, health and exams ignore it.
+  const hidden = await withPrisma((prisma) =>
+    prisma.topic.create({ data: { projectId: course.courseId, name: 'Hidden new', orderIndex: 9, userConfirmed: false, sourceMaterialIds: [] } }).then((row) => row.id)
+  )
+  await page.goto(`${base}/topics/${newB}?view=notes`)
+  await expect(page.getByText(/Next: Hidden new/)).toHaveCount(0)
+  await page.goto(`${base}/topics/${hidden}`)
+  await expect(page).toHaveURL(`${base}/topics?edit=1`)
+  expect(await withPrisma((prisma) => prisma.topicProgress.count({ where: { topicId: hidden } }))).toBe(0)
+
+  const health = await (await page.request.get(`/api/projects/${course.courseId}/health`)).json()
+  expect(health.metrics.topics.confirmed).toBe(2)
+  expect(health.metrics.topics.total).toBe(3)
+
+  const refused = await page.request.post(`/api/projects/${course.courseId}/generate-exam`, {
+    data: { topicIds: [hidden], totalQuestions: 10, durationMinutes: 15, difficultyLevel: 'medium' },
+  })
+  expect(refused.status()).toBe(400)
+})
+
+test('Confirm keeps a completed course completed', async ({ page, context }) => {
+  await setZoneCookie(context)
+  await signUpAndIn(page, 'new-topics')
+  const course = await createCourse(page, 'Done course', [{ name: 'Only', minutes: 30 }])
+  await withPrisma((prisma) => prisma.project.update({ where: { id: course.courseId }, data: { status: 'completed' } }))
+  await withPrisma((prisma) => prisma.topic.create({ data: { projectId: course.courseId, name: 'Late', orderIndex: 1, userConfirmed: false, sourceMaterialIds: [] } }))
+  expect((await page.request.post(`/api/projects/${course.courseId}/topics/confirm`)).ok()).toBeTruthy()
+  const status = await withPrisma((prisma) => prisma.project.findUniqueOrThrow({ where: { id: course.courseId }, select: { status: true } }))
+  expect(status.status).toBe('completed')
+})

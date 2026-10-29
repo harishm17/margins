@@ -6,6 +6,7 @@ import { Page, PageIntro } from '@/components/shell/page'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { examDefaultsFromParams, preselectTopics } from '@/features/exams/exam-options'
+import { topicsFromParam } from '@/lib/exams/form-defaults'
 import { NewExamForm } from '@/features/exams/new-exam-form'
 import { getCourseShell } from '@/server/queries/courses'
 import { findActiveExamJob, getExamStyleState } from '@/server/queries/mock-exams'
@@ -20,11 +21,12 @@ export default async function NewExamPage({
   searchParams,
 }: {
   params: Promise<{ courseId: string }>
-  searchParams: Promise<{ minutes?: string | string[]; questions?: string | string[] }>
+  searchParams: Promise<{ minutes?: string | string[]; questions?: string | string[]; topics?: string | string[] }>
 }) {
   const user = await requireUser()
   const { courseId } = await params
-  const initial = examDefaultsFromParams(await searchParams)
+  const query = await searchParams
+  const initial = examDefaultsFromParams(query)
   const course = await getCourseShell(user.id, courseId)
   if (!course) notFound()
 
@@ -53,10 +55,14 @@ export default async function NewExamPage({
         <NewExamForm
           courseId={courseId}
           topics={topics.map((topic) => ({ id: topic.id, name: topic.name, mastery: topic.mastery }))}
-          preselected={preselectTopics(
-            topics.map((topic) => ({ id: topic.id, mastery: topic.mastery, dueAt: topic.dueAt })),
-            serverClock()
-          )}
+          preselected={
+            // A link from the plan names its topics; ids that are not confirmed topics of this course are ignored.
+            topicsFromParam(query.topics, topics.map((topic) => topic.id)) ??
+            preselectTopics(
+              topics.map((topic) => ({ id: topic.id, mastery: topic.mastery, dueAt: topic.dueAt })),
+              serverClock()
+            )
+          }
           activeJob={activeJob}
           examStyle={examStyle}
           initial={initial}

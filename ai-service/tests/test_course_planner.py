@@ -633,11 +633,16 @@ class TestActiveCourse:
         await run_extract(course)
         await db.execute("UPDATE topics SET user_confirmed = TRUE WHERE project_id = $1", course.project_id)
         await db.execute("UPDATE projects SET status = $2 WHERE id = $1", course.project_id, status)
+        before = await db.fetchval("SELECT count(*) FROM topics WHERE project_id = $1", course.project_id)
         await add_file(db, course.project_id, "week2.pdf", lecture("Bayes", 3))
 
         await run_extract(course)
 
         assert await db.fetchval("SELECT status FROM projects WHERE id = $1", course.project_id) == status
+        # New topics really were created (and wait for review), so the status check means something.
+        assert await db.fetchval("SELECT count(*) FROM topics WHERE project_id = $1", course.project_id) > before
+        assert await db.fetchval(
+            "SELECT count(*) FROM topics WHERE project_id = $1 AND NOT user_confirmed", course.project_id) > 0
 
     async def test_a_full_replan_of_an_active_course_with_no_topics_left_keeps_the_status(self, course):
         db = course.db
@@ -657,8 +662,8 @@ class TestActiveCourse:
 
     async def test_an_unconfirmed_topic_with_study_activity_is_not_deleted_by_find_again(self, course):
         db = course.db
-        await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))
         studied = await seed_topic(db, course.project_id, "Studied before it was confirmed")
+        await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))  # uploaded after it: not covered
         await db.execute(
             "INSERT INTO topic_content (id, topic_id, content_type, content_data, updated_at) "
             "VALUES (gen_random_uuid()::text, $1, 'section_notes', '[]'::jsonb, NOW())", studied)
@@ -670,3 +675,55 @@ class TestActiveCourse:
         assert studied in ids  # kept with its content
         assert loose not in ids  # an unopened unconfirmed topic is still replaced
         assert await db.fetchval("SELECT count(*) FROM topic_content WHERE topic_id = $1", studied) == 1
+        # Nothing was confirmed, so the kept topic is the only anchor: untouched, and the plan is incremental
+        # (new topics come after it).
+        kept = await db.fetchrow("SELECT name, user_confirmed, order_index FROM topics WHERE id = $1", studied)
+        assert kept["name"] == "Studied before it was confirmed" and not kept["user_confirmed"]
+        new = [t for t in await topics_of(db, course.project_id) if t["id"] != studied]
+        assert new and all(t["order_index"] > kept["order_index"] for t in new)
+        job = await db.fetchrow("SELECT result_data FROM processing_jobs ORDER BY created_at DESC LIMIT 1")
+        assert json.loads(job["result_data"])["mode"] == "incremental"
+
+    async def test_confirming_while_topics_are_being_found_does_not_duplicate_sections(self, course, monkeypatch):
+        db = course.db
+        await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))
+        await run_extract(course)
+        await add_file(db, course.project_id, "week2.pdf", lecture("Bayes", 3))
+
+        real_plan = jobs.plan_course
+        calls = {"n": 0}
+
+        async def plan_then_confirm(project_id):
+            plan = await real_plan(project_id)
+            calls["n"] += 1
+            if calls["n"] == 1:  # the student presses Confirm while the model is working
+                await db.execute("UPDATE topics SET user_confirmed = TRUE WHERE project_id = $1", project_id)
+                await db.execute("UPDATE projects SET status = 'active' WHERE id = $1", project_id)
+            return plan
+
+        monkeypatch.setattr(jobs, "plan_course", plan_then_confirm)
+        await run_extract(course)
+
+        assert calls["n"] == 2  # planned again from the confirmed set
+        topics = [dict(t) for t in await topics_of(db, course.project_id)]
+        week1 = await db.fetchval("SELECT id FROM materials WHERE filename = 'week1.pdf'")
+        covering = await db.fetch(
+            "SELECT DISTINCT ts.topic_id FROM topic_sources ts WHERE ts.material_id = $1", week1)
+        assert len(covering) == len([t for t in topics if t["user_confirmed"]])  # one topic set covers week1, no copies
+        covered = [(s["chunk_index_start"], s["chunk_index_end"]) for s in await db.fetch(
+            "SELECT chunk_index_start, chunk_index_end FROM topic_sources WHERE material_id = $1", week1)]
+        assert len(covered) == len(set(covered))
+        assert any(not t["user_confirmed"] for t in topics)  # week2's topics are new, waiting for review
+        assert await db.fetchval("SELECT status FROM projects WHERE id = $1", course.project_id) == "active"
+
+    async def test_write_plan_refuses_a_plan_made_before_the_confirmed_set_changed(self, course):
+        db = course.db
+        await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))
+        job = await planner.plan_course(course.project_id)
+        mine = await seed_topic(db, course.project_id, "Confirmed meanwhile")
+        await db.execute("UPDATE topics SET user_confirmed = TRUE WHERE id = $1", mine)
+
+        with pytest.raises(planner.StalePlanError):
+            await planner.write_plan(job)
+
+        assert [t["id"] for t in await topics_of(db, course.project_id)] == [mine]

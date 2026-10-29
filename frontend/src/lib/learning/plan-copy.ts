@@ -1,5 +1,5 @@
 import { EXAM_DAY_REVIEWS, FINAL_DAY_REVIEWS, MIN_PART_MINUTES, type Plan, type PlanItem } from './plan'
-import { questionsForMinutes } from '../exams/form-defaults'
+import { questionsForMinutes, snapMinutes } from '../exams/form-defaults'
 import { minutesLabel } from './plan-settings'
 
 /** A plan item in the words, button and link the UI shows. */
@@ -41,7 +41,9 @@ export function planItemHref(item: PlanItem, courseId: string): string {
       return item.topicId ? `${base}/review#review-${item.topicId}` : `${base}/review`
     case 'mixed': {
       // The form opens with the block's length (and a matching number of questions), still changeable.
-      const length = `minutes=${item.minutes}&questions=${questionsForMinutes(item.minutes)}`
+      // The form offers fixed time limits: snap the block's minutes first, then derive the questions from that.
+      const minutes = snapMinutes(item.minutes)
+      const length = `minutes=${minutes}&questions=${questionsForMinutes(minutes)}`
       return item.topicIds.length > 0 ? `${base}/exams/new?topics=${item.topicIds.join(',')}&${length}` : `${base}/exams/new?${length}`
     }
     case 'unit_mock':

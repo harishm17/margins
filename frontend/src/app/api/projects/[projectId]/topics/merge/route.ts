@@ -193,7 +193,9 @@ export async function POST(
           sourceMaterialIds: Array.from(new Set([...target.sourceMaterialIds, ...source.sourceMaterialIds])),
           objectives,
           estimatedMinutes: minutes,
-          userConfirmed: target.userConfirmed && source.userConfirmed,
+          // Confirmed if either side was: a new topic merged into a confirmed one must not hide it and its
+          // progress, and a confirmed topic merged into a new one keeps its study history visible.
+          userConfirmed: target.userConfirmed || source.userConfirmed,
         },
       })
 

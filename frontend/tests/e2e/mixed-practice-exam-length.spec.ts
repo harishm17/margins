@@ -100,3 +100,25 @@ test('a 15-minute exam is written, shown with its limit and starts with a 15-min
   // The demo course is shared: other specs read its newest exam, so leave it as it was.
   await withPrisma((prisma) => prisma.sampleExam.delete({ where: { id: examId } }))
 })
+
+test('the link names the topics to tick; unknown and unconfirmed ids are ignored', async ({ page, context }) => {
+  await setZoneCookie(context)
+  await signUpAndIn(page, 'mixed-length')
+  const course = await createCourse(page, 'Topic choice', [{ name: 'Graphs' }, { name: 'Trees' }, { name: 'Heaps' }])
+  const hidden = await withPrisma((prisma) =>
+    prisma.topic.create({ data: { projectId: course.courseId, name: 'Unreviewed', orderIndex: 9, userConfirmed: false, sourceMaterialIds: [] } }).then((row) => row.id)
+  )
+  const form = `/courses/${course.courseId}/exams/new`
+  const checked = (name: string) => page.getByRole('checkbox', { name })
+
+  await page.goto(`${form}?topics=${course.topics.Trees},${course.topics.Heaps}`)
+  await expect(checked('Trees')).toBeChecked()
+  await expect(checked('Heaps')).toBeChecked()
+  await expect(checked('Graphs')).not.toBeChecked()
+
+  // Unknown and unconfirmed ids are dropped; none left means the usual default (everything is unstarted, so all ticked).
+  await page.goto(`${form}?topics=nope,${hidden}`)
+  await expect(page.getByRole('checkbox', { name: 'Unreviewed' })).toHaveCount(0)
+  await expect(checked('Graphs')).toBeChecked()
+  await expect(checked('Trees')).toBeChecked()
+})

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { examDefaultsFromParams, questionsForMinutes, QUESTION_COUNTS, TIME_LIMITS } from './form-defaults'
+import { examDefaultsFromParams, questionsForMinutes, topicsFromParam, QUESTION_COUNTS, TIME_LIMITS } from './form-defaults'
 
 describe('examDefaultsFromParams', () => {
   it('keeps the form defaults without parameters', () => {
@@ -51,5 +51,23 @@ describe('questionsForMinutes', () => {
       const questions = questionsForMinutes(minutes)
       assert.ok(questions >= 5 && questions <= 10, `${minutes} min gives ${questions}`)
     }
+  })
+})
+
+describe('topicsFromParam', () => {
+  const valid = ['a', 'b', 'c']
+  it('ticks exactly the named topics, in course order', () => {
+    assert.deepEqual(topicsFromParam('c,a', valid), ['a', 'c'])
+    assert.deepEqual(topicsFromParam(['b'], valid), ['b'])
+  })
+  it('ignores unknown or unconfirmed ids, and falls back when none remain', () => {
+    assert.deepEqual(topicsFromParam('a,zzz,new-topic', valid), ['a'])
+    assert.equal(topicsFromParam('zzz,new-topic', valid), null)
+    assert.equal(topicsFromParam('', valid), null)
+    assert.equal(topicsFromParam(undefined, valid), null)
+  })
+  it('all means every confirmed topic', () => {
+    assert.deepEqual(topicsFromParam('all', valid), valid)
+    assert.equal(topicsFromParam('all', []), null)
   })
 })

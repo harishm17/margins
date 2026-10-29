@@ -868,6 +868,10 @@ KEPT_TOPIC = """(t.user_confirmed
     OR EXISTS (SELECT 1 FROM review_schedules x WHERE x.topic_id = t.id))"""
 
 
+class StalePlanError(Exception):
+    """The confirmed topics changed while the plan was being made (the student pressed Confirm)."""
+
+
 def normalize_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).strip()
 
@@ -893,6 +897,12 @@ async def write_plan(job: PlanJob) -> Dict[str, int]:
             project_id,
         )
         confirmed_ids = [row["id"] for row in existing if row["user_confirmed"]]
+        # The plan was made from the confirmed topics at that time (a full plan from none). If Confirm
+        # (or a first study step) changed them while the model was working, what was placed as new may
+        # now be covered: nothing is written, and the caller plans again.
+        planned_from = {topic.id for topic in job.existing_topics}
+        if set(confirmed_ids) != planned_from:
+            raise StalePlanError(project_id)
         unconfirmed = [row for row in existing if not row["user_confirmed"]]
         reusable = {} if job.mode == "incremental" else {
             normalize_name(row["name"]): row["id"] for row in reversed(unconfirmed) if normalize_name(row["name"])
