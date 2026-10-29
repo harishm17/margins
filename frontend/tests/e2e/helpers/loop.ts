@@ -73,6 +73,10 @@ export async function createCourse(
     const created = await page.request.post('/api/projects', { data: { name, ...settings } })
     expect(created.ok()).toBeTruthy()
     courseId = (await created.json()).project.id as string
+    // A confirmed course has files: with none and nothing written there is nothing to study from, so
+    // setup is back at step 1 and there is no plan (lib/course-setup.ts). A file row is enough for the
+    // specs that write their content straight into the database; addMaterial is for real text.
+    await addFileRow(courseId)
   } else if (settings.examDate || settings.dailyMinutes) {
     const patched = await page.request.patch(`/api/projects/${courseId}`, { data: settings })
     expect(patched.ok()).toBeTruthy()
@@ -104,6 +108,15 @@ export async function createCourse(
   }
   expect((await page.request.post(`/api/projects/${courseId}/topics/confirm`)).ok()).toBeTruthy()
   return { courseId, topics: ids, units }
+}
+
+/** A read file in the course, written straight into the database (no upload, no text to teach from). */
+export async function addFileRow(courseId: string, filename = 'notes.pdf') {
+  await withPrisma(async (prisma) => {
+    await prisma.material.create({
+      data: { projectId: courseId, category: 'lecture_notes', filename, gcsPath: `e2e/${courseId}/${filename}`, sizeBytes: BigInt(1024), validationStatus: 'valid' },
+    })
+  })
 }
 
 /** Writes study content straight into the database, so a spec does not wait for the model. */

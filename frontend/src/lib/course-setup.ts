@@ -70,7 +70,12 @@ export function deriveSetup(input: CourseSetupInput): CourseSetup {
     extraction: input.extraction,
   }
 
-  if (input.materialCount === 0) return { mode: 'setup', step: 1, label: 'Upload materials', topics }
+  // Files are what topics are found in and what study content is written from. Deleting a file keeps
+  // the topics, the content and the progress (only its sources go), so a course that has content
+  // stays set up without files; one with nothing written yet is back to step 1, confirmed or not.
+  if (input.materialCount === 0 && input.contentBlockCount === 0) {
+    return { mode: 'setup', step: 1, label: 'Upload materials', topics }
+  }
   if (!listConfirmed) return { mode: 'setup', step: 2, label: stepTwoLabel(topics), topics }
   if (input.contentBlockCount === 0) return { mode: 'setup', step: 3, label: 'Start studying', topics }
   return { mode: 'active', step: null, label: null, topics }
@@ -83,12 +88,16 @@ function stepTwoLabel(topics: TopicListState): string {
   return 'Finding topics'
 }
 
-/** The student confirmed the topic list (steps 1 and 2 are done): the plan, Today and reviews can use it. */
-export const topicsConfirmed = (setup: CourseSetup): boolean => setup.topics.listConfirmed
+/**
+ * Steps 1 and 2 are done (step 3 or active): the plan, the next step and the study-plan API use the
+ * course. Not the same as `topics.listConfirmed`, which is only about the list (the Topics page and the
+ * editor's Confirm read that): a confirmed list with no files and nothing written is not ready.
+ */
+export const readyToStudy = (setup: CourseSetup): boolean => setup.mode === 'active' || setup.step === 3
 
-/** Topics exist and the list is waiting for the student: the sidebar's dot on Topics. */
+/** Step 2 with topics waiting for the student: the sidebar's dot on Topics. */
 export const needsTopicReview = (setup: CourseSetup): boolean =>
-  !setup.topics.listConfirmed && setup.topics.total > 0
+  setup.mode === 'setup' && setup.step === 2 && setup.topics.total > 0
 
 /**
  * Where the topic list came from, in one sentence: "We found 5 topics in your files." Found only

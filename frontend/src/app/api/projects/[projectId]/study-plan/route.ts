@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { isValidTimeZone } from '@/lib/learning/study-plan-time'
-import { topicsConfirmed } from '@/lib/course-setup'
+import { readyToStudy } from '@/lib/course-setup'
 import {
   ApiErrorCode,
   apiError,
@@ -43,8 +43,8 @@ export async function GET(
     if (!data) {
       return apiNotFound('Project not found')
     }
-    // Same rule as the Plan page: no plan until the topic list is confirmed (lib/course-setup.ts).
-    if (!topicsConfirmed(data.course.setup)) {
+    // Same rule as the Plan page: no plan until setup steps 1 and 2 are done (lib/course-setup.ts).
+    if (!readyToStudy(data.course.setup)) {
       return apiError(ApiErrorCode.CONFLICT, 'Confirm the course topics to get a study plan', undefined, 409)
     }
     return NextResponse.json({

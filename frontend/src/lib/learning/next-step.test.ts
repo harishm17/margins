@@ -310,3 +310,17 @@ test('the three screens agree: same due count whatever the plan says', () => {
   assert.equal(free.dueCount, 2)
   assert.equal(spent.dueCount, 2)
 })
+
+test('the last file deleted after Confirm, nothing written yet: upload comes first, not the plan', () => {
+  const topics = [topic('graphs', { orderIndex: 0, learned: false, started: false, quizzed: false, mastery: null })]
+  const step = nextStepForCourse({
+    courseId: COURSE,
+    setup: setupOf({ status: 'active', materialCount: 0, topicCount: 1, confirmedTopicCount: 1, extractedTopicCount: 1, confirmedExtractedTopicCount: 1 }),
+    plan: plan({ topics }),
+    due: [],
+    now: NOW,
+    timeZone: ZONE,
+  })
+  assert.equal(step.kind, 'setup')
+  assert.equal(step.title, 'Upload materials')
+})

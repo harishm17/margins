@@ -4,7 +4,6 @@ import { Page } from '@/components/shell/page'
 import { courseSummary, reviewTiming, studyPath } from '@/features/course/summary'
 import { TopicEditor } from '@/features/course/topic-editor'
 import { TopicsList } from '@/features/course/topics-list'
-import { topicsConfirmed } from '@/lib/course-setup'
 import { countMasteryLevels, masteryLevel } from '@/lib/mastery'
 import { getTopicsData } from '@/server/queries/course'
 import { getCourseShell } from '@/server/queries/courses'
@@ -28,7 +27,7 @@ export default async function TopicsPage({
   // The editor is a place in the URL, not something worked out from the topics: until the list is
   // confirmed the page sends the student there, so the refresh after adding or merging a topic can
   // never swap the editor for the list mid-edit. Confirm (not adding topics) finishes the list.
-  if (edit !== '1' && !topicsConfirmed(course.setup)) redirect(`/courses/${courseId}/topics?edit=1`)
+  if (edit !== '1' && !course.setup.topics.listConfirmed) redirect(`/courses/${courseId}/topics?edit=1`)
 
   const data = await getTopicsData(user.id, courseId)
   if (!data) notFound()

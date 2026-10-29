@@ -1,4 +1,4 @@
-import { topicsConfirmed, type CourseSetup } from '../course-setup'
+import { readyToStudy, type CourseSetup } from '../course-setup'
 import { addDays, daysBetween, localDay, REVIEW_MINUTES, type Plan } from './plan'
 import { dayLabel, upNextFromPlan, type DescribedPlanItem } from './plan-copy'
 import { zonedTimeToUtc } from './study-plan-time'
@@ -205,8 +205,8 @@ export function nextStep(input: {
 }
 
 /**
- * The next step of a course. Until the topic list is confirmed (setup steps 1 and 2) there is no
- * plan and the step is the setup step. Once it is, the plan says what is next, also in step 3,
+ * The next step of a course. Until setup steps 1 and 2 are done (`readyToStudy`) there is no
+ * plan and the step is the setup step. Once they are, the plan says what is next, also in step 3,
  * where its first item is the first topic to learn.
  */
 export function nextStepForCourse(input: {
@@ -218,7 +218,7 @@ export function nextStepForCourse(input: {
   timeZone: string
 }): NextStep {
   const { courseId, setup, plan } = input
-  if (!topicsConfirmed(setup) || !plan) {
+  if (!readyToStudy(setup) || !plan) {
     return {
       kind: 'setup',
       dueCount: 0,

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { PlanView } from '@/features/plan/plan-view'
 import { PlanSetupGate } from '@/features/plan/plan-setup-gate'
-import { topicsConfirmed } from '@/lib/course-setup'
+import { readyToStudy } from '@/lib/course-setup'
 import { getPlanData } from '@/server/queries/plan'
 import { getCourseShell } from '@/server/queries/courses'
 import { requireUser } from '@/server/session'
@@ -14,10 +14,10 @@ export const metadata: Metadata = { title: 'Plan' }
 export default async function PlanPage({ params }: { params: Promise<{ courseId: string }> }) {
   const user = await requireUser()
   const { courseId } = await params
-  // The plan is built from the confirmed topic list: before the student confirms it, the page says so.
+  // The plan needs steps 1 and 2 done (files or content, and a confirmed topic list): before that the page says what is next.
   const course = await getCourseShell(user.id, courseId)
   if (!course) notFound()
-  if (!topicsConfirmed(course.setup) && course.setup.mode === 'setup') {
+  if (!readyToStudy(course.setup) && course.setup.mode === 'setup') {
     return <PlanSetupGate courseId={courseId} setup={course.setup} />
   }
   const { timeZone, known } = await getTimeZoneState()

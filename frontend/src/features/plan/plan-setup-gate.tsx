@@ -27,7 +27,9 @@ export function PlanSetupGate({ courseId, setup }: { courseId: string; setup: Ex
         }
       >
         {needsFiles
-          ? 'Add your materials and confirm the topics, then Margins plans your days.'
+          ? setup.topics.listConfirmed
+            ? 'Add your materials, then Margins plans your days.'
+            : 'Add your materials and confirm the topics, then Margins plans your days.'
           : 'Confirm the topics, then Margins plans your days.'}
       </EmptyState>
     </Page>

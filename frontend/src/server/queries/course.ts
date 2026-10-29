@@ -379,10 +379,11 @@ export async function getCourseOverview(
   if (course.setup.mode === 'setup') {
     const [materials, generation] = await Promise.all([getMaterialsData(userId, courseId), getGenerationState(userId, course)])
     // The files step stays open while no file is usable yet or one is still being read, unless
-    // topic finding has already started.
+    // topic finding has already started. A course with no files at all is in step 2 only when it has
+    // content (lib/course-setup.ts), so there is nothing being read to wait for.
     const filesDone =
       materials.readyCount > 0 && (materials.processingCount === 0 || !!materials.extractJob || course.topics.length > 0)
-    const step = course.setup.step === 2 && !filesDone ? 1 : course.setup.step
+    const step = course.setup.step === 2 && course.materialCount > 0 && !filesDone ? 1 : course.setup.step
     return {
       mode: 'setup',
       course,
