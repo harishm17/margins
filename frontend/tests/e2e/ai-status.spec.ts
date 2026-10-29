@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { withPrisma } from './helpers/db'
-import { DEMO_EMAIL, DEMO_PASSWORD, demoIds } from './helpers/seed-demo'
+import { signIn as testSignIn } from './helpers/auth'
+import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
 
 // The shared AI status (ai-service app/services/ai_status.py) and what students see while AI is
 // unavailable. The stack reads the status uncached (scripts/e2e-stack.sh), and every test puts the
@@ -9,11 +10,7 @@ const course = `/courses/${demoIds().course}`
 const PAUSED = 'AI features are paused right now. Your files and progress are safe. Try again later.'
 
 async function signIn(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(DEMO_EMAIL)
-  await page.getByLabel('Password', { exact: true }).fill(DEMO_PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/, { timeout: 60_000 })
+  await testSignIn(page, DEMO_EMAIL)
 }
 
 const markUnavailable = () =>
