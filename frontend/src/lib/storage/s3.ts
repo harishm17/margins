@@ -97,7 +97,7 @@ export async function deleteS3Object(bucket: string, key: string): Promise<void>
 
 /** Delete every object under `prefix` in the configured bucket. */
 export async function deleteS3Prefix(prefix: string): Promise<void> {
-  const { ListObjectsV2Command, DeleteObjectCommand } = await import('@aws-sdk/client-s3')
+  const { ListObjectsV2Command } = await import('@aws-sdk/client-s3')
   const client = await getClient()
   let continuationToken: string | undefined
   do {
@@ -112,7 +112,8 @@ export async function deleteS3Prefix(prefix: string): Promise<void> {
     // when checksums are off, and a project holds few files.
     for (const object of page.Contents ?? []) {
       if (object.Key) {
-        await client.send(new DeleteObjectCommand({ Bucket: s3Bucket(), Key: object.Key }))
+        // An object that vanished since the listing counts as deleted.
+        await deleteS3Object(s3Bucket(), object.Key)
       }
     }
     continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined

@@ -63,3 +63,29 @@ test('recordStoredFile: a failed record deletes the stored file and keeps its ow
   assert.equal(await recordStoredFile('s3://materials/u1/p1/m1/c.pdf', async () => 'ok', remove), 'ok')
   assert.deepEqual(removed, [])
 })
+
+test('S3 folder sweep: an object that disappears between the list and the delete does not fail it', async () => {
+  const { setS3ClientForTests, deleteS3Prefix } = await import('./s3')
+  const deleted: string[] = []
+  setS3ClientForTests({
+    send: async (command: { constructor: { name: string }; input: { Key?: string } }) => {
+      if (command.constructor.name === 'ListObjectsV2Command') {
+        return { Contents: [{ Key: 'u1/a.pdf' }, { Key: 'u1/gone.pdf' }, { Key: 'u1/b.pdf' }], IsTruncated: false }
+      }
+      if (command.input.Key === 'u1/gone.pdf') throw notFound
+      deleted.push(command.input.Key as string)
+      return {}
+    },
+  } as never)
+  await deleteS3Prefix('u1/')
+  assert.deepEqual(deleted, ['u1/a.pdf', 'u1/b.pdf'])
+
+  // Any other error still fails the sweep.
+  setS3ClientForTests({
+    send: async (command: { constructor: { name: string } }) => {
+      if (command.constructor.name === 'ListObjectsV2Command') return { Contents: [{ Key: 'u1/a.pdf' }] }
+      throw Object.assign(new Error('denied'), { $metadata: { httpStatusCode: 403 } })
+    },
+  } as never)
+  await assert.rejects(deleteS3Prefix('u1/'), /denied/)
+})

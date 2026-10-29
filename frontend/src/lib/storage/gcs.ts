@@ -294,7 +294,7 @@ export async function deleteProjectFolder(userId: string, projectId: string): Pr
     }
     const storage = await getStorage()
     if (storage) {
-      await storage.bucket(BUCKET_NAME).deleteFiles({ prefix: folder, force: true })
+      await storage.bucket(BUCKET_NAME).deleteFiles({ prefix: folder, force: true, ignoreNotFound: true })
     }
     return true
   } catch (error) {
@@ -319,7 +319,7 @@ export async function deleteUserFiles(userId: string): Promise<void> {
   }
   const storage = await getStorage()
   if (storage) {
-    await storage.bucket(BUCKET_NAME).deleteFiles({ prefix: folder, force: true })
+    await storage.bucket(BUCKET_NAME).deleteFiles({ prefix: folder, force: true, ignoreNotFound: true })
   }
 }
 

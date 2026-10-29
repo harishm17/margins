@@ -38,3 +38,17 @@ test('GCS: any other error still fails', async () => {
   })
   await assert.rejects(deleteFile('gs://margins-materials/u1/a.pdf'), /forbidden/)
 })
+
+test('GCS folder sweep: asks the bucket to ignore objects that vanished mid-delete', async () => {
+  const { deleteUserFiles, setGcsStorageForTests } = await import('./gcs')
+  let options: Record<string, unknown> | undefined
+  setGcsStorageForTests({
+    bucket: () => ({
+      deleteFiles: async (opts: Record<string, unknown>) => {
+        options = opts
+      },
+    }),
+  })
+  await deleteUserFiles('u1')
+  assert.deepEqual(options, { prefix: 'u1/', force: true, ignoreNotFound: true })
+})
