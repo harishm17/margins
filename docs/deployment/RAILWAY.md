@@ -77,6 +77,17 @@ Google is the only way to sign in, so `web` refuses to start without a real Goog
 redirect URI. Never set `ENABLE_TEST_LOGIN` on Railway: it is a local-only test sign-in, and `web` refuses
 to start with it.
 
+## Optional settings
+
+These are read by `ai` and have working defaults. None is declared in `.railway/railway.ts`, so set one with `railway variable set -s ai NAME --stdin` only if you want to change it.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `OPS_ALERT_WEBHOOK_URL` | empty (no alerts) | A Discord, Slack or ntfy webhook. One message when the AI becomes unavailable and one when it is available again. |
+| `AI_STATUS_TTL_S` | `300` | Seconds before a recorded outage counts as unknown, so the next real call tests the provider again. |
+| `AI_STATUS_TRANSIENT_THRESHOLD` | `3` | Rate limits or overloads in a row (after the SDK's own retries) that mark the AI unavailable. Credit, key and configuration errors mark it at once. |
+| `JOB_AI_WAIT_MAX_SECONDS` | `604800` (7 days) | How long exam grading waits for the AI before it fails with the reason it was waiting. |
+
 ## Database
 
 There is no public database port. For a one-off SQL session, add a TCP proxy to `Postgres`,
