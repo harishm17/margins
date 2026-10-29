@@ -6,6 +6,7 @@ import { Check, Exam, Lightbulb, Notebook, PencilSimple, PencilSimpleLine } from
 import { PageIntro } from '@/components/shell/page'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import { ProgressRing } from '@/components/ui/progress-ring'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Tooltip } from '@/components/ui/tooltip'
@@ -159,10 +160,12 @@ type TopicsListProps = {
   generation: GenerationState
   /** When this page was rendered, in ms, so "Needs work" can tell what is due. */
   now: number
+  /** "3 new topics to review" while found topics wait for the student, else null. */
+  newTopics?: string | null
 }
 
 /** Confirmed topics: progress, the study path, mastery and review timing, with a sort. */
-export function TopicsList({ courseId, topics, units, summary, generation, now }: TopicsListProps) {
+export function TopicsList({ courseId, topics, units, summary, generation, now, newTopics = null }: TopicsListProps) {
   const [sort, setSort] = React.useState<Sort>('order')
   const ordered = sort === 'order' ? topics : needsWorkOrder(topics, now)
   // "Needs work" is one list across units; course order keeps them together under their unit.
@@ -182,6 +185,19 @@ export function TopicsList({ courseId, topics, units, summary, generation, now }
         }
       />
       <div className="flex flex-col gap-6">
+        {newTopics ? (
+          <InlineAlert
+            tone="accent"
+            title={newTopics}
+            action={
+              <Button asChild size="sm" variant="primary">
+                <Link href={`/courses/${courseId}/topics?edit=1`}>Review topics</Link>
+              </Button>
+            }
+          >
+            They join your plan once you confirm them.
+          </InlineAlert>
+        ) : null}
         {building ? <BuildingContent courseId={courseId} generation={generation} /> : null}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-end gap-3">
