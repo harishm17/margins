@@ -1,30 +1,52 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { canMarkUndelivered, undeliveredWhere } from './undelivered'
+import { markJobFailed, TaskEnqueueError, type TaskPayload } from './cloud-tasks'
+import { undeliveredWhere } from './undelivered'
 
-type Row = { status: string; startedAt: Date | null; leaseUntil?: Date | null }
+type Row = { id: string; status: string; startedAt: Date | null }
 const past = new Date(Date.now() - 60_000)
+const payloadFor = (jobId: string) => ({ jobId, jobType: 'x' }) as unknown as TaskPayload
 
-test('a dispatch that never arrived fails only a job no handler has touched', () => {
-  assert.equal(canMarkUndelivered({ status: 'pending', startedAt: null }), true)
+/** Stands in for the one Prisma call markJobFailed makes: applies `where` to in-memory rows. */
+async function failJob(row: Row): Promise<boolean> {
+  let failed = false
+  const store = {
+    processingJob: {
+      async updateMany({ where }: { where: object; data: object }) {
+        const w = where as { id: string; status: string; startedAt: null }
+        if (row.id === w.id && row.status === w.status && row.startedAt === w.startedAt) failed = true
+      },
+    },
+  }
+  await markJobFailed(payloadFor(row.id), new TaskEnqueueError('boom', true), store)
+  return failed
+}
+
+test('a dispatch that never arrived fails only a job no handler has touched', async () => {
+  assert.equal(await failJob({ id: 'j1', status: 'pending', startedAt: null }), true)
 })
 
-test('a job back in pending for its retry is left to the reaper, not failed', () => {
-  // It ran (one transient failure) and has attempts left: failing it here would lose the retry.
-  assert.equal(canMarkUndelivered({ status: 'pending', startedAt: past }), false)
+test('a job back in pending for its retry is left to the reaper, not failed', async () => {
+  assert.equal(await failJob({ id: 'j1', status: 'pending', startedAt: past }), false)
 })
 
-test('a job whose worker died is the reaper\'s too, and so is everything finished', () => {
-  const rows: Row[] = [
-    { status: 'processing', startedAt: past, leaseUntil: past },
-    { status: 'processing', startedAt: past, leaseUntil: null },
-    { status: 'completed', startedAt: past },
-    { status: 'failed', startedAt: past },
-  ]
-  for (const row of rows) assert.equal(canMarkUndelivered(row), false, JSON.stringify(row))
+test('a job whose worker died, or one already finished, is not failed here', async () => {
+  for (const status of ['processing', 'completed', 'failed']) {
+    assert.equal(await failJob({ id: 'j1', status, startedAt: past }), false, status)
+  }
 })
 
-test('the database filter is the same rule as the AI service dispatcher', () => {
+test('markJobFailed filters with the shared rule, the same as the AI service dispatcher', async () => {
+  let seen: unknown
+  const store = {
+    processingJob: {
+      async updateMany(args: { where: object; data: object }) {
+        seen = args.where
+      },
+    },
+  }
+  await markJobFailed(payloadFor('j1'), new TaskEnqueueError('x', false), store)
+  assert.deepEqual(seen, undeliveredWhere('j1'))
   // ai-service app/services/cloud_tasks.py mark_undelivered: status = 'pending' AND started_at IS NULL
-  assert.deepEqual(undeliveredWhere('j1'), { id: 'j1', status: 'pending', startedAt: null })
+  assert.deepEqual(seen, { id: 'j1', status: 'pending', startedAt: null })
 })

@@ -114,12 +114,18 @@ async function callAiServiceWithRetry(endpoint: string, payload: TaskPayload): P
   throw lastError || new TaskEnqueueError('Unknown task enqueue failure')
 }
 
-async function markJobFailed(
+type JobFailureStore = {
+  processingJob: { updateMany: (args: { where: object; data: object }) => Promise<unknown> }
+}
+
+/** Exported for its test; `store` defaults to the real database. */
+export async function markJobFailed(
   payload: TaskPayload,
-  error: TaskEnqueueError
+  error: TaskEnqueueError,
+  store?: JobFailureStore
 ): Promise<void> {
   try {
-    const { prisma } = await import('@/lib/db/prisma')
+    const prisma = store ?? (await import('@/lib/db/prisma')).prisma
     // Only a job no handler has touched (see ./undelivered): a job waiting for its retry, or one
     // whose worker died, is the AI service reaper's to send again.
     await prisma.processingJob.updateMany({

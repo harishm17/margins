@@ -12,8 +12,3 @@
 export function undeliveredWhere(jobId: string) {
   return { id: jobId, status: 'pending', startedAt: null }
 }
-
-/** The same rule for a row in memory. */
-export function canMarkUndelivered(job: { status: string; startedAt: Date | null }): boolean {
-  return job.status === 'pending' && job.startedAt === null
-}
