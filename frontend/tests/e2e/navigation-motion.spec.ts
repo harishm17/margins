@@ -168,14 +168,14 @@ test('search keeps two files with the same name apart', async ({ page }) => {
   await signUpAndIn(page, 'palette-files')
   const { courseId } = await createCourse(page, 'Palette course', [{ name: 'Sets' }])
   await page.goto(`/courses/${courseId}/materials`)
-  const pdf = { name: 'notes.pdf', mimeType: 'application/pdf', buffer: readFileSync(FIXTURE_PDF) }
+  const pdf = { name: 'week-1.pdf', mimeType: 'application/pdf', buffer: readFileSync(FIXTURE_PDF) }
   await page.getByLabel('Choose files to upload').setInputFiles([pdf, pdf])
   await expect(page.getByText('Every file here has been read.')).toBeVisible({ timeout: 60_000 })
   await page.reload()
-  await expect(page.getByText('notes.pdf', { exact: true })).toHaveCount(2)
+  await expect(page.getByText('week-1.pdf', { exact: true })).toHaveCount(2)
 
   await page.keyboard.press('Control+k')
-  await page.getByPlaceholder(/^Search topics/).fill('notes.pdf')
+  await page.getByPlaceholder(/^Search topics/).fill('week-1.pdf')
   const files = page.locator('[cmdk-group]').filter({ hasText: 'Files' }).locator('[cmdk-item]')
   await expect(files).toHaveCount(2)
   const selected = page.locator('[cmdk-item][data-selected="true"]')
