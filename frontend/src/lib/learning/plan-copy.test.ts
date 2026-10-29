@@ -95,8 +95,18 @@ test("Up next marks today's mock exam when it is longer than the day", () => {
 test('the notices for topics too long for a day and reviews with no room', () => {
   assert.equal(tooLongText(20, 1), 'This does not fit in 20 minutes a day, even split into parts of at least 15 minutes. Add study time to fit it.')
   assert.equal(tooLongText(20, 2), 'These do not fit in 20 minutes a day, even split into parts of at least 15 minutes. Add study time to fit them.')
-  assert.equal(reviewsNotScheduledText(['Graphs']), 'No room before your exam to review Graphs. Add study time to fit it in.')
-  assert.equal(reviewsNotScheduledText(['Graphs', 'Trees', 'Heaps']), 'No room before your exam to review Graphs, Trees and Heaps. Add study time to fit them in.')
+  const room = (name: string) => ({ name, reason: 'minutes' as const })
+  assert.equal(reviewsNotScheduledText([room('Graphs')]), 'No room before your exam to review Graphs. Add study time to fit it in.')
+  assert.equal(reviewsNotScheduledText(['Graphs', 'Trees', 'Heaps'].map(room)), 'No room before your exam to review Graphs, Trees and Heaps. Add study time to fit them in.')
+  // The last two days' limit on reviews: more minutes would not help, so the notice does not say they would.
+  assert.equal(
+    reviewsNotScheduledText([{ name: 'Graphs', reason: 'final_limit' }]),
+    'Graphs is not in the plan for review: the day before your exam holds 5 reviews and the exam day 2, and no earlier day is left. More study time will not change that.'
+  )
+  assert.equal(
+    reviewsNotScheduledText([room('Trees'), { name: 'Graphs', reason: 'final_limit' }, { name: 'Heaps', reason: 'final_limit' }]),
+    'No room before your exam to review Trees. Add study time to fit it in. Graphs and Heaps are not in the plan for review: the day before your exam holds 5 reviews and the exam day 2, and no earlier day is left. More study time will not change that.'
+  )
 })
 
 test('day and week labels do not depend on a time zone', () => {

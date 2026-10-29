@@ -506,10 +506,10 @@ test('when it all fits there is no warning and nothing is left out', () => {
 
 test('unit mock exams are dropped before topics are, with a notice rather than a warning', () => {
   const units = [{ id: 'u1', title: 'One', weekLabel: null, orderIndex: 0 }]
-  // 3 topics in a unit and 2 outside it, 40 minutes each, 40 minutes a day, 10 days to the exam. With the
+  // 3 topics in a unit and 2 outside it, 40 minutes each, 40 minutes a day, 9 days to the exam. With the
   // unit's mock exam (30 minutes) in the way the last topic no longer fits; without it, everything does.
   const topics = [...course(3, { unitId: 'u1', estimatedMinutes: 40 }), topic('d', { orderIndex: 3, estimatedMinutes: 40 }), topic('e', { orderIndex: 4, estimatedMinutes: 40 })]
-  const result = plan({ topics, units, examDate: '2026-10-31', dailyMinutes: 40, fullMocksDoneInFinalWeek: 2 })
+  const result = plan({ topics, units, examDate: '2026-10-30', dailyMinutes: 40, fullMocksDoneInFinalWeek: 2 })
   assert.equal(items(result, 'unit_mock').length, 0)
   assert.equal(learnTopics(result).size, 5)
   assert.equal(result.unitMocksSkipped, true)
@@ -676,6 +676,11 @@ test('invariants hold for many generated courses', () => {
       assert.ok(minutes > daily, `${entry.id} (${minutes} min) is too long for ${daily}, ${label}`)
       assert.ok(!fitsInDays(minutes, daily), label)
     }
+    // Starting a topic never makes it too long: if the whole topic fits, so does the half that is left.
+    for (const entry of result.tooLongForDay?.topics ?? []) {
+      const original = topics.find((t) => t.id === entry.id)!
+      assert.ok(!original.started || !fitsInDays(learnMinutesLeft({ ...original, started: false }), daily), `${entry.id} is too long only because it is started, ${label}`)
+    }
     if (result.tooLongForDay && !result.notScheduled) assert.equal(result.short, false, label)
     for (const entry of topics.filter((item) => !item.learned)) {
       assert.ok(learnTopics.has(entry.id) !== listed.has(entry.id), `${entry.id} is scheduled or listed, never both or neither, ${label}`)
@@ -717,7 +722,10 @@ test('invariants hold for many generated courses', () => {
       const sets = planned.filter((item) => item.kind === 'mixed').map((item) => [...item.topicIds].sort().join())
       assert.equal(new Set(sets).size, sets.length, `${day.date} repeats a mixed practice set, ${label}`)
       // Learning parts are never scraps.
-      assert.ok(planned.every((item) => item.kind !== 'learn' || item.minutes >= Math.min(15, learnMinutesLeft(topics.find((t) => t.id === item.topicId)!))), `learn parts of 15+ minutes, ${label}`)
+      // Every part but the last is at least 15 minutes; the last at least 5.
+      for (const item of planned.filter((entry) => entry.kind === 'learn' && entry.part)) {
+        assert.ok(item.minutes >= (item.part!.number < item.part!.of ? 15 : 5), `learn part of ${item.minutes} minutes, ${label}`)
+      }
       // Quizzes come after the topic's learning.
       for (const item of day.items.filter((entry) => entry.kind === 'quiz' && topics.find((t) => t.id === entry.topicId)?.learned === false)) {
         const last = items(result, 'learn').filter((entry) => entry.topicId === item.topicId).map((entry) => entry.date).sort().pop()
@@ -763,6 +771,25 @@ test('invariants hold for many generated courses', () => {
       for (const id of reported) {
         const entry = topics.find((t) => t.id === id)
         assert.ok(entry && (entry.reviewDueAt || entry.learned || learnTopics.has(id)), `${id} is reported but had no review, ${label}`)
+      }
+      // A reported review really had no room: no day between the topic's latest learning, quiz or review
+      // and the final days could take another, and the reason given is true.
+      for (const entry of result.reviewsNotScheduled ?? []) {
+        const latest = items(result, 'learn').concat(items(result, 'quiz'), items(result, 'review')).filter((item) => item.topicId === entry.id && !item.done && item.date < finalStart).map((item) => item.date).sort().pop()
+        const roomy = result.days.filter(
+          (day) => day.date >= (latest ? addDays(latest, 1) : TODAY) && day.date < finalStart && day.minutes + day.doneMinutes + 10 <= daily
+        )
+        assert.equal(roomy.length, 0, `${entry.id} is reported but ${roomy.map((day) => day.date)} had room, ${label}`)
+        if (entry.reason === 'final_limit') assert.ok(result.days.every((day) => day.date >= finalStart || day.date < (latest ? addDays(latest, 1) : TODAY)), `${entry.id}: final_limit with earlier days, ${label}`)
+      }
+      // On a final day a suggested (projected) review never takes the place of a weaker learned topic's.
+      const finalReviewed = new Set(result.days.filter((day) => day.isFinalReview).flatMap((day) => day.items).filter((item) => item.kind === 'review').map((item) => item.topicId))
+      for (const day of result.days.filter((entry) => entry.isFinalReview)) {
+        for (const item of day.items.filter((entry) => entry.kind === 'review' && entry.projected)) {
+          for (const weaker of topics.filter((t) => t.learned && (t.mastery ?? 0) < (item.mastery ?? 0))) {
+            assert.ok(finalReviewed.has(weaker.id), `${weaker.id} has no final review but ${item.topicId} (projected) does, ${label}`)
+          }
+        }
       }
       for (const entry of result.tooLongForDay?.dependents ?? []) {
         const needs = topics.find((t) => t.id === entry.id)?.prerequisiteIds ?? []
@@ -1027,15 +1054,15 @@ test("a unit mock exam comes after its topics' first quizzes, on a day with room
 })
 
 test('a topic that can never fit a day is listed as too long, and the topics after it still get scheduled', () => {
-  // 20 minutes a day: a 25-minute topic does not fit whole, and splitting it leaves a part under 15
-  // minutes. It used to hold up every later topic for the whole plan.
+  // 12 minutes a day is under the 15-minute part: a 25-minute topic cannot be split to fit. It used to
+  // hold up every later topic for the whole plan.
   const topics = [
     topic('long', { orderIndex: 0, estimatedMinutes: 25 }),
-    topic('free', { orderIndex: 1, estimatedMinutes: 15 }),
-    topic('after-long', { orderIndex: 2, estimatedMinutes: 15, prerequisiteIds: ['long'] }),
+    topic('free', { orderIndex: 1, estimatedMinutes: 10 }),
+    topic('after-long', { orderIndex: 2, estimatedMinutes: 10, prerequisiteIds: ['long'] }),
   ]
   for (const examDate of [null, '2026-11-20']) {
-    const result = plan({ topics, examDate, dailyMinutes: 20 })
+    const result = plan({ topics, examDate, dailyMinutes: 12 })
     assert.equal(dayOf(result, 'free', 'learn'), TODAY, `${examDate}`)
     assert.ok(!items(result, 'learn').some((item) => item.topicId === 'long' || item.topicId === 'after-long'))
     assert.deepEqual(result.tooLongForDay, {
@@ -1047,14 +1074,39 @@ test('a topic that can never fit a day is listed as too long, and the topics aft
     assert.equal(result.notScheduled, null)
     assert.equal(result.unitMocksSkipped || result.fullMocksReduced, false)
   }
-  // 30 minutes a day fits it whole, and 40 splits a 45-minute topic into 25 + 20.
-  assert.equal(plan({ topics, dailyMinutes: 30 }).tooLongForDay, null)
+  // Twenty minutes a day takes a 25-minute topic as 15 + 10, and 40 splits a 45-minute one into 25 + 20.
+  assert.equal(plan({ topics, dailyMinutes: 20 }).tooLongForDay, null)
   assert.equal(plan({ topics: [topic('x', { estimatedMinutes: 45 })], dailyMinutes: 40 }).tooLongForDay, null)
-  // A 45-minute topic on 20-minute days is split 15 + 15 + 15, never stuck on a 5-minute remainder.
+  // A 45-minute topic on 20-minute days is split 15 + 15 + 15, never stuck on a short remainder.
   const thirds = plan({ topics: [topic('x', { estimatedMinutes: 45 })], dailyMinutes: 20 })
   assert.equal(thirds.tooLongForDay, null)
-  assert.equal(items(thirds, 'learn').reduce((sum, item) => sum + item.minutes, 0), 45)
-  assert.ok(items(thirds, 'learn').every((item) => item.minutes >= 15 && item.minutes <= 20))
+  assert.deepEqual(items(thirds, 'learn').map((item) => item.minutes), [15, 15, 15])
+})
+
+test('starting a topic never makes it too long: 45 and 50 minutes on 20-minute days', () => {
+  // Started, a 45- or 50-minute topic has 25 left, which cannot split into parts of 15 or more within a
+  // 20-minute day. The last part may be as short as 10 (15 + 10), so it is scheduled, and so are its dependents.
+  assert.equal(fitsInDays(25, 20), true)
+  assert.equal(fitsInDays(20, 17), true) // 15 + 5, the last resort
+  assert.equal(fitsInDays(25, 12), false)
+  for (const estimatedMinutes of [45, 50]) {
+    for (const started of [false, true]) {
+      const topics = [
+        topic('x', { orderIndex: 0, estimatedMinutes, started }),
+        topic('y', { orderIndex: 1, estimatedMinutes: 15, prerequisiteIds: ['x'] }),
+      ]
+      const result = plan({ topics, examDate: '2026-11-20', dailyMinutes: 20 })
+      const label = `${estimatedMinutes} min, started ${started}`
+      assert.equal(result.tooLongForDay, null, label)
+      assert.ok(learnTopics(result).has('x') && learnTopics(result).has('y'), label)
+      const parts = items(result, 'learn').filter((item) => item.topicId === 'x').map((item) => item.minutes)
+      assert.ok(parts.every((minutes) => minutes <= 20), `${label}: ${parts}`)
+      assert.ok(parts.slice(0, -1).every((minutes) => minutes >= 15) && parts[parts.length - 1] >= 10, `${label}: ${parts}`)
+      assert.ok(started || estimatedMinutes !== 45 || parts.every((minutes) => minutes === 15), `${label}: ${parts}`)
+    }
+  }
+  const startedPlan = plan({ topics: [topic('x', { estimatedMinutes: 45, started: true })], dailyMinutes: 20 })
+  assert.deepEqual(items(startedPlan, 'learn').map((item) => item.minutes), [15, 10])
 })
 
 test("a topic's last review is not booked on a day other reviews already fill, and is never lost silently", () => {
@@ -1073,4 +1125,56 @@ test("a topic's last review is not booked on a day other reviews already fill, a
   assert.deepEqual(result.days.find((day) => day.date === '2026-10-28')?.items.map((item) => item.topicId), ['b', 'c'])
   assert.equal(result.reviewsNotScheduled, null)
   assert.ok(result.days.every((day) => day.minutes <= 20 || day.items.every((item) => item.overBudget)))
+})
+
+test('reviews due in the final days that do not fit there go to an earlier day with room', () => {
+  // 600 minutes a day, exam on the 30th: the day before holds 5 reviews and the exam day 2, but nine
+  // topics have a review due on the 29th. The other two used to be reported though the 27th was empty.
+  const topics = course(9, { learned: true, quizzed: true }).map((entry, index) => ({
+    ...entry,
+    mastery: 0.1 + index * 0.05,
+    reviewDueAt: new Date('2026-10-29T09:00:00Z'),
+  }))
+  const result = plan({ topics, examDate: '2026-10-30', dailyMinutes: 600 })
+  assert.equal(result.reviewsNotScheduled, null)
+  const reviewed = new Set(items(result, 'review').map((item) => item.topicId))
+  for (const entry of topics) assert.ok(reviewed.has(entry.id), entry.id)
+  assert.ok(result.days.filter((day) => day.date < '2026-10-29').some((day) => day.items.some((item) => item.kind === 'review')))
+})
+
+test('a review that cannot be placed says why: no room, or the limit on the last two days', () => {
+  // Exam tomorrow: only the day before and the exam day exist, holding 5 and 2 reviews whatever the minutes.
+  const topics = course(9, { learned: true, quizzed: true }).map((entry, index) => ({
+    ...entry,
+    mastery: 0.1 + index * 0.05,
+    reviewDueAt: new Date('2026-10-21T09:00:00Z'),
+  }))
+  const result = plan({ topics, examDate: '2026-10-22', dailyMinutes: 600 })
+  assert.deepEqual(result.reviewsNotScheduled?.map((entry) => `${entry.id}:${entry.reason}`), ['h:final_limit', 'i:final_limit'])
+  // Tight days: every day before the exam is full, so more study time would help.
+  const tight = plan({ topics, examDate: '2026-10-27', dailyMinutes: 20 })
+  assert.ok((tight.reviewsNotScheduled ?? []).length > 0)
+  assert.ok((tight.reviewsNotScheduled ?? []).every((entry) => entry.reason === 'minutes'))
+})
+
+test('on a final day a suggested review of a stronger topic does not take the place of a weaker topic', () => {
+  // Exam in 7 days, 20 minutes a day: each final day holds 2 reviews. t0 and t1 are due today; t2 (0.5)
+  // is stronger than t3 (0.17), and its suggested review used to take a final slot while t3, a weaker
+  // learned topic, was left out. Suggested reviews are now ranked with the other topics by mastery.
+  const due = { learned: true, quizzed: true, reviewDueAt: NOW }
+  const topics = [
+    topic('t0', { orderIndex: 0, mastery: 0.15, ...due }),
+    topic('t1', { orderIndex: 1, mastery: 0.16, ...due }),
+    topic('t2', { orderIndex: 2, mastery: 0.5, learned: true }),
+    topic('t3', { orderIndex: 3, mastery: 0.17, learned: true }),
+  ]
+  const result = plan({ topics, examDate: '2026-10-28', dailyMinutes: 20 })
+  const finals = result.days.filter((day) => day.isFinalReview).flatMap((day) => day.items.filter((item) => item.kind === 'review'))
+  assert.ok(finals.length > 0)
+  assert.ok(!finals.some((item) => item.topicId === 't2'), 'the stronger topic has no final review while weaker ones wait')
+  assert.ok(finals.every((item) => ['t0', 't1', 't3'].includes(item.topicId as string)))
+  // With room for a third review it is the weaker t3, not the stronger t2, that gets it.
+  const roomy = plan({ topics, examDate: '2026-10-28', dailyMinutes: 30 })
+  const roomyFinals = roomy.days.filter((day) => day.isFinalReview).flatMap((day) => day.items.filter((item) => item.kind === 'review')).map((item) => item.topicId)
+  assert.ok(roomyFinals.includes('t3'))
 })

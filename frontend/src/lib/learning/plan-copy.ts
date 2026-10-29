@@ -1,4 +1,4 @@
-import { MIN_PART_MINUTES, type Plan, type PlanItem } from './plan'
+import { EXAM_DAY_REVIEWS, FINAL_DAY_REVIEWS, MIN_PART_MINUTES, type Plan, type PlanItem } from './plan'
 import { minutesLabel } from './plan-settings'
 
 /** A plan item in the words, button and link the UI shows. */
@@ -143,10 +143,25 @@ export function daySummary(titles: string[]): string {
 export const tooLongText = (dailyMinutes: number, count: number): string =>
   `${count === 1 ? 'This does' : 'These do'} not fit in ${minutesLabel(dailyMinutes)} a day, even split into parts of at least ${MIN_PART_MINUTES} minutes. Add study time to fit ${count === 1 ? 'it' : 'them'}.`
 
-/** The notice for reviews that found no day with room before the exam. */
-export function reviewsNotScheduledText(names: string[]): string {
-  const list = names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
-  return `No room before your exam to review ${list}. Add study time to fit ${names.length === 1 ? 'it' : 'them'} in.`
+const nameList = (names: string[]) => (names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`)
+
+/**
+ * The notice for reviews that found no day with room before the exam. The advice matches the cause:
+ * "add study time" only when every day's minutes are used; when the last two days' limit on reviews is
+ * what stopped it, more minutes would not help, so it says so.
+ */
+export function reviewsNotScheduledText(entries: { name: string; reason: 'minutes' | 'final_limit' }[]): string {
+  const named = (reason: 'minutes' | 'final_limit') => entries.filter((entry) => entry.reason === reason).map((entry) => entry.name)
+  const minutes = named('minutes')
+  const limited = named('final_limit')
+  const parts: string[] = []
+  if (minutes.length > 0) parts.push(`No room before your exam to review ${nameList(minutes)}. Add study time to fit ${minutes.length === 1 ? 'it' : 'them'} in.`)
+  if (limited.length > 0) {
+    parts.push(
+      `${nameList(limited)} ${limited.length === 1 ? 'is' : 'are'} not in the plan for review: the day before your exam holds ${FINAL_DAY_REVIEWS} reviews and the exam day ${EXAM_DAY_REVIEWS}, and no earlier day is left. More study time will not change that.`
+    )
+  }
+  return parts.join(' ')
 }
 
 /** "Oct 19 to Oct 25" for a week starting on `start`. */

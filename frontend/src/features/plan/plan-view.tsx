@@ -388,7 +388,7 @@ export function PlanView({
           </section>
         ) : null}
         {plan.reviewsNotScheduled ? (
-          <InlineAlert tone="neutral">{reviewsNotScheduledText(plan.reviewsNotScheduled.map((topic) => topic.name))}</InlineAlert>
+          <InlineAlert tone="neutral">{reviewsNotScheduledText(plan.reviewsNotScheduled)}</InlineAlert>
         ) : null}
       </div>
 
