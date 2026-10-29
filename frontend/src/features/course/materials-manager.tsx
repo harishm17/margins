@@ -88,11 +88,18 @@ function FileIcon({ filename }: { filename: string }) {
   return <Icon aria-hidden="true" className="size-5 shrink-0 text-fg-3" />
 }
 
-type StatusProps = { children: React.ReactNode; tone?: 'neutral' | 'accent' | 'danger'; icon: React.ReactNode }
+type StatusProps = {
+  children: React.ReactNode
+  tone?: 'neutral' | 'accent' | 'danger'
+  icon: React.ReactNode
+  /** A failure that just happened in this browser (an upload refused or broken): announced as an alert. */
+  announce?: boolean
+}
 
-function StatusText({ children, tone = 'neutral', icon }: StatusProps) {
+function StatusText({ children, tone = 'neutral', icon, announce }: StatusProps) {
   return (
     <span
+      role={announce ? 'alert' : undefined}
       className={cn(
         'flex min-w-0 items-center gap-1.5 text-small',
         tone === 'danger' ? 'text-danger-soft-fg' : tone === 'accent' ? 'text-fg' : 'text-fg-2'
@@ -201,7 +208,7 @@ function RowShell({
 }) {
   return (
     <tr className="min-h-12 max-md:grid max-md:grid-cols-[minmax(0,1fr)_auto] max-md:items-center max-md:gap-x-2 max-md:gap-y-1 max-md:py-3">
-      <td className="py-2.5 pr-3 max-md:col-start-1 max-md:row-start-1 max-md:p-0">
+      <td className="py-2.5 pr-3 max-md:col-start-1 max-md:row-start-1 max-md:p-0 md:w-full md:max-w-0">
         <div className="flex min-w-0 items-center gap-3">
           <FileIcon filename={filename} />
           <div className="min-w-0">
@@ -217,8 +224,8 @@ function RowShell({
         <RoleBadge role={role} />
       </td>
       <td className="whitespace-nowrap px-3 py-2.5 text-small tabular text-fg-2 max-md:hidden">{formatBytes(size)}</td>
-      <td className="min-w-0 px-3 py-2.5 max-md:col-span-2 max-md:row-start-2 max-md:p-0 max-md:pl-8">{status}</td>
-      <td className="w-10 py-1.5 pl-3 text-right max-md:col-start-2 max-md:row-start-1 max-md:p-0">{menu}</td>
+      <td className="min-w-0 px-3 py-2.5 max-md:col-span-2 max-md:row-start-2 max-md:p-0 max-md:pl-8"><div className="md:w-52">{status}</div></td>
+      <td className="py-1.5 pl-3 text-right max-md:col-start-2 max-md:row-start-1 max-md:p-0">{menu}</td>
     </tr>
   )
 }
@@ -320,7 +327,8 @@ function ServerRow({
     status = <ExamAnalysisFailed courseId={courseId} errorCode={row.examAnalysisFailure.errorCode} onRetried={refreshSoon} />
   } else if (row.status === 'ready') {
     status = (
-      <div className="min-h-[38px]">
+      // The height of a file being read (two lines), with the word centred in it, so it sits on the row's middle line.
+      <div className="flex min-h-[38px] items-center">
         <StatusText icon={READY_ICON} tone="accent">Ready</StatusText>
       </div>
     )
@@ -439,7 +447,7 @@ function LocalRow({ upload, onDismiss, typicalSeconds }: { upload: LocalUpload; 
     status = <PipelineStatus index={0} since={upload.startedAt} typicalSeconds={typicalSeconds} />
   } else {
     status = (
-      <StatusText icon={FAILED_ICON} tone="danger">
+      <StatusText icon={FAILED_ICON} tone="danger" announce>
         {upload.error}
       </StatusText>
     )
@@ -497,6 +505,13 @@ export function MaterialsManager({
 }: MaterialsManagerProps) {
   const router = useRouter()
   const inputRef = React.useRef<HTMLInputElement>(null)
+  // The "usually about" figure stays what it was when the page first knew it. The server works it out
+  // again on every refresh (each upload and each finished file refreshes the page) from the latest
+  // finished jobs, and those soon include this batch's own files, whose times include waiting behind
+  // the other files of the batch. So the figure moved while the student watched ("about 35 seconds",
+  // then 40, then 30). A reload starts again from the server's figure.
+  const [typicalSeconds, setTypicalSeconds] = React.useState(typicalReadSeconds)
+  if (typicalSeconds === null && typicalReadSeconds !== null) setTypicalSeconds(typicalReadSeconds)
   const [category, setCategory] = React.useState<Category>('lecture_notes')
   const [dragging, setDragging] = React.useState(false)
   const [uploads, setUploads] = React.useState<LocalUpload[]>([])
@@ -570,16 +585,13 @@ export function MaterialsManager({
 
   return (
     <div className={cn(!inline && 'flex flex-col gap-6')}>
+      {/* No Upload button in the header: the drop zone under it is the one way in, with its own
+          "browse" button and the "These are:" choice that an upload needs. */}
       {inline ? null : (
         <PageIntro
           className="mb-0"
           title="Materials"
           description="Lecture notes, a syllabus, past exams and book chapters for this course."
-          actions={
-            <Button variant="primary" icon={<UploadSimple />} onClick={() => inputRef.current?.click()}>
-              Upload
-            </Button>
-          }
         />
       )}
       {banner}
@@ -654,6 +666,12 @@ export function MaterialsManager({
         )
       ) : (
         <div className={cn(inline && 'mt-4')}>
+          {/* Column widths that don't depend on the status: the status changes while a file is read
+              ("Reading pages, step 2 of 3, 12s, usually about 35 seconds", then "Ready") and used to
+              resize every column and widen the table past the drop zone. The status has a fixed
+              width (RowShell), the name takes what is left and truncates (w-full with max-w-0), and
+              the short columns fit their words. Not table-fixed: in the setup guide's narrower column
+              fixed widths left the name no room. */}
           <table className="w-full text-left max-md:block">
             <thead className="max-md:hidden">
               <tr className="border-b border-border text-caption text-fg-3">
@@ -669,9 +687,9 @@ export function MaterialsManager({
             <tbody className="max-md:block [&>tr+tr]:border-t [&>tr+tr]:border-border">
               {orderedRows.map((item) =>
                 item.kind === 'local' ? (
-                  <LocalRow key={item.upload.key} upload={item.upload} typicalSeconds={typicalReadSeconds} onDismiss={() => removeUpload(item.upload.key)} />
+                  <LocalRow key={item.upload.key} upload={item.upload} typicalSeconds={typicalSeconds} onDismiss={() => removeUpload(item.upload.key)} />
                 ) : (
-                  <ServerRow key={item.row.id} courseId={courseId} row={item.row} typicalSeconds={typicalReadSeconds} onDeleted={() => router.refresh()} />
+                  <ServerRow key={item.row.id} courseId={courseId} row={item.row} typicalSeconds={typicalSeconds} onDeleted={() => router.refresh()} />
                 )
               )}
             </tbody>

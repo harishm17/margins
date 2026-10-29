@@ -3,7 +3,7 @@ import { Skeleton, SkeletonField, SkeletonIntro, SkeletonPage } from '@/componen
 /** New course: the intro, the name and description fields, then the two buttons. */
 export default function NewCourseLoading() {
   return (
-    <SkeletonPage width="narrow" className="pt-8">
+    <SkeletonPage width="narrow">
       <SkeletonIntro />
       <div aria-hidden="true" className="flex flex-col gap-5">
         <SkeletonField labelWidth="w-24" />

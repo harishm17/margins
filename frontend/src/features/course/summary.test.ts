@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { courseSummary, fileProblem, needsWorkOrder, problemMessage, reviewTiming, studyPath } from './summary'
+import { courseSummary, fileProblem, needsWorkOrder, problemMessage, reviewTiming, studyPath, topicRowLabel } from './summary'
 
 const counts = (strong: number) => ({ none: 0, learning: 0, getting: 0, strong })
 
@@ -56,5 +56,18 @@ test('"Needs work" puts due topics first, then the lowest mastery, not started i
   assert.deepEqual(
     needsWorkOrder(topics, now).map((topic) => topic.id),
     ['d', 'c', 'b', 'a']
+  )
+})
+
+test('a topic row is named once: topic, mastery, the next step and when it is due', () => {
+  const path = { notes: 'ready', examples: 'missing', practice: 'missing', quiz: 'missing' } as const
+  assert.equal(topicRowLabel({ name: 'Conditional probability', mastery: null, timing: null, path }), 'Conditional probability, Not started, next: Notes')
+  assert.equal(
+    topicRowLabel({ name: 'Bayes', mastery: 0.62, timing: { text: 'Due today' }, path: { ...path, notes: 'done' } }),
+    'Bayes, Getting there, 62%, next: Worked examples, Due today'
+  )
+  assert.equal(
+    topicRowLabel({ name: 'Bayes', mastery: 0.9, timing: null, path: { notes: 'done', examples: 'done', practice: 'done', quiz: 'done' } }),
+    'Bayes, Strong, 90%, study path done'
   )
 })

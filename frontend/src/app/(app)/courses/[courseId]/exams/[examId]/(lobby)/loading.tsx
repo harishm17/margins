@@ -3,7 +3,7 @@ import { Skeleton, SkeletonIntro, SkeletonPage, SkeletonRows, SkeletonSection } 
 /** An exam's lobby: title, three facts, the topics it covers, what to expect, Start, past attempts. */
 export default function ExamLobbyLoading() {
   return (
-    <SkeletonPage className="max-w-[784px] pt-8">
+    <SkeletonPage width="medium">
       <SkeletonIntro />
       <div aria-hidden="true" className="flex flex-col gap-10">
         <div className="flex flex-col gap-5">

@@ -4,6 +4,7 @@ import * as React from 'react'
 import * as MenuPrimitive from '@radix-ui/react-dropdown-menu'
 import { CaretRight, Check } from '@phosphor-icons/react/dist/ssr'
 import { cn } from '@/lib/utils'
+import { KEY_HINT_HIDDEN } from './kbd'
 import { floatingSurface, menuItem, popperMotion } from './styles'
 
 export const DropdownMenu = MenuPrimitive.Root
@@ -56,7 +57,7 @@ export function DropdownMenuItem({ className, icon, kbd, trailing, destructive, 
       {icon ? <span className="inline-flex [&>svg]:size-4 [&>svg]:text-fg-3">{icon}</span> : null}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       {trailing}
-      {kbd ? <span className="ml-4 text-caption font-normal text-fg-3">{kbd}</span> : null}
+      {kbd ? <span className={cn('ml-4 text-caption font-normal text-fg-3', KEY_HINT_HIDDEN)}>{kbd}</span> : null}
     </MenuPrimitive.Item>
   )
 }

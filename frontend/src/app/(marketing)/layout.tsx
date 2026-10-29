@@ -5,6 +5,9 @@ import { BRAND_NAME } from '@/config/brand'
 import { CONTACT_EMAIL } from '@/config/site'
 import { NavActions } from '@/features/marketing/auth-actions'
 import { LINKS } from '@/features/marketing/content'
+import { MarketingMenu } from '@/features/marketing/marketing-menu'
+import { SECTION_LINKS } from '@/features/marketing/nav-links'
+import { SectionLink } from '@/features/marketing/section-link'
 import { ThemeSwitch } from '@/components/ui/theme-switch'
 import { AiStatusBanner, AiStatusProvider } from '@/features/ai/ai-status'
 
@@ -25,19 +28,16 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             <Brand />
           </Link>
           <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
-            <Link href="/#how-it-works" className={navLink}>
-              How it works
-            </Link>
-            <Link href="/#trust" className={navLink}>
-              Sources
-            </Link>
-            <Link href="/#faq" className={navLink}>
-              FAQ
-            </Link>
+            {SECTION_LINKS.map((link) => (
+              <SectionLink key={link.section} section={link.section} className={navLink}>
+                {link.label}
+              </SectionLink>
+            ))}
           </nav>
           <nav aria-label="Account" className="ml-auto flex items-center gap-1 sm:gap-2">
             <ThemeSwitch />
             <NavActions />
+            <MarketingMenu className="md:hidden" />
           </nav>
         </header>
         <main id="main" tabIndex={-1} className="flex-1 outline-none">
@@ -51,12 +51,11 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             </div>
             <nav aria-label="Product" className="flex flex-col gap-2.5">
               <p className={footerHeading}>Product</p>
-              <Link href="/#how-it-works" className={footerLink}>
-                How it works
-              </Link>
-              <Link href="/#faq" className={footerLink}>
-                FAQ
-              </Link>
+              {SECTION_LINKS.map((link) => (
+                <SectionLink key={link.section} section={link.section} className={footerLink}>
+                  {link.label}
+                </SectionLink>
+              ))}
               <Link href="/login" className={footerLink}>
                 Sign in
               </Link>

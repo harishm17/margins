@@ -31,7 +31,7 @@ export function GenerateOptions({
   submitLabel,
   note,
   focusPlaceholder,
-  align = 'start',
+  align = 'center',
   children,
 }: {
   kind: ContentKind

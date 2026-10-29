@@ -3,7 +3,7 @@ import { Skeleton, SkeletonField, SkeletonIntro, SkeletonPage } from '@/componen
 /** The new mock exam form: topic checkboxes, then four single-choice rows, then Create. */
 export default function NewExamLoading() {
   return (
-    <SkeletonPage className="max-w-[704px] pt-8">
+    <SkeletonPage width="medium">
       <SkeletonIntro />
       <div aria-hidden="true" className="flex flex-col gap-8">
         <div>

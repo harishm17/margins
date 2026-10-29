@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { getSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { BRAND_NAME } from '@/config/brand'
+import { SectionLink } from './section-link'
 
 /**
  * Whether the visitor is signed in, read in the browser so public pages stay fully static.
@@ -17,7 +18,7 @@ function readSignedIn(): Promise<boolean> {
   return sessionRequest
 }
 
-function useSignedIn(): boolean | null {
+export function useSignedIn(): boolean | null {
   const [signedIn, setSignedIn] = React.useState<boolean | null>(null)
   React.useEffect(() => {
     let cancelled = false
@@ -35,7 +36,7 @@ function useSignedIn(): boolean | null {
   return signedIn
 }
 
-/** The nav buttons: Sign in and Get started, or Open Margins when signed in. */
+/** The nav buttons: Sign in and Get started, or Open Margins when signed in. Below 640px Sign in moves into the menu (MarketingMenu). */
 export function NavActions() {
   const signedIn = useSignedIn()
   return signedIn ? (
@@ -44,7 +45,7 @@ export function NavActions() {
     </Button>
   ) : (
     <>
-      <Button asChild variant="ghost">
+      <Button asChild variant="ghost" className="max-sm:hidden">
         <Link href="/login">Sign in</Link>
       </Button>
       <Button asChild variant="primary">
@@ -69,7 +70,7 @@ export function HeroActions() {
             <Link href="/login">Get started</Link>
           </Button>
           <Button asChild variant="secondary" size="lg">
-            <a href="#how-it-works">See how it works</a>
+            <SectionLink section="how-it-works">See how it works</SectionLink>
           </Button>
         </>
       )}
