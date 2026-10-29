@@ -13,7 +13,7 @@ Upload your lecture notes, textbook chapters and past exams. Margins splits them
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Claude](https://img.shields.io/badge/LLM-Claude-D97757)](https://docs.anthropic.com/)
 
-<img src="frontend/public/screens/plan-light-1920.webp" alt="The Margins plan page: Today lists a review and a quiz, and each day after it leads to the exam date" width="860">
+<img src="frontend/public/screens/plan-light-1920.webp" alt="The Margins plan page: Today lists a review, a quiz and a new topic, and each day after it leads to the exam date" width="860">
 
 </div>
 
@@ -68,7 +68,7 @@ Browser ──▶ Next.js 16 (web) ──────────────▶
 - **Topic-scoped retrieval.** Each topic is mapped to at most 24 chunks by hybrid search: vector similarity and Postgres full-text search, merged with Reciprocal Rank Fusion, with a similarity floor so a barely covered topic gets a short list instead of loose matches. Generators only ever see those chunks, so prompt size stays flat as a course grows, and the shared excerpt block is prompt-cached across notes, examples, quizzes and exams.
 - **Models.** Claude Opus writes notes, examples, quizzes and exams, plans each course in one low-effort call and answers Ask questions; Claude Haiku handles file validation, short-answer grading and the voice coach.
 - **Voice without a speech API.** The browser does speech-to-text and text-to-speech (Web Speech API). The server runs Claude with drill tools (next question, record answer, hint) and streams each turn back as NDJSON.
-- **Jobs.** Long tasks run as jobs that are claimed with one atomic update and hold a lease; a reaper re-dispatches jobs whose worker died. Each job records its tokens and cost; a per-user daily budget and a site-wide daily cap bound spend.
+- **Jobs.** Long tasks run as jobs that are claimed with one atomic update and hold a lease; a reaper re-dispatches jobs whose worker died. Each job records its tokens and cost; a per-user daily allowance and a site-wide daily cap bound spend.
 - **AI outages and the daily allowance.** One shared status record (`ai_status`, read at `GET /status/ai`) says whether the AI is available. Out-of-credit, key and configuration errors mark it unavailable at once; rate limits and overloads do so after three in a row. While it is down, the app shows a site-wide notice and turns the AI buttons off with the reason. The daily allowance is checked before a job is created, not after. A failure that can be retried puts the job back to `pending`; `failed` is final. Mock exam answers are always saved, and grading waits for the AI to come back, for up to 7 days. If `OPS_ALERT_WEBHOOK_URL` is set, the owner gets a message when the AI goes down and when it comes back.
 - **Account deletion.** Settings has a Delete account button. It stops the account's jobs, deletes its files, then deletes the account and everything made from it. Spend rows are kept without any link to the person, so the site-wide daily cap still holds.
 - **Isolation.** Only the web service can call the AI service (shared internal token), which is reachable only on Railway's private network.
@@ -117,20 +117,6 @@ Latest run: [2026-10-21](evals/results/2026-10-21-structure.md), 8 topics, Opus 
 
 The same judge also picked the model: [Sonnet and Haiku made maths errors and fell short of the bar set before the run](evals/results/2026-10-21-model-decision.md), so generation stays on Opus and cost is held down by generating each topic only when it is opened.
 
-## Screenshots
-
-The product screenshots on the landing page, on the sign-in page and in this README are generated from the running app, so they never show an old navigation. [`frontend/scripts/capture-screens.ts`](frontend/scripts/capture-screens.ts) seeds a showcase student and course (written by hand in [`frontend/scripts/screens/`](frontend/scripts/screens/), no model output), signs in, and captures each screen in light and dark as WebP into `frontend/public/screens/`, with phone-sized crops for the landing page.
-
-```bash
-# a migrated database and the e2e stack (scripts/e2e-stack.sh start), then:
-cd frontend
-DATABASE_URL=postgresql://... PLAYWRIGHT_BASE_URL=http://localhost:3000 npm run screens
-npm run screens -- --only plan,ask      # a few screens
-npm run screens -- --no-seed            # reuse the showcase account already in the database
-```
-
-It only runs against a local web app and a local database, signs in with the test sign-in (below), and needs no AI calls: nothing is generated while it runs.
-
 ## Run it locally
 
 Everything runs without an API key: the `.env.example` files set `LLM_PROVIDER=mock`, which returns placeholder notes, quizzes and grades with no API calls. For real output, set `LLM_PROVIDER=anthropic` and an [Anthropic API key](https://console.anthropic.com/settings/keys) (`ANTHROPIC_API_KEY`).
@@ -147,9 +133,9 @@ echo "AI_INTERNAL_TOKEN=$(openssl rand -hex 32)" >> .env
 docker compose up --build
 ```
 
-Compose applies the database migrations in a one-shot `migrate` service before the web app and the AI service start. Then open http://localhost:3000 and sign in with the test sign-in (`you@example.com`, any `@example.com` address, no password).
+Compose applies the database migrations in a one-shot `migrate` service before the web app and the AI service start. Then open http://localhost:3000 and sign in with the test sign-in.
 
-Students sign in with Google only. The `ENABLE_TEST_LOGIN=true` line above turns on a test sign-in on `/login` that takes any `@example.com` address with no password; the e2e stack and the screenshot script use it. To use Google instead, set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` (an OAuth client with `http://localhost:3000/api/auth/callback/google` as a redirect URI). The test sign-in only works while `NEXTAUTH_URL` is on localhost, and the web app refuses to start with it set on any other site or on Railway.
+Students sign in with Google only. The `ENABLE_TEST_LOGIN=true` line above turns on a test sign-in on `/login` that takes any `@example.com` address (for example `you@example.com`) with no password; the e2e stack and the screenshot script use it. To use Google instead, set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` (an OAuth client with `http://localhost:3000/api/auth/callback/google` as a redirect URI). The test sign-in only works while `NEXTAUTH_URL` is on localhost, and the web app refuses to start with it set on any other site or on Railway.
 
 <details>
 <summary>Without Docker</summary>
@@ -190,7 +176,7 @@ NEXTAUTH_SECRET=...              # openssl rand -base64 32
 NEXTAUTH_URL=http://localhost:3000
 AI_SERVICE_URL=http://localhost:8000
 AI_INTERNAL_TOKEN=...            # openssl rand -hex 32, same value in both services
-GOOGLE_OAUTH_CLIENT_ID=...       # Google sign-in, the only way to sign in: production will not start without it
+GOOGLE_OAUTH_CLIENT_ID=...       # production only: Google sign-in, the only way students sign in (locally the test sign-in replaces it)
 GOOGLE_OAUTH_CLIENT_SECRET=...
 ```
 
@@ -242,6 +228,20 @@ scripts/e2e-stack.sh stop
 
 CI (`.github/workflows/ci.yml`) runs the same steps: Prisma validation, lint, type check, unit tests and a production build for the web app, the pytest suite for the AI service, and the Playwright specs against Postgres with pgvector.
 
+## Screenshots
+
+The product screenshots on the landing page, on the sign-in page and in this README are generated from the running app, so they never show an old navigation. [`frontend/scripts/capture-screens.ts`](frontend/scripts/capture-screens.ts) seeds a showcase student and course (written by hand in [`frontend/scripts/screens/`](frontend/scripts/screens/), no model output), signs in, and captures each screen in light and dark as WebP into `frontend/public/screens/`, with phone-sized crops for the landing page.
+
+```bash
+# a migrated database and the e2e stack (scripts/e2e-stack.sh start), then:
+cd frontend
+DATABASE_URL=postgresql://... PLAYWRIGHT_BASE_URL=http://localhost:3000 npm run screens
+npm run screens -- --only plan,ask      # a few screens
+npm run screens -- --no-seed            # reuse the showcase account already in the database
+```
+
+It only runs against a local web app and a local database, signs in with the test sign-in (see [Run it locally](#run-it-locally)), and needs no AI calls: nothing is generated while it runs.
+
 ## Deployment
 
 Hosted on [Railway](https://railway.com/): the web and AI services, Postgres with pgvector, and a Railway bucket for uploads. The whole project is declared in [`.railway/railway.ts`](.railway/railway.ts), and pushes to `main` deploy automatically. See [docs/deployment/RAILWAY.md](docs/deployment/RAILWAY.md).
@@ -253,7 +253,8 @@ Hosted on [Railway](https://railway.com/): the web and AI services, Postgres wit
 frontend/             Next.js app: pages, API routes, Prisma schema, Playwright e2e
 ai-service/           FastAPI service: parsing, embeddings, generation, grading
 evals/                retrieval and generation evals, results
-docs/                 deployment guide (RAILWAY.md) and old design screenshots
+scripts/              e2e-stack.sh, the stack the Playwright specs run against
+docs/                 deployment guide (RAILWAY.md) and old design screenshots (`design/`)
 ```
 
 ## License
