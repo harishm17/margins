@@ -8,6 +8,7 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { JobStatus } from '@/components/ui/job-status'
 import { FailureList, GenerationProgress, useGenerationProgress } from './building-content'
 import { useExtraction } from './extraction'
+import { AiBlockedNote } from '@/features/ai/ai-status'
 import { topicOriginSentence, type TopicListState } from '@/lib/course-setup'
 import type { GenerationState, JobRef } from '@/server/queries/course'
 
@@ -43,7 +44,7 @@ export function CheckTopicsStep({
       tone="danger"
       title="We couldn't find topics"
       action={
-        <Button size="sm" variant="secondary" onClick={extraction.start} loading={extraction.starting}>
+        <Button size="sm" variant="secondary" onClick={extraction.start} loading={extraction.starting} disabled={!!extraction.blocked}>
           Try again
         </Button>
       }
@@ -149,9 +150,10 @@ export function CheckTopicsStep({
   return (
     <div className={frame}>
       <p className="text-small text-fg-2">Margins reads your files and suggests a topic list.</p>
-      <Button variant="primary" className="mt-3" onClick={extraction.start} loading={extraction.starting}>
+      <Button variant="primary" className="mt-3" onClick={extraction.start} loading={extraction.starting} disabled={!!extraction.blocked}>
         Find topics
       </Button>
+      <AiBlockedNote className="mt-2" />
     </div>
   )
 }

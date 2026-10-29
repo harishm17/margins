@@ -44,6 +44,7 @@ import type { JobRef } from '@/server/queries/course'
 import type { ShellUnit } from '@/server/queries/courses'
 import { MoveTopicDialog, UnitDialog } from './editor-dialogs'
 import { useExtraction } from './extraction'
+import { AiBlockedNote } from '@/features/ai/ai-status'
 import { TopicEditorRow, type EditorTopic, type MergeGroup } from './topic-editor-row'
 
 const NO_UNIT = 'none'
@@ -503,7 +504,7 @@ export function TopicEditor({
             <Button
               variant="secondary"
               icon={<ArrowsClockwise />}
-              disabled={running || filesReady === 0}
+              disabled={running || filesReady === 0 || !!extraction.blocked}
               onClick={() => setFindAgainOpen(true)}
             >
               Find again
@@ -551,7 +552,7 @@ export function TopicEditor({
           className={items.length > 0 || hasUnits ? 'mb-5' : undefined}
           title="We couldn't find topics"
           action={
-            <Button size="sm" variant="secondary" onClick={extraction.start} loading={extraction.starting}>
+            <Button size="sm" variant="secondary" onClick={extraction.start} loading={extraction.starting} disabled={!!extraction.blocked}>
               Try again
             </Button>
           }
@@ -566,9 +567,12 @@ export function TopicEditor({
           title="No topics yet"
           action={
             filesReady > 0 ? (
-              <Button variant="primary" onClick={extraction.start} loading={extraction.starting}>
-                Find topics
-              </Button>
+              <div className="flex flex-col items-center gap-2">
+                <Button variant="primary" onClick={extraction.start} loading={extraction.starting} disabled={!!extraction.blocked}>
+                  Find topics
+                </Button>
+                <AiBlockedNote />
+              </div>
             ) : (
               <Button asChild variant="primary" icon={<Files />}>
                 <Link href={`/courses/${courseId}/materials`}>Add materials</Link>

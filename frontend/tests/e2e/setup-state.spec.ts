@@ -42,11 +42,10 @@ async function courseWithFailedDiscovery(page: Page, email: string): Promise<str
   return courseId
 }
 
-async function ownAccount(page: Page): Promise<{ email: string; password: string }> {
-  const user = { email: `setup-state-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`, password: 'setup-state-password' }
-  const signup = await page.request.post('/api/auth/signup', { data: { ...user, name: 'Setup Tester' } })
-  expect(signup.status()).toBe(201)
-  await signIn(page, user.email, user.password)
+async function ownAccount(page: Page): Promise<{ email: string }> {
+  // The first test sign-in with an address makes the account (students sign in with Google only).
+  const user = { email: `setup-state-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com` }
+  await signIn(page, user.email)
   return user
 }
 
