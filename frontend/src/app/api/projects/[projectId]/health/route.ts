@@ -1,3 +1,4 @@
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -20,6 +21,7 @@ export async function GET(
 ) {
   try {
     const auth = await requireAuth()
+    await applyPendingQuizResults(auth.user.id)
     const { projectId } = await params
 
     const project = await prisma.project.findFirst({

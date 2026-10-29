@@ -35,6 +35,38 @@ export class GradingUnavailableError extends Error {
   }
 }
 
+/**
+ * The AI service refused the request itself (a question it cannot read, a bad token, a bug): not a
+ * matter of waiting for the AI, so nothing is queued and the caller reports an error. `status` is
+ * the HTTP status it answered with.
+ */
+export class GradingRejectedError extends Error {
+  readonly status: number
+  constructor(status: number) {
+    super(`The grading request was rejected (${status})`)
+    this.name = 'GradingRejectedError'
+    this.status = status
+  }
+}
+
+/** The AI service's codes for "the AI cannot run now": the ones exam grading waits on (ai-service job_runner waits_for_ai). */
+const WAIT_CODES = new Set([
+  'LLM_CREDIT_EXHAUSTED',
+  'LLM_AUTH_FAILED',
+  'LLM_NOT_CONFIGURED',
+  'LLM_RATE_LIMITED',
+  'LLM_UNAVAILABLE',
+  'LLM_DAILY_BUDGET',
+  'AI_UNREACHABLE',
+])
+
+/** Whether a failed grading call means the AI is unavailable (worth waiting for) rather than that the request was refused. */
+export function isAiUnavailableOutcome(status: number, code: string | null): boolean {
+  if (code && WAIT_CODES.has(code)) return true
+  // No code: a gateway or the service itself is down or restarting.
+  return !code && (status === 429 || status === 502 || status === 503 || status === 504)
+}
+
 async function errorCode(response: Response): Promise<string | null> {
   try {
     const body = (await response.json()) as { error_code?: unknown }
@@ -72,6 +104,7 @@ export async function gradeAnswers(
   if (!response.ok) {
     const code = await errorCode(response)
     console.error('Grading request returned', response.status, code)
+    if (!isAiUnavailableOutcome(response.status, code)) throw new GradingRejectedError(response.status)
     throw new GradingUnavailableError(undefined, code)
   }
 

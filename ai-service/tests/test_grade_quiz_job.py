@@ -165,3 +165,56 @@ async def test_deleting_the_account_removes_the_stored_quiz(db, stored):
 def test_the_reaper_sends_a_waiting_quiz_with_its_submission_id():
     data = job_reaper.dispatch_data("grade_quiz", {"submissionId": "s1", "topicId": "t"})
     assert data == {"submissionId": "s1"}
+
+
+async def test_a_malformed_stored_question_is_refused_like_the_immediate_path_refuses_it(db, stored, monkeypatch):
+    calls = grader(monkeypatch, graded)
+    bad = [{"question_type": "essay", "question_text": "?"}]
+    await db.execute("UPDATE quiz_submissions SET questions = $1 WHERE id = $2", json.dumps(bad), stored.id)
+    job_id = await new_job(db, stored)
+
+    with pytest.raises(HTTPException) as raised:
+        await jobs.grade_quiz_job(payload(job_id, stored.id))
+
+    assert raised.value.status_code == 400 and calls.calls == 0
+    assert (await get_job(db, job_id))["error_code"] == "INVALID_INPUT"
+
+
+async def test_the_stored_questions_are_normalised_like_the_immediate_path(db, stored, monkeypatch):
+    seen = {}
+
+    class Grader:
+        async def grade_submission(self, submission_id, questions, answers):
+            seen["questions"] = questions
+            return graded()
+
+    monkeypatch.setattr(jobs, "ExamGrader", Grader)
+    odd = [dict(QUESTIONS[0], points="not a number")]
+    await db.execute("UPDATE quiz_submissions SET questions = $1 WHERE id = $2", json.dumps(odd), stored.id)
+
+    await jobs.grade_quiz_job(payload(await new_job(db, stored), stored.id))
+
+    # GradableQuestion falls back to 1 point for an unusable value, as POST /grade/quiz does.
+    assert seen["questions"][0]["points"] == 1
+
+
+async def test_only_one_waiting_submission_per_answers(db, stored):
+    import asyncpg
+
+    row = await db.fetchrow("SELECT topic_id FROM quiz_submissions WHERE id = $1", stored.id)
+    await db.execute("UPDATE quiz_submissions SET answers_hash = 'h' WHERE id = $1", stored.id)
+
+    async def add(status="pending", set_id=None, hash_="h"):
+        await db.execute(
+            "INSERT INTO quiz_submissions (id, user_id, topic_id, quiz_set_id, answers, questions, status, answers_hash) "
+            "VALUES ($1, $2, $3, $4, '{}', '[]', $5, $6)",
+            new_id(), stored.user_id, row["topic_id"], set_id, status, hash_,
+        )
+
+    # The same answers to the same (here: no) set while waiting: refused by the index.
+    with pytest.raises(asyncpg.UniqueViolationError):
+        await add()
+    # Other answers, another set, or one already graded are fine.
+    await add(hash_="other")
+    await add(set_id="set-2")
+    await add(status="graded")

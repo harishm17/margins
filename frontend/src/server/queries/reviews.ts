@@ -1,3 +1,4 @@
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { prisma } from '@/lib/db/prisma'
 import { displayMastery } from '@/lib/learning/mastery-math'
 import { dueBoundary } from '@/lib/learning/next-step'
@@ -16,6 +17,7 @@ export type DueReview = {
  * overdue first. `total` counts all of them so the UI can say "and N more".
  */
 export async function dueReviews(userId: string, timeZone: string, limit = 5): Promise<{ items: DueReview[]; total: number }> {
+  await applyPendingQuizResults(userId)
   const where = { userId, dueAt: { lt: dueBoundary(new Date(), timeZone) }, project: { userId }, topic: { userConfirmed: true } }
 
   const [rows, total] = await Promise.all([

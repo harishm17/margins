@@ -13,12 +13,16 @@ import {
 export { computeMasteryFromSignals, intervalFromMastery, isConfidenceFeedback }
 export type { MasteryComponents }
 
+/** The database, or the transaction a caller is applying a result in. */
+export type Db = Prisma.TransactionClient
+
 export async function computeTopicMastery(
   userId: string,
   projectId: string,
-  topicId: string
+  topicId: string,
+  db: Db = prisma
 ): Promise<MasteryComponents> {
-  const masteries = await computeProjectMastery(userId, projectId, [topicId])
+  const masteries = await computeProjectMastery(userId, projectId, [topicId], db)
   return masteries.get(topicId) as MasteryComponents
 }
 
@@ -30,7 +34,8 @@ export async function computeTopicMastery(
 export async function computeProjectMastery(
   userId: string,
   projectId: string,
-  topicIds: string[]
+  topicIds: string[],
+  db: Db = prisma
 ): Promise<Map<string, MasteryComponents>> {
   const result = new Map<string, MasteryComponents>()
   if (topicIds.length === 0) return result
@@ -40,25 +45,25 @@ export async function computeProjectMastery(
   const limit = (history: number): number | undefined => (topicIds.length === 1 ? history : undefined)
 
   const [quizAttempts, voiceAttempts, examSignals, practiceSignals] = await Promise.all([
-    prisma.quizAttempt.findMany({
+    db.quizAttempt.findMany({
       where: { userId, topicId: { in: topicIds } },
       orderBy: { takenAt: 'desc' },
       take: limit(MASTERY_HISTORY.quiz),
       select: { topicId: true, score: true, takenAt: true },
     }),
-    prisma.voiceDrillAttempt.findMany({
+    db.voiceDrillAttempt.findMany({
       where: { userId, topicId: { in: topicIds } },
       orderBy: { createdAt: 'desc' },
       take: limit(MASTERY_HISTORY.voice),
       select: { topicId: true, score: true, createdAt: true },
     }),
-    prisma.learningSignal.findMany({
+    db.learningSignal.findMany({
       where: { userId, projectId, topicId: { in: topicIds }, source: 'exam' },
       orderBy: { createdAt: 'desc' },
       take: limit(MASTERY_HISTORY.exam),
       select: { topicId: true, score: true, createdAt: true, metadata: true },
     }),
-    prisma.learningSignal.findMany({
+    db.learningSignal.findMany({
       where: { userId, projectId, topicId: { in: topicIds }, source: 'practice' },
       orderBy: { createdAt: 'desc' },
       take: limit(MASTERY_HISTORY.practice),
@@ -96,13 +101,14 @@ export async function upsertReviewSchedule(input: {
   mastery: number
   wasCorrect?: boolean
   confidence?: number
+  db?: Db
 }) {
-  const { userId, projectId, topicId, mastery, wasCorrect = true, confidence } = input
+  const { userId, projectId, topicId, mastery, wasCorrect = true, confidence, db = prisma } = input
   const intervalDays = intervalFromMastery(mastery, { wasCorrect, confidence })
   const now = new Date()
   const dueAt = new Date(now.getTime() + intervalDays * 24 * 60 * 60 * 1000)
 
-  const existing = await prisma.reviewSchedule.findUnique({
+  const existing = await db.reviewSchedule.findUnique({
     where: {
       userId_topicId: {
         userId,
@@ -114,7 +120,7 @@ export async function upsertReviewSchedule(input: {
     },
   })
 
-  return prisma.reviewSchedule.upsert({
+  return db.reviewSchedule.upsert({
     where: {
       userId_topicId: {
         userId,
@@ -183,8 +189,11 @@ export async function recordLearningSignal(input: {
   score: number
   confidence?: number
   metadata?: Record<string, unknown>
+  /** When it happened, if not now. */
+  at?: Date
+  db?: Db
 }) {
-  return prisma.learningSignal.create({
+  return (input.db ?? prisma).learningSignal.create({
     data: {
       userId: input.userId,
       projectId: input.projectId,
@@ -193,6 +202,7 @@ export async function recordLearningSignal(input: {
       score: input.score,
       confidence: input.confidence ?? null,
       metadata: (input.metadata ?? {}) as Prisma.JsonObject,
+      ...(input.at ? { createdAt: input.at } : {}),
     },
   })
 }

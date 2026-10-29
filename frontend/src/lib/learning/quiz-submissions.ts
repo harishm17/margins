@@ -10,16 +10,22 @@
  *
  * The job only grades: it stores the result on the submission. This module turns a graded
  * submission into the student's attempt, once, and applies it (progress, mastery, review date)
- * with the complete score, the same way a quiz graded at once is applied (recordQuizAttempt).
+ * with the complete score, the same way a quiz graded at once is applied (applyQuizAttempt).
  * Until then nothing about the quiz reaches mastery, the plan or the history.
+ *
+ * Applying is one transaction under a row lock on the submission: the attempt and all its effects
+ * commit together with `appliedAt`, so a failure or a crash part way leaves nothing behind and the
+ * next look applies it again, and two looks at once apply it once (the second waits for the lock and
+ * then sees `appliedAt`). There is no separate claim that could be left behind.
  */
 
-import type { Prisma } from '@prisma/client'
+import { createHash } from 'node:crypto'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
-import { createJobOrFindActive, gradeQuizTarget } from '@/lib/jobs/active-jobs'
+import { ACTIVE_JOB_STATUSES, createJobOrFindActive, gradeQuizTarget } from '@/lib/jobs/active-jobs'
 import { isWaitingForAi } from '@/lib/jobs/poll-job'
 import { buildReview, toStoredResults, type QuizReviewItem } from './quiz-review'
-import { recordQuizAttempt } from './record-quiz-attempt'
+import { applyQuizAttempt } from './record-quiz-attempt'
 import type { GradedQuestion } from '@/lib/ai-service/grading'
 
 type Topic = { id: string; projectId: string }
@@ -28,7 +34,7 @@ type RawQuestion = Record<string, unknown>
 export type QuizGradingStart = {
   submissionId: string
   jobId: string | null
-  /** False when starting the grading job failed: the submission is kept and can be graded again. */
+  /** False when starting the grading job failed for good: the submission is kept and can be graded again. */
   started: boolean
 }
 
@@ -57,19 +63,20 @@ export type AppliedQuiz = {
   outcome: { nextReviewAt: Date | null; mastery: number | null; previousMastery: number | null }
 }
 
-const STALE_CLAIM_MS = 5 * 60_000
-
-export const sameAnswers = (a: unknown, b: Record<string, string>): boolean => {
-  if (!a || typeof a !== 'object' || Array.isArray(a)) return false
-  const left = Object.entries(a as Record<string, unknown>).sort(([x], [y]) => x.localeCompare(y))
-  const right = Object.entries(b).sort(([x], [y]) => x.localeCompare(y))
-  return left.length === right.length && left.every(([key, value], index) => key === right[index][0] && value === right[index][1])
+/** The same answers hash the same, whatever order the keys came in. */
+export function answersHash(answers: Record<string, string>): string {
+  const entries = Object.entries(answers).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  return createHash('sha256').update(JSON.stringify(entries)).digest('hex')
 }
 
 /**
  * Start the grading job for a stored quiz and send it to the AI service. Used for the first
  * grading and for "Grade again". A grading job that is already waiting or running is returned as is,
  * so a retry and the reaper can never grade the same submission twice.
+ *
+ * If the AI service cannot be reached the job stays `pending` and never started: the AI service's
+ * reaper sends it once it is back (see tasks/dispatch markJobFailed, which leaves it alone). Only a
+ * refusal that no retry can fix fails the job here.
  */
 export async function startQuizGrading(userId: string, topic: Topic, submissionId: string): Promise<QuizGradingStart> {
   const { job, created } = await createJobOrFindActive({
@@ -94,13 +101,14 @@ export async function startQuizGrading(userId: string, topic: Topic, submissionI
       typeof (error as { retryable?: unknown })?.retryable === 'boolean'
         ? Boolean((error as { retryable: boolean }).retryable)
         : true
+    if (retryable) return { submissionId, jobId: job.id, started: true }
     await prisma.processingJob.update({
       where: { id: job.id },
       data: {
         status: 'failed',
-        errorCode: retryable ? 'ENQUEUE_FAILED' : 'ENQUEUE_PERMANENT',
+        errorCode: 'ENQUEUE_PERMANENT',
         errorMessage: 'Failed to start quiz grading',
-        retryable,
+        retryable: false,
         completedAt: new Date(),
       },
     })
@@ -111,7 +119,7 @@ export async function startQuizGrading(userId: string, topic: Topic, submissionI
 /**
  * Store a submitted quiz whose short answers cannot be graded now, and start the job that waits
  * for the AI. The same answers to the same set, still waiting, are the same submission (a double
- * click, or a second tab), so they are not stored twice.
+ * click, a second tab): a unique index on waiting rows decides it, so two submits at once store one.
  */
 export async function queueQuizSubmission(input: {
   userId: string
@@ -121,26 +129,42 @@ export async function queueQuizSubmission(input: {
   answers: Record<string, string>
 }): Promise<QuizGradingStart> {
   const { userId, topic, quizSetId, questions, answers } = input
-  const waiting = await prisma.quizSubmission.findMany({
-    where: { userId, topicId: topic.id, quizSetId, status: 'pending' },
-    select: { id: true, answers: true },
-  })
-  const same = waiting.find((row) => sameAnswers(row.answers, answers))
-  const id =
-    same?.id ??
-    (
+  const hash = answersHash(answers)
+  let id: string
+  try {
+    id = (
       await prisma.quizSubmission.create({
         data: {
           userId,
           topicId: topic.id,
           quizSetId,
           answers,
+          answersHash: hash,
           questions: questions as Prisma.InputJsonValue,
         },
         select: { id: true },
       })
     ).id
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error
+    const existing = await prisma.quizSubmission.findFirst({
+      where: { userId, topicId: topic.id, quizSetId, answersHash: hash, status: 'pending' },
+      select: { id: true },
+    })
+    if (!existing) throw error
+    id = existing.id
+  }
   return startQuizGrading(userId, topic, id)
+}
+
+/**
+ * Where a stored quiz is, from its latest grading job: no job, or one that failed (it waited for the
+ * whole limit, or could not start), is a grading that did not finish; a job at the stage
+ * `waiting_for_ai` is waiting for the AI; anything else is being graded.
+ */
+export function waitingState(job: { status: string; stage?: string | null } | undefined): WaitingQuizState {
+  if (!job || job.status === 'failed') return 'failed'
+  return isWaitingForAi(job) ? 'waiting' : 'grading'
 }
 
 /** The stored quizzes of a topic that are not graded yet, with where their grading job is. */
@@ -172,6 +196,29 @@ export async function getWaitingQuizzes(userId: string, topicId: string): Promis
   })
 }
 
+/**
+ * Removes a stored quiz and its answers, for a card the student does not want any more. Refused
+ * while its grading is still waiting or running (that one will finish by itself).
+ */
+export async function dismissQuizSubmission(
+  userId: string,
+  topicId: string,
+  submissionId: string
+): Promise<'deleted' | 'not_found' | 'busy'> {
+  const submission = await prisma.quizSubmission.findFirst({
+    where: { id: submissionId, userId, topicId, status: 'pending' },
+    select: { id: true },
+  })
+  if (!submission) return 'not_found'
+  const active = await prisma.processingJob.findFirst({
+    where: { targetKey: gradeQuizTarget(submissionId), status: { in: ACTIVE_JOB_STATUSES } },
+    select: { id: true },
+  })
+  if (active) return 'busy'
+  const { count } = await prisma.quizSubmission.deleteMany({ where: { id: submissionId, userId, status: 'pending' } })
+  return count > 0 ? 'deleted' : 'not_found'
+}
+
 export function readGrading(value: unknown): { graded: GradedQuestion[]; score: number; earned: number; total: number } | null {
   if (!value || typeof value !== 'object') return null
   const record = value as Record<string, unknown>
@@ -187,97 +234,95 @@ export function readGrading(value: unknown): { graded: GradedQuestion[]; score: 
 
 /**
  * Turns one graded submission into the student's attempt and applies it to progress, mastery and
- * the review schedule. It runs once per submission: `appliedAt` is claimed first with a conditional
- * update, so two pages that look together apply it once, and a failure puts the claim back so the
- * next look tries again. Null while the quiz is not graded (or not applied yet by whoever holds the
- * claim); otherwise what the page shows. Null also when the submission is not theirs.
+ * the review schedule, in one transaction (see the top of this file). Null while the quiz is not
+ * graded, or when it is not theirs; otherwise what the page shows. Applying it again returns the
+ * same thing without applying anything.
  */
 export async function applyQuizSubmission(userId: string, submissionId: string): Promise<AppliedQuiz | null> {
-  const submission = await prisma.quizSubmission.findFirst({
-    where: { id: submissionId, userId },
-    include: { topic: { select: { id: true, projectId: true } } },
-  })
-  if (!submission || submission.status !== 'graded') return null
-  const grading = readGrading(submission.aiGrading)
-  if (!grading) return null
+  return prisma.$transaction(
+    async (tx) => {
+      // The lock: a second look at the same submission waits here until the first has committed.
+      const locked = await tx.$queryRaw<{ applied_at: Date | null }[]>`
+        SELECT applied_at FROM quiz_submissions
+        WHERE id = ${submissionId} AND user_id = ${userId} AND status = 'graded'
+        FOR UPDATE`
+      if (locked.length === 0) return null
 
-  const questions = submission.questions as RawQuestion[]
-  const results = toStoredResults(grading.graded)
-  const review = buildReview(questions, results)
-  const answers = submission.answers as Record<string, string>
-  const base = { attemptId: submission.id, score: grading.score, earnedPoints: grading.earned, totalPoints: grading.total, review, answers }
-
-  // The attempt is the submission under the same id: when it exists, the quiz is applied.
-  const attempt = await prisma.quizAttempt.findUnique({ where: { id: submission.id }, select: { id: true } })
-  const claim = attempt
-    ? { count: 0 }
-    : await prisma.quizSubmission.updateMany({
-        // Not claimed, or claimed so long ago that whoever held it must have died before storing the attempt.
-        where: {
-          id: submission.id,
-          userId,
-          status: 'graded',
-          OR: [{ appliedAt: null }, { appliedAt: { lt: new Date(Date.now() - STALE_CLAIM_MS) } }],
-        },
-        data: { appliedAt: new Date() },
+      const submission = await tx.quizSubmission.findUniqueOrThrow({
+        where: { id: submissionId },
+        include: { topic: { select: { id: true, projectId: true } } },
       })
+      const grading = readGrading(submission.aiGrading)
+      if (!grading) return null
 
-  if (claim.count === 0) {
-    // Applied already (or being applied right now). The attempt is what counts.
-    if (!attempt) return null
-    const [progress, schedule] = await Promise.all([
-      prisma.topicProgress.findUnique({
-        where: { topicId_userId: { topicId: submission.topicId, userId } },
-        select: { quizScore: true },
-      }),
-      prisma.reviewSchedule.findUnique({
-        where: { userId_topicId: { userId, topicId: submission.topicId } },
-        select: { dueAt: true, mastery: true },
-      }),
-    ])
-    return {
-      ...base,
-      bestScore: Math.max(progress?.quizScore ?? 0, grading.score),
-      outcome: { nextReviewAt: schedule?.dueAt ?? null, mastery: schedule?.mastery ?? null, previousMastery: null },
-    }
-  }
+      const questions = submission.questions as RawQuestion[]
+      const results = toStoredResults(grading.graded)
+      const answers = submission.answers as Record<string, string>
+      const base = {
+        attemptId: submission.id,
+        score: grading.score,
+        earnedPoints: grading.earned,
+        totalPoints: grading.total,
+        review: buildReview(questions, results),
+        answers,
+      }
 
-  try {
-    const recorded = await recordQuizAttempt({
-      userId,
-      topic: submission.topic,
-      quizSetId: submission.quizSetId,
-      answers,
-      results: results as unknown as Prisma.InputJsonValue,
-      score: grading.score,
-      // The attempt is the submission, taken when the student submitted it.
-      id: submission.id,
-      takenAt: submission.submittedAt,
-    })
-    return { ...base, bestScore: recorded.bestScore, outcome: recorded.outcome }
-  } catch (error) {
-    await prisma.quizSubmission
-      .updateMany({ where: { id: submission.id, userId }, data: { appliedAt: null } })
-      .catch(() => undefined)
-    throw error
-  }
+      if (locked[0].applied_at) {
+        // Applied in full already.
+        const [progress, schedule] = await Promise.all([
+          tx.topicProgress.findUnique({
+            where: { topicId_userId: { topicId: submission.topicId, userId } },
+            select: { quizScore: true },
+          }),
+          tx.reviewSchedule.findUnique({
+            where: { userId_topicId: { userId, topicId: submission.topicId } },
+            select: { dueAt: true, mastery: true },
+          }),
+        ])
+        return {
+          ...base,
+          bestScore: Math.max(progress?.quizScore ?? 0, grading.score),
+          outcome: { nextReviewAt: schedule?.dueAt ?? null, mastery: schedule?.mastery ?? null, previousMastery: null },
+        }
+      }
+
+      const recorded = await applyQuizAttempt(tx, {
+        userId,
+        topic: submission.topic,
+        quizSetId: submission.quizSetId,
+        answers,
+        results: results as unknown as Prisma.InputJsonValue,
+        score: grading.score,
+        // The attempt is the submission, taken when the student submitted it.
+        id: submission.id,
+        takenAt: submission.submittedAt,
+      })
+      await tx.quizSubmission.update({ where: { id: submission.id }, data: { appliedAt: new Date() } })
+      return { ...base, bestScore: recorded.bestScore, outcome: recorded.outcome }
+    },
+    { timeout: 20_000 }
+  )
 }
 
 /**
- * Applies every graded submission not applied yet (a few at a time) for one course or one topic, so
- * mastery, the plan and the history are current before a page reads them.
+ * Applies every graded submission that is not applied yet (a few at a time), for one course, one
+ * topic, or all of the student's. Any page that shows progress, mastery or review dates calls this
+ * first, so a quiz that finished grading while the student was away shows up wherever they look
+ * first. A submission whose earlier apply failed or died is simply still unapplied, so it is taken
+ * here again. With nothing to apply it is one small query.
  */
 export async function applyPendingQuizResults(
   userId: string,
-  scope: { projectId: string } | { topicId: string }
+  scope: { projectId: string } | { topicId: string } | 'all' = 'all'
 ): Promise<number> {
+  const topic =
+    scope === 'all'
+      ? { project: { userId } }
+      : 'projectId' in scope
+        ? { projectId: scope.projectId, project: { userId } }
+        : { id: scope.topicId, project: { userId } }
   const pending = await prisma.quizSubmission.findMany({
-    where: {
-      userId,
-      status: 'graded',
-      appliedAt: null,
-      topic: 'projectId' in scope ? { projectId: scope.projectId, project: { userId } } : { id: scope.topicId, project: { userId } },
-    },
+    where: { userId, status: 'graded', appliedAt: null, topic },
     orderBy: { gradedAt: 'asc' },
     take: 10,
     select: { id: true },
@@ -291,14 +336,4 @@ export async function applyPendingQuizResults(
     }
   }
   return applied
-}
-
-/**
- * Where a stored quiz is, from its latest grading job: no job, or one that failed (it waited for the
- * whole limit, or could not start), is a grading that did not finish; a job at the stage
- * `waiting_for_ai` is waiting for the AI; anything else is being graded.
- */
-export function waitingState(job: { status: string; stage?: string | null } | undefined): WaitingQuizState {
-  if (!job || job.status === 'failed') return 'failed'
-  return isWaitingForAi(job) ? 'waiting' : 'grading'
 }

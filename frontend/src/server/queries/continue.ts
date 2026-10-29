@@ -1,3 +1,4 @@
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { prisma } from '@/lib/db/prisma'
 import { nextStepForCourse, type NextStep } from '@/lib/learning/next-step'
 import { mostRecentActivity } from '@/features/home/recent-course'
@@ -56,6 +57,7 @@ async function continueCourse(userId: string): Promise<{ id: string; name: strin
  * its plan, or the reviews that are due, or the setup step. Null when the user has no courses.
  */
 export async function continueAction(userId: string, timeZone: string): Promise<ContinueAction | null> {
+  await applyPendingQuizResults(userId)
   const course = await continueCourse(userId)
   if (!course) return null
 

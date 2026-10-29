@@ -378,10 +378,14 @@ model QuizSubmission {
   answers     Json
   // The questions (with answer keys) as they were when the student answered. Never sent to the browser.
   questions   Json
+  // A hash of the answers, so the same answers to the same set while waiting are one submission (a unique
+  // index on pending rows, see the quiz_submissions_dedupe migration; Prisma cannot express it).
+  answersHash String?   @map("answers_hash")
   status      String    @default("pending") // pending|graded
   aiGrading   Json?     @map("ai_grading")
   submittedAt DateTime  @default(now()) @map("submitted_at")
   gradedAt    DateTime? @map("graded_at")
+  // Set in the same transaction that stores the attempt and its effects: set means applied, in full.
   appliedAt   DateTime? @map("applied_at")
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)

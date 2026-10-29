@@ -10,7 +10,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
 import { apiInternal, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
-import { applyQuizSubmission } from '@/lib/learning/quiz-submissions'
+import { apiError, ApiErrorCode } from '@/lib/api/errors'
+import { applyQuizSubmission, dismissQuizSubmission } from '@/lib/learning/quiz-submissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,5 +47,29 @@ export async function GET(
     console.error('Quiz submission status error:', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the quiz result')
+  }
+}
+
+/**
+ * DELETE: dismisses a stored quiz whose grading did not finish, removing it and its answers.
+ * 409 while its grading is still waiting or running.
+ */
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ topicId: string; submissionId: string }> }
+) {
+  try {
+    const session = await requireAuth()
+    const { topicId, submissionId } = await params
+    const outcome = await dismissQuizSubmission(session.user.id, topicId, submissionId)
+    if (outcome === 'not_found') return apiNotFound('Quiz submission not found')
+    if (outcome === 'busy') {
+      return apiError(ApiErrorCode.CONFLICT, 'This quiz is still being graded.', { code: 'GRADING_ACTIVE' }, 409)
+    }
+    return NextResponse.json({ status: 'deleted' })
+  } catch (error) {
+    console.error('Quiz submission dismiss error:', error)
+    if (isUnauthorizedError(error)) return apiUnauthorized()
+    return apiInternal('Failed to dismiss the quiz')
   }
 }

@@ -1,3 +1,4 @@
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { prisma } from '@/lib/db/prisma'
 import {
   extractQuestionsFromContent,
@@ -97,6 +98,7 @@ export const buildSprintQuestionSet = async (
   projectId: string,
   userId: string
 ): Promise<VoiceQuestion[]> => {
+  await applyPendingQuizResults(userId)
   const topics = await prisma.topic.findMany({
     where: {
       projectId,

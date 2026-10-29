@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { aiMessage } from '@/lib/ai/messages'
 import { describeJobFailure } from '@/lib/jobs/failure-message'
 import { toStoredResults } from './quiz-review'
-import { readGrading, sameAnswers, waitingState } from './quiz-submissions'
+import { answersHash, readGrading, waitingState } from './quiz-submissions'
 
 test('a stored quiz is waiting, being graded, or did not finish, by its latest job', () => {
   assert.equal(waitingState({ status: 'pending', stage: 'waiting_for_ai' }), 'waiting')
@@ -14,12 +14,11 @@ test('a stored quiz is waiting, being graded, or did not finish, by its latest j
   assert.equal(waitingState(undefined), 'failed')
 })
 
-test('the same answers to the same quiz are one submission', () => {
-  assert.equal(sameAnswers({ '0': 'A', '2': 'text' }, { '2': 'text', '0': 'A' }), true)
-  assert.equal(sameAnswers({ '0': 'A' }, { '0': 'B' }), false)
-  assert.equal(sameAnswers({ '0': 'A' }, { '0': 'A', '1': 'x' }), false)
-  assert.equal(sameAnswers(null, {}), false)
-  assert.equal(sameAnswers(['A'], { '0': 'A' }), false)
+test('the same answers hash the same, in any key order, and different answers do not', () => {
+  assert.equal(answersHash({ '0': 'A', '2': 'text' }), answersHash({ '2': 'text', '0': 'A' }))
+  assert.notEqual(answersHash({ '0': 'A' }), answersHash({ '0': 'B' }))
+  assert.notEqual(answersHash({ '0': 'A' }), answersHash({ '0': 'A', '1': 'x' }))
+  assert.notEqual(answersHash({ '0': 'A1' }), answersHash({ '0': 'A', '1': '' }))
 })
 
 test('only a complete grading is read: no score, no mastery', () => {

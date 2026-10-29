@@ -76,6 +76,7 @@ export type CourseListItem = {
 }
 
 export async function listCourses(userId: string): Promise<CourseListItem[]> {
+  await applyPendingQuizResults(userId)
   const projects = await prisma.project.findMany({
     where: { userId },
     orderBy: { updatedAt: 'desc' },
@@ -172,7 +173,7 @@ export const getCourseShell = cache(async (userId: string, courseId: string): Pr
   // so it is applied before mastery is read anywhere on a course page.
   await applyPendingExamResults(userId, courseId)
   // Likewise a quiz that waited for the AI and has been graded since.
-  await applyPendingQuizResults(userId, { projectId: courseId })
+  await applyPendingQuizResults(userId)
   const project = await prisma.project.findFirst({
     where: { id: courseId, userId },
     select: {
@@ -279,6 +280,7 @@ export type NavCourse = {
  * names and mastery, for the sidebar, the course switcher and the command palette.
  */
 export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promise<NavCourse[]> => {
+  await applyPendingQuizResults(userId)
   const now = new Date()
   const boundary = dueBoundary(now, timeZone)
   const projects = await prisma.project.findMany({

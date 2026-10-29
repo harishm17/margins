@@ -9,6 +9,8 @@ import logging
 import json
 from typing import Optional
 from fastapi import APIRouter, HTTPException
+from pydantic import ValidationError
+from app.api.routes.grading import GradeQuizRequest
 from app.models.jobs import JobPayload, MaterialValidationInput, ContentGenerationInput, ExamGenerationInput
 from app.services.document_processor.validator import material_role, validate_material
 from app.services.document_processor.chunker import chunk_document, NoContentError
@@ -985,12 +987,17 @@ async def grade_quiz_job(payload: JobPayload, job: JobContext) -> JobOutcome:
         # A second delivery of work that is done (a retry and the reaper both fired): nothing to do.
         return JobOutcome(result={"submission_id": submission_id, "already_graded": True})
 
-    questions = _json_value(submission["questions"])
-    answers = _json_value(submission["answers"])
-    if not isinstance(questions, list) or len(questions) == 0:
-        raise PermanentJobError("The quiz has no questions", "INVALID_INPUT")
-    if not isinstance(answers, dict):
-        raise PermanentJobError("The submission has no answers", "INVALID_INPUT")
+    # The stored snapshot goes through the same model the immediate path (POST /grade/quiz) uses, so
+    # a malformed question or answer is refused or normalised the same way in both.
+    try:
+        request = GradeQuizRequest.model_validate({
+            "questions": _json_value(submission["questions"]),
+            "answers": _json_value(submission["answers"]),
+        })
+    except ValidationError as exc:
+        raise PermanentJobError("The stored quiz is not valid", "INVALID_INPUT") from exc
+    questions = [question.model_dump() for question in request.questions]
+    answers = dict(request.answers)
 
     grading_result = await ExamGrader().grade_submission(
         submission_id=submission_id,

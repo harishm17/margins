@@ -150,3 +150,40 @@ test('quiz: a waiting quiz whose grading did not finish offers Grade again', asy
   const jobs = await withPrisma((prisma) => prisma.processingJob.count({ where: { targetKey: `grade-quiz:${submission.id}` } }))
   expect(jobs).toBe(2)
 })
+
+test('quiz: a card for a grading that did not finish can be dismissed, which removes the stored answers', async ({ page }) => {
+  test.setTimeout(120_000)
+  await signIn(page, `quizwait-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`)
+  const courseId = await createEmptyCourse(page, 'Quiz dismiss course')
+  await addMaterial(page, courseId)
+  const course = await createCourse(page, 'Quiz dismiss course', [{ name: 'Sorting', minutes: 30 }], { existingCourseId: courseId })
+  const topic = course.topics['Sorting']
+  const questions = [{ question_type: 'short_answer', question_text: 'Why sort?', sample_answer: 'Order.', key_points: ['order'], points: 2 }]
+  await addContent(topic, { section_notes: '# Sorting\n\nNotes.', topic_quiz: questions })
+  const userId = (await withPrisma((prisma) => prisma.project.findUniqueOrThrow({ where: { id: courseId }, select: { userId: true } }))).userId
+  const submission = await withPrisma(async (prisma) => {
+    const row = await prisma.quizSubmission.create({ data: { userId, topicId: topic, answers: { '0': 'Order.' }, questions } })
+    await prisma.processingJob.create({
+      data: {
+        userId,
+        projectId: courseId,
+        jobType: 'grade_quiz',
+        status: 'failed',
+        stage: 'waiting_for_ai',
+        errorCode: 'LLM_CREDIT_EXHAUSTED',
+        targetKey: `grade-quiz:${row.id}`,
+        completedAt: new Date(),
+      },
+    })
+    return row
+  })
+
+  await page.goto(`/courses/${courseId}/topics/${topic}?view=quiz`)
+  const alert = page.getByRole('alert').filter({ hasText: "Grading didn't finish" })
+  await expect(alert).toBeVisible()
+  await alert.getByRole('button', { name: 'Dismiss' }).click()
+  await expect(alert).toBeHidden()
+  expect(await withPrisma((prisma) => prisma.quizSubmission.count({ where: { id: submission.id } }))).toBe(0)
+  await page.reload()
+  await expect(page.getByRole('alert').filter({ hasText: "Grading didn't finish" })).toHaveCount(0)
+})

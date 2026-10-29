@@ -1,3 +1,4 @@
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
@@ -23,6 +24,7 @@ export async function POST(
 ) {
   try {
     const auth = await requireAuth()
+    await applyPendingQuizResults(auth.user.id)
     const { topicId } = await params
     const body = await request.json()
     const parsed = confidenceSchema.safeParse(body)

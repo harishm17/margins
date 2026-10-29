@@ -130,6 +130,12 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
     save({ answers: {}, index: 0 })
   }
 
+  /** The student dismissed a stored quiz: it is gone from here (the server removed it). */
+  function dismissed(item: WaitingQuiz) {
+    setGraded((ids) => [...ids, item.submissionId])
+    setFocusId(null)
+  }
+
   /** A quiz that waited for the AI has been graded: show its results, whichever set it was. */
   function showGraded(item: WaitingQuiz, value: QuizResult) {
     setGraded((ids) => [...ids, item.submissionId])
@@ -228,6 +234,7 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
         variant="page"
         gone={waitingItems.find((entry) => entry.item.submissionId === focused.submissionId)?.gone ?? false}
         onGraded={showGraded}
+        onDismiss={dismissed}
         onLeave={() => setFocusId(null)}
       />
     )
@@ -260,6 +267,7 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
               variant="card"
               gone={gone}
               onGraded={showGraded}
+              onDismiss={dismissed}
             />
           ))}
         </div>

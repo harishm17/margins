@@ -12,7 +12,8 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { recordQuizAttempt } from '@/lib/learning/record-quiz-attempt'
 import { queueQuizSubmission } from '@/lib/learning/quiz-submissions'
-import { gradeAnswers, GradingUnavailableError } from '@/lib/ai-service/grading'
+import { gradeAnswers, GradingRejectedError, GradingUnavailableError } from '@/lib/ai-service/grading'
+import { ApiErrorCode, apiError } from '@/lib/api/errors'
 import { loadAllQuizQuestionSets, loadQuizQuestions } from '@/lib/learning/quiz-sets'
 import { buildReview, toStoredResults } from '@/lib/learning/quiz-review'
 import { createRateLimiter } from '@/lib/api/rate-limit'
@@ -100,6 +101,16 @@ export async function POST(
     try {
       graded = await gradeAnswers(questions, answers)
     } catch (gradeError) {
+      if (gradeError instanceof GradingRejectedError) {
+        // The grader refused the request itself (not the AI being away): an error, not a wait.
+        const unreadable = gradeError.status >= 400 && gradeError.status < 500
+        return apiError(
+          unreadable ? ApiErrorCode.VALIDATION_FAILED : ApiErrorCode.UPSTREAM_ERROR,
+          unreadable ? 'This quiz could not be graded.' : 'Grading failed. Please try again.',
+          undefined,
+          unreadable ? 422 : 502
+        )
+      }
       if (!(gradeError instanceof GradingUnavailableError)) throw gradeError
       // Short answers need the model and it cannot be reached. The answers are the student's work:
       // they are stored whole and graded when the AI is back (the same wait exam grading has), and

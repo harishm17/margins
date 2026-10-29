@@ -1,3 +1,4 @@
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 /**
  * API route for topic progress tracking
  * POST /api/topics/[topicId]/progress - Update progress
@@ -118,6 +119,8 @@ export async function GET(
       )
     }
 
+    // A quiz that finished grading while the student was away counts first.
+    await applyPendingQuizResults(session.user.id)
     // Fetch progress
     const progress = await prisma.topicProgress.findUnique({
       where: {

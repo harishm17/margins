@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { GradingUnavailableError, gradeAnswers } from './grading'
+import { GradingRejectedError, GradingUnavailableError, gradeAnswers } from './grading'
 
 function withFetch(answer: () => Promise<Response>, run: () => Promise<void>) {
   const original = globalThis.fetch
@@ -52,3 +52,24 @@ test('answers the model could not grade are never stored as a score', () =>
       })
     }
   ))
+
+test('only the AI being unavailable is a wait; a refused request is an error, not queued', async () => {
+  const outcome = async (status: number, body: unknown) => {
+    let caught: unknown
+    await withFetch(async () => json(status, body), async () => {
+      await gradeAnswers([{}], {}).catch((error: unknown) => {
+        caught = error
+      })
+    })
+    return caught
+  }
+  assert.ok((await outcome(502, { error_code: 'LLM_CREDIT_EXHAUSTED' })) instanceof GradingUnavailableError)
+  assert.ok((await outcome(503, { error_code: 'LLM_UNAVAILABLE' })) instanceof GradingUnavailableError)
+  // No code: a gateway, or the service restarting.
+  assert.ok((await outcome(503, {})) instanceof GradingUnavailableError)
+  // The grader refused the request (a question it cannot read), or broke, or the token is wrong.
+  const refused = await outcome(422, { detail: 'bad question' })
+  assert.ok(refused instanceof GradingRejectedError && refused.status === 422)
+  assert.ok((await outcome(500, {})) instanceof GradingRejectedError)
+  assert.ok((await outcome(401, {})) instanceof GradingRejectedError)
+})

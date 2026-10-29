@@ -1,3 +1,4 @@
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { prisma } from '@/lib/db/prisma'
 import { loadAllQuizQuestionSets } from './quiz-sets'
 import { displayMastery } from './mastery-math'
@@ -18,6 +19,7 @@ type RawQuestion = Record<string, unknown>
 
 /** The questions the student got wrong in their last two attempts on a topic (no model call). */
 export async function getMissedQuestions(userId: string, topicId: string): Promise<MissedQuestion[]> {
+  await applyPendingQuizResults(userId)
   const attempts = await prisma.quizAttempt.findMany({
     where: { userId, topicId },
     orderBy: { takenAt: 'desc' },
@@ -36,6 +38,7 @@ export async function getMissedQuestions(userId: string, topicId: string): Promi
 
 /** How many questions each topic has to retry, for the review list. One query for the attempts of all the topics. */
 export async function countMissedByTopic(userId: string, topicIds: string[]): Promise<Map<string, number>> {
+  await applyPendingQuizResults(userId)
   const counts = new Map<string, number>()
   if (topicIds.length === 0) return counts
   const attempts = await prisma.quizAttempt.findMany({
@@ -118,6 +121,7 @@ export type FreshReviewPlan = {
  * of the questions missed lately, and the weakest prerequisite topic to draw 1-2 questions from.
  */
 export async function planFreshReview(userId: string, topic: { id: string; projectId: string }): Promise<FreshReviewPlan> {
+  await applyPendingQuizResults(userId)
   const [schedule, missed, row] = await Promise.all([
     prisma.reviewSchedule.findUnique({
       where: { userId_topicId: { userId, topicId: topic.id } },

@@ -1,22 +1,9 @@
-import { Prisma } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
-import { computeTopicMastery, recordLearningSignal, upsertReviewSchedule } from './mastery'
+import { computeTopicMastery, recordLearningSignal, upsertReviewSchedule, type Db } from './mastery'
 
 /** A quiz is "right" for scheduling the next review at this score (percent). */
 export const QUIZ_PASS_SCORE = 70
-
-function isMissingQuizSetColumnError(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false
-  if (error.code !== 'P2022') return false
-  const column = String(error.meta?.column || '').toLowerCase()
-  const message = String(error.message || '').toLowerCase()
-  return (
-    column.includes('quiz_set_id') ||
-    column.includes('quizsetid') ||
-    message.includes('quiz_set_id') ||
-    message.includes('quizsetid')
-  )
-}
 
 export type RecordedQuizAttempt = {
   attempt: { id: string; score: number; takenAt: Date }
@@ -26,51 +13,52 @@ export type RecordedQuizAttempt = {
   outcome: { nextReviewAt: Date; mastery: number; previousMastery: number | null }
 }
 
-/**
- * Stores a graded quiz attempt and applies it: the topic's progress and best score, the learning
- * signal, mastery and the next review date. Used for a quiz graded at once and, with the
- * submission's id and time, for a quiz that waited for the AI (see lib/learning/quiz-submissions).
- *
- * Only ever called with a complete grading: a partial score must never reach mastery.
- * With a fixed `id`, storing the attempt twice keeps the first (the id is the primary key).
- */
-export async function recordQuizAttempt(input: {
+export type QuizAttemptInput = {
   userId: string
   topic: { id: string; projectId: string }
   quizSetId: string | null
   answers: Record<string, string>
   results: Prisma.InputJsonValue
   score: number
+  /** A fixed id, for a quiz that waited for the AI (the submission's own id). */
   id?: string
+  /** When the quiz was taken, if not now. */
   takenAt?: Date
-}): Promise<RecordedQuizAttempt> {
+}
+
+/**
+ * Stores a graded quiz attempt and every effect of it, on `db` (a transaction): the topic's
+ * progress and best score, the learning signal, mastery and the next review date. Callers run it
+ * in one transaction (recordQuizAttempt, applyQuizSubmission), so the attempt never exists without
+ * its effects, and a failure part way leaves nothing behind.
+ *
+ * Times: the attempt, the learning signal and the topic's last access are stamped with the time the
+ * quiz was taken; the review schedule (last reviewed, next due) counts from now, when the student
+ * gets the result, so a long wait for the AI does not make the topic due the moment it is graded.
+ *
+ * Only ever called with a complete grading: a partial score must never reach mastery.
+ */
+export async function applyQuizAttempt(db: Db, input: QuizAttemptInput): Promise<RecordedQuizAttempt> {
   const { userId, topic, quizSetId, answers, results, score } = input
   const topicId = topic.id
-  const data = { id: input.id, userId, topicId, answers, results, score, takenAt: input.takenAt }
+  const takenAt = input.takenAt ?? new Date()
 
-  let attempt: { id: string; score: number; takenAt: Date }
-  try {
-    try {
-      // Fallback keeps older DBs (without quiz_set_id) working.
-      attempt = await prisma.quizAttempt.create({ data: { ...data, quizSetId } })
-    } catch (createError) {
-      if (!isMissingQuizSetColumnError(createError)) throw createError
-      attempt = await prisma.quizAttempt.create({ data })
-    }
-  } catch (error) {
-    // The attempt with this id is already stored (a retry of the same application).
-    if (!(input.id && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error
-    attempt = await prisma.quizAttempt.findUniqueOrThrow({ where: { id: input.id } })
-  }
+  const attempt = await db.quizAttempt.create({
+    data: { id: input.id, userId, topicId, quizSetId, answers, results, score, takenAt },
+    select: { id: true, score: true, takenAt: true },
+  })
 
   const progressKey = { topicId_userId: { topicId, userId } }
-  const existingProgress = await prisma.topicProgress.findUnique({ where: progressKey })
+  const existingProgress = await db.topicProgress.findUnique({ where: progressKey })
   const currentBest = existingProgress?.quizScore
   const bestScore = currentBest === null || currentBest === undefined ? score : Math.max(currentBest, score)
+  const lastSeen = existingProgress?.lastAccessedAt
+  // A quiz applied late never moves "last accessed" back.
+  const lastAccessedAt = lastSeen && lastSeen > takenAt ? lastSeen : takenAt
 
-  await prisma.topicProgress.upsert({
+  await db.topicProgress.upsert({
     where: progressKey,
-    update: { quizCompleted: true, quizScore: bestScore, lastAccessedAt: new Date() },
+    update: { quizCompleted: true, quizScore: bestScore, lastAccessedAt },
     create: {
       topicId,
       userId,
@@ -78,7 +66,7 @@ export async function recordQuizAttempt(input: {
       examplesCompleted: false,
       quizCompleted: true,
       quizScore: score,
-      lastAccessedAt: new Date(),
+      lastAccessedAt,
     },
   })
 
@@ -89,10 +77,12 @@ export async function recordQuizAttempt(input: {
     source: 'quiz',
     score: score / 100,
     metadata: { attemptId: attempt.id, quizSetId },
+    at: takenAt,
+    db,
   })
 
-  const mastery = await computeTopicMastery(userId, topic.projectId, topicId)
-  const scheduleBefore = await prisma.reviewSchedule.findUnique({
+  const mastery = await computeTopicMastery(userId, topic.projectId, topicId, db)
+  const scheduleBefore = await db.reviewSchedule.findUnique({
     where: { userId_topicId: { userId, topicId } },
     select: { mastery: true },
   })
@@ -102,6 +92,7 @@ export async function recordQuizAttempt(input: {
     topicId,
     mastery: mastery.mastery,
     wasCorrect: score >= QUIZ_PASS_SCORE,
+    db,
   })
 
   return {
@@ -109,4 +100,9 @@ export async function recordQuizAttempt(input: {
     bestScore,
     outcome: { nextReviewAt: schedule.dueAt, mastery: schedule.mastery, previousMastery: scheduleBefore?.mastery ?? null },
   }
+}
+
+/** A quiz graded at once: the attempt and all its effects in one transaction. */
+export function recordQuizAttempt(input: QuizAttemptInput): Promise<RecordedQuizAttempt> {
+  return prisma.$transaction((tx) => applyQuizAttempt(tx, input), { timeout: 20_000 })
 }

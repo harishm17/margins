@@ -49,6 +49,8 @@ type QuizWaitingProps = {
   onGraded: (item: WaitingQuiz, result: QuizResult) => void
   /** Leave the full-page panel for the lobby (the card stays there). */
   onLeave?: () => void
+  /** The stored quiz was removed. */
+  onDismiss?: (item: WaitingQuiz) => void
 }
 
 /**
@@ -56,10 +58,11 @@ type QuizWaitingProps = {
  * waits (the same wait exam grading has) and the results appear here by themselves. If it did not
  * finish, "Grade again" starts it once more.
  */
-export function QuizWaiting({ topicId, item, variant, gone = false, onGraded, onLeave }: QuizWaitingProps) {
+export function QuizWaiting({ topicId, item, variant, gone = false, onGraded, onLeave, onDismiss }: QuizWaitingProps) {
   const router = useRouter()
   const [regradeJobId, setRegradeJobId] = React.useState<string | null>(null)
   const [regrading, setRegrading] = React.useState(false)
+  const [dismissing, setDismissing] = React.useState(false)
   const jobId = regradeJobId ?? (item.state === 'failed' ? null : item.jobId)
   const done = React.useRef(false)
   const onGradedRef = React.useRef(onGraded)
@@ -141,6 +144,20 @@ export function QuizWaiting({ topicId, item, variant, gone = false, onGraded, on
     }
   }
 
+  /** Removes the stored quiz and its answers; the student chose not to wait for or redo it. */
+  async function dismiss() {
+    setDismissing(true)
+    try {
+      await apiFetch(`/api/topics/${topicId}/quiz-submissions/${item.submissionId}`, { method: 'DELETE' })
+      onDismiss?.(item)
+      router.refresh()
+    } catch (error) {
+      toast.error(isApiError(error) ? error.message : "Couldn't dismiss it. Try again.")
+    } finally {
+      setDismissing(false)
+    }
+  }
+
   const failed = !regradeJobId && (item.state === 'failed' || jobFailure !== null)
   const frame =
     variant === 'page'
@@ -155,9 +172,14 @@ export function QuizWaiting({ topicId, item, variant, gone = false, onGraded, on
           icon={<WarningCircle />}
           title="Grading didn't finish"
           action={
-            <Button variant="secondary" icon={<ArrowClockwise />} loading={regrading} onClick={regrade}>
-              Grade again
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" loading={dismissing} onClick={dismiss}>
+                Dismiss
+              </Button>
+              <Button variant="secondary" icon={<ArrowClockwise />} loading={regrading} onClick={regrade}>
+                Grade again
+              </Button>
+            </div>
           }
         >
           Your answers are saved. {describeJobFailure(jobFailure ?? item.errorCode, null, 'grade_quiz')}
