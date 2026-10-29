@@ -8,27 +8,41 @@ import { apiFetch, isApiError } from '@/lib/api/client'
 import type { QuizReviewItem } from '@/lib/learning/quiz-review'
 import type { QuizAttemptData, QuizSetData, TopicReview } from '@/server/queries/topic'
 import { QuizLobby } from './quiz-lobby'
+import type { WaitingQuiz } from '@/lib/learning/quiz-submissions'
 import { QuizResults, type QuizResult } from './quiz-results'
 import { useQuizSession } from './quiz-session'
 import { QuizTaking } from './quiz-taking'
+import { QuizWaiting } from './quiz-waiting'
 import { useGeneration, useTopic } from './topic-provider'
 import { useAiStatus } from '@/features/ai/ai-status'
 
-type SubmitResponse = {
-  score: number
-  earnedPoints: number
-  totalPoints: number
-  bestScore: number
-  review: QuizReviewItem[]
-  /** What the attempt changed: the next review and how mastery moved. */
-  outcome?: QuizResult['outcome']
-}
+type SubmitResponse =
+  | {
+      status: 'graded'
+      score: number
+      earnedPoints: number
+      totalPoints: number
+      bestScore: number
+      review: QuizReviewItem[]
+      /** What the attempt changed: the next review and how mastery moved. */
+      outcome?: QuizResult['outcome']
+    }
+  | {
+      /** The short answers could not be graded now: the quiz is stored and graded when the AI is back. */
+      status: 'waiting'
+      submissionId: string
+      jobId: string | null
+      started: boolean
+      code: string | null
+    }
 
 type QuizViewProps = {
   courseId: string
   topicId: string
   sets: QuizSetData[]
   attempts: QuizAttemptData[]
+  /** Quizzes stored while the AI could not grade them. */
+  waiting: WaitingQuiz[]
   voiceHref: string
   /** Whether a review is due, and how many questions were missed lately. */
   review: TopicReview
@@ -42,7 +56,7 @@ type QuizViewProps = {
  * A quiz in progress lives in sessionStorage, so "taking" is simply "a session is stored".
  * Grading and results are in memory: the graded attempt is saved on the server either way.
  */
-export function QuizView({ courseId, topicId, sets, attempts, voiceHref, review, initialSetId, autoStart }: QuizViewProps) {
+export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref, review, initialSetId, autoStart }: QuizViewProps) {
   const router = useRouter()
   const { setKeysSuspended } = useTopic()
   const { running } = useGeneration('quiz')
@@ -57,6 +71,35 @@ export function QuizView({ courseId, topicId, sets, attempts, voiceHref, review,
   const [grading, setGrading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<{ setId: string; value: QuizResult } | null>(null)
+  // Quizzes stored for the AI, kept here until their results are shown: the server's list drops one the
+  // moment it is graded, which can happen before this page has asked for the result.
+  const [known, setKnown] = React.useState<Record<string, { item: WaitingQuiz; onServer: boolean }>>(() =>
+    Object.fromEntries(waiting.map((item) => [item.submissionId, { item, onServer: true }]))
+  )
+  const [focusId, setFocusId] = React.useState<string | null>(null)
+  const [graded, setGraded] = React.useState<string[]>([])
+  // When the server's list changes, take in what is new (state adjusted while rendering, not in an effect).
+  const [seenList, setSeenList] = React.useState(waiting)
+  if (seenList !== waiting) {
+    setSeenList(waiting)
+    setKnown((current) => {
+      const next = { ...current }
+      for (const item of waiting) next[item.submissionId] = { item, onServer: true }
+      return next
+    })
+  }
+  const waitingItems = React.useMemo(
+    () =>
+      Object.values(known)
+        .filter(({ item }) => !graded.includes(item.submissionId))
+        .map(({ item, onServer }) => ({
+          item: waiting.find((current) => current.submissionId === item.submissionId) ?? item,
+          // It was on the server's list and is not now: it has been graded, so ask for the result.
+          gone: onServer && !waiting.some((current) => current.submissionId === item.submissionId),
+        })),
+    [known, waiting, graded]
+  )
+  const focused = waitingItems.find(({ item }) => item.submissionId === focusId)?.item ?? null
 
   const started = React.useRef(false)
   React.useEffect(() => {
@@ -87,6 +130,14 @@ export function QuizView({ courseId, topicId, sets, attempts, voiceHref, review,
     save({ answers: {}, index: 0 })
   }
 
+  /** A quiz that waited for the AI has been graded: show its results, whichever set it was. */
+  function showGraded(item: WaitingQuiz, value: QuizResult) {
+    setGraded((ids) => [...ids, item.submissionId])
+    setFocusId(null)
+    setPick({ id: item.setId, whenAsked: initialSetId })
+    setResult({ setId: item.setId, value })
+  }
+
   async function submit() {
     if (!session) return
     setError(null)
@@ -99,6 +150,22 @@ export function QuizView({ courseId, topicId, sets, attempts, voiceHref, review,
           ...(activeSet.id === 'legacy' ? {} : { quizSetId: activeSet.id }),
         },
       })
+      if (response.status === 'waiting') {
+        // Stored whole; graded by itself when the AI is back. The answers no longer live only in this tab.
+        if (response.code) report(response.code)
+        const item: WaitingQuiz = {
+          submissionId: response.submissionId,
+          setId: activeSet.id,
+          jobId: response.jobId,
+          state: response.started ? 'grading' : 'failed',
+          errorCode: response.started ? null : 'ENQUEUE_FAILED',
+        }
+        setKnown((current) => ({ ...current, [item.submissionId]: { item, onServer: false } }))
+        setFocusId(item.submissionId)
+        clear()
+        React.startTransition(() => router.refresh())
+        return
+      }
       setResult({
         setId: activeSet.id,
         value: {
@@ -152,6 +219,20 @@ export function QuizView({ courseId, topicId, sets, attempts, voiceHref, review,
     )
   }
 
+  if (focused && !session) {
+    return (
+      <QuizWaiting
+        key={`${focused.submissionId}:${focused.jobId}:${focused.state}`}
+        topicId={topicId}
+        item={focused}
+        variant="page"
+        gone={waitingItems.find((entry) => entry.item.submissionId === focused.submissionId)?.gone ?? false}
+        onGraded={showGraded}
+        onLeave={() => setFocusId(null)}
+      />
+    )
+  }
+
   if (session) {
     return (
       <QuizTaking
@@ -168,19 +249,35 @@ export function QuizView({ courseId, topicId, sets, attempts, voiceHref, review,
   }
 
   return (
-    <QuizLobby
-      courseId={courseId}
-      topicId={topicId}
-      review={review}
-      sets={sets}
-      attempts={attempts}
-      setId={activeSet.id}
-      onSetChange={(id) => {
-        setPick({ id, whenAsked: initialSetId })
-        setResult(null)
-      }}
-      onStart={start}
-      generating={!!running && !running.done}
-    />
+    <>
+      {waitingItems.length > 0 ? (
+        <div className="mb-6 flex flex-col gap-3">
+          {waitingItems.map(({ item, gone }) => (
+            <QuizWaiting
+              key={`${item.submissionId}:${item.jobId}:${item.state}`}
+              topicId={topicId}
+              item={item}
+              variant="card"
+              gone={gone}
+              onGraded={showGraded}
+            />
+          ))}
+        </div>
+      ) : null}
+      <QuizLobby
+        courseId={courseId}
+        topicId={topicId}
+        review={review}
+        sets={sets}
+        attempts={attempts}
+        setId={activeSet.id}
+        onSetChange={(id) => {
+          setPick({ id, whenAsked: initialSetId })
+          setResult(null)
+        }}
+        onStart={start}
+        generating={!!running && !running.done}
+      />
+    </>
   )
 }

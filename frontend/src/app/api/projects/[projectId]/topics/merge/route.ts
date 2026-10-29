@@ -111,6 +111,7 @@ export async function POST(
 
       // Learning history.
       await tx.quizAttempt.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
+      await tx.quizSubmission.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
       await tx.learningSignal.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
       await tx.voiceDrillSession.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
       await tx.voiceDrillAttempt.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })

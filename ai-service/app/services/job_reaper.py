@@ -46,6 +46,9 @@ def dispatch_data(job_type: str, input_data: Any) -> Dict[str, Any]:
     if job_type == "grade_exam":
         # The submission holds the answers; the task body carries only its id.
         return {"submissionId": data.get("submissionId")}
+    if job_type == "grade_quiz":
+        # The submission holds the questions and answers.
+        return {"submissionId": data.get("submissionId")}
     return data
 
 

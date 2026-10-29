@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { GRADING_RETRY, GRADING_WAITS_FOR_AI, GradingUnavailableError, gradeAnswers } from './grading'
+import { GradingUnavailableError, gradeAnswers } from './grading'
 
 function withFetch(answer: () => Promise<Response>, run: () => Promise<void>) {
   const original = globalThis.fetch
@@ -13,15 +13,15 @@ function withFetch(answer: () => Promise<Response>, run: () => Promise<void>) {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
-test('an unreachable model keeps the answers and passes the reason on', () =>
+test('an unreachable model is reported with its reason, never as a score', () =>
   withFetch(
     async () => json(502, { detail: 'credit balance is too low', error_code: 'LLM_CREDIT_EXHAUSTED', retryable: false }),
     async () => {
       await assert.rejects(gradeAnswers([{}], { '0': 'x' }), (error: unknown) => {
         assert.ok(error instanceof GradingUnavailableError)
         assert.equal(error.code, 'LLM_CREDIT_EXHAUSTED')
-        assert.equal(error.message, GRADING_WAITS_FOR_AI)
-        assert.doesNotMatch(error.message, /credit|not saved/i)
+        assert.equal(error.message, 'Grading is unavailable right now')
+        assert.doesNotMatch(error.message, /credit/i)
         return true
       })
     }
@@ -47,8 +47,7 @@ test('answers the model could not grade are never stored as a score', () =>
     async () => {
       await assert.rejects(gradeAnswers([{}], { '0': 'x' }), (error: unknown) => {
         assert.ok(error instanceof GradingUnavailableError)
-        assert.equal(error.message, GRADING_RETRY)
-        assert.match(error.message, /still here/)
+        assert.equal(error.code, null)
         return true
       })
     }

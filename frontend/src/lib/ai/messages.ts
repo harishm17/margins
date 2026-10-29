@@ -88,10 +88,12 @@ const MESSAGES: Record<string, AiMessage> = {
   CONTENT_GENERATION_FAILED: failed('The study content could not be written. Try again.'),
   EXAM_GENERATION_FAILED: failed('The mock exam could not be written. Try again.'),
   EXAM_GRADING_FAILED: failed('We could not finish grading it. Grade the exam again to see your score.'),
+  QUIZ_GRADING_FAILED: failed('We could not finish grading it. Grade the quiz again to see your score.'),
   EXAM_PROFILE_FAILED: failed('We could not read the style of your past exams. Try again, or mock exams will use the default style.'),
   EXAM_RELEVANCE_FAILED: failed('We could not match your past exams to your topics. Try again.'),
   MATERIAL_NOT_FOUND: failed('That file was removed before it could be read.', false),
   SUBMISSION_NOT_FOUND: failed('That exam attempt could not be found, so it could not be graded.', false),
+  QUIZ_SUBMISSION_NOT_FOUND: failed('That quiz attempt could not be found, so it could not be graded.', false),
   INVALID_INPUT: failed('The request was not complete. Try again.'),
 }
 
@@ -107,6 +109,7 @@ const FALLBACK_BY_JOB_TYPE: Record<string, string> = {
   generate_content: 'CONTENT_GENERATION_FAILED',
   generate_exam: 'EXAM_GENERATION_FAILED',
   grade_exam: 'EXAM_GRADING_FAILED',
+  grade_quiz: 'QUIZ_GRADING_FAILED',
   profile_exam: 'EXAM_PROFILE_FAILED',
   exam_relevance: 'EXAM_RELEVANCE_FAILED',
 }
@@ -135,3 +138,10 @@ export function refusalStatus(code: string): number {
   if (code === 'LLM_DAILY_BUDGET') return 429
   return 503
 }
+
+/**
+ * What a page says while a submitted exam or quiz waits for the AI: the answers are stored and the
+ * grading finishes by itself when AI is available again.
+ */
+export const GRADING_WAITING_TITLE = 'Your answers are saved'
+export const GRADING_WAITING_TEXT = 'Grading will finish when AI is available again. You can leave this page and come back.'

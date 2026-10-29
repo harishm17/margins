@@ -1,6 +1,7 @@
 /**
  * API route for quiz attempts
- * POST /api/topics/[topicId]/quiz-attempts - Save quiz attempt
+ * POST /api/topics/[topicId]/quiz-attempts - Grade and save a quiz attempt. Short answers the model cannot
+ *   grade right now are stored with the submission and graded when the AI is back (202, status "waiting").
  * GET /api/topics/[topicId]/quiz-attempts - Get quiz history
  */
 
@@ -9,16 +10,12 @@ import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
-import {
-  computeTopicMastery,
-  recordLearningSignal,
-  upsertReviewSchedule,
-} from '@/lib/learning/mastery'
+import { recordQuizAttempt } from '@/lib/learning/record-quiz-attempt'
+import { queueQuizSubmission } from '@/lib/learning/quiz-submissions'
 import { gradeAnswers, GradingUnavailableError } from '@/lib/ai-service/grading'
 import { loadAllQuizQuestionSets, loadQuizQuestions } from '@/lib/learning/quiz-sets'
 import { buildReview, toStoredResults } from '@/lib/learning/quiz-review'
 import { createRateLimiter } from '@/lib/api/rate-limit'
-import { ApiErrorCode, apiError } from '@/lib/api/errors'
 
 // The client sends answers only. Anything else in the body (a score, per-question
 // results) is dropped by zod and never read: the server grades from the stored questions.
@@ -98,121 +95,47 @@ export async function POST(
       return NextResponse.json({ error: 'Quiz not found' }, { status: 404 })
     }
 
+    const answers = validation.data.answers
     let graded
     try {
-      graded = await gradeAnswers(questions, validation.data.answers)
+      graded = await gradeAnswers(questions, answers)
     } catch (gradeError) {
-      if (gradeError instanceof GradingUnavailableError) {
-        // Nothing is stored and the answers stay on the student's page (the quiz session), so
-        // they submit again once grading can run. The code lets the page update the AI status.
-        return apiError(ApiErrorCode.UPSTREAM_ERROR, gradeError.message, gradeError.code ? { code: gradeError.code } : undefined, 503)
-      }
-      throw gradeError
+      if (!(gradeError instanceof GradingUnavailableError)) throw gradeError
+      // Short answers need the model and it cannot be reached. The answers are the student's work:
+      // they are stored whole and graded when the AI is back (the same wait exam grading has), and
+      // the page says so. Nothing about the quiz touches mastery until it is graded in full.
+      const queued = await queueQuizSubmission({ userId: session.user.id, topic, quizSetId, questions, answers })
+      return NextResponse.json(
+        {
+          status: 'waiting',
+          submissionId: queued.submissionId,
+          jobId: queued.jobId,
+          started: queued.started,
+          code: gradeError.code,
+        },
+        { status: 202 }
+      )
     }
 
     const score = graded.overall_score
     const results = toStoredResults(graded.graded_questions)
-    const answers = validation.data.answers
-
-    // Save quiz attempt. Fallback keeps older DBs (without quiz_set_id) working.
-    let attempt: Awaited<ReturnType<typeof prisma.quizAttempt.create>>
-    try {
-      attempt = await prisma.quizAttempt.create({
-        data: {
-          userId: session.user.id,
-          topicId,
-          quizSetId,
-          answers,
-          results,
-          score,
-        },
-      })
-    } catch (createError) {
-      if (!isMissingQuizSetColumnError(createError)) {
-        throw createError
-      }
-
-      attempt = await prisma.quizAttempt.create({
-        data: {
-          userId: session.user.id,
-          topicId,
-          answers,
-          results,
-          score,
-        },
-      })
-    }
-
-    // Update topic progress with best score
-    const existingProgress = await prisma.topicProgress.findUnique({
-      where: {
-        topicId_userId: {
-          topicId,
-          userId: session.user.id,
-        },
-      },
-    })
-
-    const currentBest = existingProgress?.quizScore
-    const bestScore = currentBest === null || currentBest === undefined
-      ? score
-      : Math.max(currentBest, score)
-
-    await prisma.topicProgress.upsert({
-      where: {
-        topicId_userId: {
-          topicId,
-          userId: session.user.id,
-        },
-      },
-      update: {
-        quizCompleted: true,
-        quizScore: bestScore,
-        lastAccessedAt: new Date(),
-      },
-      create: {
-        topicId,
-        userId: session.user.id,
-        notesCompleted: false,
-        examplesCompleted: false,
-        quizCompleted: true,
-        quizScore: score,
-        lastAccessedAt: new Date(),
-      },
-    })
-
-    await recordLearningSignal({
+    const recorded = await recordQuizAttempt({
       userId: session.user.id,
-      projectId: topic.projectId,
-      topicId,
-      source: 'quiz',
-      score: score / 100,
-      metadata: {
-        attemptId: attempt.id,
-        quizSetId,
-      },
-    })
-
-    const mastery = await computeTopicMastery(session.user.id, topic.projectId, topicId)
-    const scheduleBefore = await prisma.reviewSchedule.findUnique({
-      where: { userId_topicId: { userId: session.user.id, topicId } },
-      select: { mastery: true },
-    })
-    const schedule = await upsertReviewSchedule({
-      userId: session.user.id,
-      projectId: topic.projectId,
-      topicId,
-      mastery: mastery.mastery,
-      wasCorrect: score >= 70,
+      topic,
+      quizSetId,
+      answers,
+      results: results as unknown as Prisma.InputJsonValue,
+      score,
     })
 
     return NextResponse.json({
+      status: 'graded',
       attempt: {
-        id: attempt.id,
-        score: attempt.score,
-        takenAt: attempt.takenAt,
+        id: recorded.attempt.id,
+        score: recorded.attempt.score,
+        takenAt: recorded.attempt.takenAt,
       },
-      bestScore,
+      bestScore: recorded.bestScore,
       score,
       earnedPoints: graded.earned_points,
       totalPoints: graded.total_points,
@@ -220,9 +143,9 @@ export async function POST(
       review: buildReview(questions, results),
       // What the attempt changed, so the results can say it: when the topic is next reviewed and how mastery moved.
       outcome: {
-        nextReviewAt: schedule.dueAt,
-        mastery: schedule.mastery,
-        previousMastery: scheduleBefore?.mastery ?? null,
+        nextReviewAt: recorded.outcome.nextReviewAt,
+        mastery: recorded.outcome.mastery,
+        previousMastery: recorded.outcome.previousMastery,
       },
     })
   } catch (error) {

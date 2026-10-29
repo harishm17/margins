@@ -51,3 +51,5 @@ export async function createJobOrFindActive(
   }
   throw new Error(`Could not create or find a job for ${data.targetKey}`)
 }
+// One grading job at a time per waiting topic quiz submission.
+export const gradeQuizTarget = (submissionId: string) => `grade-quiz:${submissionId}`

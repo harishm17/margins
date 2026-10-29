@@ -5,6 +5,7 @@ import { asQuestionList, toPublicQuestions, type PublicQuizQuestion } from '@/li
 import { buildReview, type QuizReviewItem } from '@/lib/learning/quiz-review'
 import { masteryLevel, type MasteryLevel } from '@/lib/mastery'
 import { getMissedQuestions } from '@/lib/learning/review-server'
+import { getWaitingQuizzes, type WaitingQuiz } from '@/lib/learning/quiz-submissions'
 import { mergeSources, type SourceRef } from '@/lib/topics/sources'
 import { parseNotes, parsePracticeProblems, parseSolvedExamples } from '@/features/topic/content'
 import type { ProblemProgress } from '@/features/topic/practice-keys'
@@ -102,6 +103,8 @@ export type TopicPageData = {
   /** Changes whenever any content is rewritten, so a client can tell a refresh has landed. */
   contentVersion: string
   attempts: QuizAttemptData[]
+  /** Quizzes submitted while the AI could not grade them: stored, and graded when it is back. */
+  waitingQuizzes: WaitingQuiz[]
   review: TopicReview
   /** The student's stored progress on the current practice problems (the browser loads it into its cache). */
   practiceProgress: ProblemProgress[]
@@ -264,6 +267,7 @@ export const getTopicPage = cache(async function getTopicPage(
     if (kind) failures[kind] = { message: failure.message, errorCode: failure.errorCode }
   }
 
+  const waitingQuizzes = await getWaitingQuizzes(userId, topicId)
   const due = shellTopic.dueAt ? Date.parse(shellTopic.dueAt) <= Date.now() : false
   const review: TopicReview = { due, missedCount: due ? (await getMissedQuestions(userId, topicId)).length : 0 }
 
@@ -295,6 +299,7 @@ export const getTopicPage = cache(async function getTopicPage(
     present,
     contentVersion,
     attempts,
+    waitingQuizzes,
     review,
     practiceProgress: practiceRows
       .filter((row) => row.contentId === practiceRow?.id && content.practice?.items[row.problemIndex]?.title === row.problemTitle)

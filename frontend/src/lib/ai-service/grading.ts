@@ -22,7 +22,8 @@ export type GradeResult = {
 
 /**
  * The AI service could not grade (down, over capacity, or a short answer failed). Nothing is
- * stored: a grading the model could not do must never become a 0. `code` is the AI service's
+ * scored: a grading the model could not do must never become a 0. A topic quiz is stored and graded
+ * when the AI is back (lib/learning/quiz-submissions); a voice drill says so. `code` is the AI service's
  * error code when it gave one (LLM_CREDIT_EXHAUSTED, ...).
  */
 export class GradingUnavailableError extends Error {
@@ -33,12 +34,6 @@ export class GradingUnavailableError extends Error {
     this.code = code
   }
 }
-
-/** Shown when short answers cannot be graded because the AI cannot run (copy for review). */
-export const GRADING_WAITS_FOR_AI =
-  'Your answers are still here. Short answers need AI to grade, so submit again when AI is available.'
-/** Shown when the model answered but could not grade some short answers. */
-export const GRADING_RETRY = 'Some short answers could not be graded just now. Your answers are still here, so submit again.'
 
 async function errorCode(response: Response): Promise<string | null> {
   try {
@@ -71,16 +66,16 @@ export async function gradeAnswers(
     })
   } catch (error) {
     console.error('Grading request failed:', error)
-    throw new GradingUnavailableError(GRADING_WAITS_FOR_AI, 'AI_UNREACHABLE')
+    throw new GradingUnavailableError(undefined, 'AI_UNREACHABLE')
   }
 
   if (!response.ok) {
     const code = await errorCode(response)
     console.error('Grading request returned', response.status, code)
-    throw new GradingUnavailableError(GRADING_WAITS_FOR_AI, code)
+    throw new GradingUnavailableError(undefined, code)
   }
 
   const result = (await response.json()) as GradeResult
-  if (result.needs_review) throw new GradingUnavailableError(GRADING_RETRY)
+  if (result.needs_review) throw new GradingUnavailableError('Some short answers could not be graded just now')
   return result
 }

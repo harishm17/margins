@@ -256,3 +256,15 @@ export async function enqueueExamGradingJob(
     data: { submissionId, examId },
   })
 }
+
+/**
+ * Enqueue the grading of a topic quiz that was submitted while the AI could not run. The AI
+ * service loads the questions and answers from the submission.
+ */
+export async function enqueueQuizGradingJob(jobId: string, submissionId: string): Promise<string> {
+  return enqueueTask('/jobs/grade-quiz', {
+    jobId,
+    jobType: 'grade_quiz',
+    data: { submissionId },
+  })
+}

@@ -84,6 +84,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
               autoStart={(Array.isArray(start) ? start[0] : start) === '1'}
               sets={content.quiz.sets}
               attempts={data.attempts}
+              waiting={data.waitingQuizzes}
               voiceHref={`${base}?view=voice`}
             />
           ) : null}

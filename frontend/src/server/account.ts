@@ -5,13 +5,14 @@
  * What goes with the account row. Every table reaches users through ON DELETE CASCADE, either
  * directly (user_id) or through a course (project_id) and its children:
  *   users -> projects -> materials -> material_chunks -> topic_chunk_mappings, topic_sources
- *                     -> topics -> topic_content, topic_quizzes, topic_progress, quiz_attempts,
+ *                     -> topics -> topic_content, topic_quizzes, topic_progress, quiz_attempts, quiz_submissions,
  *                                  practice_progress, review_schedules, topic_sources, ...
  *                     -> units, overall_quizzes -> overall_quiz_attempts,
  *                        sample_exams -> exam_submissions, chat_threads -> chat_messages,
  *                        voice_drill_sessions -> voice_drill_attempts, learning_signals,
  *                        processing_jobs
- *   users -> processing_jobs, topic_progress, quiz_attempts, overall_quiz_attempts,
+ *   users -> processing_jobs, topic_progress, quiz_attempts, quiz_submissions (a quiz waiting for the AI goes with
+ *            the account; its grading job is stopped first), overall_quiz_attempts,
  *            exam_submissions, voice_drill_sessions, voice_drill_attempts, learning_signals,
  *            review_schedules, practice_progress, chat_threads
  * The one exception is llm_usage_events (ON DELETE SET NULL): its rows are kept, unlinked, so the

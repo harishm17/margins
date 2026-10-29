@@ -30,6 +30,7 @@ model User {
   processingJobs      ProcessingJob[]
   topicProgress       TopicProgress[]
   quizAttempts        QuizAttempt[]
+  quizSubmissions     QuizSubmission[]
   overallQuizAttempts OverallQuizAttempt[]
   examSubmissions     ExamSubmission[]
   voiceDrillSessions  VoiceDrillSession[]
@@ -194,6 +195,7 @@ model Topic {
   topicQuizzes       TopicQuiz[]
   progress           TopicProgress[]
   quizAttempts       QuizAttempt[]
+  quizSubmissions    QuizSubmission[]
   voiceDrillSessions VoiceDrillSession[]
   voiceDrillAttempts VoiceDrillAttempt[]
   learningSignals    LearningSignal[]
@@ -360,6 +362,34 @@ model QuizAttempt {
   @@index([quizSetId])
   @@index([topicId])
   @@map("quiz_attempts")
+}
+
+// A topic quiz submitted while its short answers could not be graded (the AI is unavailable). The
+// answers and a copy of the questions are kept, and a grade_quiz job waits for the AI (the exam
+// grading mechanism, ai-service job_runner `wait_for_ai`). When the job grades it, `aiGrading` is
+// filled and `status` becomes 'graded'; the web app then turns it into the QuizAttempt (same id) and
+// applies it to progress, mastery and the review schedule, once (`appliedAt`). Quizzes graded at
+// once never get a row here.
+model QuizSubmission {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  topicId     String    @map("topic_id")
+  quizSetId   String?   @map("quiz_set_id")
+  answers     Json
+  // The questions (with answer keys) as they were when the student answered. Never sent to the browser.
+  questions   Json
+  status      String    @default("pending") // pending|graded
+  aiGrading   Json?     @map("ai_grading")
+  submittedAt DateTime  @default(now()) @map("submitted_at")
+  gradedAt    DateTime? @map("graded_at")
+  appliedAt   DateTime? @map("applied_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([userId, topicId, submittedAt])
+  @@index([topicId])
+  @@map("quiz_submissions")
 }
 
 // ============================================

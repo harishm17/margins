@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
 import { createRetrySet } from '@/lib/learning/review-server'
+import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { apiInternal, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +24,8 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     })
     if (!topic) return apiNotFound('Topic not found')
 
+    // A quiz that waited for the AI and was graded since counts: its misses are what to retry.
+    await applyPendingQuizResults(session.user.id, { topicId })
     const set = await createRetrySet(session.user.id, topicId)
     if (!set) return apiNotFound('There are no missed questions to retry')
     return NextResponse.json(set)
