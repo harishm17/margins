@@ -93,7 +93,8 @@ test("Up next marks today's mock exam when it is longer than the day", () => {
 })
 
 test('the notices for topics too long for a day and reviews with no room', () => {
-  assert.equal(tooLongText(20), 'These do not fit in 20 minutes a day, even split into parts of at least 15 minutes. Add study time to fit them.')
+  assert.equal(tooLongText(20, 1), 'This does not fit in 20 minutes a day, even split into parts of at least 15 minutes. Add study time to fit it.')
+  assert.equal(tooLongText(20, 2), 'These do not fit in 20 minutes a day, even split into parts of at least 15 minutes. Add study time to fit them.')
   assert.equal(reviewsNotScheduledText(['Graphs']), 'No room before your exam to review Graphs. Add study time to fit it in.')
   assert.equal(reviewsNotScheduledText(['Graphs', 'Trees', 'Heaps']), 'No room before your exam to review Graphs, Trees and Heaps. Add study time to fit them in.')
 })

@@ -140,8 +140,8 @@ export function daySummary(titles: string[]): string {
 }
 
 /** Why the too-long topics are not in the plan. */
-export const tooLongText = (dailyMinutes: number): string =>
-  `These do not fit in ${minutesLabel(dailyMinutes)} a day, even split into parts of at least ${MIN_PART_MINUTES} minutes. Add study time to fit them.`
+export const tooLongText = (dailyMinutes: number, count: number): string =>
+  `${count === 1 ? 'This does' : 'These do'} not fit in ${minutesLabel(dailyMinutes)} a day, even split into parts of at least ${MIN_PART_MINUTES} minutes. Add study time to fit ${count === 1 ? 'it' : 'them'}.`
 
 /** The notice for reviews that found no day with room before the exam. */
 export function reviewsNotScheduledText(names: string[]): string {

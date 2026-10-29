@@ -377,11 +377,11 @@ export function PlanView({
             <h2 id="too-long-heading" className="text-body-strong text-fg">
               Longer than your daily time: {pluralize(tooLong.topics.length, 'topic')}
             </h2>
-            <p className="mt-1 text-small text-fg-2">{tooLongText(plan.dailyMinutes)}</p>
+            <p className="mt-1 text-small text-fg-2">{tooLongText(plan.dailyMinutes, tooLong.topics.length)}</p>
             {topicChips(tooLong.topics)}
             {tooLong.dependents.length > 0 ? (
               <>
-                <p className="mt-3 text-small text-fg-2">Waiting on them:</p>
+                <p className="mt-3 text-small text-fg-2">{tooLong.topics.length === 1 ? 'Waiting on it:' : 'Waiting on them:'}</p>
                 {topicChips(tooLong.dependents)}
               </>
             ) : null}
