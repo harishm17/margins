@@ -1,4 +1,4 @@
-"""Voice coach endpoints for StudyBuddy.
+"""Voice coach endpoints for Margins.
 
 The browser does speech-to-text and text-to-speech, so the model only ever sees text:
 POST /voice/turn is one model call of that conversation, streamed back as newline-delimited
@@ -213,7 +213,7 @@ async def generate_concept_drill(
     topic_label = payload.topic or "the study topic"
 
     system_prompt = (
-        "You are StudyBuddy's oral exam coach. Generate conceptual questions only. "
+        "You are the oral exam coach in Margins, a study app. Generate conceptual questions only. "
         "Do NOT include calculations, equations, formulas, or numeric problem solving. "
         "Focus on definitions, intuition, relationships, trade-offs, comparisons, and reasoning."
     )

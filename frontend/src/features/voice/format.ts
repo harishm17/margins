@@ -19,3 +19,15 @@ export function clip(text: string, max = 110): string {
   const space = cut.lastIndexOf(' ')
   return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,.;:]+$/, '')}...`
 }
+
+const NEUTRAL_FOCUS = 'e.g. the definitions I keep mixing up'
+const MAX_FOCUS_EXAMPLE = 40
+
+/**
+ * The example in the voice lobby's Focus field: the first of the topic's own key terms that fits
+ * the field, or a neutral example that suits any course (a sprint, or a topic with no key terms).
+ */
+export function focusPlaceholder(keywords: readonly string[] = []): string {
+  const keyword = keywords.map((word) => word.replace(/\s+/g, ' ').trim()).find((word) => word.length > 0 && word.length <= MAX_FOCUS_EXAMPLE)
+  return keyword ? `e.g. ${keyword}` : NEUTRAL_FOCUS
+}

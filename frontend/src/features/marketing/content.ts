@@ -102,6 +102,11 @@ export const EVAL_FACTS = {
   grounding: '4.91',
   errors: 8,
   mathErrors: 2,
+  // "Models: opus:medium" and "Judge: opus:medium": the judge is the model that wrote the text.
+  judge: 'Claude Opus',
+  // "Automatic checks" table: the two checks that failed on every topic.
+  notesWithAllSections: '0 of 8',
+  notesInWordBand: '0 of 8',
 }
 
 export type Faq = { id: string; question: string; answer: string[] }
@@ -123,7 +128,7 @@ export const FAQ: Faq[] = [
     // Upload copy: "PDF, DOCX, PPTX or DOC, up to 25 MB each"; the validator rejects scanned PDFs (no OCR).
     answer: [
       'PDF, Word (DOCX or DOC) and PowerPoint (PPTX) files, up to 25 MB each. A PDF needs selectable text: scanned pages are not read yet.',
-      'Mark past exams as Past exams when you upload them. That is what lets mock exams match their style.',
+      'When you upload past exams, choose Past exams. That is what lets mock exams match their style.',
     ],
   },
   {
@@ -132,7 +137,7 @@ export const FAQ: Faq[] = [
     // Terms: "can contain mistakes"; README: generators only see the topic's own excerpts; Ask says when the files
     // do not cover the question; the eval lists every error the judge found.
     answer: [
-      'It can make mistakes, like any AI. Notes and quizzes are written from excerpts of your own files and point back to them, so you can check a claim against the page. Ask your materials answers only from your files, and says so when they do not cover your question.',
+      'It can make mistakes, like any AI. Notes and quizzes are written from excerpts of your own files and point back to them, so you can check a claim against the page. Answers in Ask come only from your files, and Ask says so when they do not cover your question.',
       'We measure this and publish the errors the judge found, not only the scores. For anything that matters, check it against your course materials and your instructor.',
     ],
   },

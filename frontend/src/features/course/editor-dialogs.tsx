@@ -155,7 +155,7 @@ function MoveForm({
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       <DialogHeader>
         <DialogTitle>Move topic</DialogTitle>
-        <DialogDescription>{`Choose the unit for ${topic.name}. It goes to the end of that unit.`}</DialogDescription>
+        <DialogDescription>{`Choose the unit for “${topic.name}”. It goes to the end of that unit.`}</DialogDescription>
       </DialogHeader>
       <Field label="Unit">
         <Select

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { describeSprintTopics, rankWeakestTopics, type RankableTopic } from './voice-rank'
+import { describeSprintTopics, hasStudyData, rankWeakestTopics, type RankableTopic } from './voice-rank'
 
 const done = { quizCompleted: true, notesCompleted: true, examplesCompleted: true }
 
@@ -59,10 +59,35 @@ describe('rankWeakestTopics', () => {
 })
 
 describe('describeSprintTopics', () => {
-  it('names the topics and counts them', () => {
-    assert.equal(describeSprintTopics([{ name: 'A' }, { name: 'B' }, { name: 'C' }]), 'Covers your 3 weakest topics: A, B and C.')
-    assert.equal(describeSprintTopics([{ name: 'A' }, { name: 'B' }]), 'Covers your 2 weakest topics: A and B.')
-    assert.equal(describeSprintTopics([{ name: 'A' }]), 'Covers your weakest topic: A.')
-    assert.equal(describeSprintTopics([]), '')
+  it('names the topics and counts them once there are quiz scores', () => {
+    assert.equal(describeSprintTopics([{ name: 'A' }, { name: 'B' }, { name: 'C' }], true), 'Covers your 3 weakest topics: A, B and C.')
+    assert.equal(describeSprintTopics([{ name: 'A' }, { name: 'B' }], true), 'Covers your 2 weakest topics: A and B.')
+    assert.equal(describeSprintTopics([{ name: 'A' }], true), 'Covers your weakest topic: A.')
+    assert.equal(describeSprintTopics([], true), '')
+  })
+
+  it('does not call the topics weakest before any quiz', () => {
+    assert.equal(
+      describeSprintTopics([{ name: 'A' }, { name: 'B' }, { name: 'C' }], false),
+      'Covers 3 of your topics: A, B and C. After your first quiz it picks your weakest.'
+    )
+    assert.equal(describeSprintTopics([{ name: 'A' }], false), 'Covers one of your topics: A. After your first quiz it picks your weakest.')
+    assert.equal(describeSprintTopics([], false), '')
+  })
+})
+
+describe('hasStudyData', () => {
+  it('is true only when some topic has a quiz score', () => {
+    const fresh = { quizScore: null, quizCompleted: false, notesCompleted: true, examplesCompleted: false }
+    assert.equal(hasStudyData([]), false)
+    assert.equal(hasStudyData([{ id: 'a', name: 'A', progress: null }]), false)
+    assert.equal(hasStudyData([{ id: 'a', name: 'A', progress: fresh }]), false)
+    assert.equal(
+      hasStudyData([
+        { id: 'a', name: 'A', progress: null },
+        { id: 'b', name: 'B', progress: { ...fresh, quizScore: 0, quizCompleted: true } },
+      ]),
+      true
+    )
   })
 })

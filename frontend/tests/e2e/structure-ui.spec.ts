@@ -181,8 +181,11 @@ test.describe('the demo course', () => {
   test('materials show a role badge on each file', async ({ page }) => {
     await page.goto(`/courses/${course}/materials`)
     await expect(page.getByRole('columnheader', { name: 'Used as' })).toBeVisible()
+    // One label per file: the role. The upload category is not a column of its own.
+    await expect(page.getByRole('columnheader', { name: 'Type' })).toHaveCount(0)
     await expect(page.getByRole('row', { name: /algorithms\.pdf/ }).getByText('Content', { exact: true }).filter({ visible: true })).toBeVisible()
-    await expect(page.getByRole('radio', { name: 'Syllabus or schedule' })).toBeVisible()
+    await expect(page.getByRole('radiogroup', { name: 'Use these as:' }).getByRole('radio', { name: 'Syllabus or schedule' })).toBeVisible()
+    await expect(page.getByText("PDFs need selectable text. Scans can't be read.", { exact: false })).toBeVisible()
   })
 })
 

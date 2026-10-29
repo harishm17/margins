@@ -87,7 +87,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
             </nav>
           </div>
           <div className="mx-auto w-full max-w-[1280px] border-t border-border px-4 py-5 text-small text-fg-2 md:px-8">
-            <span className="tabular">{new Date().getFullYear()}</span> {BRAND_NAME}, built by Harish Manoharan.
+            &copy; <span className="tabular">{new Date().getFullYear()}</span> {BRAND_NAME}, built by Harish Manoharan.
           </div>
         </footer>
       </div>

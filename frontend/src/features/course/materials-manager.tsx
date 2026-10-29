@@ -52,7 +52,6 @@ import type { MaterialRow } from '@/server/queries/course'
 import { useRefreshSoon } from './use-refresh-soon'
 import {
   ACCEPT_ATTRIBUTE,
-  categoryLabel,
   CATEGORY_LABELS,
   fileProblem,
   problemMessage,
@@ -182,16 +181,19 @@ function RoleBadge({ role }: { role: MaterialRole }) {
   return <Badge tone={role === 'syllabus' || role === 'exam' ? 'accent' : 'neutral'}>{ROLE_LABELS[role]}</Badge>
 }
 
+/**
+ * One file. It shows one label for what the file is for: its role, which decides how the file is
+ * used and which the student can change. The upload category is not shown: it only sets the
+ * starting role, so after a change the two can disagree.
+ */
 function RowShell({
   filename,
-  category,
   role,
   size,
   status,
   menu,
 }: {
   filename: string
-  category: string
   role: MaterialRole
   size: number
   status: React.ReactNode
@@ -205,15 +207,12 @@ function RowShell({
           <div className="min-w-0">
             <p className="truncate text-body-strong text-fg">{filename}</p>
             <p className="flex min-w-0 items-center gap-2 text-caption font-normal text-fg-3 md:hidden">
-              <span className="truncate">
-                {categoryLabel(category)}, {formatBytes(size)}
-              </span>
+              <span className="truncate">{formatBytes(size)}</span>
               <RoleBadge role={role} />
             </p>
           </div>
         </div>
       </td>
-      <td className="whitespace-nowrap px-3 py-2.5 text-small text-fg-2 max-md:hidden">{categoryLabel(category)}</td>
       <td className="whitespace-nowrap px-3 py-2.5 max-md:hidden">
         <RoleBadge role={role} />
       </td>
@@ -374,7 +373,7 @@ function ServerRow({
       router.refresh()
     } catch {
       setPicked(null)
-      toast.error("Couldn't change the file's role. Try again.")
+      toast.error("Couldn't save the change. Try again.")
     }
   }
 
@@ -382,7 +381,6 @@ function ServerRow({
     <>
       <RowShell
         filename={row.filename}
-        category={row.category}
         role={role}
         size={row.sizeBytes}
         status={status}
@@ -450,7 +448,6 @@ function LocalRow({ upload, onDismiss, typicalSeconds }: { upload: LocalUpload; 
   return (
     <RowShell
       filename={upload.filename}
-      category={upload.category}
       role={roleForCategory(upload.category)}
       size={upload.size}
       status={status}
@@ -619,10 +616,12 @@ export function MaterialsManager({
             browse
           </Button>
         </p>
-        <p className="text-small text-fg-2">PDF, DOCX, PPTX or DOC, up to {maxUploadMb} MB each.</p>
+        <p className="text-small text-fg-2">
+          PDF, DOCX, PPTX or DOC, up to {maxUploadMb} MB each. PDFs need selectable text. Scans can&apos;t be read.
+        </p>
         <div className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-2">
           <span id={`category-label-${variant}`} className="text-small text-fg-2">
-            These are:
+            Use these as:
           </span>
           <SegmentedControl
             aria-labelledby={`category-label-${variant}`}
@@ -659,7 +658,6 @@ export function MaterialsManager({
             <thead className="max-md:hidden">
               <tr className="border-b border-border text-caption text-fg-3">
                 <th scope="col" className="py-2 pr-3 font-medium">Name</th>
-                <th scope="col" className="px-3 py-2 font-medium">Type</th>
                 <th scope="col" className="px-3 py-2 font-medium">Used as</th>
                 <th scope="col" className="px-3 py-2 font-medium">Size</th>
                 <th scope="col" className="px-3 py-2 font-medium">Status</th>
