@@ -4,6 +4,7 @@ import {
   addDays,
   buildPlan,
   daysBetween,
+  fitsInDays,
   isDayString,
   learnMinutesLeft,
   learnOrder,
@@ -665,7 +666,17 @@ test('invariants hold for many generated courses', () => {
     assert.equal(new Set(ids).size, ids.length, `unique ids, ${label}`)
 
     const learnTopics = new Set(items(result, 'learn').map((item) => item.topicId))
-    const listed = new Set((result.notScheduled?.topics ?? []).map((entry) => entry.id))
+    const listed = new Set(
+      [...(result.notScheduled?.topics ?? []), ...(result.tooLongForDay?.topics ?? []), ...(result.tooLongForDay?.dependents ?? [])].map((entry) => entry.id)
+    )
+    // A topic is too long only when no split into parts of 15+ minutes fits the day, and what is too
+    // long never holds up the topics after it: those are not short of time on its account.
+    for (const entry of result.tooLongForDay?.topics ?? []) {
+      const minutes = learnMinutesLeft(topics.find((t) => t.id === entry.id)!)
+      assert.ok(minutes > daily, `${entry.id} (${minutes} min) is too long for ${daily}, ${label}`)
+      assert.ok(!fitsInDays(minutes, daily), label)
+    }
+    if (result.tooLongForDay && !result.notScheduled) assert.equal(result.short, false, label)
     for (const entry of topics.filter((item) => !item.learned)) {
       assert.ok(learnTopics.has(entry.id) !== listed.has(entry.id), `${entry.id} is scheduled or listed, never both or neither, ${label}`)
     }
@@ -727,6 +738,35 @@ test('invariants hold for many generated courses', () => {
         for (const quiz of items(result, 'quiz').filter((item) => mock.topicIds.includes(item.topicId as string))) {
           assert.ok(quiz.date <= mock.date, `unit mock after the ${quiz.topicId} quiz, ${label}`)
         }
+      }
+      // No review is lost silently. A scheduled review due before the final days, and the review a
+      // first quiz brings (when the quiz is before the last day with room for a review), are in the
+      // plan on or after their day, or listed in reviewsNotScheduled.
+      const reported = new Set((result.reviewsNotScheduled ?? []).map((entry) => entry.id))
+      const finalStart = addDays(examDate, -1)
+      const reviewedFrom = (id: string, from: string) => items(result, 'review').some((item) => item.topicId === id && !item.done && item.date >= from)
+      for (const entry of topics.filter((t) => t.reviewDueAt)) {
+        const due = localDay(entry.reviewDueAt as Date, 'UTC')
+        const from = due < TODAY ? TODAY : due
+        if (from < finalStart) assert.ok(reviewedFrom(entry.id, from) || reported.has(entry.id), `${entry.id}'s review due ${due} is planned or reported, ${label}`)
+      }
+      const lastRoom = result.days
+        .filter((day) => day.date < addDays(examDate, -1) && day.date <= addDays(examDate, -2))
+        .filter((day) => !day.items.some((item) => item.overBudget) && day.items.filter((item) => item.kind.endsWith('mock') && !item.done).reduce((sum, item) => sum + item.minutes, 0) + day.doneMinutes + 10 <= daily)
+        .map((day) => day.date)
+        .pop()
+      for (const quiz of items(result, 'quiz').filter((item) => !item.done && lastRoom !== undefined && item.date < lastRoom)) {
+        const id = quiz.topicId as string
+        assert.ok(reviewedFrom(id, addDays(quiz.date, 1)) || reported.has(id), `${id} quizzed ${quiz.date} is reviewed after or reported, ${label}`)
+      }
+      // Reported reviews really are of learned topics, and too-long topics' dependents need one of them.
+      for (const id of reported) {
+        const entry = topics.find((t) => t.id === id)
+        assert.ok(entry && (entry.reviewDueAt || entry.learned || learnTopics.has(id)), `${id} is reported but had no review, ${label}`)
+      }
+      for (const entry of result.tooLongForDay?.dependents ?? []) {
+        const needs = topics.find((t) => t.id === entry.id)?.prerequisiteIds ?? []
+        assert.ok(needs.some((id) => listed.has(id)), `${entry.id} waits on a too-long topic, ${label}`)
       }
       assert.ok(result.days.every((day) => day.date <= examDate), label)
     } else {
@@ -871,7 +911,7 @@ test('the time-is-short message never says "room to learn 0": nothing fits is sa
   const spent = plan({
     topics: [...topics, topic('done', { orderIndex: 9, learned: true, started: true, quizzed: true, mastery: 0.5 })],
     examDate: '2026-10-24',
-    dailyMinutes: 10,
+    dailyMinutes: 20,
     doneToday: [{ kind: 'quiz', topicId: 'done' }],
   })
   assert.ok(spent.short)
@@ -984,4 +1024,52 @@ test("a unit mock exam comes after its topics' first quizzes, on a day with room
   const mock = items(result, 'unit_mock')[0]
   for (const id of ['a', 'b', 'c']) assert.ok((dayOf(result, id, 'quiz') as string) <= mock.date, id)
   assert.ok(result.days.every((day) => day.minutes <= 40 || day.items.some((item) => item.overBudget)))
+})
+
+test('a topic that can never fit a day is listed as too long, and the topics after it still get scheduled', () => {
+  // 20 minutes a day: a 25-minute topic does not fit whole, and splitting it leaves a part under 15
+  // minutes. It used to hold up every later topic for the whole plan.
+  const topics = [
+    topic('long', { orderIndex: 0, estimatedMinutes: 25 }),
+    topic('free', { orderIndex: 1, estimatedMinutes: 15 }),
+    topic('after-long', { orderIndex: 2, estimatedMinutes: 15, prerequisiteIds: ['long'] }),
+  ]
+  for (const examDate of [null, '2026-11-20']) {
+    const result = plan({ topics, examDate, dailyMinutes: 20 })
+    assert.equal(dayOf(result, 'free', 'learn'), TODAY, `${examDate}`)
+    assert.ok(!items(result, 'learn').some((item) => item.topicId === 'long' || item.topicId === 'after-long'))
+    assert.deepEqual(result.tooLongForDay, {
+      topics: [{ id: 'long', name: 'long' }],
+      dependents: [{ id: 'after-long', name: 'after-long' }],
+    })
+    // Not a matter of time before the exam: no warning, no fallbacks, nothing else listed.
+    assert.equal(result.short, false)
+    assert.equal(result.notScheduled, null)
+    assert.equal(result.unitMocksSkipped || result.fullMocksReduced, false)
+  }
+  // 30 minutes a day fits it whole, and 40 splits a 45-minute topic into 25 + 20.
+  assert.equal(plan({ topics, dailyMinutes: 30 }).tooLongForDay, null)
+  assert.equal(plan({ topics: [topic('x', { estimatedMinutes: 45 })], dailyMinutes: 40 }).tooLongForDay, null)
+  // A 45-minute topic on 20-minute days is split 15 + 15 + 15, never stuck on a 5-minute remainder.
+  const thirds = plan({ topics: [topic('x', { estimatedMinutes: 45 })], dailyMinutes: 20 })
+  assert.equal(thirds.tooLongForDay, null)
+  assert.equal(items(thirds, 'learn').reduce((sum, item) => sum + item.minutes, 0), 45)
+  assert.ok(items(thirds, 'learn').every((item) => item.minutes >= 15 && item.minutes <= 20))
+})
+
+test("a topic's last review is not booked on a day other reviews already fill, and is never lost silently", () => {
+  // 20 minutes a day, exam on the 31st. A is strong and due today; B and C are weak and due on the 28th.
+  // A's last review used to be booked on the 28th, where B and C (scheduled, so first) took the day,
+  // and it vanished though the 27th was empty.
+  const topics = [
+    topic('a', { orderIndex: 0, learned: true, quizzed: true, mastery: 0.95, reviewDueAt: new Date('2026-10-21T01:00:00Z') }),
+    topic('b', { orderIndex: 1, learned: true, quizzed: true, mastery: 0.3, reviewDueAt: new Date('2026-10-28T09:00:00Z') }),
+    topic('c', { orderIndex: 2, learned: true, quizzed: true, mastery: 0.4, reviewDueAt: new Date('2026-10-28T09:00:00Z') }),
+  ]
+  const result = plan({ topics, examDate: '2026-10-31', dailyMinutes: 20 })
+  const aReviews = items(result, 'review').filter((item) => item.topicId === 'a').map((item) => item.date)
+  assert.ok(aReviews.some((date) => date > TODAY && date < '2026-10-30'), `a reviewed on ${aReviews}`)
+  assert.deepEqual(result.days.find((day) => day.date === '2026-10-28')?.items.map((item) => item.topicId), ['b', 'c'])
+  assert.equal(result.reviewsNotScheduled, null)
+  assert.ok(result.days.every((day) => day.minutes <= 20 || day.items.every((item) => item.overBudget)))
 })

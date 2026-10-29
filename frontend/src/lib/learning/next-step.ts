@@ -114,7 +114,8 @@ export function nextStep(input: {
     label: examLabel(plan),
     short: plan.short,
     shortMessage: plan.shortMessage,
-    notScheduledCount: plan.notScheduled?.topics.length ?? 0,
+    notScheduledCount:
+      (plan.notScheduled?.topics.length ?? 0) + (plan.tooLongForDay ? plan.tooLongForDay.topics.length + plan.tooLongForDay.dependents.length : 0),
   }
   const shared = { dueCount, overdueCount, exam, then: [], doneToday: 0, minutesLeft: 0, later: null, partLabel: null, overBudgetLabel: null, deferredDue: 0 }
 

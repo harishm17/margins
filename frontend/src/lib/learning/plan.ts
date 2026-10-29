@@ -37,6 +37,12 @@ import { localDateParts } from './study-plan-time'
  * mock exams are dropped, then the earlier of the two full mock exams (one stays, 2 or more days before
  * the exam), then topics that appear on past exams come first, then course order. Topics
  * that still do not fit are listed as not scheduled; nothing is dropped silently.
+ *
+ * A topic longer than the daily minutes that cannot be split into parts of at least 15 minutes that
+ * each fit a day is never scheduled, however many days there are. It, and what needs it first, is
+ * listed apart (tooLongForDay) and does not hold up the topics after it or count as time being short.
+ * A review that finds no day with room before the exam goes to the final review days if it can, and
+ * is otherwise listed (reviewsNotScheduled).
  */
 
 export const DEFAULT_TOPIC_MINUTES = 35
@@ -174,8 +180,15 @@ export type Plan = {
   unitMocksSkipped: boolean
   /** Only one of the two full mock exams is planned, to leave time for learning. */
   fullMocksReduced: boolean
-  /** Topics that are not in the plan, with why. Null when everything is scheduled. */
+  /** Topics that are not in the plan for lack of days, with why. Null when everything is scheduled. */
   notScheduled: { reason: 'short' | 'later'; topics: { id: string; name: string }[] } | null
+  /**
+   * Topics longer than the daily minutes that cannot be split into parts of at least MIN_PART_MINUTES
+   * that fit a day (so no number of days helps), and the topics that need one of them first. Null when none.
+   */
+  tooLongForDay: { topics: { id: string; name: string }[]; dependents: { id: string; name: string }[] } | null
+  /** Learned topics whose review before the exam found no day with room (exam plans only). Null when none. */
+  reviewsNotScheduled: { id: string; name: string }[] | null
   /** Why fewer than two full mock exams were planned, or null. */
   mockNote: string | null
   /** Learning left: topics and minutes (before scheduling). */
@@ -226,6 +239,19 @@ const clampMinutes = (value: number) =>
   Math.min(MAX_DAILY_MINUTES, Math.max(MIN_DAILY_MINUTES, Math.round(Number.isFinite(value) ? value : 45)))
 
 const roundUp5 = (minutes: number) => Math.max(10, Math.ceil(minutes / 5) * 5)
+
+/**
+ * Whether `minutes` of learning can be finished on days of `daily` minutes: whole on one day, or split
+ * into parts of at least MIN_PART_MINUTES that each fit a day. A topic that cannot is never scheduled
+ * (see Plan.tooLongForDay); learning more each day fixes it.
+ */
+export function fitsInDays(minutes: number, daily: number): boolean {
+  if (minutes <= daily) return true
+  if (daily < MIN_PART_MINUTES) return false
+  // k parts fit when k * MIN_PART_MINUTES <= minutes <= k * daily.
+  for (let parts = 2; parts * MIN_PART_MINUTES <= minutes; parts += 1) if (minutes <= parts * daily) return true
+  return false
+}
 
 /** Minutes of learning a topic still needs: all of it, half when one of notes and examples is done, none when learned. */
 export function learnMinutesLeft(topic: Pick<PlanTopic, 'estimatedMinutes' | 'learned' | 'started'>): number {
@@ -283,6 +309,8 @@ type Simulation = {
   days: PlanDay[]
   /** Topics whose learning did not fit before the last learning day, in order. */
   unplaced: PlanTopic[]
+  /** Learned topics whose review before the exam found no day with room. */
+  reviewsLost: PlanTopic[]
   unitMocks: number
   fullMockDays: string[]
   /** A topic was only partly placed: the caller removes it and plays again. */
@@ -298,7 +326,10 @@ type SimOptions = {
   unitMocks: boolean
   /** Time is short: one full mock exam instead of two, to leave the time to learning. */
   singleMock: boolean
+  /** Topics taken out because time ran short (a topic only partly placed, and what needs it). */
   excluded: Set<string>
+  /** Topics that can never fit a day, and what needs them: not learned, but not a sign of short time. */
+  unschedulable: Set<string>
   doneMinutes: number
 }
 
@@ -306,7 +337,7 @@ const itemId = (kind: PlanItemKind, key: string, date: string, part?: number) =>
   `${kind}:${key}:${date}${part ? `:${part}` : ''}`
 
 function simulate(options: SimOptions): Simulation {
-  const { dates, examDay, input, topics, unitMocks, singleMock, excluded, doneMinutes } = options
+  const { dates, examDay, input, topics, unitMocks, singleMock, excluded, unschedulable, doneMinutes } = options
   const daily = clampMinutes(input.dailyMinutes)
   /** The minutes a day has for planned work: the daily minutes, less what is already done today. */
   const capOf = (index: number) => daily - (index === 0 ? doneMinutes : 0)
@@ -433,17 +464,19 @@ function simulate(options: SimOptions): Simulation {
     return -1
   }
   // A topic's last review is booked on a day with room for it, not forced over the cap on the
-  // deadline: the minutes of last reviews booked on each day.
-  const lastReviewMinutes = new Map<number, number>()
+  // deadline. A day's room is what its mock exams leave, less the quizzes and reviews already due on it
+  // (the scheduled ones go first, and earlier bookings count too).
   const bookLastReview = (preferred: number, earliest: number, deadline: number): number => {
-    const free = (index: number) => (lastReviewMinutes.get(index) ?? 0) + REVIEW_MINUTES <= roomOf(index)
+    const booked = (index: number) =>
+      spaced.filter((entry) => entry.target === index).reduce((sum, entry) => sum + (entry.kind === 'quiz' ? QUIZ_MINUTES : REVIEW_MINUTES), 0)
+    const free = (index: number) => booked(index) + REVIEW_MINUTES <= roomOf(index)
     let chosen = -1
     // The preferred day or the nearest earlier one with room; failing that, the nearest later one.
     for (let index = preferred; index >= earliest && chosen < 0; index -= 1) if (free(index)) chosen = index
     for (let index = preferred + 1; index <= deadline && chosen < 0; index += 1) if (free(index)) chosen = index
-    if (chosen < 0) chosen = preferred
-    lastReviewMinutes.set(chosen, (lastReviewMinutes.get(chosen) ?? 0) + REVIEW_MINUTES)
-    return chosen
+    // No day has room: the preferred day. If it does not fit there either, the final review days take
+    // it, and failing that the plan reports it (reviewsNotScheduled); it is never dropped silently.
+    return chosen < 0 ? preferred : chosen
   }
 
   // Reviews at their due day, first quizzes for what is learned but never quizzed.
@@ -452,6 +485,8 @@ function simulate(options: SimOptions): Simulation {
     if (topic.reviewDueAt) {
       const dueDay = localDay(topic.reviewDueAt, input.timeZone)
       const gap = daysBetween(today, dueDay)
+      // Due after the exam: not part of an exam plan.
+      if (examIndex >= 0 && gap > examIndex) continue
       spaced.push({
         kind: 'review',
         topic,
@@ -465,7 +500,7 @@ function simulate(options: SimOptions): Simulation {
     }
   }
 
-  const queue = options.order.filter((topic) => !excluded.has(topic.id) && !topic.learned)
+  const queue = options.order.filter((topic) => !excluded.has(topic.id) && !unschedulable.has(topic.id) && !topic.learned)
   const left = new Map(queue.map((topic) => [topic.id, learnMinutesLeft(topic)]))
   const totalMinutes = new Map(queue.map((topic) => [topic.id, learnMinutesLeft(topic)]))
   const partCount = new Map<string, number>()
@@ -474,7 +509,8 @@ function simulate(options: SimOptions): Simulation {
   const learnedSet = new Set(topics.filter((topic) => topic.learned).map((topic) => topic.id))
   let partial: PlanTopic | null = null
   /** Every topic is learned (by now or by the plan) and every first quiz has its day. */
-  const allFirstQuizzesPlaced = () => topics.every((topic) => learnedSet.has(topic.id)) && !spaced.some((entry) => entry.kind === 'quiz')
+  const allFirstQuizzesPlaced = () =>
+    topics.every((topic) => learnedSet.has(topic.id) || unschedulable.has(topic.id)) && !spaced.some((entry) => entry.kind === 'quiz')
   if (allFirstQuizzesPlaced()) moveFirstMockAfter(-1)
 
   const days: PlanDay[] = []
@@ -497,7 +533,16 @@ function simulate(options: SimOptions): Simulation {
       const learnedByNow = topics.filter((topic) => learnedSet.has(topic.id))
       const share = Math.max(0, Math.min(5, Math.max(1, Math.floor(daily / REVIEW_MINUTES)), Math.floor(capOf(index) / REVIEW_MINUTES)))
       const count = index === examIndex ? Math.min(2, share) : share
-      for (const topic of weakestOrder(learnedByNow).slice(0, count)) {
+      // Reviews still waiting for a day come first (so none is lost), then the weakest topics.
+      const waiting = spaced
+        .filter((entry) => entry.kind === 'review' && entry.target <= index)
+        .sort((a, b) => (a.topic.mastery ?? 0) - (b.topic.mastery ?? 0) || (orderRank.get(a.topic.id) ?? 0) - (orderRank.get(b.topic.id) ?? 0))
+      const chosen = new Map<string, Spaced | null>()
+      for (const entry of waiting) if (chosen.size < count && !chosen.has(entry.topic.id)) chosen.set(entry.topic.id, entry)
+      for (const topic of weakestOrder(learnedByNow)) if (chosen.size < count && !chosen.has(topic.id)) chosen.set(topic.id, null)
+      for (const entry of waiting) if (chosen.has(entry.topic.id)) spaced.splice(spaced.indexOf(entry), 1)
+      for (const topic of weakestOrder(topics.filter((entry) => chosen.has(entry.id)))) {
+        const entry = chosen.get(topic.id)
         items.push({
           id: itemId('review', topic.id, date),
           kind: 'review',
@@ -509,9 +554,9 @@ function simulate(options: SimOptions): Simulation {
           minutes: REVIEW_MINUTES,
           done: false,
           part: null,
-          projected: false,
+          projected: entry?.projected ?? false,
           mastery: topic.mastery,
-          note: 'One of your weakest topics',
+          note: entry ? entry.note : 'One of your weakest topics',
         })
       }
     } else {
@@ -624,12 +669,16 @@ function simulate(options: SimOptions): Simulation {
           queue.shift()
           continue
         }
-        // The whole topic if it fits; else a part of what is left of the day, leaving a remainder that
-        // is not tiny (both at least MIN_PART_MINUTES). The day never runs over.
+        // The whole topic if it fits; else the largest part of what is left of the day that leaves a
+        // remainder later days can finish (every part at least MIN_PART_MINUTES). The day never runs over.
         let take = 0
         if (need <= capacity) take = need
-        else if (capacity >= MIN_PART_MINUTES) take = need - capacity >= MIN_PART_MINUTES ? capacity : need - MIN_PART_MINUTES
-        if (take < MIN_PART_MINUTES && take < need) break
+        else {
+          for (let part = Math.min(capacity, need - MIN_PART_MINUTES); part >= MIN_PART_MINUTES && take === 0; part -= 1) {
+            if (fitsInDays(need - part, daily)) take = part
+          }
+        }
+        if (take === 0) break
 
         capacity -= take
         left.set(topic.id, need - take)
@@ -744,7 +793,16 @@ function simulate(options: SimOptions): Simulation {
   }
 
   const unplaced = queue.filter((topic) => (left.get(topic.id) ?? 0) > 0)
-  return { days, unplaced, unitMocks: unitMockCount, fullMockDays: fullMockIndexes.map((i) => dates[i]), partial }
+  // A review still waiting at the end, with no review of the topic on or after its day: lost for lack of room.
+  const reviewsLost: PlanTopic[] = []
+  if (examIndex >= 0) {
+    for (const entry of spaced) {
+      if (entry.kind !== 'review' || reviewsLost.includes(entry.topic)) continue
+      const reviewed = days.some((day, index) => index >= entry.target && day.items.some((item) => item.kind === 'review' && item.topicId === entry.topic.id))
+      if (!reviewed) reviewsLost.push(entry.topic)
+    }
+  }
+  return { days, unplaced, reviewsLost, unitMocks: unitMockCount, fullMockDays: fullMockIndexes.map((i) => dates[i]), partial }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -825,6 +883,8 @@ export function buildPlan(input: PlanInput): Plan {
     unitMocksSkipped: false,
     fullMocksReduced: false,
     notScheduled: null,
+    tooLongForDay: null,
+    reviewsNotScheduled: null,
     mockNote: null,
     remaining: { topics: 0, minutes: 0 },
   }
@@ -842,6 +902,23 @@ export function buildPlan(input: PlanInput): Plan {
   const todo = topics.filter((topic) => !topic.learned)
   const remainingMinutes = todo.reduce((sum, topic) => sum + learnMinutesLeft(topic), 0)
 
+  // Topics that no number of days can fit (longer than a day, and no split into parts of at least
+  // MIN_PART_MINUTES fits days of this length), and what needs them first. They are left out of every
+  // run, so they neither hold up the topics after them nor count as time being short.
+  const tooLong = todo.filter((topic) => !fitsInDays(learnMinutesLeft(topic), dailyMinutes))
+  const unschedulable = new Set(tooLong.map((topic) => topic.id))
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const topic of todo) {
+      if (!unschedulable.has(topic.id) && topic.prerequisiteIds.some((id) => unschedulable.has(id))) {
+        unschedulable.add(topic.id)
+        grew = true
+      }
+    }
+  }
+  const schedulable = todo.filter((topic) => !unschedulable.has(topic.id))
+  const schedulableMinutes = schedulable.reduce((sum, topic) => sum + learnMinutesLeft(topic), 0)
+
   const run = (config: { examFirst: boolean; unitMocks: boolean; singleMock?: boolean }): Simulation => {
     const excluded = new Set<string>()
     let result: Simulation
@@ -857,6 +934,7 @@ export function buildPlan(input: PlanInput): Plan {
         unitMocks: config.unitMocks,
         singleMock: config.singleMock ?? false,
         excluded,
+        unschedulable,
         doneMinutes,
       })
       if (!result.partial || attempt > topics.length) break
@@ -865,7 +943,7 @@ export function buildPlan(input: PlanInput): Plan {
       for (let grew = true; grew; ) {
         grew = false
         for (const topic of topics) {
-          if (!excluded.has(topic.id) && !topic.learned && topic.prerequisiteIds.some((id) => excluded.has(id))) {
+          if (!excluded.has(topic.id) && !unschedulable.has(topic.id) && !topic.learned && topic.prerequisiteIds.some((id) => excluded.has(id))) {
             excluded.add(topic.id)
             grew = true
           }
@@ -926,10 +1004,10 @@ export function buildPlan(input: PlanInput): Plan {
 
   let shortMessage: string | null = null
   if (short) {
-    const total = todo.length
+    const total = schedulable.length
     const fits = total - unplaced.length
-    const anyRelevant = todo.some((topic) => topic.examRelevant)
-    const needs = hoursLabel(remainingMinutes)
+    const anyRelevant = schedulable.some((topic) => topic.examRelevant)
+    const needs = hoursLabel(schedulableMinutes)
     const opening =
       fits === 0
         ? `Time is short. The ${total === 1 ? 'topic' : `${total} topics`} left ${total === 1 ? 'needs' : 'need'} about ${needs}, and there is no room for ${total === 1 ? 'it' : 'them'} before your exam.`
@@ -964,6 +1042,14 @@ export function buildPlan(input: PlanInput): Plan {
     fullMocksReduced,
     mockNote,
     notScheduled: unplaced.length > 0 ? { reason: short ? 'short' : 'later', topics: unplaced } : null,
+    tooLongForDay:
+      unschedulable.size > 0
+        ? {
+            topics: tooLong.map((topic) => ({ id: topic.id, name: topic.name })),
+            dependents: todo.filter((topic) => unschedulable.has(topic.id) && !tooLong.includes(topic)).map((topic) => ({ id: topic.id, name: topic.name })),
+          }
+        : null,
+    reviewsNotScheduled: chosen.reviewsLost.length > 0 ? chosen.reviewsLost.map((topic) => ({ id: topic.id, name: topic.name })) : null,
     remaining: { topics: todo.length, minutes: remainingMinutes },
   }
 }

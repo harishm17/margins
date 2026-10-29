@@ -10,6 +10,8 @@ import {
   dayLabel,
   daySummary,
   describePlanItem,
+  reviewsNotScheduledText,
+  tooLongText,
   weekLabel,
   type DescribeContext,
   type DescribedPlanItem,
@@ -325,6 +327,21 @@ export function PlanView({
   const open = new Set(plan.days.slice(0, OPEN_DAYS).map((day) => day.date))
   const anyItems = plan.days.some((day) => day.items.length > 0)
   const notScheduled = plan.notScheduled
+  const tooLong = plan.tooLongForDay
+  const topicChips = (topics: { id: string; name: string }[]) => (
+    <ul className="mt-2 flex flex-wrap gap-1.5">
+      {topics.map((topic) => (
+        <li key={topic.id}>
+          <Link
+            href={`${base}/topics/${topic.id}`}
+            className="inline-flex min-h-7 items-center rounded-chip bg-surface-2 px-2 text-small text-fg-2 hover:text-fg max-sm:min-h-11"
+          >
+            {topic.name}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
 
   return (
     <Page>
@@ -352,19 +369,26 @@ export function PlanView({
                 ? 'There is not enough time before your exam for these. Add study time or move the date to fit them in.'
                 : 'These come after the days shown here.'}
             </p>
-            <ul className="mt-2 flex flex-wrap gap-1.5">
-              {notScheduled.topics.map((topic) => (
-                <li key={topic.id}>
-                  <Link
-                    href={`${base}/topics/${topic.id}`}
-                    className="inline-flex min-h-7 items-center rounded-chip bg-surface-2 px-2 text-small text-fg-2 hover:text-fg max-sm:min-h-11"
-                  >
-                    {topic.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            {topicChips(notScheduled.topics)}
           </section>
+        ) : null}
+        {tooLong ? (
+          <section aria-labelledby="too-long-heading" className="rounded-card border border-border bg-surface p-4">
+            <h2 id="too-long-heading" className="text-body-strong text-fg">
+              Longer than your daily time: {pluralize(tooLong.topics.length, 'topic')}
+            </h2>
+            <p className="mt-1 text-small text-fg-2">{tooLongText(plan.dailyMinutes)}</p>
+            {topicChips(tooLong.topics)}
+            {tooLong.dependents.length > 0 ? (
+              <>
+                <p className="mt-3 text-small text-fg-2">Waiting on them:</p>
+                {topicChips(tooLong.dependents)}
+              </>
+            ) : null}
+          </section>
+        ) : null}
+        {plan.reviewsNotScheduled ? (
+          <InlineAlert tone="neutral">{reviewsNotScheduledText(plan.reviewsNotScheduled.map((topic) => topic.name))}</InlineAlert>
         ) : null}
       </div>
 

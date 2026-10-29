@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildPlan, type PlanItem, type PlanTopic } from './plan'
-import { dayLabel, daySummary, describePlanItem, overBudgetLabel, planItemHref, upNextFromPlan, weekLabel } from './plan-copy'
+import { dayLabel, daySummary, describePlanItem, overBudgetLabel, planItemHref, reviewsNotScheduledText, tooLongText, upNextFromPlan, weekLabel } from './plan-copy'
 import { nextActionsFromPlan, setupNextAction } from './next-actions'
 
 const item = (over: Partial<PlanItem>): PlanItem => ({
@@ -90,6 +90,12 @@ test("Up next marks today's mock exam when it is longer than the day", () => {
   })
   const { upNext } = upNextFromPlan(plan, 'c1')
   assert.deepEqual(upNext.map((entry) => [entry.kind, entry.overBudgetLabel]), [['full_mock', 'Longer than your usual 45 minutes']])
+})
+
+test('the notices for topics too long for a day and reviews with no room', () => {
+  assert.equal(tooLongText(20), 'These do not fit in 20 minutes a day, even split into parts of at least 15 minutes. Add study time to fit them.')
+  assert.equal(reviewsNotScheduledText(['Graphs']), 'No room before your exam to review Graphs. Add study time to fit it in.')
+  assert.equal(reviewsNotScheduledText(['Graphs', 'Trees', 'Heaps']), 'No room before your exam to review Graphs, Trees and Heaps. Add study time to fit them in.')
 })
 
 test('day and week labels do not depend on a time zone', () => {

@@ -1,4 +1,4 @@
-import type { Plan, PlanItem } from './plan'
+import { MIN_PART_MINUTES, type Plan, type PlanItem } from './plan'
 import { minutesLabel } from './plan-settings'
 
 /** A plan item in the words, button and link the UI shows. */
@@ -137,6 +137,16 @@ export function daySummary(titles: string[]): string {
   if (titles.length === 1) return titles[0]
   const more = titles.length - 1
   return `${titles[0]} and ${more} more ${more === 1 ? 'task' : 'tasks'}`
+}
+
+/** Why the too-long topics are not in the plan. */
+export const tooLongText = (dailyMinutes: number): string =>
+  `These do not fit in ${minutesLabel(dailyMinutes)} a day, even split into parts of at least ${MIN_PART_MINUTES} minutes. Add study time to fit them.`
+
+/** The notice for reviews that found no day with room before the exam. */
+export function reviewsNotScheduledText(names: string[]): string {
+  const list = names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  return `No room before your exam to review ${list}. Add study time to fit ${names.length === 1 ? 'it' : 'them'} in.`
 }
 
 /** "Oct 19 to Oct 25" for a week starting on `start`. */
