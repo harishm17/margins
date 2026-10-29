@@ -496,12 +496,15 @@ main:has([data-tabs] [data-tab-pending]) [data-tab-panel] {
 
 /* The sidebar's unit groups (components/shell/sidebar.tsx) slide like the <details> above: the same
    guard, and the same 240 ms open and 180 ms close. They keep the hidden attribute for semantics, so
-   display is part of the transition. */
+   display is part of the transition. Only after the student has toggled a group (data-toggled): a group
+   that is rendered open on a page load or when the menu sheet mounts is simply there, not grown from 0.
+   The clip margin leaves room for the 2px focus ring (offset 2px) of the first and last link. */
 @media (prefers-reduced-motion: no-preference) {
   @supports (interpolate-size: allow-keywords) {
-    [data-collapsible] {
+    [data-collapsible][data-toggled] {
       interpolate-size: allow-keywords;
       overflow-y: clip;
+      overflow-clip-margin: 4px;
       block-size: auto;
       transition:
         block-size 240ms var(--ease-enter),
@@ -510,7 +513,7 @@ main:has([data-tabs] [data-tab-pending]) [data-tab-panel] {
         block-size: 0;
       }
     }
-    [data-collapsible][hidden] {
+    [data-collapsible][data-toggled][hidden] {
       display: none;
       block-size: 0;
       transition-duration: 180ms;

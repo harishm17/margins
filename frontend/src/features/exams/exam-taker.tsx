@@ -319,7 +319,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
           </div>
           <Progress aria-label="Questions answered" className="mt-3" value={total ? (answeredSet.size / total) * 100 : 0} />
 
-          <div key={current} className={cn('mt-8', motion)}>
+          <div key={current} data-question="" className={cn('mt-8', motion)}>
             <QuestionRenderer
               question={question}
               value={answers[String(current)]}

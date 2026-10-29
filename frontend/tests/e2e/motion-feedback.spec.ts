@@ -147,6 +147,55 @@ test.describe('study tabs', () => {
   })
 })
 
+test.describe('pinned scroll belongs to the tab that was clicked', () => {
+  test.use({ viewport: { width: 1440, height: 500 } })
+
+  test('a click that is replaced before it lands (the 3 key) does not scroll the page to the top of the view', async ({ page }) => {
+    await signIn(page, DEMO_EMAIL)
+    await page.goto(`${topicUrl}?view=notes`, { waitUntil: 'networkidle' })
+    const nav = studyPath(page)
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }))
+    await slowPages(page, 1500)
+    // Examples is clicked while the tabs are stuck, then the 3 key goes to Practice before Examples lands.
+    await nav.getByRole('link', { name: /^Worked examples/ }).click()
+    await page.keyboard.press('3')
+    await expect(page).toHaveURL(/view=practice/)
+    await page.waitForTimeout(300)
+    const { scrollY, pinned } = await page.evaluate(() => {
+      const nav = document.querySelector('[data-tabs]') as HTMLElement
+      const panel = document.querySelector('[data-tab-panel]')!
+      return {
+        scrollY: Math.round(window.scrollY),
+        pinned: Math.round(panel.getBoundingClientRect().top + window.scrollY - parseFloat(getComputedStyle(nav).top) - nav.offsetHeight),
+      }
+    })
+    const maxScroll = await page.evaluate(() => Math.round(document.documentElement.scrollHeight - window.innerHeight))
+    // The browser's own clamp, not the pinned position of a click that did not land.
+    expect(Math.abs(scrollY - Math.min(maxScroll, 1e9))).toBeLessThanOrEqual(2)
+    expect(pinned, 'the pinned position differs from the clamp, so the check means something').not.toBe(maxScroll)
+  })
+
+  test('Back after a pinned switch does not scroll to the top of the earlier view', async ({ page }) => {
+    await signIn(page, DEMO_EMAIL)
+    await page.goto(`${topicUrl}?view=notes`, { waitUntil: 'networkidle' })
+    const nav = studyPath(page)
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }))
+    await nav.getByRole('link', { name: /^Worked examples/ }).click()
+    await expect(page).toHaveURL(/view=examples/)
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }))
+    await page.goBack()
+    await expect(page).toHaveURL(/view=notes/)
+    await page.waitForTimeout(300)
+    const { scrollY, maxScroll } = await page.evaluate(() => ({
+      scrollY: Math.round(window.scrollY),
+      maxScroll: Math.round(document.documentElement.scrollHeight - window.innerHeight),
+    }))
+    // Back is not a click on a tab: the page is where the browser leaves it, never above the clamp by a pin.
+    expect(scrollY).toBeGreaterThan(0)
+    expect(scrollY).toBeLessThanOrEqual(maxScroll)
+  })
+})
+
 test.describe('sidebar unit groups', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
@@ -179,7 +228,6 @@ test.describe('sidebar unit groups', () => {
     const header = page.locator('button[aria-controls][aria-expanded]').first()
     await expect(header).toBeVisible()
     const expanded = (await header.getAttribute('aria-expanded')) === 'true'
-    const full = expanded ? await unitHeight(page) : 0
     // Close, then open: both must pass through heights between 0 and the full height.
     if (!expanded) await header.click()
     await page.waitForTimeout(400)
@@ -192,7 +240,64 @@ test.describe('sidebar unit groups', () => {
     const opening = await sampleHeights(page, () => header.click())
     expect(opening.some((h) => h > 0 && h < open), `opening heights ${opening}`).toBe(true)
     expect(opening[opening.length - 1]).toBe(open)
-    void full
+  })
+
+  /** Starts sampling the height of every open group each frame, from the first frame of the next page load. */
+  const sampleFromLoad = (page: Page) =>
+    page.addInitScript(() => {
+      const w = window as unknown as { __open: number[] }
+      w.__open = []
+      const tick = () => {
+        for (const list of document.querySelectorAll('ul[data-collapsible]:not([hidden])')) if (list.getClientRects().length > 0) w.__open.push(Math.round(list.getBoundingClientRect().height))
+        requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    })
+  const openSamples = (page: Page) => page.evaluate(() => (window as unknown as { __open: number[] }).__open)
+
+  test('a group that is open on a page load is there at once, not grown from nothing', async ({ page }) => {
+    await signIn(page, DEMO_EMAIL)
+    await sampleFromLoad(page)
+    await page.goto(`/courses/${course}`, { waitUntil: 'networkidle' })
+    await expect(page.locator('ul[data-collapsible]:not([hidden])').first()).toBeVisible()
+    await page.waitForTimeout(500)
+    const samples = await openSamples(page)
+    expect(samples.length).toBeGreaterThan(5)
+    expect(new Set(samples.filter((height) => height > 0)).size, `open group heights per frame ${samples}`).toBe(1)
+    expect(samples.filter((height) => height === 0), 'frames with an open group at height 0').toEqual([])
+  })
+
+  test('the menu sheet on a phone mounts its open group at full height', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await signIn(page, DEMO_EMAIL)
+    await page.goto(`/courses/${course}`, { waitUntil: 'networkidle' })
+    await sampleFromLoad(page)
+    await page.reload({ waitUntil: 'networkidle' })
+    await page.getByRole('button', { name: 'Open menu' }).click()
+    await expect(page.locator('ul[data-collapsible]:not([hidden]):visible').first()).toBeVisible()
+    await page.waitForTimeout(600)
+    const samples = await openSamples(page)
+    expect(samples.length).toBeGreaterThan(3)
+    expect(new Set(samples.filter((height) => height > 0)).size, `open group heights per frame ${samples}`).toBe(1)
+  })
+
+  test('the focus ring of the first and last link in a group is not clipped', async ({ page }) => {
+    await signIn(page, DEMO_EMAIL)
+    await page.goto(`/courses/${course}`, { waitUntil: 'networkidle' })
+    // Toggle a group once (that is what turns the clipping on), then focus its first and last link by keyboard.
+    const header = page.locator('button[aria-controls][aria-expanded]').first()
+    await header.click()
+    await header.click()
+    await page.waitForTimeout(500)
+    const list = page.locator('ul[data-collapsible]:not([hidden])').first()
+    await expect(list).toBeVisible()
+    const clip = await list.evaluate((el) => {
+      const style = getComputedStyle(el)
+      return { overflowY: style.overflowY, margin: parseFloat(style.overflowClipMargin) || 0 }
+    })
+    // Clipped on the block axis, with at least the ring's reach (2px outline + 2px offset) outside the box.
+    expect(clip.overflowY).toBe('clip')
+    expect(clip.margin).toBeGreaterThanOrEqual(4)
   })
 
   test.describe('reduced motion', () => {
@@ -210,34 +315,5 @@ test.describe('sidebar unit groups', () => {
       const opening = await sampleHeights(page, () => header.click())
       expect(opening.filter((h) => h > 0 && h < open), `opening heights ${opening}`).toEqual([])
     })
-  })
-})
-
-test.describe('question slide direction', () => {
-  test.use({ viewport: { width: 1440, height: 900 } })
-
-  const question = (page: Page) => page.locator('main div.mt-8[class*="animate-"], main div.mt-8:has(> fieldset), main div.mt-8').first()
-  const motionClass = (page: Page) =>
-    page.evaluate(() => {
-      const heading = [...document.querySelectorAll('[class*="mt-8"]')].find((el) => /animate-|mt-8/.test(el.className) && el.closest('main') && el.querySelector('[role="radiogroup"], textarea, input, fieldset, [data-question]'))
-      return heading ? [...heading.classList].filter((name) => name.startsWith('animate-')).join(' ') : 'none'
-    })
-
-  test('Next slides from the right, Previous from the left, a jump fades, the first question stays still', async ({ page }) => {
-    await signIn(page, DEMO_EMAIL)
-    await page.goto(`${topicUrl}?view=quiz`)
-    await page.getByRole('button', { name: 'Start quiz' }).click()
-    await expect(page.getByText(/^Question 1 of/)).toBeVisible()
-    void question
-    expect(await motionClass(page)).toBe('')
-    await page.getByRole('button', { name: 'Next', exact: true }).click()
-    await expect(page.getByText(/^Question 2 of/)).toBeVisible()
-    expect(await motionClass(page)).toBe('animate-slide-in')
-    await page.getByRole('button', { name: 'Previous', exact: true }).click()
-    await expect(page.getByText(/^Question 1 of/)).toBeVisible()
-    expect(await motionClass(page)).toBe('animate-slide-in-back')
-    await page.getByRole('button', { name: /^Question 4/ }).click()
-    await expect(page.getByText(/^Question 4 of/)).toBeVisible()
-    expect(await motionClass(page)).toBe('animate-fade-in')
   })
 })

@@ -51,24 +51,28 @@ function PendingUnderline() {
 export function Tabs({ items, activeId, className, scroll = false, stickyPanel, ...aria }: TabsProps) {
   const rowRef = React.useRef<HTMLDivElement>(null)
   const navRef = React.useRef<HTMLElement>(null)
-  const wasStuck = React.useRef(false)
+  // The tab clicked while the bar was stuck: the pinned scroll is for that view only, so a click that
+  // never lands (an error, a newer click) or a later change by other means (Back, a link in the page)
+  // does not scroll.
+  const pinFor = React.useRef<string | null>(null)
 
   const noteStuck = (event: React.MouseEvent, itemId: string) => {
     const nav = navRef.current
     const modified = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0
     if (!stickyPanel || !nav || modified || itemId === activeId) {
-      wasStuck.current = false
+      pinFor.current = null
       return
     }
     const stickyTop = parseFloat(getComputedStyle(nav).top) || 0
-    wasStuck.current = nav.getBoundingClientRect().top <= stickyTop + 1
+    pinFor.current = nav.getBoundingClientRect().top <= stickyTop + 1 ? itemId : null
   }
 
   // The new view is in: if the tabs were stuck when it was asked for, keep them stuck and show the
   // panel from its top. Instant, before paint; a page that is too short to scroll that far stays put.
   React.useLayoutEffect(() => {
-    if (!wasStuck.current) return
-    wasStuck.current = false
+    const pinned = pinFor.current === activeId
+    pinFor.current = null
+    if (!pinned) return
     const nav = navRef.current
     const panel = stickyPanel ? document.querySelector(stickyPanel) : null
     if (!nav || !panel) return

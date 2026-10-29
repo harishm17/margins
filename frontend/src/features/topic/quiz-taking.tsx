@@ -112,7 +112,7 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onIndex
 
       <Progress aria-label="Questions answered" className="mt-4" value={(answeredCount / total) * 100} />
 
-      <div key={current} className={cn('mt-8', motion)}>
+      <div key={current} data-question="" className={cn('mt-8', motion)}>
         <QuestionRenderer
           question={question}
           value={answers[String(current)]}

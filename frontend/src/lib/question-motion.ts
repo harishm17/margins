@@ -14,16 +14,31 @@ export function questionMotion(previous: number, current: number): string {
   return 'animate-fade-in'
 }
 
+export type SeenQuestion = { index: number; live: boolean; motion: string }
+
+/**
+ * The next state of useQuestionMotion. A question that arrives while the page is still hydrating
+ * (`seen.live` false) is where the student already was, such as an exam resumed from sessionStorage,
+ * which the first render does not know yet: it shows without motion.
+ */
+export function nextSeenQuestion(seen: SeenQuestion, current: number, live: boolean): SeenQuestion {
+  if (seen.index === current && seen.live === live) return seen
+  const moved = seen.index !== current
+  return { index: current, live, motion: moved && seen.live ? questionMotion(seen.index, current) : moved ? '' : seen.motion }
+}
+
+const noSubscribe = () => () => {}
+
 /**
  * questionMotion for a component that re-renders as the student types: the class is worked out once
  * per change of question and then kept, so an answer being picked does not cut the slide short.
+ * Nothing moves until the page has hydrated: server and first client render share one snapshot, and a
+ * value read from the browser after that (a resumed exam) is not a step.
  */
 export function useQuestionMotion(current: number): string {
-  const [seen, setSeen] = React.useState({ index: current, motion: '' })
-  if (seen.index !== current) {
-    const next = { index: current, motion: questionMotion(seen.index, current) }
-    setSeen(next)
-    return next.motion
-  }
-  return seen.motion
+  const live = React.useSyncExternalStore(noSubscribe, () => true, () => false)
+  const [seen, setSeen] = React.useState<SeenQuestion>({ index: current, live, motion: '' })
+  const next = nextSeenQuestion(seen, current, live)
+  if (next !== seen) setSeen(next)
+  return next.motion
 }
