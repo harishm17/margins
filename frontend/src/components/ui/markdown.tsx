@@ -113,11 +113,11 @@ function CodeBlock({ children }: { children?: React.ReactNode }) {
   return (
     <div className="md-code group/code">
       <div className="md-code-bar">
+        <span className="md-code-lang">{language && language !== 'math' ? language : null}</span>
         <button type="button" onClick={copy} aria-label={copied ? 'Copied' : 'Copy code'} className="md-code-copy">
           {copied ? <Check weight="bold" className="size-3.5" /> : <Copy className="size-3.5" />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
-        {language && language !== 'math' ? <span className="md-code-lang">{language}</span> : null}
       </div>
       <pre ref={ref}>{children}</pre>
     </div>

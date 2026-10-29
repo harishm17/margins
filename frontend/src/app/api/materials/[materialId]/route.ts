@@ -122,7 +122,7 @@ export async function DELETE(
     });
 
     if (material.gcsPath) {
-      const { deleteFilesBestEffort } = await import('@/lib/storage/gcs');
+      const { deleteFilesBestEffort } = await import('@/lib/storage/files');
       // Logs the path of any file it could not remove.
       await deleteFilesBestEffort([material.gcsPath]);
     }

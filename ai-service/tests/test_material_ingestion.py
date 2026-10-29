@@ -24,14 +24,12 @@ from tests.document_fixtures import PdfBuilder, sentences
 
 
 @pytest.fixture(autouse=True)
-def production_without_gcs(monkeypatch, tmp_path):
+def local_uploads(monkeypatch, tmp_path):
     """Production settings, no bucket, uploads under tmp_path (the case that used to break)."""
     uploads = tmp_path / "uploads"
     uploads.mkdir()
     monkeypatch.setattr(settings, "ENVIRONMENT", "production")
     monkeypatch.setattr(settings, "ENABLE_PROCESSING", True)
-    monkeypatch.setattr(settings, "GCS_BUCKET", "")
-    monkeypatch.setattr(settings, "GCS_BUCKET_NAME", "")
     monkeypatch.setattr(settings, "LOCAL_UPLOADS_DIR", str(uploads))
     monkeypatch.setattr(settings, "AUTO_EXTRACT_TOPICS_ON_CHUNK", False)
     return uploads
@@ -47,11 +45,11 @@ def accepting_llm(monkeypatch):
 
 
 def put_upload(uploads: Path, name: str, builder: PdfBuilder) -> str:
-    """Save a PDF where the frontend would, and return the gs:// path it records."""
+    """Save a PDF where the frontend would, and return the local:// path it records."""
     target = uploads / "user" / "project" / name
     target.parent.mkdir(parents=True, exist_ok=True)
     builder.save(target)
-    return f"gs://margins-materials/user/project/{name}"
+    return f"local://user/project/{name}"
 
 
 def text_pdf(pages: int = 3) -> PdfBuilder:
@@ -66,14 +64,21 @@ def text_pdf(pages: int = 3) -> PdfBuilder:
 
 
 class TestStorage:
-    async def test_gs_path_is_read_from_the_local_uploads_folder(self, production_without_gcs):
-        gcs_path = put_upload(production_without_gcs, "a.pdf", text_pdf(1))
+    async def test_local_path_is_read_from_the_local_uploads_folder(self, local_uploads):
+        stored = put_upload(local_uploads, "a.pdf", text_pdf(1))
 
-        async with local_copy(gcs_path) as path:
+        async with local_copy(stored) as path:
             assert Path(path).is_file()
-            assert Path(path) == (production_without_gcs / "user/project/a.pdf").resolve()
+            assert Path(path) == (local_uploads / "user/project/a.pdf").resolve()
         # A local upload is read in place and must survive the context manager.
         assert Path(path).is_file()
+
+    async def test_legacy_gs_path_is_read_from_the_local_uploads_folder(self, local_uploads):
+        """Local uploads made before `local://` were recorded as gs://<any bucket>/<path>."""
+        put_upload(local_uploads, "old.pdf", text_pdf(1))
+
+        async with local_copy("gs://local-materials/user/project/old.pdf") as path:
+            assert Path(path) == (local_uploads / "user/project/old.pdf").resolve()
 
     async def test_plain_local_path_is_read_in_place(self, tmp_path):
         target = tmp_path / "plain.pdf"
@@ -82,28 +87,32 @@ class TestStorage:
         async with local_copy(str(target)) as path:
             assert path == str(target)
 
-    async def test_missing_file_without_gcs_is_a_storage_error(self):
-        with pytest.raises(StorageError, match="GCS is not configured"):
-            async with local_copy("gs://bucket/user/project/missing.pdf"):
+    @pytest.mark.parametrize(
+        "stored", ["local://user/project/missing.pdf", "gs://bucket/user/project/missing.pdf"]
+    )
+    async def test_missing_local_file_is_a_storage_error(self, stored):
+        with pytest.raises(StorageError, match="not in the local uploads folder"):
+            async with local_copy(stored):
                 pass
 
-    async def test_path_cannot_leave_the_uploads_folder(self, tmp_path, production_without_gcs):
+    @pytest.mark.parametrize("stored", ["local://../secret.pdf", "gs://bucket/../secret.pdf"])
+    async def test_path_cannot_leave_the_uploads_folder(self, tmp_path, local_uploads, stored):
         (tmp_path / "secret.pdf").write_bytes(b"x")
 
         with pytest.raises(StorageError):
-            async with local_copy("gs://bucket/../secret.pdf"):
+            async with local_copy(stored):
                 pass
 
-    async def test_malformed_gcs_path_is_a_storage_error(self):
-        with pytest.raises(StorageError, match="Invalid GCS path"):
-            async with local_copy("gs://only-a-bucket"):
+    @pytest.mark.parametrize("stored", ["local://", "gs://only-a-bucket", "gs:///no-bucket.pdf"])
+    async def test_malformed_local_path_is_a_storage_error(self, stored):
+        with pytest.raises(StorageError, match="Invalid local storage path"):
+            async with local_copy(stored):
                 pass
 
-    async def test_downloaded_copy_is_removed_afterwards(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(settings, "GCS_BUCKET", "bucket")
+    async def test_downloaded_copy_is_removed_afterwards(self, monkeypatch):
         temp_dirs = []
 
-        def fake_download(bucket_name, blob_path):
+        def fake_download(bucket_name, key):
             import tempfile
 
             temp_dir = tempfile.mkdtemp(prefix="margins-")
@@ -112,22 +121,20 @@ class TestStorage:
             text_pdf(1).save(Path(path))
             return path, temp_dir
 
-        monkeypatch.setattr(storage, "_download_from_gcs", fake_download)
+        monkeypatch.setattr(storage, "_download_from_s3", fake_download)
 
-        async with local_copy("gs://bucket/user/project/remote.pdf") as path:
+        async with local_copy("s3://bucket/user/project/remote.pdf") as path:
             assert Path(path).is_file()
-            assert "margins_remote.pdf" not in path
         assert temp_dirs and not os.path.exists(temp_dirs[0])
 
     async def test_downloaded_copy_is_removed_when_the_body_fails(self, monkeypatch):
-        monkeypatch.setattr(settings, "GCS_BUCKET", "bucket")
         import tempfile
 
         temp_dir = tempfile.mkdtemp(prefix="margins-")
-        monkeypatch.setattr(storage, "_download_from_gcs", lambda b, p: (temp_dir + "/f", temp_dir))
+        monkeypatch.setattr(storage, "_download_from_s3", lambda b, k: (temp_dir + "/f", temp_dir))
 
         with pytest.raises(RuntimeError):
-            async with local_copy("gs://bucket/a/b.pdf"):
+            async with local_copy("s3://bucket/a/b.pdf"):
                 raise RuntimeError("parse blew up")
         assert not os.path.exists(temp_dir)
 
@@ -182,8 +189,8 @@ class TestS3Storage:
 
 
 class TestValidation:
-    async def test_local_pdf_validates_in_production(self, production_without_gcs):
-        gcs_path = put_upload(production_without_gcs, "ok.pdf", text_pdf())
+    async def test_local_pdf_validates_in_production(self, local_uploads):
+        gcs_path = put_upload(local_uploads, "ok.pdf", text_pdf())
 
         result = await validate_material("m1", gcs_path, "ok.pdf", "lecture_notes")
 
@@ -197,8 +204,8 @@ class TestValidation:
                 "m1", "gs://bucket/user/project/gone.pdf", "gone.pdf", "lecture_notes"
             )
 
-    async def test_corrupt_file_is_invalid(self, production_without_gcs):
-        target = production_without_gcs / "user" / "project" / "bad.pdf"
+    async def test_corrupt_file_is_invalid(self, local_uploads):
+        target = local_uploads / "user" / "project" / "bad.pdf"
         target.parent.mkdir(parents=True)
         target.write_bytes(b"not a pdf")
 
@@ -215,11 +222,11 @@ class TestValidation:
         assert result.status == "invalid"
         assert "Unsupported file type" in result.notes
 
-    async def test_scanned_pdf_is_rejected(self, production_without_gcs):
+    async def test_scanned_pdf_is_rejected(self, local_uploads):
         pdf = PdfBuilder().image_page()
         for _ in range(3):
             pdf.new_page().image_page()
-        gcs_path = put_upload(production_without_gcs, "scan.pdf", pdf)
+        gcs_path = put_upload(local_uploads, "scan.pdf", pdf)
 
         result = await validate_material("m1", gcs_path, "scan.pdf", "lecture_notes")
 
@@ -227,10 +234,10 @@ class TestValidation:
         assert "scanned" in result.notes
         assert "OCR is not supported yet" in result.notes
 
-    async def test_some_empty_pages_are_mentioned_in_the_notes(self, production_without_gcs):
+    async def test_some_empty_pages_are_mentioned_in_the_notes(self, local_uploads):
         pdf = text_pdf(3)
         pdf.new_page().image_page()
-        gcs_path = put_upload(production_without_gcs, "mixed.pdf", pdf)
+        gcs_path = put_upload(local_uploads, "mixed.pdf", pdf)
 
         result = await validate_material("m1", gcs_path, "mixed.pdf", "lecture_notes")
 
@@ -290,15 +297,16 @@ class TestValidateJob:
 
         assert raised.value.status_code == 500
         job = await s.job()
+        # Back in pending for the dispatcher's retry.
         assert (job["status"], job["error_code"], job["retryable"]) == (
-            "failed", "STORAGE_UNAVAILABLE", True,
+            "pending", "STORAGE_UNAVAILABLE", True,
         )
         assert (await s.material())["validation_status"] == "pending"
 
     async def test_corrupt_file_marks_the_material_invalid_and_starts_no_chunking(
-        self, db, production_without_gcs, dispatched
+        self, db, local_uploads, dispatched
     ):
-        target = production_without_gcs / "u" / "p" / "bad.pdf"
+        target = local_uploads / "u" / "p" / "bad.pdf"
         target.parent.mkdir(parents=True)
         target.write_bytes(b"junk")
         s = await Setup.create(db, "validate_material", "gs://b/u/p/bad.pdf", "bad.pdf")
@@ -311,9 +319,9 @@ class TestValidateJob:
         assert dispatched == []
 
     async def test_valid_file_completes_and_starts_one_chunking_job(
-        self, db, production_without_gcs, dispatched
+        self, db, local_uploads, dispatched
     ):
-        gcs_path = put_upload(production_without_gcs, "ok.pdf", text_pdf(3))
+        gcs_path = put_upload(local_uploads, "ok.pdf", text_pdf(3))
         s = await Setup.create(db, "validate_material", gcs_path, "ok.pdf")
 
         await jobs.validate_material_job(s.payload)
@@ -349,7 +357,7 @@ class TestMaterialRole:
     def test_the_rule(self, category, kind, role):
         assert material_role(category, kind) == role
 
-    async def validate(self, db, production_without_gcs, monkeypatch, category, kind):
+    async def validate(self, db, local_uploads, monkeypatch, category, kind):
         class Provider:
             async def generate_structured(self, messages, schema, **kwargs):
                 self.prompt = messages[0].content
@@ -357,38 +365,38 @@ class TestMaterialRole:
 
         provider = Provider()
         monkeypatch.setattr(LLMFactory, "get_provider", classmethod(lambda cls: provider))
-        gcs_path = put_upload(production_without_gcs, "ok.pdf", text_pdf(3))
+        gcs_path = put_upload(local_uploads, "ok.pdf", text_pdf(3))
         s = await Setup.create(db, "validate_material", gcs_path, "ok.pdf")
         await db.execute("UPDATE materials SET category = $2 WHERE id = $1", s.material_id, category)
         await jobs.validate_material_job(s.payload)
         return await s.material(), provider
 
-    async def test_the_validators_kind_sets_the_role(self, db, production_without_gcs, monkeypatch, dispatched):
-        material, provider = await self.validate(db, production_without_gcs, monkeypatch, "lecture_notes", "syllabus")
+    async def test_the_validators_kind_sets_the_role(self, db, local_uploads, monkeypatch, dispatched):
+        material, provider = await self.validate(db, local_uploads, monkeypatch, "lecture_notes", "syllabus")
         assert material["role"] == "syllabus" and material["validation_status"] == "valid"
         assert "Set kind to what the file is" in provider.prompt
 
     async def test_a_sample_exams_upload_is_an_exam_whatever_the_validator_says(
-        self, db, production_without_gcs, monkeypatch, dispatched
+        self, db, local_uploads, monkeypatch, dispatched
     ):
-        material, _ = await self.validate(db, production_without_gcs, monkeypatch, "sample_exams", "content")
+        material, _ = await self.validate(db, local_uploads, monkeypatch, "sample_exams", "content")
         assert material["role"] == "exam"
 
-    async def test_a_syllabus_upload_is_a_syllabus(self, db, production_without_gcs, monkeypatch, dispatched):
-        material, _ = await self.validate(db, production_without_gcs, monkeypatch, "syllabus", "content")
+    async def test_a_syllabus_upload_is_a_syllabus(self, db, local_uploads, monkeypatch, dispatched):
+        material, _ = await self.validate(db, local_uploads, monkeypatch, "syllabus", "content")
         assert material["role"] == "syllabus"
 
-    async def test_content_stays_content(self, db, production_without_gcs, monkeypatch, dispatched):
-        material, _ = await self.validate(db, production_without_gcs, monkeypatch, "lecture_notes", "content")
+    async def test_content_stays_content(self, db, local_uploads, monkeypatch, dispatched):
+        material, _ = await self.validate(db, local_uploads, monkeypatch, "lecture_notes", "content")
         assert material["role"] == "content"
 
-    async def test_without_a_model_the_role_is_content(self, db, production_without_gcs, monkeypatch, dispatched):
+    async def test_without_a_model_the_role_is_content(self, db, local_uploads, monkeypatch, dispatched):
         class Down:
             async def generate_structured(self, *args, **kwargs):
                 raise LLMError("no key")
 
         monkeypatch.setattr(LLMFactory, "get_provider", classmethod(lambda cls: Down()))
-        gcs_path = put_upload(production_without_gcs, "ok.pdf", text_pdf(3))
+        gcs_path = put_upload(local_uploads, "ok.pdf", text_pdf(3))
         s = await Setup.create(db, "validate_material", gcs_path, "ok.pdf")
 
         await jobs.validate_material_job(s.payload)
@@ -405,8 +413,8 @@ class TestChunkJob:
         monkeypatch.setattr(jobs, "generate_embeddings", embed)
 
     @pytest.fixture
-    async def setup(self, db, production_without_gcs, monkeypatch):
-        gcs_path = put_upload(production_without_gcs, "doc.pdf", text_pdf(3))
+    async def setup(self, db, local_uploads, monkeypatch):
+        gcs_path = put_upload(local_uploads, "doc.pdf", text_pdf(3))
         self.fake_embeddings(monkeypatch)
         return await Setup.create(db, "chunk_material", gcs_path, "doc.pdf", status="valid")
 
@@ -464,7 +472,7 @@ class TestChunkJob:
         assert raised.value.status_code == 500
         assert await db.fetchval("SELECT count(*) FROM material_chunks") == 0
         job = await setup.job()
-        assert (job["status"], job["retryable"]) == ("failed", True)
+        assert (job["status"], job["retryable"]) == ("pending", True)
 
     async def test_wrong_number_of_vectors_fails_the_job(self, setup, db, monkeypatch):
         async def short(texts):
@@ -477,9 +485,9 @@ class TestChunkJob:
         assert await db.fetchval("SELECT count(*) FROM material_chunks") == 0
 
     async def test_file_without_text_is_a_permanent_failure_and_marks_the_material_invalid(
-        self, db, production_without_gcs, monkeypatch
+        self, db, local_uploads, monkeypatch
     ):
-        gcs_path = put_upload(production_without_gcs, "blank.pdf", PdfBuilder().image_page())
+        gcs_path = put_upload(local_uploads, "blank.pdf", PdfBuilder().image_page())
         self.fake_embeddings(monkeypatch)
         s = await Setup.create(db, "chunk_material", gcs_path, "blank.pdf", status="valid")
 
@@ -524,7 +532,7 @@ class TestChunkJob:
 
 class TestAutoTopicExtraction:
     @pytest.fixture(autouse=True)
-    def auto_extract(self, monkeypatch, db, production_without_gcs):
+    def auto_extract(self, monkeypatch, db, local_uploads):
         monkeypatch.setattr(settings, "AUTO_EXTRACT_TOPICS_ON_CHUNK", True)
         monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")
 
@@ -538,9 +546,9 @@ class TestAutoTopicExtraction:
         return await db.fetch("SELECT * FROM processing_jobs WHERE job_type = 'extract_topics'")
 
     async def test_extraction_waits_for_uploads_still_being_validated(
-        self, db, production_without_gcs, dispatched
+        self, db, local_uploads, dispatched
     ):
-        path = put_upload(production_without_gcs, "doc.pdf", text_pdf(3))
+        path = put_upload(local_uploads, "doc.pdf", text_pdf(3))
         a = await Setup.create(db, "chunk_material", path, "doc.pdf", status="valid")
         b_material = await seed_material(db, a.project_id, path, "doc.pdf", "pending")
 
@@ -563,9 +571,9 @@ class TestAutoTopicExtraction:
         assert dispatched == [(extraction["id"], a.project_id)]
 
     async def test_a_valid_material_with_no_chunks_does_not_block_extraction(
-        self, db, production_without_gcs, dispatched
+        self, db, local_uploads, dispatched
     ):
-        path = put_upload(production_without_gcs, "doc.pdf", text_pdf(3))
+        path = put_upload(local_uploads, "doc.pdf", text_pdf(3))
         a = await Setup.create(db, "chunk_material", path, "doc.pdf", status="valid")
         await seed_material(db, a.project_id, path, "empty.pdf", "valid")  # never got chunks
 
@@ -574,9 +582,9 @@ class TestAutoTopicExtraction:
         assert len(await self.extraction_jobs(db)) == 1
 
     async def test_simultaneous_starts_create_a_single_extraction_job(
-        self, db, production_without_gcs, dispatched
+        self, db, local_uploads, dispatched
     ):
-        path = put_upload(production_without_gcs, "doc.pdf", text_pdf(3))
+        path = put_upload(local_uploads, "doc.pdf", text_pdf(3))
         a = await Setup.create(db, "chunk_material", path, "doc.pdf", status="valid")
         await jobs.chunk_material_job(a.payload)
         await db.execute("DELETE FROM processing_jobs WHERE job_type = 'extract_topics'")

@@ -26,6 +26,24 @@ services:
       timeout: 5s
       retries: 5
 
+  # One-shot: applies the Prisma migrations (frontend/prisma/migrations), then exits. The web
+  # app and the AI service start only after it succeeds. Same image and command as Railway's
+  # pre-deploy step.
+  migrate:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: margins-migrate
+    entrypoint: ["prisma", "migrate", "deploy"]
+    environment:
+      - DATABASE_URL=postgresql://dev:devpass@postgres:5432/margins
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./frontend/prisma:/app/prisma:ro
+    restart: "no"
+
   # Next.js frontend service
   frontend:
     build:
@@ -42,20 +60,23 @@ services:
       - DATABASE_URL=postgresql://dev:devpass@postgres:5432/margins
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-change-in-production}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # Local only: the test sign-in (frontend/src/lib/auth/test-login.ts)
+      - ENABLE_TEST_LOGIN=${ENABLE_TEST_LOGIN:-false}
       - AI_SERVICE_URL=http://ai-service:8000
       - AI_INTERNAL_TOKEN=${AI_INTERNAL_TOKEN:-dev-internal-token}
-      - GCS_BUCKET=${GCS_BUCKET:-local-materials}
-      - GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
-      - CLOUD_TASKS_QUEUE=${CLOUD_TASKS_QUEUE:-margins-jobs}
-      - CLOUD_TASKS_LOCATION=${CLOUD_TASKS_LOCATION:-us-central1}
-      - ENABLE_GCS_STORAGE=${ENABLE_GCS_STORAGE:-false}
-      - ALLOW_GCS_LOCAL_FALLBACK=${ALLOW_GCS_LOCAL_FALLBACK:-true}
-      - ENABLE_CLOUD_TASKS=${ENABLE_CLOUD_TASKS:-false}
+      # Uploads go to the shared uploads_data volume (no S3 bucket locally)
+      - LOCAL_UPLOADS_DIR=/data/uploads
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-25}
+      - VOICE_DAILY_MINUTES=${VOICE_DAILY_MINUTES:-30}
       - NODE_ENV=production
       - ENVIRONMENT=${ENVIRONMENT:-development}
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/prisma:/app/prisma
@@ -81,8 +102,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ENABLE_PROCESSING=${ENABLE_PROCESSING:-true}
       - AUTO_EXTRACT_TOPICS_ON_CHUNK=${AUTO_EXTRACT_TOPICS_ON_CHUNK:-false}
-      - GCS_BUCKET=${GCS_BUCKET:-local-materials}
-      - GCS_PROJECT_ID=${GCS_PROJECT_ID:-}
+      - LOCAL_UPLOADS_DIR=/data/uploads
       - AI_SERVICE_URL=http://localhost:8000
       - FRONTEND_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - ENVIRONMENT=${ENVIRONMENT:-development}
@@ -92,6 +112,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./ai-service/app:/app/app
       - uploads_data:/data/uploads

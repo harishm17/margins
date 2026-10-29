@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { Prisma, type PrismaClient } from '@prisma/client'
-import { hashSync } from 'bcryptjs'
 
 /**
  * The showcase account for the marketing and README screenshots: one student, one course, written by
@@ -12,10 +11,9 @@ import { hashSync } from 'bcryptjs'
  * topics, an exam date, a graded mock exam, a cited chat answer, and for the topic "Graph traversal"
  * real notes, worked examples, practice and a quiz with two attempts. The prose lives in
  * showcase-content.json. Idempotent: it deletes the showcase user (everything cascades) and builds
- * the account again. Local databases only: the password is in this public repo.
+ * the account again. Local databases only: the screenshot script signs in with the local-only test sign-in.
  */
 export const SHOWCASE_EMAIL = 'showcase@example.com'
-export const SHOWCASE_PASSWORD = 'showcase-demo-pass'
 const SHOWCASE_NAME = 'Jane Doe'
 const COURSE_NAME = 'CS 161 Algorithms'
 
@@ -238,7 +236,6 @@ const UNITS = [
 
 export type ShowcaseIds = {
   email: string
-  password: string
   userId: string
   courseId: string
   topicIds: string[]
@@ -263,7 +260,7 @@ function withSources<T extends Json>(items: T[], refs: ReturnType<typeof sourceO
 export async function seedShowcase(prisma: PrismaClient): Promise<ShowcaseIds> {
   await prisma.user.deleteMany({ where: { email: SHOWCASE_EMAIL } })
   const user = await prisma.user.create({
-    data: { email: SHOWCASE_EMAIL, name: SHOWCASE_NAME, passwordHash: hashSync(SHOWCASE_PASSWORD, 10) },
+    data: { email: SHOWCASE_EMAIL, name: SHOWCASE_NAME },
   })
 
   // The exam is in 16 days, stored as midnight UTC of that calendar date.
@@ -640,7 +637,6 @@ export async function seedShowcase(prisma: PrismaClient): Promise<ShowcaseIds> {
 
   return {
     email: SHOWCASE_EMAIL,
-    password: SHOWCASE_PASSWORD,
     userId: user.id,
     courseId: course.id,
     topicIds,

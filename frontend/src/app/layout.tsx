@@ -22,6 +22,8 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: { default: DEFAULT_TITLE, template: `%s - ${BRAND_NAME}` },
   description: DEFAULT_DESCRIPTION,
+  // The SVG tile comes from app/icon.svg and the apple-touch icon from app/apple-icon.tsx; the .ico is for crawlers and old browsers.
+  icons: { icon: [{ url: '/favicon.ico', sizes: '48x48' }] },
   openGraph: { type: 'website', siteName: BRAND_NAME, title: DEFAULT_TITLE, description: DEFAULT_DESCRIPTION },
   twitter: { card: 'summary_large_image', title: DEFAULT_TITLE, description: DEFAULT_DESCRIPTION },
 }

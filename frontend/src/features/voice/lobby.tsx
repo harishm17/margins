@@ -12,10 +12,11 @@ import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { LobbyAlert } from './errors'
-import { minutesLeftLabel } from './format'
+import { focusPlaceholder, minutesLeftLabel } from './format'
 import { defaultLanguageCode, VOICE_LANGUAGES } from './speech'
 import type { StartConfig } from './use-voice-session'
 import type { VoiceUsage, VoiceStyle } from './voice-api'
+import { useAiStatus } from '@/features/ai/ai-status'
 
 const STYLE_OPTIONS: { value: VoiceStyle; label: string; hint: string }[] = [
   { value: 'oral_quiz', label: 'Quiz me', hint: 'The coach asks one question at a time and checks each answer.' },
@@ -28,7 +29,7 @@ const LANGUAGE_OPTIONS = VOICE_LANGUAGES.map((language) => ({ value: language.co
 type LobbyProps = {
   courseId: string
   mode: 'topic' | 'sprint'
-  topic?: { id: string; name: string }
+  topic?: { id: string; name: string; keywords?: string[] }
   /** null while loading, 'unavailable' when the usage request failed. */
   usage: VoiceUsage | 'unavailable' | null
   limitReached: boolean
@@ -58,6 +59,8 @@ export function Lobby({
 
   const remaining = usage && usage !== 'unavailable' ? usage.remainingSeconds : null
   const outOfTime = limitReached || remaining === 0
+  // AI unavailable or the day's allowance used: the coach cannot reply, so the session cannot start.
+  const { blocked } = useAiStatus()
   const styleHint = STYLE_OPTIONS.find((option) => option.value === style)?.hint
   const effectiveStyle: VoiceStyle = mode === 'sprint' ? 'oral_quiz' : style
 
@@ -95,7 +98,7 @@ export function Lobby({
         className="flex flex-col gap-5"
         onSubmit={(event) => {
           event.preventDefault()
-          if (!outOfTime && !starting) onStart({ style: effectiveStyle, language, focus })
+          if (!outOfTime && !starting && !blocked) onStart({ style: effectiveStyle, language, focus })
         }}
       >
         {mode === 'topic' ? (
@@ -125,7 +128,7 @@ export function Lobby({
           <Input
             value={focus}
             onChange={(event) => setFocus(event.target.value)}
-            placeholder={mode === 'topic' ? 'e.g. edge cases in Dijkstra' : 'e.g. the definitions I keep mixing up'}
+            placeholder={focusPlaceholder(mode === 'topic' ? topic?.keywords : undefined)}
             maxLength={280}
             disabled={starting}
           />
@@ -138,12 +141,14 @@ export function Lobby({
             size="lg"
             icon={<Microphone />}
             loading={starting}
-            disabled={outOfTime || usage === null}
+            disabled={outOfTime || usage === null || !!blocked}
           >
             {mode === 'sprint' ? 'Start sprint' : 'Start voice practice'}
           </Button>
           <p className="max-w-[34ch] text-small text-fg-2">
-            {outOfTime
+            {blocked
+              ? blocked.text
+              : outOfTime
               ? "You've used today's voice time. It resets within 24 hours."
               : recognitionSupported
                 ? 'Works best in Chrome, Edge or Safari with a microphone.'
@@ -176,7 +181,7 @@ function LobbyAlertView({
         }
       >
         {mode === 'sprint'
-          ? "Your weakest topics don't have quiz questions yet. Create their notes and a quiz, then come back."
+          ? "These topics don't have quiz questions yet. Create their notes and a quiz, then come back."
           : "There are no questions to ask yet. Create this topic's notes and a quiz, then come back. Walk me through it and Just talk work without them."}
       </InlineAlert>
     )

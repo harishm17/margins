@@ -37,3 +37,18 @@ async def test_drill_tops_up_after_filtering():
     assert result["total"] == 3
     assert "6 questions" in llm.generate_structured.call_args.args[0][-1].content
     assert llm.generate_structured.call_args.kwargs["purpose"] == "voice_drill"
+
+
+@pytest.mark.asyncio
+async def test_drill_prompt_names_the_app_margins():
+    llm = MagicMock()
+    llm.generate_structured = AsyncMock(
+        return_value=DrillQuestionSet(
+            questions=[DrillQuestion(question_text="Explain idea", key_points=["k"], sample_answer="s", explanation="e")]
+        )
+    )
+    with patch.object(voice.LLMFactory, "get_provider", return_value=llm):
+        await voice.generate_concept_drill(DrillGenerateRequest(notes="n", count=3))
+    system = llm.generate_structured.call_args.args[0][0].content
+    assert system.startswith("You are the oral exam coach in Margins, a study app.")
+    assert "StudyBuddy" not in system

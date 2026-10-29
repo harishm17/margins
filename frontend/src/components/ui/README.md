@@ -42,7 +42,7 @@ elements (`icon={<Plus />}`), which keeps every primitive usable from server com
 | `markdown.tsx` | `Markdown`, `MarkdownInline` | heavy: import through `lazy-markdown.tsx` |
 | `lazy-markdown.tsx` | `LazyMarkdown`, `LazyMarkdownInline` | next/dynamic wrappers |
 | `math-text.tsx` | `MathText` | every model-written string in running text: inline markdown and KaTeX, plain strings render at once |
-| `kbd.tsx` | `Kbd` | |
+| `kbd.tsx` | `Kbd`, `KeyHint` | Keyboard hints; hidden on touch-first devices (`pointer: coarse`) unless `persistent` |
 | `spinner.tsx` | `Spinner` | |
 | `styles.ts` | shared class strings | floating surface, menu item |
 

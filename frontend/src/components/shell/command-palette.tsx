@@ -15,6 +15,8 @@ import {
   CircleHalf,
   Clock,
   Exam,
+  FileText,
+  GearSix,
   ListBullets,
   MagnifyingGlass,
   Microphone,
@@ -23,8 +25,9 @@ import {
   UploadSimple,
 } from '@phosphor-icons/react/dist/ssr'
 import { DialogOverlay } from '@/components/ui/dialog'
-import { Kbd } from '@/components/ui/kbd'
+import { Kbd, KeyHint } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
+import { paletteFilter, paletteItem } from './palette-search'
 import { useShell } from './shell-provider'
 
 type Entry = {
@@ -34,7 +37,7 @@ type Entry = {
   /** Quiet text after the label, e.g. the course a topic belongs to. */
   hint?: string
   icon: React.ElementType
-  group: 'Topics' | 'Courses' | 'Actions'
+  group: 'Topics' | 'Files' | 'Courses' | 'Actions'
   keywords?: string[]
   run: (ctx: { router: ReturnType<typeof useRouter> }) => void
   /** Whether to remember it under "Recent". Actions that change state are not remembered. */
@@ -89,6 +92,19 @@ function PaletteBody() {
           run: ({ router }) => router.push(`/courses/${course.id}/topics/${topic.id}`),
         })
       }
+      // Files open the way "Open file" on the Materials page opens them: the file itself, in a new tab.
+      for (const file of course.files) {
+        list.push({
+          id: `file:${file.id}`,
+          label: file.filename,
+          hint: course.id === params.courseId ? undefined : course.name,
+          icon: FileText,
+          group: 'Files',
+          keywords: [course.name],
+          remember: true,
+          run: () => window.open(`/api/materials/${file.id}/file`, '_blank', 'noopener'),
+        })
+      }
     }
     for (const course of nav) {
       list.push({
@@ -121,6 +137,7 @@ function PaletteBody() {
         keywords: ['dark', 'light'],
         run: () => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'),
       },
+      { id: 'action:settings', label: 'Settings', icon: GearSix, group: 'Actions', keywords: ['account', 'allowance', 'delete'], run: ({ router }) => router.push('/settings') },
       { id: 'action:sign-out', label: 'Sign out', icon: SignOut, group: 'Actions', run: () => void signOut({ callbackUrl: '/login' }) }
     )
     return list
@@ -143,15 +160,14 @@ function PaletteBody() {
     entry.run({ router })
   }
 
-  const groups: Entry['group'][] = ['Topics', 'Courses', 'Actions']
+  const groups: Entry['group'][] = ['Topics', 'Files', 'Courses', 'Actions']
 
   const renderItem = (entry: Entry, prefix = '') => {
     const Icon = entry.icon
     return (
       <Command.Item
         key={prefix + entry.id}
-        value={`${prefix}${entry.label} ${entry.hint ?? ''}`}
-        keywords={entry.keywords}
+        {...paletteItem(entry, prefix)}
         onSelect={() => select(entry)}
         className={itemClass}
       >
@@ -164,13 +180,13 @@ function PaletteBody() {
   }
 
   return (
-    <Command loop label="Search and commands">
+    <Command loop label="Search and commands" filter={paletteFilter}>
             <div className="flex h-12 items-center gap-3 border-b border-border px-4">
               <MagnifyingGlass aria-hidden="true" className="size-[18px] shrink-0 text-fg-3" />
               <Command.Input
                 value={search}
                 onValueChange={setSearch}
-                placeholder="Search topics, courses and actions"
+                placeholder="Search topics, files, courses and actions"
                 className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-3"
               />
               <Kbd>Esc</Kbd>
@@ -184,7 +200,7 @@ function PaletteBody() {
                   {recentEntries.map((entry) => (
                     <Command.Item
                       key={`recent:${entry.id}`}
-                      value={`recent ${entry.label} ${entry.hint ?? ''}`}
+                      {...paletteItem(entry, 'recent:')}
                       onSelect={() => select(entry)}
                       className={itemClass}
                     >
@@ -205,7 +221,7 @@ function PaletteBody() {
                 )
               })}
             </Command.List>
-            <div className="flex items-center gap-4 border-t border-border px-4 py-2 text-caption font-normal text-fg-3">
+            <KeyHint className="flex items-center gap-4 border-t border-border px-4 py-2 text-caption font-normal text-fg-3">
               <span className="flex items-center gap-1.5">
                 <Kbd>Up</Kbd>
                 <Kbd>Down</Kbd>
@@ -215,7 +231,7 @@ function PaletteBody() {
                 <Kbd>Enter</Kbd>
                 Open
               </span>
-            </div>
+            </KeyHint>
           </Command>
   )
 }

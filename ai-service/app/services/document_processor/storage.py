@@ -1,10 +1,13 @@
-"""Read uploaded material files from local disk, an S3-compatible bucket or GCS.
+"""Read uploaded material files from an S3-compatible bucket or the local uploads folder.
 
-With S3 storage on, the frontend stores materials as `s3://bucket/key` and the file is always
-downloaded from the bucket. Otherwise the frontend stores every material as `gs://bucket/path`, even when it wrote the file to its
-local uploads folder (GCS off, or an upload that fell back to disk). So a `gs://` path is looked
-up in the local upload folders first, in every environment, and only then fetched from the
-bucket. Plain filesystem paths are read in place.
+The frontend records where it stored each material:
+
+- `s3://bucket/key`: the S3 bucket (production). The file is downloaded to a temp dir.
+- `local://path`: the local uploads folder (no S3 bucket configured: local runs, e2e).
+- `gs://bucket/path`: older local uploads, written before the `local://` form. The bucket name
+  was never used for them; the path is looked up in the local uploads folder the same way.
+
+Plain filesystem paths are read in place.
 
 Any failure here is a `StorageError`: the file could not be read right now, which says nothing
 about the file's content. Callers must not mark a material invalid because of it.
@@ -22,17 +25,24 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 FALLBACK_UPLOADS_DIR = "/tmp/margins-uploads"
+LOCAL_PREFIX = "local://"
+LEGACY_LOCAL_PREFIX = "gs://"
 
 
 class StorageError(RuntimeError):
     """The file could not be fetched from storage (retryable; not a content problem)."""
 
 
-def _split_gcs_path(gcs_path: str) -> Tuple[str, str]:
-    parts = gcs_path[5:].split("/", 1)
-    if len(parts) != 2 or not parts[0] or not parts[1]:
-        raise StorageError(f"Invalid GCS path format: {gcs_path}")
-    return parts[0], parts[1]
+def _local_relative_path(storage_path: str) -> str:
+    """The path inside the uploads folder of a `local://` or legacy `gs://bucket/` path."""
+    if storage_path.startswith(LOCAL_PREFIX):
+        relative = storage_path[len(LOCAL_PREFIX):]
+    else:
+        parts = storage_path[len(LEGACY_LOCAL_PREFIX):].split("/", 1)
+        relative = parts[1] if len(parts) == 2 and parts[0] else ""
+    if not relative:
+        raise StorageError(f"Invalid local storage path: {storage_path}")
+    return relative
 
 
 def _local_candidates(blob_path: str) -> List[str]:
@@ -46,22 +56,6 @@ def _local_candidates(blob_path: str) -> List[str]:
         if os.path.commonpath([root, candidate]) == root:
             candidates.append(candidate)
     return candidates
-
-
-def _download_from_gcs(bucket_name: str, blob_path: str) -> Tuple[str, str]:
-    """Download one blob into a fresh temp dir; returns (file path, temp dir)."""
-    temp_dir = tempfile.mkdtemp(prefix="margins-")
-    try:
-        from google.cloud import storage as gcs_storage
-
-        suffix = os.path.splitext(blob_path)[1]
-        local_path = os.path.join(temp_dir, f"material{suffix}")
-        blob = gcs_storage.Client().bucket(bucket_name).blob(blob_path)
-        blob.download_to_filename(local_path)
-        return local_path, temp_dir
-    except Exception as exc:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        raise StorageError(f"Could not download gs://{bucket_name}/{blob_path}: {exc}") from exc
 
 
 def _s3_client():
@@ -107,23 +101,17 @@ def _fetch(storage_path: str) -> Tuple[str, Optional[str]]:
         logger.info("Downloading %s", storage_path)
         return _download_from_s3(parts[0], parts[1])
 
-    if not storage_path.startswith("gs://"):
+    if not storage_path.startswith((LOCAL_PREFIX, LEGACY_LOCAL_PREFIX)):
         if os.path.isfile(storage_path):
             return storage_path, None
         raise StorageError(f"File not found: {storage_path}")
 
-    bucket_name, blob_path = _split_gcs_path(storage_path)
-    for candidate in _local_candidates(blob_path):
+    for candidate in _local_candidates(_local_relative_path(storage_path)):
         if os.path.isfile(candidate):
             logger.info("Using local upload %s", candidate)
             return candidate, None
 
-    if not settings.gcs_configured:
-        raise StorageError(
-            f"{storage_path} is not in the local uploads folder and GCS is not configured"
-        )
-    logger.info("Downloading %s", storage_path)
-    return _download_from_gcs(bucket_name, blob_path)
+    raise StorageError(f"{storage_path} is not in the local uploads folder")
 
 
 @asynccontextmanager

@@ -2,11 +2,11 @@
 set -e
 
 # Get PORT from environment variable, default to 8000 for local/docker.
-# Railway and Cloud Run inject their own PORT.
+# Railway injects its own PORT.
 PORT=${PORT:-8000}
 HOST=${HOST:-0.0.0.0}
 
-echo "Starting StudyBuddy AI Service..."
+echo "Starting the Margins AI service..."
 echo "Environment: ${ENVIRONMENT:-development}"
 echo "Listening on port: ${PORT}"
 

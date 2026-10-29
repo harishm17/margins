@@ -8,7 +8,7 @@ export default async function NewCoursePage({ searchParams }: { searchParams: Pr
   const { welcome } = await searchParams
   const first = welcome === '1'
   return (
-    <Page width="narrow" className="pt-8">
+    <Page width="narrow">
       <h1 className="text-title text-fg">{first ? "Let's set up your first course" : 'New course'}</h1>
       {first ? (
         <p className="mt-1.5 text-body text-fg-2">

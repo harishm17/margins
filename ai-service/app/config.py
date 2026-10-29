@@ -108,6 +108,9 @@ class Settings(BaseSettings):
     # re-dispatches it is failed with JOB_DISPATCH_FAILED.
     JOB_PENDING_REDISPATCH_SECONDS: float = 120.0
     JOB_MAX_REDISPATCHES: int = 3
+    # Jobs that wait for AI instead of failing (exam grading: the answers are the student's work)
+    # wait at most this long, then fail with the reason they were waiting for.
+    JOB_AI_WAIT_MAX_SECONDS: float = 7 * 24 * 3600.0
     # Most a user's LLM-backed jobs and chat answers may cost per UTC day, from the stored
     # costs. 0 turns the cap off.
     DAILY_LLM_BUDGET_USD: float = 8.00
@@ -115,12 +118,14 @@ class Settings(BaseSettings):
     # the API key is shared, so this is the ceiling on the day's bill. 0 turns it off.
     GLOBAL_DAILY_LLM_BUDGET_USD: float = 40.00
 
-    # Dispatching jobs to this service. With ENABLE_CLOUD_TASKS the service creates Cloud
-    # Tasks (project, location and queue below); otherwise it posts to AI_SERVICE_URL itself.
-    ENABLE_CLOUD_TASKS: bool = False
-    CLOUD_TASKS_PROJECT_ID: str = ""  # falls back to GCS_PROJECT_ID
-    CLOUD_TASKS_LOCATION: str = "us-central1"
-    CLOUD_TASKS_QUEUE: str = "margins-jobs"
+    # The shared AI status (app/services/ai_status.py). An "unavailable" status older than this
+    # many seconds counts as unknown, so the next real call tests the provider again.
+    AI_STATUS_TTL_S: float = 300.0
+    # Rate limits or outages in a row (each after the SDK's own retries) that mark the AI
+    # unavailable. Credit, key and configuration errors mark it at once.
+    AI_STATUS_TRANSIENT_THRESHOLD: int = 3
+    # Optional webhook (Discord, Slack or ntfy) told once when the AI becomes unavailable.
+    OPS_ALERT_WEBHOOK_URL: str = ""
 
     # S3-compatible bucket (Railway Buckets, AWS S3, R2, MinIO) for `s3://` material paths.
     S3_ENDPOINT: str = ""
@@ -129,11 +134,7 @@ class Settings(BaseSettings):
     S3_SECRET_ACCESS_KEY: str = ""
     S3_FORCE_PATH_STYLE: bool = False
 
-    # GCP (optional, can use local storage)
-    GCS_BUCKET: str = ""
-    GCS_BUCKET_NAME: str = ""  # Alternative name used in some configs
-    GCS_PROJECT_ID: str = ""
-    # Where the frontend writes uploads when GCS is off (or an upload fell back to local disk).
+    # Where the frontend writes uploads when it has no S3 bucket (`local://` material paths).
     LOCAL_UPLOADS_DIR: str = "/data/uploads"
 
     # Service Configuration
@@ -163,15 +164,6 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         """Check if running in development."""
         return self.ENVIRONMENT == "development"
-
-    @property
-    def cloud_tasks_project(self) -> str:
-        return self.CLOUD_TASKS_PROJECT_ID or self.GCS_PROJECT_ID
-
-    @property
-    def gcs_configured(self) -> bool:
-        """Whether uploads can be fetched from a GCS bucket."""
-        return bool(self.GCS_BUCKET or self.GCS_BUCKET_NAME)
 
     @property
     def llm_configured(self) -> bool:

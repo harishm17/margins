@@ -52,12 +52,37 @@ export function CourseCard({ course }: { course: CourseListItem }) {
   )
 }
 
+const LEGEND_ORDER = ['strong', 'getting', 'learning', 'none'] as const
+
+/**
+ * What the squares mean, once above the grid rather than on every card. Visible words, so it works
+ * with touch and a keyboard (a tooltip on a square inside a card link would not). Shown only when a
+ * card has squares.
+ */
+export function MasteryLegend({ className }: { className?: string }) {
+  return (
+    <p className={cn('flex flex-wrap items-center gap-x-3 gap-y-1 text-caption font-normal text-fg-3', className)}>
+      <span>One square per topic:</span>
+      {LEGEND_ORDER.map((level) => (
+        <span key={level} className="inline-flex items-center gap-1.5">
+          <span aria-hidden="true" className={cn('size-2 rounded-[2px]', SQUARE[level])} />
+          {MASTERY_LABELS[level]}
+        </span>
+      ))}
+    </p>
+  )
+}
+
 export function CourseGrid({ courses }: { courses: CourseListItem[] }) {
+  const anySquares = courses.some((course) => course.levels.length > 0)
   return (
     <section aria-labelledby="courses-heading">
-      <h2 id="courses-heading" className="text-heading text-fg">
-        Courses
-      </h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h2 id="courses-heading" className="text-heading text-fg">
+          Courses
+        </h2>
+        {anySquares ? <MasteryLegend /> : null}
+      </div>
       <ul className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {courses.map((course) => (
           <li key={course.id}>

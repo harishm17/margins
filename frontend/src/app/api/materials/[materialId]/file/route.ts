@@ -9,7 +9,7 @@ import {
   isInlineContentType,
   parseByteRange,
 } from '@/lib/http/file-response'
-import { openStoredFile } from '@/lib/storage/gcs'
+import { openStoredFile } from '@/lib/storage/files'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'

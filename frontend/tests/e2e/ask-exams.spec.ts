@@ -1,19 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
-import { DEMO_EMAIL, DEMO_PASSWORD, demoIds } from './helpers/seed-demo'
+import { signIn } from './helpers/auth'
+import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
 
 // Runs against the demo course (seeded by global-setup.ts) on a stack with the mock AI service.
 const course = `/courses/${demoIds().course}`
 
-async function signIn(page: Page) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(DEMO_EMAIL)
-  await page.getByLabel('Password', { exact: true }).fill(DEMO_PASSWORD)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/\/home$/, { timeout: 60_000 })
-}
-
 test('ask: an answer streams in with citations, then the conversation can be deleted', async ({ page }) => {
-  await signIn(page)
+  await signIn(page, DEMO_EMAIL)
   await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
   await expect(page.getByRole('heading', { level: 2, name: 'Ask your materials' })).toBeVisible()
 
@@ -44,7 +37,7 @@ test('ask: an answer streams in with citations, then the conversation can be del
 })
 
 test('ask: Stop aborts a slow answer', async ({ page }) => {
-  await signIn(page)
+  await signIn(page, DEMO_EMAIL)
   // Hold the answer back so there is something to stop.
   await page.route('**/api/projects/*/chat', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 3000))
@@ -60,7 +53,7 @@ test('ask: Stop aborts a slow answer', async ({ page }) => {
 
 test('mock exam: create, take, submit and read the results', async ({ page }) => {
   test.setTimeout(240_000)
-  await signIn(page)
+  await signIn(page, DEMO_EMAIL)
   await page.goto(`${course}/exams/new`)
   await page.getByRole('radio', { name: '10', exact: true }).click()
   await page.getByRole('radio', { name: '30 min' }).click()

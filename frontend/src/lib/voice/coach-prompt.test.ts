@@ -23,6 +23,12 @@ describe('buildCoachSystemPrompt', () => {
     }
   })
 
+  it('names the app by its current name', () => {
+    const prompt = buildCoachSystemPrompt(base)
+    assert.ok(prompt.startsWith('You are the voice coach in Margins, a study app:'))
+    assert.ok(!/study ?buddy/i.test(prompt))
+  })
+
   it('names the topic and its description', () => {
     const prompt = buildCoachSystemPrompt(base)
     assert.ok(prompt.includes('Topic: Hash tables.'))

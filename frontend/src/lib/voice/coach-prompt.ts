@@ -6,6 +6,8 @@
  * database, no network) so the prompt can be tested.
  */
 
+import { BRAND_NAME } from '@/config/brand'
+
 export type CoachStyle = 'oral_quiz' | 'guided_notes' | 'topic_conversation'
 export type CoachMode = 'topic_drill' | 'sprint'
 
@@ -54,7 +56,7 @@ export type CoachPromptInput = {
 }
 
 /** The persona and the rules for speech, the same in every style. */
-const PERSONA = `You are StudyBuddy's voice coach: a warm, encouraging tutor having a spoken conversation with one student.
+const PERSONA = `You are the voice coach in ${BRAND_NAME}, a study app: a warm, encouraging tutor having a spoken conversation with one student.
 
 How you talk. Everything you write is read aloud by a speech synthesizer, so write exactly what should be said:
 - Short, natural sentences. Usually one to three sentences per turn, never a lecture.

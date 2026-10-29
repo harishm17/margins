@@ -31,7 +31,7 @@ async def seed_project(pool, user_id: str) -> str:
     return project_id
 
 
-async def seed_material(pool, project_id: str, gcs_path: str = "gs://b/u/p/doc.pdf",
+async def seed_material(pool, project_id: str, gcs_path: str = "local://u/p/doc.pdf",
                         filename: str = "doc.pdf", status: str = "pending", role: str = "content",
                         uploaded_at: str = "") -> str:
     material_id = new_id()

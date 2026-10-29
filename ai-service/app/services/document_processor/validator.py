@@ -8,6 +8,7 @@ import asyncio
 import logging
 from typing import List, Optional
 from pydantic import BaseModel
+from app.services import ai_status
 from app.services.llm import LLMFactory
 from app.services.llm.base import LLMError, LLMMessage
 from app.services.llm.schemas import MATERIAL_KINDS, MaterialCheck
@@ -82,7 +83,7 @@ def _empty_page_check(extracted: ExtractedDocument, extension: str) -> tuple[Opt
 
 async def validate_material(
     material_id: str,
-    gcs_path: str,
+    storage_path: str,
     filename: str,
     category: str,
 ) -> ValidationResult:
@@ -99,7 +100,7 @@ async def validate_material(
 
     Args:
         material_id: Material ID
-        gcs_path: Storage path of the uploaded file (gs://bucket/path or a local path)
+        storage_path: Where the file is stored (s3://bucket/key, local://path or a filesystem path)
         filename: Original filename
         category: Material category (lecture_notes, sample_exams, book_chapters, syllabus)
 
@@ -126,7 +127,7 @@ async def validate_material(
             ),
         )
 
-    async with local_copy(gcs_path) as local_path:
+    async with local_copy(storage_path) as local_path:
         try:
             extracted = await asyncio.to_thread(
                 extract_document, local_path, filename, markdown=False
@@ -175,6 +176,10 @@ Set kind to what the file is, whatever the category says: content (lecture notes
 """
     kind = "content"
     try:
+        # Known to be down: use the structural checks without waiting for a call that will fail.
+        unavailable = (await ai_status.get_status()).as_error()
+        if unavailable is not None:
+            raise unavailable
         llm = LLMFactory.get_provider()
         check = await llm.generate_structured(
             [LLMMessage(role="user", content=prompt)],

@@ -1,5 +1,5 @@
 /**
- * Refreshes the product screenshots on the landing page, the sign-in and sign-up pages and in the README
+ * Refreshes the product screenshots on the landing page, the sign-in page and in the README
  * from the real app: it seeds a showcase course (scripts/screens/seed-showcase.ts, written by hand, no model
  * output), signs in as that student, and captures each screen in light and dark as WebP.
  *
@@ -7,8 +7,8 @@
  *   DATABASE_URL=postgresql://... PLAYWRIGHT_BASE_URL=http://localhost:3000 npm run screens
  *
  * The stack is the one the e2e specs use (scripts/e2e-stack.sh start, on a migrated database); the AI service
- * can run on the mock LLM because nothing is generated. Only local stacks are accepted: the showcase password
- * is public.
+ * can run on the mock LLM because nothing is generated. It signs in with the local-only test sign-in
+ * (ENABLE_TEST_LOGIN=true, which scripts/e2e-stack.sh sets), so only local stacks are accepted.
  *
  *   npm run screens -- --only plan,ask      capture some screens (names below)
  *   npm run screens -- --no-seed            reuse the showcase account already in the database
@@ -60,7 +60,7 @@ function assertLocal() {
   if (!LOCAL.has(baseHost) || !LOCAL.has(dbHost)) {
     console.error(
       `Refusing to run: the web app (${baseHost || 'unset'}) and the database (${dbHost || 'unset'}) must both be local. ` +
-        'The showcase account has a public password.'
+        'It signs in with the local-only test sign-in.'
     )
     process.exit(1)
   }
@@ -545,9 +545,10 @@ async function signIn(browser: Browser, ids: ShowcaseIds) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
   const page = await context.newPage()
   await page.goto(`${BASE}/login`)
-  await page.getByLabel('Email').fill(ids.email)
-  await page.getByLabel('Password', { exact: true }).fill(ids.password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
+  const form = page.getByRole('form', { name: 'Test sign-in' })
+  if (!(await form.count())) throw new Error('No test sign-in on /login: start the web app with ENABLE_TEST_LOGIN=true.')
+  await form.getByLabel('Email').fill(ids.email)
+  await form.getByRole('button', { name: 'Test sign-in' }).click()
   await page.waitForURL('**/home', { timeout: 90_000 })
   const state = await context.storageState()
   await context.close()
@@ -734,7 +735,6 @@ async function main() {
       })
       ids = {
         email: user.email,
-        password: 'showcase-demo-pass',
         userId: user.id,
         courseId: found.id,
         topicIds: found.topics.map((item) => item.id),

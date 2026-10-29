@@ -22,7 +22,7 @@ export default async function VoicePracticePage({ params }: { params: Promise<{ 
   if (!course) notFound()
   const sprint = await getSprintTopics(user.id, courseId)
 
-  if (sprint.length === 0) {
+  if (sprint.topics.length === 0) {
     return (
       <div className="mx-auto w-full max-w-[720px] px-4 py-16 md:px-6">
         <EmptyState
@@ -40,5 +40,5 @@ export default async function VoicePracticePage({ params }: { params: Promise<{ 
     )
   }
 
-  return <VoiceFocus courseId={courseId} courseName={course.name} description={describeSprintTopics(sprint)} />
+  return <VoiceFocus courseId={courseId} courseName={course.name} description={describeSprintTopics(sprint.topics, sprint.studied)} />
 }

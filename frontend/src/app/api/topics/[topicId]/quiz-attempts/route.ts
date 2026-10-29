@@ -18,6 +18,7 @@ import { gradeAnswers, GradingUnavailableError } from '@/lib/ai-service/grading'
 import { loadAllQuizQuestionSets, loadQuizQuestions } from '@/lib/learning/quiz-sets'
 import { buildReview, toStoredResults } from '@/lib/learning/quiz-review'
 import { createRateLimiter } from '@/lib/api/rate-limit'
+import { ApiErrorCode, apiError } from '@/lib/api/errors'
 
 // The client sends answers only. Anything else in the body (a score, per-question
 // results) is dropped by zod and never read: the server grades from the stored questions.
@@ -102,7 +103,9 @@ export async function POST(
       graded = await gradeAnswers(questions, validation.data.answers)
     } catch (gradeError) {
       if (gradeError instanceof GradingUnavailableError) {
-        return NextResponse.json({ error: gradeError.message }, { status: 503 })
+        // Nothing is stored and the answers stay on the student's page (the quiz session), so
+        // they submit again once grading can run. The code lets the page update the AI status.
+        return apiError(ApiErrorCode.UPSTREAM_ERROR, gradeError.message, gradeError.code ? { code: gradeError.code } : undefined, 503)
       }
       throw gradeError
     }

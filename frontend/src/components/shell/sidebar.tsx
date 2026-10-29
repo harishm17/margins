@@ -14,7 +14,7 @@ import {
   MagnifyingGlass,
   ArrowsClockwise,
 } from '@phosphor-icons/react/dist/ssr'
-import { Kbd } from '@/components/ui/kbd'
+import { Kbd, KeyHint } from '@/components/ui/kbd'
 import { MasteryIndicator } from '@/components/ui/mastery-indicator'
 import { Tooltip } from '@/components/ui/tooltip'
 import { groupTopicsByUnit } from '@/lib/topics/units'
@@ -246,10 +246,10 @@ export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
     >
       <MagnifyingGlass aria-hidden="true" className="size-[18px] shrink-0 text-fg-3" />
       <span className="min-w-0 flex-1 truncate text-left rail:hidden">Search</span>
-      <span className="flex gap-1 rail:hidden" aria-hidden="true">
+      <KeyHint className="flex gap-1 rail:hidden" aria-hidden="true">
         <Kbd>{isMac ? 'Cmd' : 'Ctrl'}</Kbd>
         <Kbd>K</Kbd>
-      </span>
+      </KeyHint>
     </button>
   )
 

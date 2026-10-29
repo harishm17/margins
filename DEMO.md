@@ -1,39 +1,34 @@
-# StudyBuddy — Demo Guide
+# Margins — Demo Guide
 
 Everything needed to run a live demo or record a video.
 
 ---
 
-## Demo Credentials
+## Demo Account
 
 Local development only. `frontend/scripts/seed-demo.ts` refuses to run against anything but a local
 database (this machine or docker compose), so this account never exists on studymargins.com.
 
-| Field    | Value                  |
-|----------|------------------------|
-| Email    | demo@studymargins.com |
-| Password | demo1234               |
+Students sign in with Google. For the demo, start the web app with `ENABLE_TEST_LOGIN=true` (and
+`NEXTAUTH_URL` on localhost) and use the test sign-in on `/login` with `demo@example.com`. No password.
 
 ---
 
 ## Setup (one-time)
 
 ```bash
-# 1. Start all services
+# 1. Start all services. Compose applies the database migrations before the app starts.
+cp .env.example .env
 docker compose up --build
 
-# 2. Apply the database schema (run once, from the frontend directory)
+# 2. In a second terminal, seed demo data (pre-populates a project with topics + content)
 cd frontend
-npx prisma db push
+npm install
+DATABASE_URL=postgresql://dev:devpass@localhost:5432/margins npx tsx scripts/seed-demo.ts
 
-# 3. Seed demo data (pre-populates a project with topics + content)
-npx tsx scripts/seed-demo.ts
-
-# 4. Open the app
+# 3. Open the app
 # Browser → http://localhost:3000
 ```
-
-> **Note:** `npx tsx` downloads and runs the TypeScript runner on the fly — no install needed. If it fails, install it first: `npm install -D tsx`.
 
 Re-running the seed script is safe — it deletes the previous demo project before creating a fresh one.
 
@@ -41,25 +36,23 @@ Re-running the seed script is safe — it deletes the previous demo project befo
 
 ## Environment Variables
 
-The `ANTHROPIC_API_KEY` **and** `AI_INTERNAL_TOKEN` must be set in your shell before `docker compose up`:
+Compose reads `.env` (copied from `.env.example`). It runs on the mock LLM (`LLM_PROVIDER=mock`): placeholder content, no API calls. For the live upload and generation scenes, set a real key in `.env` before `docker compose up`:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-your-key-here
-export AI_INTERNAL_TOKEN=replace-with-shared-secret
-docker compose up --build
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
 
-`OPENAI_API_KEY` is optional: only the Voice Coach (Scene 8) needs it. All other variables are configured in `docker-compose.yml`. Key defaults:
+For the test sign-in, also `export ENABLE_TEST_LOGIN=true` before `docker compose up`.
+
+The voice coach runs on the same Claude key; the browser does the speech. All other variables are configured in `docker-compose.yml`. Key defaults:
 
 | Variable            | Value                |
 |---------------------|----------------------|
-| LLM_PROVIDER        | anthropic            |
+| LLM_PROVIDER        | mock (in `.env.example`) |
 | ANTHROPIC_MODEL     | claude-opus-5-5      |
 | ANTHROPIC_FAST_MODEL | claude-haiku-5-5    |
 | EMBEDDING_PROVIDER  | local                |
-| OPENAI_REALTIME_MODEL | gpt-realtime-mini  |
-| OPENAI_REALTIME_VOICE | marin              |
-| OPENAI_TRANSCRIPTION_MODEL | gpt-4o-mini-transcribe |
 | ENABLE_PROCESSING   | true                 |
 | ENVIRONMENT         | development          |
 
@@ -69,8 +62,8 @@ docker compose up --build
 
 ### Scene 1 — Login
 1. Open `http://localhost:3000`
-2. Click **Log in**
-3. Enter `demo@studymargins.com` / `demo1234`
+2. Click **Sign in**
+3. In the test sign-in, enter `demo@example.com`
 4. Land on the dashboard — the seeded project is visible immediately
 
 ### Scene 2 — Project Overview
@@ -120,10 +113,10 @@ docker compose up --build
 Browser  →  Next.js (port 3000)  →  FastAPI AI service (port 8000)
                   │                          │
                   ▼                          ▼
-           PostgreSQL + pgvector       Anthropic API (+ OpenAI for voice)
+           PostgreSQL + pgvector       Anthropic API (Claude)
            (port 5432)
 
-Shared volume: /data/uploads  (local file storage in dev)
+Shared volume: /data/uploads  (local file storage in dev; production uses an S3 bucket)
 ```
 
 ### How processing works in development
@@ -145,8 +138,7 @@ Useful for pure UI development when you don't have an API key. Set `LLM_PROVIDER
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | AI service returns 500 on LLM calls | Missing or invalid API key | Check `ANTHROPIC_API_KEY` env var, or check `/health/dependencies` (`llm_key`) |
-| Voice Coach token request returns 503 | No `OPENAI_API_KEY` set | Set `OPENAI_API_KEY`; without it the voice coach is off |
 | Chunking job stays at 0% | File not found at `/data/uploads` | Verify `uploads_data` volume is mounted in both services |
 | "No relevant chunks found" on content gen | Chunks weren't created | Check chunking job status; ensure `ENABLE_PROCESSING=true` |
-| Prisma client errors on seed | Schema not applied | Run `npx prisma db push` first |
+| Prisma client errors on seed | Schema not applied | Check that the `migrate` service finished: `docker compose logs migrate` |
 | Port already in use | Another instance running | `docker compose down` then `up` again |
