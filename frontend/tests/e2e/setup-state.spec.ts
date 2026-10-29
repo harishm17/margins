@@ -145,6 +145,10 @@ test('failed topic finding, topics added by hand, then Confirm finishes setup ev
   await expect(page.getByRole('heading', { level: 1, name: 'Topics' })).toBeVisible()
   await page.goto(base)
   await expect(page.getByRole('heading', { level: 2, name: 'Add your materials' })).toBeVisible()
+  // Step 1 itself (the heading shows at every step): it is the current step and not ticked.
+  const step1 = page.getByRole('listitem').filter({ has: page.getByRole('heading', { level: 2, name: 'Add your materials' }) })
+  await expect(step1).toHaveAttribute('aria-current', 'step')
+  await expect(page.getByText('Done: step 1')).toHaveCount(0)
 })
 
 test('adds that fail while queued are kept, in order, until retried or removed', async ({ page, context }) => {
@@ -173,6 +177,8 @@ test('adds that fail while queued are kept, in order, until retried or removed',
   await expect(notAdded).toHaveCount(2, { timeout: 10_000 })
   await expect(notAdded.nth(0)).toContainText('Bayes rule')
   await expect(notAdded.nth(1)).toContainText('Conditional probability')
+  // The server's reason is kept on the row (the generic text is only for errors with no message).
+  await expect(notAdded.nth(0)).toContainText('Failed to create topic')
   // Confirm waits until they are dealt with.
   await expect(page.getByRole('button', { name: 'Confirm topics' })).toBeDisabled()
 
