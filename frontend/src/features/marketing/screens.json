@@ -1,1 +1,163 @@
-{}
+{
+  "ask": {
+    "widths": [
+      960,
+      1500,
+      1920
+    ],
+    "width": 1920,
+    "height": 1440
+  },
+  "ask-mobile": {
+    "widths": [
+      390,
+      780,
+      1170
+    ],
+    "width": 1170,
+    "height": 2100
+  },
+  "exam": {
+    "widths": [
+      960,
+      1920
+    ],
+    "width": 1920,
+    "height": 987
+  },
+  "exam-new": {
+    "widths": [
+      960,
+      1500,
+      1920
+    ],
+    "width": 1920,
+    "height": 1440
+  },
+  "exam-new-mobile": {
+    "widths": [
+      390,
+      780,
+      1170
+    ],
+    "width": 1170,
+    "height": 2100
+  },
+  "materials": {
+    "widths": [
+      960,
+      1500,
+      1920
+    ],
+    "width": 1920,
+    "height": 1440
+  },
+  "materials-mobile": {
+    "widths": [
+      390,
+      780,
+      1170
+    ],
+    "width": 1170,
+    "height": 2100
+  },
+  "notes-detail": {
+    "widths": [
+      960,
+      1500,
+      1920
+    ],
+    "width": 1920,
+    "height": 1440
+  },
+  "notes-detail-mobile": {
+    "widths": [
+      390,
+      780,
+      1170
+    ],
+    "width": 1170,
+    "height": 2100
+  },
+  "plan": {
+    "widths": [
+      960,
+      1500,
+      1920,
+      2592
+    ],
+    "width": 2592,
+    "height": 1772
+  },
+  "plan-exam-day": {
+    "widths": [
+      960,
+      1500,
+      1920
+    ],
+    "width": 1920,
+    "height": 1440
+  },
+  "plan-exam-day-mobile": {
+    "widths": [
+      390,
+      780,
+      1170
+    ],
+    "width": 1170,
+    "height": 2100
+  },
+  "plan-mobile": {
+    "widths": [
+      390,
+      780,
+      1170
+    ],
+    "width": 1170,
+    "height": 2100
+  },
+  "practice": {
+    "widths": [
+      960,
+      1920
+    ],
+    "width": 1920,
+    "height": 1572
+  },
+  "quiz-results": {
+    "widths": [
+      960,
+      1500,
+      1920
+    ],
+    "width": 1920,
+    "height": 1440
+  },
+  "quiz-results-mobile": {
+    "widths": [
+      390,
+      780,
+      1170
+    ],
+    "width": 1170,
+    "height": 2100
+  },
+  "topics-edit": {
+    "widths": [
+      960,
+      1500,
+      1920
+    ],
+    "width": 1920,
+    "height": 1440
+  },
+  "topics-edit-mobile": {
+    "widths": [
+      390,
+      780,
+      1170
+    ],
+    "width": 1170,
+    "height": 2100
+  }
+}
