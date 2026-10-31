@@ -43,6 +43,7 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { stageLabel, useElapsed } from '@/components/ui/job-status'
 import { useJob } from '@/features/jobs/use-job'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { track as trackEvent } from '@/lib/analytics/track'
 import { estimateWords } from '@/lib/jobs/estimate'
 import { formatBytes, formatElapsed } from '@/lib/format'
 import { isMaterialRole, MATERIAL_ROLES, ROLE_LABELS, roleForCategory, type MaterialRole } from '@/lib/materials/role'
@@ -523,7 +524,8 @@ export function MaterialsManager({
     setUploads((current) => current.filter((item) => item.key !== key))
   }, [])
 
-  function startUpload(file: File) {
+  /** Starts one file; the promise says whether it reached the server (for the count of files uploaded). */
+  function startUpload(file: File): Promise<boolean> {
     const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`
     const problem = fileProblem(file, maxUploadMb)
     if (problem) {
@@ -531,14 +533,14 @@ export function MaterialsManager({
         { key, filename: file.name, size: file.size, category, percent: 0, startedAt: Date.now(), phase: 'error', error: problemMessage(problem, maxUploadMb) },
         ...current,
       ])
-      return
+      return Promise.resolve(false)
     }
     const abort = new AbortController()
     setUploads((current) => [
       { key, filename: file.name, size: file.size, category, percent: 0, startedAt: Date.now(), phase: 'uploading', abort },
       ...current,
     ])
-    uploadMaterial({
+    return uploadMaterial({
       projectId: courseId,
       category,
       file,
@@ -549,16 +551,22 @@ export function MaterialsManager({
       .then((result) => {
         patchUpload(key, { phase: 'sent', percent: 100, materialId: result.material.id })
         router.refresh()
+        return true
       })
       .catch((error: unknown) => {
-        if (error instanceof UploadAbortedError) return
+        if (error instanceof UploadAbortedError) return false
         patchUpload(key, { phase: 'error', error: error instanceof Error ? error.message : 'Upload failed. Try again.' })
+        return false
       })
   }
 
   function addFiles(list: FileList | File[] | null) {
     if (!list) return
-    Array.from(list).forEach(startUpload)
+    // One event per batch: how many of the files arrived (a number only, never a name).
+    void Promise.all(Array.from(list).map(startUpload)).then((results) => {
+      const count = results.filter(Boolean).length
+      if (count > 0) trackEvent('files_uploaded', { file_count: count })
+    })
   }
 
   const serverIds = new Set(materials.map((row) => row.id))

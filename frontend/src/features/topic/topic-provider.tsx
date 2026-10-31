@@ -4,6 +4,7 @@ import * as React from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from '@/components/ui/toaster'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { track as trackEvent } from '@/lib/analytics/track'
 import { isKnownAiCode } from '@/lib/ai/messages'
 import { fillResetTime } from '@/lib/budget/copy'
 import { parseContentTarget } from '@/lib/jobs/failure-message'
@@ -183,6 +184,7 @@ export function TopicProvider({
           setRunning((current) =>
             current[kind]?.jobId === jobId ? { ...current, [kind]: { ...current[kind]!, done: true } } : current
           )
+          if (kind === 'notes') trackEvent('notes_generated')
           if (!quiet) toast.success(KIND_COPY[kind].ready)
           // The AI service has already created the job for the next type, if it queues one.
           void syncActiveRef.current(true)

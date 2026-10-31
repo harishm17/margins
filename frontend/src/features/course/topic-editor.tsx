@@ -36,6 +36,7 @@ import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from '@/components/ui/toaster'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { track as trackEvent } from '@/lib/analytics/track'
 import { pluralize } from '@/lib/format'
 import { moveInOrder } from '@/lib/topics/ordering'
 import { groupTopicsByUnit, unitForRetry } from '@/lib/topics/units'
@@ -458,6 +459,7 @@ export function TopicEditor({
         return
       }
       await apiFetch(`/api/projects/${courseId}/topics/confirm`, { method: 'POST' })
+      trackEvent('plan_created')
       router.push(`/courses/${courseId}`)
       router.refresh()
     } catch (error) {

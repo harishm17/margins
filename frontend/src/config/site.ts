@@ -13,6 +13,9 @@ export const AUTHOR = {
   sameAs: ['https://github.com/harishm17', 'https://www.linkedin.com/in/harishm17/'],
 }
 
+/** The footer credit's link: the ?ref tag tells harishmanoharan.com's analytics where the visit came from. */
+export const CREDIT_URL = `${AUTHOR.url}?ref=margins`
+
 export const DEFAULT_TITLE = `${BRAND_NAME}: study from your own course files`
 export const DEFAULT_DESCRIPTION =
   'Upload lecture notes and past exams. Margins builds notes, practice, quizzes and timed mock exams from them, with sources for every answer.'
