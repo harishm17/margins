@@ -2,6 +2,9 @@
 const nextConfig = {
   output: 'standalone',
   poweredByHeader: false,
+  // The analytics proxy under /m receives POSTs to paths with a trailing slash (/m/i/v0/e/) that must not be
+  // redirected. src/proxy.ts redirects trailing slashes everywhere else, as Next did before.
+  skipTrailingSlashRedirect: true,
   // The dev overlay badge sits on top of the sidebar account row.
   devIndicators: false,
   experimental: {

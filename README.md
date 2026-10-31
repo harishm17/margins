@@ -246,6 +246,10 @@ It only runs against a local web app and a local database, signs in with the tes
 
 Hosted on [Railway](https://railway.com/): the web and AI services, Postgres with pgvector, and a Railway bucket for uploads. The whole project is declared in [`.railway/railway.ts`](.railway/railway.ts), and pushes to `main` deploy automatically. See [docs/deployment/RAILWAY.md](docs/deployment/RAILWAY.md).
 
+## Analytics
+
+Light visit analytics on studymargins.com only: page views, where a visit came from and eight funnel steps (`signup_completed`, `login_completed`, `course_created`, `files_uploaded`, `notes_generated`, `quiz_started`, `exam_started`, `plan_created`), with counts and yes/no flags as the only properties. No clicks, text, replay, page titles or student content. PostHog Cloud (US) is loaded and reached through `/m` on the site's own origin: the proxy is `frontend/src/app/m/[...path]/route.ts` (logic in `frontend/src/lib/analytics/proxy.ts`), the loader is `frontend/public/hm.js`, and `frontend/src/lib/analytics/track.ts` sends the events. It does not run on other hosts, in automated browsers, or after `?notrack=1` (`?notrack=0` undoes that). Next's own trailing-slash redirect is off (`skipTrailingSlashRedirect`) because PostHog posts to `/m/i/v0/e/`; `src/proxy.ts` redirects trailing slashes for every other path.
+
 ## Project layout
 
 ```

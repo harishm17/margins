@@ -9,6 +9,7 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { track as trackEvent } from '@/lib/analytics/track'
 import { DEFAULT_DAILY_MINUTES } from '@/lib/learning/plan-settings'
 import { PlanFields } from './plan-fields'
 
@@ -43,6 +44,7 @@ export function NewCourseForm() {
           dailyMinutes,
         },
       })
+      trackEvent('course_created')
       router.push(`/courses/${project.id}`)
       // The sidebar and command palette read the course list in the layout.
       router.refresh()

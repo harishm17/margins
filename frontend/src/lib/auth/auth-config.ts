@@ -6,6 +6,7 @@ import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
 import { prisma } from '@/lib/db/prisma'
+import { trackFromRequest } from '@/lib/analytics/server'
 import { resolveAuthSecret } from './secret'
 import { decideGoogleSignIn } from './google-link'
 import { ACCOUNT_GONE, assertAccountExists } from './account-check'
@@ -103,6 +104,9 @@ export const authOptions: NextAuthOptions = {
             },
           })
         }
+
+        // Funnel: a new account is a signup, any other sign-in a login (no account detail is sent).
+        trackFromRequest(decision.action === 'create' ? 'signup_completed' : 'login_completed')
 
         // Set user.id for JWT callback
         if (signedInUser) user.id = signedInUser.id

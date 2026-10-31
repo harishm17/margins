@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import localFont from 'next/font/local'
+import Script from 'next/script'
 import { Providers } from '@/components/shell/providers'
 import { BRAND_NAME } from '@/config/brand'
 import { SIDEBAR_INIT_SCRIPT } from '@/config/sidebar'
@@ -43,6 +44,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <Providers>{children}</Providers>
+        {/* Visit analytics: public/hm.js. Only on these pages, never on files the app serves. */}
+        <Script src="/hm.js" strategy="afterInteractive" />
       </body>
     </html>
   )

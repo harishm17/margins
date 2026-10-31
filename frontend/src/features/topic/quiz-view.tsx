@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { track as trackEvent } from '@/lib/analytics/track'
 import type { QuizReviewItem } from '@/lib/learning/quiz-review'
 import type { QuizAttemptData, QuizSetData, TopicReview } from '@/server/queries/topic'
 import { QuizLobby } from './quiz-lobby'
@@ -110,6 +111,7 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
     if (started.current) return
     started.current = true
     save({ answers: {}, index: 0 })
+    trackEvent('quiz_started')
     // The address drops ?start=1, so a reload does not start the set again (the set stays chosen).
     router.replace(`/courses/${courseId}/topics/${topicId}?view=quiz${initialSetId ? `&set=${initialSetId}` : ''}`, { scroll: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,6 +130,7 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
     setError(null)
     setResult(null)
     save({ answers: {}, index: 0 })
+    trackEvent('quiz_started')
   }
 
   /** The student dismissed a stored quiz: it is gone from here (the server removed it). */

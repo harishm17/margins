@@ -6,6 +6,7 @@ import { ArrowClockwise } from '@phosphor-icons/react/dist/ssr'
 import { Button, type ButtonProps } from '@/components/ui/button'
 import { toast } from '@/components/ui/toaster'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { track as trackEvent } from '@/lib/analytics/track'
 import { formatClock } from '@/lib/format'
 
 /** Whole seconds left, counted down in the browser from the server's figure. */
@@ -38,6 +39,7 @@ export function StartExamButton({ courseId, examId, resumeSeconds = null, label,
     setBusy(true)
     try {
       await apiFetch(`/api/exams/${examId}/attempt`, { method: 'POST' })
+      trackEvent('exam_started', { resumed: resumeSeconds !== null })
       router.push(`/courses/${courseId}/exams/${examId}/take`)
     } catch (error) {
       toast.error(isApiError(error) ? error.message : "Couldn't start the exam. Try again.")
