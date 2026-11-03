@@ -169,7 +169,7 @@ test.describe('reader focus', () => {
 
   test('reader check answer survives a reload', async ({ page, browser }) => {
     await page.setViewportSize(DESKTOP)
-    const { topicUrl } = await recallWorld(page, 'v31-check-draft')
+    const { topicUrl, userId } = await recallWorld(page, 'v31-check-draft')
     await openReader(page, `${topicUrl}?view=read`)
     const check = page.locator('[data-check]').first()
     const saved = page.waitForResponse((response) => response.url().includes('/api/drafts') && response.request().method() === 'PUT' && response.ok())
@@ -196,8 +196,9 @@ test.describe('reader focus', () => {
     await expect(again.locator('[data-check]').first().getByText('In your file')).toBeVisible()
     await again.locator('[data-check]').first().getByRole('button', { name: 'Got it' }).click()
     await expect(again.locator('[data-check]').first().getByText('Saved: Got it')).toBeVisible()
+    // This student's drafts only: the database is shared with every other spec, and some of them leave a reader check answer behind.
     await withPrisma(async (prisma) => {
-      await expect.poll(() => prisma.studyDraft.count({ where: { surface: 'reader_check' } })).toBe(0)
+      await expect.poll(() => prisma.studyDraft.count({ where: { userId, surface: 'reader_check' } })).toBe(0)
     })
     await other.close()
   })
