@@ -23,6 +23,7 @@ import {
   zodDetails,
 } from '@/lib/api/errors'
 import { createRateLimiter } from '@/lib/api/rate-limit'
+import { voiceTurnsPerMinute } from '@/lib/voice/turn-limit'
 import {
   VoiceModelError,
   modelErrorFromResponse,
@@ -58,7 +59,7 @@ export const dynamic = 'force-dynamic'
 const MAX_UTTERANCE_CHARS = 2000
 
 // Every turn is at least one model call.
-const turnLimiter = createRateLimiter({ limit: 30, windowMs: 60_000 })
+const turnLimiter = createRateLimiter({ limit: voiceTurnsPerMinute(), windowMs: 60_000 })
 
 // Sessions with a turn running on this instance. Two turns at once would each load the same
 // history and the later write would drop the earlier one.

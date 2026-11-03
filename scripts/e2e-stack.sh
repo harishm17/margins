@@ -19,6 +19,8 @@
 # Settings, all optional except DATABASE_URL:
 #   E2E_WEB_PORT (3000)  E2E_AI_PORT (8000)  E2E_RUN_DIR (.e2e in the repo: logs, pids, uploads)
 # The web app also gets E2E_HOLD_DIR=$RUN/hold, which lets a spec hold the app's own job before it is sent (src/lib/tasks/dispatch.ts).
+# The web app allows 1000 voice turns a minute (VOICE_TURNS_PER_MINUTE; 30 in production): the voice specs all sign in as one account
+# and together send more than 30 turns in a minute, which the turn limiter answers with "You're going a little fast".
 # Then run the specs with PLAYWRIGHT_BASE_URL=http://localhost:$E2E_WEB_PORT and the same DATABASE_URL.
 set -euo pipefail
 
@@ -83,6 +85,7 @@ start() {
         AI_STATUS_CACHE_MS=0 \
         LOCAL_UPLOADS_DIR="$RUN/uploads" \
         E2E_HOLD_DIR="$RUN/hold" \
+        VOICE_TURNS_PER_MINUTE=1000 \
         NEXT_TELEMETRY_DISABLED=1 \
         npx next start --port "$WEB_PORT" \
         >"$RUN/web.log" 2>&1

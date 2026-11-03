@@ -10,6 +10,7 @@ import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { createRateLimiter } from '@/lib/api/rate-limit'
+import { voiceTurnsPerMinute } from './turn-limit'
 import { gradeAnswers, GradingRejectedError, GradingUnavailableError } from '@/lib/ai-service/grading'
 import { dontKnowEvidence, isDontKnow } from '@/lib/learning/dont-know'
 import { recordEvidence } from '@/lib/learning/evidence'
@@ -187,7 +188,7 @@ const hintArgs = z.object({
 })
 
 // Each graded answer costs a model call, so one user cannot hammer them.
-const answerLimiter = createRateLimiter({ limit: 30, windowMs: 60_000 })
+const answerLimiter = createRateLimiter({ limit: voiceTurnsPerMinute(), windowMs: 60_000 })
 
 export type VoiceToolResult = {
   /** What goes back to the model as the tool result. */

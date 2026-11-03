@@ -6,6 +6,7 @@ import { withPrisma } from './helpers/db'
 import { overflowing } from './helpers/overflow'
 import { installVoiceStubs } from './helpers/voice-stubs'
 
+import { END_OF_TURN_WAIT_MS } from '../../src/lib/voice/turn-contract'
 // Voice practice against the dev stack with the mock LLM (a scripted coach: the first turn asks a
 // question, the next message is graded as the answer). The mock stack cannot write questions the
 // voice backend accepts, so helpers/voice-fixture.ts gives a test account a small course with
@@ -562,7 +563,7 @@ test('new topic_conversation session rejected; old one renders', async ({ page }
   expect(body).not.toContain('"type":"question"')
 })
 
-test('voice mode: listening, 800 ms silence sends the answer, speaking, barge-in', async ({ page }) => {
+test('voice mode: listening, a short answer is sent after its adaptive wait, speaking, barge-in', async ({ page }) => {
   await installVoiceStubs(page, { speechMs: 600 })
   await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice`)
   await waitForLobby(page)
@@ -578,7 +579,12 @@ test('voice mode: listening, 800 ms silence sends the answer, speaking, barge-in
   // The student talks: interim text shows live, then the final utterance goes out after silence.
   await page.evaluate(() => (window as any).__voice.interim('a hash function maps'))
   await expect(page.getByTestId('voice-interim')).toHaveText('a hash function maps')
+  // A quiz answer is a short answer: the turn goes out 1.2 s after the last words (END_OF_TURN_WAIT_MS), not before.
+  const turnSent = page.waitForRequest((request) => request.url().includes('/api/voice/turn') && request.method() === 'POST')
+  const finalAt = Date.now()
   await page.evaluate(() => (window as any).__voice.final('a hash function maps keys to buckets'))
+  await turnSent
+  expect(Date.now() - finalAt).toBeGreaterThanOrEqual(END_OF_TURN_WAIT_MS.short_answer - 200)
   await expect(page.getByText('a hash function maps keys to buckets')).toHaveCount(1)
   await expect(page.getByTestId('voice-evaluation').first()).toBeVisible({ timeout: 30_000 })
   await expect(page.getByTestId('voice-orb')).toHaveAttribute('data-state', /thinking|speaking|listening/)
