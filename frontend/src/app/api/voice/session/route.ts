@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/auth/get-session'
 import { VoiceQuestion } from '@/lib/voice/concept'
 import { courseTermsForTopics, sessionTopicIds } from '@/lib/voice/course-terms'
 import { normalizeFocus } from '@/lib/voice/coach-prompt'
+import { cloudSpeechConfigured } from '@/lib/voice/cloud-speech'
 import { buildSprintQuestionSet, buildTopicQuestionSet } from '@/lib/voice/drill-pack'
 import {
   apiInternal,
@@ -144,6 +145,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       sessionId: voiceSession.id,
       courseTerms,
+      // The browser asks /api/voice/speech-token for a recognition token when this is true (spec 19.12).
+      cloudSpeech: cloudSpeechConfigured(),
       questionCount: questionSet.length,
       mode: payload.mode,
       style: payload.style,

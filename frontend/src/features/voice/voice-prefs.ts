@@ -17,9 +17,14 @@ export type VoicePrefs = {
   rate: number
   /** The chosen voice for a language tag ("en-US"), by `voiceKey`. Missing means the best one is picked. */
   voices: Record<string, string>
+  /**
+   * How speech becomes text when the server offers cloud recognition (spec 19.12): 'cloud' sends the audio to the
+   * speech service Margins uses; 'browser' keeps to the browser's own recognizer. Ignored when cloud is not offered.
+   */
+  recognition: 'cloud' | 'browser'
 }
 
-export const DEFAULT_PREFS: VoicePrefs = { speak: true, rate: 1, voices: {} }
+export const DEFAULT_PREFS: VoicePrefs = { speak: true, rate: 1, voices: {}, recognition: 'cloud' }
 
 export function clampRate(value: number): number {
   if (!Number.isFinite(value)) return 1
@@ -50,6 +55,7 @@ export function parsePrefs(raw: string | null | undefined): VoicePrefs {
     speak: record.speak === false ? false : true,
     rate: typeof record.rate === 'number' ? clampRate(record.rate) : 1,
     voices,
+    recognition: record.recognition === 'browser' ? 'browser' : 'cloud',
   }
 }
 
@@ -110,6 +116,7 @@ export function setVoicePrefs(patch: Partial<Omit<VoicePrefs, 'voices'>> & { voi
     speak: patch.speak ?? before.speak,
     rate: patch.rate === undefined ? before.rate : clampRate(patch.rate),
     voices,
+    recognition: patch.recognition ?? before.recognition,
   }
   try {
     storage()?.setItem(PREFS_KEY, JSON.stringify(current))

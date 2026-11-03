@@ -7,6 +7,8 @@ export type VoiceUsage = {
   usedSeconds: number
   remainingSeconds: number
   hasLiveSession: boolean
+  /** The server can mint cloud speech tokens (spec 19.12). Missing from an older server. */
+  cloudSpeech?: boolean
 }
 
 export type VoiceStyle = 'oral_quiz' | 'teach_back' | 'guided_reading'
@@ -27,12 +29,20 @@ export type CreatedSession = Partial<VoiceSessionTerms> & {
   mode: 'topic_drill' | 'sprint'
   style: VoiceStyle
   focus: string | null
+  /** The server can mint cloud speech tokens for this session (spec 19.12). */
+  cloudSpeech?: boolean
 }
 
 export const getVoiceUsage = (signal?: AbortSignal) => apiFetch<VoiceUsage>('/api/voice/usage', { signal })
 
 export const createVoiceSession = (input: CreateSessionInput) =>
   apiFetch<CreatedSession>('/api/voice/session', { method: 'POST', json: input })
+
+/** What /api/voice/speech-token returns: the recognizer's address (without the token) and a one-minute token. */
+export type CloudSpeechGrant = { provider: 'assemblyai'; url: string; token: string }
+
+export const getCloudSpeechGrant = (sessionId: string) =>
+  apiFetch<CloudSpeechGrant>('/api/voice/speech-token', { method: 'POST', json: { sessionId } })
 
 /** True for the 422 that says the topic has no claims from the student's pages for teach-back or guided reading. */
 export function requiresClaims(error: unknown): boolean {

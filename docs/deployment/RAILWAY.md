@@ -71,6 +71,7 @@ non-interactive sessions unless you add `--confirm-destructive`.
 | `AI_INTERNAL_TOKEN` | ai (web references it) | `openssl rand -hex 32`, then as above |
 | `NEXTAUTH_SECRET` | web | `openssl rand -base64 48`, then as above |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | web | The OAuth client in Google Cloud, as above |
+| `ASSEMBLYAI_API_KEY` | web | Optional. Cloud speech recognition for voice practice (an AssemblyAI key that can mint streaming tokens). Without it, voice uses the browser's own recognizer. |
 
 Google is the only way to sign in, so `web` refuses to start without a real Google OAuth client
 (placeholders count as missing). The client needs `https://<web domain>/api/auth/callback/google` as a
@@ -78,6 +79,8 @@ redirect URI. Never set `ENABLE_TEST_LOGIN` on Railway: it is a local-only test 
 to start with it.
 
 ## Optional settings
+
+`web` reads `ASSEMBLYAI_STREAMING_MODEL` (default `universal-3-6-pro`): the streaming model for cloud speech. Set it only to try another model.
 
 These are read by `ai` and have working defaults. None is declared in `.railway/railway.ts`, so set one with `railway variable set -s ai NAME --stdin` only if you want to change it.
 

@@ -71,6 +71,8 @@ export default defineRailway(() => {
       // Google sign-in (OAuth client "Margins web" in the Google Cloud project "studybuddy").
       GOOGLE_OAUTH_CLIENT_ID: preserve(),
       GOOGLE_OAUTH_CLIENT_SECRET: preserve(),
+      // Cloud speech recognition for voice practice (AssemblyAI); the browser gets one-minute tokens, never the key.
+      ASSEMBLYAI_API_KEY: preserve(),
       DATABASE_URL: Postgres.env.DATABASE_URL,
       PORT: "3000",
       AI_SERVICE_URL: aiServiceUrl,

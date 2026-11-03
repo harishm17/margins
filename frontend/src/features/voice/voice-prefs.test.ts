@@ -23,8 +23,13 @@ describe('clampRate', () => {
 
 describe('parsePrefs', () => {
   it('reads what was saved', () => {
-    const prefs = parsePrefs(JSON.stringify({ speak: false, rate: 1.2, voices: { 'en-US': 'Samantha|en-US' } }))
-    assert.deepEqual(prefs, { speak: false, rate: 1.2, voices: { 'en-US': 'Samantha|en-US' } })
+    const prefs = parsePrefs(JSON.stringify({ speak: false, rate: 1.2, voices: { 'en-US': 'Samantha|en-US' }, recognition: 'browser' }))
+    assert.deepEqual(prefs, { speak: false, rate: 1.2, voices: { 'en-US': 'Samantha|en-US' }, recognition: 'browser' })
+  })
+
+  it('uses cloud recognition unless the student chose the browser (older saved settings have no choice)', () => {
+    assert.equal(parsePrefs('{"speak":true}').recognition, 'cloud')
+    assert.equal(parsePrefs('{"recognition":"nope"}').recognition, 'cloud')
   })
 
   it('falls back to the defaults for nothing, junk or the wrong shape', () => {
@@ -36,6 +41,7 @@ describe('parsePrefs', () => {
       speak: true,
       rate: 1.4,
       voices: { 'fr-FR': 'Amelie|fr-FR' },
+      recognition: 'cloud',
     })
   })
 })
@@ -72,7 +78,7 @@ describe('the store', () => {
     // No window here: the defaults hold and a change still reaches subscribers.
     assert.deepEqual(getVoicePrefs(), DEFAULT_PREFS)
     setVoicePrefs({ rate: 1.3, speak: false, voice: { tag: 'en-US', key: 'Samantha|en-US' } })
-    assert.deepEqual(getVoicePrefs(), { speak: false, rate: 1.3, voices: { 'en-US': 'Samantha|en-US' } })
+    assert.deepEqual(getVoicePrefs(), { speak: false, rate: 1.3, voices: { 'en-US': 'Samantha|en-US' }, recognition: 'cloud' })
     setVoicePrefs({ voice: { tag: 'en-US', key: null } })
     assert.deepEqual(getVoicePrefs().voices, {})
     resetVoicePrefsForTest()
