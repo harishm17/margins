@@ -13,5 +13,5 @@ export const PRIVACY_LINES: Record<SpeechDestination | 'cloud', string> = {
 export const PRIVACY_TYPING = 'Typing avoids it.'
 
 /** The lobby's choice of recognizer when Margins offers cloud recognition (spec 19.12). Draft copy. */
-export const CLOUD_TOGGLE_LABEL = 'Use more accurate speech recognition'
-export const CLOUD_TOGGLE_DESCRIPTION = 'Better with course terms and pauses. Turn it off to use your browser\'s own.'
+export const CLOUD_TOGGLE_LABEL = 'Better speech recognition'
+export const CLOUD_TOGGLE_DESCRIPTION = "Catches course terms more reliably. Turn it off to use your browser's own."
