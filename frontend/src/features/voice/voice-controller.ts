@@ -22,6 +22,7 @@ import { buildMetrics, buildTiming, emptyClock, type TurnClock } from './turn-ti
 import { cleanTerms, enableOnDevice, onDeviceEnvFromWindow, onDeviceReady } from './on-device'
 import { createHeardTracker, type HeardTracker } from './heard'
 import { createMicMeter, type MicMeter } from './mic-meter'
+import { canCaptureAudio, cloudRecognitionClass, createMicCapture, type MicCapture } from './cloud-recognition'
 import { getVoicePrefs, resolveVoice, setVoicePrefs, subscribeVoicePrefs } from './voice-prefs'
 import type { EndReason, InputMode, MicNotice, SessionAction } from './session-state'
 import {
@@ -43,6 +44,7 @@ import {
 } from './speech'
 import {
   createVoiceSession,
+  getCloudSpeechGrant,
   openVoiceTurn,
   patchVoiceSession,
   postVoiceMetrics,
@@ -156,6 +158,8 @@ function lobbyAlertFor(error: unknown): LobbyAlert {
 /** The turn's clock, plus when the student's turn ended (the filler counts from there) and what has been reported. */
 type Timing = TurnClock & {
   turnEnd: number
+  /** What heard the answer that opened this turn (none when it was typed). */
+  recognizer?: 'cloud' | 'device' | 'browser'
   /** The `timing` for the next request was made from this clock. */
   filed: boolean
   /** The metrics entry was posted. */
@@ -198,6 +202,18 @@ type Ctx = {
   terms: string[]
   onDevice: boolean
   onDeviceChecked: boolean
+  /** Cloud recognition (spec 19.12): the session's own microphone capture streams to the recognizer. */
+  cloud: boolean
+  capture: MicCapture | null
+  cloudClass: (new () => RecognitionLike) | null
+  /** The quiet already past when the recognizer closed the segment now being read: taken off the end-of-turn wait. */
+  waitCredit: number
+  segmentSilence: number | null
+  /** What heard the last voice answer, for its turn's timing. */
+  lastRecognizer: 'cloud' | 'device' | 'browser' | undefined
+  /** Cloud providers whose stream refused this session; a refusal means the next one is tried before the browser's. */
+  refusedProviders: string[]
+  retryCloud: boolean
   /** iOS: recognition was stopped for the coach's voice and is made again when it is done. */
   suspended: boolean
   ios: boolean
@@ -260,6 +276,14 @@ function freshCtx(generation: number): Ctx {
     terms: [],
     onDevice: false,
     onDeviceChecked: false,
+    cloud: false,
+    capture: null,
+    cloudClass: null,
+    waitCredit: 0,
+    segmentSilence: null,
+    lastRecognizer: undefined,
+    refusedProviders: [],
+    retryCloud: false,
     suspended: false,
     ios: false,
     listenFor: 'short_answer',
@@ -291,7 +315,9 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
   let unsubscribePrefs: (() => void) | null = null
 
   const collector: UtteranceCollector = createUtteranceCollector({
-    waitMs: ({ text }) => endOfTurnWaitMs({ listenFor: ctx.listenFor, text }),
+    // With cloud recognition a finished segment arrives after some quiet has already passed: only the rest is waited.
+    waitMs: ({ text, interim }) =>
+      Math.max(0, endOfTurnWaitMs({ listenFor: ctx.listenFor, text }) - (interim ? 0 : ctx.waitCredit)),
     onCommit: (text, info) => {
       if (ctx.ended || ctx.inputMode !== 'voice' || ctx.micPaused) return
       submit(text, { countInterrupt: false, via: 'voice', waitedMs: info.waitedMs })
@@ -347,7 +373,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
 
   /** iOS stops listening in a page that is hidden (screen lock, another app) and does not come back by itself: make a new recognizer when it is shown again. */
   function onVisibilityChange() {
-    if (!ctx.ios || ctx.ended || !ctx.wantListening) return
+    if (!ctx.ios || ctx.cloud || ctx.ended || !ctx.wantListening) return
     if (document.hidden) {
       if (ctx.recognition) {
         detachRecognition()
@@ -369,6 +395,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     ctx.abort = null
     ctx.speaker?.cancel()
     stopRecognition()
+    ctx.capture?.stop()
     meter.stop()
     clearTimers()
   }
@@ -396,6 +423,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
 
   function switchToText(notice?: MicNotice | null) {
     stopRecognition()
+    ctx.capture?.stop()
     meter.stop()
     ctx.inputMode = 'text'
     ctx.micPaused = false
@@ -408,7 +436,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
    * student has not sent yet; it leads the new run's list, so the words are kept and the wait goes on.
    */
   function openRecognizer(carry = ''): boolean {
-    const Recognition = getRecognitionConstructor()
+    const Recognition = ctx.cloud ? ctx.cloudClass : getRecognitionConstructor()
     if (!Recognition || !ctx.config) return false
     detachRecognition()
     ctx.wantListening = true
@@ -417,7 +445,8 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     collector.reset()
     if (carry) collector.update(ctx.runPrefix)
     // iOS hears nothing while the coach speaks, so a recognizer made now would be deaf: wait for the voice to finish.
-    if (ctx.ios && ctx.speakingNow) {
+    // The cloud recognizer listens through the page's own capture, which keeps hearing.
+    if (ctx.ios && !ctx.cloud && ctx.speakingNow) {
       ctx.suspended = true
       return true
     }
@@ -427,7 +456,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     recognition.interimResults = true
     recognition.lang = languageTag(ctx.config.language)
     recognition.maxAlternatives = 1
-    if (ctx.onDevice) {
+    if (ctx.onDevice && !ctx.cloud) {
       const env = onDeviceEnvFromWindow()
       if (!env || !enableOnDevice(recognition, env, ctx.terms)) ctx.onDevice = false
     }
@@ -457,7 +486,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
 
   /** iOS: let go of the recognizer when the coach starts to speak (abort before, new one after). */
   function suspendForSpeech() {
-    if (!ctx.ios || !ctx.wantListening || !ctx.recognition) return
+    if (!ctx.ios || ctx.cloud || !ctx.wantListening || !ctx.recognition) return
     detachRecognition()
     ctx.suspended = true
   }
@@ -476,12 +505,20 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
   async function enableVoice(): Promise<void> {
     const generation = ctx.generation
     try {
-      await meter.start()
+      // Cloud recognition opens the microphone itself (and feeds the orb's level); otherwise the meter opens it.
+      if (ctx.cloud && ctx.capture) await ctx.capture.start()
+      else await meter.start()
     } catch (error) {
       if (generation !== ctx.generation || ctx.ended) return
       const name = (error as { name?: string } | null)?.name
       if (name === 'NotAllowedError' || name === 'SecurityError') return switchToText('denied')
       if (name === 'NotFoundError' || name === 'OverconstrainedError') return switchToText('no-mic')
+      // Cloud capture failed some other way (no audio worklet): the browser's recognizer takes over.
+      if (ctx.cloud) {
+        ctx.cloud = false
+        ctx.capture?.stop()
+        if (!getRecognitionConstructor()) return switchToText('unsupported')
+      }
       // Any other failure only costs the level meter; the recognizer can still work.
     }
     if (generation !== ctx.generation || ctx.ended) {
@@ -493,7 +530,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     ctx.networkErrors = 0
     dispatch({ type: 'input-mode', mode: 'voice' })
     // Once per session: on-device recognition with the course terms, only if the language pack is already installed.
-    if (!ctx.onDeviceChecked && ctx.config) {
+    if (!ctx.cloud && !ctx.onDeviceChecked && ctx.config) {
       ctx.onDeviceChecked = true
       ctx.onDevice = await onDeviceReady(onDeviceEnvFromWindow(), languageTag(ctx.config.language))
       if (generation !== ctx.generation || ctx.ended) return
@@ -513,9 +550,46 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     }, 0)
   }
 
+  /** A new cloud stream, with the next provider, keeping the words so far. */
+  function retryCloudStream() {
+    const carry = pendingWords()
+    detachRecognition()
+    setTimeout(() => {
+      if (ctx.ended || ctx.recognition || !ctx.wantListening || ctx.suspended || ctx.micPaused || !ctx.cloud) return
+      if (!openRecognizer(carry)) fallBackFromCloud()
+    }, 0)
+  }
+
+  /** Stop using cloud recognition for this session: the browser's recognizer listens on, keeping the words so far. */
+  function fallBackFromCloud() {
+    ctx.cloud = false
+    ctx.waitCredit = 0
+    const carry = pendingWords()
+    detachRecognition()
+    ctx.capture?.stop()
+    if (!getRecognitionConstructor()) {
+      switchToText('unstable')
+      return
+    }
+    dispatch({ type: 'recognizer', kind: 'browser' })
+    setTimeout(() => {
+      if (ctx.ended || ctx.recognition || !ctx.wantListening || ctx.suspended || ctx.micPaused) return
+      if (!openRecognizer(carry)) switchToText('unstable')
+    }, 0)
+  }
+
   function onRecognitionError(code: string) {
     if (ctx.ended) return
     switch (code) {
+      case 'cloud-unavailable':
+        // One provider refused: ask for the next (the grant leaves the refused ones out). None left: the browser's.
+        if (ctx.retryCloud) {
+          ctx.retryCloud = false
+          retryCloudStream()
+        } else {
+          fallBackFromCloud()
+        }
+        break
       case 'not-allowed':
       case 'service-not-allowed':
         switchToText('denied')
@@ -534,7 +608,9 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
         break
       case 'network':
         ctx.networkErrors += 1
-        if (ctx.networkErrors >= 3) switchToText('network')
+        // The cloud stream dropped twice: go on with the browser's recognizer rather than reconnecting again.
+        if (ctx.cloud && ctx.networkErrors >= 2) fallBackFromCloud()
+        else if (ctx.networkErrors >= 3) switchToText('network')
         break
       default:
         // no-speech and aborted are routine; the recognizer restarts itself in onend.
@@ -561,6 +637,9 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
   }
 
   function onResult(results: SpeechResult[]) {
+    // The quiet the recognizer already waited out before closing this segment (cloud only), for this update's wait.
+    ctx.waitCredit = ctx.segmentSilence ?? 0
+    ctx.segmentSilence = null
     if (ctx.ended || ctx.inputMode !== 'voice' || ctx.micPaused) return
     const all = ctx.runPrefix.length > 0 ? [...ctx.runPrefix, ...results] : results
     ctx.lastResults = all
@@ -697,7 +776,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
   /** Make the `timing` that goes with the next turn request from this turn's clock. */
   function fileTiming(clock: Timing) {
     if (clock.start === 0) return
-    ctx.pending = { ...ctx.pending, timing: buildTiming(clock) }
+    ctx.pending = { ...ctx.pending, timing: { ...buildTiming(clock), ...(clock.recognizer ? { recognizer: clock.recognizer } : {}) } }
     clock.filed = true
   }
 
@@ -790,7 +869,14 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     ctx.lastUtterance = utterance
     ctx.chunker = createSentenceChunker({ minChars: 12 })
     const startedAt = performance.now()
-    ctx.timing = { ...newTiming(), start: startedAt, turnEnd: ctx.turnEndedAt || startedAt, endpointWaitMs: ctx.endpointWaitMs }
+    ctx.timing = {
+      ...newTiming(),
+      start: startedAt,
+      turnEnd: ctx.turnEndedAt || startedAt,
+      endpointWaitMs: ctx.endpointWaitMs,
+      recognizer: ctx.lastRecognizer,
+    }
+    ctx.lastRecognizer = undefined
     ctx.endpointWaitMs = null
     ctx.speakStartedAt = null
     ctx.turnEndedAt = 0
@@ -967,6 +1053,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     if (ctx.ended) return
 
     ctx.retry = null
+    ctx.lastRecognizer = options.via === 'voice' ? (ctx.cloud ? 'cloud' : ctx.onDevice ? 'device' : 'browser') : undefined
     ctx.endpointWaitMs = options.waitedMs ?? null
     ctx.turnEndedAt = performance.now()
     dispatch({ type: 'student-said', text: clean, via: options.via })
@@ -1007,12 +1094,31 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     ctx.style = options.mode === 'sprint' ? 'oral_quiz' : config.style
     ctx.listenFor = defaultListenFor(ctx.style)
     ctx.ios = isIosDevice()
+    // Cloud recognition when the server offers it, the student has not turned it off, and this browser can capture audio.
+    ctx.cloud = created.cloudSpeech === true && getVoicePrefs().recognition === 'cloud' && canCaptureAudio()
+    if (ctx.cloud) {
+      const sessionId = created.sessionId
+      ctx.capture = createMicCapture()
+      ctx.cloudClass = cloudRecognitionClass({
+        capture: ctx.capture,
+        grant: () => getCloudSpeechGrant(sessionId, ctx.refusedProviders),
+        onRefused: (provider) => {
+          if (ctx.refusedProviders.includes(provider)) return
+          ctx.refusedProviders = [...ctx.refusedProviders, provider]
+          ctx.retryCloud = true
+        },
+        onSegmentEnd: (silenceMs) => {
+          ctx.segmentSilence = silenceMs
+        },
+        onLevel: (level) => meter.bump(level),
+      })
+    }
     ctx.speaker = createSessionSpeaker(config.language)
     unsubscribePrefs?.()
     unsubscribePrefs = subscribeVoicePrefs(syncSpeechSetting)
     document.addEventListener('visibilitychange', onVisibilityChange)
 
-    const recognitionAvailable = getRecognitionConstructor() !== null
+    const recognitionAvailable = ctx.cloud || getRecognitionConstructor() !== null
     // "Start by typing" in the lobby: no microphone, so no audio goes anywhere. The student can turn the mic on later.
     const startVoice = recognitionAvailable && !config.typed
     ctx.inputMode = startVoice ? 'voice' : 'text'
@@ -1025,6 +1131,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       inputMode: ctx.inputMode,
       speech: !ctx.speaker ? 'unsupported' : ctx.speechOn ? 'on' : 'off',
       micNotice: recognitionAvailable ? null : 'unsupported',
+      recognizer: ctx.cloud ? 'cloud' : 'browser',
     })
 
     ctx.heartbeat = setInterval(() => {
@@ -1036,7 +1143,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
   }
 
   async function enableMicrophone(): Promise<void> {
-    if (ctx.ended || !getRecognitionConstructor()) return
+    if (ctx.ended || !(ctx.cloud || getRecognitionConstructor())) return
     await enableVoice()
   }
 
@@ -1084,6 +1191,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       } else {
         ctx.micPaused = true
         stopRecognition()
+        ctx.capture?.stop()
         meter.stop()
         dispatch({ type: 'mic-paused', paused: true })
       }

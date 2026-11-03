@@ -111,6 +111,8 @@ export type SessionState = {
   complete: boolean
   alert: VoiceAlert | null
   micNotice: MicNotice | null
+  /** What turns speech into text this session: the cloud service (spec 19.12) or the browser's own. */
+  recognizer: 'cloud' | 'browser'
   lobbyAlert: LobbyAlert | null
   /** The daily limit was hit (the server said so), whatever the usage numbers say. */
   limitReached: boolean
@@ -139,6 +141,7 @@ export const initialSessionState: SessionState = {
   complete: false,
   alert: null,
   micNotice: null,
+  recognizer: 'browser',
   lobbyAlert: null,
   limitReached: false,
   endReason: null,
@@ -150,7 +153,18 @@ export const initialSessionState: SessionState = {
 export type SessionAction =
   | { type: 'starting' }
   | { type: 'start-failed'; lobbyAlert: LobbyAlert; limitReached?: boolean }
-  | { type: 'started'; at: number; style: VoiceStyle; language?: string; inputMode: InputMode; speech: SpeechOutput; micNotice: MicNotice | null }
+  | {
+      type: 'started'
+      at: number
+      style: VoiceStyle
+      language?: string
+      inputMode: InputMode
+      speech: SpeechOutput
+      micNotice: MicNotice | null
+      recognizer?: 'cloud' | 'browser'
+    }
+  /** Cloud recognition failed and the browser's recognizer took over. */
+  | { type: 'recognizer'; kind: 'cloud' | 'browser' }
   | { type: 'reset' }
   | { type: 'student-said'; text: string; via?: 'voice' | 'text' }
   | { type: 'turn-started' }
@@ -230,6 +244,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         inputMode: action.inputMode,
         speech: action.speech,
         micNotice: action.micNotice,
+        recognizer: action.recognizer ?? 'browser',
         limitReached: state.limitReached,
       }
 
@@ -325,6 +340,8 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
     case 'holding':
       return state.holding === action.on ? state : { ...state, holding: action.on }
 
+    case 'recognizer':
+      return { ...state, recognizer: action.kind }
     case 'input-mode':
       return {
         ...state,

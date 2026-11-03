@@ -27,6 +27,8 @@ export interface VoiceTurnExtras {
     requestToFirstSentenceMs?: number
     requestToFirstAudioMs?: number
     interrupted?: boolean
+    /** What turned the student's speech into text for this turn (spec 19.12): cloud, on-device, or the browser's service. */
+    recognizer?: 'cloud' | 'device' | 'browser'
   }
 }
 

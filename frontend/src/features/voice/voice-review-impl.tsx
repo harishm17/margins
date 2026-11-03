@@ -6,17 +6,24 @@ import { reviewSessionHref } from '@/lib/learning/review-links'
 import { Lobby } from './lobby'
 import { practiceConceptOf } from './session-state'
 import { SessionView } from './session-view'
+import { canCaptureAudio } from './cloud-recognition'
 import { getRecognitionConstructor } from './speech'
 import { Summary } from './summary'
 import { useVoiceSession } from './use-voice-session'
 import { getVoiceUsage, type VoiceUsage } from './voice-api'
 import type { VoiceReviewProps } from './voice-review'
+import { useVoicePrefs } from './voice-settings'
 
 /** The real voice practice. Loaded on demand by voice-review.tsx so no other page ships it. */
 export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId, hasClaims, claimsOfIdea }: VoiceReviewProps) {
   const { state, orb, summary, controller } = useVoiceSession({ courseId, mode, topic })
   const [usage, setUsage] = React.useState<VoiceUsage | 'unavailable' | null>(null)
-  const [recognitionSupported] = React.useState(() => getRecognitionConstructor() !== null)
+  const [browserRecognition] = React.useState(() => getRecognitionConstructor() !== null)
+  const [captureSupported] = React.useState(() => canCaptureAudio())
+  const prefs = useVoicePrefs()
+  // Cloud recognition (spec 19.12): offered by the server and possible here; used unless the student turned it off.
+  const cloudOffered = captureSupported && usage !== null && usage !== 'unavailable' && usage.cloudSpeech === true
+  const cloudChosen = cloudOffered && prefs.recognition === 'cloud'
 
   // Minutes left: read whenever the lobby is on screen (first visit, and after a session).
   const inLobby = state.phase === 'lobby'
@@ -44,7 +51,7 @@ export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId
         controller={controller}
         title={mode === 'sprint' ? 'Weakest topics sprint' : (topic?.name ?? 'Voice practice')}
         hasQuestions={state.style === 'oral_quiz'}
-        recognitionSupported={recognitionSupported}
+        recognitionSupported={browserRecognition || state.recognizer === 'cloud'}
       />
     )
   }
@@ -80,7 +87,10 @@ export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId
       limitReached={state.limitReached}
       starting={state.phase === 'starting'}
       lobbyAlert={state.lobbyAlert}
-      recognitionSupported={recognitionSupported}
+      recognitionSupported={browserRecognition || cloudChosen}
+      cloudOffered={cloudOffered}
+      cloudChosen={cloudChosen}
+      cloudProviders={usage && usage !== 'unavailable' ? (usage.cloudProviders ?? []) : []}
       initialStyle={initialStyle}
       conceptId={conceptId}
       hasClaims={hasClaims}

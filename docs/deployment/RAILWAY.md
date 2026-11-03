@@ -71,6 +71,8 @@ non-interactive sessions unless you add `--confirm-destructive`.
 | `AI_INTERNAL_TOKEN` | ai (web references it) | `openssl rand -hex 32`, then as above |
 | `NEXTAUTH_SECRET` | web | `openssl rand -base64 48`, then as above |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | web | The OAuth client in Google Cloud, as above |
+| `DEEPGRAM_API_KEY` | web | Optional. Cloud speech recognition for voice practice, tried first. A project key with the Member role or above: lower roles cannot mint the browser tokens (`/v1/auth/grant` answers "Insufficient permissions"). |
+| `ASSEMBLYAI_API_KEY` | web | Optional. Cloud speech recognition, used when Deepgram is not set or refuses (spent credit, an outage). With neither key, voice uses the browser's own recognizer. |
 
 Google is the only way to sign in, so `web` refuses to start without a real Google OAuth client
 (placeholders count as missing). The client needs `https://<web domain>/api/auth/callback/google` as a
@@ -78,6 +80,8 @@ redirect URI. Never set `ENABLE_TEST_LOGIN` on Railway: it is a local-only test 
 to start with it.
 
 ## Optional settings
+
+`web` reads `CLOUD_SPEECH_PROVIDERS` (default `deepgram,assemblyai`: the order the cloud speech providers are tried, and which ones), `DEEPGRAM_STREAMING_MODEL` (default `nova-3`) and `ASSEMBLYAI_STREAMING_MODEL` (default `universal-3-6-pro`). Set them only to change the order or try another model.
 
 These are read by `ai` and have working defaults. None is declared in `.railway/railway.ts`, so set one with `railway variable set -s ai NAME --stdin` only if you want to change it.
 

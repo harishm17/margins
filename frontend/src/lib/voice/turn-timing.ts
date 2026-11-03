@@ -20,6 +20,7 @@ export const clientTimingSchema = z
     requestToFirstSentenceMs: ms,
     requestToFirstAudioMs: ms,
     interrupted: z.boolean().optional(),
+    recognizer: z.enum(['cloud', 'device', 'browser']).optional(),
   })
   .strip()
 

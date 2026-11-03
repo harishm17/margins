@@ -6,6 +6,7 @@ import * as RadioGroup from '@radix-ui/react-radio-group'
 import { BookOpenText, ChalkboardTeacher, CheckCircle, Keyboard, Microphone, Question } from '@phosphor-icons/react/dist/ssr'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Field } from '@/components/ui/field'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Input } from '@/components/ui/input'
@@ -16,7 +17,8 @@ import { startingStyleFor } from './starting-style'
 import type { LobbyAlert } from './errors'
 import { focusPlaceholder, minutesLeftLabel } from './format'
 import { onDeviceEnvFromWindow, onDeviceReady, speechDestination } from './on-device'
-import { PRIVACY_LINES, PRIVACY_TYPING } from './privacy'
+import { CLOUD_TOGGLE_DESCRIPTION, CLOUD_TOGGLE_LABEL, PRIVACY_LINES, PRIVACY_TYPING, cloudPrivacyLine } from './privacy'
+import { setVoicePrefs } from './voice-prefs'
 import { defaultLanguageCode, hasSpeechSynthesis, isIosDevice, languageTag, VOICE_LANGUAGES } from './speech'
 import { SpeakRepliesToggle } from './voice-settings'
 import type { StartConfig } from './use-voice-session'
@@ -51,6 +53,11 @@ type LobbyProps = {
   starting: boolean
   lobbyAlert: LobbyAlert | null
   recognitionSupported: boolean
+  /** Margins can recognise speech in the cloud here (spec 19.12), and whether the student has it on. */
+  cloudOffered?: boolean
+  cloudChosen?: boolean
+  /** The cloud providers, in the order they are used, for the privacy line. */
+  cloudProviders?: readonly string[]
   /** The style to begin with, and the idea a teach-back starts with. */
   initialStyle?: VoiceStyle
   conceptId?: string
@@ -70,6 +77,9 @@ export function Lobby({
   starting,
   lobbyAlert,
   recognitionSupported,
+  cloudOffered = false,
+  cloudChosen = false,
+  cloudProviders = [],
   initialStyle,
   conceptId,
   hasClaims = true,
@@ -101,7 +111,7 @@ export function Lobby({
   const tag = languageTag(language)
   const [onDeviceFor, setOnDeviceFor] = React.useState<{ tag: string; ready: boolean } | null>(null)
   React.useEffect(() => {
-    if (!recognitionSupported) return
+    if (!recognitionSupported || cloudChosen) return
     let current = true
     void onDeviceReady(onDeviceEnvFromWindow(), tag).then((ready) => {
       if (current) setOnDeviceFor({ tag, ready })
@@ -109,12 +119,16 @@ export function Lobby({
     return () => {
       current = false
     }
-  }, [recognitionSupported, tag])
-  const destination = speechDestination({
-    userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent,
-    ios: isIosDevice(),
-    onDevice: onDeviceFor?.tag === tag && onDeviceFor.ready,
-  })
+  }, [recognitionSupported, cloudChosen, tag])
+  const privacyLine = cloudChosen
+    ? cloudPrivacyLine(cloudProviders)
+    : PRIVACY_LINES[
+        speechDestination({
+          userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent,
+          ios: isIosDevice(),
+          onDevice: onDeviceFor?.tag === tag && onDeviceFor.ready,
+        })
+      ]
 
   const remaining = usage && usage !== 'unavailable' ? usage.remainingSeconds : null
   const outOfTime = limitReached || remaining === 0
@@ -126,9 +140,11 @@ export function Lobby({
     ? blocked.text
     : outOfTime
       ? "You've used today's voice time. It resets within 24 hours."
-      : recognitionSupported
-        ? 'Works best in Chrome, Edge or Safari with a microphone.'
-        : null
+      : cloudChosen
+        ? 'Works best with a microphone and headphones.'
+        : recognitionSupported
+          ? 'Works best in Chrome, Edge or Safari with a microphone.'
+          : null
 
   const alert: LobbyAlert | null = lobbyAlert ?? (hasClaims || mode === 'sprint' ? null : { kind: 'needs-claims', ofIdea: claimsOfIdea })
 
@@ -246,10 +262,20 @@ export function Lobby({
 
         <div className="flex flex-col gap-3">
           {hasSpeechSynthesis() ? <SpeakRepliesToggle disabled={starting} compact /> : null}
+          {cloudOffered ? (
+            <Checkbox
+              checked={cloudChosen}
+              onCheckedChange={(checked) => setVoicePrefs({ recognition: checked === true ? 'cloud' : 'browser' })}
+              disabled={starting}
+              label={CLOUD_TOGGLE_LABEL}
+              description={CLOUD_TOGGLE_DESCRIPTION}
+              data-testid="voice-cloud-toggle"
+            />
+          ) : null}
           {recognitionSupported ? (
             <p className="flex flex-wrap items-baseline gap-x-1 text-small text-fg-2" data-testid="voice-privacy">
               <span>
-                {PRIVACY_LINES[destination]} {PRIVACY_TYPING}
+                {privacyLine} {PRIVACY_TYPING}
               </span>
               <Button
                 type="button"
