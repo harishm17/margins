@@ -16,7 +16,7 @@ elements (`icon={<Plus />}`), which keeps every primitive usable from server com
 | `select.tsx` | `Select` | Radix select with an `options` array |
 | `checkbox.tsx` | `Checkbox` | optional `label`, `description`, `trailing` |
 | `segmented-control.tsx` | `SegmentedControl` | radio group semantics, arrow keys |
-| `tabs.tsx` | `Tabs` | underline tabs as links, scrolls with fade edges |
+| `tabs.tsx` | `Tabs` | underline tabs as links, scrolls with fade edges, optional trailing slot |
 | `badge.tsx` | `Badge` | neutral, accent, warning, danger |
 | `card.tsx` | `Card` | `compact`, `interactive`, `asChild` |
 | `dialog.tsx` | `Dialog` and parts | 440 / 560 / 720 |

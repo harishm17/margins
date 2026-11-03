@@ -1,6 +1,7 @@
 import { areRecordIds } from '@/lib/ids'
 import { prisma } from '@/lib/db/prisma'
 import { gradeExamTarget } from '@/lib/jobs/active-jobs'
+import { gradingJustSubmitted } from '@/lib/exams/grading-start'
 import { isWaitingForAi } from '@/lib/jobs/poll-job'
 import {
   ATTEMPT_IN_PROGRESS,
@@ -157,7 +158,7 @@ export async function getExamLobby(userId: string, courseId: string, examId: str
     const overall = readOverall(submission.aiGrading)
     if (overall) return { id: submission.id, submittedAt: submission.submittedAt.toISOString(), state: 'graded', score: overall.score }
     const status = latestJob.get(gradeExamTarget(submission.id))
-    const running = status === 'pending' || status === 'processing'
+    const running = status === 'pending' || status === 'processing' || (status === undefined && gradingJustSubmitted(submission.submittedAt))
     return { id: submission.id, submittedAt: submission.submittedAt.toISOString(), state: running ? 'grading' : 'failed', score: null }
   })
 
@@ -263,7 +264,9 @@ export async function getExamResult(
   userId: string,
   courseId: string,
   examId: string,
-  submissionId: string
+  submissionId: string,
+  /** Set by the call itself when it reads the submission a second time (see below). */
+  reread = false
 ): Promise<ExamResult | null> {
   if (!areRecordIds(courseId, examId, submissionId)) return null
   const submission = await prisma.examSubmission.findFirst({
@@ -294,7 +297,12 @@ export async function getExamResult(
       orderBy: { createdAt: 'desc' },
       select: { id: true, status: true, stage: true, errorCode: true, errorMessage: true },
     })
-    const running = job?.status === 'pending' || job?.status === 'processing'
+    // The job can finish, and write the grading, between the read of the submission above and this read of the job (the
+    // mock grades in milliseconds): a job that is done and a submission with no grading in it is read again, once, not
+    // taken for a grading that failed.
+    if (job?.status === 'completed' && !reread) return getExamResult(userId, courseId, examId, submissionId, true)
+    // No job yet for a submission handed in a moment ago is grading about to start (see gradingJustSubmitted).
+    const running = job?.status === 'pending' || job?.status === 'processing' || (!job && gradingJustSubmitted(submission.submittedAt))
     return {
       ...base,
       status: running ? 'grading' : 'failed',

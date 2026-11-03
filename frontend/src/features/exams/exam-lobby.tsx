@@ -6,6 +6,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { formatDateTime } from '@/lib/format'
 import type { AttemptRow, ExamLobby } from '@/server/queries/mock-exams'
 import { GradeAgainButton, StartExamButton } from './exam-actions'
+import { LobbyRefresh } from './lobby-refresh'
 import { difficultyLabel, formatMinutes, formatScore } from './exam-options'
 
 const BEFORE_YOU_START = [
@@ -59,6 +60,7 @@ export function ExamLobbyView({ lobby }: { lobby: ExamLobby }) {
   const { id, courseId } = lobby
   return (
     <div className="flex flex-col gap-10">
+      <LobbyRefresh grading={lobby.attempts.some((attempt) => attempt.state === 'grading')} />
       <section aria-label="About this exam" className="flex flex-col gap-5">
         <dl className="grid grid-cols-3 gap-4 border-y border-border py-4 sm:max-w-md">
           <Fact label="Questions">{lobby.questionCount}</Fact>

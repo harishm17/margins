@@ -1,5 +1,6 @@
 'use client'
 
+import { usePolling } from '@/lib/hooks/use-polling'
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -74,15 +75,7 @@ export function CheckTopicsStep({
 
   // The AI service starts topic finding a moment after the last file is read; look for it for a minute.
   const waitingForJob = !extraction.running && !extraction.failed && !extractFailure && topicCount === 0 && !filesProcessing
-  React.useEffect(() => {
-    if (!waitingForJob) return
-    const timer = setInterval(() => router.refresh(), 4000)
-    const stop = setTimeout(() => clearInterval(timer), 60_000)
-    return () => {
-      clearInterval(timer)
-      clearTimeout(stop)
-    }
-  }, [waitingForJob, router])
+  usePolling(() => router.refresh(), { active: waitingForJob, intervalMs: 4000, maxPolls: 15 })
 
   // Every state below sits in the same frame, tall enough for the tallest (a line and a button), so
   // the step under it does not move when the state changes from waiting to topics found.

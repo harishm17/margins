@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { withPrisma } from './helpers/db'
+import { endOutage, markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import { signIn as testSignIn } from './helpers/auth'
 import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
 
@@ -13,14 +13,8 @@ async function signIn(page: Page) {
   await testSignIn(page, DEMO_EMAIL)
 }
 
-const markUnavailable = () =>
-  withPrisma((prisma) => {
-    const now = new Date()
-    const row = { state: 'unavailable', reason: 'LLM_CREDIT_EXHAUSTED', since: now, checkedAt: now, detail: 'e2e' }
-    return prisma.aiStatus.upsert({ where: { id: 'global' }, create: { id: 'global', ...row }, update: row })
-  })
-
-const markAvailable = () => withPrisma((prisma) => prisma.aiStatus.deleteMany({}))
+const markUnavailable = markAiUnavailable
+const markAvailable = markAiAvailable
 
 test.afterEach(async () => {
   await markAvailable()
@@ -137,7 +131,7 @@ test('mock exam: submitted during an outage, the answers are saved and graded on
 
   // The real outage ends (credit topped up): the shared status clears and the reaper sends the
   // grading again; this time the model answers, and the page shows the score by itself.
-  await markAvailable()
+  await endOutage(`grade:${submissionId}`)
   await expect(page.getByRole('region', { name: 'Your score' })).toBeVisible({ timeout: 150_000 })
   const graded = await withPrisma((prisma) =>
     prisma.processingJob.findFirstOrThrow({

@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db/prisma'
-import { examTitle } from '@/lib/exams/display'
+import { getExamTitles } from '@/server/queries/exams'
 import { addDays, buildPlan, localDay, type DoneToday, type Plan, type PlanTopic, type PlanUnit } from '@/lib/learning/plan'
 import { zonedTimeToUtc } from '@/lib/learning/study-plan-time'
 import { getCourseShell, type CourseShell } from '@/server/queries/courses'
@@ -56,6 +56,26 @@ export function mockMinutesSpent(attempt: { startedAt: Date | null; submittedAt:
   return Math.max(0, Math.min(limit, taken))
 }
 
+/**
+ * When a topic was learned (spec §8.2): when its first graded recall was done, or, for a topic read before v3, when
+ * its notes were marked complete (the migration filled the date for rows from before it existed). A strong first quiz
+ * (`testedOutAt`, spec 18.6) counts, and so does a quick pass (spec 18.8) once its first quiz is taken (`firstQuizAt`).
+ * Null while it is not learned.
+ */
+export function learnedAt(
+  progress:
+    | { recallAt: Date | null; notesCompleted: boolean; notesCompletedAt: Date | null; testedOutAt?: Date | null; triage?: string | null; triageAt?: Date | null }
+    | undefined,
+  options: { firstQuizAt?: Date | null } = {}
+): Date | null {
+  if (!progress) return null
+  if (progress.recallAt) return progress.recallAt
+  if (progress.notesCompleted) return progress.notesCompletedAt ?? new Date(0)
+  if (progress.testedOutAt) return progress.testedOutAt
+  if (progress.triage === 'quick' && options.firstQuizAt) return options.firstQuizAt
+  return null
+}
+
 export type PlanData = {
   course: CourseShell
   plan: Plan
@@ -88,7 +108,7 @@ export async function getPlanData(
         prerequisiteIds: true,
         estimatedMinutes: true,
         examRelevant: true,
-        progress: { where: { userId }, take: 1, select: { lastAccessedAt: true } },
+        progress: { where: { userId }, take: 1, select: { recallAt: true, readAt: true, notesCompleted: true, notesCompletedAt: true, testedOutAt: true, triage: true, triageAt: true } },
         reviewSchedules: { where: { userId }, take: 1, select: { dueAt: true } },
       },
     }),
@@ -96,6 +116,7 @@ export async function getPlanData(
       by: ['topicId'],
       where: { userId, topic: { projectId: courseId } },
       _count: { _all: true },
+      _min: { takenAt: true },
     }),
     prisma.quizAttempt.findMany({
       where: { userId, topic: { projectId: courseId }, takenAt: { gte: startOfToday } },
@@ -115,14 +136,16 @@ export async function getPlanData(
 
   const extraById = new Map(extras.map((row) => [row.id, row]))
   const attemptTotal = new Map(attemptCounts.map((row) => [row.topicId, row._count._all]))
+  const firstQuizAt = new Map(attemptCounts.map((row) => [row.topicId, row._min.takenAt]))
   const attemptedToday = new Set(attemptsToday.map((row) => row.topicId))
   const attemptTodayCount = new Map<string, number>()
   for (const row of attemptsToday) attemptTodayCount.set(row.topicId, (attemptTodayCount.get(row.topicId) ?? 0) + 1)
 
   const topics: PlanTopic[] = confirmed.map((topic) => {
     const extra = extraById.get(topic.id)
-    const learned = topic.progress.notes && topic.progress.examples
-    const accessedToday = extra?.progress[0]?.lastAccessedAt ? localDay(extra.progress[0].lastAccessedAt, timeZone) === today : false
+    const learnedDate = learnedAt(extra?.progress[0], { firstQuizAt: firstQuizAt.get(topic.id) ?? null })
+    const learned = learnedDate !== null
+    const learnedOnToday = learnedDate ? localDay(learnedDate, timeZone) === today : false
     return {
       id: topic.id,
       name: topic.name,
@@ -132,16 +155,18 @@ export async function getPlanData(
       estimatedMinutes: extra?.estimatedMinutes ?? null,
       examRelevant: extra?.examRelevant ?? false,
       learned,
-      started: topic.progress.notes || topic.progress.examples,
+      started: topic.progress.notes || topic.progress.examples || extra?.progress[0]?.readAt != null,
       quizzed: topic.progress.quiz,
       mastery: topic.mastery,
       reviewDueAt: topic.dueAt ? new Date(topic.dueAt) : null,
-      // Finished today: touched today, and not just by a quiz that came after learning it earlier.
-      learnedToday: learned && accessedToday && !attemptedToday.has(topic.id),
+      // Finished today: learned today, and not just by a quiz that came after learning it earlier.
+      learnedToday: learnedOnToday && !attemptedToday.has(topic.id),
+      triage: extra?.progress[0]?.triage === 'quick' ? 'quick' : null,
     }
   })
   const units: PlanUnit[] = fresh.units.map((unit) => ({ id: unit.id, title: unit.title, weekLabel: unit.weekLabel, orderIndex: unit.orderIndex }))
 
+  const examTitles = await getExamTitles(userId, courseId)
   const seen = new Set<string>()
   const exams: MockExamFacts[] = []
   const doneToday: DoneToday[] = []
@@ -149,7 +174,7 @@ export async function getPlanData(
     const exam = submission.sampleExam
     const facts: MockExamFacts = {
       examId: exam.id,
-      name: examTitle(exam.name, exam.createdAt),
+      name: examTitles.get(exam.id) ?? exam.name,
       day: localDay(submission.submittedAt, timeZone),
       topicIds: examTopicIds(exam.questions),
     }

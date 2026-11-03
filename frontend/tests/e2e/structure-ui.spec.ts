@@ -46,7 +46,7 @@ test.describe('the demo course', () => {
   })
 
   test('the sidebar groups topics by unit, and each unit opens and closes (remembered per course)', async ({ page }) => {
-    await page.goto(`/courses/${course}/topics/${topics[0]}?view=notes`)
+    await page.goto(`/courses/${course}/topics/${topics[0]}?view=read`)
     const nav = sidebar(page)
     const unit = nav.getByRole('button', { name: /Sorting and graphs/ })
     const topicLink = nav.getByRole('link', { name: 'Graph traversal' })
@@ -66,7 +66,7 @@ test.describe('the demo course', () => {
     expect(await page.evaluate((id) => localStorage.getItem(`margins:sidebar-units:${id}`), course)).toContain('false')
 
     // The unit that holds a topic opens by itself when that topic is opened.
-    await page.goto(`/courses/${course}/topics/${topics[1]}?view=notes`)
+    await page.goto(`/courses/${course}/topics/${topics[1]}?view=read`)
     await expect(nav.getByRole('button', { name: /Sorting and graphs/ })).toHaveAttribute('aria-expanded', 'true')
     await expect(nav.getByRole('link', { name: 'Graph traversal' })).toHaveAttribute('aria-current', 'page')
 
@@ -80,7 +80,7 @@ test.describe('the demo course', () => {
   })
 
   test('the topic header shows objectives, prerequisites, sources and time', async ({ page }) => {
-    await page.goto(`/courses/${course}/topics/${topics[1]}?view=notes`)
+    await page.goto(`/courses/${course}/topics/${topics[1]}?view=read`)
     const about = page.getByRole('region', { name: 'About this topic' })
     await expect(about.getByRole('heading', { level: 2, name: 'By the end you can' })).toBeVisible()
     await expect(about.getByRole('listitem').filter({ hasText: 'run breadth-first and depth-first search by hand' })).toBeVisible()
@@ -99,13 +99,13 @@ test.describe('the demo course', () => {
   })
 
   test('a topic added by hand has no objectives block', async ({ page }) => {
-    await page.goto(`/courses/${course}/topics/${mathTopic}?view=notes`)
+    await page.goto(`/courses/${course}/topics/${mathTopic}?view=read`)
     await expect(page.getByRole('heading', { level: 1, name: 'Discrete random variables' })).toBeVisible()
     await expect(page.getByRole('region', { name: 'About this topic' })).toHaveCount(0)
   })
 
-  test('check yourself: the question shows, the answer waits behind a button', async ({ page }) => {
-    await page.goto(`/courses/${course}/topics/${mathTopic}?view=notes`)
+  test('check yourself: the question shows, the answer waits for an attempt', async ({ page }) => {
+    await page.goto(`/courses/${course}/topics/${mathTopic}?view=read`)
     // Scoped to the page body: while a page streams in, Next can keep a hidden copy of the text elsewhere.
     const main = page.locator('#main')
     const reveal = main.getByRole('button', { name: 'Show answer' })
@@ -113,27 +113,32 @@ test.describe('the demo course', () => {
     await expect(body(page).getByText('A fair die is rolled once.')).toBeVisible()
     await expect(body(page).getByText('Each of the six faces is equally likely')).toHaveCount(0)
 
+    // Attempt first: the button waits until the student has written an answer (or said they don't know).
     const first = reveal.first()
+    await expect(first).toBeDisabled()
+    await main.getByRole('textbox', { name: 'Your answer' }).first().fill('One in six.')
     await expect(first).toHaveAttribute('aria-expanded', 'false')
     // Keyboard: focus the button and press Enter.
     await first.focus()
     await page.keyboard.press('Enter')
-    const hide = main.getByRole('button', { name: 'Hide answer' })
-    await expect(hide).toHaveAttribute('aria-expanded', 'true')
     await expect(body(page).getByText('Each of the six faces is equally likely')).toBeVisible()
     // Math renders in the question and in the answer; the second item is still closed.
     await expect(page.locator('.md-check .katex').first()).toBeVisible()
     await expect(main.getByRole('button', { name: 'Show answer' })).toHaveCount(1)
-
-    await hide.click()
-    await expect(body(page).getByText('Each of the six faces is equally likely')).toHaveCount(0)
+    await expect(main.getByRole('button', { name: 'Hide answer' })).toHaveCount(0)
   })
 
   test('notes without check blocks are unchanged', async ({ page }) => {
     // The mock notes of the first topic have one block; make sure the rest of the page still reads as before.
-    await page.goto(`/courses/${course}/topics/${topics[2]}?view=notes`)
+    // The explainer (the notes) is behind the recall gate: open it the way a student whose pages are thin does. Reading it here does not mark the topic read.
+    await withPrisma(async (prisma) => {
+      const user = await prisma.user.findUniqueOrThrow({ where: { email: DEMO_EMAIL }, select: { id: true } })
+      const data = { explainerUnlockedAt: new Date(), explainerUnlockReason: 'thin_source' }
+      await prisma.topicProgress.upsert({ where: { topicId_userId: { topicId: topics[2], userId: user.id } }, create: { topicId: topics[2], userId: user.id, ...data }, update: data })
+    })
+    await page.goto(`/courses/${course}/topics/${topics[2]}?view=explainer`)
     await expect(page.getByRole('heading', { level: 2, name: 'Key concepts' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Mark as read' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Mark as read' })).toHaveCount(0)
   })
 
   test('sources sit under worked examples and practice problems', async ({ page }) => {
@@ -185,7 +190,10 @@ test.describe('the demo course', () => {
     await expect(page.getByRole('columnheader', { name: 'Type' })).toHaveCount(0)
     await expect(page.getByRole('row', { name: /algorithms\.pdf/ }).getByText('Content', { exact: true }).filter({ visible: true })).toBeVisible()
     await expect(page.getByRole('radiogroup', { name: 'Use these as:' }).getByRole('radio', { name: 'Syllabus or schedule' })).toBeVisible()
-    await expect(page.getByText("PDFs need selectable text. Scans can't be read.", { exact: false })).toBeVisible()
+    // One uploader on the page (a second one can only be a view that is still leaving).
+    const hint = page.getByText("PDFs need selectable text. Scans can't be read.", { exact: false })
+    await expect(hint).toHaveCount(1)
+    await expect(hint).toBeVisible()
   })
 })
 

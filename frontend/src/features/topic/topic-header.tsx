@@ -4,7 +4,17 @@ import * as React from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { CaretLeft, CaretRight, ChatCircleText, Clock, DotsThree, PencilSimple } from '@phosphor-icons/react/dist/ssr'
+import {
+  CaretDown,
+  CaretLeft,
+  CaretRight,
+  ChatCircleText,
+  Clock,
+  DotsThree,
+  PencilSimple,
+  TreeStructure,
+  WarningCircle,
+} from '@phosphor-icons/react/dist/ssr'
 import { PageHeader } from '@/components/shell/slots'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -23,12 +33,18 @@ import { MathText } from '@/components/ui/math-text'
 import { DueLabel } from '@/components/ui/relative-time'
 import { toast } from '@/components/ui/toaster'
 import { apiFetch, isApiError } from '@/lib/api/client'
-import { formatDate, formatWeekday } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { mapHref } from '@/lib/map/params'
 import { fadeNote } from '@/lib/learning/consequence'
 import type { TopicStructure } from '@/server/queries/topic'
+import { StateIcon } from '@/features/map/state-icon'
+import { LABEL_TEXT } from '@/lib/map/copy'
+import type { ConceptLabel } from '@/lib/learning/concept-mastery'
 import { KIND_COPY } from './copy'
 import { RegenerateDialog } from './generation-ui'
+import { ToolsMenu } from './path'
 import { TopicStructureBlock, unitLabel } from './topic-structure'
+import { useTopic } from './topic-provider'
 import { useTopicView } from './use-topic-view'
 import { CONTENT_KINDS, type ContentKind } from './types'
 
@@ -38,49 +54,108 @@ const AskSheet = dynamic(loadAskSheet)
 
 export type TopicNeighbourLink = { id: string; name: string }
 
+/** `label` is the map's word for the idea; `wrongIdea` says a wrong idea is on record for it (the map's panel shows it too). */
+export type TopicConceptChip = { id: string; name: string; label: ConceptLabel; wrongIdea: boolean }
+
 type TopicHeaderProps = {
   courseId: string
+  topicId: string
   name: string
   description: string | null
   mastery: number | null
+  /** A step of the path is done (or a quiz taken): a topic with no mastery yet reads "In progress", not "Not started". */
+  started: boolean
   /** Mastery as earned, before it faded for a late review. */
   earnedMastery: number | null
   dueAt: string | null
   /** Days until the review is due, from the server's clock; zero or less means due now. */
   daysUntilDue: number | null
+  /** "Next review Thu", worded on the server in the student's own time zone (the one the plan and the review page use). */
+  nextReviewText: string | null
   bestQuiz: number | null
   previous: TopicNeighbourLink | null
   next: TopicNeighbourLink | null
   /** Unit, objectives, prerequisites, time and sources. */
   structure: TopicStructure
+  /** The topic's concepts and their state, as chips. */
+  concepts: TopicConceptChip[]
 }
 
-/** "Next review Thu" within a week, "Next review Oct 29" after that, "Due today" once it is due. */
-function NextReview({ dueAt, daysUntil }: { dueAt: string; daysUntil: number }) {
+/**
+ * "Next review tomorrow", "Next review Thu" within a week, "Next review Oct 29" after that, "Due today" once it
+ * is due. The words are the quiz results' (lib/learning/consequence.ts), so both say the same on one screen.
+ */
+function NextReview({ dueAt, daysUntil, label }: { dueAt: string; daysUntil: number; label: string | null }) {
   if (daysUntil <= 0) return <DueLabel dueAt={dueAt} />
-  const due = new Date(dueAt)
+  return <span>{label}</span>
+}
+
+/** "3 ideas, 1 solid, 1 wrong idea": the topic's concepts in one line. */
+function conceptSummary(concepts: TopicConceptChip[]): string {
+  const solid = concepts.filter((concept) => concept.label === 'solid').length
+  const wrong = concepts.filter((concept) => concept.wrongIdea).length
+  return [
+    `${concepts.length} ${concepts.length === 1 ? 'idea' : 'ideas'}`,
+    `${solid} solid`,
+    ...(wrong > 0 ? [`${wrong} ${wrong === 1 ? 'wrong idea' : 'wrong ideas'}`] : []),
+  ].join(', ')
+}
+
+/**
+ * The topic's concepts and where each stands. State is an icon and the map's words ("Solid", "Shaky"), with "wrong idea" added
+ * when one is on record; the colour only repeats them. Nothing shows for a topic without concepts.
+ */
+function ConceptChips({ concepts, className }: { concepts: TopicConceptChip[]; className?: string }) {
+  if (concepts.length === 0) return null
   return (
-    <span suppressHydrationWarning>
-      Next review {daysUntil < 7 ? formatWeekday(due) : formatDate(due)}
-    </span>
+    <ul aria-label="Concepts in this topic" className={cn('flex flex-wrap gap-1.5', className)}>
+      {concepts.map((concept) => (
+        <li
+          key={concept.id}
+          className="inline-flex max-w-full items-center gap-1.5 rounded-chip border border-border bg-surface px-2 py-0.5 text-caption text-fg-2"
+        >
+          {concept.wrongIdea ? <WarningCircle aria-hidden="true" weight="fill" className="size-3.5 text-warning" /> : <StateIcon label={concept.label} size={14} />}
+          <span className="min-w-0 break-words text-fg">
+            <MathText>{concept.name}</MathText>
+          </span>
+          <span className="shrink-0 text-fg-3">
+            {LABEL_TEXT[concept.label]}
+            {concept.wrongIdea ? ', wrong idea' : ''}
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }
 
 export function TopicHeader({
   courseId,
+  topicId,
   name,
   description,
   mastery,
+  started,
   earnedMastery,
   dueAt,
   daysUntilDue,
+  nextReviewText,
   bestQuiz,
   previous,
   next,
   structure,
+  concepts,
 }: TopicHeaderProps) {
   const router = useRouter()
   const view = useTopicView()
+  // On a phone what the topic covers (its ideas, objectives, sources) folds behind one button next to the status.
+  const [aboutOpen, setAboutOpen] = React.useState(false)
+  const aboutId = React.useId()
+  const descriptionId = React.useId()
+  // While a question is on screen (a warm-up, quiz or recall being answered) what the topic covers steps aside, so the
+  // question starts near the top instead of below a screen of introduction. The same button opens it, on every width.
+  const { inProgress } = useTopic()
+  const folded = inProgress && !aboutOpen
+  const fold = folded ? 'hidden' : !aboutOpen && 'max-sm:hidden'
   // Why the ring is lower than the last score: mastery fades while a review is late.
   const fade =
     daysUntilDue !== null && daysUntilDue < 0
@@ -89,9 +164,17 @@ export function TopicHeader({
   const go = (target: TopicNeighbourLink | null) => {
     if (target) router.push(`/courses/${courseId}/topics/${target.id}?view=${view}`)
   }
+  const wrong = concepts.filter((concept) => concept.wrongIdea).length
+  const hasAbout = concepts.length > 0 || structure.objectives.length > 0 || structure.prerequisites.length > 0 || structure.sources.length > 0 || !!description
+  const aboutLabel =
+    concepts.length > 0
+      ? conceptSummary(concepts)
+      : structure.objectives.length > 0
+        ? `By the end you can (${structure.objectives.length})`
+        : 'About this topic'
 
   return (
-    <header className="pb-6">
+    <header className="pb-4 sm:pb-6">
       {structure.unit ? (
         <p className="mb-1 text-small text-fg-3">
           <Link
@@ -104,7 +187,8 @@ export function TopicHeader({
       ) : null}
       <div className="flex items-start justify-between gap-4">
         <h1 className="min-w-0 text-title text-fg">{name}</h1>
-        <div className="flex shrink-0 items-center gap-1">
+        <ToolsMenu courseId={courseId} topicId={topicId} neighbours={{ previous, next }} className="shrink-0" />
+        <div className="flex shrink-0 items-center gap-1 max-sm:hidden">
           <IconButton
             label={previous ? `Previous: ${previous.name}` : 'No previous topic'}
             shortcut="["
@@ -125,20 +209,51 @@ export function TopicHeader({
           />
         </div>
       </div>
-      {description ? <p className="mt-1.5 line-clamp-2 max-w-[68ch] text-body text-fg-2"><MathText>{description}</MathText></p> : null}
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-small text-fg-2">
-        <MasteryIndicator mastery={mastery} showPercent className="text-small" />
-        {bestQuiz !== null ? <span className="tabular">Best quiz {Math.round(bestQuiz)}%</span> : null}
-        {dueAt && daysUntilDue !== null ? <NextReview dueAt={dueAt} daysUntil={daysUntilDue} /> : null}
+      {description ? (
+        <p id={descriptionId} className={cn('mt-1.5 max-w-[68ch] text-body text-fg-2 sm:line-clamp-2', fold)}>
+          <MathText>{description}</MathText>
+        </p>
+      ) : null}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-fg-2 sm:mt-3">
+        <MasteryIndicator mastery={mastery} showPercent emptyLabel={started ? 'In progress' : undefined} className="text-small" />
+        {bestQuiz !== null ? <span className="tabular max-sm:hidden">Best quiz {Math.round(bestQuiz)}%</span> : null}
+        {dueAt && daysUntilDue !== null ? <NextReview dueAt={dueAt} daysUntil={daysUntilDue} label={nextReviewText} /> : null}
         {structure.estimatedMinutes ? (
           <span className="inline-flex items-center gap-1.5 tabular">
             <Clock aria-hidden="true" className="size-4 text-fg-3" />
             About {structure.estimatedMinutes} min
           </span>
         ) : null}
+        {hasAbout ? (
+          <button
+            type="button"
+            aria-expanded={aboutOpen}
+            aria-controls={description ? `${descriptionId} ${aboutId}` : aboutId}
+            onClick={() => setAboutOpen((current) => !current)}
+            className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg', !inProgress && 'sm:hidden')}
+          >
+            {wrong > 0 ? <WarningCircle aria-hidden="true" weight="fill" className="size-4 text-warning" /> : null}
+            {aboutLabel}
+            <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', aboutOpen && 'rotate-180')} />
+          </button>
+        ) : null}
       </div>
       {fade ? <p className="mt-1.5 text-caption font-normal text-fg-3">{fade}</p> : null}
-      <TopicStructureBlock courseId={courseId} structure={structure} />
+      <div id={aboutId} className={cn(fold)}>
+        <ConceptChips concepts={concepts} className="mt-3" />
+        {concepts.length > 0 ? (
+          <p className="mt-2 text-small">
+            <Link
+              href={mapHref(courseId, { unitId: structure.unit?.id ?? null, topicId })}
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-chip text-fg-2 underline decoration-border-strong decoration-1 underline-offset-[3px] hover:text-fg max-sm:min-h-11"
+            >
+              <TreeStructure aria-hidden="true" className="size-4 text-fg-3" />
+              Show on the map
+            </Link>
+          </p>
+        ) : null}
+        <TopicStructureBlock courseId={courseId} structure={structure} />
+      </div>
     </header>
   )
 }

@@ -192,6 +192,16 @@ class TestGradeExam:
         assert json.loads(graded["ai_grading"])["overall_score"] == 50
         assert graded["graded_at"] is not None
 
+    async def test_answers_with_a_confidence_are_graded_on_the_answer_alone(self, db, world, submission):
+        await db.execute(
+            "UPDATE exam_submissions SET answers = $1 WHERE id = $2",
+            json.dumps({"0": {"answer": "A", "confidence": 0.95}, "1": "text"}), submission.id,
+        )
+
+        await self.grade(db, world, submission)
+
+        assert submission.seen["answers"] == {"0": "A", "1": "text"}
+
     async def test_an_attempt_in_progress_is_not_graded(self, db, world, submission):
         await db.execute("UPDATE exam_submissions SET status = 'in_progress' WHERE id = $1", submission.id)
 

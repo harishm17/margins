@@ -124,6 +124,17 @@ export function hasSpeechSynthesis(): boolean {
   return !!w.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined'
 }
 
+/** iPhone, iPad and iPod, including an iPad that says it is a Mac. Every browser on them is WebKit. */
+export function isIosPlatform(input: { userAgent: string; platform?: string; maxTouchPoints?: number }): boolean {
+  if (/iPhone|iPad|iPod/i.test(input.userAgent)) return true
+  return input.platform === 'MacIntel' && (input.maxTouchPoints ?? 0) > 1
+}
+
+export function isIosDevice(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return isIosPlatform({ userAgent: navigator.userAgent, platform: navigator.platform, maxTouchPoints: navigator.maxTouchPoints })
+}
+
 /** The words of every result so far, in order (what the collector wants). */
 export function resultsFromEvent(event: RecognitionResultEvent): { transcript: string; isFinal: boolean }[] {
   const out: { transcript: string; isFinal: boolean }[] = []
@@ -134,11 +145,35 @@ export function resultsFromEvent(event: RecognitionResultEvent): { transcript: s
   return out
 }
 
+/**
+ * The words that became final since the last look, and how many final results have now been taken. Dictation adds only these
+ * to what is already in the box, so what the student typed while talking is kept instead of being written over.
+ */
+export function newFinalWords(parts: { transcript: string; isFinal: boolean }[], taken: number): { words: string[]; taken: number } {
+  const finals = parts.filter((part) => part.isFinal).map((part) => part.transcript.trim())
+  return { words: finals.slice(taken).filter(Boolean), taken: finals.length }
+}
+
 // ---- Speaking ----------------------------------------------------------------------------
+
+/**
+ * One sentence to say. `speech` is what the synthesizer gets (see speakable()); `display` is the
+ * sentence as the student reads it. Only sentences with a `display` are part of the reply: they are
+ * counted as heard when the student interrupts. A line without one (a filler, a sample) is not.
+ */
+export type SpeakItem = { speech: string; display?: string }
+
+export type SpeakerEvent =
+  | { type: 'start'; item: SpeakItem }
+  | { type: 'boundary'; item: SpeakItem; charIndex: number }
+  /** The sentence played to its end (or the watchdog decided it had). */
+  | { type: 'end'; item: SpeakItem }
+  /** The browser could not say it. */
+  | { type: 'error'; item: SpeakItem }
 
 export type Speaker = {
   /** Queue one sentence. */
-  enqueue: (sentence: string) => void
+  enqueue: (sentence: string | SpeakItem) => void
   /** Stop now and forget the queue. */
   cancel: () => void
   /** Resolves when nothing is playing or queued (immediately when idle). */
@@ -150,10 +185,15 @@ export type Speaker = {
 
 export type SpeakerOptions = {
   lang: string
-  rate?: number
+  /** The speaking rate, read for every sentence so a change in the settings applies at once. */
+  rate?: number | (() => number)
+  /** Picks the voice for a sentence (the chosen one, else the best); default is the best for the language. */
+  chooseVoice?: (voices: SpeechSynthesisVoice[], lang: string) => SpeechSynthesisVoice | null
   onSpeakingChange: (speaking: boolean) => void
   /** A sentence started playing (for timing metrics). */
-  onStart?: () => void
+  onStart?: (item: SpeakItem) => void
+  /** What is being said, sentence by sentence, for the record of what the student heard. */
+  onEvent?: (event: SpeakerEvent) => void
   /** Nothing ever started: the browser has no usable voice. */
   onUnavailable?: () => void
 }
@@ -167,8 +207,7 @@ const START_TIMEOUT_MS = 3000
  */
 export function createSpeaker(options: SpeakerOptions): Speaker {
   const synth = (window as unknown as SpeechWindow).speechSynthesis
-  const rate = options.rate ?? 1
-  let queue: string[] = []
+  let queue: SpeakItem[] = []
   let generation = 0
   let current: { timers: ReturnType<typeof setTimeout>[]; settle: () => void } | null = null
   let broken = false
@@ -186,25 +225,29 @@ export function createSpeaker(options: SpeakerOptions): Speaker {
 
   const pump = () => {
     if (current || broken || !synth) return
-    const text = queue.shift()
-    if (text === undefined) {
+    const item = queue.shift()
+    if (item === undefined) {
       notifyIdle()
       return
     }
+    const text = item.speech
     const myGeneration = generation
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = options.lang
+    const rate = typeof options.rate === 'function' ? options.rate() : (options.rate ?? 1)
     utterance.rate = rate
-    const voice = pickVoice(synth.getVoices(), options.lang)
+    const voice = (options.chooseVoice ?? pickVoice)(synth.getVoices(), options.lang)
     if (voice) utterance.voice = voice
 
     const timers: ReturnType<typeof setTimeout>[] = []
     let settled = false
-    const settle = () => {
+    let started = false
+    const settle = (failed = false) => {
       if (settled) return
       settled = true
       timers.forEach(clearTimeout)
       if (generation !== myGeneration) return
+      if (started || !failed) options.onEvent?.({ type: failed ? 'error' : 'end', item })
       current = null
       pump()
     }
@@ -221,7 +264,7 @@ export function createSpeaker(options: SpeakerOptions): Speaker {
         } catch {
           // ignore
         }
-        settle()
+        settle(true)
         notifyIdle()
         options.onUnavailable?.()
       }, START_TIMEOUT_MS)
@@ -229,28 +272,35 @@ export function createSpeaker(options: SpeakerOptions): Speaker {
 
     utterance.onstart = () => {
       if (generation !== myGeneration) return
+      started = true
       timers.forEach(clearTimeout)
       timers.length = 0
       const words = text.split(/\s+/).length
-      timers.push(setTimeout(settle, Math.max(4000, (words * 700 + 2000) / rate)))
-      options.onStart?.()
+      timers.push(setTimeout(() => settle(), Math.max(4000, (words * 700 + 2000) / rate)))
+      options.onEvent?.({ type: 'start', item })
+      options.onStart?.(item)
     }
-    utterance.onend = settle
-    utterance.onerror = settle
+    // Word boundaries come only from some voices (not Google's network ones): when they do, they say how far the sentence got.
+    utterance.onboundary = (event) => {
+      if (generation !== myGeneration || event.name === 'sentence') return
+      options.onEvent?.({ type: 'boundary', item, charIndex: event.charIndex })
+    }
+    utterance.onend = () => settle()
+    utterance.onerror = () => settle(true)
 
     try {
       synth.speak(utterance)
     } catch {
-      settle()
+      settle(true)
     }
   }
 
   return {
     enqueue(sentence) {
-      const text = sentence.trim()
-      if (!text || !synth || broken) return
+      const item: SpeakItem = typeof sentence === 'string' ? { speech: sentence.trim() } : { ...sentence, speech: sentence.speech.trim() }
+      if (!item.speech || !synth || broken) return
       const wasBusy = busy()
-      queue.push(text)
+      queue.push(item)
       if (!wasBusy) options.onSpeakingChange(true)
       pump()
     },

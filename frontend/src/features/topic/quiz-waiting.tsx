@@ -1,5 +1,6 @@
 'use client'
 
+import { usePolling } from '@/lib/hooks/use-polling'
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react/dist/ssr'
@@ -12,9 +13,11 @@ import { apiFetch, isApiError } from '@/lib/api/client'
 import { GRADING_WAITING_TEXT, GRADING_WAITING_TITLE } from '@/lib/ai/messages'
 import { describeJobFailure } from '@/lib/jobs/failure-message'
 import { isWaitingForAi } from '@/lib/jobs/poll-job'
+import { partialLine } from '@/lib/learning/quiz-partial'
 import type { QuizReviewItem } from '@/lib/learning/quiz-review'
 import type { WaitingQuiz } from '@/lib/learning/quiz-submissions'
-import type { QuizResult } from './quiz-results'
+import type { PublicQuizQuestion } from '@/lib/learning/quiz-questions'
+import { PartialResults, type QuizResult } from './quiz-results'
 
 /** What the result route sends for a quiz that was graded after waiting (the same as a quiz graded at once). */
 type GradedResponse = {
@@ -25,7 +28,10 @@ type GradedResponse = {
   bestScore: number
   review: QuizReviewItem[]
   answers: Record<string, string>
+  confidence?: Record<string, number>
   outcome?: QuizResult['outcome']
+  helpAfterMiss?: QuizResult['helpAfterMiss']
+  missedConcepts?: QuizResult['missedConcepts']
 }
 
 export const toQuizResult = (response: GradedResponse): QuizResult => ({
@@ -36,11 +42,17 @@ export const toQuizResult = (response: GradedResponse): QuizResult => ({
   review: response.review,
   outcome: response.outcome,
   answers: response.answers,
+  confidence: response.confidence,
+  helpAfterMiss: response.helpAfterMiss,
+  missedConcepts: response.missedConcepts,
 })
 
 type QuizWaitingProps = {
+  courseId?: string
   topicId: string
   item: WaitingQuiz
+  /** The questions of the quiz's set, for the partial view. */
+  questions?: PublicQuizQuestion[]
   /** 'page' fills the quiz view right after submitting; 'card' sits above the lobby. */
   variant: 'page' | 'card'
   /** The server no longer lists it as waiting: it was graded, so ask for the result now. */
@@ -58,7 +70,7 @@ type QuizWaitingProps = {
  * waits (the same wait exam grading has) and the results appear here by themselves. If it did not
  * finish, "Grade again" starts it once more.
  */
-export function QuizWaiting({ topicId, item, variant, gone = false, onGraded, onLeave, onDismiss }: QuizWaitingProps) {
+export function QuizWaiting({ courseId, topicId, item, questions, variant, gone = false, onGraded, onLeave, onDismiss }: QuizWaitingProps) {
   const router = useRouter()
   const [regradeJobId, setRegradeJobId] = React.useState<string | null>(null)
   const [regrading, setRegrading] = React.useState(false)
@@ -121,11 +133,7 @@ export function QuizWaiting({ topicId, item, variant, gone = false, onGraded, on
 
   // While it waits for the AI (longer than a poll lasts), or after the poller gave up, look now and then.
   const slow = waiting || timedOut
-  React.useEffect(() => {
-    if (!jobId || !slow) return
-    const timer = setInterval(() => void check(), 20_000)
-    return () => clearInterval(timer)
-  }, [jobId, slow, check])
+  usePolling(() => void check(), { active: !!jobId && slow, intervalMs: 20_000, maxPolls: 45 })
 
   async function regrade() {
     setRegrading(true)
@@ -193,7 +201,7 @@ export function QuizWaiting({ topicId, item, variant, gone = false, onGraded, on
     )
   }
 
-  return (
+  const waitingPanel = (
     <div role="status" aria-live="polite" className={frame}>
       {waiting ? (
         <>
@@ -218,4 +226,23 @@ export function QuizWaiting({ topicId, item, variant, gone = false, onGraded, on
       ) : null}
     </div>
   )
+
+  // The multiple choice answers were graded at once: show them, then the wait for the short answers.
+  if (item.partial && questions && courseId && variant === 'page') {
+    return (
+      <div className="flex flex-col gap-8">
+        <PartialResults courseId={courseId} topicId={topicId} questions={questions} partial={item.partial} />
+        {waitingPanel}
+      </div>
+    )
+  }
+  if (item.partial && variant === 'card') {
+    return (
+      <div className="flex flex-col gap-1">
+        <p className="max-w-[720px] text-small text-fg-2">{partialLine(item.partial.summary)}</p>
+        {waitingPanel}
+      </div>
+    )
+  }
+  return waitingPanel
 }

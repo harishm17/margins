@@ -10,6 +10,8 @@ export type TabItem = {
   href: string
   /** A trailing status glyph: a check, "2/5", a score, a spinner. */
   glyph?: React.ReactNode
+  /** Classes for the glyph's wrapper, such as a negative margin that takes back its gap on a phone. */
+  glyphClassName?: string
 }
 
 type TabsProps = {
@@ -25,7 +27,19 @@ type TabsProps = {
    * a shorter panel and leave the tabs mid-screen. Not stuck: the scroll position is left alone.
    */
   stickyPanel?: string
+  /**
+   * Something after the tabs on the same line, such as a menu of tools; it sits on the bar's bottom border. A link in it
+   * calls `useTabPin()` in its onClick, so it too keeps a stuck bar stuck (see `stickyPanel`).
+   */
+  trailing?: React.ReactNode
 }
+
+type PinHandler = (event: React.MouseEvent, id: string) => void
+
+const TabPinContext = React.createContext<PinHandler>(() => {})
+
+/** The click handler of a link that sits in `Tabs`' trailing slot and switches the panel like a tab (pass the id it makes active). */
+export const useTabPin = (): PinHandler => React.useContext(TabPinContext)
 
 /**
  * The tab's own underline, drawn while its link is pending (clicked, the server not answered yet), so
@@ -48,7 +62,7 @@ function PendingUnderline() {
  * Underline tabs that are links: the active one has aria-current="page". On narrow screens
  * the row scrolls sideways and fades at whichever edge has more to show.
  */
-export function Tabs({ items, activeId, className, scroll = false, stickyPanel, ...aria }: TabsProps) {
+export function Tabs({ items, activeId, className, scroll = false, stickyPanel, trailing, ...aria }: TabsProps) {
   const rowRef = React.useRef<HTMLDivElement>(null)
   const navRef = React.useRef<HTMLElement>(null)
   // The tab clicked while the bar was stuck: the pinned scroll is for that view only, so a click that
@@ -101,10 +115,17 @@ export function Tabs({ items, activeId, className, scroll = false, stickyPanel, 
     return () => observer.disconnect()
   }, [measure, items.length])
 
+  // Bring the current tab into view along the row only: scrollIntoView would also scroll the page when the
+  // tabs sit low in a short window.
   React.useEffect(() => {
-    rowRef.current
-      ?.querySelector<HTMLElement>('[aria-current="page"]')
-      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    const row = rowRef.current
+    const current = row?.querySelector<HTMLElement>('[aria-current="page"]')
+    if (!row || !current) return
+    const edge = 12
+    const left = current.getBoundingClientRect().left - row.getBoundingClientRect().left
+    const right = left + current.offsetWidth
+    if (left < 0) row.scrollLeft += left - edge
+    else if (right > row.clientWidth) row.scrollLeft += right - row.clientWidth + edge
   }, [activeId])
 
   const mask =
@@ -117,12 +138,15 @@ export function Tabs({ items, activeId, className, scroll = false, stickyPanel, 
           : undefined
 
   return (
-    <nav ref={navRef} data-tabs="" aria-label={aria['aria-label']} className={className}>
+    <nav ref={navRef} data-tabs="" aria-label={aria['aria-label']} className={cn(trailing && 'flex', className)}>
       <div
         ref={rowRef}
         onScroll={measure}
         style={{ maskImage: mask, WebkitMaskImage: mask }}
-        className="flex h-[41px] overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={cn(
+          'flex h-[41px] overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          trailing && 'min-w-0 flex-1'
+        )}
       >
         {items.map((item) => {
           const active = item.id === activeId
@@ -140,11 +164,12 @@ export function Tabs({ items, activeId, className, scroll = false, stickyPanel, 
             >
               {item.label}
               <PendingUnderline />
-              {item.glyph ? <span className="inline-flex items-center text-caption text-fg-3">{item.glyph}</span> : null}
+              {item.glyph ? <span className={cn('inline-flex items-center text-caption text-fg-3', item.glyphClassName)}>{item.glyph}</span> : null}
             </Link>
           )
         })}
       </div>
+      {trailing ? <div className="flex h-[41px] shrink-0 items-center border-b border-border pl-2"><TabPinContext.Provider value={noteStuck}>{trailing}</TabPinContext.Provider></div> : null}
     </nav>
   )
 }

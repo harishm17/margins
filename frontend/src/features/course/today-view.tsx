@@ -144,10 +144,10 @@ const BUCKETS: { level: MasteryLevel; label: string; swatch: string }[] = [
   { level: 'none', label: 'Not started', swatch: 'bg-surface-3' },
 ]
 
-function ProgressCard({ average, counts }: { average: number | null; counts: MasteryCounts }) {
+function ProgressCard({ average, counts, className }: { average: number | null; counts: MasteryCounts; className?: string }) {
   const percent = masteryPercent(average)
   return (
-    <Card aria-labelledby="progress-heading" role="region" className="flex flex-col gap-4">
+    <Card aria-labelledby="progress-heading" role="region" className={cn('flex flex-col gap-4', className)}>
       <h2 id="progress-heading" className="text-small font-medium text-fg-2">
         Course mastery
       </h2>
@@ -211,7 +211,7 @@ function ScoreBadge({ score }: { score: number | null }) {
 
 function RecentExams({ courseId, exams }: { courseId: string; exams: TodayData['recentExams'] }) {
   return (
-    <section aria-labelledby="exams-heading">
+    <section aria-labelledby="exams-heading" className="min-w-0">
       <h2 id="exams-heading" className="text-heading text-fg">
         Recent mock exams
       </h2>
@@ -282,11 +282,13 @@ export function TodayView({ course, today }: { course: CourseShell; today: Today
               They join your plan once you confirm them.
             </InlineAlert>
           ) : null}
+          {/* On a phone the exam-date line sits right under "Up next", so the whole of it is above the tab bar on the first
+              paint; from a laptop width it runs under both cards. */}
           <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
             <UpNext courseId={course.id} next={today.next} />
-            <ProgressCard average={today.averageMastery} counts={today.counts} />
+            {today.examPrompt ? <ExamPromptCard courseId={course.id} className="lg:col-span-2 lg:row-start-2" /> : null}
+            <ProgressCard average={today.averageMastery} counts={today.counts} className="lg:col-start-2 lg:row-start-1" />
           </div>
-          {today.examPrompt ? <ExamPromptCard courseId={course.id} /> : null}
         </div>
 
         <section aria-labelledby="topics-heading">

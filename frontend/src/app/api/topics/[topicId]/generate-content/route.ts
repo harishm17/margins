@@ -22,9 +22,10 @@ import {
   createJobOrFindActive,
   generateContentTarget,
 } from '@/lib/jobs/active-jobs'
+import { resolveRequestedContent } from '@/lib/learning/topic-preparation'
 
 const generateContentSchema = z.object({
-  contentType: z.enum(['section_notes', 'solved_examples', 'interactive_examples', 'topic_quiz']),
+  contentType: z.enum(['concepts', 'warmup', 'section_notes', 'solved_examples', 'interactive_examples', 'topic_quiz']),
   preferences: z.object({
     detail_level: z.enum(['brief', 'moderate', 'comprehensive']).optional(),
     include_examples: z.boolean().optional(),
@@ -80,19 +81,32 @@ export async function POST(
       return apiInvalidInput('Invalid input', zodDetails(validation.error))
     }
 
-    const { contentType, preferences: requested } = validation.data
+    const { contentType: requestedType, preferences: requested } = validation.data
     const { only_if_missing: onlyIfMissing, ...preferences } = requested ?? {}
-    // Check if content already exists for this type
-    const existingContent = await prisma.topicContent.findFirst({
-      where: {
-        topicId,
-        contentType,
-      },
+    // Opening a topic asks for its concepts and the rest of its chain: a topic that has the
+    // concepts already goes on with the first type it is missing, and concepts already being
+    // extracted (by a course-wide run, say) are followed, not started again.
+    const resolved = await resolveRequestedContent({
+      topicId,
+      contentType: requestedType,
+      onlyIfMissing: !!onlyIfMissing,
+      prepareRest: !!preferences.prepare_rest,
     })
-
-    if (onlyIfMissing && existingContent) {
+    if (resolved.kind === 'exists') {
       return NextResponse.json({ jobId: null, status: 'exists', message: 'Content already written' })
     }
+    if (resolved.kind === 'active') {
+      return NextResponse.json({
+        jobId: resolved.jobId,
+        contentType: requestedType,
+        status: resolved.status === 'processing' ? 'processing' : 'queued',
+        message: 'Content generation already in progress',
+        estimatedSeconds: 60,
+        replacingExisting: false,
+      })
+    }
+    const { contentType } = resolved
+    const existingContent = resolved.replacing
 
     // One generation per topic and content type at a time (a unique target key), so a
     // double click or a second tab gets the job that is already running.
@@ -116,10 +130,11 @@ export async function POST(
     if (!created) {
       return NextResponse.json({
         jobId: job.id,
+        contentType,
         status: job.status === 'processing' ? 'processing' : 'queued',
         message: 'Content generation already in progress',
         estimatedSeconds: 60,
-        replacingExisting: !!existingContent,
+        replacingExisting: existingContent,
       })
     }
 
@@ -145,10 +160,11 @@ export async function POST(
 
     return NextResponse.json({
       jobId: job.id,
+      contentType,
       status: 'queued',
       message: 'Content generation started',
       estimatedSeconds: 60,
-      replacingExisting: !!existingContent,
+      replacingExisting: existingContent,
     })
   } catch (error) {
     console.error('Content generation error:', error)

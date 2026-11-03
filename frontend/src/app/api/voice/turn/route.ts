@@ -31,17 +31,24 @@ import {
 } from '@/lib/voice/ai-turn'
 import { claimVoiceSession, isSerializationConflict } from '@/lib/voice/claim'
 import {
-  COACH_STYLES,
+  coachStyleOf,
   CONTINUE_MESSAGE,
   buildCoachSystemPrompt,
   startMessage,
   styleUsesTools,
   type CoachStyle,
 } from '@/lib/voice/coach-prompt'
+import { courseTermsForTopics, sessionTopicIds } from '@/lib/voice/course-terms'
 import { extractTextFromNotes } from '@/lib/voice/concept'
 import { voiceErrorMessage } from '@/lib/voice/errors'
-import { appendUserText, parseHistory, toStoredHistory, type VoiceMessage } from '@/lib/voice/history'
-import { VOICE_TOOLS, executeVoiceTool } from '@/lib/voice/tools'
+import { MAX_HEARD_CHARS, appendUserText, markInterrupted, parseHistory, toStoredHistory, type VoiceMessage } from '@/lib/voice/history'
+import { listenForSession } from '@/lib/voice/listen'
+import { attachClientTiming, clientTimingSchema, recordTurnTiming } from '@/lib/voice/turn-timing'
+import { planPreRunForSession, startWithPreRun } from '@/lib/voice/pre-run-server'
+import { beginVoiceTurn } from '@/lib/voice/teach-tools'
+import { executeVoiceTool, toolsForStyle, type StepCache } from '@/lib/voice/tools'
+import type { VoiceStreamExtra } from '@/lib/voice/turn-contract'
+import { getTimeZone } from '@/server/timezone'
 import { runTurn } from '@/lib/voice/turn-engine'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
 
@@ -61,6 +68,10 @@ const bodySchema = z.object({
   sessionId: z.string().min(1),
   // Empty (or missing) means "start the session" the first time, "carry on" afterwards.
   utterance: z.string().trim().max(MAX_UTTERANCE_CHARS, `Keep it under ${MAX_UTTERANCE_CHARS} characters`).default(''),
+  // The student interrupted the coach's last reply: what they heard of it before it stopped (spec 19.4).
+  interruptedHeard: z.string().max(MAX_HEARD_CHARS).optional(),
+  // What the browser measured for the previous turn (spec 19.10).
+  timing: clientTimingSchema.optional(),
 })
 
 /** A JSON error in the B shape, with the friendly message for `code` and the code in details. */
@@ -79,6 +90,7 @@ function voiceFailure(code: string, extraDetails: Record<string, unknown> = {}, 
 
 /** What the coach needs to know about the session's topic or sprint, read fresh each turn. */
 async function loadPromptContext(session: { mode: string; topicId: string | null; questionSet: Prisma.JsonValue }) {
+  const courseTerms = await courseTermsForTopics(sessionTopicIds(session))
   if (session.mode === 'sprint') {
     const ids = new Set<string>()
     if (Array.isArray(session.questionSet)) {
@@ -93,7 +105,7 @@ async function loadPromptContext(session: { mode: string; topicId: string | null
           orderBy: { orderIndex: 'asc' },
         })
       : []
-    return { topicName: null, topicDescription: null, notes: null, sprintTopics: topics.map((topic) => topic.name) }
+    return { topicName: null, topicDescription: null, notes: null, sprintTopics: topics.map((topic) => topic.name), courseTerms }
   }
   const topic = session.topicId
     ? await prisma.topic.findUnique({
@@ -110,10 +122,12 @@ async function loadPromptContext(session: { mode: string; topicId: string | null
     topicDescription: topic?.description ?? null,
     notes: topic?.content[0] ? extractTextFromNotes(topic.content[0].contentData) : null,
     sprintTopics: [] as string[],
+    courseTerms,
   }
 }
 
 export async function POST(request: NextRequest) {
+  const requestStarted = performance.now()
   let userId: string
   try {
     userId = (await requireAuth()).user.id
@@ -140,7 +154,7 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return apiInvalidInput(parsed.error.issues[0]?.message ?? 'Invalid input', zodDetails(parsed.error))
   }
-  const { sessionId, utterance } = parsed.data
+  const { sessionId, utterance, interruptedHeard, timing } = parsed.data
 
   const session = await prisma.voiceDrillSession.findFirst({ where: { id: sessionId, userId } })
   if (!session) return apiNotFound('Session not found')
@@ -174,9 +188,8 @@ export async function POST(request: NextRequest) {
       await prisma.voiceDrillSession.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } })
     }
 
-    const style: CoachStyle = (COACH_STYLES as readonly string[]).includes(session.style)
-      ? (session.style as CoachStyle)
-      : 'oral_quiz'
+    // A session from before teach-back and guided reading carries on in the style it began with.
+    const style: CoachStyle = coachStyleOf(session.style)
     const context = await loadPromptContext(session)
     const system = buildCoachSystemPrompt({
       mode: session.mode === 'sprint' ? 'sprint' : 'topic_drill',
@@ -185,40 +198,58 @@ export async function POST(request: NextRequest) {
       focus: session.focus,
       ...context,
     })
-    const tools = styleUsesTools(style) ? VOICE_TOOLS : []
+    const tools = styleUsesTools(style) ? toolsForStyle(style) : []
+    // Read here: the cookie is not reachable once the response stream is running.
+    const timeZone = await getTimeZone()
 
-    const history = parseHistory(session.history)
+    // An interrupted reply is stored as what the student heard and a note, so the model does not take the rest as said.
+    const stored = parseHistory(session.history)
+    const history = interruptedHeard !== undefined ? markInterrupted(stored, interruptedHeard) : stored
     const userText = utterance || (history.length === 0 ? startMessage(style, context.topicName) : CONTINUE_MESSAGE)
-    const startMessages: VoiceMessage[] = appendUserText(history, userText)
+    // The server keeps what the student said, with this turn's number: the tools take an answer from there, not from the model.
+    const turn = await beginVoiceTurn(session.id, utterance)
+    if (timing) void attachClientTiming(session.id, turn, timing)
+    let startMessages: VoiceMessage[] = appendUserText(history, userText)
+    // The step the session is waiting for runs before the model speaks (spec 19.1), in the stream below so the browser can be
+    // told at once; the model is then called once, with the result in the student's message.
+    const steps: StepCache = new Map()
+    const preRun = await planPreRunForSession({ sessionId: session.id, language: session.language, utterance, history })
 
     const modelRequest = (messages: VoiceMessage[]) =>
       requestModelTurn({ userId, projectId: session.projectId, sessionId: session.id, system, messages, tools })
 
-    // Ask first. When the AI service refuses (daily budget) or is down, the session keeps its
+    // Ask first, unless a step has to run first. When the AI service refuses (daily budget) or is down, the session keeps its
     // old conversation and the browser gets an ordinary JSON error.
-    let first: Response
-    try {
-      first = await modelRequest(startMessages)
-    } catch (error) {
-      console.error('[VOICE] The AI service is not reachable:', error)
-      await releaseClaim()
-      releaseTurn()
-      return voiceFailure('VOICE_UNAVAILABLE')
+    let firstBody: ReadableStream<Uint8Array> | null = null
+    let firstCallStarted: number | undefined
+    if (!preRun) {
+      let first: Response
+      try {
+        firstCallStarted = performance.now()
+        first = await modelRequest(startMessages)
+      } catch (error) {
+        console.error('[VOICE] The AI service is not reachable:', error)
+        await releaseClaim()
+        releaseTurn()
+        return voiceFailure('VOICE_UNAVAILABLE')
+      }
+      if (!first.ok || !first.body) {
+        const failure = await modelErrorFromResponse(first)
+        console.error(`[VOICE] ${failure.message}`)
+        await releaseClaim()
+        releaseTurn()
+        return voiceFailure(failure.code, {}, failure.retryable)
+      }
+      firstBody = first.body
     }
-    if (!first.ok || !first.body) {
-      const failure = await modelErrorFromResponse(first)
-      console.error(`[VOICE] ${failure.message}`)
-      await releaseClaim()
-      releaseTurn()
-      return voiceFailure(failure.code, {}, failure.retryable)
-    }
-    const firstBody = first.body
 
     const encoder = new TextEncoder()
     let clientGone = false
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
-        const send = (event: VoiceEvent) => {
+        let firstTextAt: number | null = null
+        const send = (event: VoiceEvent | VoiceStreamExtra) => {
+          if (event.type === 'text' && firstTextAt === null) firstTextAt = performance.now()
           if (clientGone) return
           try {
             controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'))
@@ -233,10 +264,18 @@ export async function POST(request: NextRequest) {
 
         void (async () => {
           try {
+            let preRan = false
+            let preRunMs = 0
+            if (preRun) {
+              const stepStarted = performance.now()
+              startMessages = (await startWithPreRun(preRun, { sessionId: session.id, userId, timeZone, turn, steps }, startMessages, send)).messages
+              preRunMs = performance.now() - stepStarted
+              preRan = true
+            }
             const outcome = await runTurn(
               {
                 async openModel(messages, callNumber) {
-                  if (callNumber === 1) return readModelEvents(firstBody)
+                  if (callNumber === 1 && firstBody) return readModelEvents(firstBody)
                   let response: Response
                   try {
                     response = await modelRequest(messages)
@@ -247,16 +286,30 @@ export async function POST(request: NextRequest) {
                   if (!response.ok || !response.body) throw await modelErrorFromResponse(response)
                   return readModelEvents(response.body)
                 },
-                runTool: (name, input) => executeVoiceTool({ sessionId: session.id, userId }, name, input),
+                runTool: (name, input) => executeVoiceTool({ sessionId: session.id, userId, timeZone, turn, steps }, name, input),
                 emit: send,
+                callStartedAt: (call) => (call === 1 ? firstCallStarted : undefined),
               },
               startMessages
             )
+            await recordTurnTiming({
+              sessionId: session.id,
+              userId,
+              turn,
+              style,
+              preRun: preRun?.step ?? null,
+              graded: preRan || steps.size > 0,
+              calls: outcome.calls,
+              stepMs: preRunMs + outcome.toolMs,
+              firstTextMs: firstTextAt === null ? null : firstTextAt - requestStarted,
+              totalMs: performance.now() - requestStarted,
+              ok: outcome.ok,
+            })
 
             // Keep the conversation when the turn worked, or when it failed after tools had
             // already recorded something (a retry must not record it twice).
             let saved = true
-            if (outcome.ok || outcome.toolsRan) {
+            if (outcome.ok || outcome.toolsRan || preRan) {
               try {
                 await prisma.voiceDrillSession.update({
                   where: { id: session.id },
@@ -274,8 +327,11 @@ export async function POST(request: NextRequest) {
             }
 
             if (outcome.ok) {
-              if (saved) send({ type: 'done', text: outcome.text })
-              else sendError('VOICE_NOT_SAVED')
+              if (saved) {
+                // What the session waits for next, so the browser can set its end-of-turn wait.
+                send({ type: 'listen', for: await listenForSession(session.id).catch(() => 'short_answer' as const) })
+                send({ type: 'done', text: outcome.text })
+              } else sendError('VOICE_NOT_SAVED')
             }
             // A failed turn has already sent its error event.
           } catch (error) {

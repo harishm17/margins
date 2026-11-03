@@ -62,6 +62,8 @@ export function buildCrumbs(pathname: string, nav: NavLike[]): Crumb[] {
       return [courseCrumb(false), { label: 'Ask' }]
     case 'plan':
       return [courseCrumb(false), { label: 'Plan' }]
+    case 'map':
+      return [courseCrumb(false), { label: 'Map' }]
     case 'review':
       return [courseCrumb(false), { label: 'Review' }]
     case 'settings':

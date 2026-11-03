@@ -18,7 +18,7 @@ import { groupTopicsByUnit, unitMastery, type UnitGroup as UnitGroupOf } from '@
 import { cn } from '@/lib/utils'
 import type { GenerationState, TopicsData } from '@/server/queries/course'
 import { BuildingContent } from './building-content'
-import { needsWorkOrder, topicRowLabel, type GlyphState } from './summary'
+import { needsWorkOrder, nextStepWords, type GlyphState } from './summary'
 
 export type ListTopic = {
   id: string
@@ -77,14 +77,12 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
     <li>
       <Link
         href={`/courses/${courseId}/topics/${topic.id}`}
-        aria-label={topicRowLabel(topic)}
         className="group flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 rounded-control px-2 py-2.5 transition-colors duration-120 hover:bg-surface-2 sm:flex-nowrap"
       >
         <ProgressRing
           size={28}
           value={level === 'none' ? null : topic.mastery}
           tone={masteryTone(level) === 'warning' ? 'warning' : 'accent'}
-          aria-label={percent === null ? 'Not started' : `${masteryLabel(topic.mastery)}, ${percent}%`}
         />
         <div className="min-w-0 flex-1 basis-40">
           <p className="flex items-center gap-2 text-body-strong text-fg">
@@ -93,7 +91,8 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
           </p>
           {topic.description ? <p className="truncate text-small text-fg-2">{topic.description}</p> : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5" role="group" aria-label="Study path">
+        {/* The path circles are for the eye; the row says what is next in words (below), so its name is what it shows. */}
+        <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
           <Glyph label="Notes" state={path.notes} icon={<Notebook />} />
           <Glyph label="Worked examples" state={path.examples} icon={<Lightbulb />} />
           <Glyph label="Practice" state={path.practice} icon={<PencilSimpleLine />} />
@@ -102,7 +101,10 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
           </span>
         </div>
         <div className="flex w-full shrink-0 flex-col sm:w-40 sm:items-end">
-          <span className="text-small text-fg">{masteryLabel(topic.mastery)}</span>
+          <span className="text-small text-fg">
+            {masteryLabel(topic.mastery)}
+            {percent !== null ? <span className="sr-only">, {percent}%</span> : null}
+          </span>
           {topic.timing ? (
             <span
               suppressHydrationWarning
@@ -111,6 +113,7 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
               {topic.timing.text}
             </span>
           ) : null}
+          <span className="sr-only">{nextStepWords(topic.path)}</span>
         </div>
       </Link>
     </li>

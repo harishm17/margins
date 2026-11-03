@@ -177,3 +177,69 @@ test('confirmation needs the word DELETE', () => {
   assert.equal(confirmsDeletion(''), false)
   assert.equal(confirmsDeletion('DELETE ME'), false)
 })
+
+// The learner model's tables, against a real Postgres (DATABASE_URL): deleting the account takes
+// every row of them with it. Skipped when no database answers.
+test('deleting a user removes concept memory, evidence, recall attempts, margin notes, tutor state, item sessions and study drafts', async (t) => {
+  const { prisma } = await import('@/lib/db/prisma')
+  const reachable = await prisma.$queryRaw`SELECT 1 FROM users LIMIT 1`.then(
+    () => true,
+    () => false
+  )
+  if (!reachable) return t.skip('no migrated test database')
+
+  const user = await prisma.user.create({ data: { email: `del-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com` } })
+  const project = await prisma.project.create({ data: { userId: user.id, name: 'P' } })
+  const topic = await prisma.topic.create({ data: { projectId: project.id, name: 'T', orderIndex: 0 } })
+  const material = await prisma.material.create({
+    data: { projectId: project.id, category: 'lecture_notes', filename: 'a.pdf', gcsPath: 'local://u/p/a.pdf', sizeBytes: 1 },
+  })
+  const concept = (orderIndex: number) =>
+    prisma.concept.create({
+      data: { projectId: project.id, topicId: topic.id, name: `C${orderIndex}`, summary: 'An idea.', kind: 'concept', orderIndex },
+    })
+  const [a, b] = [await concept(0), await concept(1)]
+  await prisma.conceptClaim.create({
+    data: { conceptId: a.id, text: 'Claim', quote: 'Quote', materialId: material.id, orderIndex: 0 },
+  })
+  await prisma.conceptEdge.create({
+    data: { projectId: project.id, sourceId: a.id, targetId: b.id, type: 'prerequisite', weight: 1, confidence: 0.8 },
+  })
+  await prisma.evidenceEvent.create({
+    data: {
+      userId: user.id, projectId: project.id, topicId: topic.id, conceptId: a.id, itemKey: 'quiz:q1', source: 'quiz',
+      score: 1, assistance: 0, weight: 1, role: 'primary', gradedBy: 'rule', sessionKey: 's1',
+    },
+  })
+  await prisma.conceptMemory.create({ data: { userId: user.id, projectId: project.id, topicId: topic.id, conceptId: a.id } })
+  await prisma.recallAttempt.create({
+    data: { userId: user.id, topicId: topic.id, kind: 'recall', promptText: 'Say it.', answerText: 'It is.', mode: 'text', result: {} },
+  })
+  await prisma.marginNote.create({
+    data: { userId: user.id, topicId: topic.id, materialId: material.id, chunkId: 'chunk-1', kind: 'note', text: 'Note' },
+  })
+  await prisma.tutorState.create({ data: { userId: user.id, scope: 'practice', scopeKey: 'step-1' } })
+  await prisma.itemSession.create({ data: { userId: user.id, projectId: project.id, kind: 'warmup', items: [] } })
+  await prisma.studyDraft.create({
+    data: {
+      userId: user.id, projectId: project.id, topicId: topic.id, surface: 'recall', scopeKey: `${topic.id}:card-1`,
+      payload: { text: 'half an answer' }, expiresAt: new Date(Date.now() + 14 * 24 * 3600_000),
+    },
+  })
+
+  await prisma.$queryRaw`SELECT delete_user_account(${user.id})`
+  // Other rows may share the tables, so count what this user owned.
+  const owned = await Promise.all([
+    prisma.concept.count({ where: { projectId: project.id } }),
+    prisma.conceptClaim.count({ where: { conceptId: { in: [a.id, b.id] } } }),
+    prisma.conceptEdge.count({ where: { projectId: project.id } }),
+    prisma.evidenceEvent.count({ where: { userId: user.id } }),
+    prisma.conceptMemory.count({ where: { userId: user.id } }),
+    prisma.recallAttempt.count({ where: { userId: user.id } }),
+    prisma.marginNote.count({ where: { userId: user.id } }),
+    prisma.tutorState.count({ where: { userId: user.id } }),
+    prisma.itemSession.count({ where: { userId: user.id } }),
+    prisma.studyDraft.count({ where: { userId: user.id } }),
+  ])
+  assert.deepEqual(owned, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+})

@@ -11,6 +11,7 @@ import { Skeleton, SkeletonText } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { Composer } from './composer'
 import { AssistantBlock, FailureBlock, LiveAnswer, UserBubble } from './messages'
+import { WORKED_EXAMPLE_REQUEST } from '@/lib/ask/tutor-message'
 import type { AskChat } from './use-ask-chat'
 import { useAiStatus } from '@/features/ai/ai-status'
 
@@ -22,6 +23,8 @@ type ConversationProps = {
   /** Fills the question box without sending it. */
   initialDraft?: string
   examples: string[]
+  /** The concept the conversation starts from (the knowledge map's "Ask about this"). */
+  conceptName?: string
   scopeOptions?: SelectOption[]
   scope?: string
   onScopeChange?: (scope: string) => void
@@ -40,13 +43,14 @@ export function Conversation({
   hasMaterials,
   initialDraft,
   examples,
+  conceptName,
   scopeOptions,
   scope,
   onScopeChange,
   fixedScope,
   topicName,
 }: ConversationProps) {
-  const { messages, live, sending, loadingThread, loadError, send, stop, retry } = chat
+  const { messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry } = chat
   const { blocked } = useAiStatus()
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const stickRef = React.useRef(true)
@@ -81,6 +85,8 @@ export function Conversation({
     stickRef.current = true
     void send(question)
   }
+  // The follow-up buttons belong to the last reply, and only while nothing is being written.
+  const lastMessageId = messages[messages.length - 1]?.id
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -121,7 +127,9 @@ export function Conversation({
               ) : (
                 <h2 className="text-title text-fg">Ask your materials</h2>
               )}
-              <p className="mt-1.5 max-w-[52ch] text-body text-fg-2">Answers come only from your files, with sources.</p>
+              <p className="mt-1.5 max-w-[52ch] text-body text-fg-2">
+                {conceptName ? `Your next question is about ${conceptName}. Answers come only from your files, with sources.` : 'Answers come only from your files, with sources.'}
+              </p>
               <ul className="mt-6 flex w-full max-w-[560px] flex-col gap-2">
                 {examples.map((question) => (
                   <li key={question}>
@@ -142,7 +150,17 @@ export function Conversation({
                 message.kind === 'user' ? (
                   <UserBubble key={message.id} text={message.text} />
                 ) : message.kind === 'assistant' ? (
-                  <AssistantBlock key={message.id} message={message} />
+                  <AssistantBlock
+                    key={message.id}
+                    message={message}
+                    moves={{
+                      last: message.id === lastMessageId && !live,
+                      workedAllowed,
+                      disabled: sending || !!blocked,
+                      onAsk: ask,
+                      onWorked: () => ask(WORKED_EXAMPLE_REQUEST),
+                    }}
+                  />
                 ) : (
                   <FailureBlock key={message.id} message={message} disabled={sending || !!blocked} onRetry={() => retry(message.id)} />
                 )

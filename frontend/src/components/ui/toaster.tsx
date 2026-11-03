@@ -1,5 +1,6 @@
 'use client'
 
+import * as React from 'react'
 import { Toaster as Sonner, toast } from 'sonner'
 import { useTheme } from 'next-themes'
 import { LAYERS } from '@/config/layers'
@@ -24,18 +25,33 @@ const ICON_TONE = [
   'in-data-[type=info]:text-fg-3',
 ].join(' ')
 
+// Sonner's own phone rule is `max-width: 600px` (600 included), so a 600px window gets its mobile offsets and must get the top position too.
+const PHONE_QUERY = '(max-width: 600px)'
+const subscribePhone = (notify: () => void) => {
+  const query = window.matchMedia(PHONE_QUERY)
+  query.addEventListener('change', notify)
+  return () => query.removeEventListener('change', notify)
+}
+
+/**
+ * On a phone toasts come in under the top bar, not above the tab bar: the primary action of a screen (Next question,
+ * Check my answer) sits just above the bar, and a toast over it hides what the student is about to tap.
+ */
+const usePhone = () => React.useSyncExternalStore(subscribePhone, () => window.matchMedia(PHONE_QUERY).matches, () => false)
+
 /** Transient confirmations and failures of background actions. Never for form validation. */
 export function Toaster() {
   const { resolvedTheme } = useTheme()
+  const phone = usePhone()
   return (
     <Sonner
       theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
-      position="bottom-right"
+      position={phone ? 'top-center' : 'bottom-right'}
       visibleToasts={3}
       duration={4000}
       closeButton={false}
       offset={{ bottom: BOTTOM, right: 24 }}
-      mobileOffset={{ bottom: BOTTOM, left: 16, right: 16 }}
+      mobileOffset={{ top: 'calc(var(--topbar-height) + 8px)', left: 16, right: 16 }}
       style={
         {
           zIndex: LAYERS.toast,

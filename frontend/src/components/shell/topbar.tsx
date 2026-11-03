@@ -77,9 +77,9 @@ export function Topbar() {
     <header
       data-scrolled={scrolled || undefined}
       className={cn(
-        'sticky top-0 z-topbar flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-transparent px-4 md:px-6 lg:px-8',
+        'sticky top-0 z-topbar flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-transparent pt-[env(safe-area-inset-top)] px-4 md:px-6 lg:px-8',
         'transition-[background-color,border-color,backdrop-filter] duration-180',
-        'data-[scrolled]:border-border data-[scrolled]:bg-canvas/80 data-[scrolled]:backdrop-blur-md'
+        'data-[scrolled]:border-border data-[scrolled]:bg-canvas data-[scrolled]:backdrop-blur-md'
       )}
     >
       <IconButton

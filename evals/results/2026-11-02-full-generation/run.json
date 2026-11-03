@@ -1,0 +1,59 @@
+{
+  "label": "full-generation",
+  "date": "2026-11-02",
+  "code": {
+    "commit": "60adcba763cb58712458cb13bade46405ecffd11",
+    "branch": "feat/v3-map",
+    "app_dirty": false
+  },
+  "corpora": [
+    "mit-18.05",
+    "mit-6.006"
+  ],
+  "types": [
+    "concepts",
+    "warmup",
+    "notes",
+    "solved",
+    "interactive",
+    "quiz"
+  ],
+  "models": [
+    {
+      "slug": "opus-medium",
+      "label": "opus:medium",
+      "model_id": "claude-opus-5-5",
+      "effort": "medium"
+    }
+  ],
+  "params": {
+    "examples": 3,
+    "questions": 10,
+    "difficulty": "medium",
+    "detail_level": "comprehensive"
+  },
+  "judge": null,
+  "mock": false,
+  "seed": 0,
+  "max_usd": 8.0,
+  "max_judge_usd": 3.0,
+  "notes_sections": [
+    "What you'll learn",
+    "The idea",
+    "Key concepts",
+    "Worked example",
+    "Check yourself",
+    "Common pitfalls",
+    "Summary",
+    "Overview",
+    "How it works",
+    "Exam-ready recap"
+  ],
+  "topics_source": "the app's course planner",
+  "stopped": null,
+  "spend": {
+    "generation": 7.3732,
+    "topics": 0.1285,
+    "judge": 0.0
+  }
+}

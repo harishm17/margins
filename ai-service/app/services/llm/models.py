@@ -12,6 +12,14 @@ belongs to which setting:
     exam_questions          MODEL_EXAM         mock exam question generator
     grade_short_answer      MODEL_GRADING      exam short-answer grader
     extract_topics          MODEL_TOPICS       course planner (units, topics, sources)
+    extract_concepts        MODEL_CONCEPTS     concept graph of one topic (MODEL_TOPICS when empty)
+    link_concepts           MODEL_CONCEPTS     cross-topic links of one unit (same setting)
+    warmup                  MODEL_WARMUP       warm-up (pretest) questions (MODEL_QUIZ when empty)
+    gap_explainer           MODEL_GAP_EXPLAINER  explanations of what a recall answer missed (MODEL_NOTES when empty)
+    review_items            MODEL_QUIZ         new items for review sessions
+    router                  MODEL_ROUTER       answer-key support check of generated sets; tutor leak judge; Ask routing
+    tutor                   MODEL_TUTOR        practice tutor replies
+    recall_grading          MODEL_RECALL_GRADING  verdicts on a recall answer, claim by claim
     exam_style              MODEL_TOPICS       past-exam style profile (always at low effort)
     order_units             MODEL_VALIDATION   cross-file unit order of a large course plan
     chat                    MODEL_CHAT         "Ask your materials" answers
@@ -47,6 +55,8 @@ class PurposeConfig:
     # Set when a purpose shares another's model but always runs at this effort, whatever the
     # setting says.
     effort: Optional[str] = None
+    # The setting used when this one is empty, before the tier fallback.
+    inherits: Optional[str] = None
 
 
 PURPOSES = {
@@ -57,6 +67,14 @@ PURPOSES = {
     "exam_questions": PurposeConfig("MODEL_EXAM", "main"),
     "grade_short_answer": PurposeConfig("MODEL_GRADING", "fast"),
     "extract_topics": PurposeConfig("MODEL_TOPICS", "fast"),
+    "extract_concepts": PurposeConfig("MODEL_CONCEPTS", "fast", inherits="MODEL_TOPICS"),
+    "link_concepts": PurposeConfig("MODEL_CONCEPTS", "fast", inherits="MODEL_TOPICS"),
+    "warmup": PurposeConfig("MODEL_WARMUP", "main", inherits="MODEL_QUIZ"),
+    "gap_explainer": PurposeConfig("MODEL_GAP_EXPLAINER", "main", inherits="MODEL_NOTES"),
+    "review_items": PurposeConfig("MODEL_QUIZ", "main"),
+    "router": PurposeConfig("MODEL_ROUTER", "fast"),
+    "tutor": PurposeConfig("MODEL_TUTOR", "main"),
+    "recall_grading": PurposeConfig("MODEL_RECALL_GRADING", "main"),
     "exam_style": PurposeConfig("MODEL_TOPICS", "fast", effort="low"),
     "chat": PurposeConfig("MODEL_CHAT", "main"),
     "voice": PurposeConfig("MODEL_VOICE", "fast"),
@@ -82,7 +100,10 @@ def resolve_model(purpose: str) -> ModelChoice:
         raise ValueError(
             f"Unknown LLM purpose {purpose!r}: add it to PURPOSES in app/services/llm/models.py"
         )
-    choice = parse_model_spec(getattr(settings, config.setting), tier_choice(config.fallback_tier))
+    spec = getattr(settings, config.setting)
+    if not spec and config.inherits:
+        spec = getattr(settings, config.inherits)
+    choice = parse_model_spec(spec, tier_choice(config.fallback_tier))
     if config.effort is not None:
         choice = ModelChoice(choice.model, config.effort)
     return choice

@@ -214,5 +214,6 @@ export function describeTurnFailure(failure: TurnFailure): TurnFailureView {
 /** What a failed session start (before any turn) shows in the lobby. */
 export type LobbyAlert =
   | { kind: 'needs-generation' }
+  | { kind: 'needs-claims'; /** The idea named in the link is the one without claims (the topic has some). */ ofIdea?: boolean }
   | { kind: 'turn'; alert: VoiceAlert }
   | { kind: 'error'; text: string }

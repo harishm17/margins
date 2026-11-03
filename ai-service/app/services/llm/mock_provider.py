@@ -124,6 +124,119 @@ def _latest_question_index(messages: List[Dict[str, Any]], call: Dict[str, Any],
     return default
 
 
+APP_RESULT = re.compile(r'<app_result step="([a-z_]+)">(.*?)</app_result>', re.DOTALL)
+
+
+def _app_result(blocks: List[Dict[str, Any]]) -> Optional[tuple[str, Dict[str, Any]]]:
+    """(step, result) from an <app_result> in the student's message, or None."""
+    for block in blocks:
+        if block.get("type") != "text":
+            continue
+        match = APP_RESULT.search(block.get("text", ""))
+        if match:
+            try:
+                parsed = json.loads(match.group(2).replace("<\\/app_result", "</app_result"))
+            except ValueError:
+                return None
+            return match.group(1), parsed if isinstance(parsed, dict) else {}
+    return None
+
+
+def _tool_result_json(messages: List[Dict[str, Any]], call: Dict[str, Any]) -> Dict[str, Any]:
+    """The parsed result of a tool call, or {} when it has none or is not JSON."""
+    for message in messages:
+        for block in _blocks(message):
+            if block.get("type") == "tool_result" and block.get("tool_use_id") == call.get("id"):
+                content = block.get("content")
+                if isinstance(content, list):
+                    content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+                try:
+                    parsed = json.loads(content or "{}")
+                except (TypeError, ValueError):
+                    return {}
+                return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _teach_reply(name: Optional[str], output: Dict[str, Any]) -> str:
+    """What the scripted teach-back coach says to a tool's result (or to the same result the app attached to the student's words)."""
+    if output.get("done") is True:
+        return "That was every idea. Well done, and goodbye."
+    if name == "get_concept_to_explain":
+        return "Explain it to me as if I were a classmate who has not read it."
+    action = output.get("action")
+    if action == "probe":
+        return f"Mock probe {output.get('probe', {}).get('number', 1)}: what exactly do you mean by that?"
+    if action == "explain":
+        return "Mock explanation from your pages. Now say it back in your own words."
+    if action == "explain_first":
+        return "That is fine, it is not there yet. Mock explain first: here is the idea from your pages. Now say it back in your own words."
+    if action == "ask_new_example":
+        return "Mock example: what happens in a new case?"
+    if action == "clarify":
+        return str(output.get("clarifying_question") or "Can you say a little more?")
+    if action == "wrap_up":
+        return "Mock wrap-up. Let's take the next idea."
+    return "Okay."
+
+
+def _teach_turn(messages, tools, calls, results, utterance, app=None) -> tuple[str, Optional[Dict[str, Any]]]:
+    """Teach it back, scripted: ask for an idea, assess each explanation, follow the action the tool returns."""
+    names = [call.get("name") for call in calls]
+    if app is not None:
+        return _teach_reply(app[0], app[1]), None
+    if results:
+        call = {c.get("id"): c for c in calls}.get(results[-1].get("tool_use_id"), {})
+        return _teach_reply(call.get("name"), _tool_result_json(messages, call)), None
+    if "get_concept_to_explain" not in names:
+        return "", {"name": "get_concept_to_explain", "input": {}}
+    last = calls[-1]
+    last_output = _tool_result_json(messages, last)
+    concept_id = next(
+        (_tool_result_json(messages, c).get("concept_id") for c in reversed(calls) if c.get("name") == "get_concept_to_explain" and _tool_result_json(messages, c).get("concept_id")),
+        "",
+    )
+    if last.get("name") == "assess_explanation" and last_output.get("action") == "wrap_up":
+        return "", {"name": "get_concept_to_explain", "input": {}}
+    if last.get("name") == "assess_explanation" and last_output.get("action") == "ask_new_example":
+        return "", {"name": "record_check", "input": {"concept_id": concept_id, "question": "Mock example: what happens in a new case?", "answer": utterance or "no answer"}}
+    if last.get("name") == "record_check" and last_output.get("action") != "probe":
+        return "", {"name": "get_concept_to_explain", "input": {}}
+    return "", {"name": "assess_explanation", "input": {"concept_id": concept_id, "explanation": utterance or "no answer"}}
+
+
+def _reading_reply(name: Optional[str], output: Dict[str, Any]) -> str:
+    """What the scripted guided-reading coach says to a tool's result (or to the same result attached to the student's words)."""
+    if output.get("done") is True:
+        return "That was every claim. Well done, and goodbye."
+    if name == "next_claim" and "claim" in output:
+        return "Mock claim from your pages. Here is a check question."
+    if name == "next_claim":
+        return "What do you expect your pages say about this idea?"
+    if name == "record_check":
+        return str(output.get("clarifying_question") or "Mock feedback on your check answer.")
+    return "Okay."
+
+
+def _reading_turn(messages, tools, calls, results, utterance, app=None) -> tuple[str, Optional[Dict[str, Any]]]:
+    """Guided reading, scripted: predict, then the claim, then the check, claim after claim."""
+    if app is not None:
+        return _reading_reply(app[0], app[1]), None
+    if results:
+        call = {c.get("id"): c for c in calls}.get(results[-1].get("tool_use_id"), {})
+        return _reading_reply(call.get("name"), _tool_result_json(messages, call)), None
+    if not calls:
+        return "", {"name": "next_claim", "input": {}}
+    last = calls[-1]
+    output = _tool_result_json(messages, last)
+    if last.get("name") == "record_check" and output.get("action") != "clarify":
+        return "", {"name": "next_claim", "input": {}}
+    if last.get("name") == "next_claim" and "claim" not in output and output.get("done") is not True:
+        return "", {"name": "next_claim", "input": {"reveal": True, "prediction": utterance or "no idea", "check_question": "Mock check question?"}}
+    index = output.get("claim_index", 0) if "claim" in output else 0
+    return "", {"name": "record_check", "input": {"claim_index": index, "answer": utterance or "no answer"}}
+
+
 def _mock_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> tuple[str, Optional[Dict[str, Any]]]:
     """(text, tool call) for the next reply: deterministic, driven only by the conversation.
 
@@ -135,6 +248,17 @@ def _mock_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> t
     results = [block for block in last if block.get("type") == "tool_result"]
     available = {tool.get("name") for tool in tools}
     calls = _tool_calls(messages)
+    # A step the app already ran for the student's words arrives in their message as <app_result step="...">json</app_result>.
+    app = _app_result(last)
+    utterance_text = " ".join(
+        APP_RESULT.sub("", block.get("text", "")) for block in last if block.get("type") == "text"
+    ).strip()
+    if "get_concept_to_explain" in available:
+        return _teach_turn(messages, tools, calls, results, utterance_text, app)
+    if "next_claim" in available:
+        return _reading_turn(messages, tools, calls, results, utterance_text, app)
+    if app is not None and app[0] == "record_answer":
+        return "Thanks, I have noted that. Say next when you are ready for another question.", None
 
     if results:
         called = {call.get("id"): call for call in calls}
@@ -148,6 +272,8 @@ def _mock_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> t
         if name == "record_answer":
             return "Thanks, I have noted that. Say next when you are ready for another question.", None
         if name == "get_hint":
+            if '"ask_for_try"' in output:
+                return "Have a go first, even a rough one, and then I can nudge you.", None
             return "Here is a nudge. Think about how the key ideas connect.", None
         return "Okay.", None
 
@@ -181,6 +307,49 @@ _SIMULATED_FAILURES: Dict[str, type] = {
     LLMRefusalError.code: LLMRefusalError,
     LLMOutputError.code: LLMOutputError,
 }
+
+
+def _tutoring_parts(system: str, excerpts: List[Excerpt]) -> Optional[List[tuple[str, Optional[Excerpt]]]]:
+    """The mock's reply to a tutoring turn, read from the situation block of the system prompt: a
+    question back before an explanation, an explanation that ends with a check question card, a request
+    for the student's attempt. None for a plain lookup."""
+    if "<situation>" not in system:
+        return None
+    if "Intent: understand." in system:
+        if "The question is broad" in system:
+            block = re.search(r"<entry_points>\n(.*?)\n</entry_points>", system, re.DOTALL)
+            names = [line[2:].strip() for line in (block.group(1) if block else "").splitlines() if line.startswith("- ")]
+            return [(f"This covers several ideas. Where would you like to start: {', '.join(names[:3])}? (mock)", None)]
+        if "has not yet said what they think" in system:
+            return [("What do you think this means? Say it in your own words first. (mock)", None)]
+        sentence = _first_sentence(excerpts[0].text)
+        if "said twice that they do not know" in system:
+            # A short explanation after repeated non-attempts: no praise for an attempt, one sentence, then the card.
+            short_card = json.dumps(
+                {
+                    "question": "Say the idea back in your own words.",
+                    "answer": sentence,
+                    "explanation": "The materials put it this way.",
+                    "concept_name": "",
+                }
+            )
+            return [
+                (f"Here is the short version: {sentence}", excerpts[0]),
+                (f"<check_question>{short_card}</check_question>", None),
+            ]
+        card = json.dumps(
+            {
+                "question": "In your own words, what is the key point?",
+                "answer": sentence,
+                "explanation": "The materials put it this way.",
+                "concept_name": "",
+            }
+        )
+        return [
+            (f"You have part of it. The gap: {sentence}", excerpts[0]),
+            (f"<check_question>{card}</check_question>", None),
+        ]
+    return [("What have you tried so far, and where does it get stuck? (mock)", None)]
 
 
 def _raise_if_asked(*texts: str) -> None:
@@ -263,12 +432,12 @@ class MockProvider(LLMProvider):
         _raise_if_asked(question)
         async with llm_slot():  # the wait for the first token
             await self._simulate_call()
-        parts: List[tuple[str, Optional[Excerpt]]] = [
-            (f"Mock answer to \"{question[:80]}\" (LLM_PROVIDER is mock, no model was called). ", None)
-        ]
-        for index, excerpt in enumerate(excerpts[:2]):
-            lead = "The materials say: " if index == 0 else " It also covers: "
-            parts.append((f"{lead}{_first_sentence(excerpt.text)}", excerpt))
+        parts = _tutoring_parts(system, excerpts)
+        if parts is None:
+            parts = [(f"Mock answer to \"{question[:80]}\" (LLM_PROVIDER is mock, no model was called). ", None)]
+            for index, excerpt in enumerate(excerpts[:2]):
+                lead = "The materials say: " if index == 0 else " It also covers: "
+                parts.append((f"{lead}{_first_sentence(excerpt.text)}", excerpt))
 
         text = ""
         citations: List[AnswerCitation] = []

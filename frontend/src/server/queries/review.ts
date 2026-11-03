@@ -1,6 +1,8 @@
 import { addDays, localDay } from '@/lib/learning/plan'
 import { dueBoundary, daysOverdue } from '@/lib/learning/next-step'
+import { retryOpensAt } from '@/lib/learning/missed'
 import { countMissedByTopic } from '@/lib/learning/review-server'
+import { countDueConcepts } from '@/lib/learning/review-bank'
 import { zonedTimeToUtc } from '@/lib/learning/study-plan-time'
 import { getCourseShell } from '@/server/queries/courses'
 
@@ -14,6 +16,8 @@ export type ReviewTopic = {
   dueAt: string
   /** Questions missed in the last two attempts ("Retry what you missed" is offered above zero). */
   missedCount: number
+  /** When "Retry what you missed" opens (ISO, the next local day after the last attempt), or null when it is open. */
+  retryOpensAt: string | null
   /** Whole days the review is late in the student's zone; 0 when it is due today. */
   daysLate: number
 }
@@ -23,8 +27,10 @@ export type ReviewPageData = {
   /** Due by the end of today in the student's time zone, most overdue first. */
   due: ReviewTopic[]
   /** Coming up in the next two weeks. */
-  upcoming: Omit<ReviewTopic, 'missedCount' | 'daysLate'>[]
+  upcoming: Omit<ReviewTopic, 'missedCount' | 'retryOpensAt' | 'daysLate'>[]
   hasTopics: boolean
+  /** Concepts a review session could draw on now; "Start today's review" is offered above zero. */
+  dueConceptCount: number
 }
 
 const UPCOMING_DAYS = 14
@@ -51,18 +57,23 @@ export async function getReviewPageData(
     .sort((a, b) => Date.parse(a.dueAt) - Date.parse(b.dueAt))
 
   const dueTopics = scheduled.filter((topic) => Date.parse(topic.dueAt) < endOfToday)
-  const missed = await countMissedByTopic(userId, dueTopics.map((topic) => topic.id))
+  const [missed, dueConceptCount] = await Promise.all([
+    countMissedByTopic(userId, dueTopics.map((topic) => topic.id)),
+    countDueConcepts(userId, courseId, timeZone, now),
+  ])
 
   return {
     course: { id: course.id, name: course.name },
     due: dueTopics.map((topic) => ({
       ...topic,
-      missedCount: missed.get(topic.id) ?? 0,
+      missedCount: missed.get(topic.id)?.count ?? 0,
+      retryOpensAt: retryOpensAt(missed.get(topic.id)?.lastAttemptAt ?? null, timeZone, now)?.toISOString() ?? null,
       daysLate: daysOverdue(topic.dueAt, now, timeZone),
     })),
     upcoming: scheduled
       .filter((topic) => Date.parse(topic.dueAt) >= endOfToday && Date.parse(topic.dueAt) < upcomingEnd)
       .slice(0, UPCOMING_LIMIT),
     hasTopics: course.topics.some((topic) => topic.confirmed),
+    dueConceptCount,
   }
 }

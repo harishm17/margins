@@ -1,11 +1,12 @@
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { prisma } from '@/lib/db/prisma'
 import { loadAllQuizQuestionSets } from './quiz-sets'
-import { displayMastery } from './mastery-math'
+import { topicStanding, topicStandings } from './topic-standing'
 import {
   FRESH_REVIEW_PREREQUISITE_QUESTIONS,
   FRESH_REVIEW_QUESTIONS,
   focusFromConcepts,
+  missedConceptIds,
   missedConcepts,
   missedQuestions,
   pickPrerequisite,
@@ -36,15 +37,27 @@ export async function getMissedQuestions(userId: string, topicId: string): Promi
   )
 }
 
-/** How many questions each topic has to retry, for the review list. One query for the attempts of all the topics. */
-export async function countMissedByTopic(userId: string, topicIds: string[]): Promise<Map<string, number>> {
+/** When the newest attempt on a topic was taken; "Retry what you missed" opens the next local day. */
+export async function getLastAttemptAt(userId: string, topicId: string): Promise<Date | null> {
+  const last = await prisma.quizAttempt.findFirst({ where: { userId, topicId }, orderBy: { takenAt: 'desc' }, select: { takenAt: true } })
+  return last?.takenAt ?? null
+}
+
+/**
+ * How many questions each topic has to retry, and when its newest attempt was taken, for the review
+ * list. One query for the attempts of all the topics.
+ */
+export async function countMissedByTopic(
+  userId: string,
+  topicIds: string[]
+): Promise<Map<string, { count: number; lastAttemptAt: Date | null }>> {
   await applyPendingQuizResults(userId)
-  const counts = new Map<string, number>()
+  const counts = new Map<string, { count: number; lastAttemptAt: Date | null }>()
   if (topicIds.length === 0) return counts
   const attempts = await prisma.quizAttempt.findMany({
     where: { userId, topicId: { in: topicIds } },
     orderBy: { takenAt: 'desc' },
-    select: { topicId: true, quizSetId: true, results: true },
+    select: { topicId: true, quizSetId: true, results: true, takenAt: true },
   })
   const byTopic = new Map<string, typeof attempts>()
   for (const attempt of attempts) {
@@ -60,7 +73,7 @@ export async function countMissedByTopic(userId: string, topicIds: string[]): Pr
         return questions ? [{ questions, results: attempt.results }] : []
       })
     )
-    counts.set(topicId, missed.length)
+    counts.set(topicId, { count: missed.length, lastAttemptAt: list[0]?.takenAt ?? null })
   }
   return counts
 }
@@ -91,7 +104,7 @@ export async function createRetrySet(
 
   // The first quiz was stored before quiz sets existed (topic_content). Keep it visible as Set 1
   // before the first set row is written, as the AI service does when it writes a new set.
-  if ((await prisma.topicQuiz.count({ where: { topicId } })) === 0) {
+  if ((await prisma.topicQuiz.count({ where: { topicId, kind: { in: ['standard', 'retry'] } } })) === 0) {
     const legacy = await prisma.topicContent.findUnique({
       where: { topicId_contentType: { topicId, contentType: 'topic_quiz' } },
       select: { contentData: true, createdAt: true, updatedAt: true },
@@ -113,6 +126,8 @@ export async function createRetrySet(
 export type FreshReviewPlan = {
   difficulty: ReviewDifficulty
   focus: string | null
+  /** The concepts the missed questions test (their `concept_ids`), active ones only. */
+  conceptIds: string[]
   prerequisiteTopicId: string | null
 }
 
@@ -122,14 +137,23 @@ export type FreshReviewPlan = {
  */
 export async function planFreshReview(userId: string, topic: { id: string; projectId: string }): Promise<FreshReviewPlan> {
   await applyPendingQuizResults(userId)
-  const [schedule, missed, row] = await Promise.all([
-    prisma.reviewSchedule.findUnique({
-      where: { userId_topicId: { userId, topicId: topic.id } },
-      select: { mastery: true, dueAt: true, intervalDays: true },
-    }),
+  const [standing, missed, row] = await Promise.all([
+    topicStanding(userId, topic.id),
     getMissedQuestions(userId, topic.id),
     prisma.topic.findUnique({ where: { id: topic.id }, select: { prerequisiteIds: true } }),
   ])
+
+  // The missed questions' concept ids are the focus; their names put it into words. Questions from before
+  // the concept graph have no ids, so their `concepts_tested` text is the focus as it was.
+  const missedIds = missedConceptIds(missed)
+  const concepts =
+    missedIds.length === 0
+      ? []
+      : await prisma.concept.findMany({
+          where: { id: { in: missedIds }, projectId: topic.projectId, status: 'active' },
+          select: { id: true, name: true },
+        })
+  const named = missedIds.flatMap((id) => concepts.filter((concept) => concept.id === id))
 
   const prerequisiteIds = (row?.prerequisiteIds ?? []).filter((id) => id !== topic.id)
   const prerequisites =
@@ -137,19 +161,15 @@ export async function planFreshReview(userId: string, topic: { id: string; proje
       ? []
       : await prisma.topic.findMany({
           where: { id: { in: prerequisiteIds }, projectId: topic.projectId },
-          select: { id: true, reviewSchedules: { where: { userId }, take: 1, select: { mastery: true, dueAt: true, intervalDays: true } } },
+          select: { id: true },
         })
-  const now = Date.now()
-  const pick = pickPrerequisite(
-    prerequisites.map((item) => ({
-      id: item.id,
-      mastery: displayMastery(item.reviewSchedules[0]?.mastery, item.reviewSchedules[0], now),
-    }))
-  )
+  const standings = await topicStandings(userId, prerequisites.map((item) => item.id))
+  const pick = pickPrerequisite(prerequisites.map((item) => ({ id: item.id, mastery: standings.get(item.id)?.mastery ?? null })))
 
   return {
-    difficulty: reviewDifficulty(displayMastery(schedule?.mastery, schedule, now)),
-    focus: focusFromConcepts(missedConcepts(missed)),
+    difficulty: reviewDifficulty(standing.mastery),
+    focus: focusFromConcepts(named.length > 0 ? named.map((concept) => concept.name) : missedConcepts(missed)),
+    conceptIds: named.map((concept) => concept.id),
     prerequisiteTopicId: pick?.id ?? null,
   }
 }
@@ -160,6 +180,7 @@ export function freshReviewPreferences(plan: FreshReviewPlan) {
     question_count: FRESH_REVIEW_QUESTIONS,
     difficulty_level: plan.difficulty,
     ...(plan.focus ? { focus: plan.focus } : {}),
+    ...(plan.conceptIds.length > 0 ? { concept_ids: plan.conceptIds } : {}),
     ...(plan.prerequisiteTopicId
       ? { prerequisite_topic_id: plan.prerequisiteTopicId, prerequisite_questions: FRESH_REVIEW_PREREQUISITE_QUESTIONS }
       : {}),

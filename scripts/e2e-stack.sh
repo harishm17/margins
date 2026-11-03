@@ -13,8 +13,12 @@
 # client so the sign-in page shows its Google button. NEXTAUTH_URL is on localhost, which the test sign-in needs.
 # It reads the AI status uncached (AI_STATUS_CACHE_MS=0), so a spec that marks AI unavailable sees it at once,
 # and the AI service reaps every 5 seconds, so a job that waited for the AI is sent again soon after it is back.
+# Use a database of its own for the stack and the specs (for example margins_e2e, migrated): the AI service's reaper
+# sends any pending job in its database, so a database shared with `npm test` or a dev server lets their jobs, and
+# the shared AI status, leak into the specs. Export the same E2E_RUN_DIR to the stack and to Playwright.
 # Settings, all optional except DATABASE_URL:
 #   E2E_WEB_PORT (3000)  E2E_AI_PORT (8000)  E2E_RUN_DIR (.e2e in the repo: logs, pids, uploads)
+# The web app also gets E2E_HOLD_DIR=$RUN/hold, which lets a spec hold the app's own job before it is sent (src/lib/tasks/dispatch.ts).
 # Then run the specs with PLAYWRIGHT_BASE_URL=http://localhost:$E2E_WEB_PORT and the same DATABASE_URL.
 set -euo pipefail
 
@@ -42,7 +46,7 @@ wait_http() {
 
 start() {
   : "${DATABASE_URL:?set DATABASE_URL to the migrated e2e database}"
-  mkdir -p "$RUN/uploads"
+  mkdir -p "$RUN/uploads" "$RUN/hold"
 
   if alive "$RUN/ai.pid"; then
     echo "AI service already running"
@@ -78,6 +82,7 @@ start() {
         GOOGLE_OAUTH_CLIENT_SECRET="e2e-not-a-real-google-secret" \
         AI_STATUS_CACHE_MS=0 \
         LOCAL_UPLOADS_DIR="$RUN/uploads" \
+        E2E_HOLD_DIR="$RUN/hold" \
         NEXT_TELEMETRY_DISABLED=1 \
         npx next start --port "$WEB_PORT" \
         >"$RUN/web.log" 2>&1

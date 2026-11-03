@@ -1,9 +1,9 @@
 /**
  * The chat stream, as the browser sees it: newline-delimited JSON, one event per line.
  *
- * The AI service sends retrieved / text / citation / reset / done / error (see
+ * The AI service sends route / retrieved / progress / text / citation / reset / done / error (see
  * ai-service/app/services/chat.py). The Next route adds `thread` and `user_message` first
- * and `saved` last. This file turns a stream of events into the state of one answer.
+ * and `saved` (then `tutor`) last. This file turns a stream of events into the state of one answer.
  */
 import {
   type ChatSource,
@@ -12,11 +12,15 @@ import {
   parseSource,
 } from './citations'
 import { chatErrorMessage } from './errors'
+import { parseCheckView, parseRoute, type AskRoute, type CheckView } from '@/lib/ask/tutor-message'
 
 export type ChatEvent =
   | { type: 'thread'; threadId: string; title: string | null; isNew: boolean }
   | { type: 'user_message'; id: string }
+  | { type: 'route'; route: AskRoute }
   | { type: 'retrieved'; count: number }
+  /** A tutoring reply is written and leak-checked before any of it is sent; this says which. */
+  | { type: 'progress'; stage: 'writing' | 'checking' }
   | { type: 'text'; delta: string }
   | { type: 'citation'; marker: number; offset: number; source: ChatSource }
   | { type: 'reset' }
@@ -27,6 +31,8 @@ export type ChatEvent =
       marks: CitationMark[]
       retrieved: number
       stopReason: string
+      /** The question that ends an explanation, shown as a card (the answer is not sent). */
+      check: CheckView | null
     }
   | {
       type: 'error'
@@ -37,6 +43,8 @@ export type ChatEvent =
       discarded?: boolean
     }
   | { type: 'saved'; messageId: string }
+  /** After `saved`: where the thread's tutor state stands (the "Show me a worked example" button). */
+  | { type: 'tutor'; workedAllowed: boolean }
 
 /** Parse one line of the stream. Lines that are not a known event give null. */
 export function parseChatEvent(line: string): ChatEvent | null {
@@ -61,8 +69,14 @@ export function parseChatEvent(line: string): ChatEvent | null {
         : null
     case 'user_message':
       return typeof raw.id === 'string' ? { type: 'user_message', id: raw.id } : null
+    case 'route': {
+      const route = parseRoute(raw)
+      return route ? { type: 'route', route } : null
+    }
     case 'retrieved':
       return { type: 'retrieved', count: typeof raw.count === 'number' ? raw.count : 0 }
+    case 'progress':
+      return raw.stage === 'writing' || raw.stage === 'checking' ? { type: 'progress', stage: raw.stage } : null
     case 'text':
       return typeof raw.delta === 'string' ? { type: 'text', delta: raw.delta } : null
     case 'citation': {
@@ -84,6 +98,7 @@ export function parseChatEvent(line: string): ChatEvent | null {
         marks: parseMarks(raw.marks),
         retrieved: typeof raw.retrieved === 'number' ? raw.retrieved : 0,
         stopReason: typeof raw.stop_reason === 'string' ? raw.stop_reason : '',
+        check: parseCheckView(raw.check_question),
       }
     case 'error':
       return {
@@ -95,6 +110,8 @@ export function parseChatEvent(line: string): ChatEvent | null {
       }
     case 'saved':
       return typeof raw.messageId === 'string' ? { type: 'saved', messageId: raw.messageId } : null
+    case 'tutor':
+      return { type: 'tutor', workedAllowed: raw.workedAllowed === true }
     default:
       return null
   }
@@ -127,6 +144,14 @@ export type AnswerStatus = 'searching' | 'writing' | 'done' | 'error'
 
 export type AnswerState = {
   status: AnswerStatus
+  /** What a tutoring reply is doing while none of it can be shown yet (it is checked before it is sent). */
+  stage: 'writing' | 'checking' | null
+  /** What the student's message was taken to be, once the AI service has said. */
+  route: AskRoute | null
+  /** The check question card that ends an explanation. */
+  check: CheckView | null
+  /** The thread allows the "Show me a worked example" button. */
+  workedAllowed: boolean
   text: string
   marks: CitationMark[]
   sources: ChatSource[]
@@ -137,6 +162,10 @@ export type AnswerState = {
 
 export const INITIAL_ANSWER: AnswerState = {
   status: 'searching',
+  stage: null,
+  route: null,
+  check: null,
+  workedAllowed: false,
   text: '',
   marks: [],
   sources: [],
@@ -148,10 +177,16 @@ export const INITIAL_ANSWER: AnswerState = {
 /** The answer after one more event. Pure: returns a new state. */
 export function applyChatEvent(state: AnswerState, event: ChatEvent): AnswerState {
   switch (event.type) {
+    case 'route':
+      return { ...state, route: event.route }
     case 'retrieved':
       return { ...state, retrieved: event.count }
+    case 'progress':
+      return { ...state, stage: event.stage }
+    case 'tutor':
+      return { ...state, workedAllowed: event.workedAllowed }
     case 'text':
-      return { ...state, status: 'writing', text: state.text + event.delta }
+      return { ...state, status: 'writing', stage: null, text: state.text + event.delta }
     case 'citation': {
       const known = state.sources.some((s) => s.marker === event.marker)
       const sources = known
@@ -172,6 +207,8 @@ export function applyChatEvent(state: AnswerState, event: ChatEvent): AnswerStat
       return {
         ...state,
         status: 'done',
+        stage: null,
+        check: event.check,
         text: event.text,
         sources: event.sources,
         marks: event.marks,

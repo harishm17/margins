@@ -242,3 +242,54 @@ describe('a failed answer leaves no conversation behind', () => {
     assert.doesNotMatch(String(error.message), /credit|Anthropic|key/i)
   })
 })
+
+describe('the Ask hooks', () => {
+  it('reads each event, stores and sends what the hook says, and adds events after saved', async () => {
+    const { storage, calls } = fakeStorage()
+    const seen: string[] = []
+    const events = await readAll(
+      relayChatStream({
+        head,
+        storage,
+        upstream: upstreamOf([{ type: 'route', intent: 'understand' }, { type: 'retrieved', count: 2 }, { ...done, check_question: { question: 'q', answer: 'secret' } }]),
+        hooks: {
+          onEvent: (raw) => void seen.push(String(raw.type)),
+          onDone: (raw) => ({ tutor: { kept: true }, send: { ...raw, check_question: { question: 'q' } } }),
+          afterSaved: async (messageId) => [{ type: 'tutor', messageId }],
+        },
+      })
+    )
+    assert.deepEqual(seen, ['route', 'retrieved', 'done'])
+    assert.deepEqual(calls.saved[0].tutor, { kept: true })
+    const doneEvent = events.find((event) => event.type === 'done') as Record<string, unknown>
+    assert.deepEqual(doneEvent.check_question, { question: 'q' })
+    assert.equal(JSON.stringify(events).includes('secret'), false)
+    assert.deepEqual(events.slice(-2), [{ type: 'saved', messageId: 'msg-1' }, { type: 'tutor', messageId: 'msg-1' }])
+  })
+
+  it('a hook that throws costs the answer nothing', async () => {
+    const { storage, calls } = fakeStorage()
+    const events = await readAll(
+      relayChatStream({
+        head,
+        storage,
+        log: () => {},
+        upstream: upstreamOf([{ type: 'route', intent: 'solve' }, done]),
+        hooks: {
+          onEvent: () => {
+            throw new Error('boom')
+          },
+          onDone: () => {
+            throw new Error('boom')
+          },
+          afterSaved: async () => {
+            throw new Error('boom')
+          },
+        },
+      })
+    )
+    assert.equal(calls.saved.length, 1)
+    assert.equal(calls.saved[0].tutor, undefined)
+    assert.equal((events.at(-1) as Record<string, unknown>).type, 'saved')
+  })
+})

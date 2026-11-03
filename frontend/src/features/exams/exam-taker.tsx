@@ -11,12 +11,15 @@ import { Progress } from '@/components/ui/progress'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toaster'
+import type { ConfidenceId } from '@/lib/learning/calibration'
+import { ConfidenceRow, optionCountOf } from '@/features/topic/quiz-confidence'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import type { AttemptView } from '@/lib/exams/attempts'
-import { formatClock, pluralize } from '@/lib/format'
+import { formatClock } from '@/lib/format'
 import type { PublicQuizQuestion } from '@/lib/learning/quiz-questions'
 import { useQuestionMotion } from '@/lib/question-motion'
 import { cn } from '@/lib/utils'
+import { joinAnswers, splitAnswers, submitSummary } from './exam-answers'
 import { ExamNavigator } from './exam-navigator'
 import { parseFlagState, timeNotice, timerTone, type FlagState } from './exam-timer'
 import { useExamAutosave, type SaveStatus } from './use-exam-autosave'
@@ -36,15 +39,6 @@ const RESYNC_MS = 30_000
 const subscribeToClock = (callback: () => void) => {
   const timer = setInterval(callback, 1000)
   return () => clearInterval(timer)
-}
-
-/** Answers come back from the server as strings, numbers or booleans; the form works in strings. */
-function toStringAnswers(answers: AttemptView['answers']): Record<string, string> {
-  const result: Record<string, string> = {}
-  for (const [key, value] of Object.entries(answers)) {
-    if (value !== null && value !== undefined) result[key] = String(value)
-  }
-  return result
 }
 
 const SAVE_TEXT: Record<SaveStatus, string> = {
@@ -84,11 +78,17 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
   const total = questions.length
   const base = `/courses/${courseId}/exams/${examId}`
 
-  const initialAnswers = React.useMemo(() => toStringAnswers(attempt.answers), [attempt.answers])
-  const [answers, setAnswers] = React.useState<Record<string, string>>(initialAnswers)
-  const answersRef = React.useRef(answers)
+  // Answers come back as strings, numbers or booleans, with a confidence inside once given; the form works in strings.
+  const initial = React.useMemo(() => splitAnswers(attempt.answers), [attempt.answers])
+  const [answers, setAnswers] = React.useState<Record<string, string>>(initial.answers)
+  const [confidence, setConfidence] = React.useState<Record<string, number>>(initial.confidence)
+  const [levels, setLevels] = React.useState<Record<string, ConfidenceId>>(initial.levels)
+  // What is saved and submitted: the confidence travels inside each answer, so the autosave carries it.
+  const stored = React.useMemo(() => joinAnswers(answers, confidence, levels), [answers, confidence, levels])
+  const savedAnswers = React.useMemo(() => joinAnswers(initial.answers, initial.confidence, initial.levels), [initial])
+  const storedRef = React.useRef(stored)
   React.useEffect(() => {
-    answersRef.current = answers
+    storedRef.current = stored
   })
 
   const [submitting, setSubmitting] = React.useState(false)
@@ -173,8 +173,8 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
 
   const autosave = useExamAutosave({
     examId,
-    answers,
-    savedAnswers: initialAnswers,
+    answers: stored,
+    savedAnswers,
     enabled: !submitting,
     onEnded: (submissionId) => {
       toast(submissionId ? 'Time is up. Your saved answers were submitted.' : 'This exam is no longer in progress.')
@@ -190,7 +190,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
     try {
       const result = await apiFetch<{ submissionId: string }>(`/api/exams/${examId}/submit`, {
         method: 'POST',
-        json: { answers: answersRef.current },
+        json: { answers: storedRef.current },
       })
       leaveTo(`${base}/results/${result.submissionId}`)
       return
@@ -226,10 +226,8 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
     }
   }, [secondsLeft, submit])
 
-  const requestSubmit = () => {
-    if (unanswered > 0) setConfirmSubmit(true)
-    else void submit()
-  }
+  // Submitting always asks first: it is final, and the prompt says what is left blank or flagged.
+  const requestSubmit = () => setConfirmSubmit(true)
 
   useFocusExitGuard(
     React.useCallback(() => {
@@ -245,6 +243,8 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
     if (submitting || dialogOpen) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey || isTypingTarget(event.target)) return
+      // Arrow keys move between the confidence levels when one is focused.
+      if ((event.target as HTMLElement | null)?.closest('[data-confidence-row]')) return
       if (event.key === 'ArrowRight') {
         event.preventDefault()
         event.stopPropagation()
@@ -327,6 +327,15 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
               disabled={submitting}
               shortcuts={!dialogOpen}
             />
+            <ConfidenceRow
+              value={confidence[String(current)]}
+              level={levels[String(current)]}
+              optionCount={optionCountOf(question)}
+              onChange={(level, value) => {
+                setConfidence((prev) => ({ ...prev, [String(current)]: value }))
+                setLevels((prev) => ({ ...prev, [String(current)]: level }))
+              }}
+            />
           </div>
 
           <div className="mt-10 flex items-center gap-2">
@@ -389,7 +398,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         open={confirmSubmit}
         onOpenChange={setConfirmSubmit}
         title="Submit your exam?"
-        description={`${pluralize(unanswered, 'question')} ${unanswered === 1 ? 'is' : 'are'} unanswered. ${unanswered === 1 ? 'It' : 'They'} will score zero.`}
+        description={submitSummary({ total, unanswered, flagged: flagged.size })}
         confirmLabel="Submit exam"
         cancelLabel="Keep working"
         onConfirm={() => submit()}

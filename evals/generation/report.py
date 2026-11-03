@@ -2,7 +2,7 @@
 import re
 from typing import Any, Dict, List, Optional
 
-TYPE_LABELS = {"notes": "Notes", "solved": "Worked examples", "interactive": "Practice problems", "quiz": "Quiz"}
+TYPE_LABELS = {"concepts": "Concepts", "warmup": "Warm-up", "notes": "Notes", "solved": "Worked examples", "interactive": "Practice problems", "quiz": "Quiz"}
 
 
 def usd(value: Optional[float], digits: int = 3) -> str:
@@ -19,6 +19,11 @@ def num(value: Optional[float], digits: int = 2) -> str:
 
 def secs(value: Optional[float]) -> str:
     return "n/a" if value is None else f"{value:.0f}s"
+
+
+def gate_marker(ok: Optional[bool]) -> str:
+    """PASS or FAIL after a gated value; nothing when there was nothing to check."""
+    return "" if ok is None else (" PASS" if ok else " FAIL")
 
 
 def fraction(part: Optional[int], whole: Optional[int]) -> str:
@@ -109,6 +114,18 @@ def render_markdown(summary: Dict[str, Any]) -> str:
          lambda s: f"{s['mc_letter_refs']} / {s['mc_letter_refs_strict']} of {s['mc_questions']}"),
         ("Quiz recall-copy rate (questions whose numbers all come from this model's notes or examples)",
          lambda s: f"{pct(s['quiz_recall_copy_rate'])} ({s['quiz_recall_copied']} of {s['quiz_numeric_questions']})"),
+        ("Concept claim quotes found in their chunk (gate: 98% or more)",
+         lambda s: f"{pct(s['claim_quote_rate'])} ({s['claims_matched']} of {s['claims_total']})"
+         + gate_marker(s["claim_quote_gate_ok"])),
+        ("Topics with 3-8 concepts", lambda s: f"{fraction(s['concept_count_ok'], s['concept_topics'])} (mean {num(s['concept_count_mean'], 1)})"),
+        ("Topics where every objective has a concept", lambda s: fraction(s["objectives_mapped_ok"], s["concept_topics"])),
+        ("Topics with an acyclic prerequisite graph", lambda s: fraction(s["prereq_acyclic_ok"], s["concept_topics"])),
+        ("Items whose concept tags are all valid (gate: 100%)",
+         lambda s: f"{pct(s['item_concept_id_rate'])} ({s['items_tagged_valid']} of {s['items_tagged']})"
+         + gate_marker(s["item_tag_gate_ok"])),
+        ("Warm-up questions the topic quiz repeats (gate: 0)",
+         lambda s: str(s["warmup_reused_items"]) + gate_marker(s["warmup_reuse_gate_ok"])
+         if s["warmup_vs_quiz_topics"] else "n/a (needs warm-up and quiz)"),
         ("Notes with all expected sections", lambda s: fraction(s["notes_sections_ok"], s["notes_count"])),
         ("Notes inside the requested word band", lambda s: f"{fraction(s['notes_in_word_band'], s['notes_count'])} (mean {num(s['notes_words_mean'], 0)} words)"),
         ("Notes with 5-8 recap bullets", lambda s: fraction(s["notes_recap_bullets_ok"], s["notes_count"])),

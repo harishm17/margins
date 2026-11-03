@@ -66,6 +66,8 @@ export type ReviewItemProps = {
   topicName?: string | null
   /** Where in the student's files the question comes from: "From notes.pdf, p. 4". */
   sources?: SourceRef[]
+  /** The wrong idea the picked option stands for (a wrong multiple-choice pick), worded as a fact about the option. */
+  pickedMisconception?: string | null
   /** What a written answer was graded against, with a verdict per line when the grader gave one. */
   rubric?: RubricLine[] | null
   /** Opens Ask with this question, the student's answer and the sources already written. Shown for a miss. */
@@ -155,6 +157,7 @@ export function ReviewItem({
   explanation,
   topicName,
   sources,
+  pickedMisconception,
   rubric,
   explainHref,
   gradeAction,
@@ -173,7 +176,7 @@ export function ReviewItem({
             <div className="min-w-0 flex-1">{blocks ? <QuestionText compact>{questionText}</QuestionText> : <MathText>{questionText}</MathText>}</div>
           </div>
           <span className="shrink-0 tabular text-small text-fg-2">
-            {formatPoints(pointsEarned)}/{formatPoints(points)}
+            {formatPoints(pointsEarned)} of {formatPoints(points)} {points === 1 ? 'pt' : 'pts'}
           </span>
         </div>
 
@@ -203,6 +206,13 @@ export function ReviewItem({
               </span>
             </Detail>
           ) : null}
+          {showKey && pickedMisconception ? (
+            <Detail label="About your pick">
+              <span className="whitespace-pre-wrap break-words">
+                You picked the answer you&apos;d get if you think <MathText>{pickedMisconception.replace(/[.\s]+$/, '')}</MathText>.
+              </span>
+            </Detail>
+          ) : null}
           {feedback ? (
             <Detail label="Feedback">
               <span className="whitespace-pre-wrap break-words text-fg-2">
@@ -227,7 +237,8 @@ export function ReviewItem({
 
         {sources && sources.length > 0 ? <SourceLine sources={sources} className="mt-3" /> : null}
 
-        {explainHref && (status === 'partial' || status === 'incorrect') ? (
+        {/* A blank has no mistake to explain. */}
+        {explainHref && studentAnswer && (status === 'partial' || status === 'incorrect') ? (
           <div className="mt-3">
             <Button asChild size="sm" variant="secondary" icon={<ChatCircleText />}>
               <Link href={explainHref}>Explain this mistake</Link>

@@ -16,7 +16,7 @@ def _mcq(**overrides):
     fields = dict(
         question_type="multiple_choice",
         question_text="Q",
-        options=[ChoiceOption(id=x, text=f"text {x}") for x in "ABCD"],
+        options=[ChoiceOption(id=x, text=f"text {x}", misconception="wrong idea") for x in "ABCD"],
         correct_answer="C",
         explanation="E",
         points=2,
@@ -167,3 +167,46 @@ class TestOptionLetterReferences:
     def test_other_question_types_keep_their_explanation(self):
         question = {"question_type": "true_false", "correct_answer": True, "explanation": "Option C is wrong."}
         assert shuffle_choice_options(dict(question)) == question
+
+
+# ---------------------------------------------------------------- practice hints must not give answers away
+
+
+def _practice_problem(hints_step1, hints_step2=("Look at the sentence.", "Think of the product rule.", "P = a x b")):
+    from app.services.llm.schemas import InteractiveExample, InteractiveStep
+
+    def make(n, question, answer, hints, accepted=()):
+        return InteractiveStep(
+            step_number=n, question=question, hints=list(hints), answer_type="numeric", correct_answer=answer,
+            acceptable_answers=list(accepted), tolerance=0.001, explanation="e", feedback_correct="c", feedback_incorrect="i",
+        )
+
+    return InteractiveExample(
+        title="Marbles",
+        problem_statement="A bag holds 3 red and 5 blue marbles. Two are drawn without replacement.",
+        steps=[make(1, "How many marbles are in the bag?", "8", hints_step1, ["eight"]), make(2, "What is P(both red)?", "3/28", hints_step2, ["0.1071"])],
+    )
+
+
+def test_a_problem_whose_hint_states_a_later_answer_is_dropped():
+    clean = _practice_problem(["Re-read the first sentence.", "Add the colours.", "total = red + blue"])
+    assert clean.stored() is not None
+    assert _practice_problem(["Re-read.", "Add the colours.", "total = red + blue"], ["Look.", "The answer is 3/28.", "x"]).stored() is None
+    # a hint of step 1 naming step 2's answer in another form (a decimal within tolerance)
+    assert _practice_problem(["Re-read.", "It will come out near 0.1071.", "x"]).stored() is None
+    # its own step's answer, as a word
+    assert _practice_problem(["Re-read.", "There are eight in all.", "x"]).stored() is None
+
+
+def test_a_hint_may_name_an_earlier_step_answer_and_the_problems_own_numbers():
+    ok = _practice_problem(["Re-read.", "Add the colours.", "total = red + blue"], ["You found 8 marbles.", "With 3 red marbles, think of the first draw.", "P = a x b"])
+    assert ok.stored() is not None
+
+
+def test_the_generator_keeps_the_problems_whose_hints_are_clean():
+    from app.services.llm.schemas import InteractiveExampleSet
+
+    bad = _practice_problem(["Re-read.", "Answer: eight", "x"])
+    good = _practice_problem(["Re-read.", "Add the colours.", "total = red + blue"])
+    kept = [s for e in InteractiveExampleSet(examples=[bad, good]).examples if (s := e.stored()) is not None]
+    assert len(kept) == 1

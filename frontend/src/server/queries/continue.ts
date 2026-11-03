@@ -2,8 +2,9 @@ import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { prisma } from '@/lib/db/prisma'
 import { nextStepForCourse, type NextStep } from '@/lib/learning/next-step'
 import { mostRecentActivity } from '@/features/home/recent-course'
-import { dueTopicsOf } from './course'
+import { conceptTopicsOf, dueTopicsOf } from './course'
 import { getPlanData } from './plan'
+import { withTopicActivity } from './topic-activity'
 
 export type ContinueAction = {
   course: { id: string; name: string }
@@ -64,13 +65,16 @@ export async function continueAction(userId: string, timeZone: string): Promise<
   const data = await getPlanData(userId, course.id, timeZone)
   if (!data) return null
   const now = new Date()
-  const step = nextStepForCourse({
+  const planned = nextStepForCourse({
     courseId: course.id,
     setup: data.course.setup,
     plan: data.plan,
     due: dueTopicsOf(data.course.topics, now, timeZone),
     now,
     timeZone,
+    conceptTopicIds: conceptTopicsOf(data.course.topics),
   })
+  // A topic is the next step: its own next activity words the card (spec §8.1).
+  const step = await withTopicActivity(userId, course.id, planned, data.course.topics, data.course.setup.topics.listConfirmed)
   return { course, step }
 }

@@ -131,7 +131,7 @@ export function SourcesList({ sources }: { sources: readonly ChatSource[] }) {
 
   return (
     <section aria-label="Sources" className="mt-4">
-      <h3 className="text-caption text-fg-3">Sources</h3>
+      <h2 className="text-caption text-fg-3">Sources</h2>
       <ol className="mt-1.5 flex flex-col">
         {shown.map((source) => (
           <li key={source.marker} className="flex min-h-8 items-center gap-2.5 py-1 text-small">

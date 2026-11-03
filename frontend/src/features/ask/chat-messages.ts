@@ -1,4 +1,5 @@
 /** What the conversation shows, and how stored messages become it. Pure: no React, no network. */
+import type { AskRoute, AskTurnView, CheckView } from '@/lib/ask/tutor-message'
 import type { ChatSource, CitationMark, StoredCitations } from '@/lib/chat/citations'
 
 export type UserMessage = { kind: 'user'; id: string; text: string }
@@ -15,6 +16,8 @@ export type AssistantMessage = {
   notSaved: boolean
   /** The student stopped the answer early; the stored copy is complete. */
   stopped: boolean
+  /** What the reply tutored (a place-to-start list, a check question card); null for a reply from before Ask tutored. */
+  turn: AskTurnView | null
 }
 
 export type FailureMessage = {
@@ -33,6 +36,7 @@ export type StoredMessage = {
   role: string
   content: string
   citations: StoredCitations | null
+  turn?: AskTurnView | null
 }
 
 /**
@@ -51,15 +55,17 @@ export function toChatMessages(stored: readonly StoredMessage[]): ChatMessage[] 
       messages.push({ kind: 'user', id: message.id, text: message.content })
     } else if (message.role === 'assistant') {
       const sources = message.citations?.sources ?? []
+      const turn = message.turn ?? null
       messages.push({
         kind: 'assistant',
         id: message.id,
         text: message.content,
         marks: message.citations?.marks ?? [],
         sources,
-        noSources: sources.length === 0,
+        noSources: lacksSources(turn, sources.length === 0, ''),
         notSaved: false,
         stopped: false,
+        turn,
       })
     } else if (message.role === 'error') {
       const previous = messages[messages.length - 1]
@@ -74,6 +80,26 @@ export function toChatMessages(stored: readonly StoredMessage[]): ChatMessage[] 
     }
   }
   return messages
+}
+
+/** The intents whose reply is an answer from the files, so having no citation is worth saying. */
+const ANSWERS_FROM_FILES = new Set(['lookup', 'logistics'])
+
+/**
+ * Whether to say "nothing matched closely". A question back, a card, a decline and a chat reply cite nothing on
+ * purpose; only an answer from the files with no citation is a miss.
+ */
+export function lacksSources(turn: AskTurnView | null, uncited: boolean, stopReason: string): boolean {
+  if (stopReason === 'no_sources') return true
+  if (stopReason === 'exam_guard') return false
+  if (turn && !ANSWERS_FROM_FILES.has(turn.intent)) return false
+  return uncited
+}
+
+/** What a reply that just streamed tutored, from the route event and the done event. */
+export function liveTurn(route: AskRoute | null, check: CheckView | null): AskTurnView | null {
+  if (!route) return null
+  return { intent: route.intent, entryPoints: route.broad ? route.concepts.slice(0, 3) : [], check }
 }
 
 /** The markdown source marker for a citation: the pill renderer looks the number up. */

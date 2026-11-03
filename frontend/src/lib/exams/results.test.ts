@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildQuestionResults, displayStudentAnswer, readOverall, summarizeTopics } from './results'
+import { buildQuestionResults, displayStudentAnswer, calibrationLine, examCalibration, isSureAndWrong, readOverall, summarizeTopics } from './results'
 
 const questions = [
   {
@@ -128,4 +128,48 @@ test('exam question results carry the file and pages each question is based on',
   const results = buildQuestionResults(questions, grading, {})
   assert.deepEqual(results[0].sources, [{ materialId: 'm1', filename: 'a.pdf', pageStart: 2, pageEnd: 2 }])
   assert.deepEqual(results[1].sources, [{ materialId: null, filename: 'b.pdf', pageStart: 7, pageEnd: 7 }])
+})
+
+test('object answers show the answer and carry the confidence', () => {
+  const qs = [
+    { question_type: 'true_false', question_text: 'a', correct_answer: true },
+    { question_type: 'true_false', question_text: 'b', correct_answer: true },
+    { question_type: 'true_false', question_text: 'c', correct_answer: true },
+    { question_type: 'true_false', question_text: 'd', correct_answer: true },
+  ]
+  const gradedQuestions = [false, true, false, true].map((ok, i) => ({
+    question_index: i,
+    points_possible: 1,
+    points_earned: ok ? 1 : 0,
+    is_correct: ok,
+  }))
+  const results = buildQuestionResults(
+    qs,
+    { graded_questions: gradedQuestions },
+    { '0': { answer: 'false', confidence: 0.95 }, '1': { answer: 'true', confidence: 0.5 }, '2': 'false' }
+  )
+  assert.equal(results[0].studentAnswer, 'False')
+  assert.deepEqual(results.map((r) => r.confidence), [0.95, 0.5, null, null])
+  assert.deepEqual(results.map(isSureAndWrong), [true, false, false, false])
+  // Question 3 was left blank, so it was not rated; question 2 has no rating.
+  assert.deepEqual(examCalibration(results), { rated: 2, sure: 1, sureRight: 0 })
+})
+
+test('no ratings means no calibration', () => {
+  assert.equal(examCalibration(buildQuestionResults([{ question_type: 'true_false' }], {}, { '0': 'true' })), null)
+})
+
+test('the calibration line counts the answers the student was sure about', () => {
+  assert.equal(calibrationLine({ sure: 3, sureRight: 2 }), 'You were sure about 3 answers and got 2 of them right.')
+  assert.equal(calibrationLine({ sure: 1, sureRight: 0 }), 'You were sure about 1 answer and got 0 of them right.')
+  assert.equal(calibrationLine({ sure: 0, sureRight: 0 }), "You weren't sure about any of the answers you rated.")
+})
+
+test('a blank question that was rated is not rated', () => {
+  const qs = [{ question_type: 'true_false', question_text: 'a', correct_answer: true }]
+  const grading = { graded_questions: [{ question_index: 0, points_possible: 1, points_earned: 0, is_correct: false }] }
+  const results = buildQuestionResults(qs, grading, { '0': { answer: '', confidence: 0.95 } })
+  assert.equal(results[0].confidence, null)
+  assert.equal(isSureAndWrong(results[0]), false)
+  assert.equal(examCalibration(results), null)
 })

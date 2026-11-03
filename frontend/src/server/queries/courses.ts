@@ -5,7 +5,7 @@ import { deriveSetup, needsTopicReview, type CourseSetup, type ExtractionOutcome
 import { ACTIVE_JOB_STATUSES } from '@/lib/jobs/active-jobs'
 import { applyPendingExamResults } from '@/lib/learning/exam-mastery'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
-import { displayMastery } from '@/lib/learning/mastery-math'
+import { topicStandings } from '@/lib/learning/topic-standing'
 import { dueBoundary, isReviewDue } from '@/lib/learning/next-step'
 import { masteryLevel, type MasteryLevel } from '@/lib/mastery'
 
@@ -90,20 +90,23 @@ export async function listCourses(userId: string): Promise<CourseListItem[]> {
       topics: {
         orderBy: { orderIndex: 'asc' },
         select: {
+          id: true,
           ...SETUP_TOPIC_FIELDS,
-          reviewSchedules: { where: { userId }, take: 1, select: { mastery: true, dueAt: true, intervalDays: true } },
         },
       },
     },
   })
 
-  const now = Date.now()
-  const extractions = await latestExtractions(userId, projects.map((project) => project.id))
+  const now = new Date()
+  const [extractions, standings] = await Promise.all([
+    latestExtractions(userId, projects.map((project) => project.id)),
+    topicStandings(userId, projects.flatMap((project) => project.topics.map((topic) => topic.id)), now),
+  ])
   return projects.map((project) => {
     const setup = setupOf(project, extractions.get(project.id) ?? 'none')
     // New topics waiting for review do not count as part of a confirmed course.
     const shown = project.topics.filter((topic) => !setup.topics.listConfirmed || topic.userConfirmed)
-    const levels = shown.map((topic) => masteryLevel(displayMastery(topic.reviewSchedules[0]?.mastery, topic.reviewSchedules[0], now)))
+    const levels = shown.map((topic) => masteryLevel(standings.get(topic.id)?.mastery))
     return {
       id: project.id,
       name: project.name,
@@ -144,10 +147,13 @@ export type ShellTopic = {
   mastery: number | null
   /** The mastery the student earned, before any fade for a late review. */
   earnedMastery: number | null
+  lastReviewedAt: string | null
   dueAt: string | null
   progress: { notes: boolean; examples: boolean; quiz: boolean; quizScore: number | null }
   /** The content types that exist: section_notes, solved_examples, interactive_examples, topic_quiz. */
   content: string[]
+  /** The topic has active concepts: its reviews are concept-driven sessions; without, the quiz-based review (§12). */
+  hasConcepts: boolean
 }
 
 export type CourseShell = {
@@ -203,23 +209,26 @@ export const getCourseShell = cache(async (userId: string, courseId: string): Pr
           unitId: true,
           ...SETUP_TOPIC_FIELDS,
           content: { select: { contentType: true } },
+          concepts: { where: { status: 'active' }, take: 1, select: { id: true } },
           progress: {
             where: { userId },
             take: 1,
             select: { notesCompleted: true, examplesCompleted: true, quizCompleted: true, quizScore: true },
           },
-          reviewSchedules: { where: { userId }, take: 1, select: { mastery: true, dueAt: true, intervalDays: true } },
         },
       },
     },
   })
   if (!project) return null
 
-  const now = Date.now()
-  const extraction = (await latestExtractions(userId, [project.id])).get(project.id) ?? 'none'
+  const [extractions, standings] = await Promise.all([
+    latestExtractions(userId, [project.id]),
+    topicStandings(userId, project.topics.map((topic) => topic.id)),
+  ])
+  const extraction = extractions.get(project.id) ?? 'none'
   const topics: ShellTopic[] = project.topics.map((topic) => {
     const progress = topic.progress[0]
-    const schedule = topic.reviewSchedules[0]
+    const schedule = standings.get(topic.id)
     return {
       id: topic.id,
       name: topic.name,
@@ -227,9 +236,10 @@ export const getCourseShell = cache(async (userId: string, courseId: string): Pr
       orderIndex: topic.orderIndex,
       unitId: topic.unitId,
       confirmed: topic.userConfirmed,
-      mastery: displayMastery(schedule?.mastery, schedule, now),
-      earnedMastery: schedule?.mastery ?? null,
-      dueAt: schedule?.dueAt.toISOString() ?? null,
+      mastery: schedule?.mastery ?? null,
+      earnedMastery: schedule?.earnedMastery ?? null,
+      dueAt: schedule?.dueAt?.toISOString() ?? null,
+      lastReviewedAt: schedule?.lastReviewedAt?.toISOString() ?? null,
       progress: {
         notes: progress?.notesCompleted ?? false,
         examples: progress?.examplesCompleted ?? false,
@@ -237,6 +247,7 @@ export const getCourseShell = cache(async (userId: string, courseId: string): Pr
         quizScore: progress?.quizScore ?? null,
       },
       content: topic.content.map((item) => item.contentType),
+      hasConcepts: topic.concepts.length > 0,
     }
   })
 
@@ -310,13 +321,15 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
           name: true,
           unitId: true,
           ...SETUP_TOPIC_FIELDS,
-          reviewSchedules: { where: { userId }, take: 1, select: { mastery: true, dueAt: true, intervalDays: true } },
         },
       },
     },
   })
 
-  const extractions = await latestExtractions(userId, projects.map((project) => project.id))
+  const [extractions, standings] = await Promise.all([
+    latestExtractions(userId, projects.map((project) => project.id)),
+    topicStandings(userId, projects.flatMap((project) => project.topics.map((topic) => topic.id)), now),
+  ])
   return projects.map((project) => {
     const setup = setupOf(project, extractions.get(project.id) ?? 'none')
     return {
@@ -325,7 +338,7 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
       status: project.status,
       updatedAt: project.updatedAt.toISOString(),
       // The same meaning of "due" as the Review page, Home and the overview (lib/learning/next-step.ts).
-      dueCount: project.topics.filter((topic) => topic.userConfirmed && isReviewDue(topic.reviewSchedules[0]?.dueAt, boundary)).length,
+      dueCount: project.topics.filter((topic) => topic.userConfirmed && isReviewDue(standings.get(topic.id)?.dueAt, boundary)).length,
       needsTopicReview: needsTopicReview(setup),
       active: setup.mode === 'active',
       units: project.units,
@@ -335,7 +348,7 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
       topics: project.topics.filter((topic) => !setup.topics.listConfirmed || topic.userConfirmed).map((topic) => ({
         id: topic.id,
         name: topic.name,
-        mastery: displayMastery(topic.reviewSchedules[0]?.mastery, topic.reviewSchedules[0], now),
+        mastery: standings.get(topic.id)?.mastery ?? null,
         unitId: topic.unitId,
       })),
     }

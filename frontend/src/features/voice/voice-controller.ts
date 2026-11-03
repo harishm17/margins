@@ -11,8 +11,18 @@
  */
 import { isApiError, type ApiError } from '@/lib/api/client'
 import { createSentenceChunker, readVoiceEvents, type SentenceChunker } from '@/lib/voice/turn-client'
+import { speakable } from '@/lib/voice/speakable'
+import type { ListenFor, VoiceTurnExtras } from '@/lib/voice/turn-contract'
 import { describeTurnFailure, type LobbyAlert, type TurnFailure } from './errors'
+import { defaultListenFor, endOfTurnWaitMs } from './end-of-turn'
+import { isBackchannel } from './backchannel'
+import { fillerWaitMs, pickFiller } from './filler'
+import { gentleLine } from './gentle'
+import { buildMetrics, buildTiming, emptyClock, type TurnClock } from './turn-timing'
+import { cleanTerms, enableOnDevice, onDeviceEnvFromWindow, onDeviceReady } from './on-device'
+import { createHeardTracker, type HeardTracker } from './heard'
 import { createMicMeter, type MicMeter } from './mic-meter'
+import { getVoicePrefs, resolveVoice, setVoicePrefs, subscribeVoicePrefs } from './voice-prefs'
 import type { EndReason, InputMode, MicNotice, SessionAction } from './session-state'
 import {
   createUtteranceCollector,
@@ -25,6 +35,7 @@ import {
   createSpeaker,
   getRecognitionConstructor,
   hasSpeechSynthesis,
+  isIosDevice,
   languageTag,
   resultsFromEvent,
   type RecognitionLike,
@@ -35,11 +46,20 @@ import {
   openVoiceTurn,
   patchVoiceSession,
   postVoiceMetrics,
+  requiresClaims,
   requiresGeneration,
   type VoiceStyle,
 } from './voice-api'
 
-export type StartConfig = { style: VoiceStyle; language: string; focus: string }
+export type StartConfig = {
+  style: VoiceStyle
+  language: string
+  focus: string
+  /** The idea a teach-back starts with. */
+  conceptId?: string
+  /** Start with the keyboard and the microphone off. */
+  typed?: boolean
+}
 
 export type VoiceControllerOptions = {
   courseId: string
@@ -63,10 +83,16 @@ export type VoiceController = {
   /** Back to the lobby from the summary. */
   reset: () => void
   sendText: (text: string) => void
+  /** Done: end the student's turn now, without waiting for the pause to run out. */
+  done: () => void
+  /** Stop the coach now (the Interrupt control): needed on iOS, where the recognizer cannot hear during speech. */
+  interrupt: () => void
   toggleMic: () => void
   typeInstead: () => void
   enableMicrophone: () => Promise<void>
   toggleSpeech: () => void
+  /** Say a short sample in the chosen voice and rate. */
+  previewVoice: () => void
   hint: () => void
   skip: () => void
   retry: () => void
@@ -77,6 +103,8 @@ export type VoiceController = {
   dispose: () => void
 }
 
+/** What the voice settings say to let the student hear the voice and the pace. */
+const VOICE_SAMPLE = 'This is how I sound.'
 const HEARTBEAT_MS = 30_000
 const ECHO_GRACE_MS = 1500
 const MAX_UTTERANCE_CHARS = 2000
@@ -111,6 +139,7 @@ function failureFrom(error: unknown): TurnFailure {
 }
 
 function lobbyAlertFor(error: unknown): LobbyAlert {
+  if (requiresClaims(error)) return { kind: 'needs-claims' }
   if (requiresGeneration(error)) return { kind: 'needs-generation' }
   if (isApiError(error)) {
     const text =
@@ -123,6 +152,17 @@ function lobbyAlertFor(error: unknown): LobbyAlert {
   }
   return { kind: 'error', text: "We couldn't start the voice practice. Try again in a moment." }
 }
+
+/** The turn's clock, plus when the student's turn ended (the filler counts from there) and what has been reported. */
+type Timing = TurnClock & {
+  turnEnd: number
+  /** The `timing` for the next request was made from this clock. */
+  filed: boolean
+  /** The metrics entry was posted. */
+  posted: boolean
+}
+
+const newTiming = (): Timing => ({ ...emptyClock(), turnEnd: 0, filed: false, posted: false })
 
 type Ctx = {
   sessionId: string | null
@@ -142,19 +182,50 @@ type Ctx = {
   speechEndedAt: number
   chunker: SentenceChunker
   speaker: Speaker | null
+  /** What the student heard of the reply so far (for `interruptedHeard`). */
+  heard: HeardTracker
+  /** Sent with the next turn request, then cleared. */
+  pending: VoiceTurnExtras
   speechOn: boolean
   recognition: RecognitionLike | null
   wantListening: boolean
   inputMode: InputMode
   micPaused: boolean
   lastResults: SpeechResult[]
+  /** Words carried over from the run the browser ended on its own: they lead the new run's result list. */
+  runPrefix: SpeechResult[]
+  /** The topic's key terms from the server, and whether recognition runs on the device with them as phrases. */
+  terms: string[]
+  onDevice: boolean
+  onDeviceChecked: boolean
+  /** iOS: recognition was stopped for the coach's voice and is made again when it is done. */
+  suspended: boolean
+  ios: boolean
+  /** What the session is waiting for next (the server's `listen` event, else a guess from the style). */
+  listenFor: ListenFor
+  /** The turn in flight sent its own `listen` event. */
+  listenSeen: boolean
+  /** How long the quiet lasted after the last words of the answer that opened the next turn. */
+  endpointWaitMs: number | null
+  style: VoiceStyle
   restarts: number[]
   networkErrors: number
   heartbeat: ReturnType<typeof setInterval> | null
   idleTimer: ReturnType<typeof setInterval> | null
   idleSince: number
-  nudged: boolean
-  timing: { start: number; firstText: number | null; firstSpeak: number | null }
+  /** The gentle line was shown for the question the coach last asked. */
+  gentleShown: boolean
+  timing: Timing
+  /** When the reply sentence now playing started (for the speech time). */
+  speakStartedAt: number | null
+  /** The neutral line for a slow graded turn: said at most once per turn, never the same one twice in a row. */
+  fillerDone: boolean
+  fillerTimer: ReturnType<typeof setTimeout> | null
+  lastFiller: string | null
+  /** The filler said this turn: part of what the microphone may hear back, not part of the reply. */
+  echoExtra: string
+  /** When the answer that opens the next turn was sent. */
+  turnEndedAt: number
   config: StartConfig | null
 }
 
@@ -177,19 +248,37 @@ function freshCtx(generation: number): Ctx {
     speechEndedAt: 0,
     chunker: createSentenceChunker({ minChars: 12 }),
     speaker: null,
+    heard: createHeardTracker(),
+    pending: {},
     speechOn: true,
     recognition: null,
     wantListening: false,
     inputMode: 'voice',
     micPaused: false,
     lastResults: [],
+    runPrefix: [],
+    terms: [],
+    onDevice: false,
+    onDeviceChecked: false,
+    suspended: false,
+    ios: false,
+    listenFor: 'short_answer',
+    listenSeen: false,
+    endpointWaitMs: null,
+    style: 'oral_quiz',
     restarts: [],
     networkErrors: 0,
     heartbeat: null,
     idleTimer: null,
     idleSince: 0,
-    nudged: false,
-    timing: { start: 0, firstText: null, firstSpeak: null },
+    gentleShown: false,
+    timing: newTiming(),
+    speakStartedAt: null,
+    fillerDone: false,
+    fillerTimer: null,
+    lastFiller: null,
+    echoExtra: '',
+    turnEndedAt: 0,
     config: null,
   }
 }
@@ -199,13 +288,16 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
   const meter = createMicMeter()
   let options = deps.options
   let ctx = freshCtx(0)
+  let unsubscribePrefs: (() => void) | null = null
 
   const collector: UtteranceCollector = createUtteranceCollector({
-    onCommit: (text) => {
+    waitMs: ({ text }) => endOfTurnWaitMs({ listenFor: ctx.listenFor, text }),
+    onCommit: (text, info) => {
       if (ctx.ended || ctx.inputMode !== 'voice' || ctx.micPaused) return
-      submit(text, { countInterrupt: false })
+      submit(text, { countInterrupt: false, via: 'voice', waitedMs: info.waitedMs })
     },
     onInterim: (text) => dispatch({ type: 'interim', text }),
+    onHold: (on) => dispatch({ type: 'holding', on }),
   })
 
   // ---- Teardown --------------------------------------------------------------------------
@@ -217,10 +309,10 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     ctx.idleTimer = null
   }
 
-  function stopRecognition() {
+  /** Let go of the recognizer without forgetting the words heard so far. */
+  function detachRecognition() {
     const recognition = ctx.recognition
     ctx.recognition = null
-    ctx.wantListening = false
     if (recognition) {
       recognition.onresult = null
       recognition.onerror = null
@@ -232,11 +324,45 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
         // already stopped
       }
     }
+  }
+
+  function stopRecognition() {
+    detachRecognition()
+    ctx.wantListening = false
+    ctx.suspended = false
     collector.reset()
     ctx.lastResults = []
+    ctx.runPrefix = []
+  }
+
+  /** The speech setting changed (in the lobby, the settings or the mute button): follow it. */
+  function syncSpeechSetting() {
+    if (ctx.ended || !ctx.speaker) return
+    const on = getVoicePrefs().speak
+    if (on === ctx.speechOn) return
+    ctx.speechOn = on
+    if (!on) ctx.speaker.cancel()
+    dispatch({ type: 'speech', output: on ? 'on' : 'off' })
+  }
+
+  /** iOS stops listening in a page that is hidden (screen lock, another app) and does not come back by itself: make a new recognizer when it is shown again. */
+  function onVisibilityChange() {
+    if (!ctx.ios || ctx.ended || !ctx.wantListening) return
+    if (document.hidden) {
+      if (ctx.recognition) {
+        detachRecognition()
+        ctx.suspended = true
+      }
+    } else {
+      resumeAfterSpeech()
+    }
   }
 
   function teardown() {
+    clearFiller()
+    unsubscribePrefs?.()
+    unsubscribePrefs = null
+    document.removeEventListener('visibilitychange', onVisibilityChange)
     ctx.ended = true
     ctx.turnId += 1
     ctx.abort?.abort()
@@ -276,26 +402,75 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     dispatch({ type: 'input-mode', mode: 'text', micNotice: notice })
   }
 
-  function startRecognition(): boolean {
+  /**
+   * A new recognizer, every time: a reused one can go deaf in Chrome after many restarts, and on iOS
+   * only a new one hears after the coach has spoken. `carry` is what the last run heard and the
+   * student has not sent yet; it leads the new run's list, so the words are kept and the wait goes on.
+   */
+  function openRecognizer(carry = ''): boolean {
     const Recognition = getRecognitionConstructor()
     if (!Recognition || !ctx.config) return false
-    stopRecognition()
+    detachRecognition()
+    ctx.wantListening = true
+    ctx.runPrefix = carry ? [{ transcript: carry, isFinal: true }] : []
+    ctx.lastResults = ctx.runPrefix
+    collector.reset()
+    if (carry) collector.update(ctx.runPrefix)
+    // iOS hears nothing while the coach speaks, so a recognizer made now would be deaf: wait for the voice to finish.
+    if (ctx.ios && ctx.speakingNow) {
+      ctx.suspended = true
+      return true
+    }
+    ctx.suspended = false
     const recognition = new Recognition()
     recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = languageTag(ctx.config.language)
     recognition.maxAlternatives = 1
+    if (ctx.onDevice) {
+      const env = onDeviceEnvFromWindow()
+      if (!env || !enableOnDevice(recognition, env, ctx.terms)) ctx.onDevice = false
+    }
     recognition.onresult = (event) => onResult(resultsFromEvent(event))
     recognition.onerror = (event) => onRecognitionError(event.error)
     recognition.onend = () => onRecognitionEnd(recognition)
     ctx.recognition = recognition
-    ctx.wantListening = true
     try {
       recognition.start()
     } catch {
       return false
     }
     return true
+  }
+
+  function startRecognition(): boolean {
+    stopRecognition()
+    return openRecognizer()
+  }
+
+  /** What was heard and not yet sent, to lead the next run. */
+  const pendingWords = () => {
+    const words = collector.peek(ctx.lastResults)
+    // A nod heard while the coach was talking was not the start of an answer.
+    return (ctx.speakingNow || ctx.turnActive) && isBackchannel(words) ? '' : words
+  }
+
+  /** iOS: let go of the recognizer when the coach starts to speak (abort before, new one after). */
+  function suspendForSpeech() {
+    if (!ctx.ios || !ctx.wantListening || !ctx.recognition) return
+    detachRecognition()
+    ctx.suspended = true
+  }
+
+  /** iOS: the coach is done and no reply is still arriving: listen again with a new recognizer. */
+  function resumeAfterSpeech() {
+    if (!ctx.suspended || ctx.ended || ctx.speakingNow || ctx.turnActive) return
+    const generation = ctx.generation
+    setTimeout(() => {
+      if (generation !== ctx.generation || ctx.ended || !ctx.suspended || !ctx.wantListening) return
+      if (ctx.speakingNow || ctx.turnActive) return
+      if (!openRecognizer(pendingWords())) switchToText('unstable')
+    }, 300)
   }
 
   async function enableVoice(): Promise<void> {
@@ -317,7 +492,25 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     ctx.micPaused = false
     ctx.networkErrors = 0
     dispatch({ type: 'input-mode', mode: 'voice' })
+    // Once per session: on-device recognition with the course terms, only if the language pack is already installed.
+    if (!ctx.onDeviceChecked && ctx.config) {
+      ctx.onDeviceChecked = true
+      ctx.onDevice = await onDeviceReady(onDeviceEnvFromWindow(), languageTag(ctx.config.language))
+      if (generation !== ctx.generation || ctx.ended) return
+    }
     if (!startRecognition()) switchToText('unstable')
+  }
+
+  /** Stop using on-device recognition for this session and listen again the usual way, keeping the words so far. */
+  function fallBackFromOnDevice() {
+    ctx.onDevice = false
+    if (!ctx.wantListening || ctx.suspended) return
+    const carry = pendingWords()
+    detachRecognition()
+    setTimeout(() => {
+      if (ctx.ended || ctx.recognition || !ctx.wantListening || ctx.suspended) return
+      if (!openRecognizer(carry)) switchToText('unstable')
+    }, 0)
   }
 
   function onRecognitionError(code: string) {
@@ -331,7 +524,13 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
         switchToText('no-mic')
         break
       case 'language-not-supported':
-        switchToText('language')
+      case 'phrases-not-supported':
+        // On-device recognition lost its language pack, or phrases are refused: go on with the browser's usual recognizer.
+        if (ctx.onDevice) {
+          fallBackFromOnDevice()
+          break
+        }
+        if (code === 'language-not-supported') switchToText('language')
         break
       case 'network':
         ctx.networkErrors += 1
@@ -345,9 +544,6 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
 
   function onRecognitionEnd(recognition: RecognitionLike) {
     if (ctx.recognition !== recognition) return
-    collector.flush()
-    collector.reset()
-    ctx.lastResults = []
     if (!ctx.wantListening || ctx.ended) return
     const now = Date.now()
     ctx.restarts = [...ctx.restarts.filter((at) => now - at < 5000), now]
@@ -355,38 +551,43 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       switchToText('unstable')
       return
     }
+    // The browser stopped on its own (a pause, 7-10 s of quiet): listen again at once. The words heard so
+    // far stay, and so does the wait, so a thinking pause is not mistaken for a finished answer.
+    ctx.recognition = null
     setTimeout(() => {
-      if (ctx.recognition !== recognition || !ctx.wantListening || ctx.ended) return
-      try {
-        recognition.start()
-      } catch {
-        switchToText('unstable')
-      }
+      if (ctx.recognition || !ctx.wantListening || ctx.ended || ctx.suspended) return
+      if (!openRecognizer(pendingWords())) switchToText('unstable')
     }, 250)
   }
 
   function onResult(results: SpeechResult[]) {
     if (ctx.ended || ctx.inputMode !== 'voice' || ctx.micPaused) return
-    ctx.lastResults = results
-    const heard = collector.peek(results)
+    const all = ctx.runPrefix.length > 0 ? [...ctx.runPrefix, ...results] : results
+    ctx.lastResults = all
+    const heard = collector.peek(all)
     if (!heard) return
     meter.bump()
     ctx.idleSince = Date.now()
 
     const echoWindow = ctx.speakingNow || Date.now() - ctx.speechEndedAt < ECHO_GRACE_MS
-    if (echoWindow && isEcho(heard, ctx.spokenText)) {
-      collector.skip(results)
+    if (echoWindow && isEcho(heard, `${ctx.spokenText} ${speakable(ctx.spokenText)} ${ctx.echoExtra}`)) {
+      collector.skip(all)
       return
     }
     if (ctx.turnActive || ctx.speakingNow) {
       // Too little to be a person talking (a click, a cough): ignore it.
       if (heard.replace(/[^\p{L}\p{N}]/gu, '').length < 3) {
-        collector.skip(results)
+        collector.skip(all)
+        return
+      }
+      // A nod ("yeah", "mm-hm") is not an interruption. A final one is forgotten; an interim one waits, since it may grow into a sentence.
+      if (isBackchannel(heard)) {
+        if (all[all.length - 1]?.isFinal) collector.skip(all)
         return
       }
       bargeIn(true)
     }
-    collector.update(results)
+    collector.update(all)
   }
 
   // ---- Speech output ---------------------------------------------------------------------
@@ -395,14 +596,31 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     if (!hasSpeechSynthesis()) return null
     return createSpeaker({
       lang: languageTag(language),
-      rate: 1,
+      rate: () => getVoicePrefs().rate,
+      chooseVoice: (voices, lang) => resolveVoice(voices, lang, getVoicePrefs().voices[lang]),
       onSpeakingChange: (speaking) => {
         ctx.speakingNow = speaking
+        if (speaking) suspendForSpeech()
+        else resumeAfterSpeech()
         if (!speaking) ctx.speechEndedAt = Date.now()
         dispatch({ type: 'speaking', on: speaking })
       },
-      onStart: () => {
-        if (ctx.timing.firstSpeak === null) ctx.timing.firstSpeak = performance.now()
+      onStart: (item) => {
+        // The first audio of the reply, not a filler line or a sample.
+        if (item.display !== undefined && ctx.timing.firstSpeak === null) ctx.timing.firstSpeak = performance.now()
+      },
+      onEvent: (event) => {
+        if (event.item.display === undefined) return
+        if (event.type === 'start') {
+          ctx.heard.start(event.item.display, event.item.speech)
+          ctx.speakStartedAt = performance.now()
+        } else if (event.type === 'boundary') {
+          ctx.heard.boundary(event.charIndex)
+        } else {
+          if (event.type === 'end') ctx.heard.finish()
+          else ctx.heard.abandon()
+          closeSpeechSpan()
+        }
       },
       onUnavailable: () => {
         ctx.speechOn = false
@@ -433,16 +651,24 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       const action = idleAction({
         inputMode: ctx.inputMode === 'voice' && !ctx.micPaused ? 'voice' : 'text',
         idleMs: Date.now() - ctx.idleSince,
-        nudged: ctx.nudged,
+        gentleShown: ctx.gentleShown,
+        waitingForAnswer: ctx.listenFor !== 'none',
       })
-      if (action === 'nudge') {
-        ctx.nudged = true
-        stopIdle()
-        queueTurn('')
+      if (action === 'gentle') {
+        sayGentleLine()
       } else if (action === 'end') {
         finish('idle')
       }
     }, 2000)
+  }
+
+  /** One gentle line per question: shown, and spoken when speech is on. It is not a turn and nothing is sent. */
+  function sayGentleLine() {
+    ctx.gentleShown = true
+    const line = gentleLine(ctx.config?.language ?? 'en')
+    ctx.echoExtra = `${ctx.echoExtra} ${line}`
+    dispatch({ type: 'note', text: line })
+    if (ctx.speechOn && ctx.speaker) ctx.speaker.enqueue({ speech: line })
   }
 
   /** After the coach finished (reply complete and speech drained). */
@@ -459,14 +685,73 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     })
   }
 
+  // ---- Timing --------------------------------------------------------------------------------
+
+  /** The reply sentence that was playing has stopped (finished or cut off): count its time. */
+  function closeSpeechSpan() {
+    if (ctx.speakStartedAt === null) return
+    ctx.timing.speechMs += performance.now() - ctx.speakStartedAt
+    ctx.speakStartedAt = null
+  }
+
+  /** Make the `timing` that goes with the next turn request from this turn's clock. */
+  function fileTiming(clock: Timing) {
+    if (clock.start === 0) return
+    ctx.pending = { ...ctx.pending, timing: buildTiming(clock) }
+    clock.filed = true
+  }
+
+  /** Post the turn's metrics entry, once. */
+  function postTurnMetrics(sessionId: string, clock: Timing) {
+    if (clock.posted || clock.start === 0) return
+    clock.posted = true
+    postVoiceMetrics(sessionId, buildMetrics(clock))
+  }
+
+  // ---- No silent graded turn -----------------------------------------------------------------
+
+  function clearFiller() {
+    if (ctx.fillerTimer) clearTimeout(ctx.fillerTimer)
+    ctx.fillerTimer = null
+  }
+
+  /** The first sentence of the reply is here: no filler is needed any more. */
+  function noteFirstSentence() {
+    if (ctx.timing.firstSentence === null) ctx.timing.firstSentence = performance.now()
+    clearFiller()
+  }
+
+  /** The server started a graded step. If no sentence is in 1.2 s after the turn ended, say one neutral line. */
+  function armFiller() {
+    if (ctx.fillerDone || ctx.timing.firstSentence !== null) return
+    ctx.fillerDone = true
+    const turnId = ctx.turnId
+    const generation = ctx.generation
+    clearFiller()
+    ctx.fillerTimer = setTimeout(() => {
+      ctx.fillerTimer = null
+      if (ctx.ended || ctx.generation !== generation || ctx.turnId !== turnId || !ctx.turnActive) return
+      if (ctx.timing.firstSentence !== null) return
+      const line = pickFiller(ctx.config?.language ?? 'en', ctx.lastFiller)
+      ctx.lastFiller = line
+      ctx.echoExtra = line
+      // Shown as text, and spoken when speech is on. It is not part of the reply the server stores.
+      dispatch({ type: 'coach-text', delta: `${line} ` })
+      if (ctx.speechOn && ctx.speaker) ctx.speaker.enqueue({ speech: line })
+    }, fillerWaitMs(ctx.timing.turnEnd, performance.now()))
+  }
+
   function speakSentences(sentences: string[]) {
+    if (sentences.length > 0) noteFirstSentence()
     if (!ctx.speechOn || !ctx.speaker) return
-    for (const sentence of sentences) ctx.speaker.enqueue(sentence)
+    for (const sentence of sentences) ctx.speaker.enqueue({ speech: speakable(sentence), display: sentence })
   }
 
   function failTurn(failure: TurnFailure, utterance: string) {
     const view = describeTurnFailure(failure)
+    clearFiller()
     ctx.turnActive = false
+    resumeAfterSpeech()
 
     if (failure.code === 'VOICE_NOT_SAVED') {
       // The reply itself was fine: treat the turn as done and tell the student.
@@ -498,10 +783,20 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
 
     ctx.turnActive = true
     ctx.toolRan = false
+    ctx.listenSeen = false
+    ctx.gentleShown = false
     ctx.spokenText = ''
+    ctx.heard.reset()
     ctx.lastUtterance = utterance
     ctx.chunker = createSentenceChunker({ minChars: 12 })
-    ctx.timing = { start: performance.now(), firstText: null, firstSpeak: null }
+    const startedAt = performance.now()
+    ctx.timing = { ...newTiming(), start: startedAt, turnEnd: ctx.turnEndedAt || startedAt, endpointWaitMs: ctx.endpointWaitMs }
+    ctx.endpointWaitMs = null
+    ctx.speakStartedAt = null
+    ctx.turnEndedAt = 0
+    ctx.fillerDone = false
+    ctx.echoExtra = ''
+    clearFiller()
     stopIdle()
     dispatch({ type: 'turn-started' })
 
@@ -511,7 +806,8 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     let response: Response | null = null
     for (let attempt = 0; attempt <= TURN_IN_PROGRESS_RETRIES; attempt += 1) {
       try {
-        response = await openVoiceTurn(sessionId, utterance, controller.signal)
+        response = await openVoiceTurn(sessionId, utterance, controller.signal, ctx.pending)
+        ctx.pending = {}
         break
       } catch (error) {
         if (isAbort(error) || stale()) return
@@ -535,6 +831,10 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     try {
       for await (const event of readVoiceEvents(response.body)) {
         if (stale()) return
+        const eventAt = performance.now()
+        if (ctx.timing.firstEvent === null) ctx.timing.firstEvent = eventAt
+        // The first thing after "working" ends the graded step as the browser sees it.
+        if (ctx.timing.workingAt !== null && ctx.timing.afterWorkingAt === null && event.type !== 'working' && event.type !== 'listen') ctx.timing.afterWorkingAt = eventAt
         switch (event.type) {
           case 'text':
             if (ctx.timing.firstText === null) ctx.timing.firstText = performance.now()
@@ -555,6 +855,14 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
               },
             })
             break
+          case 'idea_done':
+            ctx.toolRan = true
+            dispatch({ type: 'idea-done', idea: { name: event.name, outcome: event.outcome, conceptId: event.conceptId ?? null, lookAgain: event.lookAgain ?? [], lookLinks: event.lookLinks ?? [] } })
+            break
+          case 'board':
+            ctx.toolRan = true
+            dispatch({ type: 'board', board: { kind: event.kind, text: event.text, question: event.question, source: event.source, idea: event.idea } })
+            break
           case 'evaluation':
             ctx.toolRan = true
             dispatch({
@@ -565,12 +873,21 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
                 comment: event.comment,
                 explanation: event.explanation,
                 ungraded: event.ungraded === true,
+                ...(event.lookLinks ? { lookLinks: event.lookLinks } : {}),
               },
             })
             break
           case 'hint':
             ctx.toolRan = true
             dispatch({ type: 'hint', text: event.text })
+            break
+          case 'working':
+            if (ctx.timing.workingAt === null) ctx.timing.workingAt = performance.now()
+            armFiller()
+            break
+          case 'listen':
+            ctx.listenFor = event.for
+            ctx.listenSeen = true
             break
           case 'session_complete':
             ctx.completeSeen = true
@@ -580,15 +897,17 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
             terminal = true
             speakSentences(ctx.chunker.flush())
             ctx.turnActive = false
+            clearFiller()
             ctx.firstTurnDone = true
+            if (!ctx.listenSeen) ctx.listenFor = defaultListenFor(ctx.style)
             ctx.retry = null
             dispatch({ type: 'turn-done' })
-            const { start, firstText, firstSpeak } = ctx.timing
-            postVoiceMetrics(sessionId, {
-              ttftMs: firstText === null ? undefined : Math.round(firstText - start),
-              ttfaMs: firstSpeak === null ? undefined : Math.round(firstSpeak - start),
-              responseMs: Math.round(performance.now() - start),
-            })
+            resumeAfterSpeech()
+            const clock = ctx.timing
+            clock.doneAt = performance.now()
+            fileTiming(clock)
+            // The metrics entry waits for the reply audio to finish, so it can say how long the coach spoke.
+            void (ctx.speaker ? ctx.speaker.whenIdle() : Promise.resolve()).then(() => postTurnMetrics(sessionId, clock))
             afterCoach(turnId)
             break
           }
@@ -608,7 +927,24 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     if (!terminal) failTurn({ code: 'VOICE_INTERRUPTED', message: '', retryable: true }, utterance)
   }
 
+  /** Note what the student heard of the reply that is being cut off, to send with the next turn. */
+  function rememberInterruption() {
+    const heard = (ctx.speechOn && ctx.speaker ? ctx.heard.text() : ctx.spokenText.trim()).slice(0, MAX_UTTERANCE_CHARS)
+    ctx.pending = { ...ctx.pending, ...(heard ? { interruptedHeard: heard } : {}) }
+  }
+
   function bargeIn(countInterrupt: boolean) {
+    if (ctx.turnActive || ctx.speakingNow) {
+      rememberInterruption()
+      // The turn being cut off still reports: its timing goes with the next request, its metrics now.
+      const clock = ctx.timing
+      clock.interrupted = true
+      closeSpeechSpan()
+      if (!clock.filed) fileTiming(clock)
+      else if (ctx.pending.timing) ctx.pending = { ...ctx.pending, timing: { ...ctx.pending.timing, interrupted: true } }
+      if (ctx.sessionId) postTurnMetrics(ctx.sessionId, clock)
+    }
+    clearFiller()
     ctx.turnId += 1
     ctx.abort?.abort()
     ctx.abort = null
@@ -623,15 +959,17 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     if (ctx.completeSeen) finish('complete')
   }
 
-  function submit(text: string, options: { countInterrupt: boolean }) {
+  function submit(text: string, options: { countInterrupt: boolean; via: 'voice' | 'text'; waitedMs?: number }) {
     if (ctx.ended || !ctx.sessionId) return
     const clean = text.trim().slice(0, MAX_UTTERANCE_CHARS)
     if (!clean) return
     if (ctx.turnActive || ctx.speakingNow) bargeIn(options.countInterrupt)
     if (ctx.ended) return
-    ctx.nudged = false
+
     ctx.retry = null
-    dispatch({ type: 'student-said', text: clean })
+    ctx.endpointWaitMs = options.waitedMs ?? null
+    ctx.turnEndedAt = performance.now()
+    dispatch({ type: 'student-said', text: clean, via: options.via })
     queueTurn(clean)
   }
 
@@ -652,6 +990,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
         ...(options.mode === 'topic' ? { topicId: options.topic?.id } : {}),
         style: options.mode === 'sprint' ? 'oral_quiz' : config.style,
         focus: config.focus.trim() ? config.focus.trim() : null,
+        ...(config.conceptId ? { conceptId: config.conceptId } : {}),
         language: config.language,
       })
     } catch (error) {
@@ -664,17 +1003,27 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     ctx.sessionId = created.sessionId
     ctx.ended = false
     ctx.config = config
+    ctx.terms = cleanTerms(created.courseTerms)
+    ctx.style = options.mode === 'sprint' ? 'oral_quiz' : config.style
+    ctx.listenFor = defaultListenFor(ctx.style)
+    ctx.ios = isIosDevice()
     ctx.speaker = createSessionSpeaker(config.language)
+    unsubscribePrefs?.()
+    unsubscribePrefs = subscribeVoicePrefs(syncSpeechSetting)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     const recognitionAvailable = getRecognitionConstructor() !== null
-    ctx.inputMode = recognitionAvailable ? 'voice' : 'text'
-    ctx.speechOn = ctx.speaker !== null
+    // "Start by typing" in the lobby: no microphone, so no audio goes anywhere. The student can turn the mic on later.
+    const startVoice = recognitionAvailable && !config.typed
+    ctx.inputMode = startVoice ? 'voice' : 'text'
+    ctx.speechOn = ctx.speaker !== null && getVoicePrefs().speak
     dispatch({
       type: 'started',
       at: Date.now(),
       style: options.mode === 'sprint' ? 'oral_quiz' : config.style,
+      language: config.language,
       inputMode: ctx.inputMode,
-      speech: ctx.speaker ? 'on' : 'unsupported',
+      speech: !ctx.speaker ? 'unsupported' : ctx.speechOn ? 'on' : 'off',
       micNotice: recognitionAvailable ? null : 'unsupported',
     })
 
@@ -682,7 +1031,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       if (ctx.sessionId && !ctx.ended) void patchVoiceSession({ sessionId: ctx.sessionId, heartbeat: true })
     }, HEARTBEAT_MS)
 
-    if (recognitionAvailable) void enableVoice()
+    if (startVoice) void enableVoice()
     queueTurn('')
   }
 
@@ -708,7 +1057,18 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     },
 
     sendText(text) {
-      submit(text, { countInterrupt: false })
+      submit(text, { countInterrupt: false, via: 'text' })
+    },
+
+    interrupt() {
+      if (ctx.ended || !(ctx.turnActive || ctx.speakingNow)) return
+      bargeIn(true)
+      if (!ctx.ended) startIdle()
+    },
+
+    done() {
+      if (ctx.ended || ctx.inputMode !== 'voice' || ctx.micPaused) return
+      collector.flush()
     },
 
     toggleMic() {
@@ -736,17 +1096,21 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
 
     toggleSpeech() {
       if (ctx.ended || !ctx.speaker) return
-      ctx.speechOn = !ctx.speechOn
-      if (!ctx.speechOn) ctx.speaker.cancel()
-      dispatch({ type: 'speech', output: ctx.speechOn ? 'on' : 'off' })
+      setVoicePrefs({ speak: !getVoicePrefs().speak })
+    },
+
+    previewVoice() {
+      if (ctx.ended || !ctx.speaker || !getVoicePrefs().speak || ctx.speaker.busy || ctx.turnActive) return
+      ctx.spokenText += ` ${VOICE_SAMPLE}`
+      ctx.speaker.enqueue(VOICE_SAMPLE)
     },
 
     hint() {
-      submit('Can I have a hint?', { countInterrupt: false })
+      submit('Can I have a hint?', { countInterrupt: false, via: 'text' })
     },
 
     skip() {
-      submit('Skip this question and ask me the next one.', { countInterrupt: false })
+      submit('Skip this question and ask me the next one.', { countInterrupt: false, via: 'text' })
     },
 
     retry() {

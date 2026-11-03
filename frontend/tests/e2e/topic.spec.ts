@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { signIn } from './helpers/auth'
 import { withPrisma } from './helpers/db'
 import { FIXTURE_PDF } from './helpers/seed-demo'
+import { choice, world } from './helpers/v31-sessions'
 
 // One account per run. The AI service behind the dev stack is a mock, so generating content is
 // free and fast; the spec writes every kind of content through the page itself.
@@ -12,18 +13,19 @@ const email = `topic-${stamp}@example.com`
 const pdfPath = process.env.E2E_PDF ?? FIXTURE_PDF
 const TOPICS = ['Graph traversal', 'Sorting algorithms', 'Dynamic programming']
 
-const CONTENT_TYPES = ['section_notes', 'solved_examples', 'interactive_examples', 'topic_quiz']
+// The chain starts with the concepts (stored as concept_prompts) and the warm-up, then the four study types.
+const CONTENT_TYPES = ['section_notes', 'solved_examples', 'interactive_examples', 'topic_quiz', 'concept_prompts']
 
 /** The content types a topic has written so far. */
-async function writtenTypes(page: Page, topicId: string): Promise<string[]> {
-  const response = await page.request.get(`/api/topics/${topicId}/content`)
-  const body = await response.json()
-  return (body.content ?? []).map((row: { contentType: string }) => row.contentType).sort()
+async function writtenTypes(_page: Page, topicId: string): Promise<string[]> {
+  // Read from the database: the content route keeps the lesson notes back until the explainer is open (spec §5.4).
+  const rows = await withPrisma((prisma) => prisma.topicContent.findMany({ where: { topicId }, select: { contentType: true } }))
+  return rows.map((row) => row.contentType).sort()
 }
 
-/** How many notes jobs were ever created for the topic (any outcome), read from the stack's database. */
-async function notesJobCount(topicId: string): Promise<number> {
-  return withPrisma((prisma) => prisma.processingJob.count({ where: { targetKey: `content:${topicId}:section_notes` } }))
+/** How many jobs of a type (notes by default) were ever created for the topic (any outcome), read from the stack's database. */
+async function jobCount(topicId: string, type = 'section_notes'): Promise<number> {
+  return withPrisma((prisma) => prisma.processingJob.count({ where: { targetKey: `content:${topicId}:${type}` } }))
 }
 
 async function createCourse(page: Page) {
@@ -78,7 +80,7 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
 
   // No view in the address: it goes to the first unfinished one.
   await page.goto(base)
-  await expect(page).toHaveURL(/\?view=notes$/)
+  await expect(page).toHaveURL(/\?view=read$/)
   await expect(page.getByRole('heading', { level: 1, name: TOPICS[0] })).toBeVisible()
   // "Ask about this" opens the Ask sheet scoped to the topic, with a link to the full page.
   await page.getByRole('button', { name: 'Ask about this' }).click()
@@ -91,27 +93,30 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   await page.keyboard.press('Escape')
   await expect(sheet).toBeHidden()
 
-  // The notes are written without a click; the view fills in when the job finishes.
-  await expect(page.getByRole('heading', { name: 'Overview' }).first()).toBeVisible({ timeout: 90_000 })
-  // The page can ask more than once (it renders again after the redirect to ?view=notes), but
+  // The reader shows the student's own pages, and the topic's notes are written without a click in the meantime.
+  await expect(page.locator('[data-passage]').first()).toBeVisible({ timeout: 90_000 })
+  // The page can ask more than once (it renders again after the redirect to ?view=read), but
   // only one notes job is ever created: nothing is written twice.
-  expect(await notesJobCount(ids[0])).toBe(1)
+  expect(await jobCount(ids[0])).toBe(1)
   await expect(page.getByRole('button', { name: 'Write notes' })).toHaveCount(0)
-  await expect(page.getByRole('navigation', { name: 'Study path' }).getByRole('link', { name: /Notes/ })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Read/ })).toHaveAttribute('aria-current', 'page')
 
-  // Mark as read, then the next view is offered.
-  await page.getByRole('button', { name: 'Mark as read' }).click()
-  await expect(page.getByText("You've read these notes.")).toBeVisible()
-  await expect(page.getByRole('link', { name: /Next: Worked examples/ })).toBeVisible()
+  // "I've read it", then the next view is offered.
+  await page.getByRole('button', { name: "I've read it" }).click()
+  await expect(page.getByText("You've read this topic.")).toBeVisible()
+  await expect(page.getByRole('link', { name: /Next: (Practice|Recall)/ })).toBeVisible()
 
   // The AI service then writes the other three types, one after another, with no clicks.
   await expect.poll(() => writtenTypes(page, ids[0]), { timeout: 120_000 }).toEqual([...CONTENT_TYPES].sort())
 
   // Number keys switch views; typing in a field does not.
   await page.locator('body').click({ position: { x: 5, y: 5 } })
-  await page.keyboard.press('2')
-  await expect(page).toHaveURL(/view=examples/)
-  await page.keyboard.press('3')
+  // The keys follow the steps shown (a topic's concepts may or may not be extracted by now): find Quiz and Practice.
+  const steps = (await page.getByRole('navigation', { name: 'Topic path' }).getByRole('link').allInnerTexts()).map((text) => text.trim())
+  const keyFor = (label: string) => String(steps.findIndex((text) => text.includes(label)) + 1)
+  await page.keyboard.press(keyFor('Quiz'))
+  await expect(page).toHaveURL(/view=quiz/)
+  await page.keyboard.press(keyFor('Practice'))
   await expect(page).toHaveURL(/view=practice/)
 
   // Practice was written by the chain: answer wrong, try again, answer right. Progress survives a reload.
@@ -121,11 +126,17 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   await expect(page.getByText('Not quite')).toBeVisible()
   await page.getByRole('button', { name: 'Try again' }).click()
   await page.getByLabel('Your answer').fill('4')
+  // The save that completes the problem is sent a moment after Check; reload once the server has it.
+  const completedSave = page.waitForResponse(
+    async (response) =>
+      response.url().includes('/practice-progress') && response.request().method() === 'POST' && ((await response.json().catch(() => ({}))) as { completedNow?: boolean }).completedNow === true
+  )
   await page.getByRole('button', { name: 'Check', exact: true }).click()
   await expect(page.getByText('Correct', { exact: true })).toBeVisible()
+  await completedSave
   await page.reload()
   await expect(
-    page.getByRole('navigation', { name: 'Study path' }).getByRole('link', { name: /Practice/ }).getByRole('img', { name: 'Completed' })
+    page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Practice/ }).getByRole('img', { name: 'Completed' })
   ).toBeVisible()
 
   // Examples: mark as done. That also starts the next topic's notes in the background.
@@ -136,11 +147,13 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   const list = await (await page.request.get(`/api/projects/${courseId}/topics`)).json()
   const nextTopic = list.topics.find((topic: { name: string }) => topic.name === nextName)
   expect(nextTopic).toBeTruthy()
-  expect(await notesJobCount(nextTopic.id)).toBe(0)
+  expect(await jobCount(nextTopic.id, 'concepts')).toBe(0)
   await page.getByRole('button', { name: 'Mark as done' }).click()
   await expect(page.getByText("You've worked through these examples.")).toBeVisible()
+  // The head start is the next topic's concepts, nothing after them (the chain follows when it is opened).
   // (A topic found by extraction has no mapped text in this stack, so the job may fail; it was started.)
-  await expect.poll(() => notesJobCount(nextTopic.id), { timeout: 60_000 }).toBe(1)
+  await expect.poll(() => jobCount(nextTopic.id, 'concepts'), { timeout: 60_000 }).toBe(1)
+  expect(await jobCount(nextTopic.id)).toBe(0)
 
   // Quiz: written by the chain too. Answer with the keyboard, leave one blank, submit.
   await page.goto(`${base}?view=quiz`)
@@ -163,10 +176,10 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
 
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
-  await expect(page.getByRole('button', { name: 'Retake' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
   await page.getByRole('radio', { name: /Missed/ }).click()
-  await page.getByRole('button', { name: /4, Fairly sure/ }).click()
-  await expect(page.getByRole('button', { name: /4, Fairly sure/ })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('radio', { name: 'Fairly sure' }).click()
+  await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
 
   // The attempt is in the lobby's history, with a review.
   await page.getByRole('button', { name: 'Back to quiz' }).click()
@@ -182,6 +195,54 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   await expect(page).not.toHaveURL(before)
   await expect(page).toHaveURL(/view=quiz$/)
   await expect(page.getByRole('heading', { level: 1 })).not.toHaveText(TOPICS[0])
+})
+
+test('quiz records confidence per question', async ({ page }) => {
+  test.setTimeout(120_000)
+  // A set that has not been taken today: the same questions open again only tomorrow (spec 7.3), and the demo topic's were taken by the seed.
+  const own = await world(page, `topic-confidence-${stamp}`, [{ name: 'Graph search', quiz: [choice('Which structure does BFS use?', []), choice('Which structure does DFS use?', []), choice('Which is a heap?', [])] }])
+
+  await page.goto(`/courses/${own.courseId}/topics/${own.topics['Graph search']}?view=quiz`)
+  await expect(page.getByRole('button', { name: 'Start quiz' })).toBeVisible({ timeout: 30_000 })
+  // The prediction is optional and stays in the session with the answers.
+  await page.getByRole('combobox', { name: /expect to get right/ }).click()
+  await page.getByRole('option', { name: /^1 of/ }).click()
+  await page.getByRole('button', { name: 'Start quiz' }).click()
+  await expect(page.getByText('Question 1 of')).toBeVisible()
+
+  // Question 1: an answer, a confidence and some thinking. The chosen level is marked in text, not only by style.
+  await page.keyboard.press('b')
+  await page.getByRole('radio', { name: 'Fairly sure' }).click()
+  await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
+  await page.getByRole('button', { name: 'Show your thinking' }).click()
+  await page.getByLabel('Your thinking').fill('B looked like the queue one.')
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(page.getByText('Question 2 of')).toBeVisible()
+  // Nothing is required: question 2 has no confidence, and going back keeps question 1's.
+  await expect(page.getByRole('radio', { checked: true })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Previous', exact: true }).click()
+  await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
+  await expect(page.getByLabel('Your thinking')).toHaveValue('B looked like the queue one.')
+
+  // A reload keeps both, and the request carries them.
+  await page.reload()
+  await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
+  const total = Number((await page.getByText(/Question \d+ of \d+/).textContent())?.match(/of (\d+)/)?.[1])
+  await page.getByRole('button', { name: `Question ${total}`, exact: false }).first().click()
+  const request = page.waitForRequest((req) => req.url().includes('/quiz-attempts') && req.method() === 'POST')
+  await page.getByRole('button', { name: 'Submit quiz' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
+  const sent = (await request).postDataJSON() as { answers: Record<string, { answer: string; confidence?: number; thinking?: string }> }
+  expect(sent.answers['0']).toEqual({
+    answer: 'B',
+    confidence: 0.75,
+    confidenceLevel: 'fairly',
+    thinking: 'B looked like the queue one.',
+  })
+  await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
+  // The prediction sits beside the score, and the answers are grouped: question 1 was marked sure.
+  await expect(page.getByText(/You expected to get 1 question right and got \d+\./)).toBeVisible()
+  await expect(page.getByRole('heading', { level: 3, name: /^(You were sure about these|Solid answers|Other wrong answers|Wrong answers)/ }).first()).toBeVisible()
 })
 
 test('Prepare all topics now writes the rest of the course, one topic at a time', async ({ page }) => {

@@ -1,5 +1,5 @@
 """Configuration settings for AI service."""
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -48,6 +48,18 @@ class Settings(BaseSettings):
     MODEL_EXAM: str = ""
     MODEL_GRADING: str = ""
     MODEL_TOPICS: str = "claude-opus-5-5:low"
+    # Concept extraction (the knowledge graph of a topic). Empty means MODEL_TOPICS.
+    MODEL_CONCEPTS: str = ""
+    # Warm-up (pretest) questions. Empty means MODEL_QUIZ.
+    MODEL_WARMUP: str = ""
+    # Short explanations of what a recall answer missed. Empty means MODEL_NOTES.
+    MODEL_GAP_EXPLAINER: str = ""
+    # Cheap routing and checking calls: the answer-key support check of every generated set.
+    MODEL_ROUTER: str = "claude-haiku-5-5:low"
+    # The practice tutor: the words of each hint-ladder reply (the leak judge runs on MODEL_ROUTER).
+    MODEL_TUTOR: str = "claude-sonnet-5-5:low"
+    # Grading what a student recalls against a topic's claims (verdicts with the student's own quotes).
+    MODEL_RECALL_GRADING: str = "claude-sonnet-5-5:low"
     # "Ask your materials" answers: the main model, short thinking.
     MODEL_CHAT: str = ":low"
     # Voice coach turns and drills: the fast model, short thinking. The browser does
@@ -56,6 +68,10 @@ class Settings(BaseSettings):
     MODEL_VALIDATION: str = ""
 
     VOICE_MAX_TOKENS: int = 800
+    # Voice transcripts (what a student said out loud) are deleted after this many days; evidence events stay.
+    # 0 keeps them. The purge runs every VOICE_RETENTION_INTERVAL_SECONDS (0 = off; POST /voice/retention still works).
+    VOICE_RETENTION_DAYS: int = 180
+    VOICE_RETENTION_INTERVAL_SECONDS: float = 86400.0
 
     # Course structure. A topic is taught from the chunks of its primary sources, in document
     # order, up to this many tokens (whole sections are kept, the rest dropped from the end).
@@ -90,6 +106,13 @@ class Settings(BaseSettings):
     EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
     EMBEDDING_CACHE_DIR: str = ""
+
+    # The exam guard's meaning check (app/services/exam_guard.py): a small multilingual model, so a mock exam question
+    # reworded or translated is still recognised. Cosine at or above the threshold declines. Calibrated 2026-11-02 on
+    # paraphrases and Spanish/French/German translations of exam questions (lowest 0.69) against concept questions on
+    # the same topics (highest 0.59); see evals/tutoring and tests/test_exam_guard.py.
+    EXAM_GUARD_EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    EXAM_GUARD_SEMANTIC_THRESHOLD: float = 0.65
 
     # OpenAI: only the optional "openai" embedding provider.
     OPENAI_API_KEY: str = ""
@@ -145,7 +168,8 @@ class Settings(BaseSettings):
 
     @field_validator(
         "MODEL_NOTES", "MODEL_EXAMPLES", "MODEL_PRACTICE", "MODEL_QUIZ", "MODEL_EXAM",
-        "MODEL_GRADING", "MODEL_TOPICS", "MODEL_CHAT", "MODEL_VOICE", "MODEL_VALIDATION",
+        "MODEL_GRADING", "MODEL_TOPICS", "MODEL_CONCEPTS", "MODEL_WARMUP", "MODEL_GAP_EXPLAINER", "MODEL_ROUTER", "MODEL_TUTOR", "MODEL_RECALL_GRADING", "MODEL_CHAT",
+        "MODEL_VOICE", "MODEL_VALIDATION",
     )
     @classmethod
     def _check_model_spec(cls, value: str) -> str:
@@ -154,6 +178,14 @@ class Settings(BaseSettings):
 
         parse_model_spec(value, ModelChoice("placeholder", None))
         return value
+
+    @model_validator(mode="after")
+    def _no_mock_model_in_production(self) -> "Settings":
+        # The mock provider answers with canned text and never fails a leak check: in production it would hand
+        # students replies nobody reviewed, so the service refuses to start with it.
+        if self.ENVIRONMENT == "production" and self.LLM_PROVIDER.strip().lower() == "mock":
+            raise ValueError("LLM_PROVIDER=mock is not allowed when ENVIRONMENT=production")
+        return self
 
     @property
     def is_production(self) -> bool:

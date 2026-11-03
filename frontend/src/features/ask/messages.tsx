@@ -8,6 +8,7 @@ import { LazyMarkdown } from '@/components/ui/lazy-markdown'
 import { Spinner } from '@/components/ui/spinner'
 import { insertCitationMarkers, type ChatSource, type CitationMark } from '@/lib/chat/citations'
 import { cn } from '@/lib/utils'
+import { CheckCard } from './check-card'
 import { CitationPill, SourcesList } from './citations'
 import { sourceByMarker, type AssistantMessage, type FailureMessage } from './chat-messages'
 import type { LiveTurn } from './use-ask-chat'
@@ -60,12 +61,44 @@ function AssistantLabel() {
   return <p className="mb-1.5 text-caption text-fg-3">Margins</p>
 }
 
-export function AssistantBlock({ message }: { message: AssistantMessage }) {
+/** The intents whose replies can be followed by "Show me a worked example": the student is working a problem. */
+const WORKING_INTENTS = new Set(['solve', 'check_answer'])
+
+export type NextMoves = {
+  /** This is the last reply of the conversation, the only one its follow-up buttons belong to. */
+  last: boolean
+  /** The thread has had a genuine attempt, so the worked example may be asked for. */
+  workedAllowed: boolean
+  disabled: boolean
+  onAsk: (question: string) => void
+  onWorked: () => void
+}
+
+export function AssistantBlock({ message, moves }: { message: AssistantMessage; moves?: NextMoves }) {
+  const turn = message.turn
+  const entryPoints = moves?.last && turn ? turn.entryPoints : []
   return (
     <article className="min-w-0">
       <AssistantLabel />
       <AnswerBody text={message.text} marks={message.marks} sources={message.sources} />
       <SourcesList sources={message.sources} />
+      {entryPoints.length > 0 ? (
+        <div role="group" aria-label="Places to start" className="mt-4 flex flex-wrap gap-2">
+          {entryPoints.map((name) => (
+            <Button key={name} size="sm" variant="secondary" disabled={moves?.disabled} onClick={() => moves?.onAsk(`Explain ${name}`)}>
+              {name}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      {turn?.check && !message.notSaved ? <CheckCard messageId={message.id} check={turn.check} bringIntoView={!!moves?.last} /> : null}
+      {moves?.last && moves.workedAllowed && turn && WORKING_INTENTS.has(turn.intent) ? (
+        <div className="mt-4">
+          <Button size="sm" variant="secondary" disabled={moves.disabled} onClick={moves.onWorked}>
+            Show me a worked example
+          </Button>
+        </div>
+      ) : null}
       {message.stopped ? (
         <p className="mt-3 text-small text-fg-3">Stopped early. The full answer is saved in this conversation.</p>
       ) : null}
@@ -97,7 +130,7 @@ export function LiveAnswer({ turn }: { turn: LiveTurn }) {
       ) : (
         <p role="status" className="flex items-center gap-2 text-body text-fg-2">
           <Spinner className="text-accent" />
-          Searching your materials...
+          {answer.stage === 'checking' ? 'Checking the reply...' : answer.stage === 'writing' ? 'Writing the reply...' : 'Searching your materials...'}
         </p>
       )}
     </article>

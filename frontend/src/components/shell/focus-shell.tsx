@@ -34,7 +34,7 @@ function FocusFrame({ children }: { children: React.ReactNode }) {
   return (
     <>
       <SkipLink />
-      <header className="sticky top-0 z-topbar flex h-(--topbar-height) items-center gap-3 border-b border-border bg-canvas/90 px-4 backdrop-blur-md md:px-6">
+      <header className="sticky top-0 z-topbar flex h-(--topbar-height) items-center gap-3 border-b border-border bg-canvas/90 pt-[env(safe-area-inset-top)] px-4 backdrop-blur-md md:px-6">
         <Button asChild variant="ghost" size="sm" icon={<X />} className="-ml-2">
           <Link
             href={exitHref(pathname)}

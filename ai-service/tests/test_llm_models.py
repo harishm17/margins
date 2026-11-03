@@ -69,6 +69,13 @@ class TestResolveModel:
         assert resolve_model("topic_quiz") == ModelChoice("claude-sonnet-5-5", "medium")
         assert resolve_model("section_notes").model == "claude-opus-5-5"  # the others are unaffected
 
+    def test_concepts_follow_the_topics_model_until_set(self, monkeypatch):
+        monkeypatch.setattr(settings, "MODEL_CONCEPTS", "")
+        monkeypatch.setattr(settings, "MODEL_TOPICS", "claude-sonnet-5-5:medium")
+        assert resolve_model("extract_concepts") == ModelChoice("claude-sonnet-5-5", "medium")
+        monkeypatch.setattr(settings, "MODEL_CONCEPTS", "claude-opus-5-5:low")
+        assert resolve_model("extract_concepts") == ModelChoice("claude-opus-5-5", "low")
+
     def test_unset_purposes_follow_anthropic_model_and_fast_model(self, monkeypatch):
         monkeypatch.setattr(settings, "MODEL_NOTES", "")
         monkeypatch.setattr(settings, "MODEL_GRADING", "")
@@ -114,7 +121,7 @@ class TestSettings:
     def test_the_spec_settings_all_exist_with_the_spec_names(self):
         assert set(MODEL_SETTINGS) == {
             "MODEL_NOTES", "MODEL_EXAMPLES", "MODEL_PRACTICE", "MODEL_QUIZ", "MODEL_EXAM",
-            "MODEL_GRADING", "MODEL_TOPICS", "MODEL_CHAT", "MODEL_VOICE", "MODEL_VALIDATION",
+            "MODEL_GRADING", "MODEL_TOPICS", "MODEL_CONCEPTS", "MODEL_WARMUP", "MODEL_GAP_EXPLAINER", "MODEL_ROUTER", "MODEL_TUTOR", "MODEL_RECALL_GRADING", "MODEL_CHAT", "MODEL_VOICE", "MODEL_VALIDATION",
         }
 
     def test_new_retry_and_concurrency_defaults(self):
@@ -150,3 +157,10 @@ def test_no_llm_call_leaves_out_its_purpose():
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in methods:
                 assert any(kw.arg == "purpose" for kw in node.keywords), f"{path.name}:{node.lineno} has no purpose"
+
+
+def test_the_tutor_uses_sonnet_at_low_effort_and_the_leak_judge_the_router_model(monkeypatch):
+    monkeypatch.setattr(settings, "MODEL_TUTOR", Settings.model_fields["MODEL_TUTOR"].default)
+    monkeypatch.setattr(settings, "MODEL_ROUTER", Settings.model_fields["MODEL_ROUTER"].default)
+    assert resolve_model("tutor") == ModelChoice("claude-sonnet-5-5", "low")
+    assert resolve_model("router") == ModelChoice("claude-haiku-5-5", "low")

@@ -11,6 +11,16 @@ export function minutesLabel(minutes: number): string {
   return minutes === 1 ? '1 minute' : `${minutes} minutes`
 }
 
+/**
+ * The summary's line about the session: "You talked for 3 minutes.", "You typed for 3 minutes and sent 4 messages.".
+ * The verb follows how the student answered, so a session of typed answers is not "talked".
+ */
+export function sessionLine(summary: { minutes: number; exchanges: number; typed: number }, withMessages: boolean): string {
+  const verb = summary.typed === 0 ? 'talked' : summary.typed >= summary.exchanges ? 'typed' : 'talked and typed'
+  const base = `You ${verb} for ${minutesLabel(summary.minutes)}`
+  return withMessages ? `${base} and sent ${summary.exchanges} ${summary.exchanges === 1 ? 'message' : 'messages'}.` : `${base}.`
+}
+
 /** Cut a long question to one line of the summary list, on a word boundary. */
 export function clip(text: string, max = 110): string {
   const clean = text.replace(/\s+/g, ' ').trim()

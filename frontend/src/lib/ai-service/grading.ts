@@ -1,4 +1,5 @@
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import type { RawQuizAnswer } from '@/lib/learning/quiz-answers'
 
 export type GradedQuestion = {
   question_index: number
@@ -10,6 +11,10 @@ export type GradedQuestion = {
   needs_review: boolean
   /** Short answers: the verdict on each key point, in rubric order. */
   criteria?: { point: string; result: 'met' | 'partly' | 'not_met' }[]
+  /** Short answers that fell short: the tested concept the gap is in, when the grader could say. */
+  blamed_concept_id?: string
+  /** Short answers: the specific wrong idea the answer states, when it states one. */
+  misconception?: string
 }
 
 export type GradeResult = {
@@ -78,14 +83,41 @@ async function errorCode(response: Response): Promise<string | null> {
 
 const GRADING_TIMEOUT_MS = 90_000
 
+/** Question types the grader marks by rule, with no model: they can be graded while the AI is down (spec 18.9). */
+const RULE_GRADED_TYPES = new Set(['multiple_choice', 'true_false', 'numerical'])
+
+/** Whether a stored question is graded by rule (multiple choice, true or false, numerical). */
+export function ruleGradable(question: unknown): boolean {
+  const type = question && typeof question === 'object' ? (question as { question_type?: unknown }).question_type : undefined
+  return typeof type === 'string' && RULE_GRADED_TYPES.has(type)
+}
+
+/** The indexes of the rule-gradable questions, in order. */
+export function ruleGradableIndexes(questions: unknown[]): number[] {
+  return questions.flatMap((question, index) => (ruleGradable(question) ? [index] : []))
+}
+
 /**
  * Grade answers against questions the server loaded from its own database.
- * `answers` maps question index (as a string) to the student's answer.
+ * `answers` maps question index (as a string) to the student's answer, or to `{ answer, thinking }`
+ * when the student showed their thinking (the short-answer grader reads it as untrusted data).
+ *
+ * `only` limits the grading to those question indexes (the rule-gradable ones while the AI is down). The service
+ * sees just those questions; the result is given back under the original indexes, and its totals cover only them.
  */
 export async function gradeAnswers(
   questions: unknown[],
-  answers: Record<string, string>
+  answers: Record<string, RawQuizAnswer>,
+  only?: number[]
 ): Promise<GradeResult> {
+  if (only) {
+    const picked = [...new Set(only)].filter((index) => index >= 0 && index < questions.length).sort((a, b) => a - b)
+    const subset = await gradeAnswers(
+      picked.map((index) => questions[index]),
+      Object.fromEntries(picked.flatMap((index, position) => (answers[String(index)] === undefined ? [] : [[String(position), answers[String(index)]]])))
+    )
+    return { ...subset, graded_questions: subset.graded_questions.map((graded) => ({ ...graded, question_index: picked[graded.question_index] })) }
+  }
   const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 
   let response: Response

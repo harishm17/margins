@@ -4,9 +4,11 @@
  * Pure logic (timers are injected) so it can be tested without a browser. The recognizer
  * (continuous, interim results) reports every result so far; a result is "final" once the
  * recognizer is sure of it. We treat the utterance as finished when everything pending is
- * final and `silenceMs` passes with no new result. If a result stays interim for a long time
+ * final and the end-of-turn wait passes with no new result (end-of-turn.ts: it depends on what
+ * the student is doing and on how the last words end). If a result stays interim for a long time
  * (some browsers never finalise the last phrase) `staleInterimMs` commits it anyway.
  */
+import { END_OF_TURN_CAP_MS, END_OF_TURN_WAIT_MS } from '@/lib/voice/turn-contract'
 
 export type SpeechResult = { transcript: string; isFinal: boolean }
 
@@ -15,8 +17,9 @@ export type Timers = {
   clear: (handle: unknown) => void
 }
 
-export const SILENCE_MS = 800
 export const STALE_INTERIM_MS = 2500
+/** The quiet that makes the screen say "still listening" (the wait itself is longer). */
+export const HOLD_AFTER_MS = 700
 /** Shorter than this (after trimming) is noise ("uh", a click) and is dropped. */
 export const MIN_UTTERANCE_CHARS = 2
 
@@ -40,15 +43,26 @@ export function isSpeakable(text: string, minChars = MIN_UTTERANCE_CHARS): boole
   return trimmed.length >= minChars && /[\p{L}\p{N}]/u.test(trimmed)
 }
 
+/** What the collector knows when it picks the wait: the words so far and whether the last one is still interim. */
+export type WaitInfo = { text: string; interim: boolean }
+
+/** How a finished utterance ended: `waitedMs` of quiet after the last words, or the student pressed Done. */
+export type CommitInfo = { waitedMs: number; early: boolean }
+
 export type UtteranceCollectorOptions = {
-  silenceMs?: number
+  /** The wait after the last words for these words; default is the short-answer wait. */
+  waitMs?: (info: WaitInfo) => number
   staleInterimMs?: number
+  holdAfterMs?: number
   minChars?: number
   timers?: Timers
+  now?: () => number
   /** A finished utterance, the joined final segments. */
-  onCommit: (text: string) => void
+  onCommit: (text: string, info: CommitInfo) => void
   /** The words heard so far and not yet committed (final and interim together). */
   onInterim?: (text: string) => void
+  /** True once the quiet has lasted `holdAfterMs` with words pending (the wait is running); false when it ends. */
+  onHold?: (holding: boolean) => void
 }
 
 export type UtteranceCollector = {
@@ -58,7 +72,7 @@ export type UtteranceCollector = {
   peek: (results: SpeechResult[]) => string
   /** Forget everything heard so far (echo of the coach, or the mic was paused). */
   skip: (results: SpeechResult[]) => void
-  /** Commit what is pending now, without waiting for silence. */
+  /** Commit what is pending now, without waiting for silence (the Done control, or the recognizer ended). */
   flush: () => void
   /** The recognizer restarted: its result list starts again from zero. */
   reset: () => void
@@ -66,7 +80,9 @@ export type UtteranceCollector = {
 }
 
 export function createUtteranceCollector(options: UtteranceCollectorOptions): UtteranceCollector {
-  const silenceMs = options.silenceMs ?? SILENCE_MS
+  const waitMs = options.waitMs ?? (() => END_OF_TURN_WAIT_MS.short_answer)
+  const holdAfterMs = options.holdAfterMs ?? HOLD_AFTER_MS
+  const now = options.now ?? Date.now
   const staleInterimMs = options.staleInterimMs ?? STALE_INTERIM_MS
   const minChars = options.minChars ?? MIN_UTTERANCE_CHARS
   const timers = options.timers ?? browserTimers
@@ -75,21 +91,34 @@ export function createUtteranceCollector(options: UtteranceCollectorOptions): Ut
   let lastLength = 0
   let pending: SpeechResult[] = []
   let timer: unknown = null
+  let holdTimer: unknown = null
+  let holding = false
+  let lastResultAt = 0
+
+  const setHolding = (next: boolean) => {
+    if (holding === next) return
+    holding = next
+    options.onHold?.(next)
+  }
 
   const clearTimer = () => {
     if (timer !== null) timers.clear(timer)
+    if (holdTimer !== null) timers.clear(holdTimer)
     timer = null
+    holdTimer = null
+    setHolding(false)
   }
 
   const pendingOf = (results: SpeechResult[]) => results.slice(Math.min(consumed, results.length))
 
-  const commit = () => {
+  const commit = (early: boolean) => {
     clearTimer()
+    const waitedMs = Math.max(0, now() - lastResultAt)
     const text = joinTranscripts(pending.map((result) => result.transcript))
     consumed = lastLength
     pending = []
     options.onInterim?.('')
-    if (isSpeakable(text, minChars)) options.onCommit(text)
+    if (isSpeakable(text, minChars)) options.onCommit(text, { waitedMs, early })
   }
 
   return {
@@ -100,8 +129,12 @@ export function createUtteranceCollector(options: UtteranceCollectorOptions): Ut
       const text = joinTranscripts(pending.map((result) => result.transcript))
       options.onInterim?.(text)
       if (!text) return
-      const waitingOnRecognizer = pending.some((result) => !result.isFinal)
-      timer = timers.set(commit, waitingOnRecognizer ? staleInterimMs : silenceMs)
+      lastResultAt = now()
+      const interim = pending.some((result) => !result.isFinal)
+      const base = waitMs({ text, interim })
+      const wait = Math.min(END_OF_TURN_CAP_MS, interim ? Math.max(base, staleInterimMs) : base)
+      timer = timers.set(() => commit(false), wait)
+      if (wait > holdAfterMs) holdTimer = timers.set(() => setHolding(true), holdAfterMs)
     },
     peek(results) {
       return joinTranscripts(pendingOf(results).map((result) => result.transcript))
@@ -114,7 +147,7 @@ export function createUtteranceCollector(options: UtteranceCollectorOptions): Ut
       options.onInterim?.('')
     },
     flush() {
-      if (pending.length > 0) commit()
+      if (pending.length > 0) commit(true)
       else clearTimer()
     },
     reset() {
@@ -161,18 +194,31 @@ export function isEcho(heard: string, spoken: string): boolean {
 
 // ---- Idle --------------------------------------------------------------------------------
 
-export type IdleAction = 'none' | 'nudge' | 'end'
+export type IdleAction = 'none' | 'gentle' | 'end'
 
-export const VOICE_NUDGE_MS = 45_000
-export const VOICE_END_AFTER_NUDGE_MS = 75_000
+/** Silence after the coach asked something, before the one gentle line (spec 19.8). Never earlier. */
+export const GENTLE_AFTER_MS = 10_000
+/** A talking student who stays silent this long since the coach finished has gone: end the session. */
+export const VOICE_END_MS = 120_000
 export const TEXT_END_MS = 10 * 60_000
 
 /**
  * What to do when the student has been silent for `idleMs` since the coach last finished:
- * ask the coach to nudge once, then end the session; a typing student gets a long wait.
+ * - a talking student gets one gentle line per question after 10 s (not a turn, nothing is recorded),
+ *   and only when the coach is waiting for an answer;
+ * - the session ends after a long silence; a typing student gets a much longer wait and no line,
+ *   since typing is slow and silent.
  */
-export function idleAction(input: { inputMode: 'voice' | 'text'; idleMs: number; nudged: boolean }): IdleAction {
+export function idleAction(input: {
+  inputMode: 'voice' | 'text'
+  idleMs: number
+  /** The gentle line was already shown for this question. */
+  gentleShown: boolean
+  /** The coach asked something and waits (the server's `listen` is not `none`). */
+  waitingForAnswer: boolean
+}): IdleAction {
   if (input.inputMode === 'text') return input.idleMs >= TEXT_END_MS ? 'end' : 'none'
-  if (input.nudged) return input.idleMs >= VOICE_END_AFTER_NUDGE_MS ? 'end' : 'none'
-  return input.idleMs >= VOICE_NUDGE_MS ? 'nudge' : 'none'
+  if (input.idleMs >= VOICE_END_MS) return 'end'
+  if (!input.gentleShown && input.waitingForAnswer && input.idleMs >= GENTLE_AFTER_MS) return 'gentle'
+  return 'none'
 }

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 from pathlib import Path
 
 import asyncpg
@@ -7,8 +8,20 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+def _settings_names():
+    """The environment variables app/config.py reads: its upper-case fields."""
+    source = (Path(__file__).resolve().parents[1] / "app" / "config.py").read_text()
+    return set(re.findall(r"^    ([A-Z][A-Z0-9_]*)\s*:", source, flags=re.MULTILINE))
+
+
 def pytest_configure():
-    os.environ.setdefault("DATABASE_URL", "postgresql://user:pass@localhost:5432/margins")
+    # The suite owns its configuration. A shell that has the app's or the e2e stack's variables set (the
+    # database, the internal token, the service URLs, the environment, the uploads folder) must not change
+    # what the tests see: they would hit a live database and the stack's token instead of their own fakes.
+    # Tests that need a value set it on `settings` themselves.
+    for name in _settings_names():
+        os.environ.pop(name, None)
+    os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost:5432/margins"
     # Always a fake key, even when ai-service/.env holds a real one: tests never call the API.
     os.environ["ANTHROPIC_API_KEY"] = "test-key"
     os.environ["LLM_PROVIDER"] = "anthropic"
@@ -163,3 +176,16 @@ async def db(test_database_url, monkeypatch):
 
         ai_status.reset_local_state()
         await connection.close_db_pool()
+
+
+@pytest.fixture
+def passthrough_support(monkeypatch):
+    """For test files that fake the provider with one canned reply for every call: the answer-key
+    support check is one more call with its own reply type, so the generators get a pass-through.
+    test_support_check.py runs the real check through the real generators."""
+
+    async def keep_all(items, chunks):
+        return items, 0
+
+    for module in ("content_generator.quiz", "exam_generator", "content_generator.warmup", "content_generator.review_items"):
+        monkeypatch.setattr(f"app.services.{module}.check_support", keep_all)

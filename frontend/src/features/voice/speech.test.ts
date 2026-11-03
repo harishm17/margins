@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { defaultLanguageCode, languageTag, pickVoice, scoreVoice, VOICE_LANGUAGES, type VoiceInfo } from './speech'
+import { defaultLanguageCode, isIosPlatform, languageTag, newFinalWords, pickVoice, scoreVoice, VOICE_LANGUAGES, type VoiceInfo } from './speech'
 
 const voices: VoiceInfo[] = [
   { name: 'Albert', lang: 'en-US', localService: true },
@@ -56,5 +56,32 @@ describe('languages', () => {
     assert.equal(defaultLanguageCode('es-MX'), 'es')
     assert.equal(defaultLanguageCode('sv-SE'), 'en')
     assert.equal(defaultLanguageCode(undefined), 'en')
+  })
+})
+
+describe('dictation', () => {
+  it('hands over only the final words not taken yet', () => {
+    const parts = [
+      { transcript: ' the table ', isFinal: true },
+      { transcript: 'rebuilds when', isFinal: true },
+      { transcript: 'it is full', isFinal: false },
+    ]
+    assert.deepEqual(newFinalWords(parts, 0), { words: ['the table', 'rebuilds when'], taken: 2 })
+    assert.deepEqual(newFinalWords(parts, 2), { words: [], taken: 2 })
+    assert.deepEqual(newFinalWords([...parts.slice(0, 2), { transcript: 'it is full', isFinal: true }], 2), { words: ['it is full'], taken: 3 })
+  })
+})
+
+describe('isIosPlatform', () => {
+  it('spots iPhone, iPad and an iPad that says it is a Mac', () => {
+    assert.equal(isIosPlatform({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' }), true)
+    assert.equal(isIosPlatform({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)' }), true)
+    assert.equal(isIosPlatform({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel', maxTouchPoints: 5 }), true)
+  })
+
+  it('does not take a Mac, Android or Windows for iOS', () => {
+    assert.equal(isIosPlatform({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel', maxTouchPoints: 0 }), false)
+    assert.equal(isIosPlatform({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8)' }), false)
+    assert.equal(isIosPlatform({ userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', platform: 'Win32' }), false)
   })
 })

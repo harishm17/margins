@@ -17,10 +17,12 @@ type MasteryIndicatorProps = {
   /** "label": ring and text. "ring": ring only, with a tooltip, for dense lists. */
   variant?: 'label' | 'ring'
   showPercent?: boolean
+  /** Words for "no mastery yet" when something has been done already ("In progress"), instead of "Not started". */
+  emptyLabel?: string
   className?: string
 }
 
-export function MasteryIndicator({ mastery, variant = 'label', showPercent, className }: MasteryIndicatorProps) {
+export function MasteryIndicator({ mastery, variant = 'label', showPercent, emptyLabel, className }: MasteryIndicatorProps) {
   const level = masteryLevel(mastery)
   const ring = (
     <ProgressRing
@@ -44,7 +46,7 @@ export function MasteryIndicator({ mastery, variant = 'label', showPercent, clas
     <span className={cn('inline-flex items-center gap-1.5 text-caption text-fg-2', className)}>
       {ring}
       <span>
-        {masteryLabel(mastery)}
+        {level === 'none' && emptyLabel ? emptyLabel : masteryLabel(mastery)}
         {showPercent && percent !== null ? <span className="tabular">{` ${percent}%`}</span> : null}
       </span>
     </span>

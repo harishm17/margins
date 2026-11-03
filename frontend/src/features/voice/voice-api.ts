@@ -1,5 +1,6 @@
 /** The voice routes, as the browser calls them. */
 import { apiFetch, ApiError, isApiError, parseApiError } from '@/lib/api/client'
+import type { VoiceSessionTerms, VoiceTurnExtras } from '@/lib/voice/turn-contract'
 
 export type VoiceUsage = {
   dailyMinutes: number
@@ -8,7 +9,7 @@ export type VoiceUsage = {
   hasLiveSession: boolean
 }
 
-export type VoiceStyle = 'oral_quiz' | 'guided_notes' | 'topic_conversation'
+export type VoiceStyle = 'oral_quiz' | 'teach_back' | 'guided_reading'
 
 export type CreateSessionInput = {
   projectId: string
@@ -17,9 +18,10 @@ export type CreateSessionInput = {
   style: VoiceStyle
   focus: string | null
   language: string
+  conceptId?: string
 }
 
-export type CreatedSession = {
+export type CreatedSession = Partial<VoiceSessionTerms> & {
   sessionId: string
   questionCount: number
   mode: 'topic_drill' | 'sprint'
@@ -31,6 +33,17 @@ export const getVoiceUsage = (signal?: AbortSignal) => apiFetch<VoiceUsage>('/ap
 
 export const createVoiceSession = (input: CreateSessionInput) =>
   apiFetch<CreatedSession>('/api/voice/session', { method: 'POST', json: input })
+
+/** True for the 422 that says the topic has no claims from the student's pages for teach-back or guided reading. */
+export function requiresClaims(error: unknown): boolean {
+  return (
+    isApiError(error) &&
+    error.status === 422 &&
+    typeof error.body === 'object' &&
+    error.body !== null &&
+    (error.body as { requiresClaims?: unknown }).requiresClaims === true
+  )
+}
 
 /** True for the 422 that asks the student to create notes and a quiz first. */
 export function requiresGeneration(error: unknown): boolean {
@@ -68,7 +81,18 @@ export function patchVoiceSession(patch: SessionPatch, options: { keepalive?: bo
   )
 }
 
-export type TurnMetrics = { ttftMs?: number; ttfaMs?: number; responseMs?: number }
+/** One turn's entry in the session metrics (the fields the metrics route accepts). */
+export type TurnMetrics = {
+  ttftMs?: number
+  ttfaMs?: number
+  responseMs?: number
+  /** Milliseconds of reply audio that played. */
+  speechMs?: number
+  /** From the server starting a graded step to the first thing after it, as the browser saw it. */
+  toolLatencyMs?: number
+  /** 1 when the student cut this turn off. */
+  interrupts?: number
+}
 
 export function postVoiceMetrics(sessionId: string, entry: TurnMetrics): void {
   const clean = Object.fromEntries(
@@ -87,14 +111,19 @@ export function postVoiceMetrics(sessionId: string, entry: TurnMetrics): void {
  * Open one turn. Resolves with the streaming response; a non-200 answer (the stream never
  * started) throws an ApiError whose `code` is `error.details.code` (SESSION_ENDED, ...).
  */
-export async function openVoiceTurn(sessionId: string, utterance: string, signal: AbortSignal): Promise<Response> {
+export async function openVoiceTurn(
+  sessionId: string,
+  utterance: string,
+  signal: AbortSignal,
+  extras: VoiceTurnExtras = {}
+): Promise<Response> {
   let response: Response
   try {
     response = await fetch('/api/voice/turn', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' },
-      body: JSON.stringify({ sessionId, utterance }),
+      body: JSON.stringify({ sessionId, utterance, ...extras }),
       signal,
     })
   } catch (error) {

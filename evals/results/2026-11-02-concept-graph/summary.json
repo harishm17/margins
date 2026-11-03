@@ -1,0 +1,582 @@
+{
+  "label": "concept-graph",
+  "date": "2026-11-02",
+  "code": {
+    "commit": "e76d188fef2d888686106922dbf125451e1912af",
+    "branch": "feat/v3-map",
+    "app_dirty": false
+  },
+  "config": {
+    "corpora": [
+      "mit-18.05"
+    ],
+    "types": [
+      "concepts",
+      "warmup"
+    ],
+    "params": {
+      "examples": 3,
+      "questions": 10,
+      "difficulty": "medium",
+      "detail_level": "comprehensive"
+    },
+    "models": [
+      {
+        "slug": "sonnet-low",
+        "label": "sonnet:low",
+        "model_id": "claude-sonnet-5-5",
+        "effort": "low"
+      }
+    ],
+    "judge": null,
+    "mock": false,
+    "seed": 0,
+    "topics_source": "the app's course planner"
+  },
+  "topics": {
+    "mit-18.05": {
+      "all": [
+        {
+          "id": "5f6b40ab-708b-4830-b2db-52fa376b2c3b",
+          "name": "Sets and counting principles",
+          "description": "Set notation, Venn diagrams, inclusion-exclusion and the rule of product.",
+          "keywords": [
+            "sets",
+            "Venn diagram",
+            "inclusion-exclusion",
+            "rule of product",
+            "complement"
+          ],
+          "unit": "Counting and Sets",
+          "objectives": [
+            "use set notation for union, intersection and complement",
+            "visualize set operations with Venn diagrams",
+            "apply inclusion-exclusion to count elements",
+            "apply the rule of product to count outcomes"
+          ],
+          "estimated_minutes": 45
+        },
+        {
+          "id": "b00aff8c-2b5e-4698-a5ad-6a702ef35168",
+          "name": "Permutations and combinations",
+          "description": "Counting ordered and unordered selections and using them to compute probabilities.",
+          "keywords": [
+            "permutations",
+            "combinations",
+            "n choose k",
+            "factorial",
+            "counting probability"
+          ],
+          "unit": "Counting and Sets",
+          "objectives": [
+            "count permutations of a set",
+            "compute combinations with binomial coefficients",
+            "compute probabilities by counting equally likely outcomes"
+          ],
+          "estimated_minutes": 40
+        },
+        {
+          "id": "4b87e593-f091-4c2e-b48a-40eedaa9d12a",
+          "name": "Conditional probability and total probability",
+          "description": "Defining conditional probability and using the multiplication rule, law of total probability and trees.",
+          "keywords": [
+            "conditional probability",
+            "multiplication rule",
+            "law of total probability",
+            "partition",
+            "probability trees",
+            "urns"
+          ],
+          "unit": "Conditional Probability and Bayes",
+          "objectives": [
+            "compute conditional probability from the definition",
+            "use the multiplication rule",
+            "apply the law of total probability over a partition",
+            "organize computations with probability trees"
+          ],
+          "estimated_minutes": 60
+        },
+        {
+          "id": "21fb1f3a-2773-4146-9c0d-ed202360f983",
+          "name": "Independence of events",
+          "description": "Defining and checking independence of events and its paradoxes.",
+          "keywords": [
+            "independence",
+            "independent events",
+            "P(A\u2229B)=P(A)P(B)",
+            "paradox"
+          ],
+          "unit": "Conditional Probability and Bayes",
+          "objectives": [
+            "state the definition of independent events",
+            "check whether two events are independent",
+            "explain why a probability-zero event is independent of itself"
+          ],
+          "estimated_minutes": 25
+        },
+        {
+          "id": "698c99d8-8064-415f-ba5e-355fc41b6776",
+          "name": "Bayes' theorem and base rate fallacy",
+          "description": "Inverting conditional probabilities with Bayes' theorem, illustrated by screening tests.",
+          "keywords": [
+            "Bayes' theorem",
+            "base rate fallacy",
+            "screening test",
+            "false positive",
+            "inverting conditional probability"
+          ],
+          "unit": "Conditional Probability and Bayes",
+          "objectives": [
+            "compute an inverted conditional probability with Bayes' theorem",
+            "explain the base rate fallacy",
+            "analyze screening test false positives"
+          ],
+          "estimated_minutes": 55
+        },
+        {
+          "id": "a3bf754a-f85a-4ca8-9fd1-d5a604bb688c",
+          "name": "Random variables, pmf and cdf",
+          "description": "Random variables as payoff functions and their probability mass and cumulative distribution functions.",
+          "keywords": [
+            "random variable",
+            "pmf",
+            "cdf",
+            "probability mass function",
+            "distribution function"
+          ],
+          "unit": "Discrete Random Variables",
+          "objectives": [
+            "define a discrete random variable on a sample space",
+            "write the pmf of a random variable",
+            "compute and graph a cdf",
+            "state properties of the cdf"
+          ],
+          "estimated_minutes": 50
+        },
+        {
+          "id": "b8554e48-ad28-492b-9da9-a18dfcb31cba",
+          "name": "Bernoulli, binomial, geometric distributions",
+          "description": "Named discrete distributions, their models and pmfs, and arithmetic with random variables.",
+          "keywords": [
+            "Bernoulli",
+            "binomial",
+            "geometric",
+            "uniform distribution",
+            "indicator variables"
+          ],
+          "unit": "Discrete Random Variables",
+          "objectives": [
+            "identify Bernoulli, binomial, geometric and uniform models",
+            "derive the binomial pmf by counting",
+            "compute geometric probabilities",
+            "add random variables and count successes with indicators"
+          ],
+          "estimated_minutes": 65
+        },
+        {
+          "id": "bc4e4c31-09f9-4bfa-b965-1318d388d82e",
+          "name": "Bayes tables: prior, likelihood, posterior",
+          "description": "Terminology and tabular form of Bayes' theorem for updating discrete priors.",
+          "keywords": [
+            "Bayesian updating",
+            "prior",
+            "likelihood",
+            "posterior",
+            "Bayes table",
+            "discrete prior"
+          ],
+          "unit": "Bayesian Updating Discrete Priors",
+          "objectives": [
+            "identify hypotheses, data, prior, likelihood and posterior",
+            "build a Bayesian update table",
+            "compute prior and posterior pmfs",
+            "distinguish probability of data from probability of hypotheses"
+          ],
+          "estimated_minutes": 50
+        },
+        {
+          "id": "879b66d2-c502-49ed-91fc-32885339f893",
+          "name": "Repeated updating and screening",
+          "description": "Updating posteriors with successive data and revisiting the base rate fallacy.",
+          "keywords": [
+            "sequential updating",
+            "posterior as prior",
+            "base rate fallacy",
+            "screening test"
+          ],
+          "unit": "Bayesian Updating Discrete Priors",
+          "objectives": [
+            "use a posterior as the next prior",
+            "update on multiple data points at once",
+            "solve a screening test example with a Bayes table"
+          ],
+          "estimated_minutes": 25
+        }
+      ],
+      "selected": [
+        {
+          "id": "5f6b40ab-708b-4830-b2db-52fa376b2c3b",
+          "name": "Sets and counting principles",
+          "description": "Set notation, Venn diagrams, inclusion-exclusion and the rule of product.",
+          "keywords": [
+            "sets",
+            "Venn diagram",
+            "inclusion-exclusion",
+            "rule of product",
+            "complement"
+          ],
+          "unit": "Counting and Sets",
+          "objectives": [
+            "use set notation for union, intersection and complement",
+            "visualize set operations with Venn diagrams",
+            "apply inclusion-exclusion to count elements",
+            "apply the rule of product to count outcomes"
+          ],
+          "estimated_minutes": 45,
+          "index": 0,
+          "key": "t00-sets-and-counting-principles"
+        },
+        {
+          "id": "21fb1f3a-2773-4146-9c0d-ed202360f983",
+          "name": "Independence of events",
+          "description": "Defining and checking independence of events and its paradoxes.",
+          "keywords": [
+            "independence",
+            "independent events",
+            "P(A\u2229B)=P(A)P(B)",
+            "paradox"
+          ],
+          "unit": "Conditional Probability and Bayes",
+          "objectives": [
+            "state the definition of independent events",
+            "check whether two events are independent",
+            "explain why a probability-zero event is independent of itself"
+          ],
+          "estimated_minutes": 25,
+          "index": 3,
+          "key": "t03-independence-of-events"
+        },
+        {
+          "id": "a3bf754a-f85a-4ca8-9fd1-d5a604bb688c",
+          "name": "Random variables, pmf and cdf",
+          "description": "Random variables as payoff functions and their probability mass and cumulative distribution functions.",
+          "keywords": [
+            "random variable",
+            "pmf",
+            "cdf",
+            "probability mass function",
+            "distribution function"
+          ],
+          "unit": "Discrete Random Variables",
+          "objectives": [
+            "define a discrete random variable on a sample space",
+            "write the pmf of a random variable",
+            "compute and graph a cdf",
+            "state properties of the cdf"
+          ],
+          "estimated_minutes": 50,
+          "index": 5,
+          "key": "t05-random-variables-pmf-and-cdf"
+        },
+        {
+          "id": "879b66d2-c502-49ed-91fc-32885339f893",
+          "name": "Repeated updating and screening",
+          "description": "Updating posteriors with successive data and revisiting the base rate fallacy.",
+          "keywords": [
+            "sequential updating",
+            "posterior as prior",
+            "base rate fallacy",
+            "screening test"
+          ],
+          "unit": "Bayesian Updating Discrete Priors",
+          "objectives": [
+            "use a posterior as the next prior",
+            "update on multiple data points at once",
+            "solve a screening test example with a Bayes table"
+          ],
+          "estimated_minutes": 25,
+          "index": 8,
+          "key": "t08-repeated-updating-and-screening"
+        }
+      ]
+    }
+  },
+  "spend": {
+    "generation": 0.3678,
+    "topics": 0.0994,
+    "judge": 0.0,
+    "max_usd": 3.0,
+    "max_judge_usd": 3.0
+  },
+  "stopped": null,
+  "models": {
+    "sonnet-low": {
+      "label": "sonnet:low",
+      "model_id": "claude-sonnet-5-5",
+      "cost": {
+        "per_type": {
+          "concepts": {
+            "generated": 4,
+            "failed": 0,
+            "mean_cost_usd": 0.0445995,
+            "mean_seconds": 16.02
+          },
+          "warmup": {
+            "generated": 3,
+            "failed": 1,
+            "mean_cost_usd": 0.048778666666666665,
+            "mean_seconds": 23.919999999999998
+          }
+        },
+        "mean_cost_per_topic_usd": 0.09337816666666666,
+        "projected_cost_12_topics_usd": 1.120538,
+        "mean_seconds_per_topic": 39.94,
+        "total_cost_usd": 0.367778,
+        "calls": 12,
+        "input_tokens": 90094,
+        "output_tokens": 18759,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "checks": {
+        "concept_topics": 4,
+        "concept_count_ok": 4,
+        "concept_count_mean": 4.75,
+        "claims_total": 52,
+        "claims_matched": 52,
+        "claim_quote_rate": 1.0,
+        "claim_quote_gate_ok": true,
+        "objectives_mapped_ok": 4,
+        "prereq_acyclic_ok": 4,
+        "items_tagged": 13,
+        "items_tagged_valid": 13,
+        "item_concept_id_rate": 1.0,
+        "item_tag_gate_ok": true,
+        "warmup_topics": 3,
+        "warmup_vs_quiz_topics": 0,
+        "warmup_reused_items": 0,
+        "warmup_reuse_gate_ok": null,
+        "topics": 4,
+        "plain_text_latex_fields": 0,
+        "unbalanced_dollar_fields": 0,
+        "bare_currency_fields": 0,
+        "mc_questions": 0,
+        "mc_letter_refs": 0,
+        "mc_letter_refs_strict": 0,
+        "quiz_numeric_questions": 0,
+        "quiz_recall_copied": 0,
+        "quiz_recall_copy_rate": null,
+        "notes_words_mean": null,
+        "notes_in_word_band": 0,
+        "notes_sections_ok": 0,
+        "notes_count": 0,
+        "notes_recap_bullets_ok": 0,
+        "quiz_count_ok": 0,
+        "quiz_count": 0,
+        "solved_count_ok": 0,
+        "solved_count": 0,
+        "interactive_count_ok": 0,
+        "interactive_count": 0,
+        "grounding_share_mean": null,
+        "duplicate_example_pairs": 0,
+        "duplicate_example_details": []
+      },
+      "failures": [
+        {
+          "corpus": "mit-18.05",
+          "topic": "Random variables, pmf and cdf",
+          "type": "warmup",
+          "error": "LLMOutputError: Warm-up had 1 usable questions of 5 requested"
+        }
+      ]
+    }
+  },
+  "per_topic_checks": {
+    "sonnet-low": {
+      "mit-18.05/t00-sets-and-counting-principles": {
+        "types": [
+          "concepts",
+          "warmup"
+        ],
+        "latex": {
+          "plain_text_latex": 0,
+          "unbalanced_dollar": 0,
+          "bare_currency": 0
+        },
+        "latex_details": {},
+        "concepts": {
+          "claim_quotes": {
+            "total": 14,
+            "matched": 14,
+            "rate": 1.0,
+            "ok": true,
+            "failures": []
+          },
+          "count": {
+            "count": 6,
+            "range": [
+              3,
+              8
+            ],
+            "ok": true
+          },
+          "objectives": {
+            "objectives": 4,
+            "unmapped": [],
+            "ok": true
+          },
+          "prereq_acyclic": {
+            "ok": true,
+            "cycle": []
+          }
+        },
+        "item_concept_ids": {
+          "total": 4,
+          "valid": 4,
+          "rate": 1.0,
+          "ok": true,
+          "invalid": []
+        }
+      },
+      "mit-18.05/t03-independence-of-events": {
+        "types": [
+          "concepts",
+          "warmup"
+        ],
+        "latex": {
+          "plain_text_latex": 0,
+          "unbalanced_dollar": 0,
+          "bare_currency": 0
+        },
+        "latex_details": {},
+        "concepts": {
+          "claim_quotes": {
+            "total": 13,
+            "matched": 13,
+            "rate": 1.0,
+            "ok": true,
+            "failures": []
+          },
+          "count": {
+            "count": 4,
+            "range": [
+              3,
+              8
+            ],
+            "ok": true
+          },
+          "objectives": {
+            "objectives": 3,
+            "unmapped": [],
+            "ok": true
+          },
+          "prereq_acyclic": {
+            "ok": true,
+            "cycle": []
+          }
+        },
+        "item_concept_ids": {
+          "total": 5,
+          "valid": 5,
+          "rate": 1.0,
+          "ok": true,
+          "invalid": []
+        }
+      },
+      "mit-18.05/t05-random-variables-pmf-and-cdf": {
+        "types": [
+          "concepts"
+        ],
+        "latex": {
+          "plain_text_latex": 0,
+          "unbalanced_dollar": 0,
+          "bare_currency": 0
+        },
+        "latex_details": {},
+        "concepts": {
+          "claim_quotes": {
+            "total": 15,
+            "matched": 15,
+            "rate": 1.0,
+            "ok": true,
+            "failures": []
+          },
+          "count": {
+            "count": 5,
+            "range": [
+              3,
+              8
+            ],
+            "ok": true
+          },
+          "objectives": {
+            "objectives": 4,
+            "unmapped": [],
+            "ok": true
+          },
+          "prereq_acyclic": {
+            "ok": true,
+            "cycle": []
+          }
+        }
+      },
+      "mit-18.05/t08-repeated-updating-and-screening": {
+        "types": [
+          "concepts",
+          "warmup"
+        ],
+        "latex": {
+          "plain_text_latex": 0,
+          "unbalanced_dollar": 0,
+          "bare_currency": 0
+        },
+        "latex_details": {},
+        "concepts": {
+          "claim_quotes": {
+            "total": 10,
+            "matched": 10,
+            "rate": 1.0,
+            "ok": true,
+            "failures": []
+          },
+          "count": {
+            "count": 4,
+            "range": [
+              3,
+              8
+            ],
+            "ok": true
+          },
+          "objectives": {
+            "objectives": 3,
+            "unmapped": [],
+            "ok": true
+          },
+          "prereq_acyclic": {
+            "ok": true,
+            "cycle": []
+          }
+        },
+        "item_concept_ids": {
+          "total": 4,
+          "valid": 4,
+          "rate": 1.0,
+          "ok": true,
+          "invalid": []
+        }
+      }
+    }
+  },
+  "judge": null,
+  "judge_info": {},
+  "samples": {
+    "corpus": "mit-18.05",
+    "topic": "t00-sets-and-counting-principles",
+    "models": {
+      "sonnet-low": {
+        "notes_section": null,
+        "quiz_questions": null
+      }
+    }
+  }
+}

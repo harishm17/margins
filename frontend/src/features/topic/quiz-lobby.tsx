@@ -1,17 +1,22 @@
 'use client'
 
 import * as React from 'react'
-import { CaretDown, Plus } from '@phosphor-icons/react/dist/ssr'
+import { CaretDown, Lightning, Plus, Sparkle } from '@phosphor-icons/react/dist/ssr'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import { formatDate, formatDateTime, formatScore, pluralize } from '@/lib/format'
+import { RETRY_WAIT_TEXT } from '@/lib/learning/missed'
+import { localDateParts } from '@/lib/learning/study-plan-time'
+import { browserTimeZone } from '@/lib/utils/timezone'
 import type { QuizAttemptData, QuizSetData, TopicReview } from '@/server/queries/topic'
 import { cn } from '@/lib/utils'
 import { GenerateOptions } from './generation-ui'
 import { ReviewActions } from './review-actions'
 import { ReviewList, buildEntries } from './quiz-review-list'
 import { ViewSkeleton } from './skeletons'
+import { useGeneration } from './topic-provider'
 import { useHydrated } from './use-hydrated'
 
 const TYPE_LABELS: Record<string, string> = {
@@ -27,6 +32,9 @@ export function questionMix(set: QuizSetData): string {
   for (const question of set.questions) seen.add(question.question_type)
   return [...seen].map((type) => TYPE_LABELS[type] ?? type).join(', ')
 }
+
+/** The prediction select's "no prediction" value (an option value cannot be empty). */
+const SKIP = 'skip'
 
 const scoreTone = (score: number) => (score >= 70 ? 'accent' : 'neutral')
 
@@ -64,7 +72,7 @@ function Attempt({
           size="sm"
           variant="ghost"
           aria-expanded={open}
-          aria-controls={panelId}
+          aria-controls={open ? panelId : undefined}
           onClick={() => setOpen((current) => !current)}
         >
           <span className="inline-flex items-center gap-1">
@@ -94,18 +102,43 @@ type QuizLobbyProps = {
   attempts: QuizAttemptData[]
   setId: string
   onSetChange: (id: string) => void
-  onStart: () => void
+  /** `predicted` is how many questions the student expects to get right, when they said. */
+  onStart: (predicted?: number) => void
   /** A new set is being written: the lobby body gives way to a skeleton. */
   generating: boolean
+  /** A harder quiz was asked for (the transfer-quiz activity); `fresh` says the open set is a new all-hard one. */
+  harder?: { fresh: boolean }
+  /** A saved quiz on this set: "Resume (6 of 10 answered)". */
+  resume?: { answered: number } | null
+  onResume?: () => void
+  /** The server refused to start this set again: it was taken today (RETRY_TOMORROW). */
+  refused?: boolean
+  /** "New questions": a fresh set at the topic's band. */
+  onNewQuestions?: () => void
+  /** The quiz was just left with "Save and finish later". */
+  savedNote?: boolean
+}
+
+const dayOf = (instant: Date, timeZone: string) => {
+  const { year, month, day } = localDateParts(instant, timeZone)
+  return `${year}-${month}-${day}`
 }
 
 /** Pick a set, see how you did, start, or create a new set. */
-export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, onSetChange, onStart, generating }: QuizLobbyProps) {
+export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, onSetChange, onStart, generating, harder, resume, onResume, refused, onNewQuestions, savedNote }: QuizLobbyProps) {
   const hydrated = useHydrated()
+  const { generate, starting } = useGeneration('quiz')
   const set = sets.find((item) => item.id === setId) ?? sets[0]
   const setAttempts = attempts.filter((attempt) => attempt.setId === set.id)
   const best = setAttempts.length > 0 ? Math.max(...setAttempts.map((attempt) => attempt.score)) : null
   const multipleSets = sets.length > 1
+  // The same questions open from the next local day (spec 7.3): today a set that was taken offers new questions instead.
+  const hydratedToday = hydrated ? dayOf(new Date(), browserTimeZone()) : null
+  const takenToday = refused === true || (hydratedToday !== null && setAttempts.some((attempt) => dayOf(new Date(attempt.takenAt), browserTimeZone()) === hydratedToday))
+  const [predicted, setPredicted] = React.useState(SKIP)
+  const predictedId = React.useId()
+  // A prediction was for the set it was made on.
+  const predictedHere = predicted === SKIP || Number(predicted) <= set.questions.length ? predicted : SKIP
 
   return (
     <div className="max-w-[720px]">
@@ -118,6 +151,35 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
         </GenerateOptions>
       </div>
 
+      {harder && !generating ? (
+        <section aria-labelledby="harder-heading" className="mt-5 rounded-card border border-border bg-surface-2 p-4">
+          <h3 id="harder-heading" className="flex items-center gap-2 text-body-strong text-fg">
+            <Lightning aria-hidden="true" className="size-4 text-accent" />A harder quiz
+          </h3>
+          {harder.fresh ? (
+            <p className="mt-1 text-small text-fg-2">
+              Every question in this set is hard, and you have not taken it yet. It checks that what you know holds up on new questions.
+            </p>
+          ) : (
+            <>
+              <p className="mt-1 text-small text-fg-2">
+                You know this topic well. A set of hard questions you have not seen checks that it holds up on new questions.
+              </p>
+              <Button
+                className="mt-3"
+                size="sm"
+                variant="primary"
+                icon={<Lightning />}
+                loading={starting}
+                onClick={() => void generate('regenerate', { question_count: 10, difficulty_level: 'hard' })}
+              >
+                Create a harder set
+              </Button>
+            </>
+          )}
+        </section>
+      ) : null}
+
       {review.due && !generating ? (
         <section aria-labelledby="due-review-heading" className="mt-5 rounded-card border border-border bg-surface-2 p-4">
           <h3 id="due-review-heading" className="text-body-strong text-fg">
@@ -125,11 +187,13 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
           </h3>
           <p className="mt-1 text-small text-fg-2">
             {review.missedCount > 0
-              ? `You missed ${review.missedCount === 1 ? 'a question' : `${review.missedCount} questions`} lately. Go over ${review.missedCount === 1 ? 'it' : 'them'} again, or take a fresh set.`
+              ? `You missed ${review.missedCount === 1 ? 'a question' : `${review.missedCount} questions`} lately. ${
+                  review.retryOpensAt ? 'Fix it now with new questions' : `Go over ${review.missedCount === 1 ? 'it' : 'them'} again, or take a fresh set`
+                }.`
               : 'Take a fresh set of questions to keep this topic strong.'}
           </p>
           <div className="mt-3">
-            <ReviewActions courseId={courseId} topicId={topicId} missedCount={review.missedCount} />
+            <ReviewActions courseId={courseId} topicId={topicId} missedCount={review.missedCount} retryOpensAt={review.retryOpensAt} />
           </div>
         </section>
       ) : null}
@@ -172,9 +236,57 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
             Answers are checked when you submit. Short answers are graded with feedback.
           </p>
 
-          <Button className="mt-6" size="lg" variant="primary" onClick={onStart}>
-            Start quiz
-          </Button>
+          <div className="mt-5">
+            <label htmlFor={predictedId} className="text-small text-fg-2">
+              How many do you expect to get right? Optional.
+            </label>
+            <Select
+              id={predictedId}
+              value={predictedHere}
+              onValueChange={setPredicted}
+              className="mt-1.5 w-56"
+              placeholder="Skip this"
+              options={[
+                { value: SKIP, label: 'Skip this' },
+                ...Array.from({ length: set.questions.length + 1 }, (_unused, count) => ({
+                  value: String(count),
+                  label: `${count} of ${set.questions.length}`,
+                })),
+              ]}
+            />
+          </div>
+
+          {savedNote ? (
+            <InlineAlert className="mt-5" tone="accent">
+              Your answers are saved. Pick up where you left off from this quiz&apos;s page.
+            </InlineAlert>
+          ) : null}
+
+          {resume && onResume ? (
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <Button size="lg" variant="primary" onClick={onResume}>
+                Resume ({resume.answered} of {set.questions.length} answered)
+              </Button>
+              {!takenToday ? (
+                <Button size="lg" variant="ghost" onClick={() => onStart(predictedHere === SKIP ? undefined : Number(predictedHere))}>
+                  Start over
+                </Button>
+              ) : null}
+            </div>
+          ) : takenToday ? (
+            <div className="mt-6" data-testid="retry-tomorrow">
+              <p className="text-small text-fg-2">{RETRY_WAIT_TEXT}</p>
+              {onNewQuestions ? (
+                <Button className="mt-3" size="lg" variant="primary" icon={<Sparkle />} onClick={onNewQuestions}>
+                  New questions
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <Button className="mt-6" size="lg" variant="primary" onClick={() => onStart(predictedHere === SKIP ? undefined : Number(predictedHere))}>
+              Start quiz
+            </Button>
+          )}
         </>
       )}
 

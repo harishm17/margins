@@ -6,8 +6,8 @@ import { addContent, createCourse, createEmptyCourse, addMaterial, makeDue, quiz
 
 test.use({ timezoneId: ZONE })
 
-async function dueCourse(page: Page, label: string, due: number) {
-  const user = await signUpAndIn(page, label)
+async function dueCourse(page: Page, label: string, due: number, options: { own?: boolean } = {}) {
+  const user = await signUpAndIn(page, label, options)
   const emptyId = await createEmptyCourse(page, 'Wayfinding course')
   await addMaterial(page, emptyId)
   const names = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'].slice(0, Math.max(due, 2))
@@ -21,7 +21,8 @@ test.describe('one next step', () => {
   test('Home, the overview, the sidebar and the Review page name the same number of due reviews', async ({ page, context }) => {
     test.setTimeout(240_000)
     await setZoneCookie(context)
-    const { course } = await dueCourse(page, 'agree', 3)
+    // Its own account: Home counts and orders every course an account has, which other specs change.
+    const { course } = await dueCourse(page, 'agree', 3, { own: true })
     const base = `/courses/${course.courseId}`
 
     await page.goto(base)
@@ -33,9 +34,8 @@ test.describe('one next step', () => {
     await expect(upNext).not.toContainText("You're done for today")
 
     await page.goto('/home')
-    // Home counts every course of the account (the specs share one), so it is at least this course's three.
-    const homeCount = Number(/\((\d+)\)/.exec((await page.getByRole('heading', { level: 2, name: /Due for review/ }).textContent()) ?? '')?.[1])
-    expect(homeCount).toBeGreaterThanOrEqual(3)
+    // The account has this course only, so Home counts exactly its three.
+    await expect(page.getByRole('heading', { level: 2, name: /Due for review/ })).toContainText('(3)')
     await expect(page.getByRole('region', { name: /Up next/ })).toContainText('Review ')
 
     await page.goto(`${base}/review`)
@@ -131,16 +131,16 @@ test.describe('a phone', () => {
     expect(more!.height).toBeGreaterThanOrEqual(44)
     await expect(tabs.getByRole('link', { name: 'Topics' })).toHaveAttribute('aria-current', 'page')
 
-    // The course and the unit are named above the page name, and all five study tabs are on screen.
+    // The course and the unit are named above the page name, and every step of its path (a course with no concepts: Read, Practice, Quiz) is on screen.
     const crumb = page.getByRole('navigation', { name: 'Breadcrumb' })
     await expect(crumb.getByText(/A course with a long name for a phone \/ Unit with a long title/)).toBeVisible()
-    const study = page.getByRole('navigation', { name: 'Study path' })
+    const study = page.getByRole('navigation', { name: 'Topic path' })
     const edges = await study.evaluate((nav) => {
       const links = [...nav.querySelectorAll('a')].filter((link) => link.offsetParent !== null)
       const row = nav.firstElementChild as HTMLElement
       return { count: links.length, scrolls: row.scrollWidth > row.clientWidth + 1, sw: row.scrollWidth, cw: row.clientWidth }
     })
-    expect(edges.count).toBe(5)
+    expect(edges.count).toBe(3)
     expect(edges.scrolls, JSON.stringify(edges)).toBe(false)
 
     // More holds the other places in the course.

@@ -7,6 +7,7 @@ JSON (see `turn` below). The Next.js server owns the conversation and runs the t
 import json
 import logging
 import re
+import time
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from fastapi import APIRouter
@@ -18,6 +19,7 @@ from app.db.connection import execute_one
 from app.services import ai_status
 from app.services.budget import over_budget_message, record_usage_event
 from app.services.chat import usage_payload
+from app.services.content_generator.context import fetch_concepts, format_concept_block, resolve_concept_ids
 from app.services.llm.base import (
     LLMError,
     LLMMessage,
@@ -81,6 +83,8 @@ def _filter_concept_questions(questions: List[Dict[str, Any]]) -> List[Dict[str,
 
 class DrillGenerateRequest(BaseModel):
     topic: Optional[str] = None
+    # When given, the questions are tagged with this topic's concepts.
+    topic_id: Optional[str] = None
     notes: str
     count: int = Field(default=10, ge=3, le=20)
     difficulty: str = Field(default="medium")
@@ -123,7 +127,13 @@ async def _record_voice_usage(payload: VoiceTurnRequest, usage: Optional[LLMUsag
 
 
 async def stream_voice_turn(provider: LLMProvider, payload: VoiceTurnRequest) -> AsyncIterator[Dict[str, Any]]:
-    """Events for one model call. Failures become an `error` event, never an exception."""
+    """Events for one model call. Failures become an `error` event, never an exception.
+
+    The `done` event carries `timing` (spec 19.10): milliseconds from the start of the call to its first text or tool call,
+    and to the end. The same is logged, so the service's own share of a turn's latency is visible apart from the web app's.
+    """
+    started = time.perf_counter()
+    first_token_ms: Optional[int] = None
     try:
         async for event in provider.stream_turn(
             system=payload.system,
@@ -132,17 +142,22 @@ async def stream_voice_turn(provider: LLMProvider, payload: VoiceTurnRequest) ->
             max_tokens=settings.VOICE_MAX_TOKENS,
             purpose="voice",
         ):
+            if first_token_ms is None and isinstance(event, (TurnText, TurnToolUse)):
+                first_token_ms = round((time.perf_counter() - started) * 1000)
             if isinstance(event, TurnText):
                 yield {"type": "text", "delta": event.text}
             elif isinstance(event, TurnToolUse):
                 yield {"type": "tool_use", "id": event.id, "name": event.name, "input": event.input}
             elif isinstance(event, TurnDone):
                 await _record_voice_usage(payload, event.usage)
+                timing = {"ttft_ms": first_token_ms, "total_ms": round((time.perf_counter() - started) * 1000)}
+                logger.info("Voice call session=%s ttft_ms=%s total_ms=%s", payload.session_id, timing["ttft_ms"], timing["total_ms"])
                 yield {
                     "type": "done",
                     "stop_reason": event.stop_reason,
                     "content": event.content,
                     "usage": usage_payload(event.usage),
+                    "timing": timing,
                 }
     except LLMError as exc:
         logger.warning("Voice turn failed: %s: %s", exc.code, exc)
@@ -204,6 +219,14 @@ async def turn(payload: VoiceTurnRequest) -> Union[StreamingResponse, JSONRespon
     )
 
 
+@router.post("/retention")
+async def purge_transcripts():
+    """Delete the voice transcripts older than VOICE_RETENTION_DAYS now (the timer does it daily). Evidence events stay."""
+    from app.services.voice_retention import purge_voice_transcripts
+
+    return await purge_voice_transcripts()
+
+
 @router.post("/generate-drill")
 async def generate_concept_drill(
     payload: DrillGenerateRequest,
@@ -218,6 +241,13 @@ async def generate_concept_drill(
         "Focus on definitions, intuition, relationships, trade-offs, comparisons, and reasoning."
     )
 
+    concepts: List[Dict[str, Any]] = []
+    if payload.topic_id:
+        try:
+            concepts = await fetch_concepts(payload.topic_id)
+        except Exception as exc:  # tagging is a bonus: never fail a drill for it
+            logger.warning("Concepts for topic %s unavailable, drill is untagged: %s", payload.topic_id, exc)
+
     user_prompt = f"""
 Topic: {topic_label}
 Difficulty: {payload.difficulty}
@@ -225,7 +255,7 @@ Number of questions: {payload.count}
 
 Source notes:
 {payload.notes}
-
+{format_concept_block(concepts)}
 Write {payload.count + DRILL_EXTRA_QUESTIONS} questions a student can answer out loud in under a minute each.
 For each, give 2-4 key points a listener can check, a short sample answer, and the concepts it tests.
 """
@@ -255,12 +285,14 @@ For each, give 2-4 key points a listener can check, a short sample answer, and t
                 "explanation": q.explanation,
                 "difficulty": payload.difficulty,
                 "concepts_tested": [point.strip() for point in q.concepts_tested if point.strip()],
+                "concept_ids": q.concept_ids,
                 "source": "generated",
             }
         )
 
     # Extra questions were requested so the set is still full after the math filter.
     cleaned = _filter_concept_questions(cleaned)[: payload.count]
+    resolve_concept_ids(cleaned, concepts, [])
 
     return {
         "questions": cleaned,

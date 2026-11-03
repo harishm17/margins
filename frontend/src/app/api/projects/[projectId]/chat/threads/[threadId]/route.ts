@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { apiNotFound, apiUnauthorized } from '@/lib/api/errors'
 import { parseStoredCitations } from '@/lib/chat/citations'
+import { parseStoredTutor, turnView } from '@/lib/ask/tutor-message'
+import { getTutorState } from '@/lib/tutor/store'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,15 +33,18 @@ export async function GET(
   const messages = await prisma.chatMessage.findMany({
     where: { threadId },
     orderBy: { createdAt: 'asc' },
-    select: { id: true, role: true, content: true, citations: true, createdAt: true },
+    select: { id: true, role: true, content: true, citations: true, tutor: true, createdAt: true },
   })
+  const state = await getTutorState(userId, 'ask', threadId)
   return NextResponse.json({
-    thread: { id: thread.id, title: thread.title },
+    thread: { id: thread.id, title: thread.title, workedAllowed: state.attempts >= 1 },
     messages: messages.map((m) => ({
       id: m.id,
       role: m.role,
       content: m.content,
       citations: m.role === 'assistant' ? parseStoredCitations(m.citations) : null,
+      // What the reply tutored. The check card's answer stays on the server (GET /api/ask-checks).
+      turn: m.role === 'assistant' ? turnView(parseStoredTutor(m.tutor)) : null,
       createdAt: m.createdAt.toISOString(),
     })),
   })

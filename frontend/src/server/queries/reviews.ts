@@ -1,6 +1,6 @@
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { prisma } from '@/lib/db/prisma'
-import { displayMastery } from '@/lib/learning/mastery-math'
+import { topicStandings } from '@/lib/learning/topic-standing'
 import { dueBoundary } from '@/lib/learning/next-step'
 
 export type DueReview = {
@@ -18,35 +18,30 @@ export type DueReview = {
  */
 export async function dueReviews(userId: string, timeZone: string, limit = 5): Promise<{ items: DueReview[]; total: number }> {
   await applyPendingQuizResults(userId)
-  const where = { userId, dueAt: { lt: dueBoundary(new Date(), timeZone) }, project: { userId }, topic: { userConfirmed: true } }
-
-  const [rows, total] = await Promise.all([
-    prisma.reviewSchedule.findMany({
-      where,
-      orderBy: { dueAt: 'asc' },
-      take: limit,
-      select: {
-        topicId: true,
-        dueAt: true,
-        mastery: true,
-        intervalDays: true,
-        topic: { select: { name: true } },
-        project: { select: { id: true, name: true } },
-      },
-    }),
-    prisma.reviewSchedule.count({ where }),
-  ])
-
-  const now = Date.now()
+  const now = new Date()
+  const boundary = dueBoundary(now, timeZone).getTime()
+  // Which topics have a schedule at all is the stored row's; when each is due and its mastery are the figures
+  // every screen shows (topic-standing.ts).
+  const rows = await prisma.reviewSchedule.findMany({
+    where: { userId, project: { userId }, topic: { userConfirmed: true } },
+    select: { topicId: true, topic: { select: { name: true } }, project: { select: { id: true, name: true } } },
+  })
+  const standings = await topicStandings(userId, rows.map((row) => row.topicId), now)
+  const due = rows
+    .flatMap((row) => {
+      const standing = standings.get(row.topicId)
+      return standing?.dueAt && standing.dueAt.getTime() < boundary ? [{ row, dueAt: standing.dueAt, mastery: standing.mastery }] : []
+    })
+    .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime())
   return {
-    total,
-    items: rows.map((row) => ({
+    total: due.length,
+    items: due.slice(0, limit).map(({ row, dueAt, mastery }) => ({
       topicId: row.topicId,
       topicName: row.topic.name,
       courseId: row.project.id,
       courseName: row.project.name,
-      dueAt: row.dueAt.toISOString(),
-      mastery: displayMastery(row.mastery, row, now) ?? row.mastery,
+      dueAt: dueAt.toISOString(),
+      mastery: mastery ?? 0,
     })),
   }
 }

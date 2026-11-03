@@ -27,6 +27,15 @@ SOLVED = "solved"
 INTERACTIVE = "interactive"
 QUIZ = "quiz"
 CONTENT_TYPES = (NOTES, SOLVED, INTERACTIVE, QUIZ)
+# Concept-graph types. CONCEPTS is a snapshot of the topic's stored graph (no text a student
+# reads); WARMUP is the topic's warm-up bank, shaped like a quiz.
+CONCEPTS = "concepts"
+WARMUP = "warmup"
+GRAPH_TYPES = (CONCEPTS, WARMUP)
+# concepts_per_topic bounds: the extraction prompt asks for 3-8 (concepts/extractor.py MIN/MAX_CONCEPTS).
+CONCEPTS_PER_TOPIC = (3, 8)
+CLAIM_QUOTE_GATE = 0.98
+WARMUP_REUSE_JACCARD = 0.8
 
 # The notes structure the notes generator asks for today (notes.py `_SECTION_LABELS`). The
 # runner passes the app's own list when it can import it, so this follows a prompt change.
@@ -89,7 +98,7 @@ def iter_text_fields(content_type: str, output) -> Iterator[Tuple[str, str, bool
                 yield f"[{i}].steps[{j}].feedback_incorrect", step.get("feedback_incorrect", ""), False
             for j, concept in enumerate(example.get("key_concepts") or []):
                 yield f"[{i}].key_concepts[{j}]", concept, True
-    elif content_type == QUIZ:
+    elif content_type in (QUIZ, WARMUP):
         for i, question in enumerate(output or []):
             yield f"[{i}].question_text", question.get("question_text", ""), False
             for option in question.get("options") or []:
@@ -471,6 +480,134 @@ def near_duplicate_statements(
     return pairs
 
 
+# ---------------------------------------------------------------------------- concept graph
+#
+# Shapes (what adapters.read_concept_graph stores for the `concepts` type):
+#
+#     {"objective_count": int,
+#      "concepts": [{id, name, objective_indexes}],
+#      "claims":   [{concept_id, chunk_id, quote}],
+#      "edges":    [{source_id, target_id, type}]}
+#
+# Items are the generators' stored dicts; each carries `concept_ids` (and its steps and
+# multiple-choice options may carry `concept_ids` / `confusable_concept_id`).
+
+_QUOTE_MARKS = str.maketrans(
+    {
+        "‘": "'", "’": "'", "‚": "'", "‛": "'", "′": "'",
+        "“": '"', "”": '"', "„": '"', "‟": '"', "″": '"',
+        "‐": "-", "‑": "-", "‒": "-", "–": "-", "—": "-", "―": "-",
+        "−": "-",
+    }
+)
+
+
+def normalize_quote(text: str) -> str:
+    """Whitespace collapsed and curly quotes and dashes made ASCII, the way the app matches a quote
+    to its chunk (concepts/validate.py `normalize`)."""
+    return re.sub(r"\s+", " ", (text or "").translate(_QUOTE_MARKS)).strip()
+
+
+def claim_quote_substring_rate(claims: List[dict], chunk_texts: Dict[str, str]) -> Dict[str, object]:
+    """Share of claim quotes that appear in the chunk they name. Gate: at least 98%.
+
+    A claim whose chunk is not among the topic's excerpts counts as a miss. No claims is a pass
+    (the topic has no graph to judge)."""
+    chunks = {chunk_id: normalize_quote(text) for chunk_id, text in chunk_texts.items()}
+    failures = []
+    for claim in claims:
+        quote = normalize_quote(claim.get("quote", ""))
+        text = chunks.get(claim.get("chunk_id"))
+        if not quote or text is None or quote not in text:
+            failures.append({"concept_id": claim.get("concept_id"), "chunk_id": claim.get("chunk_id"), "quote": (claim.get("quote") or "")[:120]})
+    total = len(claims)
+    matched = total - len(failures)
+    rate = (matched / total) if total else None
+    return {"total": total, "matched": matched, "rate": rate, "ok": rate is None or rate >= CLAIM_QUOTE_GATE, "failures": failures}
+
+
+def concepts_per_topic_in_range(concepts: List[dict], bounds: Tuple[int, int] = CONCEPTS_PER_TOPIC) -> Dict[str, object]:
+    low, high = bounds
+    return {"count": len(concepts), "range": [low, high], "ok": low <= len(concepts) <= high}
+
+
+def objectives_all_mapped(concepts: List[dict], objective_count: int) -> Dict[str, object]:
+    """Every objective index 0..objective_count-1 is served by at least one concept."""
+    mapped = {i for concept in concepts for i in concept.get("objective_indexes") or []}
+    unmapped = [i for i in range(objective_count) if i not in mapped]
+    return {"objectives": objective_count, "unmapped": unmapped, "ok": not unmapped}
+
+
+def prereq_graph_acyclic(edges: List[dict]) -> Dict[str, object]:
+    """No directed cycle among the `prerequisite` edges. `cycle` lists the concept ids on one."""
+    out: Dict[str, List[str]] = {}
+    for edge in edges:
+        if edge.get("type") == "prerequisite":
+            out.setdefault(edge["source_id"], []).append(edge["target_id"])
+    state: Dict[str, int] = {}  # 1 on the current path, 2 finished
+
+    def visit(node: str, path: List[str]) -> Optional[List[str]]:
+        state[node] = 1
+        for nxt in out.get(node, []):
+            if state.get(nxt) == 1:
+                return path[path.index(nxt):]  # a node in state 1 is on the current path
+            if nxt not in state:
+                found = visit(nxt, path + [nxt])
+                if found:
+                    return found
+        state[node] = 2
+        return None
+
+    for node in list(out):
+        if node not in state:
+            cycle = visit(node, [node])
+            if cycle:
+                return {"ok": False, "cycle": cycle}
+    return {"ok": True, "cycle": []}
+
+
+def item_concept_ids_valid(items_by_type: Dict[str, List[dict]], known_ids: Iterable[str]) -> Dict[str, object]:
+    """Share of items whose concept tags are all real concepts of the topic. Gate: 100%.
+
+    An item is invalid when a tag (on the item, on one of its steps, or an option's
+    `confusable_concept_id`) is not a known id, or when it has no tag at all. The exception is a
+    review question on a prerequisite topic (`prerequisite_topic` set), which keeps none on purpose.
+    """
+    known = set(known_ids)
+    invalid = []
+    total = 0
+    for content_type, items in items_by_type.items():
+        for index, item in enumerate(items or []):
+            total += 1
+            ids = item.get("concept_ids") or []
+            stray = [i for i in ids if i not in known]
+            for step in item.get("steps") or []:
+                stray += [i for i in step.get("concept_ids") or [] if i not in known]
+            for option in item.get("options") or []:
+                other = option.get("confusable_concept_id")
+                if other is not None and other not in known:
+                    stray.append(other)
+            untagged = not ids and not item.get("prerequisite_topic")
+            if stray or untagged:
+                invalid.append({"path": f"{content_type}[{index}]", "reason": "unknown id" if stray else "no concept_ids", "ids": stray})
+    valid = total - len(invalid)
+    return {"total": total, "valid": valid, "rate": (valid / total) if total else None, "ok": not invalid, "invalid": invalid}
+
+
+def warmup_not_in_quiz(warmup: List[dict], quiz: List[dict], threshold: float = WARMUP_REUSE_JACCARD) -> Dict[str, object]:
+    """Warm-up questions the topic quiz repeats (the same wording, or a light rewording: token
+    Jaccard at or above `threshold`). The warm-up is a pretest; a quiz that reuses it measures
+    memory of the pretest."""
+    pairs = []
+    for i, w in enumerate(warmup or []):
+        for j, q in enumerate(quiz or []):
+            score = token_jaccard(w.get("question_text", ""), q.get("question_text", ""))
+            if score >= threshold:
+                pairs.append({"warmup_index": i, "quiz_index": j, "jaccard": round(score, 2)})
+                break
+    return {"reused": len(pairs), "pairs": pairs, "ok": not pairs}
+
+
 # ---------------------------------------------------------------------------- one model, all topics
 
 
@@ -485,13 +622,14 @@ def check_topic(
     requested: Optional[Dict[str, object]] = None,
     notes_sections: Iterable[str] = DEFAULT_NOTES_SECTIONS,
     notes_word_band: Tuple[int, int] = DEFAULT_NOTES_WORD_BAND,
+    chunk_texts: Optional[Dict[str, str]] = None,
 ) -> Dict[str, object]:
     """All checks for one model and one topic. `outputs` maps content type to generator output;
     a type that failed or was not generated is simply absent."""
     requested = {"examples": 3, "questions": 10, "difficulty": "medium", **(requested or {})}
     result: Dict[str, object] = {"types": sorted(outputs)}
 
-    hygiene = {t: latex_hygiene(t, out) for t, out in outputs.items()}
+    hygiene = {t: latex_hygiene(t, out) for t, out in outputs.items() if t != CONCEPTS}
     result["latex"] = {
         kind: sum(len(h[kind]) for h in hygiene.values())
         for kind in ("plain_text_latex", "unbalanced_dollar", "bare_currency")
@@ -519,6 +657,23 @@ def check_topic(
         result["recall_copy"] = (
             recall_copy_check(quiz, reference) if reference.strip() else {"skipped": "no notes or examples to compare with"}
         )
+
+    graph = outputs.get(CONCEPTS)
+    if graph is not None:
+        concepts = graph.get("concepts") or []
+        result["concepts"] = {
+            "claim_quotes": claim_quote_substring_rate(graph.get("claims") or [], chunk_texts or {}),
+            "count": concepts_per_topic_in_range(concepts),
+            "objectives": objectives_all_mapped(concepts, graph.get("objective_count", 0)),
+            "prereq_acyclic": prereq_graph_acyclic(graph.get("edges") or []),
+        }
+        # Tags are only checkable against a graph. A topic without one (extraction failed) has
+        # items with empty lists on purpose.
+        tagged = {t: outputs[t] for t in (WARMUP, SOLVED, INTERACTIVE, QUIZ) if t in outputs}
+        if tagged:
+            result["item_concept_ids"] = item_concept_ids_valid(tagged, [c["id"] for c in concepts])
+    if WARMUP in outputs and QUIZ in outputs:
+        result["warmup_not_in_quiz"] = warmup_not_in_quiz(outputs[WARMUP], outputs[QUIZ])
     return result
 
 
@@ -556,7 +711,31 @@ def summarize_model(per_topic: Dict[str, Dict[str, object]], statements: Dict[st
     copied = sum(c["copied"] for c in copies)
     mc_total = total(("mc_letter_refs", "multiple_choice"))
     pairs = near_duplicate_statements(statements)
+    graphs = [r["concepts"] for r in per_topic.values() if "concepts" in r]
+    tags = [r["item_concept_ids"] for r in per_topic.values() if "item_concept_ids" in r]
+    claims_total = sum(g["claim_quotes"]["total"] for g in graphs)
+    claims_matched = sum(g["claim_quotes"]["matched"] for g in graphs)
+    items_tagged = sum(t["total"] for t in tags)
+    items_valid = sum(t["valid"] for t in tags)
+    warmups = [r["warmup_not_in_quiz"] for r in per_topic.values() if "warmup_not_in_quiz" in r]
     return {
+        "concept_topics": len(graphs),
+        "concept_count_ok": sum(1 for g in graphs if g["count"]["ok"]),
+        "concept_count_mean": (sum(g["count"]["count"] for g in graphs) / len(graphs)) if graphs else None,
+        "claims_total": claims_total,
+        "claims_matched": claims_matched,
+        "claim_quote_rate": (claims_matched / claims_total) if claims_total else None,
+        "claim_quote_gate_ok": (claims_matched / claims_total >= CLAIM_QUOTE_GATE) if claims_total else None,
+        "objectives_mapped_ok": sum(1 for g in graphs if g["objectives"]["ok"]),
+        "prereq_acyclic_ok": sum(1 for g in graphs if g["prereq_acyclic"]["ok"]),
+        "items_tagged": items_tagged,
+        "items_tagged_valid": items_valid,
+        "item_concept_id_rate": (items_valid / items_tagged) if items_tagged else None,
+        "item_tag_gate_ok": (items_valid == items_tagged) if items_tagged else None,
+        "warmup_topics": sum(1 for r in per_topic.values() if "warmup" in r.get("types", [])),
+        "warmup_vs_quiz_topics": len(warmups),
+        "warmup_reused_items": sum(w["reused"] for w in warmups),
+        "warmup_reuse_gate_ok": (not any(w["reused"] for w in warmups)) if warmups else None,
         "topics": len(per_topic),
         "plain_text_latex_fields": total(("latex", "plain_text_latex")),
         "unbalanced_dollar_fields": total(("latex", "unbalanced_dollar")),

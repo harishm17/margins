@@ -26,9 +26,16 @@ let account: { email: string } | null = null
 
 /**
  * Signs in as the spec file's account; the first sign-in makes it. One account serves every spec in
- * the file (each makes its own course).
+ * the file (each makes its own course). With `own`, a new account is made for this call alone and the
+ * shared one is left as it was, for a spec that counts across the whole account (Home counts every
+ * course the account has, and shows the one touched last).
  */
-export async function signUpAndIn(page: Page, label: string): Promise<{ email: string }> {
+export async function signUpAndIn(page: Page, label: string, options: { own?: boolean } = {}): Promise<{ email: string }> {
+  if (options.own) {
+    const own = { email: `${label}-own-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com` }
+    await signIn(page, own.email)
+    return own
+  }
   account ??= { email: `${label}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com` }
   await signIn(page, account.email)
   return account
@@ -206,4 +213,70 @@ export async function createEmptyCourse(page: Page, name: string): Promise<strin
   const created = await page.request.post('/api/projects', { data: { name } })
   expect(created.ok()).toBeTruthy()
   return (await created.json()).project.id as string
+}
+
+/** A true/false item (the key is true) tagged with a concept, as a review session serves it. */
+export const reviewItem = (conceptId: string, text: string, difficulty: 'easy' | 'medium' | 'hard' = 'easy', mode: 'recall' | 'discrimination' | 'composition' = 'recall') => ({
+  question_type: 'true_false',
+  question_text: text,
+  correct_answer: true,
+  explanation: `${text} It is true.`,
+  points: 1,
+  difficulty,
+  mode,
+  concept_ids: [conceptId],
+})
+
+/** Quiz-set items for a topic, written straight into the database (a set the session can draw on). */
+export async function addQuizSet(topicId: string, items: object[]) {
+  await withPrisma((prisma) => prisma.topicQuiz.create({ data: { topicId, questions: items } }))
+}
+
+/**
+ * A concept of the topic that is due for review for the user: it was answered well three weeks ago, so its
+ * card is overdue and its retrievability is under 0.9.
+ */
+export async function seedDueConcept(
+  userEmail: string,
+  topicId: string,
+  name: string,
+  options: { orderIndex?: number; mastery?: number; daysAgo?: number; misconception?: string } = {}
+): Promise<string> {
+  return withPrisma(async (prisma) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: userEmail }, select: { id: true } })
+    const topic = await prisma.topic.findUniqueOrThrow({ where: { id: topicId }, select: { projectId: true } })
+    const concept = await prisma.concept.create({
+      data: { projectId: topic.projectId, topicId, name, summary: `${name}.`, kind: 'concept', orderIndex: options.orderIndex ?? 0, objectiveIndexes: [] },
+    })
+    const reviewed = new Date(Date.now() - (options.daysAgo ?? 21) * 86_400_000)
+    const due = new Date(reviewed.getTime() + 3 * 86_400_000)
+    await prisma.conceptMemory.create({
+      data: {
+        userId: user.id,
+        projectId: topic.projectId,
+        topicId,
+        conceptId: concept.id,
+        card: { due: due.toISOString(), stability: 3, difficulty: 5, elapsed_days: 0, scheduled_days: 3, reps: 1, lapses: 0, learning_steps: 0, state: 2, last_review: reviewed.toISOString() },
+        dueAt: due,
+        stability: 3,
+        lastReviewAt: reviewed,
+        nUnassisted: 1,
+        lastEvidenceAt: reviewed,
+        misconception: options.misconception ?? null,
+        mastery: options.mastery ?? 0.3,
+        label: 'shaky',
+        derived: {
+          firstEvidenceDay: reviewed.toISOString().slice(0, 10),
+          itemKeysSeen: [],
+          delayedNewSuccess: false,
+          explainedWell: false,
+          modeReached: 'recall',
+          lastMaxRung: null,
+          lastMissKind: null,
+          level0Scores: [{ score: 0.6, at: reviewed.toISOString() }],
+        },
+      },
+    })
+    return concept.id
+  })
 }

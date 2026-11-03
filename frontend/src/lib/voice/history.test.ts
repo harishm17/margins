@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { appendUserText, parseHistory, toStoredHistory, trimHistory, type VoiceMessage } from './history'
+import { INTERRUPTED_NOTE, MAX_HEARD_CHARS, appendUserText, markInterrupted, parseHistory, toStoredHistory, trimHistory, type VoiceBlock, type VoiceMessage } from './history'
 
 const user = (text: string): VoiceMessage => ({ role: 'user', content: text })
 const say = (text: string): VoiceMessage => ({ role: 'assistant', content: [{ type: 'text', text }] })
@@ -81,5 +81,44 @@ describe('toStoredHistory', () => {
     assert.ok(stored.length <= 30)
     assert.equal(stored[0].role, 'user')
     assert.deepEqual(stored.slice(-4), [user('last'), call('t9'), result('t9'), say('done')])
+  })
+})
+
+describe('markInterrupted', () => {
+  const asked: VoiceMessage[] = [
+    { role: 'user', content: 'I think it is a list' },
+    { role: 'assistant', content: [{ type: 'text', text: 'Close. What does each bucket hold? And how do you find it?' }] },
+  ]
+
+  it('keeps only what the student heard, then a note that they interrupted', () => {
+    const marked = markInterrupted(asked, 'Close. What does each bucket hold?')
+    assert.deepEqual(marked[1], { role: 'assistant', content: [{ type: 'text', text: `Close. What does each bucket hold? ${INTERRUPTED_NOTE}` }] })
+    assert.equal(JSON.stringify(marked).includes('how do you find it'), false)
+    assert.equal(marked.length, 2)
+  })
+
+  it('a turn with a tool: the text before and after it become one heard text, the tool call and result stay paired', () => {
+    const turn: VoiceMessage[] = [
+      { role: 'user', content: 'it is a list' },
+      { role: 'assistant', content: [{ type: 'text', text: 'Let me check.' }, { type: 'tool_use', id: 't1', name: 'assess_explanation', input: {} }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: '{}' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'You have part of it. What about the keys?' }] },
+    ]
+    const marked = markInterrupted(turn, 'Let me check. You have part')
+    assert.equal(marked.length, 4)
+    assert.deepEqual(marked[1].content, [{ type: 'tool_use', id: 't1', name: 'assess_explanation', input: {} }])
+    assert.deepEqual(marked[3].content, [{ type: 'text', text: `Let me check. You have part ${INTERRUPTED_NOTE}` }])
+  })
+
+  it('nothing heard says so, and nothing to mark leaves the messages alone', () => {
+    assert.match(String((markInterrupted(asked, '  ')[1].content as VoiceBlock[])[0].text), /before hearing any/)
+    const lone: VoiceMessage[] = [{ role: 'user', content: 'hi' }]
+    assert.deepEqual(markInterrupted(lone, 'x'), lone)
+    assert.deepEqual(markInterrupted([], 'x'), [])
+  })
+
+  it('the heard text is cut to a sane length', () => {
+    const marked = markInterrupted(asked, 'word '.repeat(2000))
+    assert.ok(String((marked[1].content as VoiceBlock[])[0].text).length < MAX_HEARD_CHARS + 100)
   })
 })

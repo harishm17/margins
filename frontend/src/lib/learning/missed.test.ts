@@ -2,6 +2,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   focusFromConcepts,
+  missedConceptIds,
+  retryAvailableAt,
+  retryOpensAt,
   missedConcepts,
   missedQuestions,
   pickPrerequisite,
@@ -111,4 +114,40 @@ test('the prerequisite to review from is the weakest one', () => {
   assert.equal(pickPrerequisite([]), null)
   assert.deepEqual(pickPrerequisite([{ id: 'a', mastery: 0.9 }, { id: 'b', mastery: 0.3 }, { id: 'c', mastery: null }]), { id: 'c', mastery: null })
   assert.equal(pickPrerequisite([{ id: 'a', mastery: 0.9 }, { id: 'b', mastery: 0.3 }])?.id, 'b')
+})
+
+test('retry opens next local day', () => {
+  // 23:30 in Los Angeles on 3 Nov is 07:30 UTC on 4 Nov: the next local midnight is 08:00 UTC the same day.
+  assert.equal(retryAvailableAt(new Date('2026-11-04T07:30:00Z'), 'America/Los_Angeles').toISOString(), '2026-11-04T08:00:00.000Z')
+  // Just after local midnight: still a full day away.
+  assert.equal(retryAvailableAt(new Date('2026-11-04T08:05:00Z'), 'America/Los_Angeles').toISOString(), '2026-11-05T08:00:00.000Z')
+  // Across the end of a month and a year, and in UTC.
+  assert.equal(retryAvailableAt(new Date('2026-12-31T15:00:00Z'), 'UTC').toISOString(), '2027-01-01T00:00:00.000Z')
+  // The clocks go back on 1 Nov 2026: that local day is 25 hours long.
+  assert.equal(retryAvailableAt(new Date('2026-11-01T12:00:00Z'), 'America/Los_Angeles').toISOString(), '2026-11-02T08:00:00.000Z')
+})
+
+test('fresh review focuses missed concept ids', () => {
+  const withIds = (text: string, ids: unknown) => ({ ...q(text), concept_ids: ids })
+  const wrong = attempt(
+    [withIds('A', ['c1', 'c2']), withIds('B', ['c2', 'c3']), withIds('C', 'nope') as never, withIds('D', ['c4'])],
+    false,
+    false,
+    false,
+    true
+  )
+  const missed = missedQuestions([wrong])
+  assert.deepEqual(missedConceptIds(missed), ['c1', 'c2', 'c3'])
+  assert.deepEqual(missedConceptIds(missed, 2), ['c1', 'c2'])
+  assert.deepEqual(missedConceptIds([]), [])
+})
+
+test('the retry is closed until the next local day, and open after', () => {
+  const last = new Date('2026-11-04T07:30:00Z') // 23:30 on 3 Nov in Los Angeles
+  const zone = 'America/Los_Angeles'
+  assert.equal(retryOpensAt(last, zone, new Date('2026-11-04T07:59:00Z'))?.toISOString(), '2026-11-04T08:00:00.000Z')
+  assert.equal(retryOpensAt(last, zone, new Date('2026-11-04T08:00:00Z')), null)
+  assert.equal(retryOpensAt(null, zone, last), null)
+  // The same instant is on another day in another zone.
+  assert.equal(retryOpensAt(last, 'UTC', new Date('2026-11-04T12:00:00Z'))?.toISOString(), '2026-11-05T00:00:00.000Z')
 })

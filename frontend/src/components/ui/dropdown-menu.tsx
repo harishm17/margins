@@ -9,7 +9,6 @@ import { floatingSurface, menuItem, popperMotion } from './styles'
 
 export const DropdownMenu = MenuPrimitive.Root
 export const DropdownMenuTrigger = MenuPrimitive.Trigger
-export const DropdownMenuGroup = MenuPrimitive.Group
 export const DropdownMenuSub = MenuPrimitive.Sub
 export const DropdownMenuRadioGroup = MenuPrimitive.RadioGroup
 
@@ -74,21 +73,6 @@ export function DropdownMenuRadioItem({
         <Check weight="bold" className="size-4 text-accent" />
       </MenuPrimitive.ItemIndicator>
     </MenuPrimitive.RadioItem>
-  )
-}
-
-export function DropdownMenuCheckboxItem({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof MenuPrimitive.CheckboxItem>) {
-  return (
-    <MenuPrimitive.CheckboxItem className={cn(menuItem, 'pr-8', className)} {...props}>
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-      <MenuPrimitive.ItemIndicator className="absolute right-2.5 inline-flex">
-        <Check weight="bold" className="size-4 text-accent" />
-      </MenuPrimitive.ItemIndicator>
-    </MenuPrimitive.CheckboxItem>
   )
 }
 

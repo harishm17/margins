@@ -13,6 +13,7 @@ import {
   ListBullets,
   MagnifyingGlass,
   ArrowsClockwise,
+  TreeStructure,
 } from '@phosphor-icons/react/dist/ssr'
 import { Kbd, KeyHint } from '@/components/ui/kbd'
 import { MasteryIndicator } from '@/components/ui/mastery-indicator'
@@ -235,6 +236,7 @@ export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
         { key: 'ask', label: 'Ask', href: `${base}/ask`, icon: ChatCircleText, active: pathname.startsWith(`${base}/ask`) },
         { key: 'exams', label: 'Mock exams', href: `${base}/exams`, icon: Exam, active: pathname.startsWith(`${base}/exams`) },
         { key: 'review', label: 'Review', href: `${base}/review`, icon: ArrowsClockwise, active: pathname.startsWith(`${base}/review`) },
+        { key: 'map', label: 'Map', href: `${base}/map`, icon: TreeStructure, active: pathname.startsWith(`${base}/map`) },
       ]
     : []
 

@@ -1,16 +1,19 @@
 /**
  * "Retry what you missed": a quiz set of the questions the student got wrong in their last two
  * attempts on the topic. No model call: the questions are copied from the sets they came from.
- * POST /api/topics/[topicId]/retry-quiz -> { quizSetId, questionCount }; 404 when nothing was missed.
+ * POST /api/topics/[topicId]/retry-quiz -> { quizSetId, questionCount }; 404 when nothing was missed;
+ * 409 until the next local day after the last attempt.
  * The set is taken and graded like any other (POST /quiz-attempts with its quizSetId).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
-import { createRetrySet } from '@/lib/learning/review-server'
+import { createRetrySet, getLastAttemptAt } from '@/lib/learning/review-server'
+import { RETRY_WAIT_TEXT, retryOpensAt } from '@/lib/learning/missed'
+import { getTimeZone } from '@/server/timezone'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
-import { apiInternal, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
+import { ApiErrorCode, apiError, apiInternal, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +29,9 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
     // A quiz that waited for the AI and was graded since counts: its misses are what to retry.
     await applyPendingQuizResults(session.user.id, { topicId })
+    // The identical questions open from the next local day (spec §5.7, P7): the page greys the button, and this holds it.
+    const opens = retryOpensAt(await getLastAttemptAt(session.user.id, topicId), await getTimeZone(), new Date())
+    if (opens) return apiError(ApiErrorCode.CONFLICT, RETRY_WAIT_TEXT, { code: 'RETRY_NOT_YET', opensAt: opens.toISOString() }, 409)
     const set = await createRetrySet(session.user.id, topicId)
     if (!set) return apiNotFound('There are no missed questions to retry')
     return NextResponse.json(set)

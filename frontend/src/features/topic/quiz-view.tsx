@@ -9,12 +9,16 @@ import { track as trackEvent } from '@/lib/analytics/track'
 import type { QuizReviewItem } from '@/lib/learning/quiz-review'
 import type { QuizAttemptData, QuizSetData, TopicReview } from '@/server/queries/topic'
 import { QuizLobby } from './quiz-lobby'
+import { freshHardSet } from './quiz-hard'
 import type { WaitingQuiz } from '@/lib/learning/quiz-submissions'
 import { QuizResults, type QuizResult } from './quiz-results'
-import { useQuizSession } from './quiz-session'
+import { setBeingTaken, useQuizSession } from './quiz-session'
 import { QuizTaking } from './quiz-taking'
+import { answersToSend, confidences, plainAnswers } from '@/lib/learning/quiz-answers'
+import { statusLabel } from '@/features/learning/use-server-draft'
 import { QuizWaiting } from './quiz-waiting'
-import { useGeneration, useTopic } from './topic-provider'
+import type { PartialQuiz } from '@/lib/learning/quiz-partial'
+import { useActivityInProgress, useGeneration, useTopic } from './topic-provider'
 import { useAiStatus } from '@/features/ai/ai-status'
 
 type SubmitResponse =
@@ -27,6 +31,17 @@ type SubmitResponse =
       review: QuizReviewItem[]
       /** What the attempt changed: the next review and how mastery moved. */
       outcome?: QuizResult['outcome']
+      helpAfterMiss?: QuizResult['helpAfterMiss']
+      missedConcepts?: QuizResult['missedConcepts']
+    }
+  | {
+      /** The multiple choice answers were graded at once and the short answers wait (spec 18.9): no overall score. */
+      status: 'partial'
+      submissionId: string
+      jobId: string | null
+      started: boolean
+      code: string | null
+      partial: PartialQuiz
     }
   | {
       /** The short answers could not be graded now: the quiz is stored and graded when the AI is back. */
@@ -50,6 +65,8 @@ type QuizViewProps = {
   /** The set to show first (?set=), and whether to start it at once (?start=1, from "Retry what you missed"). */
   initialSetId?: string
   autoStart?: boolean
+  /** ?difficulty=hard, from the transfer-quiz activity: open a fresh hard set, or offer to write one. */
+  harder?: boolean
 }
 
 /**
@@ -57,18 +74,32 @@ type QuizViewProps = {
  * A quiz in progress lives in sessionStorage, so "taking" is simply "a session is stored".
  * Grading and results are in memory: the graded attempt is saved on the server either way.
  */
-export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref, review, initialSetId, autoStart }: QuizViewProps) {
+export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref, review, initialSetId, autoStart, harder }: QuizViewProps) {
   const router = useRouter()
-  const { setKeysSuspended } = useTopic()
-  const { running } = useGeneration('quiz')
+  const { setKeysSuspended, generateReview } = useTopic()
+  const { running, generate } = useGeneration('quiz')
   // The set asked for (?set=), else the student's own pick, else the newest regular set: a retry set
   // made a moment ago is not the one to open next week. A pick made before another set was asked for is dropped.
-  const [pick, setPick] = React.useState<{ id: string; whenAsked: string | undefined } | null>(null)
+  // A quiz this tab is in the middle of stays chosen across a remount (the page remounts this view when a newer set arrives).
+  const [pick, setPick] = React.useState<{ id: string; whenAsked: string | undefined } | null>(() => {
+    const taken = setBeingTaken(topicId, sets.map((item) => item.id))
+    return taken ? { id: taken, whenAsked: initialSetId } : null
+  })
   const asked = initialSetId && sets.some((item) => item.id === initialSetId) ? initialSetId : undefined
   const picked = pick && pick.whenAsked === initialSetId && sets.some((item) => item.id === pick.id) ? pick.id : undefined
-  const setId = picked ?? asked ?? (sets.find((item) => item.kind === 'standard') ?? sets[0]).id
+  const hardSetId = harder ? freshHardSet(sets, attempts) : null
+  const setId = picked ?? asked ?? hardSetId ?? (sets.find((item) => item.kind === 'standard') ?? sets[0]).id
   const activeSet = sets.find((item) => item.id === setId) ?? sets[0]
-  const { session, save, clear } = useQuizSession(topicId, activeSet.id)
+  const quiz = useQuizSession(courseId, topicId, activeSet.id)
+  const { session, taking: takingHere, begin, save, pause, discard, finish, refused } = quiz
+  // Starting or resuming pins the set: a newer set that arrives mid-quiz (a generation finishing in the
+  // background) must not swap the questions under the student. Their pick stays until they choose another.
+  function beginOnThisSet(...args: Parameters<typeof begin>) {
+    setPick({ id: activeSet.id, whenAsked: initialSetId })
+    return begin(...args)
+  }
+  // After "Save and finish later" the lobby says where the answers are.
+  const [savedNote, setSavedNote] = React.useState(false)
   const [grading, setGrading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<{ setId: string; value: QuizResult } | null>(null)
@@ -110,27 +141,53 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
     }
     if (started.current) return
     started.current = true
-    save({ answers: {}, index: 0 })
+    beginOnThisSet({ answers: {}, index: 0 })
     trackEvent('quiz_started')
     // The address drops ?start=1, so a reload does not start the set again (the set stays chosen).
     router.replace(`/courses/${courseId}/topics/${topicId}?view=quiz${initialSetId ? `&set=${initialSetId}` : ''}`, { scroll: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart])
 
-  const taking = !!session && !grading && !result
+  const taking = !!session && takingHere && !grading && !result
   React.useEffect(() => {
     setKeysSuspended(taking)
     return () => setKeysSuspended(false)
   }, [taking, setKeysSuspended])
+  // A quiz being taken or graded: the next-activity card waits until the results are in.
+  useActivityInProgress(taking || grading)
 
   const answers = session?.answers ?? {}
   const { report } = useAiStatus()
 
-  function start() {
+  function start(predicted?: number) {
     setError(null)
     setResult(null)
-    save({ answers: {}, index: 0 })
+    setSavedNote(false)
+    beginOnThisSet({ answers: {}, index: 0, ...(predicted === undefined ? {} : { predicted }) })
     trackEvent('quiz_started')
+  }
+
+  /** The lobby's Resume: carry on with the saved answers, from the question they stopped at. */
+  function resume() {
+    setError(null)
+    setResult(null)
+    setSavedNote(false)
+    beginOnThisSet()
+  }
+
+  /** "Harder set": ten new hard questions, the same set the transfer quiz writes. */
+  async function harderSet() {
+    setError(null)
+    setResult(null)
+    await generate('regenerate', { question_count: 10, difficulty_level: 'hard' })
+  }
+
+  /** "New questions": a fresh set at the topic's band, written by the same path as Fix it now. */
+  async function newQuestions() {
+    setError(null)
+    setResult(null)
+    const started = await generateReview()
+    if (!started) setError('Could not start a new set. Try again.')
   }
 
   /** The student dismissed a stored quiz: it is gone from here (the server removed it). */
@@ -155,11 +212,11 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
       const response = await apiFetch<SubmitResponse>(`/api/topics/${topicId}/quiz-attempts`, {
         method: 'POST',
         json: {
-          answers: Object.fromEntries(Object.entries(session.answers).filter(([, value]) => value.trim())),
+          answers: answersToSend(session.answers),
           ...(activeSet.id === 'legacy' ? {} : { quizSetId: activeSet.id }),
         },
       })
-      if (response.status === 'waiting') {
+      if (response.status === 'waiting' || response.status === 'partial') {
         // Stored whole; graded by itself when the AI is back. The answers no longer live only in this tab.
         if (response.code) report(response.code)
         const item: WaitingQuiz = {
@@ -168,10 +225,11 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
           jobId: response.jobId,
           state: response.started ? 'grading' : 'failed',
           errorCode: response.started ? null : 'ENQUEUE_FAILED',
+          ...(response.status === 'partial' ? { partial: response.partial } : {}),
         }
         setKnown((current) => ({ ...current, [item.submissionId]: { item, onServer: false } }))
         setFocusId(item.submissionId)
-        clear()
+        void finish()
         React.startTransition(() => router.refresh())
         return
       }
@@ -184,10 +242,14 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
           bestScore: response.bestScore,
           review: response.review,
           outcome: response.outcome,
-          answers: session.answers,
+          helpAfterMiss: response.helpAfterMiss,
+          missedConcepts: response.missedConcepts,
+          answers: plainAnswers(session.answers),
+          confidence: confidences(session.answers),
+          predicted: session.predicted,
         },
       })
-      clear()
+      void finish()
       React.startTransition(() => router.refresh())
     } catch (caught) {
       if (isApiError(caught)) report(caught.code)
@@ -222,7 +284,8 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
         questions={activeSet.questions}
         result={result.value}
         voiceHref={voiceHref}
-        onRetake={start}
+        onNewQuestions={() => void newQuestions()}
+        onHarderSet={() => void harderSet()}
         onClose={() => setResult(null)}
       />
     )
@@ -232,7 +295,9 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
     return (
       <QuizWaiting
         key={`${focused.submissionId}:${focused.jobId}:${focused.state}`}
+        courseId={courseId}
         topicId={topicId}
+        questions={sets.find((candidate) => candidate.id === focused.setId)?.questions}
         item={focused}
         variant="page"
         gone={waitingItems.find((entry) => entry.item.submissionId === focused.submissionId)?.gone ?? false}
@@ -243,17 +308,33 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
     )
   }
 
-  if (session) {
+  if (session && takingHere) {
     return (
       <QuizTaking
         questions={activeSet.questions}
         answers={answers}
         index={session.index}
         error={error}
-        onAnswer={(index, value) => save({ ...session, answers: { ...session.answers, [String(index)]: value } })}
+        onAnswer={(index, value) => {
+          // Answering takes back an "I don't know" on the same question.
+          const { idk: _idk, ...before } = session.answers[String(index)] ?? { answer: '' }
+          save({ ...session, answers: { ...session.answers, [String(index)]: { ...before, answer: value } } })
+        }}
+        onDontKnow={(index, on) => {
+          const { [String(index)]: _gone, ...rest } = session.answers
+          save({ ...session, answers: on ? { ...rest, [String(index)]: { answer: '', idk: true } } : rest })
+        }}
+        onDetail={(index, detail) =>
+          save({ ...session, answers: { ...session.answers, [String(index)]: { ...session.answers[String(index)], answer: session.answers[String(index)]?.answer ?? '', ...detail } } })
+        }
         onIndex={(index) => save({ ...session, index })}
         onSubmit={submit}
-        onExit={clear}
+        onSaveAndExit={async () => {
+          await pause()
+          setSavedNote(true)
+        }}
+        onDiscard={discard}
+        saveStatus={statusLabel(quiz.status)}
       />
     )
   }
@@ -287,7 +368,13 @@ export function QuizView({ courseId, topicId, sets, attempts, waiting, voiceHref
           setResult(null)
         }}
         onStart={start}
+        resume={session && quiz.answered > 0 ? { answered: quiz.answered } : null}
+        onResume={resume}
+        refused={!!refused}
+        onNewQuestions={() => void newQuestions()}
+        savedNote={savedNote}
         generating={!!running && !running.done}
+        harder={harder ? { fresh: hardSetId === activeSet.id } : undefined}
       />
     </>
   )

@@ -1,0 +1,66 @@
+[
+  {
+    "id": "sourdough",
+    "name": "Sourdough starter",
+    "filename": "baking-notes.pdf",
+    "page": 3,
+    "passage": "A sourdough starter is a mix of flour and water kept alive by wild yeast and bacteria. Feeding it means pouring off most of the mix and stirring in fresh flour and water, which gives the microbes new food and keeps the mix from turning too sour. A fed starter doubles in size within a few hours, and that rise shows it is ready to make bread rise.",
+    "claims": [
+      {"text": "A sourdough starter is flour and water kept alive by wild yeast and bacteria.", "quote": "A sourdough starter is a mix of flour and water kept alive by wild yeast and bacteria.", "page": 3},
+      {"text": "Feeding a starter gives the microbes new food and keeps the mix from turning too sour.", "quote": "which gives the microbes new food and keeps the mix from turning too sour", "page": 3},
+      {"text": "A starter that doubles in size within a few hours is ready to make bread rise.", "quote": "A fed starter doubles in size within a few hours", "page": 3}
+    ],
+    "take": "I think it says a starter is a living mix of flour and water, and you have to feed it somehow.",
+    "right": "Feeding it with fresh flour and water gives the yeast and bacteria new food, so the mix does not turn too sour.",
+    "wrong": "You feed it to kill off the bacteria so that only the yeast is left in the mix.",
+    "restated": "A starter is flour and water with wild yeast and bacteria in it, and it needs fresh flour and water to eat."
+  },
+  {
+    "id": "tides",
+    "name": "Tides",
+    "filename": "ocean-notes.pdf",
+    "page": 11,
+    "passage": "Tides are the rise and fall of the sea, caused mainly by the Moon's gravity pulling on the oceans. The sea bulges toward the Moon and also on the opposite side of the Earth, so most coasts see two high tides a day. Spring tides, the largest, happen when the Sun and Moon line up, and neap tides, the smallest, happen when they are at right angles.",
+    "claims": [
+      {"text": "Tides are caused mainly by the Moon's gravity pulling on the oceans.", "quote": "caused mainly by the Moon's gravity pulling on the oceans", "page": 11},
+      {"text": "The sea bulges toward the Moon and on the opposite side of the Earth, so most coasts see two high tides a day.", "quote": "so most coasts see two high tides a day", "page": 11},
+      {"text": "Spring tides, the largest, happen when the Sun and Moon line up.", "quote": "Spring tides, the largest, happen when the Sun and Moon line up", "page": 11}
+    ],
+    "take": "It says the Moon pulls on the sea, and there is something about how big the tides are.",
+    "right": "The Moon's gravity pulls the sea into a bulge toward it and another on the far side, which is why there are two high tides a day.",
+    "wrong": "The tides come from the Sun heating the water so that it expands and then cools again.",
+    "restated": "The Moon pulls on the ocean, the water bulges on two sides of the Earth, and so you get high tide twice a day."
+  },
+  {
+    "id": "library",
+    "name": "Library shelving",
+    "filename": "library-guide.pdf",
+    "page": 2,
+    "passage": "Libraries shelve nonfiction by subject using the Dewey Decimal system, which gives each subject a number between 000 and 999. Books on the same subject get nearby numbers, so browsing one shelf shows related titles. A cutter number after the decimal part puts books on the same subject in order by the author's name.",
+    "claims": [
+      {"text": "The Dewey Decimal system gives each subject a number between 000 and 999.", "quote": "gives each subject a number between 000 and 999", "page": 2},
+      {"text": "Books on the same subject get nearby numbers, so browsing one shelf shows related titles.", "quote": "so browsing one shelf shows related titles", "page": 2},
+      {"text": "A cutter number puts books on the same subject in order by the author's name.", "quote": "puts books on the same subject in order by the author's name", "page": 2}
+    ],
+    "take": "Books are sorted by a number for their subject, I think, so similar ones end up together.",
+    "right": "Books on the same subject get numbers that are close together, so when you browse one shelf the titles are related.",
+    "wrong": "Books are shelved in the order the library bought them, and the number says the year they arrived.",
+    "restated": "Each subject has a number, books on one subject sit near each other, and the author's name sorts them further."
+  },
+  {
+    "id": "thermostat",
+    "name": "Thermostat",
+    "filename": "home-systems.pdf",
+    "page": 7,
+    "passage": "A thermostat keeps a room near a set temperature by switching the heating on and off. When the room falls below the set point the heater turns on, and when it passes the set point by a small margin it turns off. That margin, called hysteresis, stops the heater from switching on and off every few seconds.",
+    "claims": [
+      {"text": "A thermostat keeps a room near a set temperature by switching the heating on and off.", "quote": "keeps a room near a set temperature by switching the heating on and off", "page": 7},
+      {"text": "The heater turns off only when the room passes the set point by a small margin.", "quote": "when it passes the set point by a small margin it turns off", "page": 7},
+      {"text": "Hysteresis stops the heater from switching on and off every few seconds.", "quote": "stops the heater from switching on and off every few seconds", "page": 7}
+    ],
+    "take": "It says the heater goes on when it is cold and off when it is warm enough.",
+    "right": "The margin, hysteresis, keeps the heater from switching on and off every few seconds, because it only turns off after passing the set point.",
+    "wrong": "The margin is there so the heater can run at half power when the room is nearly warm enough.",
+    "restated": "The heater turns on below the set point and off a little above it, and the gap keeps it from flicking on and off."
+  }
+]

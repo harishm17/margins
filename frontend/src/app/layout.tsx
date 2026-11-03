@@ -29,7 +29,9 @@ export const metadata: Metadata = {
   twitter: { card: 'summary_large_image', title: DEFAULT_TITLE, description: DEFAULT_DESCRIPTION },
 }
 
+// Cover the whole screen, so env(safe-area-inset-*) has a value on a phone with a notch or a home bar (the tab bar and the top bars use it).
 export const viewport: Viewport = {
+  viewportFit: 'cover',
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: BRAND_COLORS.canvas },
     { media: '(prefers-color-scheme: dark)', color: BRAND_COLORS.canvasDark },

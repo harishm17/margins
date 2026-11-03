@@ -6,7 +6,9 @@ import {
   deriveOrbState,
   evaluationBadge,
   initialSessionState,
+  orbLabel,
   sessionReducer,
+  practiceConceptOf,
   summarize,
   type CoachEntry,
   type Evaluation,
@@ -76,6 +78,31 @@ describe('sessionReducer', () => {
     assert.equal(coach.role, 'coach')
     assert.equal(coach.evaluation?.score, 0.5)
     assert.deepEqual(state.answered, [{ text: 'Define a hash function', isCorrect: false, score: 0.5, ungraded: false }])
+  })
+
+  it('the board follows the question and each tool result, and a reset clears it', () => {
+    const asked = run([{ type: 'question', question: { index: 1, total: 4, text: 'What is $x^2$?', options: [{ id: 'A', text: 'x times x' }] } }], live())
+    assert.deepEqual(asked.board, { kind: 'question', text: 'What is $x^2$?', options: [{ id: 'A', text: 'x times x' }] })
+    const claim = run(
+      [{ type: 'board', board: { kind: 'claim', text: 'The mean is $\\mu$.', question: 'What is it?', source: { label: 'p. 14', href: '/api/materials/m/file#page=14' } } }],
+      asked
+    )
+    assert.equal(claim.board?.kind, 'claim')
+    assert.equal(claim.board?.source?.label, 'p. 14')
+    assert.equal(claim.question?.text, 'What is $x^2$?', 'the quiz progress is untouched by a board update')
+    assert.equal(run([{ type: 'reset' }], claim).board, null)
+  })
+
+  it('a check on a claim is listed by its check question when it is missed', () => {
+    const state = run(
+      [
+        { type: 'board', board: { kind: 'claim', text: 'A claim.', question: 'What did it say?' } },
+        { type: 'turn-started' },
+        { type: 'evaluation', evaluation: evaluation({ isCorrect: false, score: 0 }) },
+      ],
+      live()
+    )
+    assert.deepEqual(summarize(state).revisit, [{ text: 'What did it say?', lookLinks: [] }])
   })
 
   it('drops an empty coach entry when a turn fails before anything arrived, and shows the alert', () => {
@@ -162,14 +189,15 @@ describe('evaluationBadge', () => {
 
 describe('summarize', () => {
   it('counts graded answers, lists what to revisit once, and rounds minutes up to one', () => {
-    const state: Pick<SessionState, 'answered' | 'entries' | 'startedAt' | 'endedAt'> = {
+    const state: Pick<SessionState, 'answered' | 'entries' | 'startedAt' | 'endedAt' | 'ideas'> = {
+      ideas: [],
       answered: [
         { text: 'Q1', isCorrect: true, score: 1, ungraded: false },
         { text: 'Q2', isCorrect: false, score: 0.5, ungraded: false },
-        { text: 'Q2', isCorrect: false, score: 0, ungraded: false },
+        { text: 'Q2', isCorrect: false, score: 0, ungraded: false, lookLinks: [{ label: 'pp. 4-6', href: '/api/materials/m1/file#page=4' }] },
         { text: 'Q3', isCorrect: false, score: 0, ungraded: true },
       ],
-      entries: [{ id: 1, role: 'student', text: 'a' }],
+      entries: [{ id: 1, role: 'student', text: 'a', via: 'text' }],
       startedAt: 0,
       endedAt: 20_000,
     }
@@ -178,13 +206,41 @@ describe('summarize', () => {
     assert.equal(summary.correct, 1)
     assert.equal(summary.partly, 1)
     assert.equal(summary.score, 1 / 3)
-    assert.deepEqual(summary.revisit, ['Q2'])
+    assert.deepEqual(summary.revisit, [{ text: 'Q2', lookLinks: [{ label: 'pp. 4-6', href: '/api/materials/m1/file#page=4' }] }])
     assert.equal(summary.minutes, 1)
     assert.equal(summary.exchanges, 1)
+    assert.equal(summary.typed, 1)
+  })
+
+  it('teach-back: the ideas explained, and the ones taught after probes with the pages to look at again', () => {
+    const state = run(
+      [
+        { type: 'idea-done', idea: { name: 'Load factor', outcome: 'explained', conceptId: 'c1', lookAgain: [], lookLinks: [] } },
+        { type: 'idea-done', idea: { name: 'Collision', outcome: 'taught', conceptId: 'c2', lookAgain: ['p. 5'], lookLinks: [{ label: 'p. 5', href: '/api/materials/m1/file#page=5' }] } },
+      ],
+      live()
+    )
+    const summary = summarize(state)
+    assert.deepEqual(summary.explained, ['Load factor'])
+    assert.deepEqual(summary.taught, [{ name: 'Collision', conceptId: 'c2', lookAgain: ['p. 5'], lookLinks: [{ label: 'p. 5', href: '/api/materials/m1/file#page=5' }] }])
+    assert.equal(run([{ type: 'reset' }], state).ideas.length, 0)
+  })
+
+  it('teach-back ended early: the idea that was open and never closed is named, and a closed one is not', () => {
+    const open = { kind: 'concept' as const, text: 'Explain "Load factor" in your own words', idea: { name: 'Load factor', conceptId: 'c1' } }
+    const early = summarize({ answered: [], entries: [], startedAt: 0, endedAt: 1000, ideas: [], board: open })
+    assert.deepEqual(early.unfinished, { name: 'Load factor', conceptId: 'c1' })
+    assert.equal(practiceConceptOf(early), 'c1')
+    const closed = summarize({ answered: [], entries: [], startedAt: 0, endedAt: 1000, board: open, ideas: [{ name: 'Load factor', outcome: 'explained', conceptId: 'c1', lookAgain: [], lookLinks: [] }] })
+    assert.equal(closed.unfinished, null)
+    assert.equal(practiceConceptOf(closed), null)
+    // Nothing begun: nothing unfinished. A claim on the board (a reading session) is not an idea left open.
+    assert.equal(summarize({ answered: [], entries: [], startedAt: 0, endedAt: 1000, ideas: [], board: null }).unfinished, null)
+    assert.equal(summarize({ answered: [], entries: [], startedAt: 0, endedAt: 1000, ideas: [], board: { kind: 'claim', text: 'x' } }).unfinished, null)
   })
 
   it('has no score when nothing was graded', () => {
-    const summary = summarize({ answered: [], entries: [], startedAt: null, endedAt: null })
+    const summary = summarize({ answered: [], entries: [], startedAt: null, endedAt: null, ideas: [] })
     assert.equal(summary.score, null)
     assert.equal(summary.answered, 0)
   })
@@ -243,5 +299,40 @@ describe('describeTurnFailure', () => {
 
   it('falls back to the server message for an unknown code', () => {
     assert.equal(describeTurnFailure({ code: 'SOMETHING_NEW', message: 'Server text.', retryable: false }).alert.text, 'Server text.')
+  })
+})
+
+describe('still listening', () => {
+  it('holding turns Listening into Still listening and nothing else', () => {
+    assert.equal(orbLabel('listening', false), 'Listening')
+    assert.equal(orbLabel('listening', true), 'Still listening')
+    assert.equal(orbLabel('thinking', true), 'Thinking')
+  })
+
+  it('the hold ends when the answer is sent, the mic is paused or the session ends', () => {
+    const holding = sessionReducer(initialSessionState, { type: 'holding', on: true })
+    assert.equal(holding.holding, true)
+    assert.equal(sessionReducer(holding, { type: 'student-said', text: 'a bucket' }).holding, false)
+    assert.equal(sessionReducer(holding, { type: 'mic-paused', paused: true }).holding, false)
+    assert.equal(sessionReducer(holding, { type: 'input-mode', mode: 'text' }).holding, false)
+    assert.equal(sessionReducer(holding, { type: 'finish', reason: 'user', at: 1 }).holding, false)
+  })
+})
+
+describe('the gentle line', () => {
+  it('is a quiet coach entry that is not streaming and does not touch the answers', () => {
+    const next = sessionReducer(initialSessionState, { type: 'note', text: 'Take your time.' })
+    assert.equal(next.entries.length, 1)
+    const entry = next.entries[0] as CoachEntry
+    assert.equal(entry.role, 'coach')
+    assert.equal(entry.note, true)
+    assert.equal(entry.streaming, false)
+    assert.deepEqual(next.answered, [])
+  })
+
+  it('is left alone when the next turn starts', () => {
+    const next = run([{ type: 'note', text: 'Take your time.' }, { type: 'student-said', text: 'a bucket' }, { type: 'turn-started' }])
+    assert.equal(next.entries.length, 3)
+    assert.equal((next.entries[0] as CoachEntry).text, 'Take your time.')
   })
 })

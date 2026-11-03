@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { aiMessage } from '@/lib/ai/messages'
 import { describeJobFailure } from '@/lib/jobs/failure-message'
 import { toStoredResults } from './quiz-review'
+import { ruleGradable, ruleGradableIndexes } from '@/lib/ai-service/grading'
+import { mergeRuleResults, partialLine, partialSummary } from './quiz-partial'
 import { answersHash, readGrading, waitingState } from './quiz-submissions'
 
 test('a stored quiz is waiting, being graded, or did not finish, by its latest job', () => {
@@ -43,4 +45,47 @@ test('a quiz whose grading ran out its wait says so in the student words, with a
   assert.equal(text, aiMessage('LLM_CREDIT_EXHAUSTED').text)
   assert.match(describeJobFailure(null, null, 'grade_quiz'), /Grade the quiz again/)
   assert.match(describeJobFailure('QUIZ_SUBMISSION_NOT_FOUND', null, 'grade_quiz'), /quiz attempt/)
+})
+
+test('multiple choice, true or false and numerical answers are graded by rule; short answers are not', () => {
+  assert.equal(ruleGradable({ question_type: 'multiple_choice' }), true)
+  assert.equal(ruleGradable({ question_type: 'true_false' }), true)
+  assert.equal(ruleGradable({ question_type: 'numerical' }), true)
+  assert.equal(ruleGradable({ question_type: 'short_answer' }), false)
+  assert.equal(ruleGradable({}), false)
+  assert.deepEqual(ruleGradableIndexes([{ question_type: 'short_answer' }, { question_type: 'true_false' }, { question_type: 'numerical' }]), [1, 2])
+})
+
+const graded = (index: number, correct: boolean, type = 'true_false', possible = 1) => ({
+  question_index: index,
+  question_type: type,
+  points_possible: possible,
+  points_earned: correct ? possible : 0,
+  is_correct: correct,
+  feedback: '',
+  needs_review: false,
+})
+
+test('the rule results replace the same questions in the final grading, and the short answers stay as graded', () => {
+  const final = [graded(0, false), graded(1, true, 'short_answer', 2), graded(2, true)]
+  const rule = [graded(0, true), graded(2, true)]
+  const merged = mergeRuleResults(final, rule)
+  assert.deepEqual(merged.map((q) => [q.question_index, q.is_correct]), [[0, true], [1, true], [2, true]])
+  // Nothing to merge leaves the grading as it was.
+  assert.equal(mergeRuleResults(final, null), final)
+})
+
+test('the partial summary counts the rule items right and the short answers still waiting', () => {
+  assert.deepEqual(partialSummary([graded(0, true), graded(2, false), graded(3, true)], 2), { correct: 2, total: 3, waiting: 2 })
+})
+
+test('the partial line says what is graded and what waits, with no overall score', () => {
+  assert.equal(
+    partialLine({ correct: 6, total: 7, waiting: 3 }),
+    "6 of 7 multiple choice right. 3 short answers wait for grading; they'll be marked when the AI is back."
+  )
+  assert.equal(
+    partialLine({ correct: 1, total: 1, waiting: 1 }),
+    "1 of 1 multiple choice right. 1 short answer waits for grading; it'll be marked when the AI is back."
+  )
 })

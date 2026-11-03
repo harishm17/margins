@@ -19,6 +19,8 @@ from app.services.llm.schemas import (
 )
 from tests.context_stub import stub_topic_context, topic_context
 
+
+
 CHUNKS = [
     {"id": "c1", "chunk_text": "Bayes' rule updates a prior.", "section_hierarchy": "L1 > Bayes", "page_start": 3, "page_end": 3,
      "material_id": "m1", "filename": "bio.pdf", "category": "lecture_notes", "source_kind": "primary"},
@@ -184,6 +186,7 @@ class TestPostProcessing:
         assert clean(raw) == raw
 
 
+@pytest.mark.usefixtures("passthrough_support")
 class TestQuizAndExamPrompts:
     def _questions(self, n=4):
         return QuestionSet(questions=[
@@ -241,7 +244,7 @@ class TestQuizAndExamPrompts:
 
     async def test_exam_questions_get_the_same_rules_references_and_context(self):
         mcq = GeneratedQuestion(
-            question_type="multiple_choice", question_text="Q", options=[ChoiceOption(id=x, text=f"o{x}") for x in "ABCD"],
+            question_type="multiple_choice", question_text="Q", options=[ChoiceOption(id=x, text=f"o{x}", misconception="wrong idea") for x in "ABCD"],
             correct_answer="A", explanation="e", source_excerpts=[2],
         )
         llm = _llm(structured=QuestionSet(questions=[mcq]))

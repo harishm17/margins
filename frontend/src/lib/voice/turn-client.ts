@@ -7,13 +7,32 @@
  * while the rest of the reply is still being written.
  */
 import { createLineSplitter } from '@/lib/chat/events'
+import { MATH_SPAN } from './speakable'
+import type { ListenFor, VoiceStreamExtra } from './turn-contract'
 
 export { createLineSplitter }
 
 export type VoiceOption = { id: string; text: string }
 
+/** What the board shows. A question comes with `question` events; the others come with a tool result. */
+export type BoardKind = 'concept' | 'prediction' | 'claim'
+
+/** Where a board item comes from in the student's files: a label ("p. 14") and the link that opens it. */
+export type BoardSource = { label: string; href: string }
+
 export type VoiceEvent =
   | { type: 'text'; delta: string }
+  | {
+      type: 'board'
+      kind: BoardKind
+      /** The idea to explain, the thing to predict, or the claim, as text with maths in it. */
+      text: string
+      /** The check question that follows a claim. */
+      question?: string
+      source?: BoardSource
+      /** An idea to explain: which one, so a session that ends before it closes can name it. */
+      idea?: { name: string; conceptId: string }
+    }
   | {
       type: 'question'
       index: number
@@ -29,14 +48,27 @@ export type VoiceEvent =
       comment: string
       explanation: string
       ungraded?: boolean
+      /** A wrong answer: where the question's concepts are in the student's own file. */
+      lookLinks?: BoardSource[]
     }
   | { type: 'hint'; text: string }
   | { type: 'session_complete' }
+  /** A teach-back idea closed: explained (the new example held), or taught after probes, with the pages to look at again. */
+  | { type: 'idea_done'; name: string; outcome: 'explained' | 'taught'; conceptId?: string; lookAgain?: string[]; lookLinks?: BoardSource[] }
+  | VoiceStreamExtra
   | { type: 'done'; text: string }
   | { type: 'error'; code: string; message: string; retryable: boolean }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** Links to the student's own file: a label and an address of this app. */
+function readLinks(value: unknown): BoardSource[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((link): link is BoardSource => isObject(link) && typeof link.label === 'string' && typeof link.href === 'string' && link.href.startsWith('/') && !link.href.startsWith('//'))
+    .map((link) => ({ label: link.label, href: link.href }))
+}
 
 function parseOptions(value: unknown): VoiceOption[] | undefined {
   if (!Array.isArray(value)) return undefined
@@ -60,6 +92,21 @@ export function parseVoiceEvent(line: string): VoiceEvent | null {
   switch (raw.type) {
     case 'text':
       return typeof raw.delta === 'string' ? { type: 'text', delta: raw.delta } : null
+    case 'board': {
+      if (typeof raw.text !== 'string' || !raw.text.trim()) return null
+      const kind = raw.kind === 'concept' || raw.kind === 'prediction' || raw.kind === 'claim' ? raw.kind : null
+      if (!kind) return null
+      const source = isObject(raw.source) && typeof raw.source.label === 'string' && typeof raw.source.href === 'string' && raw.source.href.startsWith('/') && !raw.source.href.startsWith('//') ? { label: raw.source.label, href: raw.source.href } : undefined
+      const idea = isObject(raw.idea) && typeof raw.idea.name === 'string' && raw.idea.name.trim() && typeof raw.idea.conceptId === 'string' ? { name: raw.idea.name, conceptId: raw.idea.conceptId } : undefined
+      return {
+        type: 'board',
+        kind,
+        text: raw.text,
+        ...(idea ? { idea } : {}),
+        ...(typeof raw.question === 'string' && raw.question.trim() ? { question: raw.question } : {}),
+        ...(source ? { source } : {}),
+      }
+    }
     case 'question': {
       if (typeof raw.index !== 'number' || typeof raw.text !== 'string') return null
       const options = parseOptions(raw.options)
@@ -81,11 +128,31 @@ export function parseVoiceEvent(line: string): VoiceEvent | null {
         comment: typeof raw.comment === 'string' ? raw.comment : '',
         explanation: typeof raw.explanation === 'string' ? raw.explanation : '',
         ...(raw.ungraded === true ? { ungraded: true } : {}),
+        ...(readLinks(raw.lookLinks).length > 0 ? { lookLinks: readLinks(raw.lookLinks) } : {}),
       }
     case 'hint':
       return typeof raw.text === 'string' ? { type: 'hint', text: raw.text } : null
     case 'session_complete':
       return { type: 'session_complete' }
+    case 'idea_done': {
+      if (typeof raw.name !== 'string' || !raw.name || (raw.outcome !== 'explained' && raw.outcome !== 'taught')) return null
+      const lookAgain = Array.isArray(raw.lookAgain) ? raw.lookAgain.filter((page): page is string => typeof page === 'string') : []
+      const lookLinks = readLinks(raw.lookLinks)
+      return {
+        type: 'idea_done',
+        name: raw.name,
+        outcome: raw.outcome,
+        ...(typeof raw.conceptId === 'string' && raw.conceptId ? { conceptId: raw.conceptId } : {}),
+        ...(lookAgain.length > 0 ? { lookAgain } : {}),
+        ...(lookLinks.length > 0 ? { lookLinks } : {}),
+      }
+    }
+    case 'working':
+      return raw.step === 'assess' || raw.step === 'record_answer' || raw.step === 'reveal' || raw.step === 'record_check' ? { type: 'working', step: raw.step } : null
+    case 'listen': {
+      const wanted: ListenFor[] = ['short_answer', 'prediction', 'explanation', 'none']
+      return wanted.includes(raw.for as ListenFor) ? { type: 'listen', for: raw.for as ListenFor } : null
+    }
     case 'done':
       return { type: 'done', text: typeof raw.text === 'string' ? raw.text : '' }
     case 'error':
@@ -215,6 +282,17 @@ function findBoundary(text: string, final: boolean): { end: number; next: number
 
 /** Removes markdown a speech synthesizer would read aloud ("star star"). */
 export function cleanForSpeech(sentence: string): string {
+  // Math keeps its notation here (x_i would lose its underscore to the markdown rules below);
+  // speakable() turns it into words when the sentence is spoken.
+  const math: string[] = []
+  const protectedSentence = sentence.replace(MATH_SPAN, (span) => {
+    math.push(span)
+    return `\u0000${math.length - 1}\u0000`
+  })
+  return stripMarkdown(protectedSentence).replace(/\u0000(\d+)\u0000/g, (_match, index: string) => math[Number(index)] ?? '')
+}
+
+function stripMarkdown(sentence: string): string {
   return sentence
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`([^`]*)`/g, '$1')

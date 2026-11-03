@@ -1,12 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
 import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
-import { signIn } from './helpers/loop'
+import { addQuizSet, createCourse, quizQuestions, signIn, signUpAndIn } from './helpers/loop'
+import { animationsSettled } from './helpers/settle'
 
 // Quiz and mock exam questions slide the way the student went (Next from the right, Previous from the
 // left, a jump fades) and stay still when a session is resumed after a reload.
 
-const { course, topics } = demoIds()
-const topicUrl = `/courses/${course}/topics/${topics[0]}`
+const { course } = demoIds()
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
@@ -17,9 +17,17 @@ const motion = (page: Page) =>
     animation: getComputedStyle(el).animationName,
   }))
 
+/** A topic of its own with a quiz that has not been taken today: the same questions open again only tomorrow (spec 7.3). */
+async function freshQuizUrl(page: Page, label: string) {
+  await signUpAndIn(page, label, { own: true })
+  const created = await createCourse(page, `Motion ${Date.now()}`, [{ name: 'Graph search' }])
+  const topicId = created.topics['Graph search']
+  await addQuizSet(topicId, quizQuestions(5))
+  return `/courses/${created.courseId}/topics/${topicId}?view=quiz`
+}
+
 test('Next slides from the right, Previous from the left, a jump fades, the first question stays still', async ({ page }) => {
-  await signIn(page, DEMO_EMAIL)
-  await page.goto(`${topicUrl}?view=quiz`)
+  await page.goto(await freshQuizUrl(page, 'motion-a'))
   await page.getByRole('button', { name: 'Start quiz' }).click()
   await expect(page.getByText(/^Question 1 of/)).toBeVisible()
   expect((await motion(page)).classes).toBe('')
@@ -35,8 +43,7 @@ test('Next slides from the right, Previous from the left, a jump fades, the firs
 })
 
 test('a quiz resumed after a reload shows its question without moving', async ({ page }) => {
-  await signIn(page, DEMO_EMAIL)
-  await page.goto(`${topicUrl}?view=quiz`)
+  await page.goto(await freshQuizUrl(page, 'motion-b'))
   await page.getByRole('button', { name: 'Start quiz' }).click()
   for (const n of [2, 3]) {
     await page.getByRole('button', { name: 'Next', exact: true }).click()
@@ -44,7 +51,8 @@ test('a quiz resumed after a reload shows its question without moving', async ({
   }
   await page.reload()
   await expect(page.getByText(/^Question 3 of/)).toBeVisible()
-  await page.waitForTimeout(400)
+  // Whatever would move has finished moving; a motion class added after the page woke up would still be on the question.
+  await animationsSettled(page)
   expect(await motion(page)).toEqual({ classes: '', animation: 'none' })
 })
 
@@ -68,7 +76,7 @@ test('a mock exam resumed after a reload shows its question without moving (at 2
     expect((await motion(page)).classes).toMatch(/animate-(slide-in|fade-in)/)
     await page.reload()
     await expect(page.getByRole('heading', { name: new RegExp(`Question ${n} of`) })).toBeVisible()
-    await page.waitForTimeout(400)
+    await animationsSettled(page)
     expect(await motion(page), `resumed at question ${n}`).toEqual({ classes: '', animation: 'none' })
   }
 })

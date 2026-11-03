@@ -18,6 +18,10 @@ export type StreamChatArgs = {
   question: string
   threadId?: string | null
   topicId?: string | null
+  /** The concept a new conversation is about (the knowledge map's "Ask about this"). */
+  conceptId?: string | null
+  /** The student's "Show me a worked example" button. */
+  event?: 'show_worked'
   signal: AbortSignal
   onEvent: (event: ChatEvent) => void
 }
@@ -27,7 +31,7 @@ export type StreamChatArgs = {
  * before any event (rate limit, budget, validation, offline) and with an AbortError when the
  * student stops it.
  */
-export async function streamChat({ courseId, question, threadId, topicId, signal, onEvent }: StreamChatArgs) {
+export async function streamChat({ courseId, question, threadId, topicId, conceptId, event, signal, onEvent }: StreamChatArgs) {
   let response: Response
   try {
     response = await fetch(`/api/projects/${encodeURIComponent(courseId)}/chat`, {
@@ -38,6 +42,8 @@ export async function streamChat({ courseId, question, threadId, topicId, signal
         question,
         ...(threadId ? { threadId } : {}),
         ...(topicId ? { topicId } : {}),
+        ...(conceptId ? { conceptId } : {}),
+        ...(event ? { event } : {}),
       }),
       signal,
     })
@@ -57,8 +63,8 @@ export async function streamChat({ courseId, question, threadId, topicId, signal
   const splitter = createLineSplitter()
   const emit = (lines: string[]) => {
     for (const line of lines) {
-      const event = parseChatEvent(line)
-      if (event) onEvent(event)
+      const parsed = parseChatEvent(line)
+      if (parsed) onEvent(parsed)
     }
   }
   while (true) {

@@ -611,7 +611,7 @@ class TestRubricChecks:
         grader = ExamGrader()
         question = dict(SHORT_QUESTION, key_points=['Point 1'])
 
-        async def fake_short(_question, _answer):
+        async def fake_short(_question, _answer, _thinking=None):
             return {'points_earned': 10, 'is_correct': True, 'feedback': 'Good.', 'criteria': [{'point': 'Point 1', 'result': 'met'}]}
 
         grader._grade_short_answer = fake_short

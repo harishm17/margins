@@ -5,7 +5,12 @@ import { ArrowsClockwise, Microphone } from '@phosphor-icons/react/dist/ssr'
 import { Page, PageIntro } from '@/components/shell/page'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ShortSessionCard } from '@/features/home/short-session-card'
+import { ProgressPanel, WeeklyFocus } from '@/features/review/progress-panel'
 import { ReviewList } from '@/features/review/review-list'
+import { activeSession } from '@/lib/learning/review-session'
+import { shortSessionOffer } from '@/lib/learning/short-session-server'
+import { getProgress } from '@/server/queries/progress'
 import { getReviewPageData } from '@/server/queries/review'
 import { describeSprintTopics, getSprintTopics } from '@/server/queries/voice'
 import { requireUser } from '@/server/session'
@@ -21,7 +26,20 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
   if (!known) return <ReviewSkeleton />
   const data = await getReviewPageData(user.id, courseId, timeZone)
   if (!data) notFound()
-  const sprint = await getSprintTopics(user.id, courseId)
+  // The progress figures are an extra: if they cannot be read the list and the sessions still open.
+  const [sprint, progress, active, short] = await Promise.all([
+    getSprintTopics(user.id, courseId),
+    data.hasTopics
+      ? getProgress(user.id, courseId, { timeZone }).catch((error) => {
+          console.error('[REVIEW] Progress could not be read:', error)
+          return null
+        })
+      : null,
+    // A review started today and not finished: the page offers to resume it (spec 18.7).
+    activeSession(user.id, courseId, timeZone).catch(() => null),
+    // "Have 10 minutes?" (spec 18.8): an extra, so a failure to work it out leaves the page as it was.
+    data.hasTopics ? shortSessionOffer(user.id, courseId, timeZone).catch(() => null) : null,
+  ])
 
   return (
     <Page>
@@ -40,7 +58,9 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-10">
-          <ReviewList data={data} />
+          {progress ? <WeeklyFocus courseId={courseId} focus={progress.focus} /> : null}
+          <ReviewList data={data} active={active} />
+          {short ? <ShortSessionCard courseId={courseId} plan={short.plan} /> : null}
           {sprint.topics.length > 0 ? (
             // The session itself has its own screen: it runs full height and does not scroll under this list.
             <section
@@ -58,6 +78,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
               </Button>
             </section>
           ) : null}
+          {progress ? <ProgressPanel progress={progress} /> : null}
         </div>
       )}
     </Page>

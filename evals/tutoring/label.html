@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Label tutor replies</title>
+<style>
+  :root { color-scheme: light dark; --line: #8886; --accent: #2457c5; }
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 52rem; margin: 0 auto; padding: 1rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1rem; margin: 1.25rem 0 .25rem; }
+  p.hint { margin: .25rem 0 1rem; opacity: .8; }
+  .box { border: 1px solid var(--line); border-radius: 6px; padding: .5rem .75rem; margin: .5rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .reply { border-width: 2px; border-color: var(--accent); }
+  .student { border-left: 4px solid var(--line); }
+  .tutor { border-left: 4px solid var(--accent); }
+  .meta { font-size: .875rem; opacity: .8; }
+  fieldset { border: 1px solid var(--line); border-radius: 6px; margin: .5rem 0; padding: .25rem .75rem .5rem; }
+  legend { font-weight: 600; padding: 0 .25rem; }
+  fieldset p { margin: 0 0 .25rem; font-size: .9rem; opacity: .85; }
+  label { display: inline-block; margin-right: 1rem; padding: .15rem 0; }
+  button { font: inherit; padding: .4rem .9rem; margin-right: .5rem; border: 1px solid var(--line); border-radius: 6px; background: Canvas; color: CanvasText; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button[disabled] { opacity: .5; cursor: default; }
+  #progress { font-weight: 600; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1>Label tutor replies</h1>
+<p class="hint">Open the <code>turns.json</code> of a tutoring eval run. You will see 40 replies, chosen in a fixed order across the student patterns. Rate each reply on the dimensions below. The model judge's ratings are not shown. Labels are kept in this browser as you go and downloaded as a JSON file at the end.</p>
+
+<section id="load">
+  <label for="file">Results file (turns.json)</label>
+  <input id="file" type="file" accept="application/json,.json">
+  <p id="loadError" role="alert"></p>
+</section>
+
+<section id="work" hidden>
+  <p><span id="progress"></span> <span class="meta" id="where"></span></p>
+  <h2>Problem</h2>
+  <div class="box" id="problem"></div>
+  <h2>Authored solution (for judging only)</h2>
+  <div class="box" id="solution"></div>
+  <h2>Conversation</h2>
+  <div id="conversation"></div>
+  <h2>Reply to rate</h2>
+  <div class="box reply" id="reply" tabindex="-1"></div>
+  <form id="form" aria-label="Ratings"></form>
+  <p>
+    <button type="button" id="prev">Previous</button>
+    <button type="button" id="next">Next</button>
+    <button type="button" id="download">Download labels</button>
+  </p>
+  <p id="status" role="status" class="meta"></p>
+</section>
+
+<script>
+// The dimensions and labels are the ones in tutor_judge.py (Maurya et al., Table 4, plus groundedness).
+// test_tutor_judge.py checks that the two lists agree.
+const DIMENSIONS = [
+  { key: "mistake_identification", name: "Mistake identification", question: "Does the reply recognise that the student's work has a mistake?", options: ["yes", "some", "no", "not_applicable"] },
+  { key: "mistake_location", name: "Mistake location", question: "Does the reply point to where the mistake is and say what it is?", options: ["yes", "some", "no", "not_applicable"] },
+  { key: "reveals_answer", name: "Revealing of the answer", question: "Does the reply state the final answer of the step, correct or not, in any form?", options: ["no", "yes_correct", "yes_incorrect"] },
+  { key: "guidance", name: "Providing guidance", question: "Is the guidance correct and relevant to the mistake?", options: ["yes", "some", "no"] },
+  { key: "actionability", name: "Actionability", question: "Is it clear what the student should do next?", options: ["yes", "some", "no"] },
+  { key: "coherence", name: "Coherence", question: "Is the reply consistent with what the student said before?", options: ["yes", "some", "no"] },
+  { key: "tone", name: "Tutor tone", question: "Is the tone encouraging, neutral or offensive?", options: ["encouraging", "neutral", "offensive"] },
+  { key: "human_likeness", name: "Human-likeness", question: "Does it sound natural, as a person tutoring would write?", options: ["yes", "some", "no"] },
+  { key: "groundedness", name: "Groundedness", question: "Is everything it says consistent with the authored solution, with nothing outside knowledge presented as course fact?", options: ["yes", "some", "no"] },
+];
+const SAMPLE_SIZE = 40;
+const SEED = 7;
+
+let data = null, sample = [], position = 0, labels = {}, storageKey = "";
+
+const $ = (id) => document.getElementById(id);
+
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// 40 replies, taking the patterns in turn so that every student pattern is rated.
+function chooseSample(turns) {
+  const random = mulberry32(SEED);
+  const byPattern = {};
+  for (const turn of turns) if (turn.reply) (byPattern[turn.pattern] ||= []).push(turn);
+  const names = Object.keys(byPattern).sort();
+  for (const name of names) {
+    const list = byPattern[name];
+    for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  }
+  const chosen = [];
+  while (chosen.length < SAMPLE_SIZE && names.some((n) => byPattern[n].length)) {
+    for (const name of names) if (byPattern[name].length && chosen.length < SAMPLE_SIZE) chosen.push(byPattern[name].pop());
+  }
+  return chosen;
+}
+
+const keyOf = (turn) => `${turn.scenario}#${turn.turn}`;
+
+function describeStudent(step) {
+  if (step.event === "check") return `Checked the answer "${step.answer}": ${step.correct ? "right" : "wrong"}.`;
+  if (step.event === "hint") return "Opened an authored hint.";
+  if (step.event === "clarify") return "Pressed: I don't understand the question.";
+  if (step.event === "show_worked") return "Pressed: Show me a worked example.";
+  const text = (step.message ?? step.working ?? "").trim();
+  const working = (step.working ?? "").trim();
+  return (text ? `Wrote: ${text}` : "Asked for a check of their understanding, no message.") + (working && working !== text ? `\nWorking: ${working}` : "");
+}
+
+function box(className, text) {
+  const div = document.createElement("div");
+  div.className = `box ${className}`;
+  div.textContent = text;
+  return div;
+}
+
+function render() {
+  const turn = sample[position];
+  const scenario = data.scenarios[turn.scenario];
+  $("progress").textContent = `Reply ${position + 1} of ${sample.length}`;
+  $("where").textContent = `${scenario.pattern}, move ${turn.move}, rung ${turn.rung_used}. ${Object.keys(labels).length} labelled.`;
+  $("problem").textContent = scenario.problem;
+  $("solution").textContent = scenario.steps.map((s, i) => `Step ${i + 1}: ${s.question}\n  Answer: ${s.answer}`).join("\n") + `\n\nThe student is on step ${scenario.step_index + 1}.`;
+  const conversation = $("conversation");
+  conversation.replaceChildren();
+  const replies = new Map(data.turns.filter((t) => t.scenario === turn.scenario).map((t) => [t.turn, t]));
+  scenario.turns.slice(0, turn.turn).forEach((step, index) => {
+    const number = index + 1;
+    if (number === turn.turn) { conversation.append(box("student", `Student: ${describeStudent(step)}`)); return; }
+    conversation.append(box("student", `Student: ${describeStudent(step)}`));
+    const earlier = replies.get(number);
+    if (earlier && earlier.reply) conversation.append(box("tutor", `Tutor: ${earlier.reply}`));
+    else if (step.event === "ask" || step.event === "clarify" || step.event === "show_worked") conversation.append(box("tutor", "Tutor: (the app did not call the tutor)"));
+  });
+  $("reply").textContent = turn.reply;
+  const current = labels[keyOf(turn)] || {};
+  const form = $("form");
+  form.replaceChildren();
+  for (const dim of DIMENSIONS) {
+    const fieldset = document.createElement("fieldset");
+    const legend = document.createElement("legend");
+    legend.textContent = dim.name;
+    fieldset.append(legend);
+    const question = document.createElement("p");
+    question.textContent = dim.question;
+    fieldset.append(question);
+    for (const option of dim.options) {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = dim.key;
+      input.value = option;
+      input.checked = current[dim.key] === option;
+      input.addEventListener("change", () => save(turn, dim.key, option));
+      label.append(input, " " + option.replace(/_/g, " "));
+      fieldset.append(label);
+    }
+    form.append(fieldset);
+  }
+  $("prev").disabled = position === 0;
+  $("next").disabled = position === sample.length - 1;
+  $("reply").focus();
+}
+
+function save(turn, dimension, value) {
+  const key = keyOf(turn);
+  labels[key] = { ...(labels[key] || {}), [dimension]: value };
+  localStorage.setItem(storageKey, JSON.stringify(labels));
+  $("where").textContent = $("where").textContent.replace(/\d+ labelled/, `${Object.keys(labels).length} labelled`);
+}
+
+function download() {
+  const out = {
+    source: $("file").files[0] ? $("file").files[0].name : "",
+    created: new Date().toISOString(),
+    labels: sample.filter((t) => labels[keyOf(t)]).map((t) => ({ key: keyOf(t), labels: labels[keyOf(t)] })),
+  };
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
+  link.download = "tutor-labels.json";
+  link.click();
+  URL.revokeObjectURL(link.href);
+  const complete = out.labels.filter((l) => DIMENSIONS.every((d) => l.labels[d.key])).length;
+  $("status").textContent = `Downloaded ${out.labels.length} replies, ${complete} with every dimension rated.`;
+}
+
+$("file").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  $("loadError").textContent = "";
+  if (!file) return;
+  try {
+    data = JSON.parse(await file.text());
+    if (!data.scenarios || !Array.isArray(data.turns)) throw new Error("not a tutoring eval turns.json");
+    sample = chooseSample(data.turns);
+    if (!sample.length) throw new Error("no replies in this file");
+  } catch (error) {
+    $("loadError").textContent = `Could not read that file: ${error.message}`;
+    return;
+  }
+  storageKey = `tutor-labels:${file.name}:${file.size}`;
+  labels = JSON.parse(localStorage.getItem(storageKey) || "{}");
+  position = 0;
+  $("work").hidden = false;
+  render();
+});
+$("prev").addEventListener("click", () => { position = Math.max(0, position - 1); render(); });
+$("next").addEventListener("click", () => { position = Math.min(sample.length - 1, position + 1); render(); });
+$("download").addEventListener("click", download);
+</script>
+</body>
+</html>

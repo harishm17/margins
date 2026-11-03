@@ -132,6 +132,7 @@ export async function POST(
             where: { id: existing.id },
             data: {
               notesCompleted: existing.notesCompleted || row.notesCompleted,
+              notesCompletedAt: [existing.notesCompletedAt, row.notesCompletedAt].filter((date): date is Date => date !== null).sort((a, b) => a.getTime() - b.getTime())[0] ?? null,
               examplesCompleted: existing.examplesCompleted || row.examplesCompleted,
               quizCompleted: existing.quizCompleted || row.quizCompleted,
               quizScore: scores.length > 0 ? Math.max(...scores) : null,

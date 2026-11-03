@@ -17,6 +17,10 @@ RUN uv sync --locked --no-dev --no-install-project
 # Bake the local embedding model into the image so cold starts never download it.
 ARG EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 RUN /opt/venv/bin/python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='${EMBEDDING_MODEL}', cache_dir='/opt/models')"
+# The exam guard's meaning check compares across languages with a second model (app.config EXAM_GUARD_EMBEDDING_MODEL).
+# The runtime is offline (HF_HUB_OFFLINE=1), so it must be baked here too, or the check is silently off in production.
+ARG EXAM_GUARD_EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+RUN /opt/venv/bin/python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='${EXAM_GUARD_EMBEDDING_MODEL}', cache_dir='/opt/models')"
 
 # Same for the tokenizer the chunker counts with (tiktoken downloads its vocabulary on first use).
 ENV TIKTOKEN_CACHE_DIR=/opt/tiktoken

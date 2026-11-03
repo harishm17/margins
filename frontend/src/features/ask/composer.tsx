@@ -80,6 +80,7 @@ export function Composer({
 
   return (
     <form
+      data-ask-composer=""
       onSubmit={(event) => {
         event.preventDefault()
         submit()
@@ -136,7 +137,7 @@ export function Composer({
           </span>
         ) : null}
         {sending ? (
-          <Button size="sm" variant="secondary" icon={<Stop weight="fill" />} onClick={onStop} aria-label="Stop answering" kbd="Esc">
+          <Button size="sm" variant="secondary" className="md:h-[34px]" icon={<Stop weight="fill" />} onClick={onStop} aria-keyshortcuts="Escape" kbd="Esc">
             Stop
           </Button>
         ) : (

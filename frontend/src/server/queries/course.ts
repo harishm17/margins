@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { areRecordIds } from '@/lib/ids'
 import { prisma } from '@/lib/db/prisma'
-import { examTitle } from '@/lib/exams/display'
+import { getExamTitles } from '@/server/queries/exams'
 import { dueBoundary, isReviewDue, nextStepForCourse, type DueTopic, type NextStep } from '@/lib/learning/next-step'
 import { ACTIVE_JOB_STATUSES } from '@/lib/jobs/active-jobs'
 import { typicalPipelineSeconds } from '@/lib/jobs/estimate'
@@ -20,6 +20,9 @@ import { PRACTICE_DONE_SHARE } from '@/features/topic/practice-keys'
 import type { CourseSetup, TopicListState } from '@/lib/course-setup'
 import { getCourseShell, type CourseShell, type ShellTopic, type ShellUnit } from '@/server/queries/courses'
 import { getPlanData } from '@/server/queries/plan'
+import { withTopicActivity } from '@/server/queries/topic-activity'
+import { backfillIfDue } from '@/lib/learning/backfill'
+import { startPrepareConceptsForCourse } from '@/lib/learning/prepare-concepts'
 import { deriveExamStyleState, examProfileTarget, materialIdFromProfileTarget } from '@/lib/exams/style-state'
 
 /**
@@ -300,7 +303,8 @@ export async function getGenerationState(userId: string, course: CourseShell): P
   const failures = pickGenerationFailures(recent as GenerationJobRow[], (topicId, contentType) =>
     topicsById.get(topicId)?.content.includes(contentType) ?? false
   )
-    .filter((failure) => topicsById.has(failure.topicId))
+    // Concepts and the warm-up are extras: a topic still gets its notes, so their failures are not listed.
+    .filter((failure) => topicsById.has(failure.topicId) && core.has(failure.contentType))
     .map((failure) => {
       const topicName = topicsById.get(failure.topicId)!.name
       return {
@@ -394,7 +398,12 @@ export function dueTopicsOf(topics: ShellTopic[], now: Date, timeZone: string): 
   const boundary = dueBoundary(now, timeZone)
   return topics
     .filter((topic) => topic.confirmed && isReviewDue(topic.dueAt, boundary))
-    .map((topic) => ({ topicId: topic.id, name: topic.name, dueAt: topic.dueAt as string, mastery: topic.mastery }))
+    .map((topic) => ({ topicId: topic.id, name: topic.name, dueAt: topic.dueAt as string, mastery: topic.mastery, hasConcepts: topic.hasConcepts }))
+}
+
+/** The topics that have concepts, for the links that open a review. */
+export function conceptTopicsOf(topics: ShellTopic[]): Set<string> {
+  return new Set(topics.filter((topic) => topic.hasConcepts).map((topic) => topic.id))
 }
 
 /** Due topics first (most overdue first), the rest in course order. */
@@ -453,17 +462,30 @@ export async function getCourseOverview(
   if (!planData) return null
   const { plan } = planData
 
+  // A course planned before concepts existed gets them now (once; see lib/learning/prepare-concepts.ts).
+  await startPrepareConceptsForCourse(userId, courseId)
+  // Each topic that has concepts has its history turned into evidence (lib/learning/backfill.ts).
+  // Fire and forget, and that is only safe because the web app is a long-lived Node server (Railway): the
+  // promise keeps running after the response is sent. On a host that freezes or stops the process when the
+  // response ends (serverless), this must move to a job. A run that dies midway marks nothing; its lease
+  // (Project.evidenceBackfillClaimedAt) expires and a later visit finishes it, so a failure here is only logged.
+  void backfillIfDue(userId, courseId, { timeZone }).catch((error) => console.error('Evidence backfill failed:', error))
+
+  const examTitles = await getExamTitles(userId, courseId)
   const now = new Date()
   const summary = summarizeTopics(course.topics)
   const boundary = dueBoundary(now, timeZone)
-  const next = nextStepForCourse({
+  const planned = nextStepForCourse({
     courseId,
     setup: course.setup,
     plan,
     due: dueTopicsOf(course.topics, now, timeZone),
     now,
     timeZone,
+    conceptTopicIds: conceptTopicsOf(course.topics),
   })
+  // A topic is the next step: its own next activity words the card (spec §8.1).
+  const next = await withTopicActivity(userId, courseId, planned, course.topics, course.setup.topics.listConfirmed)
   return {
     mode: 'today',
     course,
@@ -483,7 +505,7 @@ export async function getCourseOverview(
       recentExams: submissions.map((submission) => ({
         submissionId: submission.id,
         examId: submission.sampleExam.id,
-        name: examTitle(submission.sampleExam.name, submission.sampleExam.createdAt),
+        name: examTitles.get(submission.sampleExam.id) ?? submission.sampleExam.name,
         submittedAt: submission.submittedAt.toISOString(),
         score:
           isRecord(submission.aiGrading) && typeof submission.aiGrading.overall_score === 'number'
@@ -552,7 +574,6 @@ export async function getTopicsData(userId: string, courseId: string): Promise<T
         prerequisiteIds: true,
         estimatedMinutes: true,
         examRelevant: true,
-        reviewSchedules: { where: { userId }, take: 1, select: { lastReviewedAt: true } },
       },
     }),
     prisma.topicSource.findMany({
@@ -604,7 +625,7 @@ export async function getTopicsData(userId: string, courseId: string): Promise<T
     confirmed: topic.confirmed,
     mastery: topic.mastery,
     dueAt: topic.dueAt,
-    lastReviewedAt: extraById.get(topic.id)?.reviewSchedules[0]?.lastReviewedAt?.toISOString() ?? null,
+    lastReviewedAt: topic.lastReviewedAt ?? null,
     progress: topic.progress,
     practiceDone: practiceDone.has(topic.id),
     content: topic.content,

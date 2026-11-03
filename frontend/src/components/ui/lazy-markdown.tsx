@@ -16,6 +16,11 @@ export const LazyMarkdown = dynamic(() => import('./markdown').then((m) => m.Mar
   ),
 })
 
+/** A "Check yourself" block outside markdown (the gap explainer's), sharing the markdown chunk. */
+export const LazyCheckYourself = dynamic(() => import('./markdown').then((m) => m.CheckYourself), {
+  loading: () => <Skeleton className="h-28 w-full rounded-card" aria-hidden="true" />,
+})
+
 export const LazyMarkdownInline = dynamic(() => import('./markdown').then((m) => m.MarkdownInline), {
   loading: () => null,
 })

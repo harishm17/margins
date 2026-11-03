@@ -15,6 +15,8 @@ const updateProgressSchema = z.object({
   examplesCompleted: z.boolean().optional(),
   quizCompleted: z.boolean().optional(),
   quizScore: z.number().min(0).max(100).optional(),
+  // "I've read it" in the reader: stamps readAt (the first time) and counts as the notes being read.
+  readAt: z.literal(true).optional(),
 })
 
 export async function POST(
@@ -53,6 +55,11 @@ export async function POST(
     }
 
     // Upsert progress
+    const { readAt: markRead, ...fields } = validation.data
+    const now = new Date()
+    // Any "mark as read" (the reader's, or the notes view's) stamps readAt, so a topic read after v3 is never taken for one read before.
+    const marksRead = !!markRead || fields.notesCompleted === true
+    const read = markRead ? { notesCompleted: true } : {}
     const progress = await prisma.topicProgress.upsert({
       where: {
         topicId_userId: {
@@ -61,19 +68,33 @@ export async function POST(
         },
       },
       update: {
-        ...validation.data,
-        lastAccessedAt: new Date(),
+        ...fields,
+        ...read,
+        lastAccessedAt: now,
       },
       create: {
         topicId,
         userId: session.user.id,
-        notesCompleted: validation.data.notesCompleted || false,
+        ...(marksRead ? { readAt: now } : {}),
+        notesCompleted: validation.data.notesCompleted || markRead || false,
         examplesCompleted: validation.data.examplesCompleted || false,
         quizCompleted: validation.data.quizCompleted || false,
         quizScore: validation.data.quizScore ?? null,
         lastAccessedAt: new Date(),
       },
     })
+
+    // The first time the notes are complete is when a topic read before the learning path counts as learned.
+    if (progress.notesCompleted && !progress.notesCompletedAt) {
+      await prisma.topicProgress.updateMany({ where: { topicId, userId: session.user.id, notesCompletedAt: null }, data: { notesCompletedAt: now } })
+      progress.notesCompletedAt = now
+    }
+
+    // The first "I've read it" stands; reading again does not move readAt.
+    if (marksRead && !progress.readAt) {
+      await prisma.topicProgress.updateMany({ where: { topicId, userId: session.user.id, readAt: null }, data: { readAt: now } })
+      progress.readAt = now
+    }
 
     return NextResponse.json({ progress })
   } catch (error) {

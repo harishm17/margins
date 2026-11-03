@@ -36,6 +36,9 @@ class LLMFactory:
                 max_retries=settings.LLM_MAX_RETRIES,
             )
         if provider_name == "mock":
+            # Settings refuses this at startup; checked again here in case the setting was changed after.
+            if settings.is_production:
+                raise LLMNotConfiguredError("LLM_PROVIDER=mock is not allowed when ENVIRONMENT=production")
             from app.services.llm.mock_provider import MockProvider
 
             return MockProvider()

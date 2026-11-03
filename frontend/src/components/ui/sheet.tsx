@@ -8,7 +8,6 @@ import { DialogOverlay } from './dialog'
 import { IconButton } from './icon-button'
 
 export const Sheet = DialogPrimitive.Root
-export const SheetTrigger = DialogPrimitive.Trigger
 export const SheetClose = DialogPrimitive.Close
 
 type SheetContentProps = React.ComponentProps<typeof DialogPrimitive.Content> & {

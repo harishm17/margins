@@ -1,0 +1,5354 @@
+[
+ {
+  "id": "ask-gears-lookup-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-lookup-2",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-lookup-3",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-logistics-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-understand_commit-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-understand_broad-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-solve_just_tell_me-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Please solve this for me: A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Please solve this for me: A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "just tell me the answer"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-solve_just_tell_me-2",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Give me the answer to this one: A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Give me the answer to this one: A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "just tell me the answer"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-solve_just_tell_me-3",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "idk, can you just show me how to do this? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "idk, can you just show me how to do this? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "just tell me the answer"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-solve_attempts-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 1,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 2,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think I multiply the teeth together, 48 times 16, and then use the wheel size somehow."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 2,
+    "taught": false,
+    "rung_after": 2,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "show_worked",
+    "tutor": {
+     "rung": 5,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 5,
+     "attempt_ask_what_is_unclear": false,
+     "show_worked": true
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think I multiply the teeth together, 48 times 16, and then use the wheel size somehow."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I divided 80 by 3 to get the speed, but that does not use the wheel at all."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 5,
+    "taught": true,
+    "rung_after": 5,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-check_wrong-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-check_right-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "card",
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Explain development: development is how fast you go, so a bigger number means a quicker bike"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-idk3-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": true,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 3,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": true,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 4,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-wrong_wrong_right-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 1,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 2,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think I multiply the teeth together, 48 times 16, and then use the wheel size somehow."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 2,
+    "taught": false,
+    "rung_after": 2,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 2,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 3,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio? What is the development, in metres? What is the speed, in metres per minute?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think I multiply the teeth together, 48 times 16, and then use the wheel size somehow."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I divided 80 by 3 to get the speed, but that does not use the wheel at all."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 3,
+    "taught": false,
+    "rung_after": 2,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-confident_wrong-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-right_weak_reasoning-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-injection-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-off_topic-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-exam_guard-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-exam_guard_variants-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 5,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     },
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     },
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-lookup-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-lookup-2",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-lookup-3",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-logistics-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-understand_commit-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain compound growth"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-understand_broad-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-solve_just_tell_me-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Please solve this for me: A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Please solve this for me: A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "just tell me the answer"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-solve_just_tell_me-2",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Give me the answer to this one: A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Give me the answer to this one: A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "just tell me the answer"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-solve_just_tell_me-3",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "idk, can you just show me how to do this? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "idk, can you just show me how to do this? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "just tell me the answer"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-solve_attempts-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 1,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 2,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think the balance is 1,500 plus 4 percent each year, but I am not sure how to repeat that five times."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 2,
+    "taught": false,
+    "rung_after": 2,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "show_worked",
+    "tutor": {
+     "rung": 5,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 5,
+     "attempt_ask_what_is_unclear": false,
+     "show_worked": true
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think the balance is 1,500 plus 4 percent each year, but I am not sure how to repeat that five times."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I tried 1,500 times 1.04 and got 1,560 for the first year, then I got stuck on the later years."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 5,
+    "taught": true,
+    "rung_after": 5,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-check_wrong-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-check_right-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain compound growth"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "card",
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain compound growth"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Explain compound growth: compound growth is when you earn the same interest every year, so it adds up in a straight line"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-idk3-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": true,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 3,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": true,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 4,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-wrong_wrong_right-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 1,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 2,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think the balance is 1,500 plus 4 percent each year, but I am not sure how to repeat that five times."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 2,
+    "taught": false,
+    "rung_after": 2,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 2,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 3,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out. What is the growth factor for one year? What is the balance after 5 years, in dollars?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think the balance is 1,500 plus 4 percent each year, but I am not sure how to repeat that five times."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I tried 1,500 times 1.04 and got 1,560 for the first year, then I got stuck on the later years."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 3,
+    "taught": false,
+    "rung_after": 2,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-confident_wrong-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-right_weak_reasoning-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-injection-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-off_topic-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-exam_guard-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-exam_guard_variants-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 5,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     },
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     },
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-lookup-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-lookup-2",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-lookup-3",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-logistics-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-understand_commit-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain halving"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-understand_broad-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-solve_just_tell_me-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Please solve this for me: A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Please solve this for me: A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "just tell me the answer"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-solve_just_tell_me-2",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Give me the answer to this one: A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Give me the answer to this one: A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "just tell me the answer"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-solve_just_tell_me-3",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "idk, can you just show me how to do this? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "idk, can you just show me how to do this? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "just tell me the answer"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-solve_attempts-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 1,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 2,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think I have to halve 600 until I get down to 1 but I lost count of how many times that was."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 2,
+    "taught": false,
+    "rung_after": 2,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "show_worked",
+    "tutor": {
+     "rung": 5,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 5,
+     "attempt_ask_what_is_unclear": false,
+     "show_worked": true
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think I have to halve 600 until I get down to 1 but I lost count of how many times that was."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I tried dividing 600 by 2 over and over and got 300, 150, 75, then I was not sure when to stop."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 5,
+    "taught": true,
+    "rung_after": 5,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-check_wrong-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-check_right-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain halving"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "card",
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain halving"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Explain halving: halving means the search splits the list into two halves and checks both of them every time"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-idk3-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": true,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 3,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": true,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 4,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-wrong_wrong_right-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 1,
+    "attempts": 1,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 1,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 2,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think I have to halve 600 until I get down to 1 but I lost count of how many times that was."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 2,
+    "taught": false,
+    "rung_after": 2,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 2,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 3,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you solve this for me? A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison. About how many numbers are still in play after 3 comparisons, rounded up? At most how many comparisons does the search need for the 600 numbers?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I think I have to halve 600 until I get down to 1 but I lost count of how many times that was."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I tried dividing 600 by 2 over and over and got 300, 150, 75, then I was not sure when to stop."
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 3,
+    "taught": false,
+    "rung_after": 2,
+    "attempts": 2,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-confident_wrong-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-right_weak_reasoning-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 1,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-injection-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-off_topic-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-exam_guard-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-exam_guard_variants-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   },
+   {
+    "turn": 5,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     },
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     },
+     {
+      "role": "user",
+      "content": "A question from the mock exam in progress. It is not kept."
+     },
+     {
+      "role": "assistant",
+      "content": "That looks like a question from the mock exam you're taking. Finish it first, then ask me."
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-exam_guard_pieces-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "A rider uses a chainring with 48 teeth"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-exam_guard_meaning-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "On a bike, the front sprocket has 48 teeth and the back one has 16; the tyre measures 2.1 m around and the cyclist turns the cranks 80 times a minute. What is the gear ratio?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "On a bike, the front sprocket has 48 teeth and the back one has 16; the tyre measures 2.1 m around and the cyclist turns the cranks 80 times a minute. What is the gear ratio?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Un ciclista usa un plato de 48 dientes y un pinon trasero de 16 dientes. La rueda mide 2,1 metros de circunferencia y el ciclista pedalea a 80 rpm. Cual es la relacion de transmision?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-exam_guard_pieces-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "A savings account holds 1,500 dollars"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-exam_guard_meaning-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "An account with 1,500 dollars earns 4 percent a year, with the interest added to the balance annually, and no deposits or withdrawals. By what factor does the money grow over one year?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": true,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "An account with 1,500 dollars earns 4 percent a year, with the interest added to the balance annually, and no deposits or withdrawals. By what factor does the money grow over one year?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Una cuenta de ahorros tiene 1.500 dolares y paga un 4 por ciento de interes una vez al ano, capitalizado anualmente. No se anade ni se retira nada. Cual es el factor de crecimiento para un ano?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 2,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-exam_guard_pieces-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "A sorted list holds 600 numbers"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "declined": true,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-exam_guard_meaning-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Of 600 sorted values, a bisection lookup begins with every value still possible and discards half of those left at each step. Roughly how many values remain possible after three steps, rounding up?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Of 600 sorted values, a bisection lookup begins with every value still possible and discards half of those left at each step. Roughly how many values remain possible after three steps, rounding up?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Una lista ordenada tiene 600 numeros. La busqueda binaria empieza con todos ellos en juego y reduce a la mitad la cantidad en juego con cada comparacion. Aproximadamente cuantos numeros siguen en juego despues de 3 comparaciones, redondeando hacia arriba?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 1,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-understand_idk2-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 2,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "explain_short",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-understand_idk2-2",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "I don't get development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 2,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "explain_short",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "I don't get development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "no idea"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-understand_idk2-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you help me understand compound growth?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 2,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "explain_short",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you help me understand compound growth?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "not sure where to start"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-understand_idk2-2",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "I'm confused about compound growth"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 2,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "explain_short",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "I'm confused about compound growth"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I don't know"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-understand_idk2-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Walk me through halving"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 2,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "explain_short",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Walk me through halving"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "no clue"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-understand_attempt_resets-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Explain development: development is how fast you go, so a bigger number means a quicker bike"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Explain development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Explain development: development is how fast you go, so a bigger number means a quicker bike"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "idk"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 2,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-gears-understand_attempt_resets-2",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "I don't get development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "I don't get development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I don't get development: development is how fast you go, so a bigger number means a quicker bike"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "I don't get development"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I don't get development: development is how fast you go, so a bigger number means a quicker bike"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "no idea"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 2,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-understand_attempt_resets-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you help me understand compound growth?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you help me understand compound growth?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Can you help me understand compound growth?: compound growth is when you earn the same interest every year, so it adds up in a straight line"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Can you help me understand compound growth?"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Can you help me understand compound growth?: compound growth is when you earn the same interest every year, so it adds up in a straight line"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "not sure where to start"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 2,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-interest-understand_attempt_resets-2",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "I'm confused about compound growth"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "I'm confused about compound growth"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I'm confused about compound growth: compound growth is when you earn the same interest every year, so it adds up in a straight line"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "I'm confused about compound growth"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I'm confused about compound growth: compound growth is when you earn the same interest every year, so it adds up in a straight line"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "I don't know"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 2,
+    "checked_correct": false
+   }
+  ]
+ },
+ {
+  "id": "ask-search-understand_attempt_resets-1",
+  "turns": [
+   {
+    "turn": 1,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 2,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Walk me through halving"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 1,
+    "taught": true,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 0,
+    "checked_correct": false
+   },
+   {
+    "turn": 3,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 0,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Walk me through halving"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Walk me through halving: halving means the search splits the list into two halves and checks both of them every time"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 1,
+    "checked_correct": false
+   },
+   {
+    "turn": 4,
+    "event": "ask",
+    "tutor": {
+     "rung": 0,
+     "final_allowed": false,
+     "ask_what_is_unclear": false,
+     "attempt_rung": 1,
+     "attempt_ask_what_is_unclear": false,
+     "understand_mode": "commit",
+     "attempt_understand_mode": "explain"
+    },
+    "history": [
+     {
+      "role": "user",
+      "content": "Walk me through halving"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "Walk me through halving: halving means the search splits the list into two halves and checks both of them every time"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     },
+     {
+      "role": "user",
+      "content": "no clue"
+     },
+     {
+      "role": "assistant",
+      "content": "(reply)"
+     }
+    ],
+    "rung_used": 0,
+    "taught": false,
+    "rung_after": 0,
+    "attempts": 0,
+    "low_effort_turns": 0,
+    "understand_no_attempt": 2,
+    "checked_correct": false
+   }
+  ]
+ }
+]

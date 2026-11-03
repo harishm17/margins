@@ -10,6 +10,7 @@ GENERATOR_MODULES = (
     "app.services.content_generator.examples",
     "app.services.content_generator.quiz",
     "app.services.exam_generator",
+    "app.services.content_generator.warmup",
 )
 
 
@@ -26,10 +27,14 @@ def topic_context(chunks: List[Dict[str, Any]], course_map: str = "", **topic: A
 @contextmanager
 def stub_topic_context(chunks: List[Dict[str, Any]], course_map: str = "", digest: str = "",
                        context: Optional[TopicContext] = None,
-                       contexts: Optional[Dict[str, TopicContext]] = None):
+                       contexts: Optional[Dict[str, TopicContext]] = None,
+                       concepts: Optional[List[Dict[str, Any]]] = None,
+                       neighbours: Optional[List[Dict[str, Any]]] = None):
     """Every generator reads `chunks` (and `course_map`) instead of the database, and the quiz and
     exam generators see `digest` as what the student already has. `contexts` maps a topic id to its
-    own context (a prerequisite, say); any other id gets the main one."""
+    own context (a prerequisite, say); any other id gets the main one. `concepts` are the topic's
+    concepts (none by default: a topic whose extraction has not run); `neighbours` are the confusable
+    concepts of other topics (none by default)."""
     result = context or topic_context(chunks, course_map)
 
     async def fetch(topic_id: str, limit: int = 24) -> TopicContext:
@@ -38,9 +43,17 @@ def stub_topic_context(chunks: List[Dict[str, Any]], course_map: str = "", diges
     async def existing(topic_id: str) -> str:
         return digest
 
+    async def fetch_concepts(topic_id: str) -> List[Dict[str, Any]]:
+        return [dict(concept) for concept in concepts or []]
+
+    async def fetch_neighbours(topic_id: str) -> List[Dict[str, Any]]:
+        return [dict(concept) for concept in neighbours or []]
+
     with ExitStack() as stack:
         for module in GENERATOR_MODULES:
             stack.enter_context(patch(f"{module}.fetch_topic_context", fetch))
+            stack.enter_context(patch(f"{module}.fetch_concepts", fetch_concepts, create=True))
+            stack.enter_context(patch(f"{module}.fetch_confusable_neighbours", fetch_neighbours, create=True))
         for module in ("app.services.content_generator.quiz", "app.services.exam_generator"):
             stack.enter_context(patch(f"{module}.existing_content_digest", existing))
         yield result

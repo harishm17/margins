@@ -25,7 +25,12 @@ import { prisma } from '@/lib/db/prisma'
 import { ACTIVE_JOB_STATUSES, createJobOrFindActive, gradeQuizTarget } from '@/lib/jobs/active-jobs'
 import { isWaitingForAi } from '@/lib/jobs/poll-job'
 import { buildReview, toStoredResults, type QuizReviewItem } from './quiz-review'
-import { applyQuizAttempt } from './record-quiz-attempt'
+import { mergeRuleResults, partialSummary, type PartialQuiz, type PartialSummary } from './quiz-partial'
+import { gradeAnswers as defaultGrade, GradingUnavailableError, ruleGradableIndexes } from '@/lib/ai-service/grading'
+import { applyQuizAttempt, isStrongStart, quizHelp, quizOutcome, type QuizHelp, type QuizOutcome } from './record-quiz-attempt'
+import { answersForGrader, answersForStorage, confidences, normalizeAnswers, plainAnswers, type QuizAnswer, type RawQuizAnswer } from './quiz-answers'
+import { pendingQuizEvidence, recordAttemptEvidence, recordQuizEvidence, retryPendingQuizEvidence, takenEarlierToday } from './quiz-evidence'
+import { studentTimeZone } from './student-time-zone'
 import type { GradedQuestion } from '@/lib/ai-service/grading'
 
 type Topic = { id: string; projectId: string }
@@ -48,6 +53,8 @@ export type WaitingQuiz = {
   jobId: string | null
   state: WaitingQuizState
   errorCode: string | null
+  /** Set when the multiple choice, true or false and numerical answers were graded at once. */
+  partial?: PartialQuiz
 }
 
 /** What the page shows for a quiz once it is graded (the same as a quiz graded at once). */
@@ -60,11 +67,15 @@ export type AppliedQuiz = {
   review: QuizReviewItem[]
   /** The student's own answers, for the review list. */
   answers: Record<string, string>
-  outcome: { nextReviewAt: Date | null; mastery: number | null; previousMastery: number | null }
+  /** How sure the student was, by question index, for the questions where they said. */
+  confidence: Record<string, number>
+  outcome: QuizOutcome
+  /** Where to look for the missed questions (spec 18.5), when any named a concept. */
+  help: QuizHelp | null
 }
 
 /** The same answers hash the same, whatever order the keys came in. */
-export function answersHash(answers: Record<string, string>): string {
+export function answersHash(answers: Record<string, RawQuizAnswer>): string {
   const entries = Object.entries(answers).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
   return createHash('sha256').update(JSON.stringify(entries)).digest('hex')
 }
@@ -126,7 +137,10 @@ export async function queueQuizSubmission(input: {
   topic: Topic
   quizSetId: string | null
   questions: RawQuestion[]
-  answers: Record<string, string>
+  /** Plain answers, or `{ answer, confidence?, thinking? }`: stored whole, so confidence survives the wait. */
+  answers: Record<string, RawQuizAnswer>
+  /** The rule-gradable questions' results, graded at once while the AI was down (spec 18.9). */
+  ruleResults?: GradedQuestion[]
 }): Promise<QuizGradingStart> {
   const { userId, topic, quizSetId, questions, answers } = input
   const hash = answersHash(answers)
@@ -141,6 +155,7 @@ export async function queueQuizSubmission(input: {
           answers,
           answersHash: hash,
           questions: questions as Prisma.InputJsonValue,
+          ...(input.ruleResults ? { ruleResults: input.ruleResults as unknown as Prisma.InputJsonValue, ruleGradedAt: new Date() } : {}),
         },
         select: { id: true },
       })
@@ -157,6 +172,66 @@ export async function queueQuizSubmission(input: {
   return startQuizGrading(userId, topic, id)
 }
 
+const readRuleResults = (value: unknown): GradedQuestion[] | null =>
+  Array.isArray(value) && value.length > 0 ? (value as GradedQuestion[]) : null
+
+export type { PartialQuiz, PartialSummary }
+
+export type PartialGrading = { submission: QuizGradingStart; ruleGraded: GradedQuestion[]; summary: PartialSummary }
+
+/**
+ * The AI could not grade the short answers (spec 18.9): grade what rules can, now. The multiple choice, true or false and
+ * numerical answers go to the grader alone (no model is involved), the whole quiz is stored for the short answers to be
+ * graded when the AI is back, and the rule items' evidence is written at once under the submission's session key.
+ *
+ * Null when this is not possible, and the caller queues the whole quiz as before: the service could not be reached at all
+ * (`unavailableCode` AI_UNREACHABLE, or it fails now), or the quiz has no rule-gradable question to grade early.
+ */
+export async function gradeRuleItemsNow(input: {
+  userId: string
+  topic: Topic
+  quizSetId: string | null
+  questions: RawQuestion[]
+  given: Record<string, QuizAnswer>
+  unavailableCode: string | null
+  timeZone: string
+  sameDayRepeat: boolean
+  /** The grader, replaceable in tests. */
+  grade?: (questions: unknown[], answers: Record<string, RawQuizAnswer>, only?: number[]) => Promise<{ graded_questions: GradedQuestion[] }>
+}): Promise<PartialGrading | null> {
+  const { userId, topic, quizSetId, questions, given } = input
+  if (input.unavailableCode === 'AI_UNREACHABLE') return null
+  const only = ruleGradableIndexes(questions)
+  const shortCount = questions.length - only.length
+  if (only.length === 0 || shortCount === 0) return null
+
+  let ruleGraded: GradedQuestion[]
+  try {
+    ruleGraded = (await (input.grade ?? defaultGrade)(questions, answersForGrader(given), only)).graded_questions
+  } catch (error) {
+    if (error instanceof GradingUnavailableError) return null
+    throw error
+  }
+
+  const submission = await queueQuizSubmission({ userId, topic, quizSetId, questions, answers: answersForStorage(given), ruleResults: ruleGraded })
+  // The rule items count now, as they would in a graded quiz: level 0, under the submission's own session key. Written
+  // again when the short answers land, the rule items are skipped (`skipIfPresent`).
+  await recordQuizEvidence({
+    userId,
+    projectId: topic.projectId,
+    topicId: topic.id,
+    quizSetId,
+    questions,
+    answers: given,
+    graded: ruleGraded,
+    attemptId: submission.submissionId,
+    timeZone: input.timeZone,
+    sameDayRepeat: input.sameDayRepeat,
+    skipIfPresent: true,
+  })
+  return { submission, ruleGraded, summary: partialSummary(ruleGraded, shortCount) }
+}
+
 /**
  * Where a stored quiz is, from its latest grading job: no job, or one that failed (it waited for the
  * whole limit, or could not start), is a grading that did not finish; a job at the stage
@@ -167,12 +242,27 @@ export function waitingState(job: { status: string; stage?: string | null } | un
   return isWaitingForAi(job) ? 'waiting' : 'grading'
 }
 
+/** What the partial view shows for the rule-graded questions: counts, their results with answer keys, and the student's answers. */
+export function partialQuizOf(questions: RawQuestion[], rule: GradedQuestion[], rawAnswers: unknown): PartialQuiz {
+  const answers = plainAnswers(normalizeAnswers(rawAnswers))
+  const covered = new Set(rule.map((q) => q.question_index))
+  const review = buildReview(questions, toStoredResults(rule), answers).filter((item) => covered.has(item.questionIndex))
+  return { summary: partialSummary(rule, questions.length - rule.length), review, answers }
+}
+
+/** The partial result of a stored quiz that had its rule items graded early, or nothing. */
+function partialOf(row: { ruleResults: unknown; questions: unknown; answers: unknown }): { partial?: PartialQuiz } {
+  const rule = readRuleResults(row.ruleResults)
+  if (!rule || !Array.isArray(row.questions)) return {}
+  return { partial: partialQuizOf(row.questions as RawQuestion[], rule, row.answers) }
+}
+
 /** The stored quizzes of a topic that are not graded yet, with where their grading job is. */
 export async function getWaitingQuizzes(userId: string, topicId: string): Promise<WaitingQuiz[]> {
   const submissions = await prisma.quizSubmission.findMany({
     where: { userId, topicId, status: 'pending' },
     orderBy: { submittedAt: 'desc' },
-    select: { id: true, quizSetId: true },
+    select: { id: true, quizSetId: true, ruleResults: true, questions: true, answers: true },
   })
   if (submissions.length === 0) return []
   const jobs = await prisma.processingJob.findMany({
@@ -192,6 +282,7 @@ export async function getWaitingQuizzes(userId: string, topicId: string): Promis
       jobId: job && job.status !== 'failed' ? job.id : null,
       state,
       errorCode: job?.status === 'failed' ? job.errorCode : null,
+      ...partialOf(row),
     }
   })
 }
@@ -239,8 +330,17 @@ export function readGrading(value: unknown): { graded: GradedQuestion[]; score: 
  * same thing without applying anything.
  */
 export async function applyQuizSubmission(userId: string, submissionId: string): Promise<AppliedQuiz | null> {
-  return prisma.$transaction(
-    async (tx) => {
+  // Evidence is written once the attempt and its effects have committed; writing it again is safe.
+  const done = await prisma.$transaction(
+    async (
+      tx
+    ): Promise<{
+      applied: Omit<AppliedQuiz, 'outcome' | 'help'>
+      topicId: string
+      previousMastery: number | null
+      questions: RawQuestion[]
+      evidence: Parameters<typeof recordAttemptEvidence>[0] | null
+    } | null> => {
       // The lock: a second look at the same submission waits here until the first has committed.
       const locked = await tx.$queryRaw<{ applied_at: Date | null }[]>`
         SELECT applied_at FROM quiz_submissions
@@ -252,40 +352,61 @@ export async function applyQuizSubmission(userId: string, submissionId: string):
         where: { id: submissionId },
         include: { topic: { select: { id: true, projectId: true } } },
       })
-      const grading = readGrading(submission.aiGrading)
-      if (!grading) return null
+      const finalGrading = readGrading(submission.aiGrading)
+      if (!finalGrading) return null
+      // Rule items were graded when the quiz was submitted; those results stand, and the job's cover the short answers.
+      const early = readRuleResults(submission.ruleResults)
+      const grading = early ? { ...finalGrading, graded: mergeRuleResults(finalGrading.graded, early) } : finalGrading
 
       const questions = submission.questions as RawQuestion[]
       const results = toStoredResults(grading.graded)
-      const answers = submission.answers as Record<string, string>
+      const given = normalizeAnswers(submission.answers)
+      const answers = plainAnswers(given)
       const base = {
         attemptId: submission.id,
         score: grading.score,
         earnedPoints: grading.earned,
         totalPoints: grading.total,
-        review: buildReview(questions, results),
+        review: buildReview(questions, results, answers),
         answers,
+        confidence: confidences(given),
       }
 
       if (locked[0].applied_at) {
         // Applied in full already.
-        const [progress, schedule] = await Promise.all([
-          tx.topicProgress.findUnique({
-            where: { topicId_userId: { topicId: submission.topicId, userId } },
-            select: { quizScore: true },
-          }),
-          tx.reviewSchedule.findUnique({
-            where: { userId_topicId: { userId, topicId: submission.topicId } },
-            select: { dueAt: true, mastery: true },
-          }),
-        ])
+        const progress = await tx.topicProgress.findUnique({
+          where: { topicId_userId: { topicId: submission.topicId, userId } },
+          select: { quizScore: true },
+        })
         return {
-          ...base,
-          bestScore: Math.max(progress?.quizScore ?? 0, grading.score),
-          outcome: { nextReviewAt: schedule?.dueAt ?? null, mastery: schedule?.mastery ?? null, previousMastery: null },
+          applied: { ...base, bestScore: Math.max(progress?.quizScore ?? 0, grading.score) },
+          topicId: submission.topicId,
+          previousMastery: null,
+          questions,
+          evidence: null,
         }
       }
 
+      const evidenceInput = {
+        userId,
+        projectId: submission.topic.projectId,
+        topicId: submission.topicId,
+        quizSetId: submission.quizSetId,
+        questions,
+        answers: given,
+        graded: grading.graded,
+        at: submission.submittedAt,
+        // Rule items already have their events from the early grading: write only what is missing.
+        skipIfPresent: early !== null,
+        sameDayRepeat: await takenEarlierToday({
+          userId,
+          topicId: submission.topicId,
+          quizSetId: submission.quizSetId,
+          at: submission.submittedAt,
+          timeZone: await studentTimeZone(),
+          exceptId: submission.id,
+        }),
+      }
       const recorded = await applyQuizAttempt(tx, {
         userId,
         topic: submission.topic,
@@ -296,12 +417,21 @@ export async function applyQuizSubmission(userId: string, submissionId: string):
         // The attempt is the submission, taken when the student submitted it.
         id: submission.id,
         takenAt: submission.submittedAt,
+        evidencePending: pendingQuizEvidence(evidenceInput),
+        strongStart: isStrongStart(grading.graded, given, evidenceInput.sameDayRepeat),
       })
       await tx.quizSubmission.update({ where: { id: submission.id }, data: { appliedAt: new Date() } })
-      return { ...base, bestScore: recorded.bestScore, outcome: recorded.outcome }
+      const evidence = { ...evidenceInput, attemptId: submission.id, timeZone: 'UTC' }
+      return { applied: { ...base, bestScore: recorded.bestScore }, topicId: submission.topicId, previousMastery: recorded.previousMastery, questions, evidence }
     },
     { timeout: 20_000 }
   )
+  if (!done) return null
+  if (done.evidence) await recordAttemptEvidence({ ...done.evidence, timeZone: await studentTimeZone() })
+  // Read after the evidence is written: a converted topic's figures come from its concepts' memory.
+  const outcome = await quizOutcome(userId, done.topicId, done.previousMastery)
+  const help = await quizHelp(userId, done.topicId, done.questions, done.applied.review)
+  return { ...done.applied, outcome, help }
 }
 
 /**
@@ -315,6 +445,8 @@ export async function applyPendingQuizResults(
   userId: string,
   scope: { projectId: string } | { topicId: string } | 'all' = 'all'
 ): Promise<number> {
+  // Evidence that failed to write after an earlier attempt committed is owed; write it now (bounded).
+  await retryPendingQuizEvidence(userId)
   const topic =
     scope === 'all'
       ? { project: { userId } }

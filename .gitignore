@@ -59,3 +59,11 @@ evals/.cache/
 evals/results/*/raw/
 evals/results/*/judge/
 evals/results/*/excerpts.json
+
+# Tutoring eval: practice problems written from the MIT OCW corpora (CC BY-NC-SA); rebuilt locally, see evals/README.md
+evals/tutoring/scenarios/practice.jsonl
+evals/results/*/judge/
+evals/results/*/turns.json
+
+# internal working notes, never committed
+.superpowers/

@@ -4,9 +4,12 @@
  * only use it for a submitted, graded submission.
  */
 
+import { pluralize } from '@/lib/format'
 import { answerUnit, reviewAnswer } from '@/lib/learning/quiz-questions'
+import { SURE_CONFIDENCE } from '@/lib/learning/quiz-review'
 import { buildRubric, type RubricLine } from '@/lib/learning/rubric'
 import { parseSources, type SourceRef } from '@/lib/topics/sources'
+import { confidenceOf, plainAnswerOf } from './attempt-timing'
 
 type RawQuestion = Record<string, unknown>
 
@@ -17,6 +20,8 @@ export type ExamQuestionResult = {
   topicId: string | null
   topicName: string | null
   studentAnswer: string | null
+  /** How sure the student said they were (0 to 1), when they said. */
+  confidence: number | null
   correctAnswer: string
   points: number
   pointsEarned: number
@@ -106,13 +111,16 @@ export function buildQuestionResults(
     const graded = gradedByIndex.get(index)
     const points = asNumber(graded?.points_possible, asNumber(question.points, 1))
     const earned = asNumber(graded?.points_earned, 0)
+    const studentAnswer = displayStudentAnswer(question, plainAnswerOf(answerMap[String(index)]))
     return {
       questionIndex: index,
       questionType: String(question.question_type ?? ''),
       questionText: String(question.question_text ?? ''),
       topicId: asString(question.topic_id),
       topicName: asString(question.topic_name),
-      studentAnswer: displayStudentAnswer(question, answerMap[String(index)]),
+      studentAnswer,
+      // A blank question is not rated, whatever was tapped: evidence skips it too.
+      confidence: studentAnswer === null ? null : (confidenceOf(answerMap[String(index)]) ?? null),
       correctAnswer: displayCorrectAnswer(question, graded),
       points,
       pointsEarned: earned,
@@ -164,4 +172,26 @@ export function readOverall(aiGrading: unknown): { score: number; earned: number
     earned: asNumber(aiGrading.earned_points, 0),
     total: asNumber(aiGrading.total_points, 0),
   }
+}
+
+/** Wrong and sure: the answers worth reading first (spec §5.7, §5.9). Ungraded questions are not wrong yet. */
+export function isSureAndWrong(result: ExamQuestionResult): boolean {
+  return !result.isCorrect && !result.needsReview && result.confidence !== null && result.confidence >= SURE_CONFIDENCE
+}
+
+/** The calibration as one sentence, in words that work without a colour. */
+export function calibrationLine({ sure, sureRight }: { sure: number; sureRight: number }): string {
+  if (sure === 0) return "You weren't sure about any of the answers you rated."
+  return `You were sure about ${pluralize(sure, 'answer')} and got ${sureRight} of them right.`
+}
+
+/**
+ * How the student's confidence matched the result: of the graded questions they rated, how many
+ * they were sure about and how many of those were right. Null when they rated none.
+ */
+export function examCalibration(results: ExamQuestionResult[]): { rated: number; sure: number; sureRight: number } | null {
+  const rated = results.filter((result) => result.confidence !== null && !result.needsReview)
+  if (rated.length === 0) return null
+  const sure = rated.filter((result) => (result.confidence ?? 0) >= SURE_CONFIDENCE)
+  return { rated: rated.length, sure: sure.length, sureRight: sure.filter((result) => result.isCorrect).length }
 }

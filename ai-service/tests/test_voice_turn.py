@@ -217,6 +217,88 @@ class TestMockTurn:
         assert "heaps" in events[-1].content[0]["text"]
 
 
+TEACH_TOOLS = [
+    {"name": "get_concept_to_explain", "description": "Concept", "input_schema": {"type": "object", "properties": {}}},
+    {"name": "assess_explanation", "description": "Assess", "input_schema": {"type": "object", "properties": {}}},
+    {"name": "record_check", "description": "Check", "input_schema": {"type": "object", "properties": {}}},
+]
+READING_TOOLS = [
+    {"name": "next_claim", "description": "Claim", "input_schema": {"type": "object", "properties": {}}},
+    {"name": "record_check", "description": "Check", "input_schema": {"type": "object", "properties": {}}},
+]
+
+
+async def converse(tools, steps):
+    """Plays a conversation against the mock. `steps` are the student's messages, or (name, result) pairs for the tool result
+    to give back to the tool call the mock just made. Returns the mock's tool calls and its spoken text, in order."""
+    messages = [{"role": "user", "content": "[start]"}]
+    said, calls, n = [], [], 0
+    steps = list(steps)
+    while True:
+        events = await collect(MockProvider(), messages=messages, tools=tools)
+        spoken = "".join(e.text for e in events if isinstance(e, TurnText))
+        done = events[-1]
+        messages.append({"role": "assistant", "content": done.content})
+        if spoken:
+            said.append(spoken)
+        tool = next((e for e in events if isinstance(e, TurnToolUse)), None)
+        if tool is not None:
+            calls.append((tool.name, tool.input))
+            result = steps.pop(0)
+            assert result[0] == tool.name, f"expected {result[0]}, the mock called {tool.name}"
+            messages.append(user(tool_result(tool.id, result[1])))
+            continue
+        if not steps:
+            return calls, said
+        n += 1
+        messages.append({"role": "user", "content": steps.pop(0)})
+
+
+class TestMockTeachBack:
+    async def test_asks_for_an_idea_assesses_the_explanation_and_follows_the_action(self):
+        calls, said = await converse(
+            TEACH_TOOLS,
+            [
+                ("get_concept_to_explain", {"done": False, "concept_id": "c1", "prompt": "Explain it"}),
+                "Hash tables send keys to buckets.",
+                ("assess_explanation", {"action": "probe", "probe": {"type": "implication", "number": 1}}),
+                "They collide, I think.",
+                ("assess_explanation", {"action": "ask_new_example"}),
+                "It works the same in a new case.",
+                ("record_check", {"passed": True, "action": "wrap_up"}),
+            ],
+        )
+        assert [name for name, _ in calls] == ["get_concept_to_explain", "assess_explanation", "assess_explanation", "record_check"]
+        assert calls[1] == ("assess_explanation", {"concept_id": "c1", "explanation": "Hash tables send keys to buckets."})
+        assert calls[3][0] == "record_check" and calls[3][1]["concept_id"] == "c1"
+        assert any("Mock probe 1" in line for line in said)
+
+    async def test_without_the_teach_back_tools_it_does_not_script_them(self):
+        events = await collect(MockProvider(), messages=[{"role": "user", "content": "Start"}], tools=TOOLS)
+        assert events[0].name == "get_next_question"
+
+
+class TestMockGuidedReading:
+    async def test_predicts_then_asks_for_the_claim_then_checks_it(self):
+        calls, said = await converse(
+            READING_TOOLS,
+            [
+                ("next_claim", {"done": False, "claim_index": 0, "prediction_prompt": "What do you expect?"}),
+                "I think it defines a bucket.",
+                ("next_claim", {"done": False, "claim_index": 0, "claim": {"text": "A claim.", "page": 4}}),
+                "A bucket holds keys.",
+                ("record_check", {"verdict": "right"}),
+                "ok",
+                ("next_claim", {"done": True}),
+            ],
+        )
+        assert calls[0] == ("next_claim", {})
+        assert calls[1] == ("next_claim", {"reveal": True, "prediction": "I think it defines a bucket.", "check_question": "Mock check question?"})
+        assert calls[2] == ("record_check", {"claim_index": 0, "answer": "A bucket holds keys."})
+        assert calls[3] == ("next_claim", {})
+        assert any("every claim" in line for line in said)
+
+
 # ---- the route -----------------------------------------------------------------------------
 
 
@@ -302,6 +384,12 @@ class TestRoute:
         done = events[-1]
         assert done["stop_reason"] == "tool_use"
         assert done["content"][0]["type"] == "tool_use" and done["content"][0]["id"] == events[0]["id"]
+
+    def test_done_carries_the_time_to_the_first_token_and_the_total(self, client, wired):
+        events = lines(post(client))
+        timing = events[-1]["timing"]
+        assert isinstance(timing["ttft_ms"], int) and isinstance(timing["total_ms"], int)
+        assert 0 <= timing["ttft_ms"] <= timing["total_ms"]
 
     def test_text_deltas_add_up_to_the_final_text(self, client, wired):
         events = lines(post(client, tools=[], messages=[{"role": "user", "content": "Tell me about heaps"}]))
@@ -425,3 +513,38 @@ class TestMockDrillEnd:
         ]
         events = await collect(MockProvider(), messages=messages)
         assert "goodbye" in events[-1].content[0]["text"]
+
+
+def with_result(words, step, payload):
+    """The student's message as the app sends it when it has already run the step (spec 19.1)."""
+    return user(text(words), text(f'<app_result step="{step}">{json.dumps(payload)}</app_result>'))
+
+
+class TestMockAttachedResults:
+    """A step the app ran before the model speaks: the mock speaks at once, with no tool call, as the real coach does."""
+
+    async def test_teach_back_speaks_to_the_attached_assessment(self):
+        messages = [
+            {"role": "user", "content": "[start]"},
+            {"role": "assistant", "content": [text("Explain it.")]},
+            with_result("They collide.", "assess_explanation", {"action": "probe", "probe": {"type": "implication", "number": 2}}),
+        ]
+        events = await collect(MockProvider(), messages=messages, tools=TEACH_TOOLS)
+        assert [e.type for e in events][-1] == "done" and events[-1].stop_reason == "end_turn"
+        assert not any(isinstance(e, TurnToolUse) for e in events)
+        assert "Mock probe 2" in "".join(e.text for e in events if isinstance(e, TurnText))
+
+    async def test_guided_reading_speaks_to_the_attached_reveal_and_check(self):
+        reveal = [{"role": "user", "content": "[start]"}, {"role": "assistant", "content": [text("Predict.")]}, with_result("A bucket.", "next_claim", {"claim_index": 0, "claim": {"text": "A claim."}})]
+        events = await collect(MockProvider(), messages=reveal, tools=READING_TOOLS)
+        assert not any(isinstance(e, TurnToolUse) for e in events)
+        assert "Mock claim" in "".join(e.text for e in events if isinstance(e, TurnText))
+        check = [*reveal[:2], with_result("It holds keys.", "record_check", {"verdict": "right"})]
+        events = await collect(MockProvider(), messages=check, tools=READING_TOOLS)
+        assert "Mock feedback" in "".join(e.text for e in events if isinstance(e, TurnText))
+
+    async def test_the_quiz_speaks_to_the_attached_answer(self):
+        messages = [{"role": "user", "content": "[start]"}, {"role": "assistant", "content": [text("Question one.")]}, with_result("Buckets.", "record_answer", {"is_correct": True})]
+        events = await collect(MockProvider(), messages=messages, tools=TOOLS)
+        assert not any(isinstance(e, TurnToolUse) for e in events)
+        assert "noted" in "".join(e.text for e in events if isinstance(e, TurnText))

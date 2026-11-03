@@ -7,6 +7,7 @@ import {
   pageLabel,
   parseStoredCitations,
   quoteForDisplay,
+  quoteOnOneLine,
   sourceLabel,
   viewerUrl,
   type ChatSource,
@@ -69,6 +70,13 @@ describe('quoteForDisplay', () => {
       'Hash Tables\n\nCollisions happen when two keys map to one bucket.'
     )
     assert.equal(quoteForDisplay('Use # for comments #1'), 'Use # for comments #1')
+  })
+})
+
+describe('quoteOnOneLine', () => {
+  it('drops heading marks and runs the lines together so a sentence can hold the quote', () => {
+    assert.equal(quoteOnOneLine('# Chapter 1: Hashing\n\nA hash function maps a key.'), 'Chapter 1: Hashing A hash function maps a key.')
+    assert.equal(quoteOnOneLine('  one  \n two '), 'one two')
   })
 })
 

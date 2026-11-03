@@ -17,6 +17,7 @@ import {
   type DescribedPlanItem,
 } from '@/lib/learning/plan-copy'
 import { minutesLabel } from '@/lib/learning/plan-settings'
+import { overlayPlanItem, type ActivityOverlay } from '@/features/topic/step-activity'
 import { cn } from '@/lib/utils'
 import { pluralize } from '@/lib/format'
 
@@ -263,15 +264,28 @@ export function PlanView({
   courseId,
   plan,
   unitTitles = {},
+  conceptTopicIds,
+  activities = {},
+  quickPass,
 }: {
   courseId: string
   plan: Plan
+  /** The quick-pass choice (spec 18.8). It sits with the "Time is short" alert and the "Not scheduled" chips it answers. */
+  quickPass?: React.ReactNode
+  /** Each topic's next activity: today's learn and quiz rows are worded by it, the same as Home and the overview. */
+  activities?: Record<string, ActivityOverlay>
+  /** The topics that have concepts: a review of another topic opens the quiz-based review. */
+  conceptTopicIds?: ReadonlySet<string>
   /** Unit names by id, so a learn row can say which unit it is in. */
   unitTitles?: Record<string, string>
 }) {
   const base = `/courses/${courseId}`
-  const context = toContext(unitTitles, plan.dailyMinutes)
-  const describe = (day: PlanDay) => day.items.map((item) => describePlanItem(item, courseId, context))
+  const context = { ...toContext(unitTitles, plan.dailyMinutes), conceptTopicIds }
+  const describe = (day: PlanDay) =>
+    day.items.map((item) => {
+      const described = describePlanItem(item, courseId, context)
+      return day.isToday && item.topicId ? overlayPlanItem(described, activities[item.topicId]) : described
+    })
   const settings = (
     <Button asChild variant="secondary" icon={<Gear />}>
       <Link href={`${base}/settings`}>Exam date and time</Link>
@@ -372,6 +386,7 @@ export function PlanView({
             {topicChips(notScheduled.topics)}
           </section>
         ) : null}
+        {quickPass}
         {tooLong ? (
           <section aria-labelledby="too-long-heading" className="rounded-card border border-border bg-surface p-4">
             <h2 id="too-long-heading" className="text-body-strong text-fg">

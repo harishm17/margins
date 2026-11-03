@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { PlanTopic, PlanUnit } from '@/lib/learning/plan'
-import { examTopicIds, fullMocksSince, mockMinutesSpent, unitsCovered, type MockExamFacts } from './plan'
+import { examTopicIds, fullMocksSince, learnedAt, mockMinutesSpent, unitsCovered, type MockExamFacts } from './plan'
 
 const topic = (id: string, unitId: string | null): PlanTopic => ({
   id,
@@ -70,4 +70,38 @@ test("a mock exam done today counts the minutes it took, never more than its tim
   // Attempts from before start times were stored count as the time limit.
   assert.equal(mockMinutesSpent({ startedAt: null, submittedAt: at(5), durationMinutes: 30 }), 30)
   assert.equal(mockMinutesSpent({ startedAt: at(5), submittedAt: start, durationMinutes: 30 }), 0)
+})
+
+test('learned uses recallAt and legacy notesCompleted', () => {
+  const recall = new Date('2026-10-20T10:00:00Z')
+  const completed = new Date('2026-10-01T10:00:00Z')
+  // Recall is the learned signal; notes and examples no longer are.
+  assert.equal(learnedAt({ recallAt: recall, notesCompleted: false, notesCompletedAt: completed }), recall)
+  assert.equal(learnedAt({ recallAt: recall, notesCompleted: true, notesCompletedAt: completed }), recall)
+  // A topic read before v3 stays learned, from the day its notes were completed (later visits do not move it).
+  assert.equal(learnedAt({ recallAt: null, notesCompleted: true, notesCompletedAt: completed }), completed)
+  assert.deepEqual(learnedAt({ recallAt: null, notesCompleted: true, notesCompletedAt: null }), new Date(0))
+  // Examples done, notes not read, no recall: not learned.
+  assert.equal(learnedAt({ recallAt: null, notesCompleted: false, notesCompletedAt: null }), null)
+  assert.equal(learnedAt(undefined), null)
+})
+
+test('testedOut counts as learned', () => {
+  const tested = new Date('2026-10-20T10:00:00Z')
+  const base = { recallAt: null, notesCompleted: false, notesCompletedAt: null }
+  assert.equal(learnedAt({ ...base, testedOutAt: tested }), tested)
+  // Recall, when there is one, is the date.
+  const recall = new Date('2026-10-19T10:00:00Z')
+  assert.equal(learnedAt({ ...base, recallAt: recall, testedOutAt: tested }), recall)
+  // Not tested out, not learned.
+  assert.equal(learnedAt({ ...base, testedOutAt: null }), null)
+})
+
+test('a quick pass counts as learned once its first quiz is taken', () => {
+  const quiz = new Date('2026-10-20T12:00:00Z')
+  const base = { recallAt: null, notesCompleted: false, notesCompletedAt: null, triage: 'quick' as const, triageAt: new Date('2026-10-20T08:00:00Z') }
+  assert.equal(learnedAt(base, { firstQuizAt: quiz }), quiz)
+  // Before the quiz it is still to do; and a quiz without the quick pass changes nothing.
+  assert.equal(learnedAt(base, { firstQuizAt: null }), null)
+  assert.equal(learnedAt({ ...base, triage: null }, { firstQuizAt: quiz }), null)
 })

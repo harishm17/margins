@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { expectNoSidewaysScroll } from './helpers/overflow'
 import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
 import { addContent, createCourse, dayIn, makeDue, quizQuestions, setZoneCookie, signIn, signUpAndIn, ZONE } from './helpers/loop'
 
@@ -6,39 +7,6 @@ import { addContent, createCourse, dayIn, makeDue, quizQuestions, setZoneCookie,
 // demo course, seeded by global-setup.ts) and the document must be no wider than the window.
 // Desktop-only layouts count: they are still opened on a phone sometimes.
 test.use({ viewport: { width: 390, height: 844 } })
-
-/** The elements that stick out past the right edge, for the failure message. */
-const overflowing = (page: Page) =>
-  page.evaluate(() => {
-    const width = window.innerWidth
-    // Something inside a box that scrolls or clips on its own does not widen the page.
-    const clipped = (element: Element) => {
-      for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
-        if (getComputedStyle(parent).overflowX !== 'visible') return true
-      }
-      return false
-    }
-    return [...document.querySelectorAll('body *')]
-      .map((element) => ({ element, box: element.getBoundingClientRect() }))
-      .filter(({ element, box }) => box.width > 0 && box.right > width + 0.5 && !clipped(element))
-      .slice(0, 8)
-      .map(({ element, box }) => {
-        const classes = typeof element.className === 'string' ? element.className.split(/\s+/).slice(0, 4).join('.') : ''
-        return `${element.tagName.toLowerCase()}${classes ? `.${classes}` : ''} right=${Math.round(box.right)}`
-      })
-  })
-
-async function expectNoSidewaysScroll(page: Page, url: string) {
-  await page.goto(url, { waitUntil: 'networkidle' })
-  await page.evaluate(() => document.fonts.ready)
-  const { scrollWidth, innerWidth } = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
-  }))
-  expect(scrollWidth, `${url} is ${scrollWidth}px wide in a ${innerWidth}px window; sticking out: ${(await overflowing(page)).join(', ')}`).toBeLessThanOrEqual(
-    innerWidth
-  )
-}
 
 const { course, setupCourse, topics, mathTopic } = demoIds()
 const topic = `/courses/${course}/topics/${topics[0]}`
@@ -49,12 +17,12 @@ const PAGES: [string, string][] = [
   ['course setup guide', `/courses/${setupCourse}`],
   ['topics list with units', `/courses/${course}/topics`],
   ['topic editor with units', `/courses/${course}/topics?edit=1`],
-  ['topic notes with objectives and sources', `${topic}?view=notes`],
+  ['topic notes with objectives and sources', `${topic}?view=read`],
   ['topic examples', `${topic}?view=examples`],
   ['topic practice', `${topic}?view=practice`],
   ['topic quiz', `${topic}?view=quiz`],
   ['topic voice', `${topic}?view=voice`],
-  ['math topic notes', `${math}?view=notes`],
+  ['math topic notes', `${math}?view=read`],
   ['math topic examples', `${math}?view=examples`],
   ['math topic practice', `${math}?view=practice`],
   ['math topic quiz', `${math}?view=quiz`],
@@ -101,9 +69,15 @@ test.describe('signed in', () => {
   }
 
   test('the objectives open on a phone without widening the page', async ({ page }) => {
-    await page.goto(topic + '?view=notes', { waitUntil: 'networkidle' })
-    const toggle = page.getByRole('button', { name: /By the end you can/ })
+    await page.goto(topic + '?view=read', { waitUntil: 'networkidle' })
+    // One button in the header's status line opens everything the topic covers: its ideas, objectives and sources.
+    const toggle = page.locator('main header').getByRole('button', { name: /By the end you can|ideas?, \d+ solid|About this topic/ })
     await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    // It controls everything it shows or hides: the description (when the topic has one) and the ideas and objectives. Each id exists.
+    const controls = ((await toggle.getAttribute('aria-controls')) ?? '').split(' ').filter(Boolean)
+    expect(controls.length, 'it names what it controls').toBeGreaterThanOrEqual(1)
+    for (const id of controls) await expect(page.locator(`[id="${id}"]`), `controlled element ${id}`).toHaveCount(1)
+    if ((await page.locator('main header p[id]').count()) > 0) expect(controls.length, 'the description and the rest').toBe(2)
     await toggle.click()
     await expect(page.getByText('trace merge sort and quicksort on a small array').locator('visible=true')).toBeVisible()
     const { scrollWidth, innerWidth } = await page.evaluate(() => ({
@@ -114,9 +88,11 @@ test.describe('signed in', () => {
   })
 
   test('graded exam results fit the window', async ({ page }) => {
+    // The demo course can hold other exams (other specs write them); take the one that was taken.
     const { exams } = await (await page.request.get(`/api/projects/${course}/exams`)).json()
-    const { submissions } = await (await page.request.get(`/api/exams/${exams[0].id}/submissions`)).json()
-    await expectNoSidewaysScroll(page, `/courses/${course}/exams/${exams[0].id}/results/${submissions[0].id}`)
+    const taken = exams.find((exam: { attemptsCount?: number }) => (exam.attemptsCount ?? 0) > 0)
+    const { submissions } = await (await page.request.get(`/api/exams/${taken.id}/submissions`)).json()
+    await expectNoSidewaysScroll(page, `/courses/${course}/exams/${taken.id}/results/${submissions[0].id}`)
   })
 })
 

@@ -24,11 +24,14 @@ export function nextReviewLabel(dueAt: string | Date | null | undefined, now: Da
   return `Next review ${MONTHS[month - 1]} ${date}`
 }
 
-/** "Mastery went from 62% to 71%." or, with nothing before, "Mastery is now 40%." Null when there is no mastery. */
+/**
+ * "Mastery went from 62% to 71%." Null when mastery did not move or has nothing before it: where mastery
+ * stands is the topic header's one figure, and saying it again on the same screen only repeats it.
+ */
 export function masteryChange(before: number | null | undefined, after: number | null | undefined): string | null {
   if (after === null || after === undefined || Number.isNaN(after)) return null
-  if (before === null || before === undefined || Number.isNaN(before)) return `Mastery is now ${percent(after)}.`
-  if (percent(before) === percent(after)) return `Mastery is ${percent(after)}.`
+  if (before === null || before === undefined || Number.isNaN(before)) return null
+  if (percent(before) === percent(after)) return null
   return `Mastery went from ${percent(before)} to ${percent(after)}.`
 }
 

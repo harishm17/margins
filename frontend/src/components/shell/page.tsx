@@ -46,7 +46,7 @@ export function PageIntro({
     <div className={cn('mb-8 flex flex-wrap items-start justify-between gap-x-6 gap-y-4', className)}>
       <div className="min-w-0">
         <h1 className="text-title text-fg">{title}</h1>
-        {description ? <p className="mt-1 text-body text-fg-2">{description}</p> : null}
+        {description ? <p className="mt-1 max-w-[68ch] text-body text-fg-2">{description}</p> : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
     </div>

@@ -6,6 +6,7 @@ import { ArrowCounterClockwise, Sparkle } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { RETRY_WAIT_TEXT } from '@/lib/learning/missed'
 import { useOptionalTopic } from './topic-provider'
 
 type ReviewActionsProps = {
@@ -13,6 +14,8 @@ type ReviewActionsProps = {
   topicId: string
   /** Questions missed in the last two attempts. "Retry what you missed" is hidden when there are none. */
   missedCount: number
+  /** When the identical questions open again (ISO; the next local day, in the zone the server uses), or null when open now. */
+  retryOpensAt?: string | null
   /** For a name that tells the buttons apart when several are on one page. */
   topicName?: string
   size?: 'sm' | 'md'
@@ -25,15 +28,29 @@ type ReviewActionsProps = {
 
 /**
  * The two ways to review a topic that is due. "Retry what you missed" is a quiz of the questions
- * got wrong in the last two attempts (no model call). "New questions" writes a new 6-question set,
- * focused on what was missed and mixing in a question or two from a prerequisite topic. Both lead
- * to the topic's quiz; the attempt then updates mastery and the schedule like any quiz.
+ * got wrong in the last two attempts (no model call); it opens from the next local day, because
+ * answering the same question again straight away mostly tests short-term memory. "Fix it now"
+ * writes a new 6-question set, focused on the concepts that were missed and mixing in a question
+ * or two from a prerequisite topic; its questions are new, so it can be taken the same day. Both
+ * lead to the topic's quiz; the attempt then updates mastery and the schedule like any quiz.
  */
-export function ReviewActions({ courseId, topicId, missedCount, topicName, size = 'md', emphasis = true }: ReviewActionsProps) {
+export function ReviewActions({ courseId, topicId, missedCount, retryOpensAt, topicName, size = 'md', emphasis = true }: ReviewActionsProps) {
   const router = useRouter()
   const topic = useOptionalTopic()
   const [busy, setBusy] = React.useState<'retry' | 'fresh' | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const retryNoteId = React.useId()
+  // The server worked out when the retry opens (the student's own days) and refuses it before then; the
+  // button follows, and opens by itself when the time comes. Disabled from the first render.
+  const [openedAt, setOpenedAt] = React.useState<string | null>(null)
+  const retryWaits = !!retryOpensAt && openedAt !== retryOpensAt
+  React.useEffect(() => {
+    if (!retryOpensAt) return
+    // setTimeout holds at most about 24.8 days; a day is far less.
+    const wait = Math.min(Math.max(Date.parse(retryOpensAt) - Date.now(), 0), 2_000_000_000)
+    const timer = window.setTimeout(() => setOpenedAt(retryOpensAt), wait)
+    return () => window.clearTimeout(timer)
+  }, [retryOpensAt])
   const quizHref = `/courses/${courseId}/topics/${topicId}?view=quiz`
   const suffix = topicName ? ` for ${topicName}` : ''
 
@@ -78,25 +95,31 @@ export function ReviewActions({ courseId, topicId, missedCount, topicName, size 
             variant={emphasis ? 'primary' : 'secondary'}
             icon={<ArrowCounterClockwise />}
             loading={busy === 'retry'}
-            disabled={busy === 'fresh'}
+            disabled={busy === 'fresh' || retryWaits}
             onClick={retry}
             aria-label={`Retry what you missed${suffix}`}
+            aria-describedby={retryWaits ? retryNoteId : undefined}
           >
             Retry what you missed
           </Button>
         ) : null}
         <Button
           size={size}
-          variant={missedCount > 0 || !emphasis ? 'secondary' : 'primary'}
+          variant={(missedCount > 0 && !retryWaits) || !emphasis ? 'secondary' : 'primary'}
           icon={<Sparkle />}
           loading={busy === 'fresh'}
           disabled={busy === 'retry'}
           onClick={fresh}
-          aria-label={`New questions${suffix}`}
+          aria-label={`Fix it now${suffix}`}
         >
-          New questions
+          Fix it now
         </Button>
       </div>
+      {missedCount > 0 && retryWaits ? (
+        <p id={retryNoteId} className="text-caption font-normal text-fg-2">
+          {RETRY_WAIT_TEXT}
+        </p>
+      ) : null}
       {error ? <InlineAlert tone="danger">{error}</InlineAlert> : null}
     </div>
   )

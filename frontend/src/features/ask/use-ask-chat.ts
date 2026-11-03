@@ -7,7 +7,10 @@ import { apiFetch, isApiError } from '@/lib/api/client'
 import { parseStoredCitations } from '@/lib/chat/citations'
 import { applyChatEvent, INITIAL_ANSWER, type AnswerState } from '@/lib/chat/events'
 import { chatErrorMessage } from '@/lib/chat/errors'
+import { WORKED_EXAMPLE_REQUEST, type AskTurnView } from '@/lib/ask/tutor-message'
 import {
+  lacksSources,
+  liveTurn,
   retryPlan,
   toChatMessages,
   type AssistantMessage,
@@ -19,14 +22,20 @@ import { ChatRequestError, streamChat } from './chat-client'
 
 export type LiveTurn = { question: string; answer: AnswerState }
 
-type ThreadPayload = { thread: { id: string; title: string | null }; messages: Array<StoredMessage & { citations: unknown }> }
+type ThreadPayload = {
+  thread: { id: string; title: string | null; workedAllowed?: boolean }
+  messages: Array<StoredMessage & { citations: unknown; turn?: AskTurnView | null }>
+}
 
 type Options = {
   courseId: string
   /** The topic to focus retrieval on, or null for all materials. */
   topicId: string | null
+  /** The concept the first question of a new conversation is about; sent only until the conversation exists. */
+  conceptId?: string | null
   initialThreadId?: string | null
   initialMessages?: ChatMessage[]
+  initialWorkedAllowed?: boolean
   /** A new conversation was created by the first question. */
   onThreadStarted?: (thread: { id: string; title: string | null }) => void
   /** The conversation got a new answer (or a stopped one): move it to the top of the list. */
@@ -42,8 +51,10 @@ type Options = {
 export function useAskChat({
   courseId,
   topicId,
+  conceptId = null,
   initialThreadId = null,
   initialMessages = [],
+  initialWorkedAllowed = false,
   onThreadStarted,
   onThreadActive,
   onThreadDiscarded,
@@ -53,6 +64,8 @@ export function useAskChat({
   const [live, setLive] = React.useState<LiveTurn | null>(null)
   const [loadingThread, setLoadingThread] = React.useState(false)
   const [loadError, setLoadError] = React.useState<string | null>(null)
+  // The thread has had a genuine attempt, so "Show me a worked example" may be offered.
+  const [workedAllowed, setWorkedAllowed] = React.useState(initialWorkedAllowed)
 
   const controllerRef = React.useRef<AbortController | null>(null)
   const threadRef = React.useRef(threadId)
@@ -60,9 +73,11 @@ export function useAskChat({
   const idCounter = React.useRef(0)
   const callbacks = React.useRef({ onThreadStarted, onThreadActive, onThreadDiscarded })
 
+  const messagesRef = React.useRef(messages)
   React.useEffect(() => {
     callbacks.current = { onThreadStarted, onThreadActive, onThreadDiscarded }
     threadRef.current = threadId
+    messagesRef.current = messages
   })
 
   const nextId = React.useCallback(() => `local-${Date.now()}-${(idCounter.current += 1)}`, [])
@@ -79,6 +94,41 @@ export function useAskChat({
 
   // Leaving the page stops reading; the server still stores the answer.
   React.useEffect(() => () => controllerRef.current?.abort(), [])
+
+  /**
+   * A reply the student stopped is kept as far as it was read, but the server finishes writing it and stores it with its
+   * check question. Once it is stored, show the stored reply (full text, with its card) in place of the partial one.
+   */
+  const attachStored = React.useCallback(
+    async (id: string) => {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+        if (controllerRef.current || threadRef.current !== id) return
+        try {
+          const data = await apiFetch<ThreadPayload>(`/api/projects/${encodeURIComponent(courseId)}/chat/threads/${encodeURIComponent(id)}`)
+          const shown = messagesRef.current.filter((message) => message.kind === 'assistant').length
+          if (data.messages.filter((message) => message.role === 'assistant').length < shown) continue
+          if (controllerRef.current || threadRef.current !== id) return
+          setWorkedAllowed(data.thread.workedAllowed === true)
+          setMessages(
+            toChatMessages(
+              data.messages.map((m) => ({
+                id: m.id,
+                role: m.role,
+                content: m.content,
+                citations: m.role === 'assistant' ? parseStoredCitations(m.citations) : null,
+                turn: m.turn ?? null,
+              }))
+            )
+          )
+          return
+        } catch {
+          return
+        }
+      }
+    },
+    [courseId]
+  )
 
   const send = React.useCallback(
     async (rawQuestion: string) => {
@@ -115,6 +165,9 @@ export function useAskChat({
           question,
           threadId: threadRef.current,
           topicId,
+          conceptId: threadRef.current ? null : conceptId,
+          // The button's message is the one fixed sentence, so a retry of it is the button again.
+          ...(question === WORKED_EXAMPLE_REQUEST ? { event: 'show_worked' as const } : {}),
           signal: controller.signal,
           onEvent: (event) => {
             if (event.type === 'thread') {
@@ -143,20 +196,23 @@ export function useAskChat({
               return
             }
             answer = applyChatEvent(answer, event)
+            if (event.type === 'tutor') setWorkedAllowed(event.workedAllowed)
             setLive({ question, answer })
           },
         })
 
         if (answer.status === 'done') {
+          const turn = liveTurn(answer.route, answer.check)
           const message: AssistantMessage = {
             kind: 'assistant',
             id: answer.messageId ?? nextId(),
             text: answer.text,
             marks: answer.marks,
             sources: answer.sources,
-            noSources: doneStopReason === 'no_sources' || answer.sources.length === 0,
+            noSources: lacksSources(turn, answer.sources.length === 0, doneStopReason ?? ''),
             notSaved,
             stopped: false,
+            turn,
           }
           finish(message)
           if (threadRef.current) callbacks.current.onThreadActive?.(threadRef.current)
@@ -180,10 +236,13 @@ export function useAskChat({
                 noSources: false,
                 notSaved: false,
                 stopped: true,
+                turn: liveTurn(answer.route, answer.check),
               }
             : null
           finish(partial)
           if (threadRef.current) callbacks.current.onThreadActive?.(threadRef.current)
+          // An explanation ends with a check question the stopped reply never showed.
+          if (partial && answer.route?.intent === 'understand' && threadRef.current) void attachStored(threadRef.current)
         } else if (error instanceof ChatRequestError) {
           report(error.code)
           finish(failure(error.message, error.retryable))
@@ -193,7 +252,7 @@ export function useAskChat({
         }
       }
     },
-    [courseId, topicId, nextId, report]
+    [courseId, topicId, conceptId, nextId, report, attachStored]
   )
 
   /** Stop the answer. The server keeps writing it to the conversation. */
@@ -224,6 +283,7 @@ export function useAskChat({
     threadRef.current = null
     setLoadError(null)
     setLoadingThread(false)
+    setWorkedAllowed(false)
   }, [abortCurrent])
 
   /** Open a stored conversation. */
@@ -235,6 +295,7 @@ export function useAskChat({
       setThreadId(id)
       threadRef.current = id
       setMessages([])
+      setWorkedAllowed(false)
       setLoadError(null)
       setLoadingThread(true)
       try {
@@ -242,6 +303,7 @@ export function useAskChat({
           `/api/projects/${encodeURIComponent(courseId)}/chat/threads/${encodeURIComponent(id)}`
         )
         if (token !== loadTokenRef.current) return
+        setWorkedAllowed(data.thread.workedAllowed === true)
         setMessages(
           toChatMessages(
             data.messages.map((m) => ({
@@ -249,6 +311,7 @@ export function useAskChat({
               role: m.role,
               content: m.content,
               citations: m.role === 'assistant' ? parseStoredCitations(m.citations) : null,
+              turn: m.turn ?? null,
             }))
           )
         )
@@ -262,7 +325,7 @@ export function useAskChat({
     [courseId, abortCurrent]
   )
 
-  return { threadId, messages, live, sending, loadingThread, loadError, send, stop, retry, reset, loadThread }
+  return { threadId, messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry, reset, loadThread }
 }
 
 export type AskChat = ReturnType<typeof useAskChat>

@@ -6,6 +6,9 @@
 
 Upload your lecture notes, textbook chapters and past exams. Margins splits them into topics, then writes notes, worked examples, quizzes and timed practice exams from that material, with sources you can click back to. A voice coach quizzes you out loud.
 
+<!-- draft for Harish -->
+Margins asks you to try before it helps. Each topic starts with a few questions you will probably miss, then the reading, then writing what you remember with the book closed. The AI writes the questions, grades the answers, plans your days and gives the smallest hint that unblocks you. It does not hand you the answer first.
+
 **[studymargins.com](https://studymargins.com)**
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -21,15 +24,23 @@ Upload your lecture notes, textbook chapters and past exams. Margins splits them
 
 1. **Upload** PDF, DOCX, PPTX or DOC files: lecture notes, book chapters, sample exams.
 2. **Review the course plan** Margins proposes: units (the syllabus's chapters or weeks) of topics, each tied to the pages that teach it, with learning objectives, prerequisites and an estimated time. Rename, merge, move, add or remove topics before anything is generated.
-3. **Study each topic** in five views:
-   - **Notes**: a lesson (what you'll learn, the idea, key concepts, a worked example, a check-yourself question, pitfalls and a summary), rendered with KaTeX math and highlighted code, written from that topic's own pages and listing the files and pages it came from.
-   - **Worked examples**: solved problems with step-by-step reasoning.
-   - **Practice**: problems you solve one step at a time, with hints and a check for each step.
-   - **Quiz**: multiple choice, true/false, numerical and short answer. Scores are computed on the server; short answers are graded by the model with partial credit.
-   - **Voice practice**: a spoken session with three styles (quiz me, walk me through it, just talk) in ten languages.
+<!-- draft for Harish -->
+3. **Study each topic along a path**: Warm-up, Read, Recall, Practice, Quiz. The topic opens on the step Margins thinks you need next, and says why in one sentence. Worked examples, the explainer and voice practice are tools beside the path.
+   - **Warm-up**: a few questions before you read. You will miss some. That is the point: it shows what to look for. Nothing here counts toward quiz scores.
+   - **Read**: your own pages, with the passages your warm-up pointed to marked "Focus here", margin notes, short check questions between sections, and a link to the original page. Asking the tutor about a passage needs your own attempt first.
+   - **Recall**: close the book and write what you remember, one idea at a time or the whole topic. The grader quotes your words back, says what is not right with the page it is from, and points at what you missed without giving the answer. Opening the reading while a recall card is open means that card does not count.
+   - **Explainer**: the AI lesson, opened after recall. It covers only the gaps your recall left, written from your pages.
+   - **Worked examples**: solved problems where you predict the next step, then see it. The steps fade as you improve.
+   - **Practice**: problems you solve one step at a time. Hints come in three kinds (locate, connect, structure) and say what they cost before you open them. A practice tutor can ask about your working. It never gives the answer.
+   - **Quiz**: multiple choice, true/false, numerical and short answer. You say how sure you are on each question, and can show your thinking. Scores are computed on the server; short answers are graded by the model with partial credit. Wrong options name the specific mix-up they stand for.
+   - **Voice practice**: a spoken session in ten languages with three styles: quiz me, teach it back (you explain an idea and the coach asks about the gaps), and read it with me (predict a claim from your pages, hear it, answer one check).
 4. **Take practice exams** across topics: timed, autosaved, with per-question feedback and regrading. Upload past exams and **Match my past exams** writes new ones in their style (question mix, points, phrasing, conventions); the topics those exams test are flagged.
-5. **Plan to your exam date.** Give the date and your daily minutes and Margins lays out each day: new topics in prerequisite order, a quiz the next day, spaced reviews, a mock exam after each unit and two full mocks before the exam. Mastery comes from quizzes, exams, voice and practice; **Retry what you missed** and **Fresh review** target weak spots.
+5. **Plan to your exam date.** Give the date and your daily minutes and Margins lays out each day: new topics in prerequisite order, a quiz the next day, spaced reviews, a mock exam after each unit and two full mocks before the exam. Mastery comes from what you answered yourself in quizzes, exams, recall, review, voice and practice, not from reading; **Retry what you missed** and **Fresh review** target weak spots.
 6. **Ask your materials**: a chat that answers from your files with numbered citations, and says so when the files don't cover the question.
+<!-- draft for Harish -->
+   Finding a fact gets a direct, cited answer. Asking to understand an idea first asks what you think, then explains the gap and ends with a check card you answer from memory. Asking for help with a problem of your own never gets the solution: it asks about your attempt, and after a real try you can ask for a worked example with different numbers. While a mock exam is in progress, Ask declines questions that match the exam.
+7. **Review in mixed sessions.** The Review page starts a session of up to 12 questions from the ideas that are due across your topics, never two in a row on the same idea. A miss is followed by a fresh question on the same idea, so you are not re-answering the same wording.
+8. **See where you stand.** The map shows one unit's ideas and what builds on what, with a state on each (Solid, Getting there, Shaky, Fading, Inferred, Not started). This week's focus names the few ideas worth your time. The progress panel shows only what you answered yourself, how much help you used and how well your confidence matched your results. There are no streaks, points or badges.
 
 <img src="frontend/public/screens/topics-edit-light-1920.webp" alt="The course plan: units and topics, each tied to the file and pages it is taught from" width="860">
 
@@ -66,13 +77,40 @@ Browser ──▶ Next.js 16 (web) ──────────────▶
 - **Parsing and chunking.** Files are read as markdown (PDFs with pymupdf4llm; DOCX, PPTX, and DOC through LibreOffice when installed) and split at headings and paragraphs into chunks of about 350 tokens, each tagged with its heading path and pages.
 - **Local embeddings.** Chunks are embedded in-process with `BAAI/bge-small-en-v1.5` (384 dimensions, no API cost) and stored in pgvector with an HNSW index.
 - **Topic-scoped retrieval.** Each topic is mapped to at most 24 chunks by hybrid search: vector similarity and Postgres full-text search, merged with Reciprocal Rank Fusion, with a similarity floor so a barely covered topic gets a short list instead of loose matches. Generators only ever see those chunks, so prompt size stays flat as a course grows, and the shared excerpt block is prompt-cached across notes, examples, quizzes and exams.
-- **Models.** Claude Opus writes notes, examples, quizzes and exams, plans each course in one low-effort call and answers Ask questions; Claude Haiku handles file validation, short-answer grading and the voice coach.
+- **Models.** Claude Opus writes notes, examples, quizzes and exams, plans each course in one low-effort call and answers Ask questions; Claude Haiku handles file validation, short-answer grading and the voice coach. <!-- draft for Harish --> The learning features add three more purposes: Sonnet at low effort writes the practice tutor's replies and grades recall answers, and Haiku at low effort routes Ask messages and judges tutor replies for leaks. Each purpose has its own setting (`MODEL_TUTOR`, `MODEL_RECALL_GRADING`, `MODEL_ROUTER`).
 - **Voice without a speech API.** The browser does speech-to-text and text-to-speech (Web Speech API). The server runs Claude with drill tools (next question, record answer, hint) and streams each turn back as NDJSON.
 - **Jobs.** Long tasks run as jobs that are claimed with one atomic update and hold a lease; a reaper re-dispatches jobs whose worker died. Each job records its tokens and cost; a per-user daily allowance and a site-wide daily cap bound spend.
 - **AI outages and the daily allowance.** One shared status record (`ai_status`, read at `GET /status/ai`) says whether the AI is available. Out-of-credit, key and configuration errors mark it unavailable at once; rate limits and overloads do so after three in a row. While it is down, the app shows a site-wide notice and turns the AI buttons off with the reason. The daily allowance is checked before a job is created, not after. A failure that can be retried puts the job back to `pending`; `failed` is final. Mock exam answers are always saved, and grading waits for the AI to come back, for up to 7 days. If `OPS_ALERT_WEBHOOK_URL` is set, the owner gets a message when the AI goes down and when it comes back.
 - **Account deletion.** Settings has a Delete account button. It stops the account's jobs, deletes its files, then deletes the account and everything made from it. Spend rows are kept without any link to the person, so the site-wide daily cap still holds.
 - **Isolation.** Only the web service can call the AI service (shared internal token), which is reachable only on Railway's private network.
 - **Storage.** The web app streams each upload through size and file-type checks into an S3-compatible bucket (a Railway bucket in production); the AI service downloads it from there to process it. Without a bucket, both use a local uploads folder.
+
+<!-- draft for Harish -->
+## Effort before help
+
+Research on learning keeps finding the same thing: help given before you try does not stick, and students cannot feel the difference. Margins is built around that. The AI plans, writes questions, grades, diagnoses and gives the smallest hint that unblocks you. The student does the generative work first, and the app enforces the order instead of asking nicely.
+
+Every answer, from any screen, goes through one path:
+
+```
+ surfaces: warm-up, reader checks, recall, practice, quiz, exam, review, voice, Ask check
+        │   each answer is stored with who graded it and how much help it needed
+        ▼
+ evidence events (append-only, one row per answer) ──replay──▶ concept memory + mastery
+        │                                                         │
+        │ credit and penalty spread along prerequisite edges      ▼
+        ▼                                          next activity · plan · reviews · map · progress
+ knowledge graph per topic: concepts, claims quoted from your pages, edges
+```
+
+- **Evidence and the learner model.** Each answer becomes an event with an assistance level that the screen decides, never the model. Level 0 is an answer with no help. Levels 1 to 3 cover a hint, a named idea, a revealed answer or a worked example. Only unassisted answers update a concept's memory and mastery. Assisted ones are kept for display and for the "help used" figure. A concept's memory is replayed from its events with FSRS (`ts-fsrs`, pinned, 90% retention, no short-term steps), so the state is a pure function of the log and can be rebuilt at any time. Mastery is a recency-weighted mean of the last five unassisted scores, capped by how many independent sessions back it up, so ten questions in one sitting count once. A pass on one concept spreads a small credit to the concepts it builds on, and a miss shortens the next review of the concepts that depend on it.
+- **Knowledge graph.** When a topic is opened, an extraction job turns its pages into 3 to 8 concepts, each with two to five claims that quote the source. Quotes that are not a verbatim substring of the named chunk are dropped, cycles are broken, and edges (needs, covers, easy to mix up with) are kept with a confidence. A second job proposes links between topics of a unit. Suggested links stay suggestions until the student confirms them on the map.
+- **Study path.** A pure function reads a topic's state and returns the next activity and a reason: fix a wrong idea first, then warm-up, read, recall, the explainer for recall gaps, a due review, a prerequisite drill, quiz or practice, and finally a stretch task (teach it back, a harder quiz or a mock exam). The topic page, the plan and the Continue card all use it.
+- **Tutoring that does not leak.** The practice tutor works up a ladder from "what have you tried" to locating, naming the idea and showing the general form. The server holds the rung, so the model cannot skip ahead. Every reply that has an authored answer goes through a leak check: a string and number match first, then a model judge looks for the answer in any rearranged form, the problem's numbers plugged into a formula, or a worked example that reuses the problem's numbers. A leaking reply is written again once; if it leaks again, the authored hint for that rung is sent instead.
+- **Review sessions.** Due concepts are ordered by wrong idea first, then most overdue, then lowest recall. Questions are interleaved across topics, and each concept moves from recall to telling near-twins apart to using the idea in a chain. A miss is followed by a fresh question written for that idea. If the AI is unavailable, only questions graded by rule are served, and one can be skipped for now.
+- **Ask with the attempt first.** A small model sorts each message (lookup, logistics, understand, solve, check answer). Each intent has its own prompt. Solve never solves; the worked example button opens only after a real attempt. A check card at the end of an explanation is graded as an item at a lower assistance level. The exam guard compares a message with the questions of any mock exam in progress and declines without calling a model.
+- **Voice teach-back.** The coach asks you to explain an idea, then calls the recall grader on what you said. Its verdict decides the next move: a probe about the gap (never an explanation first), a new example to test whether you can use the idea, or a wrap-up. Only after two probes on the same gap does it explain, from your own pages with the page number, and ask you to say it back.
+- **Knowledge map and progress honesty.** The map lays out one unit with `@dagrejs/dagre`: prerequisites above what depends on them, state shown by icon and text as well as colour, and a frontier mark on ideas whose prerequisites are solid. A list view shows the same data for screen readers and phones. The progress panel counts only first tries without help, leaves out weeks with fewer than ten, and shows calibration (what you scored when you were Certain, and when you were guessing). Nothing in it can go up without real retrieval.
 
 ## Evals
 
@@ -116,6 +154,15 @@ Latest run: [2026-10-21](evals/results/2026-10-21-structure.md), 8 topics, Opus 
 | Cost per topic (all four types) | $0.585 |
 
 The same judge also picked the model: [Sonnet and Haiku made maths errors and fell short of the bar set before the run](evals/results/2026-10-21-model-decision.md), so generation stays on Opus and cost is held down by generating each topic only when it is opened.
+
+<!-- draft for Harish -->
+### Learning checks
+
+The learning features add three checks. Their numbers are pending, and this section stays a placeholder until the runs are in.
+
+- **Tutoring gates** (`evals/tutoring/`). Scripted students, not a model, play conversations against the practice tutor, Ask and the voice teach-back coach. Code checks every reply for answer leaks, one question per turn, length, a clear next step, rung jumps, the worked-example rule, pointing at the first wrong step, and prompt injection. Gates and results: (eval numbers pending).
+- **Recall grader.** The grader labels each claim covered, partial, missing or incorrect, and each label must carry a quote that is a substring of the student's answer or it is downgraded. It can decline to grade a short answer. Results against hand labels: (eval numbers pending).
+- **Generation checks** (`evals/generation/`). Claim quotes that are substrings of their chunk, 3 to 8 concepts per topic, every objective mapped, an acyclic prerequisite graph, valid concept ids on every item, and warm-up questions not reused in the quiz. Results: (eval numbers pending).
 
 ## Run it locally
 
@@ -218,8 +265,13 @@ Migration `20261022000000_retrieval_indexes` makes embeddings `vector(384)` and 
 
 The Playwright specs run against the production build, the AI service on the mock LLM and a migrated database:
 
+Give the specs a database of their own (create it once, migrate it, and use it for the stack and the specs). The stack's AI service sends every pending job in its database, so sharing one with `npm test` or a dev server lets their jobs and the shared AI status leak into the specs.
+
 ```bash
-export DATABASE_URL=postgresql://dev:devpass@localhost:5432/margins
+createdb margins_e2e   # or: psql -c 'create database margins_e2e'
+export DATABASE_URL=postgresql://dev:devpass@localhost:5432/margins_e2e
+(cd frontend && npx prisma migrate deploy)
+export E2E_RUN_DIR=/tmp/e2e-run   # the specs read the stack's uploads from here
 (cd frontend && npx playwright install chromium)   # once
 scripts/e2e-stack.sh start            # after the build above
 (cd frontend && PLAYWRIGHT_BASE_URL=http://localhost:3000 npx playwright test)

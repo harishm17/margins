@@ -14,7 +14,7 @@ async function signIn(page: Page) {
 
 test('the Copy button never covers code, is a 44px target, and long lines scroll inside the block', async ({ page }) => {
   await signIn(page)
-  await page.goto(`/courses/${course}/topics/${mathTopic}?view=notes`)
+  await page.goto(`/courses/${course}/topics/${mathTopic}?view=read`)
   const blocks = page.locator('#main .md-code')
   await expect(blocks).toHaveCount(2)
 

@@ -2,7 +2,14 @@ import type { Metadata } from 'next'
 import { ArrowUpRight } from '@phosphor-icons/react/dist/ssr'
 import { BRAND_NAME } from '@/config/brand'
 import { AUTHOR, SITE_URL } from '@/config/site'
+import { LEARNING_V3_EVAL_DRAFT, type DraftCheck } from '@/features/marketing/content'
 import { EVAL_FILES, GENERATION, MODEL_CHOICE, RETRIEVAL } from '@/features/marketing/evals'
+
+/**
+ * DRAFT FOR HARISH. Shows the learning v3 sections from LEARNING_V3_EVAL_DRAFT. Keep this false until the eval
+ * runs are done and every "(eval numbers pending)" has a real number and a source file. The text is a draft too.
+ */
+const SHOW_LEARNING_V3_DRAFT = false
 
 const PATH = '/evaluation'
 const TITLE = 'How Margins is evaluated'
@@ -115,6 +122,54 @@ function ComparisonTable({
 }
 
 const STATUS = { failed: 'Failed', flagged: 'Flagged for reading', passed: 'Passed' }
+
+/** Draft block (see SHOW_LEARNING_V3_DRAFT): one heading, its text, a gate table and the limits. */
+function DraftSection({
+  section,
+}: {
+  section: { heading: string; text: string[]; checks: DraftCheck[]; limits: string }
+}) {
+  return (
+    <>
+      <h3 className={h3}>{section.heading}</h3>
+      {section.text.map((paragraph) => (
+        <p key={paragraph} className={p}>
+          {paragraph}
+        </p>
+      ))}
+      <TableBox label={section.heading}>
+        <table className="w-full min-w-[520px] border-collapse">
+          <caption className="px-3 pb-1 pt-3 text-left text-small text-fg-2">{section.heading}: gate and result.</caption>
+          <thead>
+            <tr className="border-b border-border">
+              <th scope="col" className={th}>
+                Check
+              </th>
+              <th scope="col" className={th}>
+                Gate
+              </th>
+              <th scope="col" className={th}>
+                Result
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {section.checks.map((check) => (
+              <tr key={check.label}>
+                <th scope="row" className={`${th} font-normal`}>
+                  {check.label}
+                </th>
+                <td className={td}>{check.gate}</td>
+                <td className={td}>{check.result}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </TableBox>
+      <p className={p}>{section.limits}</p>
+    </>
+  )
+}
 
 export default function EvaluationPage() {
   return (
@@ -336,6 +391,16 @@ export default function EvaluationPage() {
         Notes, worked examples, practice, quizzes and exams stay on Claude Opus at medium effort. Cost is controlled by
         generating on demand, when a student opens a topic, rather than by a weaker model.
       </p>
+
+      {SHOW_LEARNING_V3_DRAFT ? (
+        <>
+          <h2 className={h2}>{LEARNING_V3_EVAL_DRAFT.heading}</h2>
+          <p className={p}>{LEARNING_V3_EVAL_DRAFT.intro}</p>
+          <DraftSection section={LEARNING_V3_EVAL_DRAFT.tutoring} />
+          <DraftSection section={LEARNING_V3_EVAL_DRAFT.recall} />
+          <DraftSection section={LEARNING_V3_EVAL_DRAFT.generation} />
+        </>
+      ) : null}
 
       <h2 className={h2}>Raw results</h2>
       <p className={p}>Every table above comes from one of these files in the public repository.</p>

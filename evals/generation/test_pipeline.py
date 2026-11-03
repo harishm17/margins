@@ -345,3 +345,40 @@ def test_real_provider_sends_the_pinned_model_and_effort(monkeypatch):
         assert response.content == "hello notes"
         assert sent[-1]["model"] == model and sent[-1]["output_config"]["effort"] == effort
         assert provider.calls[0]["model"] == model and provider.calls[0]["effort"] == effort
+
+
+def test_concepts_and_warmup_flow_through_summary_and_report(tmp_path):
+    run = tmp_path / "2026-01-01-graph"
+    (run / "raw").mkdir(parents=True)
+    graph = {
+        "objective_count": 1,
+        "concepts": [{"id": f"c{i}", "name": f"C{i}", "objective_indexes": [0]} for i in range(3)],
+        "claims": [{"concept_id": "c0", "chunk_id": "k1", "quote": "maps keys to slots"}, {"concept_id": "c1", "chunk_id": "k1", "quote": "not in the chunk"}],
+        "edges": [{"source_id": "c0", "target_id": "c1", "type": "prerequisite"}],
+    }
+    warmup = [{"question_type": "true_false", "question_text": "A hash function maps any key to a slot.", "correct_answer": True, "explanation": "Yes.", "concept_ids": ["c0"]}]
+    for content_type, output in (("concepts", graph), ("warmup", warmup), ("quiz", QUIZ)):
+        r = _record("c", "t1", "a-medium", content_type, output)
+        (run / "raw" / analysis.raw_name("c", "t1", "a-medium", content_type)).write_text(json.dumps(r))
+    (run / "excerpts.json").write_text(json.dumps({"c": {"t1": [{"chunk_id": "k1", "text": "A hash function maps keys to slots."}]}}))
+    (run / "topics.json").write_text(json.dumps({"c": {"all": [{"name": "T1"}], "selected": [{"name": "T1", "key": "t1"}]}}))
+    info = {
+        "label": "graph", "date": "2026-01-01", "corpora": ["c"], "types": ["concepts", "warmup", "quiz"],
+        "models": [{"slug": "a-medium", "label": "a:medium", "model_id": "x"}],
+        "params": {"examples": 3, "questions": 10, "difficulty": "medium", "detail_level": "comprehensive"},
+        "judge": None, "mock": False, "seed": 0, "max_usd": 3.0, "max_judge_usd": 3.0, "topics_source": "fixed",
+    }
+    summary = analysis.build_summary(run, info, {"generation": 0.03, "topics": 0.0, "judge": 0.0}, {})
+    checks_ = summary["models"]["a-medium"]["checks"]
+    assert (checks_["claims_total"], checks_["claims_matched"]) == (2, 1)
+    assert checks_["claim_quote_gate_ok"] is False
+    assert checks_["concept_count_ok"] == 1 and checks_["warmup_reused_items"] == 0
+    # The warm-up is tagged with a real concept; the quiz fixture has no tags at all.
+    assert (checks_["items_tagged"], checks_["items_tagged_valid"]) == (2, 1)
+    markdown = report.render_markdown(summary)
+    assert "50% (1 of 2) FAIL" in markdown and "Concepts" in markdown and "Warm-up" in markdown
+    # The item-tag gate fails (one quiz item is untagged); the warm-up reuse gate passes at zero.
+    assert checks_["item_tag_gate_ok"] is False and checks_["warmup_reuse_gate_ok"] is True
+    assert "50% (1 of 2) FAIL" in markdown.split("Items whose concept tags are all valid")[1].splitlines()[0]
+    assert "| 0 PASS |" in markdown.split("Warm-up questions the topic quiz repeats")[1].splitlines()[0]
+    json.dumps(summary)

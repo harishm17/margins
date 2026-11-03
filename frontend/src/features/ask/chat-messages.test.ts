@@ -35,7 +35,7 @@ test('a stored failure with no question before it has nothing to retry', () => {
 
 const user = (id: string, text: string): ChatMessage => ({ kind: 'user', id, text })
 const answer = (id: string): ChatMessage => ({
-  kind: 'assistant', id, text: 'ok', marks: [], sources: [], noSources: false, notSaved: false, stopped: false,
+  kind: 'assistant', id, text: 'ok', marks: [], sources: [], noSources: false, notSaved: false, stopped: false, turn: null,
 })
 const failure = (id: string, question: string): ChatMessage => ({ kind: 'failure', id, message: 'x', retryable: true, question })
 

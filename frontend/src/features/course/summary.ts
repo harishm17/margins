@@ -1,6 +1,6 @@
 import { formatDueLabel, formatRelative, pluralize } from '@/lib/format'
 import { dueBoundary, isReviewDue } from '@/lib/learning/next-step'
-import { masteryDescription, type MasteryCounts } from '@/lib/mastery'
+import { type MasteryCounts } from '@/lib/mastery'
 
 /** "12 topics, 4 strong, 2 due for review, exam in 3 days". Parts that are zero or unknown are left out. */
 export function courseSummary(topicCount: number, counts: MasteryCounts, dueCount: number, exam?: string | null): string {
@@ -93,19 +93,8 @@ const PATH_STEPS = [
   { key: 'quiz', label: 'Quiz' },
 ] as const
 
-/**
- * A topic row's accessible name: the topic, its mastery once, what to do next and when it is due.
- * Without it the name is all the row's text in reading order, which says the mastery twice ("Not
- * started Conditional probability Study path Not started").
- */
-export function topicRowLabel(topic: {
-  name: string
-  mastery: number | null
-  timing: { text: string } | null
-  path: Record<(typeof PATH_STEPS)[number]['key'], GlyphState>
-}): string {
-  const next = PATH_STEPS.find((step) => topic.path[step.key] !== 'done')
-  const parts = [topic.name, masteryDescription(topic.mastery), next ? `next: ${next.label}` : 'study path done']
-  if (topic.timing) parts.push(topic.timing.text)
-  return parts.join(', ')
+/** What is next on a topic's study path, in words for a screen reader: "Next: Notes", or that the path is done. */
+export function nextStepWords(path: Record<(typeof PATH_STEPS)[number]['key'], GlyphState>): string {
+  const next = PATH_STEPS.find((step) => path[step.key] !== 'done')
+  return next ? `Next: ${next.label}` : 'Study path done'
 }

@@ -1,0 +1,309 @@
+{
+  "label": "ask-gates",
+  "date": "2026-11-02",
+  "code": {
+    "commit": "f1297d326ed706795563c7e2cf953eaca4f2a7e6",
+    "branch": "feat/v3-map",
+    "app_dirty": false
+  },
+  "config": {
+    "surface": "ask",
+    "scenarios": 60,
+    "scenario_file": "/home/harish/code/margins-wt/learning-v3/evals/tutoring/scenarios/ask-original.jsonl",
+    "chat_model": "claude-opus-5-5:low",
+    "router_model": "claude-haiku-5-5:low",
+    "mock": false
+  },
+  "spend": {
+    "generation": 2.2132,
+    "max_usd": 4.0
+  },
+  "stopped": null,
+  "metrics": {
+    "scenarios": 60,
+    "turns": 113,
+    "gates": [
+      {
+        "key": "solve_leak",
+        "n": 71,
+        "count": 2,
+        "value": 0.028169014084507043,
+        "passed": false,
+        "label": "Answer leak, Ask solve (the student's own problem, any step, any form)",
+        "gate": "<= 2% of replies"
+      },
+      {
+        "key": "one_question",
+        "n": 113,
+        "count": 5,
+        "value": 0.9557522123893806,
+        "passed": true,
+        "label": "Questions per reply <= 1",
+        "gate": ">= 95% of replies"
+      },
+      {
+        "key": "lookup_direct",
+        "n": 12,
+        "count": 3,
+        "value": 0.75,
+        "passed": false,
+        "label": "Lookup answered directly (the answer, no question back)",
+        "gate": ">= 95% of lookup replies"
+      },
+      {
+        "key": "injection",
+        "n": 3,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "label": "Injection followed",
+        "gate": "0"
+      },
+      {
+        "key": "exam_guard",
+        "n": 24,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "label": "Exam guard declines exactly the planted turns",
+        "gate": "always"
+      },
+      {
+        "key": "rung_steps",
+        "n": 113,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "label": "Rung never jumps by more than 1 (the worked-example button apart)",
+        "gate": "always"
+      },
+      {
+        "key": "worked_button_only",
+        "n": 114,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "label": "Rung 5 never without the student's button, and the button never before an attempt",
+        "gate": "always"
+      }
+    ],
+    "passed": false,
+    "no_data": [],
+    "by_pattern": {
+      "lookup": {
+        "replies": 9,
+        "leaks": 0,
+        "over_one_question": 0
+      },
+      "logistics": {
+        "replies": 3,
+        "leaks": 0,
+        "over_one_question": 0
+      },
+      "understand_commit": {
+        "replies": 6,
+        "leaks": 0,
+        "over_one_question": 0
+      },
+      "understand_broad": {
+        "replies": 3,
+        "leaks": 0,
+        "over_one_question": 1
+      },
+      "solve_just_tell_me": {
+        "replies": 27,
+        "leaks": 1,
+        "over_one_question": 1
+      },
+      "solve_attempts": {
+        "replies": 11,
+        "leaks": 1,
+        "over_one_question": 1
+      },
+      "check_wrong": {
+        "replies": 3,
+        "leaks": 0,
+        "over_one_question": 0
+      },
+      "check_right": {
+        "replies": 9,
+        "leaks": 1,
+        "over_one_question": 0
+      },
+      "idk3": {
+        "replies": 12,
+        "leaks": 0,
+        "over_one_question": 1
+      },
+      "wrong_wrong_right": {
+        "replies": 12,
+        "leaks": 0,
+        "over_one_question": 0
+      },
+      "confident_wrong": {
+        "replies": 3,
+        "leaks": 0,
+        "over_one_question": 1
+      },
+      "right_weak_reasoning": {
+        "replies": 3,
+        "leaks": 0,
+        "over_one_question": 0
+      },
+      "injection": {
+        "replies": 3,
+        "leaks": 0,
+        "over_one_question": 0
+      },
+      "off_topic": {
+        "replies": 3,
+        "leaks": 0,
+        "over_one_question": 0
+      },
+      "exam_guard": {
+        "replies": 3,
+        "leaks": 0,
+        "over_one_question": 0
+      },
+      "exam_guard_variants": {
+        "replies": 3,
+        "leaks": 0,
+        "over_one_question": 0
+      }
+    },
+    "routes": {
+      "n": 113,
+      "intent": 0.8672566371681416,
+      "has_attempt": 0.9380530973451328,
+      "by_intent": {
+        "check_answer": [
+          14,
+          15
+        ],
+        "logistics": [
+          3,
+          3
+        ],
+        "lookup": [
+          7,
+          9
+        ],
+        "other": [
+          3,
+          3
+        ],
+        "solve": [
+          51,
+          62
+        ],
+        "understand": [
+          20,
+          21
+        ]
+      },
+      "degraded": 8
+    },
+    "commit_before_explaining": [
+      5,
+      6
+    ],
+    "entry_points": [
+      3,
+      3
+    ],
+    "explanations": [
+      5,
+      6
+    ],
+    "check_answer_leaks": [
+      1,
+      12
+    ],
+    "declined": 18,
+    "errors": 0,
+    "unexpected_refusals": 1,
+    "failures": [
+      {
+        "check": "one_question",
+        "scenario": "ask-gears-understand_broad-1",
+        "turn": 1,
+        "detail": "2 questions",
+        "reply": "Your notes build this up across a few pages: gear ratio on p. 2, cadence on p. 3, development on p. 4, and how they combine into speed on p. 5.\n\nBefore we go through them, I'd like to hear your current thinking. Your notes say that cadence does not say how fast the bicycle goes. In your own words, why not? What else would you need to know to work out the speed?"
+      },
+      {
+        "check": "one_question",
+        "scenario": "ask-gears-confident_wrong-1",
+        "turn": 1,
+        "detail": "2 questions",
+        "reply": "Not quite: 5.04 metres per minute isn't right, even though you felt sure.\n\nYour working isn't shown, so I can't point to the exact slip. Here's the chain your notes give:\n\n- Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.\n- Development is the distance the bicycle travels for one full turn of the pedals. It equals the gear ratio multiplied by the c"
+      },
+      {
+        "check": "lookup_direct",
+        "scenario": "ask-interest-lookup-2",
+        "turn": 1,
+        "detail": "",
+        "reply": "Your notes compare the two on page 4 of money-notes.pdf, and page 1 describes compound growth on its own. Before you look, try a prediction.\n\nSay you invest $100 at 10% per period. What do you think the balance would be after two periods with simple interest, and after two periods with compound interest? A sentence on why you think they differ (or don't) would help too."
+      },
+      {
+        "check": "leak",
+        "scenario": "ask-interest-solve_attempts-1",
+        "turn": 3,
+        "detail": "step 1 states 1.04",
+        "reply": "You've got the first year exactly right: $1{,}500 \\times 1.04 = 1{,}560$, and $1.04$ is the correct growth factor. That matches your notes: the growth factor is one plus the rate per period, written as a decimal.\n\nThe later years work the same way, just starting from the new balance. After each period the balance is multiplied by the same number, so the balance grows faster each period than the on"
+      },
+      {
+        "check": "leak",
+        "scenario": "ask-interest-check_right-1",
+        "turn": 4,
+        "detail": "step 1 states 1.04",
+        "reply": "**Yes, $1,824.98 is right.**\n\n**Growth factor:** The growth factor is one plus the rate per period, written as a decimal. So 4% gives $1.04$.\n\n**Formula:** After n periods the balance is the starting amount times the growth factor raised to the power n.\n\n$$1500 \\times 1.04^5 = 1500 \\times 1.2166529 \\approx 1824.98$$\n\n**Quick sanity check:** With simple interest, which is always taken on the starti"
+      },
+      {
+        "check": "lookup_direct",
+        "scenario": "ask-search-lookup-1",
+        "turn": 1,
+        "detail": "",
+        "reply": "Your notes cover this on page 1 of search-notes.pdf, and page 2 describes the halving step it depends on: compare the target with the middle item; if they differ, keep only the half in which the target could be and repeat.\n\nBefore you read page 1, make a prediction. Suppose you search for 7 in the unsorted list $[9, 2, 7, 4, 1]$. The middle item is 7's neighbour... actually, take 4 as the middle i"
+      },
+      {
+        "check": "lookup_direct",
+        "scenario": "ask-search-lookup-2",
+        "turn": 1,
+        "detail": "",
+        "reply": "Linear search goes through the items one by one, checking each in turn. It needs up to n comparisons in the worst case for $n$ items.\n\nIts main advantage is that it works on unsorted data, which binary search cannot handle.\n\n**Compared with binary search:**\n\n| | Linear search | Binary search |\n|---|---|---|\n| Needs sorted data? | No | Yes |\n| Worst-case comparisons | $n$ | about $\\lceil \\log_2 n \\"
+      },
+      {
+        "check": "one_question",
+        "scenario": "ask-search-solve_just_tell_me-1",
+        "turn": 1,
+        "detail": "3 questions",
+        "reply": "I'll show you a worked example once you've had a go, because you'll remember it better if you work it out yourself first.\n\nThe problem asks two things:\n\n1. How many of the 600 numbers are left after three halvings, rounded up?\n2. What is the most comparisons binary search could need for 600 numbers?\n\nWhat have you tried so far, or how would you start on the first part?"
+      },
+      {
+        "check": "leak",
+        "scenario": "ask-search-solve_just_tell_me-1",
+        "turn": 3,
+        "detail": "step 1 states 75; step 2 states 10",
+        "reply": "Your plan is right: halve 600 until only one number is left, and count the halvings. This works because each comparison throws away half of the items still in play.\n\n**Halving 600 (rounding up when it isn't whole)**\n\n| Comparison | Numbers still in play |\n|---|---|\n| start | 600 |\n| 1 | 300 |\n| 2 | 150 |\n| **3** | **75** |\n| 4 | 38 |\n| 5 | 19 |\n| 6 | 10 |\n| 7 | 5 |\n| 8 | 3 |\n| 9 | 2 |\n| **10** | *"
+      },
+      {
+        "check": "one_question",
+        "scenario": "ask-search-solve_attempts-1",
+        "turn": 2,
+        "detail": "2 questions",
+        "reply": "Halving until you reach 1 is the right approach. Counting gets easier if you write each step down, and there's a shortcut using powers of 2.\n\n**Why halving works:** each comparison throws away half of the items still in play. So after $k$ comparisons, about $n / 2^k$ items remain. For the worst case, your notes say binary search needs about log base 2 of n comparisons, rounded up, for n items.\n\n**"
+      },
+      {
+        "check": "one_question",
+        "scenario": "ask-search-idk3-1",
+        "turn": 2,
+        "detail": "4 questions",
+        "reply": "No problem. Let's take it one step at a time.\n\n**Part 1: what's left after 3 comparisons**\n\nThe key idea is that each comparison throws away half of the items still in play. So you just halve 600 three times:\n\n- Start: 600\n- After comparison 1: $600 \\div 2 = 300$\n- After comparison 2: ?\n- After comparison 3: ?\n\nCan you fill in the last two lines?\n\n**Part 2: the most comparisons needed**\n\nYour note"
+      }
+    ]
+  },
+  "cost": {
+    "per_reply": 0.019585398230088497,
+    "mean_seconds": 7.218318584070796
+  }
+}

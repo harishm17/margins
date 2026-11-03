@@ -7,12 +7,12 @@ import { apiFetch } from '@/lib/api/client'
 import { useTopic } from './topic-provider'
 
 /**
- * "Mark as read" and "Mark as done": flips to completed at once, saves through the progress
+ * "Mark as read", "I've read it" (the reader) and "Mark as done": flips to completed at once, saves through the progress
  * route, and rolls back with a toast if saving fails. On success the page is refreshed so the
  * tab glyph and the sidebar catch up. Marking the examples done also starts the next topic's
  * notes in the background, so they are ready when the student gets there.
  */
-export function useMarkComplete(topicId: string, field: 'notesCompleted' | 'examplesCompleted', initial: boolean) {
+export function useMarkComplete(topicId: string, field: 'notesCompleted' | 'examplesCompleted' | 'readAt', initial: boolean) {
   const router = useRouter()
   const { prefetchNext } = useTopic()
   const [optimistic, setOptimistic] = React.useState(false)

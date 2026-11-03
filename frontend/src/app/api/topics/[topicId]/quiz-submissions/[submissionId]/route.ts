@@ -41,7 +41,9 @@ export async function GET(
       totalPoints: applied.totalPoints,
       review: applied.review,
       answers: applied.answers,
+      confidence: applied.confidence,
       outcome: applied.outcome,
+      ...(applied.help ?? {}),
     })
   } catch (error) {
     console.error('Quiz submission status error:', error)

@@ -107,7 +107,8 @@ def run_checks(
                     continue
                 full_key = f"{corpus}/{topic_key}"
                 texts = [e["text"] for e in excerpts.get(corpus, {}).get(topic_key, [])]
-                topic_results[full_key] = checks.check_topic(model_outputs, texts, **kwargs)
+                chunk_texts = {e["chunk_id"]: e["text"] for e in excerpts.get(corpus, {}).get(topic_key, []) if e.get("chunk_id")}
+                topic_results[full_key] = checks.check_topic(model_outputs, texts, chunk_texts=chunk_texts, **kwargs)
                 statements[full_key] = checks.problem_statements(
                     model_outputs.get(checks.SOLVED), model_outputs.get(checks.INTERACTIVE)
                 )

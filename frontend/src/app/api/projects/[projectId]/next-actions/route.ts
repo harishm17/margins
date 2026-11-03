@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { nextActionsFromStep, setupNextAction } from '@/lib/learning/next-actions'
 import { nextStepForCourse } from '@/lib/learning/next-step'
-import { dueTopicsOf } from '@/server/queries/course'
+import { conceptTopicsOf, dueTopicsOf } from '@/server/queries/course'
 import { getPlanData } from '@/server/queries/plan'
 import { resolveTimeZone } from '@/lib/learning/time-zone'
 import {
@@ -40,6 +40,7 @@ export async function GET(
       due: dueTopicsOf(data.course.topics, now, timeZone),
       now,
       timeZone,
+      conceptTopicIds: conceptTopicsOf(data.course.topics),
     })
     const actions = setup ? [setup] : nextActionsFromStep(step, data.plan)
     return NextResponse.json({

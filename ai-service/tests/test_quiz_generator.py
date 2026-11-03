@@ -10,6 +10,9 @@ from app.services.llm.base import LLMOutputError
 from app.services.llm.schemas import ChoiceOption, GeneratedQuestion, QuestionSet
 
 
+pytestmark = pytest.mark.usefixtures("passthrough_support")
+
+
 CHUNKS = [
     {
         "id": "c1",
@@ -28,7 +31,7 @@ def _mcq(text="What is ML?", answer="B"):
     return GeneratedQuestion(
         question_type="multiple_choice",
         question_text=text,
-        options=[ChoiceOption(id=x, text=f"Option {x}") for x in "ABCD"],
+        options=[ChoiceOption(id=x, text=f"Option {x}", misconception="wrong idea") for x in "ABCD"],
         correct_answer=answer,
         explanation="Because.",
     )

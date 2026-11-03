@@ -16,11 +16,17 @@ type ProgressRingProps = {
   className?: string
 }
 
+/**
+ * The ring for a finished test's score. An empty large ring is a stark grey circle that shouts the miss, so a
+ * score of nothing is drawn at the small size, with the words beside it carrying the result.
+ */
+export const scoreRingSize = (score: number): RingSize => (score > 0 ? 96 : 44)
+
 const LABEL_CLASS: Record<RingSize, string> = {
   16: 'hidden',
   28: 'text-[9px] font-medium',
   44: 'text-caption',
-  96: 'text-title',
+  96: 'text-heading',
 }
 
 /** The arc of a "learning" ring as ten segments around the circle, each followed by a gap of a quarter of its width. */

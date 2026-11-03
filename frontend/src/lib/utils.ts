@@ -53,16 +53,3 @@ const twMerge = extendTailwindMerge({
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
-
-const SUPPORTED_MATERIAL_EXTENSIONS = ['.pdf', '.docx', '.pptx', '.doc']
-
-/** Validate file type for supported study materials. */
-export function isValidStudyMaterial(file: { name: string }): boolean {
-  const filename = file.name.toLowerCase()
-  return SUPPORTED_MATERIAL_EXTENSIONS.some((ext) => filename.endsWith(ext))
-}
-
-/** Validate file size against a limit in MB. */
-export function isValidFileSize(file: { size: number }, maxSizeMB = 25): boolean {
-  return file.size <= maxSizeMB * 1024 * 1024
-}

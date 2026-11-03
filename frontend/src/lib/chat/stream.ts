@@ -17,6 +17,8 @@ export type AnswerRecord = {
   sources: ChatSource[]
   marks: CitationMark[]
   usage: UsageInfo
+  /** What Ask tutored on this reply, stored with it (see lib/ask/tutor-message.ts). */
+  tutor?: unknown
 }
 
 export type ChatStorage = {
@@ -46,14 +48,26 @@ export function parseUsage(value: unknown): UsageInfo | null {
 
 type Json = Record<string, unknown>
 
+/** Ask's part in the relay: it reads the AI service's events and adds its own. All optional. */
+export type RelayHooks = {
+  /** Every event from the AI service, before it is handled (the route comes first). */
+  onEvent?(raw: Json): void
+  /** The finished answer: what is stored with it, and what the browser is sent in its place (it may hide parts). */
+  onDone?(raw: Json): { tutor?: unknown; send?: Json } | undefined
+  /** The answer is stored: more events for the browser, sent after `saved`. A failure here is logged and the stream still ends well. */
+  afterSaved?(messageId: string): Promise<Json[]>
+}
+
 export function relayChatStream(args: {
   /** Events sent before the AI service's own (thread, user_message). */
   head: Json[]
   upstream: ReadableStream<Uint8Array>
   storage: ChatStorage
+  hooks?: RelayHooks
   log?: (message: string, error?: unknown) => void
 }): ReadableStream<Uint8Array> {
   const { head, upstream, storage } = args
+  const hooks = args.hooks ?? {}
   const log = args.log ?? ((message, error) => console.error(`[CHAT] ${message}`, error ?? ''))
   const encoder = new TextEncoder()
   let clientGone = false
@@ -104,12 +118,17 @@ export function relayChatStream(args: {
             } catch {
               return
             }
+            await safely('reading an event', async () => hooks.onEvent?.(raw))
 
             if (event.type === 'done') {
               finished = true
               const usage = parseUsage(raw.usage) ?? { model: '', inputTokens: 0, outputTokens: 0, costUsd: 0 }
+              let extra: { tutor?: unknown; send?: Json } | undefined
+              await safely('preparing the answer', async () => {
+                extra = hooks.onDone?.(raw)
+              })
               // The browser sees the finished answer before the database write.
-              send({ ...raw, usage: undefined })
+              send({ ...(extra?.send ?? raw), usage: undefined })
               let messageId: string | null = null
               const saved = await safely('saving the answer', async () => {
                 messageId = await storage.saveAnswer({
@@ -117,10 +136,16 @@ export function relayChatStream(args: {
                   sources: event.sources,
                   marks: event.marks,
                   usage,
+                  ...(extra?.tutor != null ? { tutor: extra.tutor } : {}),
                 })
               })
-              if (saved && messageId) send({ type: 'saved', messageId })
-              else sendError('CHAT_NOT_SAVED')
+              if (saved && messageId) {
+                send({ type: 'saved', messageId })
+                const stored: string = messageId
+                await safely('after saving the answer', async () => {
+                  for (const more of (await hooks.afterSaved?.(stored)) ?? []) send(more)
+                })
+              } else sendError('CHAT_NOT_SAVED')
             } else if (event.type === 'error') {
               finished = true
               const usage = parseUsage(raw.usage)

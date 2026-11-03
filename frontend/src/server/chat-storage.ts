@@ -72,6 +72,7 @@ export function createChatStorage(db: PrismaClient, context: ChatStorageContext)
             role: 'assistant',
             content: record.text,
             citations: toStoredCitations(record.sources, record.marks) as unknown as Prisma.InputJsonValue,
+            ...(record.tutor != null ? { tutor: record.tutor as Prisma.InputJsonValue } : {}),
             llmInputTokens: record.usage.inputTokens,
             llmOutputTokens: record.usage.outputTokens,
             llmCostUsd: record.usage.costUsd.toFixed(6),
@@ -96,7 +97,9 @@ export function createChatStorage(db: PrismaClient, context: ChatStorageContext)
         }
         await tx.chatMessage.deleteMany({ where: { id: userMessageId } })
         if (isNewThread) {
-          await tx.chatThread.deleteMany({ where: { id: threadId, messages: { none: {} } } })
+          const removed = await tx.chatThread.deleteMany({ where: { id: threadId, messages: { none: {} } } })
+          // The state a map link seeded for the conversation goes with it.
+          if (removed.count > 0) await tx.tutorState.deleteMany({ where: { userId, scope: 'ask', scopeKey: threadId } })
         }
       }))
       return { discarded: true }

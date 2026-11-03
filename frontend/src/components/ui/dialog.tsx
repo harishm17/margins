@@ -7,7 +7,6 @@ import { cn } from '@/lib/utils'
 import { IconButton } from './icon-button'
 
 export const Dialog = DialogPrimitive.Root
-export const DialogTrigger = DialogPrimitive.Trigger
 export const DialogClose = DialogPrimitive.Close
 
 const SIZES = { sm: 'max-w-[440px]', md: 'max-w-[560px]', lg: 'max-w-[720px]' } as const

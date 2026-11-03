@@ -1,6 +1,7 @@
 import { EXAM_DAY_REVIEWS, FINAL_DAY_REVIEWS, MIN_PART_MINUTES, type Plan, type PlanItem } from './plan'
 import { questionsForMinutes, snapMinutes } from '../exams/form-defaults'
 import { minutesLabel } from './plan-settings'
+import { reviewSessionHref } from './review-links'
 
 /** A plan item in the words, button and link the UI shows. */
 export type DescribedPlanItem = {
@@ -27,8 +28,8 @@ export type DescribedPlanItem = {
 
 const eta = (minutes: number) => `About ${minutes} min`
 
-/** Where a plan item leads: the topic, its quiz, the review list or the mock exam form. */
-export function planItemHref(item: PlanItem, courseId: string): string {
+/** Where a plan item leads: the topic, its quiz, a review session or the mock exam form. */
+export function planItemHref(item: PlanItem, courseId: string, conceptTopicIds?: ReadonlySet<string>): string {
   const base = `/courses/${courseId}`
   switch (item.kind) {
     case 'learn':
@@ -38,7 +39,10 @@ export function planItemHref(item: PlanItem, courseId: string): string {
     case 'review':
       // A projected review has no review date yet, so it is not on the Review list: it is a quiz on the topic.
       if (item.projected && item.topicId) return `${base}/topics/${item.topicId}?view=quiz`
-      return item.topicId ? `${base}/review#review-${item.topicId}` : `${base}/review`
+      // A due review is a session on the topic's due concepts (plus up to two from other topics).
+      // A topic without concepts (a course from before the concept graph) keeps its quiz-based review card.
+      if (item.topicId && conceptTopicIds && !conceptTopicIds.has(item.topicId)) return `${base}/review#review-${item.topicId}`
+      return reviewSessionHref(courseId, { topicId: item.topicId })
     case 'mixed': {
       // The form opens with the block's length (and a matching number of questions), still changeable.
       // The form offers fixed time limits: snap the block's minutes first, then derive the questions from that.
@@ -54,7 +58,12 @@ export function planItemHref(item: PlanItem, courseId: string): string {
 }
 
 /** Names the copy can use, so a row says more than "Read the notes", and the plan's daily minutes. */
-export type DescribeContext = { unitTitles?: Record<string, string>; dailyMinutes?: number }
+export type DescribeContext = {
+  unitTitles?: Record<string, string>
+  dailyMinutes?: number
+  /** The topics that have concepts; a review of any other topic opens the quiz-based review. Unset: all have. */
+  conceptTopicIds?: ReadonlySet<string>
+}
 
 /**
  * Why a mock exam is marked as longer than its day: longer than the daily minutes, or (today, after
@@ -89,7 +98,7 @@ export function describePlanItem(item: PlanItem, courseId: string, context: Desc
     kind: item.kind,
     topicId: item.topicId,
     title: item.title,
-    href: planItemHref(item, courseId),
+    href: planItemHref(item, courseId, context.conceptTopicIds),
     etaLabel: eta(item.minutes),
     minutes: item.minutes,
     done: item.done,
@@ -189,9 +198,9 @@ export type UpNextData = {
   later: { date: string; item: DescribedPlanItem } | null
 }
 
-export function upNextFromPlan(plan: Plan, courseId: string): UpNextData {
+export function upNextFromPlan(plan: Plan, courseId: string, conceptTopicIds?: ReadonlySet<string>): UpNextData {
   const today = plan.days.find((day) => day.isToday)
-  const context: DescribeContext = { dailyMinutes: plan.dailyMinutes }
+  const context: DescribeContext = { dailyMinutes: plan.dailyMinutes, conceptTopicIds }
   const described = (today?.items ?? []).map((item) => describePlanItem(item, courseId, context))
   const upNext = described.filter((item) => !item.done)
   const next = upNext.length === 0 ? plan.days.find((day) => !day.isToday && day.items.some((item) => !item.done)) : null

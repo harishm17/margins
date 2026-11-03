@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { errorCodeFromResponse, HISTORY_MESSAGES, titleFromQuestion, toHistoryTurns } from './server'
+import { errorCodeFromResponse, HISTORY_MESSAGES, requestChatAnswer, titleFromQuestion, toHistoryTurns } from './server'
 
 describe('titleFromQuestion', () => {
   it('keeps a short question and flattens whitespace', () => {
@@ -38,5 +38,25 @@ describe('errorCodeFromResponse', () => {
     assert.equal(await errorCodeFromResponse(new Response('<html>', { status: 502 })), 'CHAT_UNAVAILABLE')
     assert.equal(await errorCodeFromResponse(json(401, { detail: 'Unauthorized' })), 'CHAT_UNAVAILABLE')
     assert.equal(await errorCodeFromResponse(json(422, { detail: [] })), 'CHAT_FAILED')
+  })
+})
+
+describe('requestChatAnswer', () => {
+  it('sends the thread tutor state when there is one, and nothing otherwise', async () => {
+    const bodies: Record<string, unknown>[] = []
+    const realFetch = globalThis.fetch
+    globalThis.fetch = (async (_url: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)))
+      return new Response('{}')
+    }) as typeof fetch
+    try {
+      const base = { projectId: 'p', userId: 'u', question: 'q', history: [] }
+      await requestChatAnswer({ ...base, tutor: { rung: 2, final_allowed: false } })
+      await requestChatAnswer(base)
+    } finally {
+      globalThis.fetch = realFetch
+    }
+    assert.deepEqual(bodies[0].tutor, { rung: 2, final_allowed: false })
+    assert.equal('tutor' in bodies[1], false)
   })
 })

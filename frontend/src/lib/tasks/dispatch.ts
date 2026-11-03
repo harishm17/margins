@@ -6,6 +6,7 @@
  */
 
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { isTestLoginEnabled } from '@/lib/auth/test-login'
 import { retryDelayMs } from './retry-delay'
 import { undeliveredWhere } from './undelivered'
 
@@ -56,7 +57,25 @@ function isTransientTaskFailure(status: number): boolean {
   return status >= 500
 }
 
+/**
+ * Test only. With E2E_HOLD_DIR set (scripts/e2e-stack.sh sets it), a spec can keep the app's own job from being sent while
+ * it looks at it: when the file <dir>/<jobType>.hold exists as a job is about to go, the request is written to
+ * <dir>/<jobId>.request.json and the job waits until <dir>/<jobId>.release exists. Without the variable this does nothing,
+ * and it does nothing on any site where the test sign-in is not allowed (a real deployment), whatever the variable says.
+ */
+async function holdForSpec(endpoint: string, payload: TaskPayload): Promise<void> {
+  const dir = process.env.E2E_HOLD_DIR
+  if (!dir || !isTestLoginEnabled(process.env)) return
+  const { access, writeFile } = await import('node:fs/promises')
+  const { join } = await import('node:path')
+  const exists = (name: string) => access(join(dir, name)).then(() => true, () => false)
+  if (!(await exists(`${payload.jobType}.hold`))) return
+  await writeFile(join(dir, `${payload.jobId}.request.json`), JSON.stringify({ endpoint, payload }))
+  while (!(await exists(`${payload.jobId}.release`))) await sleep(50)
+}
+
 async function callAiServiceWithRetry(endpoint: string, payload: TaskPayload): Promise<void> {
+  await holdForSpec(endpoint, payload)
   let attempt = 0
   let lastError: TaskEnqueueError | null = null
 
@@ -238,6 +257,39 @@ export async function enqueueContentGenerationJob(
     jobId,
     jobType: 'generate_content',
     data: { topicId, contentType, preferences },
+  })
+}
+
+/**
+ * Enqueue a review-item job: new items for the concepts of one topic that a review session lacks.
+ * @param jobId - Processing job ID
+ * @param topicId - Topic ID
+ * @param requests - The concepts needing an item, each group with the mode and difficulty wanted
+ * @returns Task name
+ */
+export async function enqueueReviewItemsJob(
+  jobId: string,
+  topicId: string,
+  requests: { conceptIds: string[]; mode: string; difficulty: string }[]
+): Promise<string> {
+  return enqueueTask('/jobs/generate-review-items', {
+    jobId,
+    jobType: 'generate_review_items',
+    data: { topicId, requests },
+  })
+}
+
+/**
+ * Enqueue a gap-explainer job: short explanations of what one recall attempt missed.
+ * @param jobId - Processing job ID
+ * @param attemptId - The recall attempt
+ * @returns Task name
+ */
+export async function enqueueGapExplainerJob(jobId: string, attemptId: string): Promise<string> {
+  return enqueueTask('/jobs/gap-explainer', {
+    jobId,
+    jobType: 'gap_explainer',
+    data: { attemptId },
   })
 }
 

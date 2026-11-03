@@ -17,10 +17,12 @@ export type AskPageProps = {
   courseId: string
   threads: ThreadSummary[]
   /** The conversation named by ?thread=, already loaded on the server. */
-  initialThread: { id: string; messages: ChatMessage[] } | null
+  initialThread: { id: string; messages: ChatMessage[]; workedAllowed: boolean } | null
   topics: { id: string; name: string }[]
   /** The topic from ?topic=, or null for all materials. */
   initialTopicId: string | null
+  /** The concept from ?concept= (the knowledge map's "Ask about this"), or null. The first question of a new conversation is about it. */
+  initialConcept?: { id: string; name: string } | null
   hasMaterials: boolean
   /** Text for the question box, from a link such as "Explain this mistake". Empty for none. */
   initialDraft?: string
@@ -35,6 +37,7 @@ export default function AskPage({
   initialThread,
   topics,
   initialTopicId,
+  initialConcept = null,
   hasMaterials,
   initialDraft = '',
   now,
@@ -42,13 +45,17 @@ export default function AskPage({
   const base = `/courses/${courseId}/ask`
   const [threads, setThreads] = React.useState(initialThreads)
   const [scope, setScope] = React.useState(initialTopicId ?? ALL_MATERIALS)
+  // The concept holds for the conversation this page opened with; another conversation or a new chat leaves it.
+  const [concept, setConcept] = React.useState(initialConcept)
   const [pendingDelete, setPendingDelete] = React.useState<ThreadSummary | null>(null)
 
   const chat = useAskChat({
     courseId,
     topicId: scope === ALL_MATERIALS ? null : scope,
+    conceptId: concept?.id ?? null,
     initialThreadId: initialThread?.id ?? null,
     initialMessages: initialThread?.messages ?? [],
+    initialWorkedAllowed: initialThread?.workedAllowed ?? false,
     onThreadStarted: ({ id, title }) => {
       setThreads((current) => [{ id, title, updatedAt: new Date().toISOString() }, ...current.filter((t) => t.id !== id)])
       window.history.replaceState(null, '', `${base}?thread=${id}`)
@@ -71,6 +78,7 @@ export default function AskPage({
     (id: string) => {
       if (id === threadId) return
       window.history.pushState(null, '', `${base}?thread=${id}`)
+      setConcept(null)
       void loadThread(id)
     },
     [base, loadThread, threadId]
@@ -78,6 +86,7 @@ export default function AskPage({
 
   const newChat = React.useCallback(() => {
     if (threadId || chat.messages.length > 0) window.history.pushState(null, '', base)
+    setConcept(null)
     reset()
     document.getElementById('ask-composer')?.focus()
   }, [base, reset, threadId, chat.messages.length])
@@ -86,6 +95,7 @@ export default function AskPage({
   React.useEffect(() => {
     const onPopState = () => {
       const id = new URLSearchParams(window.location.search).get('thread')
+      setConcept(null)
       if (id) void loadThread(id)
       else reset()
     }
@@ -115,9 +125,10 @@ export default function AskPage({
     [topics]
   )
   const examples = React.useMemo(() => {
+    if (concept) return [`Explain ${concept.name} in simple terms`, `Why does ${concept.name} matter?`]
     const focus = scope === ALL_MATERIALS ? topics.map((t) => t.name) : topics.filter((t) => t.id === scope).map((t) => t.name)
     return exampleQuestions(focus, 4)
-  }, [topics, scope])
+  }, [topics, scope, concept])
 
   const listProps = {
     threads,
@@ -129,7 +140,7 @@ export default function AskPage({
   }
 
   return (
-    <div className="flex h-[calc(100dvh-var(--topbar-height)-var(--tabbar-height,0px)-var(--ai-banner-height,0px))] min-h-0">
+    <div className="flex h-[calc(100dvh-var(--topbar-height)-var(--tabbar-height,0px)-var(--ai-banner-height,0px)-var(--exam-cue-height,0px))] min-h-0">
       <h1 className="sr-only">Ask your materials</h1>
       <aside className="hidden w-[248px] shrink-0 border-r border-border bg-surface lg:block">
         <ThreadList {...listProps} hrefFor={(id) => `${base}?thread=${id}`} />
@@ -145,6 +156,7 @@ export default function AskPage({
           hasMaterials={hasMaterials}
           initialDraft={initialDraft}
           examples={examples}
+          conceptName={concept?.name}
           scopeOptions={scopeOptions}
           scope={scope}
           onScopeChange={setScope}

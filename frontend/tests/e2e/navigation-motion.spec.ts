@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { createCourse, signUpAndIn } from './helpers/loop'
+import { framesPainted } from './helpers/settle'
 import { FIXTURE_PDF } from './helpers/seed-demo'
 
 /** Scrolls so only the top fifth of the loop (steps and screenshot) shows, at the bottom of the window. */
@@ -147,6 +148,25 @@ test('on a phone a toast sits above the tab bar, so the tabs stay usable', async
   await expect(page).toHaveURL(new RegExp(`/courses/${courseId}/plan$`))
 })
 
+test('the toast moves to the top at the same width Sonner switches to its phone offsets: 600px included, 601px not', async ({ page }) => {
+  await signUpAndIn(page, 'toast-edge')
+  const { courseId } = await createCourse(page, 'Toast edge course', [{ name: 'Sets' }])
+  for (const [width, where] of [[600, 'top'], [601, 'bottom']] as const) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto(`/courses/${courseId}/settings`)
+    await page.getByLabel('Description').fill(`Midterm practice at ${width}`)
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    const toast = page.locator('[data-sonner-toast]').filter({ hasText: 'Course saved' })
+    await expect(toast).toBeVisible()
+    await expect(page.locator('[data-sonner-toaster]')).toHaveAttribute('data-y-position', where)
+    // The toast is where Sonner's own width rule puts it: inside the window on both sides, whichever rule applies.
+    await expect.poll(async () => {
+      const box = (await toast.boundingBox())!
+      return box.x >= 0 && box.x + box.width <= width
+    }, `the toast fits a ${width}px window`).toBe(true)
+  }
+})
+
 test.describe('on a touch phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 
@@ -169,7 +189,10 @@ test('search keeps two files with the same name apart', async ({ page }) => {
   const { courseId } = await createCourse(page, 'Palette course', [{ name: 'Sets' }])
   await page.goto(`/courses/${courseId}/materials`)
   const pdf = { name: 'week-1.pdf', mimeType: 'application/pdf', buffer: readFileSync(FIXTURE_PDF) }
-  await page.getByLabel('Choose files to upload').setInputFiles([pdf, pdf])
+  // The course page's setup uploader and this page's both exist while the navigation settles: wait for the old one to go.
+  const upload = page.getByLabel('Choose files to upload')
+  await expect(upload).toHaveCount(1)
+  await upload.setInputFiles([pdf, pdf])
   await expect(page.getByText('Every file here has been read.')).toBeVisible({ timeout: 60_000 })
   await page.reload()
   await expect(page.getByText('week-1.pdf', { exact: true })).toHaveCount(2)
@@ -208,12 +231,15 @@ test('the loop waits until at least half of it is in view, and pauses again belo
   await page.clock.runFor(16_000)
   expect(await selected()).toBe(0)
 
+  // The loop's progress fill runs while it is in view and is paused when it is not: that is what the autoplay is told.
+  const fill = page.locator('[style*="loop-fill"]')
+  await expect(fill).toHaveCSS('animation-play-state', 'paused')
   await page.evaluate(() => document.getElementById('how-it-works')!.scrollIntoView())
-  await page.waitForTimeout(200)
+  await expect(fill).toHaveCSS('animation-play-state', 'running')
   await page.clock.runFor(7100)
   await expect.poll(selected).toBe(1)
   await showLoopSliver(page)
-  await page.waitForTimeout(200)
+  await expect(fill).toHaveCSS('animation-play-state', 'paused')
   await page.clock.runFor(16_000)
   expect(await selected()).toBe(1)
 })
@@ -236,7 +262,9 @@ test('a fragment that is not a section, or does not decode, is left alone', asyn
   for (const fragment of ['50%', 'nothing-here']) {
     await page.goto(`/#${fragment}`)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-    await page.waitForTimeout(300)
+    // The page has loaded and drawn; any handler that would have rewritten the address has had its turn.
+    await page.waitForLoadState('networkidle')
+    await framesPainted(page)
     expect(new URL(page.url()).hash).toBe(`#${fragment}`)
   }
   expect(errors).toEqual([])

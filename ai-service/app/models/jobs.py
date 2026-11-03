@@ -22,8 +22,41 @@ class ContentGenerationInput(BaseModel):
     """Input for content generation job."""
 
     topicId: str
-    contentType: str  # section_notes, solved_examples, interactive_examples, topic_quiz
+    contentType: str  # concepts, warmup, section_notes, solved_examples, interactive_examples, topic_quiz
     preferences: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ConceptExtractionInput(BaseModel):
+    """Input for the concept extraction job."""
+
+    topicId: str
+
+
+class ConceptLinkingInput(BaseModel):
+    """Input for the concept linking job."""
+
+    unitId: str
+
+
+class ReviewItemRequest(BaseModel):
+    """Concepts that need a new review item in one mode and difficulty."""
+
+    conceptIds: list[str]
+    mode: str  # recall, discrimination, composition
+    difficulty: str  # easy, medium, hard
+
+
+class ReviewItemsInput(BaseModel):
+    """Input for the review-item job: one topic, and what its concepts need."""
+
+    topicId: str
+    requests: list[ReviewItemRequest]
+
+
+class GapExplainerInput(BaseModel):
+    """Input for the gap-explainer job: one recall attempt."""
+
+    attemptId: str
 
 
 class ExamGenerationInput(BaseModel):

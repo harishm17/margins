@@ -27,6 +27,11 @@ export type QuizReviewItem = {
   sources: SourceRef[]
   /** For short answers: what the grader looked for, with a verdict per line when it gave one. */
   rubric: RubricLine[] | null
+  /**
+   * For a wrong multiple-choice pick: the wrong idea the picked option stands for (spec §5.7), read
+   * from the option with no model call. Null when the option carries none or nothing was picked.
+   */
+  pickedMisconception: string | null
 }
 
 type RawQuestion = Record<string, unknown>
@@ -63,7 +68,20 @@ function readStoredResult(value: unknown): Partial<StoredQuestionResult> {
   return {}
 }
 
-export function buildReview(questions: RawQuestion[], results: unknown): QuizReviewItem[] {
+/** The misconception of the option a student picked on a multiple-choice question, when it names one. */
+function pickedMisconceptionOf(question: RawQuestion, answer: string | undefined): string | null {
+  if (!answer || !Array.isArray(question.options)) return null
+  const id = answer.trim().toUpperCase()
+  const picked = question.options.find(
+    (option): option is Record<string, unknown> =>
+      !!option && typeof option === 'object' && String((option as Record<string, unknown>).id).trim().toUpperCase() === id
+  )
+  const text = typeof picked?.misconception === 'string' ? picked.misconception.replace(/\s+/g, ' ').trim() : ''
+  return text || null
+}
+
+/** `answers` are the student's plain answers by question index; they say which option was picked. */
+export function buildReview(questions: RawQuestion[], results: unknown, answers?: Record<string, string>): QuizReviewItem[] {
   const resultMap = results && typeof results === 'object' ? (results as Record<string, unknown>) : {}
   return questions.map((question, index) => {
     const result = readStoredResult(resultMap[String(index)])
@@ -79,6 +97,39 @@ export function buildReview(questions: RawQuestion[], results: unknown): QuizRev
       feedback: result.feedback ?? null,
       sources: parseSources(question.sources),
       rubric: buildRubric(question, result.criteria),
+      pickedMisconception: isCorrect ? null : pickedMisconceptionOf(question, answers?.[String(index)]),
     }
   })
+}
+
+/** An answer as the results page has it: the plain text, or the object with its confidence. */
+type AnswerWithConfidence = string | { confidence?: number }
+
+export type ResultGroups = {
+  /** Confident and wrong: the hypercorrection case, shown first. */
+  sureWrong: QuizReviewItem[]
+  /** Every other answer that was not fully right. */
+  wrong: QuizReviewItem[]
+  /** Right, but the student said they were unsure or guessing. */
+  unsureRight: QuizReviewItem[]
+  /** Right, and either sure or not rated. */
+  solid: QuizReviewItem[]
+}
+
+/** At or above this a student counts as sure (Fairly sure stores 0.75). */
+export const SURE_CONFIDENCE = 0.75
+
+/** Results in the order of spec §5.7: sure and wrong, other wrong, right but unsure, solid. */
+export function groupResults(review: QuizReviewItem[], answers: Record<string, AnswerWithConfidence>): ResultGroups {
+  const groups: ResultGroups = { sureWrong: [], wrong: [], unsureRight: [], solid: [] }
+  for (const item of review) {
+    const given = answers[String(item.questionIndex)]
+    const confidence = typeof given === 'object' && given ? given.confidence : undefined
+    if (!item.isCorrect) {
+      if (confidence !== undefined && confidence >= SURE_CONFIDENCE) groups.sureWrong.push(item)
+      else groups.wrong.push(item)
+    } else if (confidence !== undefined && confidence < SURE_CONFIDENCE) groups.unsureRight.push(item)
+    else groups.solid.push(item)
+  }
+  return groups
 }
