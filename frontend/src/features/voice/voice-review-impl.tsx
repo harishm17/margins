@@ -90,6 +90,7 @@ export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId
       recognitionSupported={browserRecognition || cloudChosen}
       cloudOffered={cloudOffered}
       cloudChosen={cloudChosen}
+      cloudProviders={usage && usage !== 'unavailable' ? (usage.cloudProviders ?? []) : []}
       initialStyle={initialStyle}
       conceptId={conceptId}
       hasClaims={hasClaims}

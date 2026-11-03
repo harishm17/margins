@@ -1,7 +1,7 @@
 /**
- * Cloud speech recognition (spec 19.12): the page captures the microphone itself, sends 16 kHz PCM16 frames to
- * AssemblyAI's streaming recognizer over a WebSocket, and turns its messages into the same running result list the
- * browser recognizer gives. So the rest of voice mode (the end-of-turn wait, echo and backchannel filters, barge-in,
+ * Cloud speech recognition (spec 19.12): the page captures the microphone itself, sends 16 kHz PCM16 frames to a
+ * streaming recognizer over a WebSocket (Deepgram or AssemblyAI, whichever the server's grant names), and turns its
+ * messages into the same running result list the browser recognizer gives. So the rest of voice mode (the end-of-turn wait, echo and backchannel filters, barge-in,
  * Done) works unchanged: `CloudRecognition` is a `RecognitionLike`.
  *
  * Owning the audio adds one thing the browser recognizer cannot give: the level of each frame. A rise in level after
@@ -43,6 +43,43 @@ export function applyTurn(state: TurnState, message: CloudTurn): TurnState {
   if (!message.end_of_turn && typeof lastEnd === 'number') lastWordEndMs = lastEnd
   if (message.end_of_turn && lastWordEndMs === null && typeof lastEnd === 'number') lastWordEndMs = lastEnd
   return { turns, lastWordEndMs, pendingVoice: false }
+}
+
+/** Deepgram's `Results` message (the parts read here). Word times are in seconds from the start of the stream. */
+export type DeepgramResults = {
+  type: 'Results'
+  is_final?: boolean
+  speech_final?: boolean
+  channel?: { alternatives?: { transcript?: string; words?: { end?: number }[] }[] }
+}
+
+/**
+ * Apply one Deepgram `Results` message. Deepgram finalises the stream in segments (`is_final`); between them it sends
+ * interim guesses for the segment in progress. So the list is the final segments, then at most one interim one, and an
+ * interim is always replaced at its own position (by the next guess or by its final), never moved. A segment that turns
+ * out empty stays as an empty final, so later positions do not shift. `speech_final` closes the segment: the end of turn
+ * the session's wait then runs from.
+ */
+export function applyDeepgram(state: TurnState, message: DeepgramResults): { state: TurnState; segmentEnd: boolean } {
+  const alternative = message.channel?.alternatives?.[0]
+  const transcript = (alternative?.transcript ?? '').trim()
+  const turns = state.turns.slice()
+  const last = turns[turns.length - 1]
+  const hasInterim = last !== undefined && !last.isFinal
+  const put = (entry: { transcript: string; isFinal: boolean }) => {
+    if (hasInterim) turns[turns.length - 1] = entry
+    else turns.push(entry)
+  }
+  if (message.is_final) {
+    if (transcript || hasInterim) put({ transcript, isFinal: true })
+  } else if (transcript) {
+    put({ transcript, isFinal: false })
+  }
+  const words = alternative?.words ?? []
+  const lastEnd = words.length > 0 ? words[words.length - 1]?.end : undefined
+  const lastWordEndMs = typeof lastEnd === 'number' && Number.isFinite(lastEnd) ? Math.round(lastEnd * 1000) : state.lastWordEndMs
+  const segmentEnd = message.speech_final === true && lastWordEndMs !== null
+  return { state: { turns, lastWordEndMs, pendingVoice: transcript ? false : state.pendingVoice }, segmentEnd }
 }
 
 /**
@@ -202,12 +239,35 @@ export function createMicCapture(): MicCapture {
 
 // ---- The recognizer -------------------------------------------------------------------------
 
-export type CloudGrant = { url: string; token: string }
+export type CloudProvider = 'deepgram' | 'assemblyai'
+export type CloudGrant = { provider: CloudProvider; url: string; token: string }
+
+/** How each provider is spoken to: how the token is passed, when the stream is open, and how it is closed. */
+const PROTOCOL: Record<
+  CloudProvider,
+  { connect: (Socket: typeof WebSocket, grant: CloudGrant) => WebSocket; openOn: 'open' | 'Begin'; flush: string[]; end: string }
+> = {
+  // The token as the `bearer` subprotocol: the one header a browser can set on a WebSocket.
+  deepgram: {
+    connect: (Socket, grant) => new Socket(grant.url, ['bearer', grant.token]),
+    openOn: 'open',
+    flush: [JSON.stringify({ type: 'Finalize' }), JSON.stringify({ type: 'CloseStream' })],
+    end: JSON.stringify({ type: 'CloseStream' }),
+  },
+  assemblyai: {
+    connect: (Socket, grant) => new Socket(`${grant.url}&token=${encodeURIComponent(grant.token)}`),
+    openOn: 'Begin',
+    flush: [JSON.stringify({ type: 'ForceEndpoint' }), JSON.stringify({ type: 'Terminate' })],
+    end: JSON.stringify({ type: 'Terminate' }),
+  },
+}
 
 export type CloudRecognitionDeps = {
   capture: MicCapture
-  /** A fresh grant for each stream (the token lasts a minute). */
+  /** A fresh grant for each stream (a token only opens one stream, for a short time). */
   grant: () => Promise<CloudGrant>
+  /** This provider refused the stream (spent credit, an outage): the next grant should leave it out. */
+  onRefused?: (provider: CloudProvider) => void
   /** A segment closed after this much quiet (for the end-of-turn wait). */
   onSegmentEnd?: (silenceMs: number) => void
   /** The level of each frame, 0..1 (for the orb). */
@@ -234,6 +294,7 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
     onstart: RecognitionLike['onstart'] = null
 
     private socket: WebSocket | null = null
+    private provider: CloudProvider | null = null
     private unsubscribe: (() => void) | null = null
     private state = emptyTurnState()
     private sentMs = 0
@@ -243,6 +304,8 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
     private holdTimer: ReturnType<typeof setTimeout> | null = null
     /** The finished segment the last hold was for: one hold per segment, so steady noise cannot keep the turn open. */
     private heldFor = -1
+    /** A graceful stop is waiting for the recognizer's last words. */
+    private closing = false
 
     start(): void {
       void this.run()
@@ -281,7 +344,7 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
         socket.onerror = null
         socket.onclose = null
         try {
-          if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'Terminate' }))
+          if (socket.readyState === 1 && this.provider) socket.send(PROTOCOL[this.provider].end)
           socket.close(1000)
         } catch {
           // already closed
@@ -300,9 +363,9 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
       }
       this.unsubscribe?.()
       this.unsubscribe = null
+      this.closing = true
       try {
-        socket.send(JSON.stringify({ type: 'ForceEndpoint' }))
-        socket.send(JSON.stringify({ type: 'Terminate' }))
+        for (const message of PROTOCOL[this.provider ?? 'assemblyai'].flush) socket.send(message)
       } catch {
         this.finish()
         return
@@ -339,6 +402,13 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
       }
     }
 
+    private begin() {
+      if (this.opened || this.ended) return
+      this.opened = true
+      this.unsubscribe = deps.capture.onFrame((frame) => this.onFrame(frame))
+      this.onstart?.()
+    }
+
     private async run() {
       let grant: CloudGrant
       try {
@@ -356,27 +426,46 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
         return this.fail('cloud-unavailable')
       }
       if (this.ended) return
-      const Socket = deps.WebSocketImpl ?? WebSocket
+      const protocol = PROTOCOL[grant.provider] ?? PROTOCOL.assemblyai
+      this.provider = grant.provider
       let socket: WebSocket
       try {
-        socket = new Socket(`${grant.url}&token=${encodeURIComponent(grant.token)}`)
+        socket = protocol.connect(deps.WebSocketImpl ?? WebSocket, grant)
       } catch {
+        deps.onRefused?.(grant.provider)
         return this.fail('cloud-unavailable')
       }
       socket.binaryType = 'arraybuffer'
       this.socket = socket
+      socket.onopen = () => {
+        if (protocol.openOn === 'open') this.begin()
+      }
       socket.onmessage = (event) => this.onMessage(event.data)
       socket.onerror = () => {
         // The close event follows with the reason.
       }
       socket.onclose = (event) => {
         if (this.ended) return
-        // 1008: the token or the account was refused; before any audio: the service cannot be reached. Both mean the
-        // browser's own recognizer should take over. A drop mid-stream is a network error: the controller reconnects.
-        if (event.code === 1008 || !this.opened) return this.fail('cloud-unavailable')
+        // Refused (1008: the token, the account or its credit) or never opened (the service cannot be reached): this
+        // provider is out for the session and the next one, or the browser's own recognizer, takes over. A drop
+        // mid-stream is a network error: the controller reconnects.
+        if (event.code === 1008 || !this.opened) {
+          deps.onRefused?.(grant.provider)
+          return this.fail('cloud-unavailable')
+        }
         if (event.code === 1000 || event.code === 3008) return this.finish()
         return this.fail('network')
       }
+    }
+
+    private segmentClosed() {
+      deps.onSegmentEnd?.(silenceAfterLastWordMs(this.sentMs, this.state.lastWordEndMs))
+      this.state = { ...this.state, lastWordEndMs: null }
+    }
+
+    private wordsArrived() {
+      if (this.holdTimer) clearTimeout(this.holdTimer)
+      this.holdTimer = null
     }
 
     private onMessage(data: unknown) {
@@ -387,25 +476,29 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
       } catch {
         return
       }
-      if (message.type === 'Begin') {
-        this.opened = true
-        this.unsubscribe = deps.capture.onFrame((frame) => this.onFrame(frame))
-        this.onstart?.()
-        return
-      }
+      // AssemblyAI
+      if (message.type === 'Begin') return this.begin()
       if (message.type === 'Turn') {
         const turn = message as unknown as CloudTurn
         this.state = applyTurn(this.state, turn)
-        if (this.holdTimer) clearTimeout(this.holdTimer)
-        this.holdTimer = null
-        if (turn.end_of_turn) {
-          deps.onSegmentEnd?.(silenceAfterLastWordMs(this.sentMs, this.state.lastWordEndMs))
-          this.state = { ...this.state, lastWordEndMs: null }
-        }
+        this.wordsArrived()
+        if (turn.end_of_turn) this.segmentClosed()
         this.emit()
         return
       }
-      if (message.type === 'Termination') this.finish()
+      if (message.type === 'Termination') return this.finish()
+      // Deepgram
+      if (message.type === 'Results') {
+        const applied = applyDeepgram(this.state, message as unknown as DeepgramResults)
+        this.state = applied.state
+        // Words ended any hold (applyDeepgram clears it when the message has a transcript).
+        if (!this.state.pendingVoice) this.wordsArrived()
+        if (applied.segmentEnd) this.segmentClosed()
+        this.emit()
+        return
+      }
+      // Sent after CloseStream, once everything is transcribed.
+      if (message.type === 'Metadata' && this.socket && this.closing) this.finish()
     }
   }
 }

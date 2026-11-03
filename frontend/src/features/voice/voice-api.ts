@@ -7,8 +7,9 @@ export type VoiceUsage = {
   usedSeconds: number
   remainingSeconds: number
   hasLiveSession: boolean
-  /** The server can mint cloud speech tokens (spec 19.12). Missing from an older server. */
+  /** The server can mint cloud speech tokens (spec 19.12), and from which providers, in order. Missing from an older server. */
   cloudSpeech?: boolean
+  cloudProviders?: Array<'deepgram' | 'assemblyai'>
 }
 
 export type VoiceStyle = 'oral_quiz' | 'teach_back' | 'guided_reading'
@@ -38,11 +39,15 @@ export const getVoiceUsage = (signal?: AbortSignal) => apiFetch<VoiceUsage>('/ap
 export const createVoiceSession = (input: CreateSessionInput) =>
   apiFetch<CreatedSession>('/api/voice/session', { method: 'POST', json: input })
 
-/** What /api/voice/speech-token returns: the recognizer's address (without the token) and a one-minute token. */
-export type CloudSpeechGrant = { provider: 'assemblyai'; url: string; token: string }
+/** What /api/voice/speech-token returns: the provider, the recognizer's address and a short-lived token. */
+export type CloudSpeechGrant = { provider: 'deepgram' | 'assemblyai'; url: string; token: string }
 
-export const getCloudSpeechGrant = (sessionId: string) =>
-  apiFetch<CloudSpeechGrant>('/api/voice/speech-token', { method: 'POST', json: { sessionId } })
+/** `exclude`: providers whose stream refused this session, so the server tries the next one. */
+export const getCloudSpeechGrant = (sessionId: string, exclude: string[] = []) =>
+  apiFetch<CloudSpeechGrant>('/api/voice/speech-token', {
+    method: 'POST',
+    json: exclude.length > 0 ? { sessionId, exclude } : { sessionId },
+  })
 
 /** True for the 422 that says the topic has no claims from the student's pages for teach-back or guided reading. */
 export function requiresClaims(error: unknown): boolean {

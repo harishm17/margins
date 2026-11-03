@@ -1,62 +1,116 @@
 /**
- * Cloud speech recognition for voice practice (spec 19.12): AssemblyAI's streaming recognizer, reached straight from
- * the browser with a short-lived token this server mints. The API key never leaves the server, and the token can open
- * a recognition session only for a minute, and that session can last no longer than the student's voice time left today.
+ * Cloud speech recognition for voice practice (spec 19.12): a streaming recognizer reached straight from the browser
+ * with a short-lived token this server mints. The API keys never leave the server.
  *
- * Pure parts (the settings and the URL) are exported for tests; `mintCloudSpeechToken` is the one network call.
+ * Two providers, tried in order: Deepgram (Nova-3) first, then AssemblyAI (Universal-3.6 Pro). Only those with a key
+ * are offered; CLOUD_SPEECH_PROVIDERS ("assemblyai,deepgram") changes the order or leaves one out. A provider whose
+ * token cannot be minted is skipped, and the browser can ask again leaving out one that refused its stream (spent
+ * credit, an outage), so a session moves to the next provider before it falls back to the browser's own recognizer.
+ *
+ * Pure parts (the order, the URLs, the term lists) are exported for tests; `mintCloudSpeechGrant` makes the network calls.
  */
 
-export const CLOUD_SPEECH_PROVIDER = 'assemblyai'
-const TOKEN_URL = 'https://token.assemblyai.com/v1/token'
-const STREAM_URL = 'wss://streaming.assemblyai.com/v3/ws'
+export type CloudSpeechProvider = 'deepgram' | 'assemblyai'
+export const CLOUD_SPEECH_PROVIDERS: readonly CloudSpeechProvider[] = ['deepgram', 'assemblyai']
 
-/** The model, unless ASSEMBLYAI_STREAMING_MODEL names another: the multilingual one with course terms included. */
-export const DEFAULT_STREAMING_MODEL = 'universal-3-6-pro'
-
-/** The languages voice practice offers (speech.ts) that the default model takes as `language_codes`. */
-const MODEL_LANGUAGES = new Set(['en', 'es', 'fr', 'de', 'it', 'pt', 'hi', 'zh', 'ja', 'ko'])
+/** What the browser needs to open a stream: where, and the token (as a query parameter or a WebSocket subprotocol). */
+export type CloudSpeechGrant = { provider: CloudSpeechProvider; url: string; token: string }
 
 /** The audio the browser sends: 16 kHz mono PCM16 (what the capture worklet makes). */
 export const CLOUD_SAMPLE_RATE = 16000
 
-/**
- * Turn settings. The recognizer closes a segment quickly (a check after 160 ms of quiet, at most 800 ms); the session's
- * own end-of-turn wait (end-of-turn.ts) then decides whether the student has finished, as it does for browser speech.
- */
-export const MIN_TURN_SILENCE_MS = 160
-export const MAX_TURN_SILENCE_MS = 800
-/** No audio for this long (a frozen tab) ends the session at AssemblyAI, so it does not run on unheard. */
-export const INACTIVITY_TIMEOUT_S = 30
+/** The languages voice practice offers (speech.ts); both default models take all of them. */
+const VOICE_LANGUAGES = new Set(['en', 'es', 'fr', 'de', 'it', 'pt', 'hi', 'zh', 'ja', 'ko'])
 
-/** Course terms as the recognizer takes them: at most 100, each at most 50 characters and 6 words. */
+const KEY_ENV: Record<CloudSpeechProvider, string> = { deepgram: 'DEEPGRAM_API_KEY', assemblyai: 'ASSEMBLYAI_API_KEY' }
+
+const keyOf = (provider: CloudSpeechProvider, env: NodeJS.ProcessEnv) => env[KEY_ENV[provider]]?.trim() || ''
+
+/** The providers this server can offer, in the order they are tried. */
+export function cloudSpeechProviders(env: NodeJS.ProcessEnv = process.env): CloudSpeechProvider[] {
+  const named = (env.CLOUD_SPEECH_PROVIDERS ?? '')
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter((name): name is CloudSpeechProvider => (CLOUD_SPEECH_PROVIDERS as readonly string[]).includes(name))
+  const order = named.length > 0 ? [...new Set(named)] : [...CLOUD_SPEECH_PROVIDERS]
+  return order.filter((provider) => keyOf(provider, env).length > 0)
+}
+
+export function cloudSpeechConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return cloudSpeechProviders(env).length > 0
+}
+
+// ---- Course terms ---------------------------------------------------------------------------
+
+/** At most 100 terms (both providers' limit), each at most 50 characters and 6 words. */
 export const MAX_KEYTERMS = 100
 const MAX_KEYTERM_CHARS = 50
 const MAX_KEYTERM_WORDS = 6
-
-export function cloudSpeechConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return typeof env.ASSEMBLYAI_API_KEY === 'string' && env.ASSEMBLYAI_API_KEY.trim().length > 0
-}
+/** Deepgram counts at most 500 tokens across all terms; 1200 characters stays well under it. */
+const MAX_KEYTERM_TOTAL_CHARS = 1200
 
 export function keytermsFor(terms: string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
+  let total = 0
   for (const raw of terms) {
     const term = raw.replace(/\s+/g, ' ').trim()
     if (term.length < 2 || term.length > MAX_KEYTERM_CHARS) continue
     if (term.split(' ').length > MAX_KEYTERM_WORDS) continue
     const key = term.toLowerCase()
     if (seen.has(key)) continue
+    if (total + term.length > MAX_KEYTERM_TOTAL_CHARS) break
     seen.add(key)
     out.push(term)
+    total += term.length
     if (out.length >= MAX_KEYTERMS) break
   }
   return out
 }
 
-/** The WebSocket address without the token (the browser adds it). */
-export function cloudSpeechUrl(input: { language: string; terms: string[]; model?: string }): string {
+// ---- Deepgram -------------------------------------------------------------------------------
+
+/** Nova-3, unless DEEPGRAM_STREAMING_MODEL names another. $0.0077 a minute, $0.0013 more with course terms. */
+export const DEFAULT_DEEPGRAM_MODEL = 'nova-3'
+const DEEPGRAM_GRANT_URL = 'https://api.deepgram.com/v1/auth/grant'
+const DEEPGRAM_STREAM_URL = 'wss://api.deepgram.com/v1/listen'
+/**
+ * Quiet before Deepgram closes a segment (`speech_final`). The session's own end-of-turn wait (end-of-turn.ts) still
+ * decides when the student has finished; this only keeps a thinking pause from splitting a sentence too early.
+ */
+export const DEEPGRAM_ENDPOINTING_MS = 300
+
+export function deepgramUrl(input: { language: string; terms: string[]; model?: string }): string {
   const params = new URLSearchParams({
-    speech_model: input.model || DEFAULT_STREAMING_MODEL,
+    model: input.model || DEFAULT_DEEPGRAM_MODEL,
+    encoding: 'linear16',
+    sample_rate: String(CLOUD_SAMPLE_RATE),
+    channels: '1',
+    interim_results: 'true',
+    smart_format: 'true',
+    endpointing: String(DEEPGRAM_ENDPOINTING_MS),
+  })
+  const language = input.language.toLowerCase()
+  params.set('language', VOICE_LANGUAGES.has(language) ? language : 'en')
+  for (const term of keytermsFor(input.terms)) params.append('keyterm', term)
+  return `${DEEPGRAM_STREAM_URL}?${params.toString()}`
+}
+
+// ---- AssemblyAI -----------------------------------------------------------------------------
+
+/** Universal-3.6 Pro, unless ASSEMBLYAI_STREAMING_MODEL names another. $0.45 an hour, course terms included. */
+export const DEFAULT_ASSEMBLYAI_MODEL = 'universal-3-6-pro'
+const ASSEMBLYAI_TOKEN_URL = 'https://token.assemblyai.com/v1/token'
+const ASSEMBLYAI_STREAM_URL = 'wss://streaming.assemblyai.com/v3/ws'
+/** The recognizer closes a segment quickly (a check after 160 ms of quiet, at most 800 ms); the session's wait decides the turn. */
+export const MIN_TURN_SILENCE_MS = 160
+export const MAX_TURN_SILENCE_MS = 800
+/** No audio for this long (a frozen tab) ends the session at AssemblyAI, so it does not run on unheard. */
+export const INACTIVITY_TIMEOUT_S = 30
+
+export function assemblyAiUrl(input: { language: string; terms: string[]; model?: string }): string {
+  const params = new URLSearchParams({
+    speech_model: input.model || DEFAULT_ASSEMBLYAI_MODEL,
     sample_rate: String(CLOUD_SAMPLE_RATE),
     encoding: 'pcm_s16le',
     min_turn_silence: String(MIN_TURN_SILENCE_MS),
@@ -64,17 +118,19 @@ export function cloudSpeechUrl(input: { language: string; terms: string[]; model
     inactivity_timeout: String(INACTIVITY_TIMEOUT_S),
   })
   const language = input.language.toLowerCase()
-  if (MODEL_LANGUAGES.has(language)) params.set('language_codes', JSON.stringify([language]))
+  if (VOICE_LANGUAGES.has(language)) params.set('language_codes', JSON.stringify([language]))
   const keyterms = keytermsFor(input.terms)
   if (keyterms.length > 0) params.set('keyterms_prompt', JSON.stringify(keyterms))
-  return `${STREAM_URL}?${params.toString()}`
+  return `${ASSEMBLYAI_STREAM_URL}?${params.toString()}`
 }
 
-/** How long one recognition session may run: the voice time left today, at least a minute, at most AssemblyAI's 3 h. */
+/** How long one AssemblyAI session may run: the voice time left today, at least a minute, at most its 3 h. */
 export function sessionCapSeconds(remainingSeconds: number): number {
   const seconds = Number.isFinite(remainingSeconds) ? Math.ceil(remainingSeconds) : 60
   return Math.min(10_800, Math.max(60, seconds))
 }
+
+// ---- Minting --------------------------------------------------------------------------------
 
 export class CloudSpeechError extends Error {
   constructor(
@@ -85,11 +141,32 @@ export class CloudSpeechError extends Error {
   }
 }
 
-/** A token that can open recognition sessions for 60 s; each session lasts at most `maxSessionSeconds`. */
-export async function mintCloudSpeechToken(input: { maxSessionSeconds: number; fetchImpl?: typeof fetch }): Promise<string> {
-  const key = process.env.ASSEMBLYAI_API_KEY?.trim()
-  if (!key) throw new CloudSpeechError('Cloud speech is not configured', 503)
-  const response = await (input.fetchImpl ?? fetch)(TOKEN_URL, {
+type MintInput = { maxSessionSeconds: number; fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv }
+
+async function readToken(response: Response, field: 'token' | 'access_token'): Promise<string> {
+  if (!response.ok) throw new CloudSpeechError(`Token request failed (${response.status})`, 502)
+  const body = (await response.json().catch(() => null)) as Record<string, unknown> | null
+  const token = body?.[field]
+  if (typeof token !== 'string' || !token) throw new CloudSpeechError('Token missing', 502)
+  return token
+}
+
+/** One provider's token: Deepgram's can open a stream for 30 s; AssemblyAI's for 60 s, each stream capped at the time left. */
+export async function mintProviderToken(provider: CloudSpeechProvider, input: MintInput): Promise<string> {
+  const env = input.env ?? process.env
+  const key = keyOf(provider, env)
+  if (!key) throw new CloudSpeechError(`${provider} is not configured`, 503)
+  const doFetch = input.fetchImpl ?? fetch
+  if (provider === 'deepgram') {
+    const response = await doFetch(DEEPGRAM_GRANT_URL, {
+      method: 'POST',
+      headers: { Authorization: `Token ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ttl_seconds: 30 }),
+      signal: AbortSignal.timeout(5000),
+    })
+    return readToken(response, 'access_token')
+  }
+  const response = await doFetch(ASSEMBLYAI_TOKEN_URL, {
     method: 'POST',
     headers: { Authorization: key, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -99,8 +176,32 @@ export async function mintCloudSpeechToken(input: { maxSessionSeconds: number; f
     }),
     signal: AbortSignal.timeout(5000),
   })
-  if (!response.ok) throw new CloudSpeechError(`Token request failed (${response.status})`, 502)
-  const body = (await response.json().catch(() => null)) as { token?: unknown } | null
-  if (!body || typeof body.token !== 'string' || !body.token) throw new CloudSpeechError('Token missing', 502)
-  return body.token
+  return readToken(response, 'token')
+}
+
+/**
+ * The first provider (in order, leaving out `exclude`) that mints a token. Throws 503 when none is configured or left,
+ * 502 when every one left failed.
+ */
+export async function mintCloudSpeechGrant(
+  input: MintInput & { language: string; terms: string[]; exclude?: string[]; log?: (line: string) => void }
+): Promise<CloudSpeechGrant> {
+  const env = input.env ?? process.env
+  const candidates = cloudSpeechProviders(env).filter((provider) => !input.exclude?.includes(provider))
+  if (candidates.length === 0) throw new CloudSpeechError('Cloud speech is not available', 503)
+  let lastError: unknown = null
+  for (const provider of candidates) {
+    try {
+      const token = await mintProviderToken(provider, input)
+      const url =
+        provider === 'deepgram'
+          ? deepgramUrl({ language: input.language, terms: input.terms, model: env.DEEPGRAM_STREAMING_MODEL })
+          : assemblyAiUrl({ language: input.language, terms: input.terms, model: env.ASSEMBLYAI_STREAMING_MODEL })
+      return { provider, url, token }
+    } catch (error) {
+      lastError = error
+      ;(input.log ?? console.error)(`[VOICE] ${provider} token failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  throw lastError instanceof CloudSpeechError ? lastError : new CloudSpeechError('Cloud speech is not available', 502)
 }

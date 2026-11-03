@@ -17,7 +17,7 @@ import { startingStyleFor } from './starting-style'
 import type { LobbyAlert } from './errors'
 import { focusPlaceholder, minutesLeftLabel } from './format'
 import { onDeviceEnvFromWindow, onDeviceReady, speechDestination } from './on-device'
-import { CLOUD_TOGGLE_DESCRIPTION, CLOUD_TOGGLE_LABEL, PRIVACY_LINES, PRIVACY_TYPING } from './privacy'
+import { CLOUD_TOGGLE_DESCRIPTION, CLOUD_TOGGLE_LABEL, PRIVACY_LINES, PRIVACY_TYPING, cloudPrivacyLine } from './privacy'
 import { setVoicePrefs } from './voice-prefs'
 import { defaultLanguageCode, hasSpeechSynthesis, isIosDevice, languageTag, VOICE_LANGUAGES } from './speech'
 import { SpeakRepliesToggle } from './voice-settings'
@@ -56,6 +56,8 @@ type LobbyProps = {
   /** Margins can recognise speech in the cloud here (spec 19.12), and whether the student has it on. */
   cloudOffered?: boolean
   cloudChosen?: boolean
+  /** The cloud providers, in the order they are used, for the privacy line. */
+  cloudProviders?: readonly string[]
   /** The style to begin with, and the idea a teach-back starts with. */
   initialStyle?: VoiceStyle
   conceptId?: string
@@ -77,6 +79,7 @@ export function Lobby({
   recognitionSupported,
   cloudOffered = false,
   cloudChosen = false,
+  cloudProviders = [],
   initialStyle,
   conceptId,
   hasClaims = true,
@@ -117,13 +120,15 @@ export function Lobby({
       current = false
     }
   }, [recognitionSupported, cloudChosen, tag])
-  const destination = cloudChosen
-    ? 'cloud'
-    : speechDestination({
-        userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent,
-        ios: isIosDevice(),
-        onDevice: onDeviceFor?.tag === tag && onDeviceFor.ready,
-      })
+  const privacyLine = cloudChosen
+    ? cloudPrivacyLine(cloudProviders)
+    : PRIVACY_LINES[
+        speechDestination({
+          userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent,
+          ios: isIosDevice(),
+          onDevice: onDeviceFor?.tag === tag && onDeviceFor.ready,
+        })
+      ]
 
   const remaining = usage && usage !== 'unavailable' ? usage.remainingSeconds : null
   const outOfTime = limitReached || remaining === 0
@@ -270,7 +275,7 @@ export function Lobby({
           {recognitionSupported ? (
             <p className="flex flex-wrap items-baseline gap-x-1 text-small text-fg-2" data-testid="voice-privacy">
               <span>
-                {PRIVACY_LINES[destination]} {PRIVACY_TYPING}
+                {privacyLine} {PRIVACY_TYPING}
               </span>
               <Button
                 type="button"

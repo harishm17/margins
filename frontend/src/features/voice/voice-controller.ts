@@ -211,6 +211,9 @@ type Ctx = {
   segmentSilence: number | null
   /** What heard the last voice answer, for its turn's timing. */
   lastRecognizer: 'cloud' | 'device' | 'browser' | undefined
+  /** Cloud providers whose stream refused this session; a refusal means the next one is tried before the browser's. */
+  refusedProviders: string[]
+  retryCloud: boolean
   /** iOS: recognition was stopped for the coach's voice and is made again when it is done. */
   suspended: boolean
   ios: boolean
@@ -279,6 +282,8 @@ function freshCtx(generation: number): Ctx {
     waitCredit: 0,
     segmentSilence: null,
     lastRecognizer: undefined,
+    refusedProviders: [],
+    retryCloud: false,
     suspended: false,
     ios: false,
     listenFor: 'short_answer',
@@ -545,6 +550,16 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     }, 0)
   }
 
+  /** A new cloud stream, with the next provider, keeping the words so far. */
+  function retryCloudStream() {
+    const carry = pendingWords()
+    detachRecognition()
+    setTimeout(() => {
+      if (ctx.ended || ctx.recognition || !ctx.wantListening || ctx.suspended || ctx.micPaused || !ctx.cloud) return
+      if (!openRecognizer(carry)) fallBackFromCloud()
+    }, 0)
+  }
+
   /** Stop using cloud recognition for this session: the browser's recognizer listens on, keeping the words so far. */
   function fallBackFromCloud() {
     ctx.cloud = false
@@ -567,7 +582,13 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     if (ctx.ended) return
     switch (code) {
       case 'cloud-unavailable':
-        fallBackFromCloud()
+        // One provider refused: ask for the next (the grant leaves the refused ones out). None left: the browser's.
+        if (ctx.retryCloud) {
+          ctx.retryCloud = false
+          retryCloudStream()
+        } else {
+          fallBackFromCloud()
+        }
         break
       case 'not-allowed':
       case 'service-not-allowed':
@@ -1080,7 +1101,12 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       ctx.capture = createMicCapture()
       ctx.cloudClass = cloudRecognitionClass({
         capture: ctx.capture,
-        grant: () => getCloudSpeechGrant(sessionId),
+        grant: () => getCloudSpeechGrant(sessionId, ctx.refusedProviders),
+        onRefused: (provider) => {
+          if (ctx.refusedProviders.includes(provider)) return
+          ctx.refusedProviders = [...ctx.refusedProviders, provider]
+          ctx.retryCloud = true
+        },
         onSegmentEnd: (silenceMs) => {
           ctx.segmentSilence = silenceMs
         },

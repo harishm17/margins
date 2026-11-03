@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  applyDeepgram,
   applyTurn,
   cloudRecognitionClass,
   createActivityTracker,
@@ -10,6 +11,7 @@ import {
   silenceAfterLastWordMs,
   toResultEvent,
   type CloudTurn,
+  type DeepgramResults,
   type MicCapture,
 } from './cloud-recognition'
 import { resultsFromEvent } from './speech'
@@ -113,8 +115,15 @@ class FakeSocket {
   onmessage: ((event: { data: unknown }) => void) | null = null
   onerror: (() => void) | null = null
   onclose: ((event: { code: number }) => void) | null = null
-  constructor(readonly url: string) {
+  constructor(
+    readonly url: string,
+    readonly protocols?: string[]
+  ) {
     FakeSocket.last = this
+  }
+  open() {
+    this.readyState = 1
+    ;(this as unknown as { onopen: (() => void) | null }).onopen?.()
   }
   send(data: unknown) {
     this.sent.push(data)
@@ -153,7 +162,7 @@ describe('cloudRecognitionClass', () => {
     const silences: number[] = []
     const Recognition = cloudRecognitionClass({
       capture,
-      grant: async () => ({ url: 'wss://example.test/v3/ws?sample_rate=16000', token: 'tok en' }),
+      grant: async () => ({ provider: 'assemblyai', url: 'wss://example.test/v3/ws?sample_rate=16000', token: 'tok en' }),
       onSegmentEnd: (ms) => silences.push(ms),
       WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
     })
@@ -221,7 +230,7 @@ describe('cloudRecognitionClass', () => {
     ] as const) {
       const Recognition = cloudRecognitionClass({
         capture: fakeCapture(),
-        grant: async () => ({ url: 'wss://example.test/ws?a=1', token: 't' }),
+        grant: async () => ({ provider: 'assemblyai', url: 'wss://example.test/ws?a=1', token: 't' }),
         WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
       })
       const recognition = new Recognition()
@@ -243,7 +252,7 @@ describe('cloudRecognitionClass', () => {
     const capture = fakeCapture()
     const Recognition = cloudRecognitionClass({
       capture,
-      grant: async () => ({ url: 'wss://example.test/ws?a=1', token: 't' }),
+      grant: async () => ({ provider: 'assemblyai', url: 'wss://example.test/ws?a=1', token: 't' }),
       WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
     })
     const recognition = new Recognition()
@@ -266,7 +275,7 @@ describe('cloudRecognitionClass', () => {
     const capture = fakeCapture()
     const Recognition = cloudRecognitionClass({
       capture,
-      grant: async () => ({ url: 'wss://example.test/ws?a=1', token: 't' }),
+      grant: async () => ({ provider: 'assemblyai', url: 'wss://example.test/ws?a=1', token: 't' }),
       WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
     })
     const recognition = new Recognition()
@@ -290,3 +299,121 @@ describe('cloudRecognitionClass', () => {
     recognition.abort()
   })
 })
+
+// ---- Deepgram ------------------------------------------------------------------------------
+
+const results = (transcript: string, isFinal: boolean, speechFinal: boolean, lastEnd?: number): DeepgramResults => ({
+  type: 'Results',
+  is_final: isFinal,
+  speech_final: speechFinal,
+  channel: { alternatives: [{ transcript, words: lastEnd === undefined ? [] : [{ end: lastEnd }] }] },
+})
+
+describe('applyDeepgram', () => {
+  it('keeps the final segments, then one interim, each replaced at its own position', () => {
+    let state = emptyTurnState()
+    state = applyDeepgram(state, results('smoke from', false, false, 0.8)).state
+    state = applyDeepgram(state, results('smoke from hundreds', false, false, 1.4)).state
+    assert.deepEqual(resultsOf(state), [{ transcript: 'smoke from hundreds', isFinal: false }])
+    const closed = applyDeepgram(state, results('Smoke from hundreds of wildfires.', true, true, 2.1))
+    assert.equal(closed.segmentEnd, true)
+    assert.equal(closed.state.lastWordEndMs, 2100)
+    state = applyDeepgram(closed.state, results('skylines', false, false, 3.0)).state
+    assert.deepEqual(resultsOf(state), [
+      { transcript: 'Smoke from hundreds of wildfires.', isFinal: true },
+      { transcript: 'skylines', isFinal: false },
+    ])
+  })
+
+  it('keeps an interim that came out empty as an empty final, so positions do not shift', () => {
+    let state = applyDeepgram(emptyTurnState(), results('It doubles.', true, false, 1)).state
+    state = applyDeepgram(state, results('um', false, false, 1.5)).state
+    state = applyDeepgram(state, results('', true, false)).state
+    assert.deepEqual(resultsOf(state), [
+      { transcript: 'It doubles.', isFinal: true },
+      { transcript: '', isFinal: true },
+    ])
+    // An empty final with nothing in progress adds nothing.
+    assert.equal(applyDeepgram(state, results('', true, true)).state.turns.length, 2)
+  })
+
+  it('a final without speech_final does not close the segment', () => {
+    assert.equal(applyDeepgram(emptyTurnState(), results('Skylines', true, false, 9.5)).segmentEnd, false)
+  })
+})
+
+describe('cloudRecognitionClass with Deepgram', () => {
+  it('passes the token as the bearer subprotocol, starts on open, and reads Results', async () => {
+    const capture = fakeCapture()
+    const silences: number[] = []
+    const Recognition = cloudRecognitionClass({
+      capture,
+      grant: async () => ({ provider: 'deepgram', url: 'wss://api.deepgram.test/v1/listen?model=nova-3', token: 'jwt' }),
+      onSegmentEnd: (ms) => silences.push(ms),
+      WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+    })
+    const recognition = new Recognition()
+    const seen: { transcript: string; isFinal: boolean }[][] = []
+    let started = false
+    recognition.onresult = (event) => seen.push(resultsFromEvent(event))
+    recognition.onstart = () => {
+      started = true
+    }
+    recognition.start()
+    await tick()
+    const socket = FakeSocket.last!
+    assert.equal(socket.url, 'wss://api.deepgram.test/v1/listen?model=nova-3')
+    assert.deepEqual(socket.protocols, ['bearer', 'jwt'])
+    assert.equal(started, false)
+    socket.open()
+    assert.equal(started, true)
+    for (let i = 0; i < 25; i += 1) capture.emit(new Int16Array(1600))
+    socket.message(results('it is four', false, false, 1.2))
+    socket.message(results('It is four.', true, true, 1.6))
+    assert.deepEqual(seen.at(-1), [{ transcript: 'It is four.', isFinal: true }])
+    assert.deepEqual(silences, [900])
+    recognition.abort()
+    assert.deepEqual(socket.sent.at(-1), JSON.stringify({ type: 'CloseStream' }))
+  })
+
+  it('a stream refused before it opens names the provider, so the next grant can leave it out', async () => {
+    const refused: string[] = []
+    const Recognition = cloudRecognitionClass({
+      capture: fakeCapture(),
+      grant: async () => ({ provider: 'deepgram', url: 'wss://api.deepgram.test/v1/listen?a=1', token: 'jwt' }),
+      onRefused: (provider) => refused.push(provider),
+      WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+    })
+    const recognition = new Recognition()
+    const errors: string[] = []
+    recognition.onerror = (event) => errors.push(event.error)
+    recognition.start()
+    await tick()
+    FakeSocket.last!.onclose?.({ code: 1006 })
+    assert.deepEqual(refused, ['deepgram'])
+    assert.deepEqual(errors, ['cloud-unavailable'])
+  })
+
+  it('a graceful stop asks Deepgram to finalise and ends when its Metadata arrives', async () => {
+    const Recognition = cloudRecognitionClass({
+      capture: fakeCapture(),
+      grant: async () => ({ provider: 'deepgram', url: 'wss://api.deepgram.test/v1/listen?a=1', token: 'jwt' }),
+      WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+    })
+    const recognition = new Recognition()
+    let ended = false
+    recognition.onend = () => {
+      ended = true
+    }
+    recognition.start()
+    await tick()
+    const socket = FakeSocket.last!
+    socket.open()
+    recognition.stop()
+    assert.deepEqual(socket.sent.slice(-2), [JSON.stringify({ type: 'Finalize' }), JSON.stringify({ type: 'CloseStream' })])
+    assert.equal(ended, false)
+    socket.message({ type: 'Metadata', request_id: 'r' })
+    assert.equal(ended, true)
+  })
+})
+
