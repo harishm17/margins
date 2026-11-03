@@ -31,6 +31,8 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm test
+      - name: Tutoring eval parity (the real tutor logic against the committed fixture)
+        run: npx tsx --test src/lib/tutor/eval-parity.test.ts src/lib/ask/eval-parity.test.ts src/lib/voice/eval-parity.test.ts
       - run: npm run build
 
   ai-service:
@@ -51,6 +53,8 @@ jobs:
       - run: uv sync --locked --python 3.14
       - run: uv run python -m compileall -q app
       - run: uv run pytest -q
+      - name: Eval tests (retrieval, generation and tutoring; the tutoring ones replay the parity fixture)
+        run: uv run pytest ../evals -q
 
   e2e:
     # Playwright against the real stack: Postgres with pgvector, the AI service on the mock LLM (no

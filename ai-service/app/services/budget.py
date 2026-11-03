@@ -35,7 +35,7 @@ async def record_usage_event(
     output_tokens: int,
     cost_usd: float,
 ) -> None:
-    """Append one row to the ledger. `source` is 'job', 'chat' or 'voice'; nothing is written for
+    """Append one row to the ledger. `source` is 'job', 'chat', 'voice', 'tutor' or 'recall'; nothing is written for
     a call that cost nothing. Never raises: a ledger failure must not fail the work that was billed
     (a retry would bill it again), so it is logged loudly instead.
 

@@ -43,21 +43,19 @@ test('setup guide: upload materials and wait for topics', async ({ page }) => {
   await page.getByRole('button', { name: 'Dismiss notes.txt' }).click()
   await expect(page.getByText('notes.txt')).toHaveCount(0)
 
-  // Real files go through the pipeline. The page refreshes itself, with no reload.
-  await page.getByLabel('Choose files to upload').setInputFiles([PDF, DOCX])
+  // Real files go through the pipeline. The page refreshes itself, with no reload. One file at a time: topic finding
+  // starts by itself when the last file is read, and two files that finish at the same moment can miss it (the guide
+  // then offers a "Find topics" button), which would make what happens next depend on timing.
+  await page.getByLabel('Choose files to upload').setInputFiles([PDF])
   await expect(page.getByText('algorithms.pdf')).toBeVisible()
+  await expect(page.getByText('Ready', { exact: true })).toHaveCount(1, { timeout: 60_000 })
+  await page.getByLabel('Choose files to upload').setInputFiles([DOCX])
   await expect(page.getByText('hashing.docx')).toBeVisible()
 
-  // Files read: each shows its phase while it is read, step 1 keeps its list and says so when every file is
-  // done. Topic finding starts by itself; if two files finish at the same moment it can miss, and the guide
-  // offers a button for that.
+  // Files read: each shows its phase while it is read, step 1 keeps its list and says so when every file is done.
   await expect(page.getByText('Every file here has been read.')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByText('Ready', { exact: true })).toHaveCount(2)
-  const review = page.getByRole('link', { name: 'Review topics' })
-  const find = page.getByRole('button', { name: 'Find topics' })
-  await expect(review.or(find)).toBeVisible({ timeout: 30_000 })
-  if (await find.isVisible()) await find.click()
-  await expect(review).toBeVisible({ timeout: 90_000 })
+  await expect(page.getByRole('link', { name: 'Review topics' })).toBeVisible({ timeout: 90_000 })
 })
 
 test('topic editor: rename, add, reorder, merge, delete, confirm', async ({ page }) => {
@@ -136,9 +134,9 @@ test('starting the first topic writes its notes, then topics list and materials'
   // second time by itself). With text mapped, the notes appear.
   await page.goto(courseUrl)
   await page.getByRole('link', { name: /^Start / }).click()
-  await expect(page).toHaveURL(/\/topics\/[0-9a-f-]{36}\?view=notes$/)
+  await expect(page).toHaveURL(/\/topics\/[0-9a-f-]{36}\?view=read$/)
   await expect(
-    page.getByText(/couldn't be written/).or(page.getByRole('heading', { name: 'Overview' }).first()).first()
+    page.getByText(/couldn't be written/).or(page.getByRole('heading', { name: 'Overview' }).first()).or(page.getByRole('button', { name: "I've read it" })).first()
   ).toBeVisible({ timeout: 60_000 })
 
   // The topics list: confirmed topics, and no bulk build button.

@@ -11,15 +11,29 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 from app.api.routes.grading import GradeQuizRequest
-from app.models.jobs import JobPayload, MaterialValidationInput, ContentGenerationInput, ExamGenerationInput
+from app.models.jobs import (
+    ConceptExtractionInput,
+    ConceptLinkingInput,
+    ContentGenerationInput,
+    ExamGenerationInput,
+    GapExplainerInput,
+    JobPayload,
+    MaterialValidationInput,
+    ReviewItemsInput,
+)
 from app.services.document_processor.validator import material_role, validate_material
 from app.services.document_processor.chunker import chunk_document, NoContentError
 from app.services.document_processor.storage import local_copy
 from app.services.embeddings.generator import embedding_text, generate_embeddings
 from app.services.course_planner import NoPlannableMaterialError, StalePlanError, plan_course, write_plan
+from app.services.concepts.extractor import extract_concepts
+from app.services.concepts.linker import link_unit
 from app.services.content_generator import NotesGenerator, ExamplesGenerator, QuizGenerator
 from app.services.content_generator.context import NoSourceMaterialError
 from app.services.content_generator.examples import ExampleType
+from app.services.content_generator.gap_explainer import generate_gap_explainer
+from app.services.content_generator.review_items import generate_review_items
+from app.services.content_generator.warmup import generate_warmup
 from app.services.content_generator.quiz import QuestionType
 from app.services.exam_generator import ExamGenerator
 from app.services.exam_relevance import mark_exam_relevant_topics, mark_exam_relevant_topics_quietly
@@ -32,7 +46,16 @@ from app.services.dispatch import (
     enqueue_topic_extraction_job,
     mark_undelivered,
 )
-from app.services.generation_chain import content_exists, continue_chain, dispatch as dispatch_job, plan_next_job
+from app.services.generation_chain import (
+    OPTIONAL_TYPES,
+    content_exists,
+    continue_chain,
+    dispatch as dispatch_job,
+    plan_link_job,
+    plan_next_job,
+    plan_relink_job,
+    skip_entry,
+)
 from app.services.job_reaper import reap_expired_jobs
 from app.services.llm.base import LLMRefusalError
 from app.services.llm.limiter import topic_lock
@@ -478,6 +501,8 @@ async def extract_topics_job(payload: JobPayload, job: JobContext) -> JobOutcome
 
 
 _APPENDABLE_CONTENT = {"solved_examples", "interactive_examples"}
+# Written to their own tables (concepts, the warm-up bank), not to topic_content.
+SUPPORT_CONTENT = {"concepts", "warmup"}
 
 # One statement, so concurrent appends cannot overwrite each other: the upsert locks the
 # existing row, and Postgres re-reads it before concatenating. With $5 false (regeneration)
@@ -522,9 +547,10 @@ RETURNING id,
     default_error_code="CONTENT_GENERATION_FAILED",
     stage="generating",
     uses_llm=True,
+    after_failure=lambda payload, job, exc: _link_after_failed_concepts(payload, job),
 )
 async def generate_content_job(payload: JobPayload, job: JobContext) -> JobOutcome:
-    """Generate content for a topic (notes, examples, or quiz).
+    """Generate content for a topic (concepts, warm-up, notes, examples, or quiz).
 
     Jobs for the same topic run one at a time: a job waits here, holding its claim and lease,
     until the topic's earlier jobs have finished and stored their content.
@@ -554,6 +580,10 @@ async def generate_content_job(payload: JobPayload, job: JobContext) -> JobOutco
 async def _skip_failed_topic(job: JobContext, input_data: ContentGenerationInput, topic, exc: Exception) -> None:
     """A "Prepare all topics now" run goes on to the next topic when this one cannot be generated
     at all (no source material, or the model refuses it). Any other failure stops the run."""
+    if input_data.contentType in OPTIONAL_TYPES:
+        # Whatever went wrong, the topic's notes, examples and quiz are still written.
+        await _continue_past_optional(job, input_data, topic)
+        return
     if not isinstance(exc, (NoSourceMaterialError, LLMRefusalError)):
         return
     try:
@@ -566,6 +596,34 @@ async def _skip_failed_topic(job: JobContext, input_data: ContentGenerationInput
         )
     except Exception:
         logger.exception("Could not continue the generation run after topic %s failed", topic["id"])
+
+
+async def _continue_past_optional(job: JobContext, input_data: ContentGenerationInput, topic) -> None:
+    """Concepts and the warm-up are supporting material: when one fails, the topic's notes,
+    examples and quiz are still written. The type is left out of the rest of this run; the
+    failed job is shown as usual."""
+    preferences = dict(input_data.preferences)
+    preferences["chain_skip"] = [
+        *(preferences.get("chain_skip") or []), skip_entry(topic["id"], input_data.contentType)
+    ]
+    try:
+        await continue_chain(
+            user_id=job.user_id, project_id=job.project_id, topic_id=topic["id"], preferences=preferences
+        )
+    except Exception:
+        logger.exception("Could not continue the generation run after %s failed for topic %s",
+                         input_data.contentType, topic["id"])
+
+
+async def _link_after_failed_concepts(payload: JobPayload, job: JobContext) -> None:
+    """A topic whose extraction failed no longer holds its unit back: link the unit if it was the
+    last one. Runs once the job is marked failed."""
+    data = payload.data or {}
+    if data.get("contentType") != "concepts" or not data.get("topicId"):
+        return
+    await dispatch_job(
+        await plan_link_job(user_id=job.user_id, project_id=job.project_id, topic_id=data["topicId"])
+    )
 
 
 def _prerequisite_question_count(preferences: dict) -> int:
@@ -598,6 +656,9 @@ async def _generate_and_store_content(job: JobContext, input_data: ContentGenera
     content_type = input_data.contentType
     focus = input_data.preferences.get("focus")
     append = bool(input_data.preferences.get("append")) and content_type in _APPENDABLE_CONTENT
+
+    if content_type in SUPPORT_CONTENT:
+        return await _generate_support_content(job, input_data, topic)
 
     # Generate content based on type
     if content_type == "section_notes":
@@ -693,7 +754,8 @@ async def _generate_and_store_content(job: JobContext, input_data: ContentGenera
         metadata = {
             'total_questions': result['total_questions'],
             'difficulty_level': result['difficulty_level'],
-            'question_types': result['question_types']
+            'question_types': result['question_types'],
+            'dropped_unsupported': result.get('dropped_unsupported', 0),
         }
 
     else:
@@ -709,7 +771,7 @@ async def _generate_and_store_content(job: JobContext, input_data: ContentGenera
             """
             SELECT COUNT(*)::int AS count
             FROM topic_quizzes
-            WHERE topic_id = $1
+            WHERE topic_id = $1 AND kind IN ('standard', 'retry')
             """,
             topic['id'],
         )
@@ -792,6 +854,144 @@ async def _generate_and_store_content(job: JobContext, input_data: ContentGenera
     )
 
 
+async def _generate_support_content(job: JobContext, input_data: ContentGenerationInput, topic) -> JobOutcome:
+    """The concepts or the warm-up bank of a topic, then the chain's next job. The last topic of
+    a unit to get concepts also queues the unit's link_concepts."""
+    content_type = input_data.contentType
+    if content_type == "concepts":
+        result = (await extract_concepts(topic["id"])).as_result()
+    else:
+        warmup = await generate_warmup(topic["id"])
+        result = {key: warmup[key] for key in ("warmup_id", "total_questions", "dropped_unsupported")}
+    logger.info("Completed %s for topic %s: %s", content_type, topic["id"], result)
+
+    next_job = await plan_next_job(
+        user_id=job.user_id,
+        project_id=job.project_id,
+        topic_id=topic["id"],
+        preferences=input_data.preferences,
+    )
+
+    async def queue_next():
+        await dispatch_job(next_job)
+        if content_type == "concepts":
+            # Decided once this job is marked completed: of two topics finishing together, the
+            # later one sees the other as settled.
+            await dispatch_job(
+                await plan_link_job(user_id=job.user_id, project_id=job.project_id, topic_id=topic["id"])
+            )
+
+    return JobOutcome(result=result, response={"contentType": content_type}, after=queue_next)
+
+
+@router.post("/jobs/extract-concepts")
+@job_handler(
+    job_type="extract_concepts",
+    label="Concept extraction",
+    default_error_code="CONCEPT_EXTRACTION_FAILED",
+    stage="generating",
+    uses_llm=True,
+)
+async def extract_concepts_job(payload: JobPayload, job: JobContext) -> JobOutcome:
+    """Extract the concept graph of one topic: concepts, claims, edges, focus questions and
+    recall prompts. Jobs for the same topic run one at a time, like content generation."""
+    input_data = parse_input(ConceptExtractionInput, payload.data)
+
+    topic = await execute_one("SELECT id FROM topics WHERE id = $1", input_data.topicId)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    async with topic_lock(topic["id"]):
+        summary = await extract_concepts(topic["id"])
+    logger.info("Extracted concepts for topic %s: %s", topic["id"], summary.as_result())
+    return JobOutcome(result=summary.as_result())
+
+
+@router.post("/jobs/link-concepts")
+@job_handler(
+    job_type="link_concepts",
+    label="Concept linking",
+    default_error_code="CONCEPT_LINKING_FAILED",
+    stage="generating",
+    uses_llm=True,
+)
+async def link_concepts_job(payload: JobPayload, job: JobContext) -> JobOutcome:
+    """Link the concepts of one unit across its topics: confusable and encompasses edges."""
+    input_data = parse_input(ConceptLinkingInput, payload.data)
+
+    unit = await execute_one("SELECT id FROM units WHERE id = $1", input_data.unitId)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+
+    async with topic_lock(f"unit:{unit['id']}"):
+        written = await link_unit(unit["id"])
+    logger.info("Linked concepts for unit %s: %d edges", unit["id"], written)
+
+    async def relink():
+        # A topic that finished its extraction while this job ran could not queue its own link.
+        await dispatch_job(
+            await plan_relink_job(
+                job_id=job.id, unit_id=unit["id"], user_id=job.user_id, project_id=job.project_id
+            )
+        )
+
+    return JobOutcome(result={"unit_id": unit["id"], "edges": written}, after=relink)
+
+
+@router.post("/jobs/generate-review-items")
+@job_handler(
+    job_type="generate_review_items",
+    label="Review item generation",
+    default_error_code="REVIEW_ITEMS_FAILED",
+    stage="generating",
+    uses_llm=True,
+)
+async def generate_review_items_job(payload: JobPayload, job: JobContext) -> JobOutcome:
+    """New items for the concepts of one topic that a review session lacks, appended to the topic's
+    review bank. One job per topic; jobs for the same topic run one at a time, like content generation."""
+    input_data = parse_input(ReviewItemsInput, payload.data)
+
+    topic = await execute_one("SELECT id FROM topics WHERE id = $1", input_data.topicId)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    async with topic_lock(topic["id"]):
+        result = await generate_review_items(
+            topic["id"],
+            [
+                {"concept_ids": request.conceptIds, "mode": request.mode, "difficulty": request.difficulty}
+                for request in input_data.requests
+            ],
+        )
+    logger.info("Generated review items for topic %s: %s", topic["id"], result["total_items"])
+    return JobOutcome(result=result, response={"totalItems": result["total_items"]})
+
+
+@router.post("/jobs/gap-explainer")
+@job_handler(
+    job_type="gap_explainer",
+    label="Gap explanation",
+    default_error_code="GAP_EXPLAINER_FAILED",
+    stage="generating",
+    uses_llm=True,
+)
+async def gap_explainer_job(payload: JobPayload, job: JobContext) -> JobOutcome:
+    """Explain what one recall attempt missed, from the student's pages, and store it on the attempt.
+    Jobs for the same topic run one at a time, like content generation."""
+    input_data = parse_input(GapExplainerInput, payload.data)
+
+    attempt = await execute_one(
+        "SELECT topic_id FROM recall_attempts WHERE id = $1 AND user_id = $2", input_data.attemptId, job.user_id
+    )
+    if not attempt:
+        raise PermanentJobError("Recall attempt not found", "ATTEMPT_NOT_FOUND")
+
+    async with topic_lock(attempt["topic_id"]):
+        stored = await generate_gap_explainer(input_data.attemptId, job.user_id)
+    logger.info("Gap explainer for attempt %s: %s gaps", input_data.attemptId, len(stored["gaps"]))
+    return JobOutcome(result={"gaps": len(stored["gaps"]), "skipped": len(stored["skipped"])}, response={"gaps": len(stored["gaps"])})
+
+
 @router.post("/jobs/generate-exam")
 @job_handler(
     job_type="generate_exam",
@@ -832,7 +1032,9 @@ async def generate_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
             "exam_id": exam_record['id'],
             "total_questions": result['total_questions'],
             "topics_covered": result['topics_covered'],
+            "skipped_topics": result.get('skipped_topics', []),
             "matched_past_exams": result['matched_past_exams'],
+            "dropped_unsupported": result.get("dropped_unsupported", 0),
         },
         response={
             "examId": exam_record['id'],
@@ -877,6 +1079,9 @@ async def grade_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
         raise PermanentJobError("The exam has no questions", "INVALID_INPUT")
     if not isinstance(answers, dict):
         raise PermanentJobError("The submission has no answers", "INVALID_INPUT")
+
+    # An answer may carry how sure the student was ({answer, confidence}); the grader reads the answer alone.
+    answers = {key: value.get("answer") if isinstance(value, dict) else value for key, value in answers.items()}
 
     grading_result = await ExamGrader().grade_submission(
         submission_id=submission_id,
@@ -1007,12 +1212,13 @@ async def grade_quiz_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     except ValidationError as exc:
         raise PermanentJobError("The stored quiz is not valid", "INVALID_INPUT") from exc
     questions = [question.model_dump() for question in request.questions]
-    answers = dict(request.answers)
+    answers = request.plain_answers()
 
     grading_result = await ExamGrader().grade_submission(
         submission_id=submission_id,
         questions=questions,
         answers=answers,
+        thinking=request.thinking(),
     )
     if any(question.get("needs_review") for question in grading_result["graded_questions"]):
         # The model answered, but not usefully: a score with a 0 in it must not be stored. Failing

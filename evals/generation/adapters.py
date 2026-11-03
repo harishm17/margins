@@ -9,7 +9,8 @@ from `app`.
     MeteredProvider                     wraps a provider: model pin, spend gate, usage, latency, raw output
     extract_topics                      the app's topic extraction (stage 2 swaps this one)
     store_topics / map_topic            topic rows and chunk mappings, as the extract-topics job writes them
-    make_generators / generate          the app's notes, examples and quiz generators
+    make_generators / generate          the app's concept extraction, warm-up, notes, examples and quiz generators
+    read_concept_graph                  a topic's stored concepts, claims, prerequisite edges and objective count
     fetch_excerpts                      the excerpts a topic is generated from
     app_cost                            the app's price table
 """
@@ -37,8 +38,10 @@ MODEL_ALIASES = {
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
 # Content types, in the order the app presents them, and the app purpose each one is billed under.
-CONTENT_TYPES = ("notes", "solved", "interactive", "quiz")
+CONTENT_TYPES = ("concepts", "warmup", "notes", "solved", "interactive", "quiz")
 PURPOSES = {
+    "concepts": "extract_concepts",
+    "warmup": "warmup",
     "notes": "section_notes",
     "solved": "solved_examples",
     "interactive": "interactive_examples",
@@ -398,7 +401,9 @@ def make_generators(provider: LLMProvider) -> Dict[str, Any]:
     previous = LLMFactory._instance
     LLMFactory._instance = provider
     try:
-        return {"notes": NotesGenerator(), "examples": ExamplesGenerator(), "quiz": QuizGenerator()}
+        # Concept extraction and the warm-up are functions that ask the factory for their provider
+        # when they run, so the provider rides along for `generate` to install around them.
+        return {"notes": NotesGenerator(), "examples": ExamplesGenerator(), "quiz": QuizGenerator(), "provider": provider}
     finally:
         LLMFactory._instance = previous
 
@@ -418,8 +423,13 @@ async def generate(generators: Dict[str, Any], topic: Dict[str, Any], content_ty
 
     notes: markdown string; solved / interactive: list of examples; quiz: list of questions.
     `topic` has id, name, description. Calls mirror generate_content_job in jobs.py.
+    concepts: the topic's stored graph after extraction (`read_concept_graph`); warmup: the warm-up
+    questions. Both write to the topic's rows, so models must run one after another (run_eval does).
     """
     from app.services.content_generator.examples import ExampleType
+
+    if content_type in ("concepts", "warmup"):
+        return await _generate_graph_type(generators["provider"], topic, content_type)
 
     common = dict(topic_id=topic["id"], topic_name=topic["name"], topic_description=topic["description"])
     if content_type == "notes":
@@ -441,3 +451,53 @@ async def generate(generators: Dict[str, Any], topic: Dict[str, Any], content_ty
         )
         return result["questions"]
     raise ValueError(f"unknown content type {content_type}")
+
+
+async def _generate_graph_type(provider: LLMProvider, topic: Dict[str, Any], content_type: str):
+    """Run concept extraction or the warm-up generator with `provider` installed in the factory."""
+    from app.services.llm.factory import LLMFactory
+
+    previous = LLMFactory._instance
+    LLMFactory._instance = provider
+    try:
+        if content_type == "concepts":
+            from app.services.concepts.extractor import extract_concepts
+
+            await extract_concepts(topic["id"])
+            return await read_concept_graph(topic["id"])
+        from app.services.content_generator.warmup import generate_warmup
+
+        return (await generate_warmup(topic["id"]))["questions"]
+    finally:
+        LLMFactory._instance = previous
+
+
+async def read_concept_graph(topic_id: str) -> Dict[str, Any]:
+    """The topic's active concepts with their claims and the edges that touch them, as stored.
+
+    Shape: objective_count, concepts[{id, name, objective_indexes}], claims[{concept_id, chunk_id,
+    quote}], edges[{source_id, target_id, type}]. Edges to concepts of other topics are included
+    (a prerequisite cycle can run through them).
+    """
+    from app.db.connection import execute_query, execute_one
+
+    topic = await execute_one("SELECT objectives FROM topics WHERE id = $1", topic_id)
+    concepts = await execute_query(
+        "SELECT id, name, objective_indexes FROM concepts WHERE topic_id = $1 AND status = 'active' ORDER BY order_index, id",
+        topic_id,
+    )
+    ids = [c["id"] for c in concepts]
+    claims = await execute_query(
+        "SELECT concept_id, chunk_id, quote FROM concept_claims WHERE concept_id = ANY($1::text[]) ORDER BY concept_id, order_index",
+        ids,
+    )
+    edges = await execute_query(
+        "SELECT source_id, target_id, type FROM concept_edges WHERE source_id = ANY($1::text[]) OR target_id = ANY($1::text[])",
+        ids,
+    )
+    return {
+        "objective_count": len([o for o in (topic["objectives"] if topic else None) or [] if o]),
+        "concepts": [{"id": c["id"], "name": c["name"], "objective_indexes": list(c["objective_indexes"] or [])} for c in concepts],
+        "claims": [{"concept_id": c["concept_id"], "chunk_id": c["chunk_id"], "quote": c["quote"]} for c in claims],
+        "edges": [{"source_id": e["source_id"], "target_id": e["target_id"], "type": e["type"]} for e in edges],
+    }

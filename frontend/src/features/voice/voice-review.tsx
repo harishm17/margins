@@ -9,6 +9,14 @@ export type VoiceReviewProps = {
   mode: 'topic' | 'sprint'
   /** `keywords`: the topic's key terms, for the Focus field's example. */
   topic?: { id: string; name: string; keywords?: string[] }
+  /** The style the lobby has chosen to begin with (a link such as "Do it out loud" names it). */
+  initialStyle?: 'oral_quiz' | 'teach_back' | 'guided_reading'
+  /** The idea a teach-back starts with. */
+  conceptId?: string
+  /** False when what Teach it back needs is missing: the claims of the named idea, else of the topic. The lobby then starts on Quiz me. */
+  hasClaims?: boolean
+  /** The claims counted are the named idea's, not the topic's (the lobby says which is missing). */
+  claimsOfIdea?: boolean
 }
 
 function LobbySkeleton() {

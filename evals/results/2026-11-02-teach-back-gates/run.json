@@ -1,0 +1,13 @@
+{
+  "label": "teach-back-gates",
+  "date": "2026-11-02",
+  "surface": "teach_back",
+  "patterns": null,
+  "limit": null,
+  "scenarios": "/home/harish/code/margins-wt/learning-v3/evals/tutoring/scenarios/teach-back-original.jsonl",
+  "stopped": null,
+  "spend": {
+    "generation": 0.0292,
+    "max_usd": 2.0
+  }
+}

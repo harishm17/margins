@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { VoiceQuestion } from '@/lib/voice/concept'
+import { courseTermsForTopics, sessionTopicIds } from '@/lib/voice/course-terms'
 import { normalizeFocus } from '@/lib/voice/coach-prompt'
 import { buildSprintQuestionSet, buildTopicQuestionSet } from '@/lib/voice/drill-pack'
 import {
@@ -16,9 +17,16 @@ import {
 
 const sessionSchema = z.object({
   mode: z.enum(['topic_drill', 'sprint']).default('topic_drill'),
-  style: z.enum(['oral_quiz', 'guided_notes', 'topic_conversation']).optional().default('oral_quiz'),
+  // `topic_conversation` is gone for new sessions. A tab opened before guided reading replaced guided notes still sends the old name.
+  style: z
+    .enum(['oral_quiz', 'teach_back', 'guided_reading', 'guided_notes'])
+    .optional()
+    .default('oral_quiz')
+    .transform((style) => (style === 'guided_notes' ? 'guided_reading' : style)),
   projectId: z.string(),
   topicId: z.string().optional(),
+  // The idea a teach-back starts with (the "Do it out loud" link names it).
+  conceptId: z.string().max(100).optional(),
   language: z.string().regex(/^[a-z]{2,8}$/i).optional().default('en'),
   // Ignored since the coach moved to Claude (the browser chooses the voice). Still accepted.
   voice: z.string().optional().default('marin'),
@@ -72,9 +80,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const readsClaims = payload.style === 'teach_back' || payload.style === 'guided_reading'
+    if (readsClaims && (payload.mode === 'sprint' || !payload.topicId)) {
+      return apiInvalidInput('Teach it back and guided reading work on one topic at a time')
+    }
+    // The idea must be an active one of this topic with claims; anything else is ignored (the coach picks the weakest).
+    const startConcept =
+      payload.style === 'teach_back' && payload.conceptId && payload.topicId
+        ? await prisma.concept.findFirst({
+            where: { id: payload.conceptId, topicId: payload.topicId, status: 'active', claims: { some: {} } },
+            select: { id: true },
+          })
+        : null
+    // Both styles are grounded in the topic's claims from the student's own pages.
+    if (readsClaims && payload.topicId) {
+      const claims = await prisma.conceptClaim.count({ where: { concept: { topicId: payload.topicId, status: 'active' } } })
+      if (claims === 0) {
+        return NextResponse.json(
+          { error: { code: 'CONFLICT', message: 'This topic has no claims from your pages yet' }, requiresClaims: true },
+          { status: 422 }
+        )
+      }
+    }
+
     let questionSet: VoiceQuestion[] = []
 
-    if (payload.mode === 'topic_drill' && payload.topicId) {
+    if (readsClaims) {
+      // These styles read the topic's claims through their tools; there is no question bank.
+    } else if (payload.mode === 'topic_drill' && payload.topicId) {
       questionSet = await buildTopicQuestionSet(payload.topicId, session.user.id)
     } else {
       questionSet = await buildSprintQuestionSet(payload.projectId, session.user.id)
@@ -99,13 +132,18 @@ export async function POST(request: NextRequest) {
         style: payload.style,
         focus: normalizeFocus(payload.focus),
         questionSet,
+        ...(startConcept ? { coachState: { teach: { current: startConcept.id, concepts: {} } } } : {}),
         metrics: { entries: [] },
         status: 'active',
       },
     })
 
+    // The topic's key terms, for the coach prompt (the turn route builds the same list) and for on-device recognition (spec 19.5).
+    const courseTerms = await courseTermsForTopics(sessionTopicIds({ topicId: payload.topicId ?? null, questionSet }))
+
     return NextResponse.json({
       sessionId: voiceSession.id,
+      courseTerms,
       questionCount: questionSet.length,
       mode: payload.mode,
       style: payload.style,

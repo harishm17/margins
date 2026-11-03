@@ -4,8 +4,13 @@ import { pickGenerationFailures } from '@/lib/jobs/failure-message'
 import { asQuestionList, toPublicQuestions, type PublicQuizQuestion } from '@/lib/learning/quiz-questions'
 import { buildReview, type QuizReviewItem } from '@/lib/learning/quiz-review'
 import { masteryLevel, type MasteryLevel } from '@/lib/mastery'
-import { getMissedQuestions } from '@/lib/learning/review-server'
+import type { ConceptLabel } from '@/lib/learning/concept-mastery'
+import { retryOpensAt } from '@/lib/learning/missed'
+import { getTimeZone } from '@/server/timezone'
+import { convertTopicIfDue } from '@/lib/learning/backfill'
+import { getLastAttemptAt, getMissedQuestions } from '@/lib/learning/review-server'
 import { getWaitingQuizzes, type WaitingQuiz } from '@/lib/learning/quiz-submissions'
+import { practiceRowProgress } from '@/lib/learning/practice-server'
 import { mergeSources, type SourceRef } from '@/lib/topics/sources'
 import { parseNotes, parsePracticeProblems, parseSolvedExamples } from '@/features/topic/content'
 import type { ProblemProgress } from '@/features/topic/practice-keys'
@@ -17,6 +22,12 @@ import {
   type NotesContent,
   type PracticeContent,
 } from '@/features/topic/types'
+import { topicBand, type Band } from '@/lib/learning/level'
+import type { NextActivity } from '@/lib/learning/next-activity'
+import { loadTopicLearningState, resolveTopicActivity } from '@/lib/learning/next-activity-server'
+import { findActiveConceptsJob } from '@/lib/learning/topic-preparation'
+import { pathSteps } from '@/features/topic/path-steps'
+import type { PathView } from '@/features/topic/types'
 import { getCourseShell } from './courses'
 
 /**
@@ -53,6 +64,8 @@ export type TopicReview = {
   due: boolean
   /** Questions missed in the last two attempts: "Retry what you missed" is offered when this is above zero. */
   missedCount: number
+  /** When "Retry what you missed" opens (ISO, the start of the next local day after the last attempt), or null. */
+  retryOpensAt: string | null
 }
 
 export type TopicFailure = { message: string; errorCode: string | null }
@@ -112,6 +125,20 @@ export type TopicPageData = {
   practiceProgress: ProblemProgress[]
   /** Kinds whose latest generation failed and that still have no content. */
   failures: Partial<Record<ContentKind, TopicFailure>>
+  /** What to do next on this topic (spec §8.1), with the address it opens. */
+  nextActivity: NextActivity & { href: string }
+  /** The topic's concepts as chips on the header: name, the map's label, whether a wrong idea is on record, and the support band (0 support, 1 core, 2 stretch). Empty for a topic without concepts. */
+  concepts: { id: string; name: string; label: ConceptLabel; wrongIdea: boolean; band: Band }[]
+  /** The topic's support band (lib/learning/level.ts `topicBand`): where quiz difficulty, the next practice problem and the examples' fading start. */
+  topicBand: Band
+  /** Which path steps are done (the warm-up taken, the topic read, recall done). */
+  pathDone: { warmup: boolean; read: boolean; recall: boolean }
+  /** The steps of the path this topic can offer (no warm-up without a bank, no recall without concepts). */
+  pathSteps: PathView[]
+  /** Concept extraction is queued or running: Recall shows a preparing state. */
+  preparingConcepts: boolean
+  /** The one-time card about trying before help has not been closed yet. */
+  showEffortIntro: boolean
 }
 
 const RECENT_ATTEMPTS = 30
@@ -147,13 +174,16 @@ export const getTopicPage = cache(async function getTopicPage(
   const visible = course.topics.filter((item) => item.id === topicId || !course.setup.topics.listConfirmed || item.confirmed)
   const position = visible.findIndex((item) => item.id === topicId)
 
-  const [contentRows, quizRows, attemptRows, jobRows, structureRow, sourceRows, practiceRows] = await Promise.all([
+  // Concepts that finished after the overview was last opened: convert this topic now, so the path and the explainer gate are right from the first view.
+  if (!hidden) await convertTopicIfDue(userId, courseId, topicId, { timeZone: await getTimeZone() }).catch((error) => console.error('Topic conversion failed:', error))
+
+  const [contentRows, quizRows, attemptRows, jobRows, structureRow, sourceRows, practiceRows, learningState, waitingQuizzes, effortIntro] = await Promise.all([
     prisma.topicContent.findMany({
       where: { topicId },
       select: { id: true, contentType: true, contentData: true, metadata: true, updatedAt: true },
     }),
     prisma.topicQuiz.findMany({
-      where: { topicId },
+      where: { topicId, kind: { in: ['standard', 'retry'] } },
       orderBy: { createdAt: 'asc' },
       select: { id: true, questions: true, kind: true, createdAt: true },
     }),
@@ -179,6 +209,9 @@ export const getTopicPage = cache(async function getTopicPage(
       select: { materialId: true, pageStart: true, pageEnd: true, material: { select: { filename: true } } },
     }),
     prisma.practiceProgress.findMany({ where: { userId, topicId }, orderBy: { problemIndex: 'asc' } }),
+    loadTopicLearningState({ userId, topicId }),
+    getWaitingQuizzes(userId, topicId),
+    prisma.user.findUnique({ where: { id: userId }, select: { seenEffortIntroAt: true } }),
   ])
 
   const unit = shellTopic.unitId ? (course.units.find((item) => item.id === shellTopic.unitId) ?? null) : null
@@ -247,7 +280,7 @@ export const getTopicPage = cache(async function getTopicPage(
       takenAt: iso(attempt.takenAt),
       setId,
       answers: toAnswers(attempt.answers),
-      review: position < REVIEWED_ATTEMPTS && questions ? buildReview(questions, attempt.results) : null,
+      review: position < REVIEWED_ATTEMPTS && questions ? buildReview(questions, attempt.results, toAnswers(attempt.answers)) : null,
     }
   })
 
@@ -273,9 +306,20 @@ export const getTopicPage = cache(async function getTopicPage(
     if (kind) failures[kind] = { message: failure.message, errorCode: failure.errorCode }
   }
 
-  const waitingQuizzes = await getWaitingQuizzes(userId, topicId)
   const due = shellTopic.dueAt ? Date.parse(shellTopic.dueAt) <= Date.now() : false
-  const review: TopicReview = { due, missedCount: due ? (await getMissedQuestions(userId, topicId)).length : 0 }
+  const [missed, lastAttemptAt, timeZone] = due
+    ? await Promise.all([getMissedQuestions(userId, topicId), getLastAttemptAt(userId, topicId), getTimeZone()])
+    : [[], null, null]
+  const review: TopicReview = {
+    due,
+    missedCount: missed.length,
+    retryOpensAt: due && timeZone ? (retryOpensAt(lastAttemptAt, timeZone, new Date())?.toISOString() ?? null) : null,
+  }
+
+  const hasConcepts = learningState.concepts.length > 0
+  const preparingConcepts = !hasConcepts && (await findActiveConceptsJob(topicId)) !== null
+  // The same function Home, the overview and the plan use (it also reads whether the AI is up).
+  const nextWithHref = await resolveTopicActivity({ userId, courseId, topicId, topics: course.topics, listConfirmed: course.setup.topics.listConfirmed, state: learningState })
 
   const contentVersion = [
     ...contentRows.map((row) => `${row.contentType}:${row.updatedAt.getTime()}`),
@@ -310,13 +354,14 @@ export const getTopicPage = cache(async function getTopicPage(
     review,
     practiceProgress: practiceRows
       .filter((row) => row.contentId === practiceRow?.id && content.practice?.items[row.problemIndex]?.title === row.problemTitle)
-      .map((row) => ({
-        problemIndex: row.problemIndex,
-        problemTitle: row.problemTitle,
-        solvedSteps: row.solvedSteps,
-        revealedSteps: row.revealedSteps,
-        hintedSteps: row.hintedSteps,
-      })),
+      .map((row) => practiceRowProgress(row, content.practice?.items[row.problemIndex]?.steps.length ?? 0)),
     failures,
+    nextActivity: nextWithHref,
+    pathSteps: pathSteps({ hasConcepts, warmupReady: learningState.warmupReady, warmupDone: learningState.warmupAt !== null, readDone: learningState.readAt !== null, preparingConcepts }),
+    preparingConcepts,
+    concepts: learningState.concepts.map((concept) => ({ id: concept.id, name: concept.name ?? '', label: concept.label, wrongIdea: concept.misconception !== null, band: concept.band })),
+    topicBand: topicBand(learningState.concepts.map((concept) => ({ band: concept.band, solid: concept.label === 'solid' }))),
+    pathDone: { warmup: learningState.warmupAt !== null, read: learningState.readAt !== null, recall: learningState.recallAt !== null },
+    showEffortIntro: effortIntro?.seenEffortIntroAt == null,
   }
 })

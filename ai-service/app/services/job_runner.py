@@ -60,6 +60,10 @@ LEASE_SECONDS = {
     "profile_exam": 300,
     "exam_relevance": 300,
     "generate_content": 300,
+    "extract_concepts": 300,
+    "link_concepts": 300,
+    "generate_review_items": 300,
+    "gap_explainer": 300,
     "generate_exam": 600,
     "grade_exam": 300,
     "grade_quiz": 300,
@@ -443,6 +447,7 @@ def job_handler(
     uses_llm: bool = False,
     lease_seconds: Optional[float] = None,
     wait_for_ai: bool = False,
+    after_failure: Optional[Callable[[JobPayload, JobContext, Exception], Awaitable[None]]] = None,
 ):
     """Wrap a job handler with claim, lease, usage tracking and failure handling.
 
@@ -450,6 +455,8 @@ def job_handler(
     ("Content generation failed: ...").
     `uses_llm` makes the handler subject to the AI status and the per-user daily budget.
     `wait_for_ai` makes it wait (see `_defer`) instead of failing when the AI cannot run.
+    `after_failure` runs once the job is marked failed (its errors are logged), the failure
+    counterpart of `JobOutcome.after`.
     """
 
     def decorator(handler: Handler):
@@ -488,6 +495,11 @@ def job_handler(
                         error_code, retryable, status_code = classify_failure(exc, default_error_code)
                         wait = retry_after(exc)
                         await _fail(job, error_code, retryable, str(exc), usages, retry_in=wait)
+                        if after_failure is not None:
+                            try:
+                                await after_failure(payload, job, exc)
+                            except Exception:
+                                logger.exception("Follow-up work after failed %s job %s failed", job_type, job.id)
                         raise HTTPException(
                             status_code=status_code,
                             detail=f"{label} failed: {exc}",

@@ -1,6 +1,7 @@
 import { readyToStudy, type CourseSetup } from '../course-setup'
 import { addDays, daysBetween, localDay, REVIEW_MINUTES, type Plan } from './plan'
 import { dayLabel, upNextFromPlan, type DescribedPlanItem } from './plan-copy'
+import { reviewSessionHref } from './review-links'
 import { zonedTimeToUtc } from './study-plan-time'
 
 /**
@@ -14,7 +15,7 @@ import { zonedTimeToUtc } from './study-plan-time'
  */
 
 /** A topic whose review is due by the end of today. */
-export type DueTopic = { topicId: string; name: string; dueAt: string; mastery: number | null }
+export type DueTopic = { topicId: string; name: string; dueAt: string; mastery: number | null; /** False for a topic without concepts: its review is the quiz-based card. Unset: true. */ hasConcepts?: boolean }
 
 /** The first instant of the student's tomorrow: a review before it is due. */
 export function dueBoundary(now: Date, timeZone: string): Date {
@@ -65,7 +66,7 @@ export type NextStep = {
   /** One plain sentence under it. */
   reason: string
   /** The button, or null when there is nothing to do. `topicId` is the topic it opens, when it opens one. */
-  action: { verb: string; href: string; topicId: string | null } | null
+  action: { verb: string; href: string; topicId: string | null; /** For a plan item: what kind of item it is. */ itemKind?: DescribedPlanItem['kind'] } | null
   /** "About 10 min", or null. */
   etaLabel: string | null
   /** "Part 1 of 2", or null. */
@@ -104,6 +105,8 @@ export function nextStep(input: {
   due: DueTopic[]
   now: Date
   timeZone: string
+  /** The topics that have concepts (see `DescribeContext`). Unset: all have. */
+  conceptTopicIds?: ReadonlySet<string>
 }): NextStep {
   const { courseId, plan, now, timeZone } = input
   const base = `/courses/${courseId}`
@@ -127,7 +130,11 @@ export function nextStep(input: {
       kind: 'reviews_due',
       title: `Review ${first.name}`,
       reason,
-      action: { verb: 'Review', href: `${base}/review#review-${first.topicId}`, topicId: first.topicId },
+      action: {
+        verb: 'Review',
+        href: first.hasConcepts === false ? `${base}/review#review-${first.topicId}` : reviewSessionHref(courseId, { topicId: first.topicId }),
+        topicId: first.topicId,
+      },
       etaLabel: `About ${REVIEW_MINUTES} min`,
       deferredDue: dueCount,
     }
@@ -159,7 +166,7 @@ export function nextStep(input: {
     }
   }
 
-  const { upNext, doneToday, later } = upNextFromPlan(plan, courseId)
+  const { upNext, doneToday, later } = upNextFromPlan(plan, courseId, input.conceptTopicIds)
   const [first, ...rest] = upNext
   const minutesLeft = upNext.reduce((sum, item) => sum + item.minutes, 0)
 
@@ -175,7 +182,7 @@ export function nextStep(input: {
       kind: 'work',
       title: first.title,
       reason: first.reason,
-      action: { verb: first.verb, href: first.href, topicId: first.topicId },
+      action: { verb: first.verb, href: first.href, topicId: first.topicId, itemKind: first.kind },
       etaLabel: first.etaLabel,
       partLabel: first.partLabel,
       overBudgetLabel: first.overBudgetLabel,
@@ -220,6 +227,7 @@ export function nextStepForCourse(input: {
   due: DueTopic[]
   now: Date
   timeZone: string
+  conceptTopicIds?: ReadonlySet<string>
 }): NextStep {
   const { courseId, setup, plan } = input
   if (!readyToStudy(setup) || !plan) {
@@ -241,5 +249,5 @@ export function nextStepForCourse(input: {
       exam: noExam,
     }
   }
-  return nextStep({ courseId, plan, due: input.due, now: input.now, timeZone: input.timeZone })
+  return nextStep({ courseId, plan, due: input.due, now: input.now, timeZone: input.timeZone, conceptTopicIds: input.conceptTopicIds })
 }

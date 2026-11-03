@@ -10,7 +10,7 @@ import asyncpg
 import pytest
 
 from app.services.budget import global_spent_today_usd, record_usage_event
-from tests.db_helpers import new_id, seed_project, seed_usage, seed_user
+from tests.db_helpers import new_id, seed_material, seed_project, seed_topic, seed_usage, seed_user
 
 pytestmark = pytest.mark.asyncio
 
@@ -71,6 +71,37 @@ async def test_spend_of_a_live_account_keeps_its_ids(db):
                                               "source_id": "message-1", "cost": 0.5}
 
 
+async def test_deleting_a_user_removes_the_concept_graph_the_ai_service_wrote(db):
+    # Concepts, claims and edges hang off the project (and the material), so they go with the account.
+    user_id = await seed_user(db)
+    project_id = await seed_project(db, user_id)
+    topic_id = await seed_topic(db, project_id)
+    material_id = await seed_material(db, project_id)
+    first, second = new_id(), new_id()
+    for concept_id, order in ((first, 0), (second, 1)):
+        await db.execute(
+            "INSERT INTO concepts (id, project_id, topic_id, name, summary, kind, order_index)"
+            " VALUES ($1, $2, $3, 'Idea', 'An idea.', 'concept', $4)",
+            concept_id, project_id, topic_id, order,
+        )
+    await db.execute(
+        "INSERT INTO concept_claims (id, concept_id, text, quote, material_id, order_index)"
+        " VALUES ($1, $2, 'Claim', 'Quote', $3, 0)",
+        new_id(), first, material_id,
+    )
+    await db.execute(
+        "INSERT INTO concept_edges (id, project_id, source_id, target_id, type, weight, confidence)"
+        " VALUES ($1, $2, $3, $4, 'prerequisite', 1, 0.8)",
+        new_id(), project_id, first, second,
+    )
+    # The array columns default to an empty array for rows written by raw SQL.
+    assert await db.fetchval("SELECT objective_indexes FROM concepts WHERE id = $1", first) == []
+
+    assert await db.fetchval("SELECT delete_user_account($1)", user_id) is True
+    for table in ("concepts", "concept_claims", "concept_edges"):
+        assert await db.fetchval(f"SELECT count(*) FROM {table}") == 0, table
+
+
 class TestConcurrentSpend:
     """Two connections: the deletion and a usage insert for the same account at the same time."""
 
@@ -117,3 +148,19 @@ class TestConcurrentSpend:
         await tx.commit()
         assert await asyncio.wait_for(deletion, 5) is True
         assert await ledger_row(db, event_id) == {**UNLINKED, "cost": 0.5}
+
+
+async def test_deleting_a_user_removes_study_drafts(db):
+    # Drafts hang off the user, the project and the topic (migration 20261203000000_help_and_adaptation).
+    user_id = await seed_user(db)
+    project_id = await seed_project(db, user_id)
+    topic_id = await seed_topic(db, project_id)
+    await db.execute(
+        "INSERT INTO study_drafts (id, user_id, project_id, topic_id, surface, scope_key, payload, updated_at, expires_at)"
+        " VALUES ($1, $2, $3, $4, 'recall', 'card-1', '{\"text\": \"half an answer\"}', now(), now() + interval '14 days')",
+        new_id(), user_id, project_id, topic_id,
+    )
+    assert await db.fetchval("SELECT version FROM study_drafts WHERE user_id = $1", user_id) == 1
+
+    assert await db.fetchval("SELECT delete_user_account($1)", user_id) is True
+    assert await db.fetchval("SELECT count(*) FROM study_drafts WHERE user_id = $1", user_id) == 0

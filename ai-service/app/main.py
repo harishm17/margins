@@ -60,19 +60,38 @@ async def _run_shutdown() -> None:
     logger.info("Margins AI service shutting down")
 
 
+async def _warm_exam_guard() -> None:
+    """Load the exam guard's model before the first sitting needs it, so its first check is not the slow one."""
+    from app.services import exam_guard
+
+    try:
+        await exam_guard.get_guard_embedder().embed_documents(["warm up"])
+    except Exception as exc:
+        logger.warning("Could not warm the exam guard model: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await _run_startup_checks()
+    warm = asyncio.create_task(_warm_exam_guard())
     reaper = None
     if settings.JOB_REAPER_INTERVAL_SECONDS > 0:
         from app.services.job_reaper import reaper_loop
 
         reaper = asyncio.create_task(reaper_loop())
+    retention = None
+    if settings.VOICE_RETENTION_INTERVAL_SECONDS > 0 and settings.VOICE_RETENTION_DAYS > 0:
+        from app.services.voice_retention import voice_retention_loop
+
+        retention = asyncio.create_task(voice_retention_loop())
     try:
         yield
     finally:
+        warm.cancel()
         if reaper is not None:
             reaper.cancel()
+        if retention is not None:
+            retention.cancel()
         await _run_shutdown()
 
 
@@ -138,6 +157,10 @@ app.include_router(grading.router, tags=["Grading"], dependencies=internal_only)
 # "Ask your materials" chat answers (streamed to the Next.js server)
 from app.api.routes import chat
 app.include_router(chat.router, tags=["Chat"], dependencies=internal_only)
+
+# Practice tutor replies (the Next.js server picks the move and rung)
+from app.api.routes import tutor
+app.include_router(tutor.router, tags=["Tutor"], dependencies=internal_only)
 
 # Whether AI features can be used now, and a user's allowance (read by the Next.js server)
 from app.api.routes import status

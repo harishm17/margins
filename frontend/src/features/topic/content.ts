@@ -66,6 +66,7 @@ export function parseSolvedExamples(contentData: unknown, updatedAt: string): Ex
     const title = text(raw.title).trim()
     const problem = text(raw.problem_statement).trim()
     if (!title && !problem) continue
+    const exampleConceptIds = strings(raw.concept_ids)
     const steps: SolvedStep[] = list(raw.solution_steps)
       .filter(isRecord)
       .map((step, index) => ({
@@ -73,6 +74,7 @@ export function parseSolvedExamples(contentData: unknown, updatedAt: string): Ex
         description: text(step.description).trim(),
         work: text(step.work).trim(),
         explanation: text(step.explanation).trim(),
+        conceptIds: strings(step.concept_ids).length > 0 ? strings(step.concept_ids) : exampleConceptIds,
       }))
     const difficulty = DIFFICULTIES.find((level) => level === text(raw.difficulty).toLowerCase()) ?? null
     items.push({
@@ -82,6 +84,7 @@ export function parseSolvedExamples(contentData: unknown, updatedAt: string): Ex
       finalAnswer: Array.isArray(raw.final_answer) ? strings(raw.final_answer).map((line) => `- ${line}`).join('\n') : text(raw.final_answer).trim(),
       keyConcepts: strings(raw.key_concepts),
       difficulty,
+      conceptIds: exampleConceptIds,
       sources: parseSources(raw.sources),
     })
   }
@@ -90,16 +93,26 @@ export function parseSolvedExamples(contentData: unknown, updatedAt: string): Ex
 
 const ANSWER_TYPES = ['numeric', 'text', 'multiple_choice'] as const
 
+/** Locate, connect, structure. Content from before hint rungs has one `hint`, which is the connect hint. */
+function stepHints(step: Record<string, unknown>): [string, string, string] {
+  const hints = strings(step.hints).map((hint) => hint.trim())
+  if (hints.length === 3) return [hints[0], hints[1], hints[2]]
+  return ['', text(step.hint).trim(), '']
+}
+
 export function parsePracticeProblems(contentData: unknown, updatedAt: string): PracticeContent | null {
   const items: PracticeProblem[] = []
   for (const raw of list(contentData)) {
     if (!isRecord(raw)) continue
+    const problemConceptIds = strings(raw.concept_ids)
     const steps: PracticeStep[] = list(raw.steps)
       .filter(isRecord)
       .map((step, index) => ({
         number: typeof step.step_number === 'number' ? step.step_number : index + 1,
         question: text(step.question).trim(),
         hint: text(step.hint).trim(),
+        hints: stepHints(step),
+        conceptIds: strings(step.concept_ids).length > 0 ? strings(step.concept_ids) : problemConceptIds,
         answerType: ANSWER_TYPES.find((type) => type === text(step.answer_type)) ?? 'text',
         options: list(step.options)
           .filter(isRecord)
@@ -119,6 +132,7 @@ export function parsePracticeProblems(contentData: unknown, updatedAt: string): 
       problem: text(raw.problem_statement).trim(),
       steps,
       keyConcepts: strings(raw.key_concepts),
+      conceptIds: problemConceptIds,
       difficulty: text(raw.difficulty).trim() || null,
       minutes: typeof raw.estimated_time_minutes === 'number' ? raw.estimated_time_minutes : null,
       sources: parseSources(raw.sources),

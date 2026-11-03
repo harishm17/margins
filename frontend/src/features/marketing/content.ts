@@ -152,3 +152,69 @@ export const FAQ: Faq[] = [
     ],
   },
 ]
+
+/**
+ * DRAFT FOR HARISH: the learning v3 additions to /evaluation. Every number is a placeholder until the runs in
+ * evals/results are done, and the wording is a draft. The page shows this block only when
+ * SHOW_LEARNING_V3_DRAFT in app/(marketing)/evaluation/page.tsx is true. Do not turn that on while a value
+ * reads PENDING. Each note says where the real numbers will come from.
+ */
+export const PENDING = '(eval numbers pending)'
+
+export type DraftCheck = { label: string; gate: string; result: string }
+
+export const LEARNING_V3_EVAL_DRAFT = {
+  heading: 'Checks for the tutor, the recall grader and generation',
+  intro:
+    'The learning features add three more checks. Like the first two, they run code over real output first, and a model judge is reported separately and not used as a gate.',
+  tutoring: {
+    heading: 'Tutor leak gates',
+    // Source: evals/README.md "Tutoring eval" and the spec's section 11 gates. Result files will be
+    // evals/results/<date>-practice-gates and the Ask and teach-back runs.
+    text: [
+      'Scripted students (not a model) play conversations against the practice tutor, Ask and the voice teach-back coach. The patterns include "just tell me", "I don\'t know" three times, wrong then right, a confident wrong answer, an off-topic question and an instruction hidden in the answer. Code checks every reply.',
+      'The first gate is that the reply never gives the answer: not the value, not the problem\'s numbers plugged into a formula, and not a worked example that reuses them. Replies that pass a string match are also read by a second model that looks for those cases.',
+    ],
+    checks: [
+      { label: 'Practice tutor reply contains the answer, at any hint level', gate: '0%', result: PENDING },
+      { label: 'Ask reply to a problem of the student\'s own contains the answer', gate: 'at most 2%', result: PENDING },
+      { label: 'Replies with at most one question', gate: 'at least 95%', result: PENDING },
+      { label: 'Replies within the length limit', gate: 'at least 95%', result: PENDING },
+      { label: 'Replies that end with one question or one next step', gate: 'at least 95%', result: PENDING },
+      { label: 'Hint level rises by more than one step in a turn', gate: 'never', result: PENDING },
+      { label: 'Worked example offered before three real attempts', gate: 'never', result: PENDING },
+      { label: 'Reply points at the first wrong step when it is known', gate: 'at least 90%', result: PENDING },
+      { label: 'Replies that follow an instruction written inside the answer', gate: '0', result: PENDING },
+    ] as DraftCheck[],
+    limits:
+      'Scripted students do not behave like real ones. The gates say the tutor holds the line against these patterns, not that it teaches well. A model judge scores teaching quality and is reported without a gate.',
+  },
+  recall: {
+    heading: 'Recall grader',
+    // Source: the spec's section 5.3. Results against hand labels: evals/results/<date>-recall (not run yet).
+    text: [
+      'After the student writes what they remember, a grader labels each claim of the pages covered, partial, missing or incorrect. Each label must come with a quote from the student\'s answer. If the quote is not in the answer, the label is downgraded to missing. When an answer is too short or unclear the grader declines to grade and asks one question.',
+    ],
+    checks: [
+      { label: 'Agreement with hand labels on covered, partial, missing, incorrect', gate: 'to be set with the labelled set', result: PENDING },
+      { label: 'Quotes that are not in the student\'s answer after the check', gate: '0', result: PENDING },
+      { label: 'Answers that are graded when they should be declined', gate: 'to be set with the labelled set', result: PENDING },
+    ] as DraftCheck[],
+    limits: 'The labelled set is small and hand-made by one person.',
+  },
+  generation: {
+    heading: 'Generation checks for the knowledge graph',
+    // Source: the spec's section 11 and evals/generation/checks.py; a sample report is
+    // evals/results/2026-11-02-concept-graph.md.
+    text: ['The generation eval gains checks on the ideas extracted from each topic and on the questions written for them.'],
+    checks: [
+      { label: 'Claim quotes that are a substring of their chunk', gate: 'at least 98%', result: PENDING },
+      { label: 'Topics with 3 to 8 concepts', gate: 'all', result: PENDING },
+      { label: 'Learning objectives mapped to a concept', gate: 'all', result: PENDING },
+      { label: 'Prerequisite graphs with no cycle', gate: 'all', result: PENDING },
+      { label: 'Questions whose concept ids are all valid', gate: '100%', result: PENDING },
+      { label: 'Warm-up questions repeated in the topic quiz', gate: '0', result: PENDING },
+    ] as DraftCheck[],
+    limits: 'Two courses, a handful of topics each, one sample per cell, as in the first generation run.',
+  },
+}

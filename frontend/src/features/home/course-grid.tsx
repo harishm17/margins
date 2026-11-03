@@ -86,7 +86,7 @@ export function CourseGrid({ courses }: { courses: CourseListItem[] }) {
         </h2>
         {anySquares ? <MasteryLegend /> : null}
       </div>
-      <ul className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {courses.map((course) => (
           <li key={course.id}>
             <CourseCard course={course} />

@@ -24,6 +24,7 @@ const dedupeQuestions = (questions: VoiceQuestion[]) => {
 
 const buildConceptQuestionsFromNotes = async (
   topicName: string,
+  topicId: string,
   notesText: string,
   count: number
 ): Promise<VoiceQuestion[]> => {
@@ -33,6 +34,7 @@ const buildConceptQuestionsFromNotes = async (
     headers: aiServiceHeaders(),
     body: JSON.stringify({
       topic: topicName,
+      topic_id: topicId,
       notes: notesText.slice(0, MAX_NOTES_CHARS),
       count,
       difficulty: 'medium',
@@ -90,7 +92,7 @@ export const buildTopicQuestionSet = async (
     return []
   }
 
-  const generated = await buildConceptQuestionsFromNotes(topic.name, notesText, 10)
+  const generated = await buildConceptQuestionsFromNotes(topic.name, topic.id, notesText, 10)
   return dedupeQuestions(generated.map(q => ({ ...q, topic_id: topic.id })))
 }
 
@@ -153,7 +155,7 @@ export const buildSprintQuestionSet = async (
       const notesContent = topic.content.find(c => c.contentType === 'section_notes')
       const notesText = extractTextFromNotes(notesContent?.contentData)
       if (notesText) {
-        questions = (await buildConceptQuestionsFromNotes(topic.name, notesText, 6))
+        questions = (await buildConceptQuestionsFromNotes(topic.name, topic.id, notesText, 6))
           .map(q => ({ ...q, topic_id: topic.id }))
       }
     }

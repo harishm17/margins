@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { examTitle, examTitles } from './display'
+import { examTitle, examTitles, topicsLabel } from './display'
 
 describe('examTitle', () => {
   it('names generated exams "Mock exam" by date and keeps custom names', () => {
@@ -31,5 +31,28 @@ describe('examTitles', () => {
     ])
     assert.equal(titles.get('a'), 'Midterm drill')
     assert.equal(titles.get('b'), 'Midterm drill (2)')
+  })
+})
+
+describe('titles by topics covered', () => {
+  it('names the topics an exam covers, the first two and a count of the rest', () => {
+    assert.equal(topicsLabel(['Sorting']), 'Sorting')
+    assert.equal(topicsLabel(['Sorting', 'Hash tables']), 'Sorting, Hash tables')
+    assert.equal(topicsLabel(['Sorting', 'Hash tables', 'Graphs', 'DP']), 'Sorting, Hash tables and 2 more')
+    assert.equal(topicsLabel([]), '')
+    assert.equal(examTitle('Mock exam - 2026-11-02', '2026-11-02T12:00:00Z', ['Sorting', 'Hash tables']), 'Mock exam, Nov 2: Sorting, Hash tables')
+    assert.equal(examTitle('Midterm drill', '2026-11-02T12:00:00Z', ['Sorting']), 'Midterm drill')
+  })
+
+  it('tells same-day exams apart by topics, and numbers only the ones that still read alike', () => {
+    const day = '2026-11-02'
+    const titles = examTitles([
+      { id: 'a', name: `Mock exam - ${day}`, createdAt: `${day}T10:00:00Z`, topicsCovered: ['Sorting'] },
+      { id: 'b', name: `Mock exam - ${day}`, createdAt: `${day}T11:00:00Z`, topicsCovered: ['Hash tables', 'Graphs'] },
+      { id: 'c', name: `Mock exam - ${day}`, createdAt: `${day}T12:00:00Z`, topicsCovered: ['Sorting'] },
+    ])
+    assert.equal(titles.get('a'), 'Mock exam, Nov 2: Sorting')
+    assert.equal(titles.get('b'), 'Mock exam, Nov 2: Hash tables, Graphs')
+    assert.equal(titles.get('c'), 'Mock exam, Nov 2: Sorting (2)')
   })
 })

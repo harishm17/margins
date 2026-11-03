@@ -4,8 +4,10 @@ import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import {
   groupProgress,
+  replaceProblem,
   mergeServerProgress,
   parseProgress,
+  progressFromProblems,
   type PracticeProgress,
   type ProblemProgress,
 } from './practice-keys'
@@ -24,6 +26,7 @@ import {
 
 const EVENT = 'margins:practice-progress'
 const SAVED_EVENT = 'margins:practice-saved'
+const REJECTED_EVENT = 'margins:practice-rejected'
 const storageKey = (topicId: string) => `margins:practice:${topicId}`
 const syncedKey = (topicId: string) => `margins:practice-synced:${topicId}`
 
@@ -66,6 +69,10 @@ async function send(topicId: string, payload: Payload): Promise<{ completedNow: 
       body: JSON.stringify(payload),
       keepalive: true,
     })
+    if (response.status === 400 || (response.status === 409 && (await refusedForNoAttempt(response)))) {
+      await restoreFromServer(topicId, payload)
+      return null
+    }
     if (!response.ok) return null
     const body = (await response.json()) as { completedNow?: boolean }
     if (body.completedNow) window.dispatchEvent(new Event(SAVED_EVENT))
@@ -76,25 +83,76 @@ async function send(topicId: string, payload: Payload): Promise<{ completedNow: 
   }
 }
 
-const timers = new Map<string, ReturnType<typeof setTimeout>>()
+/** The server held back Connect or deeper help, or a shown answer, because the step has no attempt (409 ATTEMPT_FIRST, spec 18.4). */
+async function refusedForNoAttempt(response: Response): Promise<boolean> {
+  const body = (await response.clone().json().catch(() => null)) as { code?: unknown } | null
+  return body?.code === 'ATTEMPT_FIRST'
+}
 
-/** Sends the problems whose progress changed, a moment after the last change. The latest state is read when it fires. */
+/**
+ * The server refused a problem's state (it cannot follow what is stored, for example after progress
+ * was changed on another device). The browser takes the server's state of that problem, and the view
+ * says so.
+ */
+async function restoreFromServer(topicId: string, payload: Payload) {
+  try {
+    const response = await fetch(`/api/topics/${topicId}/practice-progress`)
+    if (response.ok) {
+      const { problems } = (await response.json()) as { problems: ProblemProgress[] }
+      const row = problems.find((item) => item.problemIndex === payload.problemIndex && item.problemTitle === payload.problemTitle)
+      write(topicId, replaceProblem(parseProgress(read(topicId)), payload.problemIndex, payload.problemTitle, row ?? null))
+    }
+  } catch {
+    // Offline: the notice still shows, and the next visit loads the server's rows.
+  }
+  window.dispatchEvent(new Event(REJECTED_EVENT))
+}
+
+const timers = new Map<string, { timer: ReturnType<typeof setTimeout>; run: () => void }>()
+/** The last request of each problem: the next one starts when it has ended, so the server sees a problem's saves in the order they were made. */
+const inFlight = new Map<string, Promise<unknown>>()
+
+function enqueue(id: string, task: () => Promise<unknown>) {
+  const next = (inFlight.get(id) ?? Promise.resolve()).then(task, task)
+  inFlight.set(id, next)
+  void next.finally(() => {
+    if (inFlight.get(id) === next) inFlight.delete(id)
+  })
+}
+
+/** Sends the problems whose progress changed, a moment after the last change. The latest state is read when it is sent. */
 function scheduleSync(topicId: string, problemKeys: { problemIndex: number; problemTitle: string }[]) {
   for (const { problemIndex, problemTitle } of problemKeys) {
     const id = `${topicId}:${problemIndex}:${problemTitle}`
-    clearTimeout(timers.get(id))
-    timers.set(
-      id,
-      setTimeout(() => {
-        timers.delete(id)
+    const pending = timers.get(id)
+    if (pending) clearTimeout(pending.timer)
+    const run = () => {
+      timers.delete(id)
+      enqueue(id, () => {
         const group = groupProgress(parseProgress(read(topicId))).find(
           (item) => item.problemIndex === problemIndex && item.problemTitle === problemTitle
         )
         // Nothing left locally means the problem was started over.
-        void send(topicId, group ?? { problemIndex, problemTitle, solvedSteps: [], revealedSteps: [], hintedSteps: [] })
-      }, 250)
-    )
+        return send(topicId, group ?? { problemIndex, problemTitle, solvedSteps: [], revealedSteps: [], hintedSteps: [], attemptedSteps: [], firstTrySteps: [], maxRungs: {} })
+      })
+    }
+    timers.set(id, { timer: setTimeout(run, 250), run })
   }
+}
+
+/** Sends every change still waiting out its moment, now. The page is being hidden or closed, so a timer would never fire (the requests are keepalive). */
+function flushPending() {
+  for (const { timer, run } of [...timers.values()]) {
+    clearTimeout(timer)
+    run()
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushPending)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPending()
+  })
 }
 
 const sameProblem = (a: ProblemProgress, b: { problemIndex: number; problemTitle: string }) =>
@@ -122,6 +180,18 @@ export function usePracticeProgress(topicId: string) {
     () => ''
   )
   const progress = React.useMemo(() => parseProgress(raw), [raw])
+  /** True after the server refused a change and the browser went back to the server's state. */
+  const [rejected, setRejected] = React.useState(false)
+  /** How many saves were refused: a view can tell that what it showed before is stale. */
+  const [rejections, setRejections] = React.useState(0)
+  React.useEffect(() => {
+    const onRejected = () => {
+      setRejected(true)
+      setRejections((count) => count + 1)
+    }
+    window.addEventListener(REJECTED_EVENT, onRejected)
+    return () => window.removeEventListener(REJECTED_EVENT, onRejected)
+  }, [])
 
   const update = React.useCallback(
     (change: (current: PracticeProgress) => PracticeProgress) => {
@@ -133,45 +203,81 @@ export function usePracticeProgress(topicId: string) {
     [topicId]
   )
 
-  const markSolved = React.useCallback(
-    (key: string) =>
-      update((current) => ({
-        solved: current.solved.includes(key) ? current.solved : [...current.solved, key],
-        revealed: current.revealed.filter((item) => item !== key),
-        hinted: current.hinted,
-      })),
+  /**
+   * A checked answer. The step counts as attempted; a right one solves it, and it is a first-try success
+   * when it is the step's first check.
+   */
+  const recordCheck = React.useCallback(
+    (key: string, correct: boolean) =>
+      update((current) => {
+        const firstCheck = !current.attempted.includes(key)
+        return {
+          ...current,
+          // The rung the student had reached at their first wrong check: a hint after it is not a clean success.
+          missRungs: !correct && current.missRungs[key] === undefined ? { ...current.missRungs, [key]: current.rungs[key] ?? 0 } : current.missRungs,
+          attempted: firstCheck ? [...current.attempted, key] : current.attempted,
+          solved: correct && !current.solved.includes(key) ? [...current.solved, key] : current.solved,
+          revealed: correct ? current.revealed.filter((item) => item !== key) : current.revealed,
+          firstTry: correct && firstCheck ? [...current.firstTry, key] : current.firstTry,
+        }
+      }),
     [update]
   )
   const markRevealed = React.useCallback(
     (key: string) =>
       update((current) => ({
-        solved: current.solved,
+        ...current,
         revealed: current.revealed.includes(key) || current.solved.includes(key) ? current.revealed : [...current.revealed, key],
-        hinted: current.hinted,
       })),
     [update]
   )
-  /** The hint of a step was opened: the step no longer counts towards the score when the problem is finished. */
-  const markHinted = React.useCallback(
+  /**
+   * "I don't know" on a step: its first check, wrong. The step counts as attempted and as a miss at the rung it had reached;
+   * nothing solves it. The server's tutor state has its own record of the button (practice-tutor, event `dont_know`).
+   */
+  const markDontKnow = React.useCallback(
     (key: string) =>
       update((current) => ({
         ...current,
-        hinted: current.hinted.includes(key) ? current.hinted : [...current.hinted, key],
+        missRungs: current.missRungs[key] === undefined ? { ...current.missRungs, [key]: current.rungs[key] ?? 0 } : current.missRungs,
+        attempted: current.attempted.includes(key) ? current.attempted : [...current.attempted, key],
+        idk: (current.idk ?? []).includes(key) ? current.idk : [...(current.idk ?? []), key],
       })),
     [update]
   )
-  /** Forget the given steps, to work a problem again. */
+  /** A hint of a step was opened, at this rung: the step no longer counts towards the score when the problem is finished. */
+  const markHinted = React.useCallback(
+    (key: string, rung: number) =>
+      update((current) => ({
+        ...current,
+        hinted: current.hinted.includes(key) ? current.hinted : [...current.hinted, key],
+        rungs: { ...current.rungs, [key]: Math.max(current.rungs[key] ?? 0, rung) },
+      })),
+    [update]
+  )
+  /** The one-line answer to "What tripped you up?" for a problem (see problemKey). */
+  const setTrippedUp = React.useCallback(
+    (problem: string, answer: string) => update((current) => ({ ...current, trippedUp: { ...current.trippedUp, [problem]: answer } })),
+    [update]
+  )
+  /** Forget the given steps and the problem's "tripped up" answer, to work a problem again. */
   const clear = React.useCallback(
-    (keys: string[]) =>
+    (keys: string[], problem: string) =>
       update((current) => ({
         solved: current.solved.filter((item) => !keys.includes(item)),
         revealed: current.revealed.filter((item) => !keys.includes(item)),
         hinted: current.hinted.filter((item) => !keys.includes(item)),
+        attempted: current.attempted.filter((item) => !keys.includes(item)),
+        firstTry: current.firstTry.filter((item) => !keys.includes(item)),
+        rungs: Object.fromEntries(Object.entries(current.rungs).filter(([item]) => !keys.includes(item))),
+        missRungs: Object.fromEntries(Object.entries(current.missRungs).filter(([item]) => !keys.includes(item))),
+        idk: (current.idk ?? []).filter((item) => !keys.includes(item)),
+        trippedUp: Object.fromEntries(Object.entries(current.trippedUp).filter(([item]) => item !== problem)),
       })),
     [update]
   )
 
-  return { progress, markSolved, markRevealed, markHinted, clear }
+  return { progress, rejected, rejections, dismissRejected: () => setRejected(false), recordCheck, markDontKnow, markRevealed, markHinted, setTrippedUp, clear }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -201,6 +307,10 @@ export function PracticeProgressSync({ topicId, server }: { topicId: string; ser
       // Without storage the upload simply repeats; the server joins it with what it has.
     }
     for (const problem of toUpload) void send(topicId, { ...problem, migrated: !alreadySynced })
+    // A step left with a miss on an earlier day is settled as a failed first try when the progress is read (spec 18.4).
+    if (server.some((problem) => (problem.attemptedSteps ?? []).some((step) => !problem.solvedSteps.includes(step) && !problem.revealedSteps.includes(step)))) {
+      void fetch(`/api/topics/${topicId}/practice-progress`).catch(() => undefined)
+    }
     try {
       window.localStorage.setItem(syncedKey(topicId), '1')
     } catch {

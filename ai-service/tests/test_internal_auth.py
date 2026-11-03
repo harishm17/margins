@@ -37,14 +37,16 @@ def test_job_and_voice_routes_are_all_listed():
     paths = {path for _, path in PROTECTED}
     assert "/jobs/grade-exam" in paths
     assert "/jobs/grade-quiz" in paths
-    assert "/voice/turn" in paths
+    assert {"/voice/turn", "/voice/retention"} <= paths
     assert "/voice/realtime/token" not in paths
-    assert "/grade/quiz" in paths
+    assert {"/grade/quiz", "/grade/recall"} <= paths
     assert "/jobs/reap" in paths
-    assert "/chat/answer" in paths
+    assert {"/chat/answer", "/chat/exam-guard"} <= paths
     assert {"/jobs/profile-exam", "/jobs/exam-relevance"} <= paths
     assert "/status/ai" in paths
-    assert len(PROTECTED) == 15
+    assert {"/tutor/practice", "/tutor/reader"} <= paths
+    assert {"/jobs/extract-concepts", "/jobs/link-concepts", "/jobs/generate-review-items", "/jobs/gap-explainer"} <= paths
+    assert len(PROTECTED) == 24
 
 
 @pytest.mark.parametrize("method,path", PROTECTED)
@@ -59,8 +61,8 @@ def test_wrong_token_is_refused(client, token, method, path):
     assert resp.status_code == 401
 
 
-# /jobs/reap and /status/ai take no body, so there is no validation step to stop at.
-BODY_ROUTES = [route for route in PROTECTED if route[1] not in {"/jobs/reap", "/status/ai"}]
+# /jobs/reap, /status/ai and /voice/retention take no body, so there is no validation step to stop at.
+BODY_ROUTES = [route for route in PROTECTED if route[1] not in {"/jobs/reap", "/status/ai", "/voice/retention"}]
 
 
 def test_right_token_reaches_the_reaper(client, token, monkeypatch):
@@ -73,6 +75,18 @@ def test_right_token_reaches_the_reaper(client, token, monkeypatch):
     resp = client.post("/jobs/reap", headers={HEADER: token})
     assert resp.status_code == 200
     assert resp.json() == {"failed": 0, "redispatched": 0}
+
+
+def test_right_token_reaches_the_voice_retention_purge(client, token, monkeypatch):
+    from app.services import voice_retention
+
+    async def purge():
+        return {"sessions": 0, "attempts": 0, "recall_attempts": 0}
+
+    monkeypatch.setattr(voice_retention, "purge_voice_transcripts", purge)
+    assert client.post("/voice/retention").status_code == 401
+    resp = client.post("/voice/retention", headers={HEADER: token})
+    assert resp.status_code == 200 and resp.json()["sessions"] == 0
 
 
 @pytest.mark.parametrize("method,path", BODY_ROUTES)

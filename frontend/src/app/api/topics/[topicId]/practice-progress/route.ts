@@ -1,7 +1,11 @@
 /**
  * Practice progress, stored on the server so it follows the student across devices.
  * GET  /api/topics/[topicId]/practice-progress  - the progress on the topic's current practice problems
- * POST /api/topics/[topicId]/practice-progress  - store one problem's solved, shown and hinted steps
+ * POST /api/topics/[topicId]/practice-progress  - store one problem's solved, shown, hinted and checked steps and
+ *   rungs; the steps that finish with it, and those whose first-try record is already decided, are written as evidence
+ *   (spec §5.6, §18.4). A state that cannot follow the stored one (a rung going down) is refused with 400; Connect or
+ *   deeper help, or a shown answer, on a step with no attempt is refused with 409 ATTEMPT_FIRST. Reading the progress
+ *   writes the evidence of misses left open on an earlier day.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -9,6 +13,7 @@ import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
 import { loadPracticeProgress, savePracticeProgress } from '@/lib/learning/practice-server'
+import { studentTimeZone } from '@/lib/learning/student-time-zone'
 import {
   apiInternal,
   apiInvalidInput,
@@ -29,6 +34,12 @@ const saveSchema = z.object({
   solvedSteps: steps,
   revealedSteps: steps,
   hintedSteps: steps,
+  // Absent from a browser that predates rungs: the problem is stored as before and writes no evidence.
+  attemptedSteps: steps.optional(),
+  firstTrySteps: steps.optional(),
+  maxRungs: z.record(z.string().max(4), z.number().int().min(0).max(5)).optional(),
+  missRungs: z.record(z.string().max(4), z.number().int().min(0).max(5)).optional(),
+  trippedUp: z.string().max(500).optional(),
   // Progress that was kept in the browser before the server stored it, uploaded once.
   migrated: z.boolean().optional(),
 })
@@ -45,7 +56,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const session = await requireAuth()
     const { topicId } = await params
     if (!(await ownedTopic(session.user.id, topicId))) return apiNotFound('Topic not found')
-    return NextResponse.json({ problems: await loadPracticeProgress(session.user.id, topicId) })
+    return NextResponse.json({ problems: await loadPracticeProgress(session.user.id, topicId, await studentTimeZone()) })
   } catch (error) {
     console.error('Practice progress read error:', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
@@ -64,7 +75,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const parsed = saveSchema.safeParse(body)
     if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
 
-    const result = await savePracticeProgress(session.user.id, topic, parsed.data)
+    const result = await savePracticeProgress(session.user.id, topic, { ...parsed.data, timeZone: await studentTimeZone() })
+    if (result.status === 'invalid') return apiInvalidInput(result.reason)
+    if (result.status === 'attempt_first') {
+      return NextResponse.json({ error: 'Check an answer first, or say you don\'t know.', code: 'ATTEMPT_FIRST' }, { status: 409 })
+    }
     if (result.status === 'stale') {
       // The practice was rewritten or removed since the student started: the browser reloads it.
       return NextResponse.json({ error: 'That problem is no longer in this practice.', code: 'STALE_PRACTICE' }, { status: 409 })

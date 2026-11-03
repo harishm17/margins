@@ -1,11 +1,8 @@
 'use client'
 
-import * as React from 'react'
 import Link from 'next/link'
-import { CaretDown } from '@phosphor-icons/react/dist/ssr'
 import { SourceIcon, SourceLink } from '@/components/learning/source-link'
 import { MathText } from '@/components/ui/math-text'
-import { cn } from '@/lib/utils'
 import type { TopicStructure } from '@/server/queries/topic'
 
 const linkClass =
@@ -28,36 +25,19 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 /**
  * What the topic covers and where it comes from, under the title: the objectives ("By the end you
  * can ..."), the topics it builds on, and the files it is taught from. Compact on purpose. On a
- * phone the objectives fold behind a button; from 640px they are always shown. Renders nothing
+ * phone the header folds the whole block behind its status line's button. Renders nothing
  * for a topic added by hand that has none of this.
  */
 export function TopicStructureBlock({ courseId, structure }: { courseId: string; structure: TopicStructure }) {
   const { objectives, prerequisites, sources } = structure
-  const [open, setOpen] = React.useState(false)
-  const listId = React.useId()
   if (objectives.length === 0 && prerequisites.length === 0 && sources.length === 0) return null
 
   return (
-    <section aria-label="About this topic" className="mt-5 flex max-w-[68ch] flex-col gap-3 border-t border-border pt-4">
+    <section aria-label="About this topic" className="mt-4 flex max-w-[68ch] flex-col gap-3 border-t border-border pt-4 sm:mt-5">
       {objectives.length > 0 ? (
         <div>
-          <h2 className="text-body-strong text-fg max-sm:hidden">By the end you can</h2>
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={listId}
-            onClick={() => setOpen((current) => !current)}
-            className="flex min-h-11 w-full items-center justify-between gap-2 rounded-control text-left text-body-strong text-fg sm:hidden"
-          >
-            <span>
-              By the end you can <span className="tabular font-normal text-fg-3">({objectives.length})</span>
-            </span>
-            <CaretDown
-              aria-hidden="true"
-              className={cn('size-4 shrink-0 text-fg-3 transition-transform duration-180', open && 'rotate-180')}
-            />
-          </button>
-          <ul id={listId} className={cn('mt-1.5 list-disc space-y-1 pl-5 text-body text-fg-2 marker:text-fg-3', !open && 'max-sm:hidden')}>
+          <h2 className="text-body-strong text-fg">By the end you can</h2>
+          <ul className="mt-1.5 list-disc space-y-1 pl-5 text-body text-fg-2 marker:text-fg-3">
             {objectives.map((objective, index) => (
               <li key={`${index}-${objective}`}>
                 <MathText>{objective}</MathText>

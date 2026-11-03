@@ -256,8 +256,28 @@ class TestFactory:
     def test_mock_provider(self):
         with patch("app.services.llm.factory.settings") as settings:
             settings.LLM_PROVIDER = "mock"
+            settings.is_production = False
             LLMFactory.reset()
             assert isinstance(LLMFactory.get_provider().inner, MockProvider)
+
+    def test_the_mock_provider_is_refused_in_production(self):
+        with patch("app.services.llm.factory.settings") as settings:
+            settings.LLM_PROVIDER = "mock"
+            settings.is_production = True
+            LLMFactory.reset()
+            with pytest.raises(LLMNotConfiguredError, match="production"):
+                LLMFactory.get_provider()
+        LLMFactory.reset()
+
+    def test_the_service_does_not_start_in_production_with_the_mock_provider(self):
+        from pydantic import ValidationError
+
+        from app.config import Settings
+
+        with pytest.raises(ValidationError, match="LLM_PROVIDER=mock"):
+            Settings(ENVIRONMENT="production", LLM_PROVIDER="Mock")
+        assert Settings(ENVIRONMENT="development", LLM_PROVIDER="mock").LLM_PROVIDER == "mock"
+        assert Settings(ENVIRONMENT="production", LLM_PROVIDER="anthropic").is_production
 
     def test_unknown_provider(self):
         with patch("app.services.llm.factory.settings") as settings:

@@ -2,7 +2,9 @@
 
 import * as React from 'react'
 import { InlineAlert } from '@/components/ui/inline-alert'
+import { reviewSessionHref } from '@/lib/learning/review-links'
 import { Lobby } from './lobby'
+import { practiceConceptOf } from './session-state'
 import { SessionView } from './session-view'
 import { getRecognitionConstructor } from './speech'
 import { Summary } from './summary'
@@ -11,7 +13,7 @@ import { getVoiceUsage, type VoiceUsage } from './voice-api'
 import type { VoiceReviewProps } from './voice-review'
 
 /** The real voice practice. Loaded on demand by voice-review.tsx so no other page ships it. */
-export function VoiceReviewImpl({ courseId, mode, topic }: VoiceReviewProps) {
+export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId, hasClaims, claimsOfIdea }: VoiceReviewProps) {
   const { state, orb, summary, controller } = useVoiceSession({ courseId, mode, topic })
   const [usage, setUsage] = React.useState<VoiceUsage | 'unavailable' | null>(null)
   const [recognitionSupported] = React.useState(() => getRecognitionConstructor() !== null)
@@ -50,6 +52,7 @@ export function VoiceReviewImpl({ courseId, mode, topic }: VoiceReviewProps) {
   if (state.phase === 'summary') {
     return (
       <Summary
+        style={state.style}
         summary={summary}
         reason={state.endReason}
         alert={state.alert}
@@ -57,6 +60,11 @@ export function VoiceReviewImpl({ courseId, mode, topic }: VoiceReviewProps) {
           mode === 'sprint' || !topic
             ? { href: `/courses/${courseId}/review`, label: 'Back to review' }
             : { href: `/courses/${courseId}/topics/${topic.id}`, label: 'Back to topic' }
+        }
+        practiceHref={
+          practiceConceptOf(summary)
+            ? reviewSessionHref(courseId, { conceptId: practiceConceptOf(summary) })
+            : reviewSessionHref(courseId, { topicId: mode === 'topic' ? topic?.id : null })
         }
         onRestart={() => controller.reset()}
       />
@@ -73,6 +81,10 @@ export function VoiceReviewImpl({ courseId, mode, topic }: VoiceReviewProps) {
       starting={state.phase === 'starting'}
       lobbyAlert={state.lobbyAlert}
       recognitionSupported={recognitionSupported}
+      initialStyle={initialStyle}
+      conceptId={conceptId}
+      hasClaims={hasClaims}
+      claimsOfIdea={claimsOfIdea}
       onStart={(config) => void controller.start(config)}
     />
   )

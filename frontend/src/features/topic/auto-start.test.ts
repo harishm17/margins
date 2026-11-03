@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { autoStartDecision, type AutoStartInput } from './auto-start'
+import { autoStartDecision, autoStartRequest, prefetchRequest, type AutoStartInput } from './auto-start'
 
 const base: AutoStartInput = {
   preparing: true,
@@ -36,4 +36,15 @@ test('a topic with a failed attempt, or one the student dismissed, is not restar
 
 test('nothing is started while AI is unavailable or the allowance is used', () => {
   assert.equal(autoStartDecision({ ...base, aiBlocked: true }), 'skip')
+})
+
+test('auto start requests concepts on first open', () => {
+  assert.deepEqual(autoStartRequest(), {
+    contentType: 'concepts',
+    preferences: { prepare_rest: true, only_if_missing: true },
+  })
+})
+
+test('prefetching the next topic asks for its concepts only', () => {
+  assert.deepEqual(prefetchRequest(), { contentType: 'concepts', preferences: { only_if_missing: true } })
 })

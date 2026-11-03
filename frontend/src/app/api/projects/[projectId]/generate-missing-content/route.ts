@@ -29,8 +29,7 @@ import {
   isUnauthorizedError,
 } from '@/lib/api/errors'
 
-// The order a student meets them in, and so the order they are written in.
-const CONTENT_ORDER = ['section_notes', 'solved_examples', 'interactive_examples', 'topic_quiz'] as const
+import { PREPARATION_ORDER } from '@/lib/learning/topic-preparation'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,21 +50,47 @@ export async function POST(
     const preflightError = await ensureAiGenerationReady(auth.user.id)
     if (preflightError) return preflightError
 
-    const [topics, activeJobs] = await Promise.all([
+    const [topics, activeJobs, extractedJobs] = await Promise.all([
       prisma.topic.findMany({
         where: { projectId, userConfirmed: true },
-        select: { id: true, content: { select: { contentType: true } } },
+        select: {
+          id: true,
+          content: { select: { contentType: true } },
+          concepts: { where: { status: 'active' }, select: { id: true }, take: 1 },
+          topicQuizzes: { where: { kind: 'warmup' }, select: { id: true }, take: 1 },
+        },
         orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
       }),
       prisma.processingJob.count({
         where: { projectId, jobType: 'generate_content', status: { in: ACTIVE_JOB_STATUSES } },
       }),
+      // An extraction that finished with no concept is not run again.
+      prisma.processingJob.findMany({
+        where: {
+          projectId,
+          jobType: 'generate_content',
+          status: 'completed',
+          inputData: { path: ['contentType'], equals: 'concepts' },
+        },
+        select: { inputData: true },
+      }),
     ])
+    const extracted = new Set(
+      extractedJobs.flatMap((job) =>
+        job.inputData && typeof job.inputData === 'object' && !Array.isArray(job.inputData) &&
+        typeof job.inputData.topicId === 'string'
+          ? [job.inputData.topicId]
+          : []
+      )
+    )
 
     const missing = topics
       .map((topic) => {
         const present = new Set(topic.content.map((item) => item.contentType))
-        return { topicId: topic.id, types: CONTENT_ORDER.filter((type) => !present.has(type)) }
+        if (topic.concepts.length > 0 || extracted.has(topic.id)) present.add('concepts')
+        if (topic.topicQuizzes.length > 0) present.add('warmup')
+        // The order a student meets them in, and so the order they are written in.
+        return { topicId: topic.id, types: PREPARATION_ORDER.filter((type) => !present.has(type)) }
       })
       .filter((topic) => topic.types.length > 0)
 

@@ -18,6 +18,9 @@ from tests.context_stub import stub_topic_context, topic_context
 from tests.db_helpers import new_id, seed_job, seed_project, seed_topic, seed_user
 
 
+pytestmark = pytest.mark.usefixtures("passthrough_support")
+
+
 def chunk(n, kind="primary", tokens=100, material="m-own"):
     return {
         "id": f"{material}-{n}", "chunk_text": f"text {material} {n}", "section_hierarchy": "S",
@@ -34,7 +37,7 @@ PREREQ_CONTEXT = topic_context(PREREQ, name="Limits")
 def mcq(text, excerpts):
     return GeneratedQuestion(
         question_type="multiple_choice", question_text=text,
-        options=[ChoiceOption(id=x, text=f"Option {x}") for x in "ABCD"],
+        options=[ChoiceOption(id=x, text=f"Option {x}", misconception="wrong idea") for x in "ABCD"],
         correct_answer="B", explanation="Because.", source_excerpts=excerpts,
     )
 
@@ -120,8 +123,8 @@ class TestPrerequisiteQuestions:
     async def test_instruction_block_count(self, count, requested, expected):
         _, _, instructions = await run(QUESTIONS * 3, question_count=count, prerequisite_questions=requested)
 
-        assert f"exactly {expected} of the {count} questions must test the prerequisite topic \"Limits\"" in instructions
-        assert f"The other {count - expected} questions" in instructions
+        assert f"exactly {expected} of the {count + 2} questions must test the prerequisite topic \"Limits\"" in instructions
+        assert f"The other {count + 2 - expected} questions" in instructions
 
     @pytest.mark.asyncio
     async def test_too_short_a_quiz_has_no_review(self):

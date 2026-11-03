@@ -13,8 +13,10 @@ const topic = (id: string, mastery: number | null, confirmed = true) => ({
   mastery,
   earnedMastery: mastery,
   dueAt: null,
+  lastReviewedAt: null,
   progress: { notes: false, examples: false, quiz: false, quizScore: null },
   content: [],
+  hasConcepts: true,
 })
 
 test('course mastery counts not-started topics as 0', () => {

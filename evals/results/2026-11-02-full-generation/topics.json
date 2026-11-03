@@ -1,0 +1,526 @@
+{
+  "mit-18.05": {
+    "all": [
+      {
+        "id": "5f6b40ab-708b-4830-b2db-52fa376b2c3b",
+        "name": "Sets and counting principles",
+        "description": "Set notation, Venn diagrams, inclusion-exclusion and the rule of product.",
+        "keywords": [
+          "sets",
+          "Venn diagram",
+          "inclusion-exclusion",
+          "rule of product",
+          "complement"
+        ],
+        "unit": "Counting and Sets",
+        "objectives": [
+          "use set notation for union, intersection and complement",
+          "visualize set operations with Venn diagrams",
+          "apply inclusion-exclusion to count elements",
+          "apply the rule of product to count outcomes"
+        ],
+        "estimated_minutes": 45
+      },
+      {
+        "id": "21fb1f3a-2773-4146-9c0d-ed202360f983",
+        "name": "Independence of events",
+        "description": "Defining and checking independence of events and its paradoxes.",
+        "keywords": [
+          "independence",
+          "independent events",
+          "P(A\u2229B)=P(A)P(B)",
+          "paradox"
+        ],
+        "unit": "Conditional Probability and Bayes",
+        "objectives": [
+          "state the definition of independent events",
+          "check whether two events are independent",
+          "explain why a probability-zero event is independent of itself"
+        ],
+        "estimated_minutes": 25
+      },
+      {
+        "id": "a3bf754a-f85a-4ca8-9fd1-d5a604bb688c",
+        "name": "Random variables, pmf and cdf",
+        "description": "Random variables as payoff functions and their probability mass and cumulative distribution functions.",
+        "keywords": [
+          "random variable",
+          "pmf",
+          "cdf",
+          "probability mass function",
+          "distribution function"
+        ],
+        "unit": "Discrete Random Variables",
+        "objectives": [
+          "define a discrete random variable on a sample space",
+          "write the pmf of a random variable",
+          "compute and graph a cdf",
+          "state properties of the cdf"
+        ],
+        "estimated_minutes": 50
+      },
+      {
+        "id": "879b66d2-c502-49ed-91fc-32885339f893",
+        "name": "Repeated updating and screening",
+        "description": "Updating posteriors with successive data and revisiting the base rate fallacy.",
+        "keywords": [
+          "sequential updating",
+          "posterior as prior",
+          "base rate fallacy",
+          "screening test"
+        ],
+        "unit": "Bayesian Updating Discrete Priors",
+        "objectives": [
+          "use a posterior as the next prior",
+          "update on multiple data points at once",
+          "solve a screening test example with a Bayes table"
+        ],
+        "estimated_minutes": 25
+      },
+      {
+        "id": "fc945e5c-2692-4abd-a45a-55359d253a7a",
+        "name": "Bayesian updating with Bayes tables",
+        "description": "Use a coin example to define hypotheses, data, prior, likelihood and posterior and compute them in a Bayes table.",
+        "keywords": [
+          "Bayes table",
+          "prior",
+          "likelihood",
+          "posterior",
+          "hypothesis",
+          "Bayesian updating"
+        ],
+        "unit": "Bayesian Updating Discrete Priors",
+        "objectives": [
+          "identify prior, likelihood and posterior in a problem",
+          "build a Bayes table for discrete hypotheses",
+          "express priors and posteriors as pmfs",
+          "distinguish probability of data from probability of hypotheses"
+        ],
+        "estimated_minutes": 45
+      },
+      {
+        "id": "b174cf10-a1a3-4e4f-9ece-aa0bf76e1d68",
+        "name": "Conditional probability and multiplication rule",
+        "description": "Defines conditional probability and derives the multiplication rule from it.",
+        "keywords": [
+          "conditional probability",
+          "multiplication rule",
+          "P(A|B)",
+          "sample space"
+        ],
+        "unit": "Conditional Probability and Bayes",
+        "objectives": [
+          "compute a conditional probability from the definition",
+          "apply the multiplication rule to find joint probabilities",
+          "interpret conditioning as restricting the sample space"
+        ],
+        "estimated_minutes": 35
+      },
+      {
+        "id": "99627717-9a22-47dd-9598-c3f03c9584bb",
+        "name": "Bayes' theorem and base rate fallacy",
+        "description": "Introduces Bayes' theorem for inverting conditional probabilities and illustrates the base rate fallacy with screening tests.",
+        "keywords": [
+          "Bayes' theorem",
+          "base rate fallacy",
+          "screening test",
+          "false positive",
+          "inverting conditional probability"
+        ],
+        "unit": "Conditional Probability and Bayes",
+        "objectives": [
+          "state and derive Bayes' theorem",
+          "invert a conditional probability",
+          "explain the base rate fallacy",
+          "compute the probability of disease given a positive test"
+        ],
+        "estimated_minutes": 50
+      },
+      {
+        "id": "5119e2e3-72ce-4b0b-b3b5-cccba9abf775",
+        "name": "Law of total probability and trees",
+        "description": "Partition the sample space and organize conditional probability computations with urn models and trees.",
+        "keywords": [
+          "law of total probability",
+          "partition",
+          "probability urn",
+          "probability tree",
+          "conditional probability"
+        ],
+        "unit": "Conditional Probability and Bayes",
+        "objectives": [
+          "state the law of total probability for a partition",
+          "compute probabilities in urn problems",
+          "organize a multi-stage computation with a probability tree",
+          "distinguish shorthand from precise tree labels"
+        ],
+        "estimated_minutes": 35
+      },
+      {
+        "id": "1e36ec08-f344-4a3e-a37c-8f2d020ffefd",
+        "name": "Arithmetic with random variables",
+        "description": "Shows how to add, multiply and transform random variables and count with sums of indicator variables.",
+        "keywords": [
+          "sum of random variables",
+          "indicator variables",
+          "function of random variable",
+          "joint table"
+        ],
+        "unit": "Discrete Random Variables",
+        "objectives": [
+          "compute the pmf of a sum of random variables",
+          "use indicator sums to count successes",
+          "find the distribution of a function of a random variable"
+        ],
+        "estimated_minutes": 30
+      },
+      {
+        "id": "4ad9e45d-0b64-4dee-9fd5-35a904abdacc",
+        "name": "Bernoulli and binomial distributions",
+        "description": "Model single trials and counts of successes in independent trials, and derive the binomial pmf.",
+        "keywords": [
+          "Bernoulli distribution",
+          "binomial distribution",
+          "binomial coefficient",
+          "independent trials",
+          "pmf"
+        ],
+        "unit": "Discrete Random Variables",
+        "objectives": [
+          "write the pmf of a Bernoulli(p) variable",
+          "compute binomial probabilities",
+          "explain the binomial coefficient in the pmf",
+          "recognize when a binomial model applies"
+        ],
+        "estimated_minutes": 40
+      },
+      {
+        "id": "ccf71ddc-5f1f-454b-8591-b0fbec1ee6b5",
+        "name": "Geometric, uniform and other distributions",
+        "description": "Model waiting times with the geometric distribution, equally likely outcomes with the uniform distribution, and look up other named distributions.",
+        "keywords": [
+          "geometric distribution",
+          "uniform distribution",
+          "discrete distributions",
+          "applet",
+          "waiting time"
+        ],
+        "unit": "Discrete Random Variables",
+        "objectives": [
+          "compute geometric probabilities for tails before first head",
+          "write the pmf of a discrete uniform variable",
+          "explore distributions with the applet",
+          "look up an unfamiliar pmf in a reference"
+        ],
+        "estimated_minutes": 30
+      }
+    ],
+    "selected": [
+      {
+        "id": "5f6b40ab-708b-4830-b2db-52fa376b2c3b",
+        "name": "Sets and counting principles",
+        "description": "Set notation, Venn diagrams, inclusion-exclusion and the rule of product.",
+        "keywords": [
+          "sets",
+          "Venn diagram",
+          "inclusion-exclusion",
+          "rule of product",
+          "complement"
+        ],
+        "unit": "Counting and Sets",
+        "objectives": [
+          "use set notation for union, intersection and complement",
+          "visualize set operations with Venn diagrams",
+          "apply inclusion-exclusion to count elements",
+          "apply the rule of product to count outcomes"
+        ],
+        "estimated_minutes": 45,
+        "index": 0,
+        "key": "t00-sets-and-counting-principles"
+      },
+      {
+        "id": "879b66d2-c502-49ed-91fc-32885339f893",
+        "name": "Repeated updating and screening",
+        "description": "Updating posteriors with successive data and revisiting the base rate fallacy.",
+        "keywords": [
+          "sequential updating",
+          "posterior as prior",
+          "base rate fallacy",
+          "screening test"
+        ],
+        "unit": "Bayesian Updating Discrete Priors",
+        "objectives": [
+          "use a posterior as the next prior",
+          "update on multiple data points at once",
+          "solve a screening test example with a Bayes table"
+        ],
+        "estimated_minutes": 25,
+        "index": 3,
+        "key": "t03-repeated-updating-and-screening"
+      },
+      {
+        "id": "5119e2e3-72ce-4b0b-b3b5-cccba9abf775",
+        "name": "Law of total probability and trees",
+        "description": "Partition the sample space and organize conditional probability computations with urn models and trees.",
+        "keywords": [
+          "law of total probability",
+          "partition",
+          "probability urn",
+          "probability tree",
+          "conditional probability"
+        ],
+        "unit": "Conditional Probability and Bayes",
+        "objectives": [
+          "state the law of total probability for a partition",
+          "compute probabilities in urn problems",
+          "organize a multi-stage computation with a probability tree",
+          "distinguish shorthand from precise tree labels"
+        ],
+        "estimated_minutes": 35,
+        "index": 7,
+        "key": "t07-law-of-total-probability-and-trees"
+      },
+      {
+        "id": "ccf71ddc-5f1f-454b-8591-b0fbec1ee6b5",
+        "name": "Geometric, uniform and other distributions",
+        "description": "Model waiting times with the geometric distribution, equally likely outcomes with the uniform distribution, and look up other named distributions.",
+        "keywords": [
+          "geometric distribution",
+          "uniform distribution",
+          "discrete distributions",
+          "applet",
+          "waiting time"
+        ],
+        "unit": "Discrete Random Variables",
+        "objectives": [
+          "compute geometric probabilities for tails before first head",
+          "write the pmf of a discrete uniform variable",
+          "explore distributions with the applet",
+          "look up an unfamiliar pmf in a reference"
+        ],
+        "estimated_minutes": 30,
+        "index": 10,
+        "key": "t10-geometric-uniform-and-other-distribution"
+      }
+    ]
+  },
+  "mit-6.006": {
+    "all": [
+      {
+        "id": "d5ecfc1f-f47f-4e71-83c9-711a5ba1a454",
+        "name": "Comparison model search lower bound",
+        "description": "Uses decision trees to show comparison-based search needs Omega(log n) time.",
+        "keywords": [
+          "comparison model",
+          "decision tree",
+          "lower bound",
+          "search",
+          "log n"
+        ],
+        "unit": "Hashing",
+        "objectives": [
+          "describe the comparison model of computation",
+          "model an algorithm as a decision tree",
+          "derive the Omega(log n) lower bound for comparison search",
+          "explain why the bound motivates non-comparison data structures"
+        ],
+        "estimated_minutes": 25
+      },
+      {
+        "id": "646bf5d7-ac09-42fa-8cd7-c4ce56a9f63f",
+        "name": "Direct access arrays and hash tables",
+        "description": "Builds hash tables from direct access arrays, resolving collisions by chaining and choosing good hash functions.",
+        "keywords": [
+          "direct access array",
+          "hash function",
+          "chaining",
+          "universal hashing",
+          "load factor",
+          "amortized"
+        ],
+        "unit": "Hashing",
+        "objectives": [
+          "implement a set with a direct access array",
+          "explain hash functions and collisions",
+          "analyze chaining under a universal hash family",
+          "maintain hash table size dynamically with amortized rebuilds"
+        ],
+        "estimated_minutes": 40
+      },
+      {
+        "id": "7c439017-f761-490f-8945-568c325f783e",
+        "name": "Priority queues and PQ sort",
+        "description": "Introduces the priority queue interface and compares AVL, array, and sorted array implementations via priority queue sort.",
+        "keywords": [
+          "priority queue",
+          "delete max",
+          "selection sort",
+          "insertion sort",
+          "AVL sort"
+        ],
+        "unit": "Binary Heaps",
+        "objectives": [
+          "state the priority queue operations",
+          "turn any priority queue into a sorting algorithm",
+          "compare running times of array, sorted array, and AVL priority queues",
+          "relate selection and insertion sort to priority queue sort"
+        ],
+        "estimated_minutes": 30
+      },
+      {
+        "id": "4f77d1ea-6c61-4108-8a11-1af87f436a09",
+        "name": "Binary heap operations and heap sort",
+        "description": "Implements max-heaps on implicit complete binary trees and uses them for in-place heap sort and linear build.",
+        "keywords": [
+          "binary heap",
+          "max-heap property",
+          "heapify",
+          "heap sort",
+          "build heap",
+          "complete binary tree"
+        ],
+        "unit": "Binary Heaps",
+        "objectives": [
+          "compute parent and child indices in an implicit tree",
+          "perform heap insert with max heapify up",
+          "perform delete max with max heapify down",
+          "run in-place heap sort",
+          "prove linear-time heap build"
+        ],
+        "estimated_minutes": 50
+      },
+      {
+        "id": "b02120e2-aeb3-4593-96e2-219c88fd068d",
+        "name": "SRT BOT and longest common subsequence",
+        "description": "Reviews dynamic programming steps and applies them to the longest common subsequence problem.",
+        "keywords": [
+          "dynamic programming",
+          "SRT BOT",
+          "memoization",
+          "LCS",
+          "subsequence"
+        ],
+        "unit": "Dynamic Programming Subproblems",
+        "objectives": [
+          "list the SRT BOT steps",
+          "define subproblems over prefixes and suffixes",
+          "write the LCS recurrence",
+          "analyze LCS running time"
+        ],
+        "estimated_minutes": 40
+      },
+      {
+        "id": "db14399d-7dcf-4880-a9e6-5ed2d1bd364d",
+        "name": "LIS, coin game, subproblem expansion",
+        "description": "Solves longest increasing subsequence and the alternating coin game using constrained and expanded subproblems.",
+        "keywords": [
+          "longest increasing subsequence",
+          "coin game",
+          "subproblem expansion",
+          "subproblem constraint",
+          "game DP"
+        ],
+        "unit": "Dynamic Programming Subproblems",
+        "objectives": [
+          "solve LIS with a constrained subproblem",
+          "model the coin game with substring subproblems",
+          "expand subproblems with extra state such as whose turn",
+          "decide when to constrain or expand subproblems"
+        ],
+        "estimated_minutes": 45
+      }
+    ],
+    "selected": [
+      {
+        "id": "d5ecfc1f-f47f-4e71-83c9-711a5ba1a454",
+        "name": "Comparison model search lower bound",
+        "description": "Uses decision trees to show comparison-based search needs Omega(log n) time.",
+        "keywords": [
+          "comparison model",
+          "decision tree",
+          "lower bound",
+          "search",
+          "log n"
+        ],
+        "unit": "Hashing",
+        "objectives": [
+          "describe the comparison model of computation",
+          "model an algorithm as a decision tree",
+          "derive the Omega(log n) lower bound for comparison search",
+          "explain why the bound motivates non-comparison data structures"
+        ],
+        "estimated_minutes": 25,
+        "index": 0,
+        "key": "t00-comparison-model-search-lower-bound"
+      },
+      {
+        "id": "7c439017-f761-490f-8945-568c325f783e",
+        "name": "Priority queues and PQ sort",
+        "description": "Introduces the priority queue interface and compares AVL, array, and sorted array implementations via priority queue sort.",
+        "keywords": [
+          "priority queue",
+          "delete max",
+          "selection sort",
+          "insertion sort",
+          "AVL sort"
+        ],
+        "unit": "Binary Heaps",
+        "objectives": [
+          "state the priority queue operations",
+          "turn any priority queue into a sorting algorithm",
+          "compare running times of array, sorted array, and AVL priority queues",
+          "relate selection and insertion sort to priority queue sort"
+        ],
+        "estimated_minutes": 30,
+        "index": 2,
+        "key": "t02-priority-queues-and-pq-sort"
+      },
+      {
+        "id": "4f77d1ea-6c61-4108-8a11-1af87f436a09",
+        "name": "Binary heap operations and heap sort",
+        "description": "Implements max-heaps on implicit complete binary trees and uses them for in-place heap sort and linear build.",
+        "keywords": [
+          "binary heap",
+          "max-heap property",
+          "heapify",
+          "heap sort",
+          "build heap",
+          "complete binary tree"
+        ],
+        "unit": "Binary Heaps",
+        "objectives": [
+          "compute parent and child indices in an implicit tree",
+          "perform heap insert with max heapify up",
+          "perform delete max with max heapify down",
+          "run in-place heap sort",
+          "prove linear-time heap build"
+        ],
+        "estimated_minutes": 50,
+        "index": 3,
+        "key": "t03-binary-heap-operations-and-heap-sort"
+      },
+      {
+        "id": "db14399d-7dcf-4880-a9e6-5ed2d1bd364d",
+        "name": "LIS, coin game, subproblem expansion",
+        "description": "Solves longest increasing subsequence and the alternating coin game using constrained and expanded subproblems.",
+        "keywords": [
+          "longest increasing subsequence",
+          "coin game",
+          "subproblem expansion",
+          "subproblem constraint",
+          "game DP"
+        ],
+        "unit": "Dynamic Programming Subproblems",
+        "objectives": [
+          "solve LIS with a constrained subproblem",
+          "model the coin game with substring subproblems",
+          "expand subproblems with extra state such as whose turn",
+          "decide when to constrain or expand subproblems"
+        ],
+        "estimated_minutes": 45,
+        "index": 5,
+        "key": "t05-lis-coin-game-subproblem-expansion"
+      }
+    ]
+  }
+}

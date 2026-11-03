@@ -133,7 +133,7 @@ test('merging, topic pages, health and exam creation treat new topics as waiting
   const hidden = await withPrisma((prisma) =>
     prisma.topic.create({ data: { projectId: course.courseId, name: 'Hidden new', orderIndex: 9, userConfirmed: false, sourceMaterialIds: [] } }).then((row) => row.id)
   )
-  await page.goto(`${base}/topics/${newB}?view=notes`)
+  await page.goto(`${base}/topics/${newB}?view=read`)
   await expect(page.getByText(/Next: Hidden new/)).toHaveCount(0)
   await page.goto(`${base}/topics/${hidden}`)
   await expect(page).toHaveURL(`${base}/topics?edit=1`)

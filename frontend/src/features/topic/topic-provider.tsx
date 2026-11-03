@@ -11,9 +11,9 @@ import { parseContentTarget } from '@/lib/jobs/failure-message'
 import { fetchActiveJobs, type NormalizedJob } from '@/lib/jobs/poll-job'
 import { useAiStatus } from '@/features/ai/ai-status'
 import { useJobPolling } from '@/features/jobs/use-job-polling'
-import { autoStartDecision } from './auto-start'
+import { autoStartDecision, autoStartRequest, prefetchRequest } from './auto-start'
 import { KIND_COPY } from './copy'
-import { CONTENT_KINDS, CONTENT_TYPE_BY_KIND, KIND_BY_CONTENT_TYPE, type ContentKind } from './types'
+import { CONTENT_KINDS, CONTENT_TYPE_BY_KIND, KIND_BY_CONTENT_TYPE, PREPARATION_TYPES, type ContentKind } from './types'
 import type { GenerateMode } from './generate-preferences'
 import { noticeForCode, type GenerationNotice } from './notice'
 import { useTopicView } from './use-topic-view'
@@ -42,7 +42,12 @@ type TopicContextValue = {
   starting: Partial<Record<ContentKind, boolean>>
   /** Opening a topic with no notes starts them; true until that has started (or been found running). */
   preparingNotes: boolean
-  generate: (kind: ContentKind, mode: GenerateMode, preferences: Record<string, unknown>) => Promise<boolean>
+  generate: (
+    kind: ContentKind,
+    mode: GenerateMode,
+    preferences: Record<string, unknown>,
+    contentType?: string
+  ) => Promise<boolean>
   /** Start a fresh review quiz set (focused on what was missed, with a prerequisite question or two). */
   generateReview: () => Promise<boolean>
   dismiss: (kind: ContentKind) => void
@@ -51,6 +56,10 @@ type TopicContextValue = {
   /** The number keys switch views, except while a quiz is being taken (they pick options). */
   keysSuspended: boolean
   setKeysSuspended: (suspended: boolean) => void
+  /** The student is in the middle of an activity on this view (a quiz being taken, a practice problem under way). */
+  inProgress: boolean
+  /** Counts one more view as working; the returned function takes it back. See useActivityInProgress. */
+  claimInProgress: () => () => void
 }
 
 const TopicContext = React.createContext<TopicContextValue | null>(null)
@@ -64,6 +73,18 @@ export function useTopic(): TopicContextValue {
   const value = React.useContext(TopicContext)
   if (!value) throw new Error('useTopic must be used inside TopicProvider')
   return value
+}
+
+/**
+ * Marks the view on screen as an activity the student is in the middle of while `active` is true. The
+ * next-activity card steps aside meanwhile (it would pull them out of the work), and comes back, with the
+ * refreshed next activity, once they are done. Each caller holds its own claim, so a view and a screen inside
+ * it (the warm-up and its results) cannot switch each other off: effects run child first, and a flag the
+ * parent wrote last used to win.
+ */
+export function useActivityInProgress(active: boolean) {
+  const { claimInProgress } = useTopic()
+  React.useEffect(() => (active ? claimInProgress() : undefined), [active, claimInProgress])
 }
 
 /** Generation state of one kind of content, with the action to start it. */
@@ -151,8 +172,20 @@ export function TopicProvider({
   const [localFailure, setLocalFailure] = React.useState<TopicContextValue['failure']>({})
   const [starting, setStarting] = React.useState<TopicContextValue['starting']>({})
   const [keysSuspended, setKeysSuspended] = React.useState(false)
+  const [claims, setClaims] = React.useState(0)
+  const inProgress = claims > 0
+  const claimInProgress = React.useCallback(() => {
+    setClaims((count) => count + 1)
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      setClaims((count) => count - 1)
+    }
+  }, [])
   const tracked = React.useRef(new Set<string>())
-  // Opening a topic with no notes (and no failed attempt to retry by hand) starts them once.
+  // Opening a topic with no notes (and no failed attempt to retry by hand) starts its preparation once:
+  // concepts, then the rest of the chain, notes among it.
   const [preparingNotes, setPreparingNotes] = React.useState(!notesPresent && !initialFailures.notes)
   const [activeChecked, setActiveChecked] = React.useState(false)
   const autoStarted = React.useRef(false)
@@ -169,7 +202,7 @@ export function TopicProvider({
   }, [localFailure, initialFailures, dismissed])
 
   const track = React.useCallback(
-    (jobId: string, kind: ContentKind, since: number, quiet = false) => {
+    (jobId: string, kind: ContentKind, since: number, quiet = false, preparation = false) => {
       if (tracked.current.has(jobId)) return
       tracked.current.add(jobId)
       setRunning((current) => ({ ...current, [kind]: { jobId, job: null, since, timedOut: false, done: false } }))
@@ -185,7 +218,7 @@ export function TopicProvider({
             current[kind]?.jobId === jobId ? { ...current, [kind]: { ...current[kind]!, done: true } } : current
           )
           if (kind === 'notes') trackEvent('notes_generated')
-          if (!quiet) toast.success(KIND_COPY[kind].ready)
+          if (!quiet && !preparation) toast.success(KIND_COPY[kind].ready)
           // The AI service has already created the job for the next type, if it queues one.
           void syncActiveRef.current(true)
           React.startTransition(() => router.refresh())
@@ -204,6 +237,11 @@ export function TopicProvider({
           delete next[kind]
           return next
         })
+        if (preparation) {
+          // Concepts and the warm-up are extras: the AI service goes on to write the notes.
+          void syncActiveRef.current(true)
+          return
+        }
         report(result.job?.errorCode)
         const notice = result.job ? failureNotice(result.job) : noticeForCode(null)
         setLocalFailure((current) => ({ ...current, [kind]: notice }))
@@ -225,10 +263,11 @@ export function TopicProvider({
         const targetKey = typeof job.raw.targetKey === 'string' ? job.raw.targetKey : null
         const target = parseContentTarget(targetKey)
         if (!target || target.topicId !== topicId) continue
-        const kind = KIND_BY_CONTENT_TYPE[target.contentType]
+        const preparation = PREPARATION_TYPES.includes(target.contentType)
+        const kind = preparation ? 'notes' : KIND_BY_CONTENT_TYPE[target.contentType]
         if (!kind) continue
         const startedAt = Date.parse(String(job.raw.startedAt ?? job.raw.createdAt ?? ''))
-        track(job.id, kind, Number.isFinite(startedAt) ? startedAt : Date.now(), quiet)
+        track(job.id, kind, Number.isFinite(startedAt) ? startedAt : Date.now(), quiet, preparation)
       }
     },
     [courseId, topicId, track]
@@ -267,18 +306,20 @@ export function TopicProvider({
   }, [running])
 
   const generate = React.useCallback<TopicContextValue['generate']>(
-    async (kind, mode, preferences) => {
+    async (kind, mode, preferences, contentType = CONTENT_TYPE_BY_KIND[kind]) => {
       setStarting((current) => ({ ...current, [kind]: true }))
       setStartError((current) => ({ ...current, [kind]: undefined }))
       setLocalFailure((current) => ({ ...current, [kind]: undefined }))
       setDismissed((current) => [...current.filter((item) => item !== kind), kind])
       try {
         const endpoint = mode === 'create' ? 'generate-content' : 'regenerate-content'
-        const response = await apiFetch<{ jobId: string | null }>(`/api/topics/${topicId}/${endpoint}`, {
+        const response = await apiFetch<{ jobId: string | null; contentType?: string }>(`/api/topics/${topicId}/${endpoint}`, {
           method: 'POST',
-          json: { contentType: CONTENT_TYPE_BY_KIND[kind], preferences },
+          json: { contentType, preferences },
         })
-        if (response.jobId) track(response.jobId, kind, Date.now())
+        // The server may start a later type than the one asked for (a topic that has its concepts already).
+        const started = response.contentType ?? contentType
+        if (response.jobId) track(response.jobId, kind, Date.now(), false, PREPARATION_TYPES.includes(started))
         // Nothing was started because the content is already there: show it.
         else React.startTransition(() => router.refresh())
         return true
@@ -320,7 +361,7 @@ export function TopicProvider({
     }
   }, [topicId, track, router, report])
 
-  // Start the notes of a topic that has none, once the jobs already running have been found.
+  // Start the preparation of a topic that has no notes, once the jobs already running have been found.
   const notesRunning = !!running.notes
   React.useEffect(() => {
     const decision = autoStartDecision({
@@ -337,16 +378,14 @@ export function TopicProvider({
       return
     }
     autoStarted.current = true
-    void generate('notes', 'create', { prepare_rest: true, only_if_missing: true }).finally(() => setPreparingNotes(false))
+    const request = autoStartRequest()
+    void generate('notes', 'create', request.preferences, request.contentType).finally(() => setPreparingNotes(false))
   }, [preparingNotes, activeChecked, notesPresent, notesRunning, blocked, generate])
 
   const prefetchNext = React.useCallback(() => {
     if (!next || next.hasNotes) return
     // Quiet: it is a head start, and a failure shows when that topic is opened.
-    apiFetch(`/api/topics/${next.id}/generate-content`, {
-      method: 'POST',
-      json: { contentType: CONTENT_TYPE_BY_KIND.notes, preferences: { only_if_missing: true } },
-    }).catch(() => {})
+    apiFetch(`/api/topics/${next.id}/generate-content`, { method: 'POST', json: prefetchRequest() }).catch(() => {})
   }, [next])
 
   const dismiss = React.useCallback((kind: ContentKind) => {
@@ -370,8 +409,10 @@ export function TopicProvider({
       prefetchNext,
       keysSuspended,
       setKeysSuspended,
+      inProgress,
+      claimInProgress,
     }),
-    [topicId, courseId, running, startError, failure, starting, preparingNotes, generate, generateReview, dismiss, prefetchNext, keysSuspended]
+    [topicId, courseId, running, startError, failure, starting, preparingNotes, generate, generateReview, dismiss, prefetchNext, keysSuspended, inProgress, claimInProgress]
   )
 
   return <TopicContext.Provider value={value}>{children}</TopicContext.Provider>

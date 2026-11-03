@@ -8,6 +8,10 @@ import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import type { Prisma } from '@prisma/client'
 import { toPublicContentData } from '@/lib/learning/quiz-questions'
+import { explainerAccess } from '@/lib/learning/explainer-server'
+import { CONTENT_TYPE_BY_KIND } from '@/features/topic/types'
+
+const NOTES_TYPE = CONTENT_TYPE_BY_KIND.notes
 
 // Kept for API clients; the UI reads this through server queries.
 export async function GET(
@@ -37,10 +41,23 @@ export async function GET(
       )
     }
 
+    // The lesson notes are the explainer, and the explainer is gated (spec §5.4): before a recall (or the
+    // thin-source unlock) they are neither sent when asked for nor included in the list of everything.
+    const access = await explainerAccess(session.user.id, topicId)
+    const notesOpen = access?.open === true
+    if (contentType === NOTES_TYPE && !notesOpen) {
+      return NextResponse.json(
+        { error: 'Try recalling this topic first. The explainer opens after that.', code: 'EXPLAINER_LOCKED' },
+        { status: 403 }
+      )
+    }
+
     // Build where clause
     const where: Prisma.TopicContentWhereInput = { topicId }
     if (contentType) {
       where.contentType = contentType
+    } else if (!notesOpen) {
+      where.contentType = { not: NOTES_TYPE }
     }
 
     // Fetch content

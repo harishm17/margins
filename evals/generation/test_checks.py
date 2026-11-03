@@ -10,15 +10,20 @@ import checks  # noqa: E402
 from checks import (  # noqa: E402
     bare_currency_count,
     check_topic,
+    claim_quote_substring_rate,
+    concepts_per_topic_in_range,
     excerpt_terms,
     grounding_share,
     has_latex,
+    item_concept_ids_valid,
     interactive_structure,
     latex_hygiene,
     letter_references,
     mc_letter_reference_check,
     near_duplicate_statements,
     notes_structure,
+    objectives_all_mapped,
+    prereq_graph_acyclic,
     quiz_structure,
     recall_copy_check,
     significant_numbers,
@@ -26,6 +31,7 @@ from checks import (  # noqa: E402
     summarize_model,
     token_jaccard,
     unbalanced_dollar,
+    warmup_not_in_quiz,
 )
 
 
@@ -316,3 +322,135 @@ def test_check_topic_and_summary():
 def test_check_topic_without_notes_skips_recall_copy():
     result = check_topic({checks.QUIZ: _quiz_questions()}, [])
     assert "skipped" in result["recall_copy"]
+
+
+# ---------------------------------------------------------------- concept graph
+
+
+def _concept(cid, objectives=(0,)):
+    return {"id": cid, "name": f"Concept {cid}", "objective_indexes": list(objectives)}
+
+
+def test_claim_quote_substring_rate():
+    chunks = {"k1": "The  law of total probability\nsplits an event over a partition.", "k2": "Bayes’ rule reverses a conditional."}
+    claims = [
+        {"concept_id": "c1", "chunk_id": "k1", "quote": "law of total probability splits"},  # whitespace differs
+        {"concept_id": "c1", "chunk_id": "k2", "quote": "Bayes' rule reverses"},  # curly apostrophe
+        {"concept_id": "c2", "chunk_id": "k1", "quote": "a sentence the chunk never says"},
+        {"concept_id": "c2", "chunk_id": "gone", "quote": "anything"},  # chunk not in the excerpts
+    ]
+    result = claim_quote_substring_rate(claims, chunks)
+    assert (result["total"], result["matched"]) == (4, 2)
+    assert result["rate"] == 0.5 and not result["ok"]
+    assert [f["chunk_id"] for f in result["failures"]] == ["k1", "gone"]
+    assert claim_quote_substring_rate(claims[:2], chunks)["ok"]
+    assert claim_quote_substring_rate([], chunks) == {"total": 0, "matched": 0, "rate": None, "ok": True, "failures": []}
+
+
+def test_claim_quote_gate_is_98_percent():
+    chunks = {"k": "alpha beta"}
+    good = {"concept_id": "c", "chunk_id": "k", "quote": "alpha"}
+    bad = {"concept_id": "c", "chunk_id": "k", "quote": "zzz"}
+    assert claim_quote_substring_rate([good] * 49 + [bad], chunks)["ok"]  # 49/50 = 98%
+    assert not claim_quote_substring_rate([good] * 49 + [bad, bad], chunks)["ok"]  # 49/51
+
+
+@pytest.mark.parametrize("count,ok", [(2, False), (3, True), (8, True), (9, False), (0, False)])
+def test_concepts_per_topic_in_range(count, ok):
+    result = concepts_per_topic_in_range([_concept(f"c{i}") for i in range(count)])
+    assert result["count"] == count and result["ok"] is ok
+
+
+def test_objectives_all_mapped():
+    concepts = [_concept("a", [0]), _concept("b", [2])]
+    result = objectives_all_mapped(concepts, 3)
+    assert result["unmapped"] == [1] and not result["ok"]
+    assert objectives_all_mapped(concepts + [_concept("c", [1, 7])], 3)["ok"]
+    # A topic with no objectives has nothing to map.
+    assert objectives_all_mapped([], 0)["ok"]
+
+
+def test_prereq_graph_acyclic():
+    chain = [{"source_id": "a", "target_id": "b", "type": "prerequisite"}, {"source_id": "b", "target_id": "c", "type": "prerequisite"}]
+    assert prereq_graph_acyclic(chain)["ok"]
+    loop = chain + [{"source_id": "c", "target_id": "a", "type": "prerequisite"}]
+    result = prereq_graph_acyclic(loop)
+    assert not result["ok"] and set(result["cycle"]) == {"a", "b", "c"}
+    # Only prerequisite edges count: a confusable pair is allowed to point both ways.
+    assert prereq_graph_acyclic(chain + [{"source_id": "c", "target_id": "a", "type": "confusable"}])["ok"]
+    assert not prereq_graph_acyclic([{"source_id": "a", "target_id": "a", "type": "prerequisite"}])["ok"]
+
+
+def test_item_concept_ids_valid():
+    known = ["c1", "c2"]
+    quiz = [
+        {"question_text": "q1", "concept_ids": ["c1"], "options": [{"id": "A", "confusable_concept_id": "c2"}, {"id": "B"}]},
+        {"question_text": "q2", "concept_ids": ["c1", "c9"]},  # unknown id
+        {"question_text": "q3", "concept_ids": []},  # untagged
+        {"question_text": "q4", "concept_ids": [], "prerequisite_topic": "Earlier topic"},  # review item: no tag is right
+        {"question_text": "q5", "concept_ids": ["c2"], "options": [{"id": "A", "confusable_concept_id": "zzz"}]},
+    ]
+    practice = [{"title": "p", "concept_ids": ["c2"], "steps": [{"concept_ids": ["c2"]}, {"concept_ids": ["nope"]}]}]
+    result = item_concept_ids_valid({"quiz": quiz, "interactive": practice}, known)
+    assert result["total"] == 6 and result["valid"] == 2
+    assert result["rate"] == pytest.approx(2 / 6) and not result["ok"]
+    assert sorted(f["path"] for f in result["invalid"]) == ["interactive[0]", "quiz[1]", "quiz[2]", "quiz[4]"]
+    assert item_concept_ids_valid({"quiz": quiz[:1]}, known)["ok"]
+    assert item_concept_ids_valid({}, known) == {"total": 0, "valid": 0, "rate": None, "ok": True, "invalid": []}
+
+
+def test_warmup_not_in_quiz():
+    warmup = [
+        {"question_text": "Which rule splits an event over a partition?"},
+        {"question_text": "True or false: independent events satisfy P(A and B) = P(A)P(B)."},
+    ]
+    quiz = [
+        {"question_text": "Which rule splits an event over a partition?"},  # copied
+        {"question_text": "True or false: independent events satisfy P(A and B) = P(A)P(B)"},  # light rewording
+        {"question_text": "Compute the posterior given a 1% prior and a 90% sensitive test."},
+    ]
+    result = warmup_not_in_quiz(warmup, quiz)
+    assert not result["ok"] and result["reused"] == 2
+    assert [(r["warmup_index"], r["quiz_index"]) for r in result["pairs"]] == [(0, 0), (1, 1)]
+    assert warmup_not_in_quiz(warmup, quiz[2:])["ok"]
+    assert warmup_not_in_quiz(warmup, [])["ok"]
+
+
+def _graph(**changes):
+    graph = {
+        "objective_count": 2,
+        "concepts": [_concept("c1", [0]), _concept("c2", [1]), _concept("c3", [0, 1])],
+        "claims": [{"concept_id": "c1", "chunk_id": "k1", "quote": "law of total"}],
+        "edges": [{"source_id": "c1", "target_id": "c2", "type": "prerequisite"}],
+    }
+    graph.update(changes)
+    return graph
+
+
+def test_check_topic_runs_the_concept_checks_and_tags_items_against_them():
+    warmup = [{"question_type": "true_false", "question_text": "Chaining resolves collisions.", "correct_answer": True, "explanation": "Yes.", "concept_ids": ["c1"]}]
+    quiz = [{"question_type": "true_false", "question_text": "Chaining resolves collisions.", "correct_answer": True, "explanation": "Yes.", "concept_ids": ["c7"]}]
+    outputs = {checks.CONCEPTS: _graph(), checks.WARMUP: warmup, checks.QUIZ: quiz}
+    result = check_topic(outputs, [], chunk_texts={"k1": "the law of total probability"})
+    assert result["concepts"]["claim_quotes"]["ok"] and result["concepts"]["count"]["ok"]
+    assert result["concepts"]["objectives"]["ok"] and result["concepts"]["prereq_acyclic"]["ok"]
+    assert result["item_concept_ids"]["total"] == 2 and result["item_concept_ids"]["valid"] == 1
+    assert result["warmup_not_in_quiz"]["reused"] == 1
+    assert result["latex"]["unbalanced_dollar"] == 0  # warm-up questions get the quiz's text hygiene
+
+    summary = summarize_model({"t1": result}, {})
+    assert summary["concept_topics"] == 1 and summary["concept_count_ok"] == 1
+    assert summary["claims_total"] == 1 and summary["claims_matched"] == 1 and summary["claim_quote_rate"] == 1.0
+    assert summary["objectives_mapped_ok"] == 1 and summary["prereq_acyclic_ok"] == 1
+    assert (summary["items_tagged"], summary["items_tagged_valid"]) == (2, 1)
+    assert summary["warmup_topics"] == 1 and summary["warmup_reused_items"] == 1
+    assert summary["item_tag_gate_ok"] is False and summary["warmup_reuse_gate_ok"] is False
+
+
+def test_item_tags_are_not_checked_for_a_topic_without_concepts():
+    quiz = [{"question_type": "true_false", "question_text": "x", "correct_answer": True, "explanation": "y"}]
+    result = check_topic({checks.QUIZ: quiz}, [])
+    assert "item_concept_ids" not in result and "concepts" not in result
+    summary = summarize_model({"t1": result}, {})
+    assert summary["concept_topics"] == 0
+    assert summary["item_tag_gate_ok"] is None and summary["warmup_reuse_gate_ok"] is None

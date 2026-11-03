@@ -24,12 +24,18 @@ const item = (over: Partial<PlanItem>): PlanItem => ({
 test('each kind of item links to its action', () => {
   assert.equal(planItemHref(item({}), 'c1'), '/courses/c1/topics/t1')
   assert.equal(planItemHref(item({ kind: 'quiz' }), 'c1'), '/courses/c1/topics/t1?view=quiz')
-  assert.equal(planItemHref(item({ kind: 'review' }), 'c1'), '/courses/c1/review#review-t1')
   assert.equal(
     planItemHref(item({ kind: 'unit_mock', topicId: null, topicIds: ['a', 'b', 'c'] }), 'c1'),
     '/courses/c1/exams/new?topics=a,b,c'
   )
   assert.equal(planItemHref(item({ kind: 'full_mock', topicId: null, topicIds: ['a'] }), 'c1'), '/courses/c1/exams/new?topics=all')
+})
+
+test('plan review item opens topic-filtered session', () => {
+  assert.equal(planItemHref(item({ kind: 'review' }), 'c1'), '/courses/c1/review/session?topic=t1')
+  assert.equal(planItemHref(item({ kind: 'review', topicId: null, topicIds: [] }), 'c1'), '/courses/c1/review/session')
+  // A projected review has no due concepts yet: it stays a quiz on the topic.
+  assert.equal(planItemHref(item({ kind: 'review', projected: true }), 'c1'), '/courses/c1/topics/t1?view=quiz')
 })
 
 test('mixed practice and projected reviews link to their actions', () => {
@@ -221,4 +227,12 @@ test('the mixed practice link and the exam form agree for every block length', (
   // 25 minutes: the form offers 20 min, so the link says 20 min with 5 questions (not 10).
   const block = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes: 25 })
   assert.equal(planItemHref(block, 'c1'), '/courses/c1/exams/new?topics=a,b&minutes=20&questions=5')
+})
+
+test('a review of a topic without concepts keeps the quiz-based review card', () => {
+  const withConcepts = new Set(['t2'])
+  assert.equal(planItemHref(item({ kind: 'review' }), 'c1', withConcepts), '/courses/c1/review#review-t1')
+  assert.equal(planItemHref(item({ kind: 'review', topicId: 't2' }), 'c1', withConcepts), '/courses/c1/review/session?topic=t2')
+  // Without the flag every topic is taken to have concepts.
+  assert.equal(planItemHref(item({ kind: 'review' }), 'c1'), '/courses/c1/review/session?topic=t1')
 })

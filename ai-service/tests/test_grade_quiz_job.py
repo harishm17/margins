@@ -44,7 +44,7 @@ def grader(monkeypatch, behaviour):
     class Grader:
         calls = 0
 
-        async def grade_submission(self, submission_id, questions, answers):
+        async def grade_submission(self, submission_id, questions, answers, thinking=None):
             Grader.calls += 1
             return behaviour()
 
@@ -184,7 +184,7 @@ async def test_the_stored_questions_are_normalised_like_the_immediate_path(db, s
     seen = {}
 
     class Grader:
-        async def grade_submission(self, submission_id, questions, answers):
+        async def grade_submission(self, submission_id, questions, answers, thinking=None):
             seen["questions"] = questions
             return graded()
 

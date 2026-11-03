@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { cn } from '@/lib/utils'
 
 /**
  * A slim line under "Up next" while the course has no exam date and the line was not closed: it asks
@@ -13,7 +14,7 @@ import { apiFetch, isApiError } from '@/lib/api/client'
  * closes it for good (it is remembered on the course, so it stays closed on every device). A date given
  * when the course was made means this never shows.
  */
-export function ExamPromptCard({ courseId }: { courseId: string }) {
+export function ExamPromptCard({ courseId, className }: { courseId: string; className?: string }) {
   const router = useRouter()
   const inputId = React.useId()
   const [date, setDate] = React.useState('')
@@ -48,7 +49,7 @@ export function ExamPromptCard({ courseId }: { courseId: string }) {
     <section
       role="region"
       aria-label="When is your exam?"
-      className="flex flex-col gap-3 rounded-card border border-border bg-surface px-4 py-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-4"
+      className={cn('flex flex-col gap-3 rounded-card border border-border bg-surface px-4 py-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-4', className)}
     >
       <p className="min-w-0 flex-1 text-small text-fg-2">
         <span className="font-medium text-fg">No exam date yet.</span> Add one and Margins plans your days up to it, and tells you if time is short.

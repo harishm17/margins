@@ -1,0 +1,14 @@
+{
+  "label": "practice-gates-rerun2",
+  "date": "2026-11-02",
+  "patterns": null,
+  "limit": null,
+  "scenarios": "/home/harish/code/margins-wt/learning-v3/evals/tutoring/scenarios/practice.jsonl",
+  "stopped": null,
+  "spend": {
+    "generation": 1.7358,
+    "judge": 0.0,
+    "max_usd": 4.0,
+    "max_judge_usd": 3.0
+  }
+}

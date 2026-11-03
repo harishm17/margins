@@ -144,3 +144,38 @@ describe('chatErrorMessage', () => {
     assert.doesNotMatch(info.message, /SOMETHING/)
   })
 })
+
+describe('the tutoring events', () => {
+  const route = { type: 'route', intent: 'understand', has_attempt: false, wants_answer: false, concepts: ['Hash tables'], concept_ids: ['c1'], broad: false, degraded: false }
+
+  it('reads the route event and keeps it on the answer', () => {
+    const state = run([route])
+    assert.equal(state.route?.intent, 'understand')
+    assert.deepEqual(state.route?.concepts, ['Hash tables'])
+    assert.equal(parseChatEvent('{"type":"route","intent":"mystery"}'), null)
+  })
+
+  it('progress shows what the buffered reply is doing until text arrives', () => {
+    let state = run([route, { type: 'retrieved', count: 3 }, { type: 'progress', stage: 'writing' }])
+    assert.equal(state.stage, 'writing')
+    state = run([{ type: 'progress', stage: 'checking' }], state)
+    assert.equal(state.stage, 'checking')
+    assert.equal(state.status, 'searching')
+    state = run([{ type: 'text', delta: 'Hi' }], state)
+    assert.equal(state.stage, null)
+    assert.equal(parseChatEvent('{"type":"progress","stage":"elsewhere"}'), null)
+  })
+
+  it('done carries the card without its answer', () => {
+    const state = run([
+      { type: 'done', text: 'The gap.', sources: [], marks: [], retrieved: 1, stop_reason: 'end_turn', check_question: { question: 'What is a bucket?', concept_name: 'Hash tables' } },
+    ])
+    assert.deepEqual(state.check, { question: 'What is a bucket?', conceptName: 'Hash tables', grade: null })
+    assert.equal(run([{ type: 'done', text: 'x', sources: [], marks: [] }]).check, null)
+  })
+
+  it('the tutor event says whether the worked example may be asked for', () => {
+    assert.equal(run([{ type: 'tutor', workedAllowed: true }]).workedAllowed, true)
+    assert.equal(run([{ type: 'tutor' }]).workedAllowed, false)
+  })
+})

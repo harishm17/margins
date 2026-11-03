@@ -1,0 +1,13 @@
+{
+  "label": "ask-gates",
+  "date": "2026-11-02",
+  "surface": "ask",
+  "patterns": null,
+  "limit": null,
+  "scenarios": "/home/harish/code/margins-wt/learning-v3/evals/tutoring/scenarios/ask-original.jsonl",
+  "stopped": null,
+  "spend": {
+    "generation": 2.2132,
+    "max_usd": 4.0
+  }
+}

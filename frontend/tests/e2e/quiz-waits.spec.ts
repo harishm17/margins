@@ -1,5 +1,8 @@
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { withPrisma } from './helpers/db'
+import { applyScreenSize, shot } from './helpers/v31-sessions'
 import { addContent, addMaterial, createCourse, createEmptyCourse, signIn } from './helpers/loop'
 
 // A topic quiz submitted while the AI is unavailable is stored, its short answers wait for the AI like
@@ -9,7 +12,11 @@ import { addContent, addMaterial, createCourse, createEmptyCourse, signIn } from
 // Each test signs in as its own account: the learning-loop specs share one, and a course made here would change what Home continues.
 const markAvailable = () => withPrisma((prisma) => prisma.aiStatus.deleteMany({}))
 
+test.beforeEach(async ({ page }) => applyScreenSize(page))
+
 test.afterEach(async () => {
+  // A test that held the grading job must not leave the gate shut for the next one.
+  await rm(join(process.env.E2E_RUN_DIR || join(process.cwd(), '..', '.e2e'), 'hold', 'grade_quiz.hold'), { force: true })
   await markAvailable()
 })
 
@@ -74,7 +81,8 @@ test('quiz: submitted during an outage, the answers are saved and graded once AI
   await page.goto(`/courses/${courseId}/topics/${topic}?view=quiz`)
   await expect(page.getByRole('heading', { name: 'Your answers are saved' })).toBeVisible()
 
-  // The outage ends: the reaper sends the grading again and the results appear by themselves.
+  // The outage ends the natural way, as it does for a student: only the shared status clears, and the job's own recheck
+  // lease (30 s) and the reaper (5 s in the e2e stack) bring the results back by themselves, within the long wait below.
   await markAvailable()
   await expect(page.getByRole('heading', { name: /of 3 points/ })).toBeVisible({ timeout: 150_000 })
 
@@ -186,4 +194,93 @@ test('quiz: a card for a grading that did not finish can be dismissed, which rem
   expect(await withPrisma((prisma) => prisma.quizSubmission.count({ where: { id: submission.id } }))).toBe(0)
   await page.reload()
   await expect(page.getByRole('alert').filter({ hasText: "Grading didn't finish" })).toHaveCount(0)
+})
+
+test('AI down shows multiple choice results at once', async ({ page }) => {
+  test.setTimeout(240_000)
+  await signIn(page, `quizwait-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`)
+  const courseId = await createEmptyCourse(page, 'Quiz partial course')
+  await addMaterial(page, courseId)
+  const course = await createCourse(page, 'Quiz partial course', [{ name: 'Graph traversal', minutes: 30 }], { existingCourseId: courseId })
+  const topic = course.topics['Graph traversal']
+  // With notes the topic page does not start preparing the topic: a second quiz set made meanwhile would replace this one as the newest.
+  await addContent(topic, { section_notes: '# Graph traversal\n\nBFS uses a queue.' })
+  const concept = await withPrisma(async (prisma) => {
+    const row = await prisma.concept.create({
+      data: { projectId: courseId, topicId: topic, name: 'Queues', summary: 'BFS uses a queue.', kind: 'concept', orderIndex: 0, objectiveIndexes: [] },
+    })
+    await prisma.topic.update({ where: { id: topic }, data: { evidenceBackfilledAt: new Date() } })
+    return row.id
+  })
+  const set = await withPrisma(async (prisma) =>
+    prisma.topicQuiz.create({
+      data: {
+        topicId: topic,
+        questions: [
+          { question_type: 'true_false', question_text: 'BFS uses a queue.', correct_answer: true, explanation: 'It does.', points: 1, concept_ids: [concept] },
+          { question_type: 'true_false', question_text: 'DFS uses a queue.', correct_answer: false, explanation: 'It uses a stack.', points: 1, concept_ids: [concept] },
+          {
+            question_type: 'short_answer',
+            question_text: 'Why does BFS find shortest paths?',
+            sample_answer: 'It visits nodes in order of distance.',
+            key_points: ['level order'],
+            points: 2,
+            concept_ids: [concept],
+          },
+        ],
+      },
+    })
+  )
+
+  // The grading job is held before it is sent (the stack's E2E_HOLD_DIR hook, src/lib/tasks/dispatch.ts), so the partial view stays
+  // until this test lets it go, whatever the AI status does meanwhile.
+  const holdDir = join(process.env.E2E_RUN_DIR || join(process.cwd(), '..', '.e2e'), 'hold')
+  const gate = join(holdDir, 'grade_quiz.hold')
+  await mkdir(holdDir, { recursive: true })
+  await writeFile(gate, '')
+
+  await page.goto(`/courses/${courseId}/topics/${topic}?view=quiz`)
+  await page.getByRole('button', { name: 'Start quiz' }).click()
+  // Question 1 right, question 2 wrong (true instead of false), question 3 a short answer the AI cannot grade now.
+  await page.getByRole('radio', { name: 'True' }).click()
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  await page.getByRole('radio', { name: 'True' }).click()
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
+  const trigger = `MOCK_LLM_FAIL:LLM_CREDIT_EXHAUSTEDx1@partial${Date.now()}`
+  await page.getByLabel('Your answer').locator('visible=true').fill(`Queue gives level order. ${trigger}`)
+  await page.getByRole('button', { name: 'Submit quiz' }).click()
+
+  // The multiple choice results are shown at once, with what waits, and no overall score.
+  const partial = page.getByTestId('partial-results')
+  await expect(partial).toBeVisible({ timeout: 60_000 })
+  await expect(partial.getByRole('heading', { name: 'Graded so far' })).toBeVisible()
+  await expect(partial).toContainText("1 of 2 multiple choice right. 1 short answer waits for grading; it'll be marked when the AI is back.")
+  await expect(partial).toContainText('DFS uses a queue.')
+  await expect(page.getByRole('heading', { name: /of \d+ points/ })).toHaveCount(0)
+  // Below it, the wait for the short answers (held here, so it reads as grading; with the AI away it reads "Your answers are saved").
+  await expect(page.getByRole('heading', { name: /^(Your answers are saved|Grading your quiz)$/ })).toBeVisible()
+  await shot(page, 'quiz-partial')
+
+  const stored = await withPrisma(async (prisma) => ({
+    submission: await prisma.quizSubmission.findFirstOrThrow({ where: { topicId: topic }, select: { id: true, status: true, ruleGradedAt: true, quizSetId: true } }),
+    attempts: await prisma.quizAttempt.count({ where: { topicId: topic } }),
+    events: await prisma.evidenceEvent.findMany({ where: { topicId: topic, source: 'quiz' }, select: { id: true, itemKey: true, sessionKey: true, score: true } }),
+  }))
+  expect(stored.submission.status).toBe('pending')
+  expect(stored.submission.ruleGradedAt).not.toBeNull()
+  expect(stored.submission.quizSetId).toBe(set.id)
+  // No attempt yet, but the two rule items already count, under the submission's session key.
+  expect(stored.attempts).toBe(0)
+  expect(stored.events.map((event) => [event.itemKey, event.score]).sort()).toEqual([[`quiz:${set.id}:0`, 1], [`quiz:${set.id}:1`, 0]])
+  expect(stored.events.every((event) => event.sessionKey === `quiz:${stored.submission.id}`)).toBe(true)
+
+  // The outage ends: the short answer is graded and the full score appears; the rule items keep their one event each.
+  const job = await withPrisma((prisma) => prisma.processingJob.findFirstOrThrow({ where: { jobType: 'grade_quiz', targetKey: `grade-quiz:${stored.submission.id}` } }))
+  await markAvailable()
+  await rm(gate, { force: true })
+  await writeFile(join(holdDir, `${job.id}.release`), '')
+  await expect(page.getByRole('heading', { name: /of 4 points/ })).toBeVisible({ timeout: 150_000 })
+  const done = await withPrisma((prisma) => prisma.evidenceEvent.findMany({ where: { topicId: topic, source: 'quiz' }, select: { id: true, itemKey: true } }))
+  expect(done.map((event) => event.itemKey).sort()).toEqual([`quiz:${set.id}:0`, `quiz:${set.id}:1`, `quiz:${set.id}:2`])
+  for (const event of stored.events) expect(done.some((later) => later.id === event.id)).toBe(true)
 })

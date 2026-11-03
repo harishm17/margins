@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { clip, focusPlaceholder, minutesLabel, minutesLeftLabel } from './format'
+import { clip, focusPlaceholder, minutesLabel, minutesLeftLabel, sessionLine } from './format'
 
 describe('minutesLeftLabel', () => {
   it('rounds down to whole minutes and handles the edges', () => {
@@ -9,6 +9,16 @@ describe('minutesLeftLabel', () => {
     assert.equal(minutesLeftLabel(59), 'Under 1 min left today')
     assert.equal(minutesLeftLabel(0), '0 min left today')
     assert.equal(minutesLeftLabel(-5), '0 min left today')
+  })
+})
+
+describe('sessionLine', () => {
+  it('says talked for spoken answers, typed for typed ones, and both when mixed', () => {
+    assert.equal(sessionLine({ minutes: 3, exchanges: 4, typed: 0 }, false), 'You talked for 3 minutes.')
+    assert.equal(sessionLine({ minutes: 1, exchanges: 4, typed: 4 }, false), 'You typed for 1 minute.')
+    assert.equal(sessionLine({ minutes: 3, exchanges: 4, typed: 1 }, true), 'You talked and typed for 3 minutes and sent 4 messages.')
+    assert.equal(sessionLine({ minutes: 2, exchanges: 1, typed: 1 }, true), 'You typed for 2 minutes and sent 1 message.')
+    assert.equal(sessionLine({ minutes: 1, exchanges: 0, typed: 0 }, true), 'You talked for 1 minute and sent 0 messages.')
   })
 })
 

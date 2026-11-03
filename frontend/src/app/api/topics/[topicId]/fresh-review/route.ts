@@ -1,6 +1,6 @@
 /**
  * "Fresh review": a new 6-question quiz set for a topic that is due, written by the regeneration
- * path (cached excerpts). Difficulty follows the topic's mastery, the focus is the concepts of the
+ * path (cached excerpts). Difficulty follows the topic's support band (spec 18.6: easy, medium or hard). The focus is the concepts of the
  * questions missed lately, and 1-2 questions come from the weakest prerequisite topic when there is one.
  * POST /api/topics/[topicId]/fresh-review -> the same answer as regenerate-content (a job id to follow).
  */
@@ -10,6 +10,7 @@ import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
 import { startRegeneration } from '@/lib/jobs/regenerate'
 import { freshReviewPreferences, planFreshReview } from '@/lib/learning/review-server'
+import { onDemandQuizPreferences, topicBandOf } from '@/lib/learning/quiz-band'
 import { apiInternal, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
@@ -25,11 +26,12 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     if (!topic) return apiNotFound('Topic not found')
 
     const plan = await planFreshReview(session.user.id, topic)
+    const band = await topicBandOf(session.user.id, topic.id)
     return await startRegeneration({
       userId: session.user.id,
       topic,
       contentType: 'topic_quiz',
-      preferences: freshReviewPreferences(plan),
+      preferences: onDemandQuizPreferences(freshReviewPreferences(plan), band),
     })
   } catch (error) {
     console.error('Fresh review error:', error)

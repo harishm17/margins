@@ -48,6 +48,8 @@ import { localDateParts } from './study-plan-time'
  */
 
 export const DEFAULT_TOPIC_MINUTES = 35
+/** A quick-pass topic's learn block (spec 18.8): a warm-up and a quiz, then review what is missed. */
+export const QUICK_PASS_MINUTES = 20
 export const REVIEW_MINUTES = 10
 export const QUIZ_MINUTES = 15
 export const UNIT_MOCK_MINUTES = 30
@@ -107,6 +109,8 @@ export type PlanTopic = {
   reviewDueAt: Date | null
   /** The topic's learning was finished today (it is quizzed tomorrow, not today). */
   learnedToday: boolean
+  /** The student chose a quick pass for this topic (spec 18.8): its learn block is `QUICK_PASS_MINUTES`. */
+  triage?: 'quick' | null
 }
 
 export type PlanUnit = { id: string; title: string; weekLabel: string | null; orderIndex: number }
@@ -274,9 +278,13 @@ export function fitsInDays(minutes: number, daily: number, options: { minLast?: 
   return false
 }
 
-/** Minutes of learning a topic still needs: all of it, half when one of notes and examples is done, none when learned. */
-export function learnMinutesLeft(topic: Pick<PlanTopic, 'estimatedMinutes' | 'learned' | 'started'>): number {
+/**
+ * Minutes of learning a topic still needs: all of it, half when one of notes and examples is done, none when learned. A quick
+ * pass is `QUICK_PASS_MINUTES` whatever the topic's own estimate (spec 18.8), so the plan fits more topics.
+ */
+export function learnMinutesLeft(topic: Pick<PlanTopic, 'estimatedMinutes' | 'learned' | 'started'> & { triage?: 'quick' | null }): number {
   if (topic.learned) return 0
+  if (topic.triage === 'quick') return QUICK_PASS_MINUTES
   const total = topic.estimatedMinutes && topic.estimatedMinutes > 0 ? topic.estimatedMinutes : DEFAULT_TOPIC_MINUTES
   return topic.started ? roundUp5(total / 2) : roundUp5(total)
 }
@@ -1093,6 +1101,8 @@ export function buildPlan(input: PlanInput): Plan {
       (fits === 0 ? '' : anyRelevant ? ' Topics that appear on your past exams come first, then course order.' : ' They are in course order.') +
       (unitMocksSkipped ? ' The mock exams after each unit are left out to make room.' : '') +
       (fullMocksReduced ? ' Only one full mock exam is planned, so there is more time to learn.' : '') +
+      // The topics that did not fit, by name, so the student can choose a quick pass for them (spec 18.8).
+      (unplaced.length > 0 ? ` Left out: ${unplaced.map((topic) => topic.name).join(', ')}.` : '') +
       ' Add study time or move the date to fit more.'
   }
 

@@ -386,6 +386,11 @@ export async function seedDemo(baseURL: string): Promise<DemoIds> {
   const api = await request.newContext({ baseURL, timeout: 120_000 })
   try {
     await signInApi(api, DEMO_EMAIL, DEMO_NAME)
+    // The demo student has closed the one-time "try before it helps" card, so it does not push every topic
+    // page down in the specs that share this account (topic-path.spec.ts covers the card with its own accounts).
+    await withPrisma((prisma) =>
+      prisma.user.updateMany({ where: { email: DEMO_EMAIL, seenEffortIntroAt: null }, data: { seenEffortIntroAt: new Date() } })
+    )
     const course = await ensureCourse(api, DEMO_COURSE, DEMO_COURSE_DESCRIPTION)
     await ensureMaterials(api, course)
     // Later runs find the math topic too; it is not one of the four mock-content topics.

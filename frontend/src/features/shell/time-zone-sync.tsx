@@ -2,18 +2,16 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
+import { readClientCookie, writeClientCookie } from '@/lib/utils/client-cookie'
 import { browserTimeZone } from '@/lib/utils/timezone'
 import { TIME_ZONE_COOKIE } from '@/lib/learning/time-zone'
 
 /** Writes the cookie when it is missing or has changed (travel). True when it wrote one. */
 function rememberTimeZone(): boolean {
   const zone = browserTimeZone()
-  const current = document.cookie
-    .split('; ')
-    .find((entry) => entry.startsWith(`${TIME_ZONE_COOKIE}=`))
-    ?.split('=')[1]
+  const current = readClientCookie(TIME_ZONE_COOKIE)
   if (current && decodeURIComponent(current) === zone) return false
-  document.cookie = `${TIME_ZONE_COOKIE}=${encodeURIComponent(zone)}; path=/; max-age=31536000; samesite=lax`
+  writeClientCookie(TIME_ZONE_COOKIE, encodeURIComponent(zone))
   return true
 }
 

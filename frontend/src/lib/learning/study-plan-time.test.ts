@@ -48,3 +48,10 @@ test('the zone cookie falls back to UTC when it is missing, odd or invalid', () 
   assert.equal(resolveTimeZone('%E0%A4%A'), 'UTC')
   assert.equal(resolveTimeZone('x'.repeat(100)), 'UTC')
 })
+
+test('a zone\'s formatter is made once and reused', async () => {
+  const { dateFormatter } = await import('./study-plan-time')
+  assert.equal(dateFormatter('America/Chicago', 'day'), dateFormatter('America/Chicago', 'day'))
+  assert.notEqual(dateFormatter('America/Chicago', 'day'), dateFormatter('America/Chicago', 'clock'))
+  assert.notEqual(dateFormatter('America/Chicago', 'day'), dateFormatter('UTC', 'day'))
+})

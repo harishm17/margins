@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   algebraEquivalent,
   checkPracticeAnswer,
+  missNote,
   normalizeAnswer,
   numberCandidates,
   parseNumber,
@@ -359,4 +360,17 @@ test('multiple choice is untouched by the new matching', () => {
 test('a hyphen between words is the same as a space', () => {
   assert.equal(checkPracticeAnswer(text, 'breadth first search'), true)
   assert.equal(checkPracticeAnswer({ ...text, correctAnswer: 'breadth first search' }, 'Breadth-first search'), true)
+})
+
+test('a miss says only that the answer is not a number, never anything about its size', () => {
+  const step = { answerType: 'numeric' as const, correctAnswer: '12', acceptableAnswers: [] }
+  assert.match(missNote(step, 'twelve-ish') ?? '', /number/)
+  // Any number, however close or far (a power of ten, a sign, a slipped digit), gets no note: it would confirm the digits.
+  for (const wrong of ['1200', '0.12', '1.2 m', '13', '-12', '12.0000001']) assert.equal(missNote(step, wrong), null, wrong)
+  assert.equal(missNote({ ...step, correctAnswer: '0' }, '10'), null)
+  // Never on a step whose key is not a number, nor on text or multiple choice, nor on a blank.
+  assert.equal(missNote({ ...step, correctAnswer: 'a queue' }, 'stack'), null)
+  assert.equal(missNote(text, 'dfs'), null)
+  assert.equal(missNote({ answerType: 'multiple_choice' as const, correctAnswer: 'B', acceptableAnswers: [] }, 'C'), null)
+  assert.equal(missNote(step, '  '), null)
 })

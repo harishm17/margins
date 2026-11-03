@@ -2,7 +2,7 @@
  * The UI state of a voice practice, as a pure reducer. The hook in use-voice-session.ts does the
  * imperative work (fetch, recognition, speech) and reports what happened here.
  */
-import type { VoiceOption } from '@/lib/voice/turn-client'
+import type { BoardSource, VoiceOption } from '@/lib/voice/turn-client'
 import type { LobbyAlert, VoiceAlert } from './errors'
 import type { VoiceStyle } from './voice-api'
 
@@ -22,6 +22,7 @@ export type Evaluation = {
   comment: string
   explanation: string
   ungraded: boolean
+  lookLinks?: BoardSource[]
 }
 
 export type EvaluationTone = 'accent' | 'warning' | 'danger' | 'neutral'
@@ -37,13 +38,16 @@ export function evaluationBadge(evaluation: Pick<Evaluation, 'isCorrect' | 'scor
   return { label: 'Not quite', tone: 'danger' }
 }
 
-export type StudentEntry = { id: number; role: 'student'; text: string }
+/** `via`: spoken, or typed (a typed answer, and the Hint and Skip buttons). */
+export type StudentEntry = { id: number; role: 'student'; text: string; via: 'voice' | 'text' }
 export type CoachEntry = {
   id: number
   role: 'coach'
   text: string
   streaming: boolean
   interrupted: boolean
+  /** A quiet line from the app in the coach's voice (the gentle line after a silence): not a turn, nothing was sent. */
+  note?: boolean
   evaluation?: Evaluation
   hint?: string
 }
@@ -51,12 +55,32 @@ export type TranscriptEntry = StudentEntry | CoachEntry
 
 export type QuestionInfo = { index: number; total: number; text: string; options?: VoiceOption[] }
 
+/**
+ * What the board shows: the question, the idea to explain, the thing to predict or the claim just told, as text with
+ * maths in it, and the page it comes from. It is the same text the coach says, so nothing is only audio.
+ */
+export type BoardItem = {
+  kind: 'question' | 'concept' | 'prediction' | 'claim'
+  text: string
+  /** The check question that follows a claim. */
+  question?: string
+  options?: VoiceOption[]
+  source?: BoardSource
+  /** An idea to explain (teach-back): its name and concept. */
+  idea?: { name: string; conceptId: string }
+}
+
 export type AnsweredQuestion = {
   text: string
   isCorrect: boolean
   score: number
   ungraded: boolean
+  /** Where the question's concepts are in the student's own file, when the server knew. */
+  lookLinks?: BoardSource[]
 }
+
+/** A teach-back idea that closed: explained, or taught after probes (with the pages to look at again). */
+export type IdeaResult = { name: string; outcome: 'explained' | 'taught'; conceptId: string | null; lookAgain: string[]; lookLinks: BoardSource[] }
 
 export type SpeechOutput = 'on' | 'off' | 'unsupported'
 
@@ -65,6 +89,8 @@ export type SessionState = {
   /** The coaching style of the open session (a sprint is always oral_quiz). */
   style: VoiceStyle
   inputMode: InputMode
+  /** The language the coach speaks (en, es, ...). */
+  language: string
   micPaused: boolean
   speech: SpeechOutput
   /** Coach audio is playing. */
@@ -72,8 +98,14 @@ export type SessionState = {
   /** A turn request is open (the coach is working or streaming). */
   turnActive: boolean
   interim: string
+  /** The words are in and the wait for more has begun: the screen says it is still listening, and Done is ready. */
+  holding: boolean
   entries: TranscriptEntry[]
   question: QuestionInfo | null
+  /** The item the coach is on, updated from each tool result. */
+  board: BoardItem | null
+  /** Teach-back: the ideas that have closed, in order. */
+  ideas: IdeaResult[]
   answered: AnsweredQuestion[]
   /** The coach said the drill is over; the summary follows when it stops talking. */
   complete: boolean
@@ -92,13 +124,17 @@ export const initialSessionState: SessionState = {
   phase: 'lobby',
   style: 'oral_quiz',
   inputMode: 'voice',
+  language: 'en',
   micPaused: false,
   speech: 'on',
   speaking: false,
   turnActive: false,
   interim: '',
+  holding: false,
   entries: [],
   question: null,
+  board: null,
+  ideas: [],
   answered: [],
   complete: false,
   alert: null,
@@ -114,12 +150,14 @@ export const initialSessionState: SessionState = {
 export type SessionAction =
   | { type: 'starting' }
   | { type: 'start-failed'; lobbyAlert: LobbyAlert; limitReached?: boolean }
-  | { type: 'started'; at: number; style: VoiceStyle; inputMode: InputMode; speech: SpeechOutput; micNotice: MicNotice | null }
+  | { type: 'started'; at: number; style: VoiceStyle; language?: string; inputMode: InputMode; speech: SpeechOutput; micNotice: MicNotice | null }
   | { type: 'reset' }
-  | { type: 'student-said'; text: string }
+  | { type: 'student-said'; text: string; via?: 'voice' | 'text' }
   | { type: 'turn-started' }
   | { type: 'coach-text'; delta: string }
   | { type: 'question'; question: QuestionInfo }
+  | { type: 'board'; board: BoardItem }
+  | { type: 'idea-done'; idea: IdeaResult }
   | { type: 'evaluation'; evaluation: Evaluation }
   | { type: 'hint'; text: string }
   | { type: 'session-complete' }
@@ -128,6 +166,8 @@ export type SessionAction =
   | { type: 'turn-aborted' }
   | { type: 'speaking'; on: boolean }
   | { type: 'interim'; text: string }
+  | { type: 'holding'; on: boolean }
+  | { type: 'note'; text: string }
   | { type: 'mic-paused'; paused: boolean }
   | { type: 'input-mode'; mode: InputMode; micNotice?: MicNotice | null }
   | { type: 'speech'; output: SpeechOutput }
@@ -185,6 +225,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         ...initialSessionState,
         phase: 'live',
         style: action.style,
+        language: action.language ?? 'en',
         startedAt: action.at,
         inputMode: action.inputMode,
         speech: action.speech,
@@ -200,7 +241,8 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         ...state,
         alert: null,
         interim: '',
-        entries: [...state.entries, { id: state.nextId, role: 'student', text: action.text }],
+        holding: false,
+        entries: [...state.entries, { id: state.nextId, role: 'student', text: action.text, via: action.via ?? 'voice' }],
         nextId: state.nextId + 1,
       }
 
@@ -220,7 +262,17 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       return patchOpenCoach(state, (entry) => ({ ...entry, text: entry.text + action.delta }))
 
     case 'question':
-      return { ...state, question: action.question }
+      return {
+        ...state,
+        question: action.question,
+        board: { kind: 'question', text: action.question.text, ...(action.question.options ? { options: action.question.options } : {}) },
+      }
+
+    case 'board':
+      return { ...state, board: action.board }
+
+    case 'idea-done':
+      return { ...state, ideas: [...state.ideas, action.idea] }
 
     case 'evaluation': {
       const next = patchOpenCoach(state, (entry) => ({ ...entry, evaluation: action.evaluation }))
@@ -229,10 +281,11 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         answered: [
           ...next.answered,
           {
-            text: state.question?.text ?? 'A question',
+            text: state.question?.text ?? state.board?.question ?? state.board?.text ?? 'A question',
             isCorrect: action.evaluation.isCorrect,
             score: action.evaluation.score,
             ungraded: action.evaluation.ungraded,
+            ...(action.evaluation.lookLinks && action.evaluation.lookLinks.length > 0 ? { lookLinks: action.evaluation.lookLinks } : {}),
           },
         ],
       }
@@ -260,7 +313,17 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       return state.interim === action.text ? state : { ...state, interim: action.text }
 
     case 'mic-paused':
-      return { ...state, micPaused: action.paused, interim: action.paused ? '' : state.interim }
+      return { ...state, micPaused: action.paused, interim: action.paused ? '' : state.interim, holding: action.paused ? false : state.holding }
+
+    case 'note':
+      return {
+        ...state,
+        entries: [...state.entries, { id: state.nextId, role: 'coach', text: action.text, streaming: false, interrupted: false, note: true }],
+        nextId: state.nextId + 1,
+      }
+
+    case 'holding':
+      return state.holding === action.on ? state : { ...state, holding: action.on }
 
     case 'input-mode':
       return {
@@ -268,6 +331,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         inputMode: action.mode,
         micPaused: false,
         interim: '',
+        holding: false,
         micNotice: action.micNotice === undefined ? (action.mode === 'voice' ? null : state.micNotice) : action.micNotice,
       }
 
@@ -289,6 +353,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         turnActive: false,
         speaking: false,
         interim: '',
+        holding: false,
         alert: action.alert ?? null,
         entries: closeCoach(state.entries, false),
       }
@@ -323,24 +388,56 @@ export type SessionSummary = {
   partly: number
   /** 0..1 of graded answers that were correct, null when nothing was graded. */
   score: number | null
-  revisit: string[]
+  /** The questions answered wrongly, each once, with the pages of their concepts when known. */
+  revisit: { text: string; lookLinks: BoardSource[] }[]
+  /** Teach-back: the ideas explained in the student's own words, and the ones the coach had to explain after two probes. */
+  explained: string[]
+  taught: { name: string; conceptId: string | null; lookAgain: string[]; lookLinks: BoardSource[] }[]
+  /** Teach-back: the idea that was open when the session ended, if it never closed. */
+  unfinished: { name: string; conceptId: string } | null
   minutes: number
   exchanges: number
+  /** How many of the student's messages were typed. */
+  typed: number
 }
 
-export function summarize(state: Pick<SessionState, 'answered' | 'entries' | 'startedAt' | 'endedAt'>): SessionSummary {
+export function summarize(state: Pick<SessionState, 'answered' | 'entries' | 'startedAt' | 'endedAt' | 'ideas'> & Partial<Pick<SessionState, 'board'>>): SessionSummary {
   const graded = state.answered.filter((item) => !item.ungraded)
   const correct = graded.filter((item) => item.isCorrect).length
   const partly = graded.filter((item) => !item.isCorrect && item.score >= 0.4).length
-  const revisit = graded.filter((item) => !item.isCorrect).map((item) => item.text)
+  const revisit: SessionSummary['revisit'] = []
+  for (const item of graded.filter((answer) => !answer.isCorrect)) {
+    const seen = revisit.find((entry) => entry.text === item.text)
+    if (!seen) revisit.push({ text: item.text, lookLinks: item.lookLinks ?? [] })
+    else if (seen.lookLinks.length === 0 && item.lookLinks) seen.lookLinks = item.lookLinks
+  }
+  const openIdea = state.board?.kind === 'concept' ? (state.board.idea ?? null) : null
   const seconds = state.startedAt && state.endedAt ? Math.max(0, (state.endedAt - state.startedAt) / 1000) : 0
   return {
     answered: state.answered.length,
     correct,
     partly,
     score: graded.length > 0 ? correct / graded.length : null,
-    revisit: [...new Set(revisit)],
+    revisit,
+    explained: state.ideas.filter((idea) => idea.outcome === 'explained').map((idea) => idea.name),
+    taught: state.ideas.filter((idea) => idea.outcome === 'taught').map((idea) => ({ name: idea.name, conceptId: idea.conceptId, lookAgain: idea.lookAgain, lookLinks: idea.lookLinks })),
+    unfinished: openIdea && !state.ideas.some((idea) => idea.name === openIdea.name) ? openIdea : null,
     minutes: Math.max(1, Math.round(seconds / 60)),
     exchanges: state.entries.filter((entry) => entry.role === 'student').length,
+    typed: state.entries.filter((entry) => entry.role === 'student' && entry.via === 'text').length,
   }
 }
+
+/** The one idea a drill after the session is about: the only idea taught, else the one left unfinished; with both or neither, none (the topic). */
+export function practiceConceptOf(summary: Pick<SessionSummary, 'taught' | 'unfinished'>): string | null {
+  if (summary.taught.length === 1 && !summary.unfinished) return summary.taught[0].conceptId
+  if (summary.taught.length === 0 && summary.unfinished) return summary.unfinished.conceptId
+  return null
+}
+
+/** The word under the orb: while the wait for more words runs, Listening becomes "Still listening". */
+export function orbLabel(orb: OrbState, holding: boolean): string {
+  return orb === 'listening' && holding ? STILL_LISTENING : ORB_LABEL[orb]
+}
+
+export const STILL_LISTENING = 'Still listening'

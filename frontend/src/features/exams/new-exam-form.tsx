@@ -1,9 +1,11 @@
 'use client'
 
+import { usePolling } from '@/lib/hooks/use-polling'
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { toast } from '@/components/ui/toaster'
 import { Checkbox } from '@/components/ui/checkbox'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { JobStatus } from '@/components/ui/job-status'
@@ -19,6 +21,7 @@ import type { ExamStyleState } from '@/lib/exams/style-state'
 import { jobFailureMessage } from '@/lib/jobs/failure-message'
 import { pollFailureMessage, type PollResult } from '@/lib/jobs/poll-job'
 import { cn } from '@/lib/utils'
+import { examShortfallNotes } from './exam-shortfall'
 import {
   DEFAULT_EXAM_CONFIG,
   DIFFICULTIES,
@@ -102,6 +105,8 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
   const [submitting, setSubmitting] = React.useState(false)
   const { blocked, report } = useAiStatus()
   const failureRef = React.useRef<HTMLDivElement>(null)
+  // How many questions this page asked for (not known for a job picked up again after a reload).
+  const askedRef = React.useRef<number | null>(null)
 
   const fail = React.useCallback((message: AiMessage) => {
     setPhase({ kind: 'failed', message })
@@ -116,6 +121,8 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
     timeoutMs: EXAM_JOB_TIMEOUT_MS,
     onSettled: (result) => {
       if (result.state === 'completed') {
+        // The exam is not always the one asked for: the student is told before the exam opens, and the note stays up a while.
+        for (const note of examShortfallNotes(result.job?.resultData, askedRef.current)) toast(note, { duration: 12_000 })
         const examId = result.job?.resultData?.exam_id
         router.push(typeof examId === 'string' ? `/courses/${courseId}/exams/${examId}` : `/courses/${courseId}/exams`)
       } else if (result.state === 'failed') {
@@ -137,6 +144,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
 
   async function create() {
     setSubmitting(true)
+    askedRef.current = totalQuestions
     try {
       const result = await apiFetch<{ jobId: string }>(`/api/projects/${courseId}/generate-exam`, {
         method: 'POST',
@@ -366,16 +374,7 @@ function ExamStyleStatus({ courseId, state }: { courseId: string; state: ExamSty
   const copy = STYLE_COPY[kind]
 
   // While analysing, look again every few seconds (for about three minutes).
-  React.useEffect(() => {
-    if (kind !== 'analysing') return
-    let count = 0
-    const timer = setInterval(() => {
-      count += 1
-      if (count > 18) clearInterval(timer)
-      else router.refresh()
-    }, 10_000)
-    return () => clearInterval(timer)
-  }, [kind, router])
+  usePolling(() => router.refresh(), { active: kind === 'analysing', intervalMs: 10_000, maxPolls: 18 })
 
   async function retry() {
     setStarting(true)

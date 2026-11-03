@@ -11,6 +11,10 @@ import { withPrisma } from './db'
  * course with hand-written conceptual questions to its own test account, straight in the dev
  * database (DATABASE_URL). It is idempotent.
  *
+ * The Hash tables topic also has concepts with claims from a notes file (the teach-back and guided-reading styles read them):
+ * Load factor (a claim with maths) and Collision (two claims). `makeLoadFactorStrong` puts Load factor ahead in the learner model,
+ * so teach-back asks about Collision first.
+ *
  * Progress is set so the sprint's three weakest topics are known: Recursion basics (no data),
  * Graph search (40, unfinished), Sorting by comparison (70); Hash tables (90) is left out.
  */
@@ -117,6 +121,13 @@ const TOPICS: {
   },
 ]
 
+/** Claims of the Hash tables topic, in the order guided reading reads them. */
+export const HASH_CLAIMS = [
+  { concept: 'Load factor', text: 'The load factor is $\\alpha = n / m$, the entries divided by the buckets.', page: 6 },
+  { concept: 'Collision', text: 'Two keys that share a bucket collide.', page: 4 },
+  { concept: 'Collision', text: 'Chaining keeps a list of keys in each bucket.', page: 5 },
+]
+
 export type VoiceFixture = {
   courseId: string
   topics: Record<string, string>
@@ -179,6 +190,28 @@ export async function ensureVoiceFixture(baseURL: string): Promise<VoiceFixture>
       })
     }
 
+    // Concepts and claims for Hash tables. Idempotent: found by name.
+    const hashTopicId = topics['Hash tables']
+    let material = await prisma.material.findFirst({ where: { projectId: project.id, filename: 'hash-notes.pdf' } })
+    material ??= await prisma.material.create({
+      data: { projectId: project.id, filename: 'hash-notes.pdf', category: 'lecture_notes', gcsPath: 'local://hash-notes.pdf', sizeBytes: 1 },
+    })
+    const conceptIds: Record<string, string> = {}
+    for (const [orderIndex, name] of ['Load factor', 'Collision'].entries()) {
+      let concept = await prisma.concept.findFirst({ where: { topicId: hashTopicId, name } })
+      concept ??= await prisma.concept.create({
+        data: { projectId: project.id, topicId: hashTopicId, name, summary: `${name}.`, kind: 'concept', orderIndex },
+      })
+      conceptIds[name] = concept.id
+    }
+    if ((await prisma.conceptClaim.count({ where: { conceptId: { in: Object.values(conceptIds) } } })) === 0) {
+      let order = 0
+      for (const claim of HASH_CLAIMS) {
+        await prisma.conceptClaim.create({
+          data: { conceptId: conceptIds[claim.concept], text: claim.text, quote: claim.text.slice(0, 120), materialId: material.id, orderIndex: order++, pageStart: claim.page },
+        })
+      }
+    }
     return {
       courseId: project.id,
       topics,
@@ -193,4 +226,36 @@ export async function ensureVoiceFixture(baseURL: string): Promise<VoiceFixture>
  */
 export async function clearVoiceSessions(): Promise<void> {
   await withPrisma((prisma) => prisma.voiceDrillSession.deleteMany({ where: { user: { email: VOICE_TEST_EMAIL } } }))
+}
+
+/** Load factor has been explained well three times, so teach-back starts with Collision, the weaker idea. Call it right before a session. */
+export async function makeLoadFactorStrong(): Promise<void> {
+  await withPrisma(async (prisma) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: VOICE_TEST_EMAIL } })
+    const concept = await prisma.concept.findFirstOrThrow({ where: { name: 'Load factor', project: { userId: user.id } } })
+    const now = new Date()
+    const data = {
+      lastEvidenceAt: now,
+      nUnassisted: 3,
+      // A review card that is fresh, so the concept's retrievability (and so its mastery) is not zero.
+      card: {
+        due: new Date(now.getTime() + 30 * 86_400_000).toISOString(),
+        stability: 30,
+        difficulty: 5,
+        elapsed_days: 0,
+        scheduled_days: 30,
+        learning_steps: 0,
+        reps: 3,
+        lapses: 0,
+        state: 2,
+        last_review: now.toISOString(),
+      },
+      derived: { level0Scores: [1, 1, 1].map((score) => ({ score, at: now.toISOString() })) },
+    }
+    await prisma.conceptMemory.upsert({
+      where: { userId_conceptId: { userId: user.id, conceptId: concept.id } },
+      create: { userId: user.id, projectId: concept.projectId, topicId: concept.topicId, conceptId: concept.id, ...data },
+      update: data,
+    })
+  })
 }

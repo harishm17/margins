@@ -1,0 +1,123 @@
+[
+  {
+    "id": "gears",
+    "name": "Gears and cadence",
+    "concepts": [
+      {"name": "Gear ratio", "summary": "Chainring teeth divided by rear cog teeth: how many times the wheel turns for one pedal turn."},
+      {"name": "Cadence", "summary": "Pedal revolutions per minute."},
+      {"name": "Development", "summary": "The distance travelled for one turn of the pedals."}
+    ],
+    "passages": [
+      {"filename": "cycling-notes.pdf", "page": 2, "text": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog. A chainring with 40 teeth driving a cog with 20 teeth gives a gear ratio of 2: the rear wheel turns twice for every full turn of the pedals. A higher ratio is a harder gear."},
+      {"filename": "cycling-notes.pdf", "page": 3, "text": "Cadence is the number of pedal revolutions per minute, written rpm. Most riders settle on a cadence between 70 and 100 rpm on flat ground. Cadence does not say how fast the bicycle goes, because the gear decides how far each pedal turn carries it."},
+      {"filename": "cycling-notes.pdf", "page": 4, "text": "Development is the distance the bicycle travels for one full turn of the pedals. It equals the gear ratio multiplied by the circumference of the wheel. With a gear ratio of 2 and a wheel circumference of 2 metres, the development is 4 metres."},
+      {"filename": "cycling-notes.pdf", "page": 5, "text": "Speed follows from development and cadence: distance per minute equals development multiplied by cadence. Dividing metres per minute by 60 gives metres per second. Changing to a harder gear raises the development, so the same cadence gives a higher speed."},
+      {"filename": "cycling-notes.pdf", "page": 6, "text": "Course logistics: the cycling unit quiz is open for one week after the lecture, and each student may attempt it twice. The better score is kept."}
+    ],
+    "problem": {
+      "statement": "A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm.",
+      "steps": [
+        {"question": "What is the gear ratio?", "answer": "3", "acceptable_answers": ["3.0", "3:1"], "tolerance": 0, "answer_type": "numeric"},
+        {"question": "What is the development, in metres?", "answer": "6.3", "acceptable_answers": ["6.3 m", "6.3 metres"], "tolerance": 0.05, "answer_type": "numeric"},
+        {"question": "What is the speed, in metres per minute?", "answer": "504", "acceptable_answers": ["504 m/min", "504 metres per minute"], "tolerance": 1, "answer_type": "numeric"}
+      ],
+      "wrong_answer": "I got 5.04 metres per minute for the speed. Is that right?",
+      "right_answer": "I worked out 504 metres per minute for the speed. Is that right?",
+      "attempts": [
+        "I think I multiply the teeth together, 48 times 16, and then use the wheel size somehow.",
+        "I divided 80 by 3 to get the speed, but that does not use the wheel at all."
+      ]
+    },
+    "lookups": [
+      {"question": "What does the lecture say cadence is?", "expect_terms": ["pedal revolutions per minute", "rpm"]},
+      {"question": "How do I calculate the gear ratio according to my notes?", "expect_terms": ["chainring", "rear cog", "teeth"]},
+      {"question": "What is development in the cycling notes?", "expect_terms": ["distance", "full turn of the pedals", "one full turn"]}
+    ],
+    "understand": {
+      "concept": "Development",
+      "attempt": "development is how fast you go, so a bigger number means a quicker bike",
+      "broad": "Explain everything about gears and cadence"
+    },
+    "logistics": {"question": "How many times can I attempt the cycling unit quiz?", "expect_terms": ["twice", "two"]}
+  },
+  {
+    "id": "interest",
+    "name": "Compound interest",
+    "concepts": [
+      {"name": "Compound growth", "summary": "Interest that is earned on earlier interest as well as on the starting amount."},
+      {"name": "Growth factor", "summary": "One plus the rate: the number the balance is multiplied by each period."},
+      {"name": "Doubling time", "summary": "How long a balance takes to double at a steady rate."}
+    ],
+    "passages": [
+      {"filename": "money-notes.pdf", "page": 1, "text": "Compound growth means that interest is earned on the interest already added as well as on the amount first invested. After each period the balance is multiplied by the same number, so the balance grows faster each period than the one before."},
+      {"filename": "money-notes.pdf", "page": 2, "text": "The growth factor is one plus the rate per period, written as a decimal. A rate of 10 percent per period gives a growth factor of 1.10. After n periods the balance is the starting amount times the growth factor raised to the power n."},
+      {"filename": "money-notes.pdf", "page": 3, "text": "Doubling time is the number of periods a balance needs to double. A quick estimate is the rule of 72: divide 72 by the rate in percent per period. At 6 percent per period the estimate is 12 periods."},
+      {"filename": "money-notes.pdf", "page": 4, "text": "Simple interest differs from compound interest: simple interest is always taken on the starting amount only, so the balance rises by the same amount each period."},
+      {"filename": "money-notes.pdf", "page": 5, "text": "Course logistics: the money unit has a problem set due on the Friday of week four. Late problem sets lose 10 percent per day."}
+    ],
+    "problem": {
+      "statement": "A savings account holds 1,500 dollars and pays 4 percent interest once a year, compounded yearly. Nothing is added or taken out.",
+      "steps": [
+        {"question": "What is the growth factor for one year?", "answer": "1.04", "acceptable_answers": ["1.040"], "tolerance": 0, "answer_type": "numeric"},
+        {"question": "What is the balance after 5 years, in dollars?", "answer": "1824.98", "acceptable_answers": ["1,824.98", "$1824.98", "1825"], "tolerance": 0.5, "answer_type": "numeric"}
+      ],
+      "wrong_answer": "I got 1,800 dollars after 5 years, because 4 percent of 1,500 is 60 and 60 times 5 is 300. Is that right?",
+      "right_answer": "I calculated 1,824.98 dollars after 5 years. Is that right?",
+      "attempts": [
+        "I think the balance is 1,500 plus 4 percent each year, but I am not sure how to repeat that five times.",
+        "I tried 1,500 times 1.04 and got 1,560 for the first year, then I got stuck on the later years."
+      ]
+    },
+    "lookups": [
+      {"question": "What is the growth factor according to my notes?", "expect_terms": ["one plus the rate", "1 plus the rate"]},
+      {"question": "How does simple interest differ from compound interest in the lecture?", "expect_terms": ["starting amount", "same amount each period"]},
+      {"question": "What is the rule of 72 in my notes?", "expect_terms": ["divide 72", "72 by the rate"]}
+    ],
+    "understand": {
+      "concept": "Compound growth",
+      "attempt": "compound growth is when you earn the same interest every year, so it adds up in a straight line",
+      "broad": "Explain everything about compound interest"
+    },
+    "logistics": {"question": "When is the money problem set due?", "expect_terms": ["friday", "week four"]}
+  },
+  {
+    "id": "search",
+    "name": "Binary search",
+    "concepts": [
+      {"name": "Sorted precondition", "summary": "Binary search only works when the collection is already in order."},
+      {"name": "Halving", "summary": "Each comparison throws away half of the candidates that remain."},
+      {"name": "Worst-case comparisons", "summary": "The most comparisons the search can need for a given size."}
+    ],
+    "passages": [
+      {"filename": "search-notes.pdf", "page": 1, "text": "Binary search needs the collection to be sorted first. Without the order, comparing with the middle item says nothing about which half can hold the target, so the method gives wrong answers on unsorted data."},
+      {"filename": "search-notes.pdf", "page": 2, "text": "Halving is the heart of binary search. Compare the target with the middle item; if they differ, keep only the half in which the target could be and repeat. Each comparison throws away half of the items still in play."},
+      {"filename": "search-notes.pdf", "page": 3, "text": "In the worst case binary search needs about log base 2 of n comparisons, rounded up, for n items. Doubling the number of items adds only one more comparison, which is why the method scales so well."},
+      {"filename": "search-notes.pdf", "page": 4, "text": "Linear search checks the items one at a time and needs up to n comparisons in the worst case. It works on unsorted data, which binary search cannot handle."},
+      {"filename": "search-notes.pdf", "page": 5, "text": "Course logistics: lab 3 on searching is done in pairs and submitted through the course site. Pairs are announced in the second lecture."}
+    ],
+    "problem": {
+      "statement": "A sorted list holds 600 numbers. Binary search starts with all of them still in play and halves the number in play with each comparison.",
+      "steps": [
+        {"question": "About how many numbers are still in play after 3 comparisons, rounded up?", "answer": "75", "acceptable_answers": ["75 numbers"], "tolerance": 0, "answer_type": "numeric"},
+        {"question": "At most how many comparisons does the search need for the 600 numbers?", "answer": "10", "acceptable_answers": ["10 comparisons", "ten"], "tolerance": 0, "answer_type": "numeric"}
+      ],
+      "wrong_answer": "I think it needs 300 comparisons at most, since I keep halving 600. Is that right?",
+      "right_answer": "I worked out that it needs at most 10 comparisons. Is that right?",
+      "attempts": [
+        "I think I have to halve 600 until I get down to 1 but I lost count of how many times that was.",
+        "I tried dividing 600 by 2 over and over and got 300, 150, 75, then I was not sure when to stop."
+      ]
+    },
+    "lookups": [
+      {"question": "Why does binary search need sorted data according to my notes?", "expect_terms": ["sorted", "which half", "middle item"]},
+      {"question": "What does linear search do, in the lecture notes?", "expect_terms": ["one at a time", "n comparisons"]},
+      {"question": "What does the lecture say about doubling the number of items?", "expect_terms": ["one more comparison", "adds only one"]}
+    ],
+    "understand": {
+      "concept": "Halving",
+      "attempt": "halving means the search splits the list into two halves and checks both of them every time",
+      "broad": "Explain everything about binary search"
+    },
+    "logistics": {"question": "Who do I work with on lab 3?", "expect_terms": ["pairs", "second lecture"]}
+  }
+]

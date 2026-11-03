@@ -14,6 +14,7 @@ import {
   House,
   List,
   ListBullets,
+  TreeStructure,
 } from '@phosphor-icons/react/dist/ssr'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
@@ -68,7 +69,7 @@ function MoreRow({ href, icon: Icon, label, badge }: { href: string; icon: React
 
 /**
  * The course navigation on a phone or small tablet: a bar of five targets fixed to the bottom, inside
- * a course (research idea 9). Overview, Plan, Topics and Ask are one tap away; More holds Review, Mock
+ * a course (research idea 9). Overview, Plan, Topics and Ask are one tap away; More holds Review, Map, Mock
  * exams, Materials and the course settings, and the full menu (courses, topic tree, account) stays
  * on the top bar's menu button. Hidden from 1024px, where the sidebar takes over.
  */
@@ -88,7 +89,7 @@ export function MobileTabs() {
   if (!course) return null
 
   const base = `/courses/${course.id}`
-  const inMore = ['review', 'exams', 'materials', 'settings'].some((section) => pathname.startsWith(`${base}/${section}`))
+  const inMore = ['review', 'map', 'exams', 'materials', 'settings'].some((section) => pathname.startsWith(`${base}/${section}`))
   const tabs: Tab[] = [
     { key: 'overview', label: 'Overview', href: base, icon: House, active: pathname === base, badge: course.dueCount },
     { key: 'plan', label: 'Plan', href: `${base}/plan`, icon: CalendarCheck, active: pathname.startsWith(`${base}/plan`) },
@@ -103,7 +104,7 @@ export function MobileTabs() {
       <div aria-hidden="true" className="h-(--tabbar-height) lg:hidden" />
       <nav
         aria-label="Course tabs"
-        className="fixed inset-x-0 bottom-0 z-topbar border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-topbar border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:hidden"
       >
         <div className="grid h-14 grid-cols-5 px-1">
           {tabs.map((tab) => (
@@ -132,6 +133,7 @@ export function MobileTabs() {
           </div>
           <div className="flex flex-col gap-0.5 px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-1">
             <MoreRow href={`${base}/review`} icon={ArrowsClockwise} label="Review" badge={course.dueCount} />
+            <MoreRow href={`${base}/map`} icon={TreeStructure} label="Map" />
             <MoreRow href={`${base}/exams`} icon={Exam} label="Mock exams" />
             <MoreRow href={`${base}/materials`} icon={Files} label="Materials" />
             <MoreRow href={`${base}/settings`} icon={Gear} label="Course settings" />

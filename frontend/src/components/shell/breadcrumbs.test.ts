@@ -25,6 +25,7 @@ test('topic page: course, topics, topic name', () => {
 
 test('sections', () => {
   assert.deepEqual(buildCrumbs('/courses/c1/materials', nav).at(-1), { label: 'Materials' })
+  assert.deepEqual(buildCrumbs('/courses/c1/map', nav).at(-1), { label: 'Map' })
   assert.deepEqual(buildCrumbs('/courses/c1/exams', nav).at(-1), { label: 'Mock exams' })
   assert.deepEqual(buildCrumbs('/courses/c1/exams/new', nav).at(-1), { label: 'New mock exam' })
   assert.deepEqual(buildCrumbs('/courses/c1/exams/e1/results/s1', nav).at(-1), { label: 'Results' })

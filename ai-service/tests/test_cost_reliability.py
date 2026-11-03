@@ -110,10 +110,25 @@ class FakeGenerators:
 
 
 @pytest.fixture
-def generators(monkeypatch):
+def generators(monkeypatch, db):
     FakeGenerators.reset()
     for name in ("NotesGenerator", "ExamplesGenerator", "QuizGenerator"):
         monkeypatch.setattr(jobs, name, FakeGenerators)
+
+    async def extract_concepts(topic_id):
+        await FakeGenerators()._run("concepts", {"topic_id": topic_id})
+        return SimpleNamespace(as_result=lambda: {"topic_id": topic_id, "concepts": 0})
+
+    async def generate_warmup(topic_id):
+        await FakeGenerators()._run("warmup", {"topic_id": topic_id})
+        warmup_id = new_id()
+        await db.execute(
+            "INSERT INTO topic_quizzes (id, topic_id, questions, kind, created_at) "
+            "VALUES ($1, $2, '[]'::jsonb, 'warmup', NOW())", warmup_id, topic_id)
+        return {"warmup_id": warmup_id, "total_questions": 0, "dropped_unsupported": 0}
+
+    monkeypatch.setattr(jobs, "extract_concepts", extract_concepts)
+    monkeypatch.setattr(jobs, "generate_warmup", generate_warmup)
     return FakeGenerators
 
 
@@ -144,11 +159,9 @@ async def course(db):
 
 
 async def run_job(db, course, topic_id, content_type, **preferences):
-    job_id = await seed_job(db, course.user_id, project_id=course.project_id)
-    payload = JobPayload(
-        jobId=job_id, jobType="generate_content",
-        data={"topicId": topic_id, "contentType": content_type, "preferences": preferences},
-    )
+    data = {"topicId": topic_id, "contentType": content_type, "preferences": preferences}
+    job_id = await seed_job(db, course.user_id, project_id=course.project_id, input_data=data)
+    payload = JobPayload(jobId=job_id, jobType="generate_content", data=data)
     return job_id, await jobs.generate_content_job(payload)
 
 
@@ -452,22 +465,22 @@ async def finish_chain(db, course, dispatched, topic_id, content_type, **prefere
 class TestGenerationChain:
     async def test_notes_then_the_other_missing_types_one_at_a_time(self, db, course, generators, dispatched):
         topic = course.topics[0]
-        await run_job(db, course, topic, "section_notes", prepare_rest=True)
+        await run_job(db, course, topic, "concepts", prepare_rest=True)
 
-        # Only the next type is queued, not all three: examples after notes ...
+        # Only the next type is queued, not all five: the warm-up after the concepts ...
         assert [(job["data"]["contentType"], job["data"]["preferences"]) for job in dispatched] == [
-            ("solved_examples", {"prepare_rest": True})
+            ("warmup", {"prepare_rest": True})
         ]
         job = await get_job(db, dispatched[0]["job_id"])
-        assert job["status"] == "pending" and job["target_key"] == f"content:{topic}:solved_examples"
+        assert job["status"] == "pending" and job["target_key"] == f"content:{topic}:warmup"
         assert job["user_id"] == course.user_id and job["project_id"] == course.project_id
 
     async def test_the_whole_chain_runs_in_order_and_stops(self, db, course, generators, dispatched):
         topic = course.topics[0]
-        ran = await finish_chain(db, course, dispatched, topic, "section_notes", prepare_rest=True)
+        ran = await finish_chain(db, course, dispatched, topic, "concepts", prepare_rest=True)
 
         assert [content_type for _, content_type in ran] == [
-            "section_notes", "solved_examples", "interactive_examples", "topic_quiz",
+            "concepts", "warmup", "section_notes", "solved_examples", "interactive_examples", "topic_quiz",
         ]
         assert {t for t, _ in ran} == {topic}  # prepare_rest stays on this topic
         assert await stored_types(db, topic) == {
@@ -478,16 +491,16 @@ class TestGenerationChain:
     async def test_types_the_topic_already_has_are_skipped(self, db, course, generators, dispatched):
         topic = course.topics[0]
         await run_job(db, course, topic, "interactive_examples")
-        ran = await finish_chain(db, course, dispatched, topic, "section_notes", prepare_rest=True)
-        assert [c for _, c in ran] == ["section_notes", "solved_examples", "topic_quiz"]
+        ran = await finish_chain(db, course, dispatched, topic, "concepts", prepare_rest=True)
+        assert [c for _, c in ran] == ["concepts", "warmup", "section_notes", "solved_examples", "topic_quiz"]
 
     async def test_types_with_a_job_in_flight_are_not_queued_twice(self, db, course, generators, dispatched):
         topic = course.topics[0]
         await seed_job(db, course.user_id, project_id=course.project_id, status="processing",
-                       input_data={"topicId": topic, "contentType": "solved_examples"},
-                       target_key=f"content:{topic}:solved_examples")
-        await run_job(db, course, topic, "section_notes", prepare_rest=True)
-        assert [job["data"]["contentType"] for job in dispatched] == ["interactive_examples"]
+                       input_data={"topicId": topic, "contentType": "warmup"},
+                       target_key=f"content:{topic}:warmup")
+        await run_job(db, course, topic, "concepts", prepare_rest=True)
+        assert [job["data"]["contentType"] for job in dispatched] == ["section_notes"]
 
     async def test_a_plain_job_queues_nothing(self, db, course, generators, dispatched):
         await run_job(db, course, course.topics[0], "section_notes")
@@ -518,11 +531,11 @@ class TestGenerationChain:
         self, db, course, generators, dispatched
     ):
         first = course.topics[0]
-        ran = await finish_chain(db, course, dispatched, first, "section_notes", prepare_all=True)
+        ran = await finish_chain(db, course, dispatched, first, "concepts", prepare_all=True)
 
         order = [(course.topics.index(t), c) for t, c in ran]
         expected = [(i, c) for i in range(3) for c in
-                    ("section_notes", "solved_examples", "interactive_examples", "topic_quiz")]
+                    ("concepts", "warmup", "section_notes", "solved_examples", "interactive_examples", "topic_quiz")]
         assert order == expected
         assert generators.max_active == 1  # one topic in flight, one job at a time
 
@@ -533,7 +546,7 @@ class TestGenerationChain:
         for content_type in generation_chain.CONTENT_ORDER:
             await run_job(db, course, middle, content_type)
         await db.execute("UPDATE topics SET user_confirmed = FALSE WHERE id = $1", course.topics[2])
-        ran = await finish_chain(db, course, dispatched, course.topics[0], "section_notes", prepare_all=True)
+        ran = await finish_chain(db, course, dispatched, course.topics[0], "concepts", prepare_all=True)
         assert {t for t, _ in ran} == {course.topics[0]}
 
     async def test_prepare_all_skips_a_topic_that_cannot_be_generated(self, db, course, generators, dispatched):
@@ -541,9 +554,9 @@ class TestGenerationChain:
         with pytest.raises(HTTPException) as raised:
             await run_job(db, course, course.topics[0], "section_notes", prepare_all=True)
         assert raised.value.status_code == 400
-        # The run moves on to the second topic, starting with its notes.
+        # The run moves on to the second topic, starting with its concepts.
         assert [(job["data"]["topicId"], job["data"]["contentType"]) for job in dispatched] == [
-            (course.topics[1], "section_notes")
+            (course.topics[1], "concepts")
         ]
 
     async def test_a_failed_dispatch_marks_the_new_job_undelivered(self, db, course, generators, monkeypatch):
@@ -551,9 +564,9 @@ class TestGenerationChain:
             raise RuntimeError("queue down")
 
         monkeypatch.setattr(generation_chain, "enqueue_job", broken)
-        await run_job(db, course, course.topics[0], "section_notes", prepare_rest=True)
+        await run_job(db, course, course.topics[0], "concepts", prepare_rest=True)
         row = await db.fetchrow("SELECT status, error_code, retryable FROM processing_jobs WHERE target_key = $1",
-                                f"content:{course.topics[0]}:solved_examples")
+                                f"content:{course.topics[0]}:warmup")
         assert (row["status"], row["error_code"], row["retryable"]) == ("failed", "ENQUEUE_FAILED", True)
 
     async def test_missing_content_types(self, db, course):

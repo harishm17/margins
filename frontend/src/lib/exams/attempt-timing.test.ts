@@ -93,3 +93,20 @@ test('readStoredAnswers tolerates bad stored data', () => {
   assert.deepEqual(readStoredAnswers([1]), {})
   assert.deepEqual(readStoredAnswers({ '0': 'A', '1': { x: 1 } }), { '0': 'A' })
 })
+
+test('answers with a confidence are kept, and a confidence out of range is dropped', () => {
+  const clean = sanitizeAnswers(
+    { '0': { answer: 'B', confidence: 0.75 }, '1': { answer: 'x', confidence: 3 }, '2': { answer: { deep: 1 } }, '3': { confidence: 0.5 } },
+    5
+  )
+  assert.deepEqual(clean, { '0': { answer: 'B', confidence: 0.75 }, '1': 'x' })
+  assert.deepEqual(readStoredAnswers({ '0': { answer: 'B', confidence: 0.5 }, '1': 'A' }), { '0': { answer: 'B', confidence: 0.5 }, '1': 'A' })
+})
+
+test('an answer keeps a valid confidence level and drops an unknown one', () => {
+  const clean = sanitizeAnswers(
+    { '0': { answer: 'True', confidence: 0.5, confidenceLevel: 'guess' }, '1': { answer: 'True', confidence: 0.5, confidenceLevel: 'x' } },
+    5
+  )
+  assert.deepEqual(clean, { '0': { answer: 'True', confidence: 0.5, confidenceLevel: 'guess' }, '1': { answer: 'True', confidence: 0.5 } })
+})

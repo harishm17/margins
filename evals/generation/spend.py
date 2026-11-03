@@ -29,7 +29,20 @@ DEFAULT_OUTPUT_TOKENS = {
     "interactive_examples": 7000,
     "topic_quiz": 6000,
     "extract_topics": 1500,
+    "extract_concepts": 7000,
+    "warmup": 3000,
     "judge": 8000,
+    # The tutoring eval (evals/tutoring): a practice tutor reply with a short private analysis, the
+    # small leak judge, and one Opus judge call per scenario.
+    "tutor": 700,
+    "router": 100,
+    "judge_tutoring": 2500,
+    # The teach-back teaches-before-probe judge: one asking turn, a one-sentence reason and a verdict (about $0.008 a call at opus:medium).
+    "judge_teach_back": 700,
+    # An Ask reply (an explanation of under 150 words, or a question back) and its check card.
+    "chat": 500,
+    # A voice coach turn: one or two spoken sentences, or a tool call.
+    "voice": 250,
 }
 FALLBACK_OUTPUT_TOKENS = 6000
 OBSERVED_MARGIN = 1.25

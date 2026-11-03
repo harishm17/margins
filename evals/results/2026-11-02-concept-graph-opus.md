@@ -1,0 +1,59 @@
+# Generation eval: concept-graph-opus
+
+- Date: 2026-11-02. Code: `e76d188fef`, branch `feat/v3-map`.
+- Corpora and topics generated: mit-18.05 4. Topics came from: the app's course planner.
+- Models: opus:medium. Content types: concepts, warmup.
+- Requested per topic: 3 examples of each kind, 10 quiz questions, medium difficulty, comprehensive notes.
+- Judge: off.
+- Spend: $1.07 generation, $0.08 topic extraction, $0.00 judge; total $1.15 (caps: $3.00 total, $3.00 judge).
+
+## Cost and latency
+
+Cost uses the app's own price table (`usage.py`) on the token counts the API reported. A topic's cost is the sum of the mean cost of each content type, so the 12-topic projection is for one set of all the types generated here, times 12. Latency is wall time of the app's generator call.
+
+| Model | Per topic | Projected, 12 topics | Concepts | Warm-up | Seconds per topic | Total spent |
+|---|---|---|---|---|---|---|
+| opus:medium | $0.268 | $3.21 | $0.142 (38s) | $0.126 (30s) | 69s | $1.070 |
+
+Per-type cells are mean cost per generation and, in brackets, mean seconds.
+
+| Model | Calls | Input tokens | Output tokens | Cache write tokens | Cache read tokens |
+|---|---|---|---|---|---|
+| opus:medium | 12 | 107,544 | 32,011 | 0 | 0 |
+
+## Automatic checks
+
+No model is involved. These are lexical heuristics: they find things worth reading, they do not prove content right or wrong (see the README for what each can miss). Counts are over every topic generated.
+
+| Check | opus:medium |
+|---|---|
+| Plain-text fields with `$` or backslash sequences | 0 |
+| Fields with unbalanced `$` | 0 |
+| Fields with bare currency | 0 |
+| MC explanations naming an option letter (any / strict `Option C`, `(B)`) | 0 / 0 of 0 |
+| Quiz recall-copy rate (questions whose numbers all come from this model's notes or examples) | n/a (0 of 0) |
+| Concept claim quotes found in their chunk (gate: 98% or more) | 100% (75 of 75) PASS |
+| Topics with 3-8 concepts | 4/4 (mean 6.2) |
+| Topics where every objective has a concept | 4/4 |
+| Topics with an acyclic prerequisite graph | 4/4 |
+| Items whose concept tags are all valid (gate: 100%) | 100% (20 of 20) PASS |
+| Warm-up questions the topic quiz repeats (gate: 0) | n/a (needs warm-up and quiz) |
+| Notes with all expected sections | n/a |
+| Notes inside the requested word band | n/a (mean n/a words) |
+| Notes with 5-8 recap bullets | n/a |
+| Worked-example sets with the requested count | n/a |
+| Practice sets with the requested count | n/a |
+| Quizzes with the requested question count | n/a |
+| Grounding proxy (share of notes sentences sharing vocabulary with the excerpts) | n/a |
+| Near-duplicate example statements across topics (Jaccard > 0.6) | 0 |
+
+## Judge
+
+The judge was not run.
+
+## Side by side
+
+Topic `mit-18.05/t00-sets-and-counting-principles`. One notes section and two quiz questions per model, as stored (multiple-choice options already shuffled by the app).
+
+### opus:medium
+

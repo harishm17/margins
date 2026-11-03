@@ -58,7 +58,26 @@ export const getExamTitles = cache(async (userId: string, courseId: string): Pro
   if (!areRecordIds(courseId)) return new Map()
   const exams = await prisma.sampleExam.findMany({
     where: { projectId: courseId, project: { userId } },
-    select: { id: true, name: true, createdAt: true },
+    select: { id: true, name: true, createdAt: true, topicsCovered: true },
   })
   return examTitles(exams)
 })
+
+/**
+ * The mock exam the student is in the middle of in this course (the oldest, when several), or null. A timed attempt
+ * whose time ran out while they were away is not in progress any more: the next visit to the exam submits it.
+ */
+export async function getOpenExamId(userId: string, courseId: string, now: Date = new Date()): Promise<string | null> {
+  if (!areRecordIds(courseId)) return null
+  const attempt = await prisma.examSubmission.findFirst({
+    where: {
+      userId,
+      status: 'in_progress',
+      sampleExam: { projectId: courseId, project: { userId } },
+      OR: [{ deadlineAt: null }, { deadlineAt: { gt: now } }],
+    },
+    orderBy: { startedAt: 'asc' },
+    select: { sampleExamId: true },
+  })
+  return attempt?.sampleExamId ?? null
+}

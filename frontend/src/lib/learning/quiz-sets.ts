@@ -38,7 +38,7 @@ export async function loadAllQuizQuestionSets(
   topicId: string
 ): Promise<Map<string | null, RawQuestion[]>> {
   const [sets, legacy] = await Promise.all([
-    prisma.topicQuiz.findMany({ where: { topicId }, orderBy: { createdAt: 'asc' }, select: { id: true, questions: true } }),
+    prisma.topicQuiz.findMany({ where: { topicId, kind: { in: ['standard', 'retry'] } }, orderBy: { createdAt: 'asc' }, select: { id: true, questions: true } }),
     loadLegacyQuestions(topicId),
   ])
   const map = new Map<string | null, RawQuestion[]>()

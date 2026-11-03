@@ -79,6 +79,11 @@ export function quoteForDisplay(citedText: string): string {
   return citedText.replace(/^#{1,6}[ \t]+/gm, '').trim()
 }
 
+/** A cited quote on one line, for a place that shows it inside a sentence: heading marks dropped, line breaks as spaces. */
+export function quoteOnOneLine(citedText: string): string {
+  return quoteForDisplay(citedText).replace(/\s*\n+\s*/g, ' ')
+}
+
 export function isPdf(filename: string): boolean {
   return filename.toLowerCase().endsWith('.pdf')
 }

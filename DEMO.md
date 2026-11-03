@@ -45,7 +45,7 @@ ANTHROPIC_API_KEY=sk-ant-your-key-here
 
 For the test sign-in, also `export ENABLE_TEST_LOGIN=true` before `docker compose up`.
 
-The voice coach runs on the same Claude key; the browser does the speech. All other variables are configured in `docker-compose.yml`. Key defaults:
+The voice coach, the practice tutor, Ask and the recall grader run on the same Claude key; the browser does the speech. On the mock provider they return placeholder text, so the tutoring scenes only show the flow, not real replies. All other variables are configured in `docker-compose.yml`. Key defaults:
 
 | Variable            | Value                |
 |---------------------|----------------------|
@@ -71,20 +71,29 @@ The voice coach runs on the same Claude key; the browser does the speech. All ot
 2. Show the two uploaded materials (lecture notes + textbook chapter) with "valid" status
 3. Show the three extracted topics: Data Structures, Algorithm Analysis, Sorting Algorithms
 
-### Scene 3 — Reading Notes
-1. Click **Data Structures**
-2. Show the generated notes tab — full markdown with tables and citations
-3. Scroll through the content
+<!-- draft for Harish -->
+### Scene 3 — The Topic Path
+1. Click **Data Structures**. The topic opens on its next step, with one sentence saying why
+2. If the topic says "Getting this topic ready", wait a moment. Margins is finding the ideas in the topic's pages, and the path needs them
+3. Show the path across the top: Warm-up, Read, Recall, Practice, Quiz. Worked examples, the explainer and voice practice sit beside it as tools
+4. Show the one-time card, "Margins asks you to try before it helps"
 
-### Scene 4 — Solved Examples
-1. Switch to the **Worked examples** tab
-2. Show the two solved examples with step-by-step solutions
-3. Highlight the key-concepts tags
+### Scene 4 — Warm-up and Reading
+1. Start the **Warm-up**. Answer a question, tap how sure you are, and note that there are no hints
+2. See the answers, each with the page to find it on, then **Start reading**
+3. In **Read**, point to the passages marked "Focus here" and the "Open the original" link on each page
+4. Add a margin note, then use **Explain this passage**: it asks for your own take first (at least 8 characters, or "I can't parse any of it")
 
-### Scene 5 — Quiz
-1. Switch to the **Quiz** tab
-2. Answer the 4 questions (mix of multiple-choice and true/false)
-3. Show the score and per-question explanations
+### Scene 5 — Recall and the Explainer
+1. Go to **Recall**. Write what you remember of one idea with the reading closed
+2. Show the feedback: what you got (quoting you), what is not right with its page, and what you missed as a pointer, not as the answer
+3. Try the explainer from a fresh topic first to show the gate ("Try recalling first"), then open it after recall. It covers only the gaps
+
+### Scene 5b — Practice and Quiz
+1. Open **Practice**. Check an answer, then open **Locate**. Each hint says what it costs before it opens
+2. Switch to the **Worked examples** tab and write a guess for the next step before it opens
+3. Take the **Quiz**. Tap how sure you are on each question, and expand "Show your thinking" on one
+4. In the results, show "You were sure about these", the prediction line and the "About your pick" note on a wrong option
 
 ### Scene 6 — Live Upload (optional, requires ANTHROPIC_API_KEY)
 1. Go back to the course
@@ -99,11 +108,22 @@ The voice coach runs on the same Claude key; the browser does the speech. All ot
 3. Start the exam, answer a few questions, submit
 4. Show the AI-graded results and feedback
 
-### Scene 8 — Voice Coach (Concept-Only)
+### Scene 8 — Review Session, Ask and the Map
+<!-- draft for Harish -->
+1. Open **Review** and click **Start today's review**. Answer a question and note that a miss is followed by a fresh question on the same idea
+2. Open the **Progress** panel on the Review page. It counts only your own first tries and shows how your confidence matched your scores
+3. Open **Ask** and ask "Explain <an idea>". It asks what you think first, then explains the gap and ends with a check card
+4. Paste a practice question and ask for the answer. Note that it asks about your attempt instead. After a real attempt, "Show me a worked example" appears
+5. Start a mock exam, then ask Ask one of its questions. It declines and links back to the exam
+6. Open **Map**. Choose a unit, select an idea, and show how it connects and what your last answers were. Try **List view**
+
+### Scene 9 — Voice Coach (Teach It Back)
 1. Open a topic page and open the **Voice practice** tab
-2. Connect and answer 2–3 questions
-3. Speak over the coach to show barge‑in / interruption
-4. Show the concept-only feedback and hints
+2. Choose **Teach it back**, connect and explain one idea in your own words
+3. Show the coach asking about what is missing and not explaining first. Page numbers appear on the board
+4. Speak over the coach to show barge-in. Without speech recognition, type instead
+5. Show the summary: what you explained, what needed two questions, and one next step
+6. Try **Quiz me** and **Read it with me** for the other two styles
 
 ---
 
@@ -124,7 +144,8 @@ Shared volume: /data/uploads  (local file storage in dev; production uses an S3 
 2. **Validate:** AI service reads the PDF from the same volume, parses it with PyMuPDF, and optionally validates content via LLM
 3. **Chunk:** PDF is split into semantic sections; embeddings are generated locally in the AI service
 4. **Extract topics:** LLM analyzes chunk structure and returns a topic list
-5. **Generate content:** For each topic the LLM produces notes, examples, and quiz questions grounded in the relevant chunks
+5. **Find the ideas:** For each topic the LLM returns a few concepts with claims that quote the chunks, and the edges between them
+6. **Generate content:** For each topic the LLM produces notes, examples, quiz questions and warm-up questions grounded in the relevant chunks
 
 ### Disabling processing
 Set `ENABLE_PROCESSING=false` in the ai-service environment (docker-compose.yml).

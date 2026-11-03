@@ -1,9 +1,12 @@
 import Link from 'next/link'
-import { CheckCircle } from '@phosphor-icons/react/dist/ssr'
+import { CheckCircle, Play } from '@phosphor-icons/react/dist/ssr'
+import { Button } from '@/components/ui/button'
 import { MasteryIndicator } from '@/components/ui/mastery-indicator'
 import { DueLabel } from '@/components/ui/relative-time'
 import { formatDate, pluralize } from '@/lib/format'
 import { fadeNote as describeFade } from '@/lib/learning/consequence'
+import { reviewSessionHref } from '@/lib/learning/review-links'
+import type { ActiveSession } from '@/lib/learning/review-session'
 import { ReviewActions } from '@/features/topic/review-actions'
 import type { ReviewPageData, ReviewTopic } from '@/server/queries/review'
 
@@ -42,6 +45,7 @@ function DueCard({ courseId, topic, first }: { courseId: string; topic: ReviewTo
           courseId={courseId}
           topicId={topic.id}
           missedCount={topic.missedCount}
+          retryOpensAt={topic.retryOpensAt}
           topicName={topic.name}
           size="sm"
           emphasis={first}
@@ -52,44 +56,87 @@ function DueCard({ courseId, topic, first }: { courseId: string; topic: ReviewTo
 }
 
 /**
- * The topics due for review, each with "Retry what you missed" (when there is something to retry) and
- * "New questions". One button on the page is filled: the first topic's main action. The rest are
- * outlined, so the most overdue topic is where to start.
+ * "Start today's review" (spec §7.4): up to 12 questions on the concepts that are due, mixed across the
+ * course's topics, then a fresh question on each miss. It is the page's main action.
  */
-export function ReviewList({ data }: { data: ReviewPageData }) {
+function SessionCard({ courseId, dueConceptCount, active }: { courseId: string; dueConceptCount: number; active: ActiveSession | null }) {
+  // A review already under way today is gone on with, not started again (spec 18.7).
+  const resumeHref = active ? `${reviewSessionHref(courseId, { topicId: active.topicId })}${active.topicId ? '&' : '?'}session=${encodeURIComponent(active.sessionId)}` : null
+  return (
+    <section
+      aria-labelledby="session-heading"
+      className="flex flex-col gap-4 rounded-card border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="min-w-0">
+        <h2 id="session-heading" className="text-heading text-fg">
+          Today&apos;s review
+        </h2>
+        <p className="mt-1 text-small text-fg-2">
+          {dueConceptCount > 0
+            ? `${pluralize(dueConceptCount, 'idea')} to bring back, mixed across your topics. A fresh question follows each one you miss.`
+            : 'You started a review today. Pick up where you left off.'}
+        </p>
+      </div>
+      <Button asChild variant="primary" icon={<Play weight="fill" />} className="shrink-0 self-start sm:self-center">
+        {active && resumeHref ? (
+          <Link href={resumeHref}>
+            Resume {active.short ? 'your short review' : "today's review"} ({active.answered} of {active.total})
+          </Link>
+        ) : (
+          <Link href={reviewSessionHref(courseId)}>Start today&apos;s review</Link>
+        )}
+      </Button>
+    </section>
+  )
+}
+
+/**
+ * The topics due for review, each with "Retry what you missed" (when there is something to retry) and
+ * "Fix it now". "Start today's review" is the one filled button on the page when concepts are due; the
+ * topic buttons are outlined. Without it (a course from before concepts) the first topic's main action
+ * is filled, so the most overdue topic is where to start.
+ */
+export function ReviewList({ data, active = null }: { data: ReviewPageData; active?: ActiveSession | null }) {
   const courseId = data.course.id
   const next = data.upcoming[0]
+  // Concepts due, or a session already started today that is still open.
+  const hasSession = data.dueConceptCount > 0 || active !== null
+  // Concepts due but no topic due (a surrendered step, say): the session card alone is the answer.
+  const showDue = !hasSession || data.due.length > 0
   return (
     <div className="flex flex-col gap-10">
-      <section aria-labelledby="due-heading">
-        <h2 id="due-heading" className="text-heading text-fg">
-          Due for review <span className="tabular text-fg-2">({data.due.length})</span>
-        </h2>
-        {data.due.length > 0 ? (
-          <>
-            <p className="mt-1 text-small text-fg-2">
-              Most overdue first. Score 70% or more and the next review moves out; below that it comes back tomorrow.
-            </p>
-            <ul className="mt-3 flex flex-col gap-3">
-              {data.due.map((topic, index) => (
-                <DueCard key={topic.id} courseId={courseId} topic={topic} first={index === 0} />
-              ))}
-            </ul>
-          </>
-        ) : (
-          <div className="mt-3 flex items-start gap-3 rounded-card border border-border bg-surface p-4">
-            <CheckCircle aria-hidden="true" weight="fill" className="mt-0.5 size-5 shrink-0 text-accent" />
-            <div>
-              <h3 className="text-body-strong text-fg">Nothing is due</h3>
-              <p className="mt-0.5 text-small text-fg-2">
-                {next
-                  ? `Your next review is ${next.name}, on ${formatDate(next.dueAt)}.`
-                  : 'Reviews appear here a few days after you take a quiz.'}
+      {hasSession ? <SessionCard courseId={courseId} dueConceptCount={data.dueConceptCount} active={active} /> : null}
+      {showDue ? (
+        <section aria-labelledby="due-heading">
+          <h2 id="due-heading" className="text-heading text-fg">
+            Due for review <span className="tabular text-fg-2">({data.due.length})</span>
+          </h2>
+          {data.due.length > 0 ? (
+            <>
+              <p className="mt-1 text-small text-fg-2">
+                Most overdue first. Score 70% or more and the next review moves out; below that it comes back tomorrow.
               </p>
+              <ul className="mt-3 flex flex-col gap-3">
+                {data.due.map((topic, index) => (
+                  <DueCard key={topic.id} courseId={courseId} topic={topic} first={index === 0 && !hasSession} />
+                ))}
+              </ul>
+            </>
+          ) : (
+            <div className="mt-3 flex items-start gap-3 rounded-card border border-border bg-surface p-4">
+              <CheckCircle aria-hidden="true" weight="fill" className="mt-0.5 size-5 shrink-0 text-accent" />
+              <div>
+                <h3 className="text-body-strong text-fg">Nothing is due</h3>
+                <p className="mt-0.5 text-small text-fg-2">
+                  {next
+                    ? `Your next review is ${next.name}, on ${formatDate(next.dueAt)}.`
+                    : 'Reviews appear here a few days after you take a quiz.'}
+                </p>
+              </div>
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      ) : null}
 
       {data.upcoming.length > 0 ? (
         <section aria-labelledby="upcoming-heading">

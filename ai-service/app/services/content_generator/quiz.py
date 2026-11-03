@@ -15,15 +15,24 @@ from app.services.content_generator.context import (
     content_messages,
     do_not_reuse_block,
     existing_content_digest,
+    fetch_concepts,
+    fetch_confusable_neighbours,
     fetch_topic_context,
     focus_line,
+    format_concept_block,
+    resolve_concept_ids,
 )
+from app.services.content_generator.support_check import check_support
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import QuestionSet
 
 
 logger = logging.getLogger(__name__)
+
+# Questions asked for beyond the requested count: the support check drops some, and the set is
+# trimmed back to the requested count afterwards so it is not short by default.
+SUPPORT_SPARE_QUESTIONS = 2
 
 # Excerpts of a prerequisite topic added for the "fresh review" questions.
 PREREQUISITE_MAX_CHUNKS = 6
@@ -50,6 +59,8 @@ QUESTION_FORMAT_RULES = """Question rules:
 - true_false: correct_answer is a boolean; the explanation says why.
 - Every question has an explanation of the correct answer and points from 1 to 5 by complexity.
 - In explanations, refer to options by their content, never by letter. The options are shuffled after you write them.
+- Each wrong option is the answer a student would give if they held one specific wrong idea; write that idea in `misconception`. When the wrong idea is a mix-up with another concept of the <concepts> or <confusable_concepts> list, also set `confusable_concept_id` to that concept's id. The correct option has neither.
+- Set `mode` on every question: recall (bring the idea to mind from a cue, in a new situation), discrimination (choose between near-twin ideas; a wrong option names the twin in `confusable_concept_id`) or composition (run the idea inside a chain with other ideas). Use recall unless the concepts support another mode.
 - List in source_excerpts the index of every excerpt a question is based on."""
 
 APPLICATION_RULES = """Question design:
@@ -115,6 +126,8 @@ class QuizGenerator:
         if not chunks:
             raise NoSourceMaterialError(f"No source material is mapped to topic {topic_id}")
         seen = do_not_reuse_block(await existing_content_digest(topic_id))
+        concepts = await fetch_concepts(topic_id)
+        neighbours = await fetch_confusable_neighbours(topic_id)
 
         review = 0
         prerequisite_name = ""
@@ -130,7 +143,7 @@ class QuizGenerator:
         if prerequisite_topic_id and not review:
             logger.info("Quiz for topic %s: prerequisite %s not used", topic_id, prerequisite_topic_id)
 
-        questions = await self._generate_questions(
+        questions, dropped = await self._generate_questions(
             topic_name=topic_name,
             topic_description=topic_description,
             chunks=chunks,
@@ -141,18 +154,21 @@ class QuizGenerator:
             cache_excerpts=cache_excerpts,
             course_map=context.course_map,
             already_seen=seen,
+            concepts=format_concept_block(concepts, neighbours),
             review_instructions=(
-                prerequisite_instructions(prerequisite_name, topic_name, review, question_count)
+                prerequisite_instructions(prerequisite_name, topic_name, review, question_count + SUPPORT_SPARE_QUESTIONS)
                 if review else ""
             ),
         )
         if review:
             self._tag_prerequisite_questions(questions, own_count, len(chunks), prerequisite_name)
+        resolve_concept_ids(questions, concepts, chunks, neighbours)
         attach_sources(questions, chunks)
 
         return {
             'questions': questions,
             'total_questions': len(questions),
+            'dropped_unsupported': dropped,
             'difficulty_level': difficulty_level,
             'question_types': [qt.value for qt in question_types],
             'generated_at': datetime.now(UTC).isoformat()
@@ -195,19 +211,20 @@ class QuizGenerator:
         cache_excerpts: bool = False,
         course_map: str = "",
         already_seen: str = "",
+        concepts: str = "",
         review_instructions: str = "",
-    ) -> List[Dict]:
-        """Generate and validate quiz questions."""
+    ) -> tuple[List[Dict], int]:
+        """Generate and validate quiz questions; return them and how many the support check dropped."""
         guidance = DIFFICULTY_GUIDANCE.get(difficulty_level, DIFFICULTY_GUIDANCE['medium'])
         types_str = ", ".join(qt.value for qt in question_types)
 
-        instructions = f"""Write a {question_count}-question quiz on "{topic_name}" from the excerpts above.
+        instructions = f"""Write a {question_count + SUPPORT_SPARE_QUESTIONS}-question quiz on "{topic_name}" from the excerpts above.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
 Use only these question types, spread across them: {types_str}.
 
 {APPLICATION_RULES}
-{already_seen}{review_instructions}
+{already_seen}{concepts}{review_instructions}
 {QUESTION_FORMAT_RULES}
 Set difficulty to "{difficulty_level}" and list the concepts each question tests."""
 
@@ -218,9 +235,12 @@ Set difficulty to "{difficulty_level}" and list the concepts each question tests
             purpose="topic_quiz",
         )
         allowed = {qt.value for qt in question_types}
-        questions = [q for q in result.usable() if q["question_type"] in allowed][:question_count]
+        asked = question_count + SUPPORT_SPARE_QUESTIONS
+        questions = [q for q in result.usable() if q["question_type"] in allowed][:asked]
+        questions, dropped = await check_support(questions, chunks)
+        questions = questions[:question_count]
         if len(questions) < minimum_usable(question_count):
             raise LLMOutputError(
                 f"Quiz had {len(questions)} usable questions of {question_count} requested"
             )
-        return questions
+        return questions, dropped

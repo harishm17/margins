@@ -7,8 +7,6 @@ import { floatingSurface, popperMotion } from './styles'
 
 export const Popover = PopoverPrimitive.Root
 export const PopoverTrigger = PopoverPrimitive.Trigger
-export const PopoverAnchor = PopoverPrimitive.Anchor
-export const PopoverClose = PopoverPrimitive.Close
 
 type PopoverContentProps = React.ComponentProps<typeof PopoverPrimitive.Content> & {
   /** Content padding. Menus of items use "menu" (4px); forms use the default 16px. */

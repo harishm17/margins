@@ -16,14 +16,16 @@ datasource db {
 // ============================================
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  passwordHash  String?   @map("password_hash")
-  oauthProvider String?   @map("oauth_provider")
-  oauthId       String?   @map("oauth_id")
-  name          String?
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String?   @map("password_hash")
+  oauthProvider     String?   @map("oauth_provider")
+  oauthId           String?   @map("oauth_id")
+  name              String?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  // When the student closed the one-time card that says Margins asks for an attempt before it helps (spec §5).
+  seenEffortIntroAt DateTime? @map("seen_effort_intro_at")
 
   // Relations
   projects            Project[]
@@ -40,6 +42,13 @@ model User {
   practiceProgress    PracticeProgress[]
   chatThreads         ChatThread[]
   llmUsageEvents      LlmUsageEvent[]
+  evidenceEvents      EvidenceEvent[]
+  conceptMemories     ConceptMemory[]
+  recallAttempts      RecallAttempt[]
+  marginNotes         MarginNote[]
+  tutorStates         TutorState[]
+  itemSessions        ItemSession[]
+  studyDrafts         StudyDraft[]
 
   @@index([oauthProvider, oauthId])
   @@map("users")
@@ -64,6 +73,12 @@ model Project {
   examDate            DateTime? @map("exam_date")
   dailyMinutes        Int       @default(45) @map("daily_minutes")
   examPromptDismissed Boolean   @default(false) @map("exam_prompt_dismissed")
+  // Set when the student's history was turned into learner-model evidence (lib/learning/backfill.ts, spec §12).
+  // Set when every confirmed topic's history is converted (each topic has its own marker, Topic.evidenceBackfilledAt).
+  evidenceBackfilledAt DateTime? @map("evidence_backfilled_at")
+  // A backfill run's short lease: set when a run starts and honoured until it expires, so two runs do not
+  // overlap and a run that died is picked up later. Never a "done" signal.
+  evidenceBackfillClaimedAt DateTime? @map("evidence_backfill_claimed_at")
 
   // Relations
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -77,6 +92,12 @@ model Project {
   reviewSchedules ReviewSchedule[]
   chatThreads    ChatThread[]
   units          Unit[]
+  concepts        Concept[]
+  conceptEdges    ConceptEdge[]
+  evidenceEvents  EvidenceEvent[]
+  conceptMemories ConceptMemory[]
+  itemSessions    ItemSession[]
+  studyDrafts     StudyDraft[]
 
   @@index([userId])
   @@index([status])
@@ -117,6 +138,8 @@ model Material {
   project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   materialChunks MaterialChunk[]
   topicSources   TopicSource[]
+  conceptClaims  ConceptClaim[]
+  marginNotes    MarginNote[]
 
   @@index([projectId])
   @@index([category])
@@ -171,6 +194,9 @@ model Topic {
   orderIndex         Int      @map("order_index")
   sourceMaterialIds  String[] @map("source_material_ids")
   userConfirmed      Boolean  @default(false) @map("user_confirmed")
+  // Set when this topic's history was converted to evidence (lib/learning/backfill.ts). Until then a topic with
+  // concepts keeps the legacy mastery blend (spec §3.6, §12).
+  evidenceBackfilledAt DateTime? @map("evidence_backfilled_at")
   createdAt          DateTime @default(now()) @map("created_at")
 
   // Course structure. unitId is null for topics added by hand and for courses planned before
@@ -201,6 +227,12 @@ model Topic {
   learningSignals    LearningSignal[]
   reviewSchedules    ReviewSchedule[]
   practiceProgress   PracticeProgress[]
+  concepts           Concept[]
+  evidenceEvents     EvidenceEvent[]
+  conceptMemories    ConceptMemory[]
+  recallAttempts     RecallAttempt[]
+  marginNotes        MarginNote[]
+  studyDrafts        StudyDraft[]
 
   @@index([projectId, orderIndex])
   @@index([unitId])
@@ -306,7 +338,8 @@ model TopicQuiz {
   topicId   String   @map("topic_id")
   questions Json
   // standard: written by the AI service. retry: the questions a student missed in their last two
-  // attempts, copied from the sets they came from (no model call).
+  // attempts, copied from the sets they came from (no model call). warmup: the pretest bank. review_bank:
+  // items written for review sessions, only ever appended to; read by review selection, never listed as a quiz.
   kind      String   @default("standard")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -326,10 +359,22 @@ model TopicProgress {
   userId            String    @map("user_id")
   topicId           String    @map("topic_id")
   notesCompleted    Boolean   @default(false) @map("notes_completed")
+  notesCompletedAt  DateTime? @map("notes_completed_at") // the first time the notes were marked complete
   examplesCompleted Boolean   @default(false) @map("examples_completed")
   quizCompleted     Boolean   @default(false) @map("quiz_completed")
   quizScore         Float?    @map("quiz_score") // Best score percentage
   lastAccessedAt    DateTime? @map("last_accessed_at")
+  // Learning path stages (notesCompleted stays for old data): when the student finished the
+  // warm-up, read the topic and did Recall, and when the AI explainer unlocked and why.
+  warmupAt              DateTime? @map("warmup_at")
+  readAt                DateTime? @map("read_at")
+  recallAt              DateTime? @map("recall_at")
+  explainerUnlockedAt   DateTime? @map("explainer_unlocked_at")
+  explainerUnlockReason String?   @map("explainer_unlock_reason")
+  // Tested out of the topic by a strong first quiz, and quick-pass triage (spec 18.8): both count as learned.
+  testedOutAt           DateTime? @map("tested_out_at")
+  triage                String? // quick
+  triageAt              DateTime? @map("triage_at")
 
   // Relations
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -353,6 +398,16 @@ model QuizAttempt {
   results    Json     // Grading results (correct/incorrect per question)
   score      Float    // Percentage score
   takenAt    DateTime @default(now()) @map("taken_at")
+  // When this attempt's concept evidence was written. Null while it is owed: the attempt commits
+  // first, and a write that failed is tried again on the student's next visit from `evidencePending`.
+  evidenceRecordedAt DateTime? @map("evidence_recorded_at")
+  // What the evidence is built from (questions with their answer keys, the answers given, the graded
+  // result), kept only until it is written. Never selected into a response.
+  evidencePending    Json?     @map("evidence_pending")
+  // Failed tries so far and when the last one was: a write is tried again at most once an hour, and
+  // given up on after a few tries, so a row that can never be written costs nothing on later visits.
+  evidenceAttempts   Int       @default(0) @map("evidence_attempts")
+  evidenceTriedAt    DateTime? @map("evidence_tried_at")
 
   // Relations
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -387,6 +442,10 @@ model QuizSubmission {
   gradedAt    DateTime? @map("graded_at")
   // Set in the same transaction that stores the attempt and its effects: set means applied, in full.
   appliedAt   DateTime? @map("applied_at")
+  // When the AI is down, the multiple-choice items the rules can grade are graded at once (spec 18.9): their
+  // results and when, while the short answers wait.
+  ruleResults Json?     @map("rule_results")
+  ruleGradedAt DateTime? @map("rule_graded_at")
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
@@ -408,7 +467,7 @@ model VoiceDrillSession {
   mode        String   @default("topic_drill") // topic_drill|sprint|teach_back
   language    String   @default("en")
   voice       String   @default("marin") // unused since the Claude voice coach (the browser picks the voice)
-  style       String   @default("oral_quiz") // oral_quiz|guided_notes|topic_conversation
+  style       String   @default("oral_quiz") // oral_quiz|teach_back|guided_reading (older sessions: guided_notes|topic_conversation)
   focus       String?  // optional "what to concentrate on", at most 280 characters
   status      String   @default("active") @map("status") // active|ended|aborted
   interruptCount Int   @default(0) @map("interrupt_count")
@@ -425,16 +484,49 @@ model VoiceDrillSession {
   // lastSeenAt when the browser went away without ending the session.
   connectedAt DateTime? @map("connected_at")
   lastSeenAt  DateTime? @map("last_seen_at")
+  // Question indexes the student asked a hint for (get_hint); an answer after one is assisted (spec §5.8).
+  // Database default is an empty array (migrations/20261201000003_voice_hints_backfill_marker): keep it.
+  hintedQuestions Int[] @map("hinted_questions")
+  // Teach-back and guided reading: where the session is (probes asked per gap, the claim being read). The tools
+  // read and write it, so the model cannot move it (spec §5.8).
+  coachState Json? @map("coach_state")
 
   user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   project  Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   topic    Topic?             @relation(fields: [topicId], references: [id], onDelete: SetNull)
   attempts VoiceDrillAttempt[]
+  timings  VoiceTurnTiming[]
 
   @@index([userId, projectId])
   @@index([userId, connectedAt])
   @@index([topicId])
   @@map("voice_drill_sessions")
+}
+
+// How long one voice turn took (spec §19.10): the server's own numbers, and the browser's for the same turn (sent with the
+// next turn). No text of what was said. The P50 and P95 per style come from scripts/voice-timing.ts.
+model VoiceTurnTiming {
+  id         String   @id @default(uuid())
+  sessionId  String   @map("session_id")
+  userId     String   @map("user_id")
+  turn       Int      // the session's turn number (coachState.turn)
+  style      String   // oral_quiz|teach_back|guided_reading|topic_conversation
+  preRun     String?  @map("pre_run") // the step run before the model spoke (assess|record_answer|reveal|record_check), if any
+  graded     Boolean  // a graded step ran this turn, before the model or at its request
+  modelCalls Int      @map("model_calls")
+  ttftMs     Json     @map("ttft_ms") // per call, milliseconds to the first token (null for a call that had none)
+  stepMs     Int      @map("step_ms") // time in graded steps and tools
+  firstTextMs Int?    @map("first_text_ms") // request to the first text, on the server
+  totalMs    Int      @map("total_ms")
+  ok         Boolean
+  client     Json? // what the browser measured for this turn (VoiceTurnExtras.timing)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  session VoiceDrillSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, turn])
+  @@index([createdAt])
+  @@map("voice_turn_timings")
 }
 
 model VoiceDrillAttempt {
@@ -508,6 +600,20 @@ model PracticeProgress {
   solvedSteps   Int[]     @map("solved_steps")
   revealedSteps Int[]     @map("revealed_steps")
   hintedSteps   Int[]     @map("hinted_steps")
+  // Steps with at least one checked answer, and steps whose first check was right (spec §5.6). Both have a
+  // database default of an empty array (migrations/20261201000001_practice_rungs): keep it.
+  attemptedSteps Int[]    @map("attempted_steps")
+  firstTrySteps  Int[]    @map("first_try_steps")
+  // Highest help rung used per step (spec §6.2): { "<step index>": rung }. Null on rows from before rungs.
+  maxRungs      Json?     @map("max_rungs")
+  // Step -> the rung reached at its first wrong check (spec 3.3: a hint after a miss is the failure only).
+  missRungs     Json?     @map("miss_rungs")
+  // The student's one-line answer to "What tripped you up?", asked after a problem with a wrong check.
+  trippedUp     String?   @map("tripped_up")
+  // Steps whose evidence is written for the current run through the problem (cleared by "Start over"). A step that
+  // finished but is not listed is written by the next save, so a failed write is never lost. The database default
+  // is an empty array (migrations/20261202000000_final_review_fixes): keep it.
+  evidenceSteps Int[]     @map("evidence_steps")
   // Set when every step is solved or shown; the practice signal is recorded at that moment.
   completedAt   DateTime? @map("completed_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
@@ -631,6 +737,12 @@ model ExamSubmission {
   // results page does it the first time it sees the grading). A regrade clears it, so the new
   // grading is applied once more.
   reviewAppliedAt DateTime? @map("review_applied_at")
+  // When the graded result's concept evidence was written. Null while it is owed (a graded exam whose
+  // write failed is tried again on the next visit); applying a regrade clears it first.
+  evidenceRecordedAt DateTime? @map("evidence_recorded_at")
+  // Failed tries so far and when the last one was (see QuizAttempt.evidenceAttempts).
+  evidenceAttempts   Int       @default(0) @map("evidence_attempts")
+  evidenceTriedAt    DateTime? @map("evidence_tried_at")
 
   @@index([userId])
   @@index([sampleExamId, userId, submittedAt])
@@ -721,6 +833,9 @@ model ChatMessage {
   // Assistant messages only: { sources: [...], marks: [{ offset, marker }] }. The shape is
   // documented in src/lib/chat/citations.ts.
   citations Json?
+  // Assistant messages: what Ask tutored on this reply (route, check question card). The shape is
+  // documented in src/lib/ask/tutor-message.ts; the card's answer never leaves the server.
+  tutor Json?
   // Assistant messages (and billed failure notes). The cost is also written to llm_usage_events,
   // which is what the daily budget sums; these columns are for display and auditing.
   llmInputTokens  Int      @default(0) @map("llm_input_tokens")
@@ -739,7 +854,7 @@ model ChatMessage {
 // LLM usage ledger (the daily budget)
 // ============================================
 
-// Append-only: one row per LLM spend (a job attempt, a chat answer or a billed chat failure),
+// Append-only: one row per LLM spend (a job attempt, a chat answer, a billed chat failure or a tutor reply),
 // written when the cost is known and never deleted by the app. The per-user daily budget sums
 // this table, so deleting a thread, a project or its jobs cannot lower it. projectId and sourceId
 // are plain columns on purpose: they have no foreign keys, so they outlive what they point at.
@@ -752,7 +867,7 @@ model LlmUsageEvent {
   id           String   @id @default(uuid())
   userId       String?  @map("user_id")
   projectId    String?  @map("project_id")
-  source       String // job|chat|voice
+  source       String // job|chat|voice|tutor|recall
   sourceId     String   @map("source_id") // processing job id, chat message id or voice session id
   models       String   @default("") // comma-separated
   inputTokens  Int      @default(0) @map("input_tokens")
@@ -785,4 +900,319 @@ model AiStatus {
   detail    String?
 
   @@map("ai_status")
+}
+
+// ============================================
+// Learner model (learning v3): concepts, evidence, memory
+// ============================================
+
+// One idea a topic teaches, found by the concept extraction job. Merged and removed concepts stay
+// as rows (status) so evidence that names them keeps its meaning.
+model Concept {
+  id               String   @id @default(uuid())
+  projectId        String   @map("project_id")
+  topicId          String   @map("topic_id")
+  name             String // 2-6 words
+  summary          String // one sentence stating the idea
+  kind             String // fact|concept|procedure|judgment
+  orderIndex       Int      @map("order_index")
+  // Has a database default of an empty array (migrations/20261201000000_learning_v3) so rows
+  // written by raw SQL read as []; `prisma migrate dev` may propose dropping that default (and
+  // the one on tutor_states.concept_ids, topic_ids on item_sessions): keep them.
+  objectiveIndexes Int[]    @map("objective_indexes")
+  difficultyPrior  Float    @default(0) @map("difficulty_prior")
+  status           String   @default("active") // active|merged|removed
+  mergedIntoId     String?  @map("merged_into_id")
+  origin           String   @default("llm") // llm|student
+  // 384 numbers from the local embedder, as on material_chunks.chunk_embedding.
+  embedding        Unsupported("vector(384)")?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // Relations
+  project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  topic      Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  mergedInto Concept?        @relation("ConceptMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom Concept[]       @relation("ConceptMerge")
+  claims     ConceptClaim[]
+  outgoing   ConceptEdge[]   @relation("EdgeSource")
+  incoming   ConceptEdge[]   @relation("EdgeTarget")
+  evidence   EvidenceEvent[]
+  memories   ConceptMemory[]
+
+  @@index([projectId, topicId, orderIndex])
+  @@index([topicId])
+  @@map("concepts")
+}
+
+// What the course material says about a concept, with a quote that was checked against the chunk.
+model ConceptClaim {
+  id         String  @id @default(uuid())
+  conceptId  String  @map("concept_id")
+  text       String
+  quote      String // at most 300 characters, a whitespace-normalised substring of the chunk
+  materialId String  @map("material_id")
+  // Not a foreign key: chunks are rewritten when a file is processed again.
+  chunkId    String? @map("chunk_id")
+  pageStart  Int?    @map("page_start")
+  pageEnd    Int?    @map("page_end")
+  orderIndex Int     @map("order_index")
+
+  // Relations
+  concept  Concept  @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([conceptId])
+  @@index([materialId])
+  @@map("concept_claims")
+}
+
+model ConceptEdge {
+  id            String   @id @default(uuid())
+  projectId     String   @map("project_id")
+  sourceId      String   @map("source_id")
+  targetId      String   @map("target_id")
+  type          String // prerequisite|encompasses|confusable
+  // One of 0.25, 0.5, 0.75, 1. Used for encompasses; 1 otherwise.
+  weight        Float
+  confidence    Float
+  origin        String   @default("llm") // llm|student
+  status        String   @default("proposed") // proposed|confirmed|rejected
+  evidenceQuote String?  @map("evidence_quote")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  source  Concept @relation("EdgeSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target  Concept @relation("EdgeTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  // For a confusable edge, the smaller id is the source.
+  @@unique([sourceId, targetId, type])
+  @@index([projectId])
+  @@index([targetId])
+  @@map("concept_edges")
+}
+
+// Append-only: one row per graded answer for one concept. ConceptMemory is rebuilt from these.
+model EvidenceEvent {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  projectId  String   @map("project_id")
+  topicId    String?  @map("topic_id")
+  conceptId  String   @map("concept_id")
+  itemKey    String   @map("item_key")
+  // warmup|recall|quiz|review|exam|practice|example|voice|teach_back|ask_check|reader|drill|implicit|instruction
+  source     String
+  score      Float // 0 to 1
+  assistance Int
+  confidence Float? // 0 to 1
+  // The role weight times the grader weight.
+  weight     Float
+  role       String // primary|secondary
+  gradedBy   String   @map("graded_by") // rule|model|self
+  latencyMs  Int?     @map("latency_ms")
+  sessionKey String   @map("session_key")
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@index([userId, conceptId, createdAt])
+  @@index([userId, projectId, createdAt])
+  @@index([userId, sessionKey])
+  @@index([userId, itemKey])
+  @@index([conceptId])
+  @@index([projectId])
+  @@index([topicId])
+  @@map("evidence_events")
+}
+
+// What one student knows about one concept. A cache: replayConcept rebuilds the whole row from
+// EvidenceEvent.
+model ConceptMemory {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  projectId        String    @map("project_id")
+  topicId          String    @map("topic_id")
+  conceptId        String    @map("concept_id")
+  // FSRS state (the ts-fsrs card).
+  card             Json?
+  dueAt            DateTime? @map("due_at")
+  stability        Float?
+  lastReviewAt     DateTime? @map("last_review_at")
+  nUnassisted      Int       @default(0) @map("n_unassisted")
+  nAssisted        Int       @default(0) @map("n_assisted")
+  lastEvidenceAt   DateTime? @map("last_evidence_at")
+  lastAssistedAt   DateTime? @map("last_assisted_at")
+  // The warm-up score, and the misconception the last misses pointed at.
+  inferredPrior    Float?    @map("inferred_prior")
+  misconception    String?
+  misconceptionAt  DateTime? @map("misconception_at")
+  consecutiveFails Int       @default(0) @map("consecutive_fails")
+  mastery          Float     @default(0)
+  // not_started|inferred|shaky|getting_there|solid|fading
+  label            String    @default("not_started")
+  // Replay-derived inputs the selectors read: firstEvidenceDay, itemKeysSeen, delayedNewSuccess,
+  // modeReached, lastMaxRung, lastMissKind.
+  derived          Json      @default("{}")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  topic   Topic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conceptId])
+  @@index([userId, projectId, dueAt])
+  @@index([topicId])
+  @@index([conceptId])
+  @@index([projectId])
+  @@map("concept_memories")
+}
+
+model RecallAttempt {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  topicId        String   @map("topic_id")
+  kind           String // recall|teach_back
+  promptText     String   @map("prompt_text")
+  objectiveIndex Int?     @map("objective_index")
+  answerText     String   @map("answer_text")
+  mode           String // text|voice
+  result         Json
+  explainer      Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([userId, topicId, createdAt])
+  @@index([topicId])
+  @@map("recall_attempts")
+}
+
+// A note or a question the student attached to a passage while reading.
+model MarginNote {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  topicId    String   @map("topic_id")
+  materialId String   @map("material_id")
+  // Not a foreign key: chunks are rewritten when a file is processed again.
+  chunkId    String   @map("chunk_id")
+  kind       String // note|question|answer (a reader check answer, with reply.parentNoteId)
+  text       String
+  reply      Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic    Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([userId, topicId, createdAt])
+  @@index([materialId])
+  @@map("margin_notes")
+}
+
+// Where one tutoring conversation stands on the hint ladder. Ask threads use scope "ask" and the
+// thread id as scopeKey.
+model TutorState {
+  id                 String   @id @default(uuid())
+  userId             String   @map("user_id")
+  scope              String // practice|ask|voice|reader
+  scopeKey           String   @map("scope_key")
+  rung               Int      @default(0)
+  attempts           Int      @default(0)
+  lowEffortTurns     Int      @default(0) @map("low_effort_turns")
+  revealed           Boolean  @default(false)
+  conceptIds         String[] @map("concept_ids")
+  // The highest rung reached and the authored hints opened (it only rises), the guesses in a row
+  // with no reasoning, and the replies at one rung without progress (spec 6.2), and the gap
+  // the last reply addressed.
+  maxRung            Int      @default(0) @map("max_rung")
+  hintsOpened        Int      @default(0) @map("hints_opened")
+  bareGuesses        Int      @default(0) @map("bare_guesses")
+  sameRungNoProgress Int      @default(0) @map("same_rung_no_progress")
+  gapId              String?  @map("gap_id")
+  // Checked answers the server saw on this step: all, wrong, whether the last was wrong, and whether
+  // the right answer was given (spec 6.2: the reply may then confirm it).
+  checks             Int      @default(0)
+  wrongChecks        Int      @default(0) @map("wrong_checks")
+  lastCheckWrong     Boolean  @default(false) @map("last_check_wrong")
+  checkedCorrect     Boolean  @default(false) @map("checked_correct")
+  // Practice evidence reads these (the browser's word is not evidence): the highest rung of help the student was
+  // actually given (an opened hint, a tutor reply's rung, the worked example), which `maxRung` does not say because
+  // it also climbs with every wrong check; and the help level at the step's first wrong check (null before one).
+  helpRung           Int      @default(0) @map("help_rung")
+  firstMissRung      Int?     @map("first_miss_rung")
+  // The answer the server graded as right (the latest one), so a reply may confirm that and nothing the browser sends.
+  checkedAnswer      String?  @map("checked_answer")
+  // Ask `understand` turns with no attempt from the student, the concepts they covered, the replies in a row the
+  // student could not parse, and when they last said "I don't know" (spec 18.3, 6.3, 5.2).
+  understandNoAttempt Int      @default(0) @map("understand_no_attempt")
+  understandConcepts  String[] @map("understand_concepts")
+  cantParseTurns      Int      @default(0) @map("cant_parse_turns")
+  dontKnowAt          DateTime? @map("dont_know_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scope, scopeKey])
+  @@map("tutor_states")
+}
+
+// A warm-up, review session or concept drill, with the items as served so a later regeneration
+// cannot change what was graded. Never stored as a QuizAttempt. `results.meta` may carry short, abandoned and
+// retestCap (spec 18.8).
+model ItemSession {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  projectId   String    @map("project_id")
+  kind        String // warmup|review|drill
+  topicIds    String[]  @map("topic_ids")
+  items       Json
+  answers     Json?
+  results     Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, projectId, createdAt])
+  @@index([projectId])
+  @@map("item_sessions")
+}
+
+// What a student is typing or has answered so far on a surface, kept on the server so a closed tab, a reload
+// or another device loses nothing (spec 18.7). One row per user, surface and scope; the payload is at most 16 KB.
+model StudyDraft {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  projectId String   @map("project_id")
+  topicId   String?  @map("topic_id")
+  surface   String // quiz|recall|reader_check|explainer_check|review|practice
+  scopeKey  String   @map("scope_key")
+  payload   Json
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  expiresAt DateTime @map("expires_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, surface, scopeKey])
+  @@index([userId, expiresAt])
+  @@index([projectId])
+  @@index([topicId])
+  @@map("study_drafts")
 }

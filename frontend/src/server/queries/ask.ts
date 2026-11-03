@@ -2,6 +2,8 @@ import { areRecordIds } from '@/lib/ids'
 import { prisma } from '@/lib/db/prisma'
 import { parseStoredCitations } from '@/lib/chat/citations'
 import { toChatMessages, type ChatMessage } from '@/features/ask/chat-messages'
+import { parseStoredTutor, turnView } from '@/lib/ask/tutor-message'
+import { getTutorState } from '@/lib/tutor/store'
 
 /** Everything here is filtered by the user id; an id that is not theirs is simply not found. */
 
@@ -26,7 +28,7 @@ export async function getAskThread(
   userId: string,
   courseId: string,
   threadId: string
-): Promise<{ id: string; messages: ChatMessage[] } | null> {
+): Promise<{ id: string; messages: ChatMessage[]; workedAllowed: boolean } | null> {
   if (!areRecordIds(courseId, threadId)) return null
   const thread = await prisma.chatThread.findFirst({
     where: { id: threadId, projectId: courseId, userId },
@@ -34,19 +36,22 @@ export async function getAskThread(
       id: true,
       messages: {
         orderBy: { createdAt: 'asc' },
-        select: { id: true, role: true, content: true, citations: true },
+        select: { id: true, role: true, content: true, citations: true, tutor: true },
       },
     },
   })
   if (!thread) return null
+  const state = await getTutorState(userId, 'ask', thread.id)
   return {
     id: thread.id,
+    workedAllowed: state.attempts >= 1,
     messages: toChatMessages(
       thread.messages.map((message) => ({
         id: message.id,
         role: message.role,
         content: message.content,
         citations: message.role === 'assistant' ? parseStoredCitations(message.citations) : null,
+        turn: message.role === 'assistant' ? turnView(parseStoredTutor(message.tutor)) : null,
       }))
     ),
   }

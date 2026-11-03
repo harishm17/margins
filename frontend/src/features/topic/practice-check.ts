@@ -730,3 +730,14 @@ export function splitChoices(question: string): { stem: string; options: { id: s
   if (options.length < 2) return null
   return { stem: stem.join('\n').trim(), options }
 }
+
+/**
+ * Why a wrong answer was wrong, when the form of it says so without confirming any part of the answer: a
+ * numeric step whose key is a number, answered with something that is not a number. Nothing about the size,
+ * sign or digits is ever said (a note on those would tell the student their digits are right). Null otherwise.
+ */
+export function missNote(step: PracticeCheckStep, input: string): string | null {
+  if (step.answerType !== 'numeric' || !cleanAnswer(input)) return null
+  if (parseNumber(step.correctAnswer) === null) return null
+  return parseNumber(input) === null ? 'Your answer should be a number. A unit after it is fine.' : null
+}

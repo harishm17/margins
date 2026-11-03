@@ -19,6 +19,12 @@ export const ACTIVE_JOB_STATUSES = ['pending', 'processing']
 export const extractTopicsTarget = (projectId: string) => `extract:${projectId}`
 export const generateContentTarget = (topicId: string, contentType: string) =>
   `content:${topicId}:${contentType}`
+// One review-item job at a time per topic.
+export const reviewItemsTarget = (topicId: string) => `review-items:${topicId}`
+// One gap-explainer job at a time per recall attempt.
+export const gapExplainerTarget = (attemptId: string) => `gap-explainer:${attemptId}`
+// One "prepare concepts" chain at a time per course (the chain's first job; later jobs have content targets).
+export const prepareConceptsTarget = (projectId: string) => `concepts:${projectId}`
 // One grading job at a time per exam submission, for the first grading and for "grade again".
 export const gradeExamTarget = (submissionId: string) => `grade:${submissionId}`
 

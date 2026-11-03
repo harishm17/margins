@@ -8,14 +8,21 @@ import math
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.services import ai_status
+from app.services.budget import over_budget_message, record_usage_event
 from app.services.exam_grader import ExamGrader
+from app.services.llm.schemas import RecallGradeRequest, RecallGradeResult
+from app.services.llm.usage import estimate_cost_usd, track_llm_usage
+from app.services.recall_grader import grade_recall
 
 router = APIRouter(prefix="/grade")
 
 MAX_QUESTIONS = 100
 MAX_ANSWER_CHARS = 5000
+MAX_THINKING_CHARS = 4000
 
 AnswerValue = Union[str, int, float, bool, None]
 
@@ -39,17 +46,42 @@ class GradableQuestion(BaseModel):
         return points if math.isfinite(points) and points > 0 else 1
 
 
+class RichAnswer(BaseModel):
+    """An answer with the student's own account of how they got there (confidence is not read here)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    answer: AnswerValue = None
+    thinking: Optional[str] = Field(default=None, max_length=MAX_THINKING_CHARS)
+
+
 class GradeQuizRequest(BaseModel):
     questions: List[GradableQuestion] = Field(min_length=1, max_length=MAX_QUESTIONS)
-    answers: Dict[str, AnswerValue] = Field(default_factory=dict, description="question index -> answer")
+    answers: Dict[str, Union[AnswerValue, RichAnswer]] = Field(
+        default_factory=dict,
+        description="question index -> answer, or {answer, thinking} when the student showed their thinking",
+    )
 
     @field_validator("answers")
     @classmethod
-    def _short_answers(cls, answers: Dict[str, AnswerValue]) -> Dict[str, AnswerValue]:
-        for answer in answers.values():
+    def _short_answers(cls, answers: Dict[str, Any]) -> Dict[str, Any]:
+        for value in answers.values():
+            answer = value.answer if isinstance(value, RichAnswer) else value
             if isinstance(answer, str) and len(answer) > MAX_ANSWER_CHARS:
                 raise ValueError(f"answers are limited to {MAX_ANSWER_CHARS} characters")
         return answers
+
+    def plain_answers(self) -> Dict[str, AnswerValue]:
+        """The answers alone, whichever form they came in."""
+        return {key: value.answer if isinstance(value, RichAnswer) else value for key, value in self.answers.items()}
+
+    def thinking(self) -> Dict[str, str]:
+        """The thinking the student wrote, by question index."""
+        return {
+            key: value.thinking
+            for key, value in self.answers.items()
+            if isinstance(value, RichAnswer) and value.thinking and value.thinking.strip()
+        }
 
 
 class GradeQuizResponse(BaseModel):
@@ -69,7 +101,8 @@ async def grade_quiz(payload: GradeQuizRequest) -> GradeQuizResponse:
     result = await ExamGrader().grade_submission(
         "quiz",
         [question.model_dump() for question in payload.questions],
-        dict(payload.answers),
+        payload.plain_answers(),
+        payload.thinking(),
     )
     return GradeQuizResponse(
         graded_questions=result["graded_questions"],
@@ -79,3 +112,38 @@ async def grade_quiz(payload: GradeQuizRequest) -> GradeQuizResponse:
         needs_review=any(q.get("needs_review") for q in result["graded_questions"]),
         graded_at=result["graded_at"],
     )
+
+
+@router.post("/recall", response_model=RecallGradeResult, response_model_exclude={"analysis"})
+async def grade_recall_answer(payload: RecallGradeRequest) -> Union[RecallGradeResult, JSONResponse]:
+    """Verdicts on what a student recalled, claim by claim, or one clarifying question when the answer can't be graded.
+
+    Model failures and an AI marked unavailable are typed errors (main.py); a user over the daily budget gets
+    a 429 with the same body shape as the tutor routes.
+    """
+    unavailable = (await ai_status.get_status()).as_error()
+    if unavailable is not None:
+        raise unavailable
+    if payload.user_id:
+        over_budget = await over_budget_message(payload.user_id)
+        if over_budget:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": over_budget, "error_code": "LLM_DAILY_BUDGET", "retryable": False},
+            )
+    with track_llm_usage() as usages:
+        try:
+            return await grade_recall(payload)
+        finally:
+            if payload.user_id and usages:
+                cost = sum(c for c in (estimate_cost_usd(usage) for usage in usages) if c is not None)
+                await record_usage_event(
+                    user_id=payload.user_id,
+                    project_id=payload.project_id,
+                    source="recall",
+                    source_id=payload.session_id or "",
+                    models=",".join(sorted({usage.model for usage in usages})),
+                    input_tokens=sum(u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens for u in usages),
+                    output_tokens=sum(u.output_tokens for u in usages),
+                    cost_usd=round(cost, 6),
+                )

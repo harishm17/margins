@@ -4,6 +4,8 @@ import * as React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  Check,
+  HandPalm,
   Keyboard,
   Lightbulb,
   Microphone,
@@ -13,17 +15,18 @@ import {
   SpeakerHigh,
   SpeakerSlash,
 } from '@phosphor-icons/react/dist/ssr'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Input } from '@/components/ui/input'
-import { MathText } from '@/components/ui/math-text'
+import { Board } from './board'
 import type { VoiceAlert } from './errors'
-import type { MicNotice, OrbState, SessionState } from './session-state'
+import { isDoneShortcut } from './shortcuts'
+import { ORB_LABEL, orbLabel, type MicNotice, type OrbState, type SessionState } from './session-state'
 import { Transcript } from './transcript'
 import type { VoiceController } from './voice-controller'
 import { VoiceOrb } from './voice-orb'
+import { VoiceSettings } from './voice-settings'
 
 type SessionViewProps = {
   state: SessionState
@@ -55,14 +58,29 @@ const MIC_NOTICES: Record<MicNotice, { tone: 'neutral' | 'warning'; title?: stri
 }
 
 export function SessionView({ state, orb, controller, title, hasQuestions, recognitionSupported }: SessionViewProps) {
-  const { question, entries, interim, inputMode, micPaused, speech, turnActive, alert, micNotice } = state
+  const { question, board, entries, interim, inputMode, micPaused, speech, turnActive, alert, micNotice } = state
   const [draft, setDraft] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
   const textMode = inputMode === 'text'
+  // No speech recognition here (the lobby said so before the start): the text box is the way in, with no mic to look at.
+  const textOnly = textMode && !recognitionSupported
 
   React.useEffect(() => {
     if (textMode) inputRef.current?.focus()
   }, [textMode])
+
+  // Done from the keyboard: Enter, when no field or button has the focus (never while typing an answer).
+  const hasWords = interim.trim() !== ''
+  React.useEffect(() => {
+    if (textMode || micPaused || !hasWords) return
+    const onKey = (event: KeyboardEvent) => {
+      if (!isDoneShortcut(event, event.target as Element | null)) return
+      event.preventDefault()
+      controller.done()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [controller, textMode, micPaused, hasWords])
 
   const send = (event: React.FormEvent) => {
     event.preventDefault()
@@ -88,32 +106,44 @@ export function SessionView({ state, orb, controller, title, hasQuestions, recog
         </header>
 
         <div className="flex flex-1 flex-col gap-6 pb-6 pt-5">
-          {question ? (
-            <div data-testid="voice-question">
-              <h2 className="text-heading text-fg">
-                <MathText>{question.text}</MathText>
-              </h2>
-              {question.options && question.options.length > 0 ? (
-                <ul className="mt-3 flex flex-col gap-1.5">
-                  {question.options.map((option) => (
-                    <li key={option.id} className="flex items-baseline gap-2 text-body text-fg-2">
-                      <Badge tone="neutral" className="shrink-0 justify-center">
-                        {option.id}
-                      </Badge>
-                      <span>
-                        <MathText>{option.text}</MathText>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+          <Board board={board} />
+
+          {textOnly ? (
+            <p role="status" aria-live="polite" className="h-6 self-center text-body-strong text-fg-2" data-testid="voice-text-status">
+              {orb === 'thinking' || orb === 'speaking' ? ORB_LABEL[orb] : ''}
+            </p>
+          ) : (
+            <VoiceOrb state={orb} meter={controller.meter} label={orbLabel(orb, state.holding)} className="self-center py-2" size={textMode ? 'sm' : 'md'} />
+          )}
+
+
+          {/* Under the orb, in a slot that keeps its height: Interrupt while the coach speaks, Done while the student's words wait to be sent. */}
+          {!textOnly && (!textMode || speech === 'on') ? (
+            <div className="-mt-3 flex h-9 items-center justify-center self-center" data-testid="voice-turn-control">
+              {state.speaking && speech === 'on' ? (
+                <Button variant="secondary" size="sm" icon={<HandPalm />} onClick={() => controller.interrupt()} data-testid="voice-interrupt">
+                  Interrupt
+                </Button>
+              ) : !textMode && !micPaused && hasWords ? (
+                <Button
+                  variant={state.holding ? 'primary' : 'secondary'}
+                  size="sm"
+                  icon={<Check />}
+                  aria-keyshortcuts="Enter Control+Enter Meta+Enter"
+                  data-testid="voice-done"
+                  onClick={() => controller.done()}
+                >
+                  Done
+                  <kbd className="rounded-chip border border-border px-1 text-caption font-normal text-fg-3 max-md:hidden" aria-hidden="true">
+                    Enter
+                  </kbd>
+                </Button>
               ) : null}
             </div>
           ) : null}
 
-          <VoiceOrb state={orb} meter={controller.meter} className="self-center py-2" size={textMode ? 'sm' : 'md'} />
-
           <div className="flex flex-col gap-3">
-            {micNotice ? <MicNoticeView notice={micNotice} onRetry={() => void controller.enableMicrophone()} /> : null}
+            {micNotice && !(micNotice === 'unsupported' && textOnly) ? <MicNoticeView notice={micNotice} onRetry={() => void controller.enableMicrophone()} /> : null}
             {alert ? <TurnAlert alert={alert} onRetry={() => controller.retry()} onDismiss={() => controller.dismissAlert()} /> : null}
           </div>
 
@@ -173,12 +203,13 @@ export function SessionView({ state, orb, controller, title, hasQuestions, recog
               {speech !== 'unsupported' ? (
                 <IconButton
                   variant="ghost"
-                  label={speech === 'on' ? 'Mute coach voice' : 'Unmute coach voice'}
+                  label="Speak replies"
                   icon={speech === 'on' ? <SpeakerHigh /> : <SpeakerSlash />}
-                  aria-pressed={speech === 'off'}
+                  aria-pressed={speech === 'on'}
                   onClick={() => controller.toggleSpeech()}
                 />
               ) : null}
+              {speech !== 'unsupported' ? <VoiceSettings language={state.language} onPreview={() => controller.previewVoice()} /> : null}
             </div>
           </div>
         </div>

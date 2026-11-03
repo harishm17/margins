@@ -3,10 +3,10 @@ import { cn } from '@/lib/utils'
 
 /**
  * Keyboard hints are noise on a touch-first device (its main pointer is coarse: a phone or a tablet
- * without a trackpad), so every hint hides there. This one class is the rule; `Kbd`, `KeyHint` and the
+ * without a trackpad) and at phone widths, so every hint hides there. This one class is the rule; `Kbd`, `KeyHint` and the
  * menu item hint all use it.
  */
-export const KEY_HINT_HIDDEN = 'pointer-coarse:hidden'
+export const KEY_HINT_HIDDEN = 'pointer-coarse:hidden max-sm:hidden'
 
 type KbdProps = ComponentProps<'kbd'> & {
   /**

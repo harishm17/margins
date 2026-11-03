@@ -61,7 +61,8 @@
 
   --sidebar-width: 248px;
   --sidebar-rail-width: 64px;
-  --topbar-height: 56px;
+  /* The bar and the space a notch takes above it: every sticky offset and screen height that reads this stays clear of both. */
+  --topbar-height: calc(56px + env(safe-area-inset-top, 0px));
 }
 
 .dark {
@@ -364,6 +365,21 @@
   );
 }
 
+/* A box that scrolls sideways shows a soft edge on each side that has more to scroll to: the shadow fades out
+   where the content starts or ends (the `local` layers cover it there). */
+@utility scroll-cue-x {
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(to right, var(--surface), transparent),
+    linear-gradient(to left, var(--surface), transparent),
+    linear-gradient(to right, color-mix(in srgb, var(--fg) 22%, transparent), transparent),
+    linear-gradient(to left, color-mix(in srgb, var(--fg) 22%, transparent), transparent);
+  background-position: left center, right center, left center, right center;
+  background-size: 36px 100%, 36px 100%, 12px 100%, 12px 100%;
+  background-repeat: no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+
 /* Numbers that update or are compared. */
 @utility tabular {
   font-variant-numeric: tabular-nums;
@@ -387,12 +403,18 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     -webkit-text-size-adjust: 100%;
+    /* The fixed bottom tab bar (phones) never covers what the page scrolls to: a focused button, an anchor,
+       scrollIntoView. The page's own bottom spacer already clears it at the end of the page. */
+    scroll-padding-bottom: calc(var(--tabbar-height, 0px) + 16px);
   }
 
   body {
     min-height: 100dvh;
     font-size: 14px;
     line-height: 22px;
+    /* A phone turned sideways has a notch at one side (the viewport covers the whole screen): keep the page clear of it. */
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 
   h1,

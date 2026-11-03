@@ -4,6 +4,7 @@ import { VoiceModelError, parseModelEvent, readModelEvents, type ModelEvent } fr
 import type { VoiceMessage } from './history'
 import type { VoiceToolResult } from './tools'
 import type { VoiceEvent } from './turn-client'
+import type { VoiceStreamExtra } from './turn-contract'
 import { MAX_MODEL_CALLS, runTurn, type TurnDeps } from './turn-engine'
 
 async function* gen(events: ModelEvent[]): AsyncGenerator<ModelEvent> {
@@ -33,7 +34,7 @@ type ToolHandler = (input: Record<string, unknown>) => VoiceToolResult | Promise
 
 /** A script of model calls (each an array of events, or an Error to throw on open). */
 function harness(script: Array<ModelEvent[] | Error>, tools: Record<string, ToolHandler> = {}) {
-  const emitted: VoiceEvent[] = []
+  const emitted: (VoiceEvent | VoiceStreamExtra)[] = []
   const sent: VoiceMessage[][] = []
   const toolCalls: Array<{ name: string; input: Record<string, unknown> }> = []
   const deps: TurnDeps = {
@@ -288,5 +289,34 @@ describe('parseModelEvent / readModelEvents', () => {
     const events: ModelEvent[] = []
     for await (const event of readModelEvents(body)) events.push(event)
     assert.deepEqual(events.map((e) => e.type), ['text', 'done'])
+  })
+})
+
+describe('runTurn timing (spec 19.10)', () => {
+  const clock = (...times: number[]) => {
+    let i = 0
+    return () => times[Math.min(i++, times.length - 1)]
+  }
+
+  it('reports each model call: time to its first token and how long it took, and the time spent in tools', async () => {
+    // now() is read at: call 1 start, first event, call 1 end, tool start, tool end, call 2 start, first event, end.
+    const h = harness(
+      [[{ type: 'tool_use', id: 't1', name: 'record_answer', input: { question_index: 0 } }, toolCall('t1', 'record_answer', { question_index: 0 })], say('Right.')],
+      { record_answer: () => ok({ is_correct: true }) }
+    )
+    h.deps.now = clock(0, 1100, 1300, 1300, 1900, 1900, 2800, 3000)
+    const outcome = await runTurn(h.deps, start)
+    assert.equal(outcome.calls.length, 2)
+    assert.deepEqual(outcome.calls[0], { ttftMs: 1100, totalMs: 1300 })
+    assert.deepEqual(outcome.calls[1], { ttftMs: 900, totalMs: 1100 })
+    assert.equal(outcome.toolMs, 600)
+  })
+
+  it('a call that says nothing has no time to a first token, and the first call can start before the engine was asked', async () => {
+    const h = harness([[{ type: 'done', stopReason: 'end_turn', content: [] }]])
+    h.deps.now = clock(5400)
+    h.deps.callStartedAt = (call) => (call === 1 ? 4000 : undefined)
+    const outcome = await runTurn(h.deps, start)
+    assert.deepEqual(outcome.calls, [{ ttftMs: null, totalMs: 1400 }])
   })
 })

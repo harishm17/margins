@@ -10,18 +10,34 @@ import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
-import { recordQuizAttempt } from '@/lib/learning/record-quiz-attempt'
-import { queueQuizSubmission } from '@/lib/learning/quiz-submissions'
+import { isStrongStart, quizHelp, quizOutcome, recordQuizAttempt } from '@/lib/learning/record-quiz-attempt'
+import { gradeRuleItemsNow, partialQuizOf, queueQuizSubmission } from '@/lib/learning/quiz-submissions'
 import { gradeAnswers, GradingRejectedError, GradingUnavailableError } from '@/lib/ai-service/grading'
 import { ApiErrorCode, apiError } from '@/lib/api/errors'
 import { loadAllQuizQuestionSets, loadQuizQuestions } from '@/lib/learning/quiz-sets'
 import { buildReview, toStoredResults } from '@/lib/learning/quiz-review'
 import { createRateLimiter } from '@/lib/api/rate-limit'
+import { answersForGrader, answersForStorage, confidences, normalizeAnswers, plainAnswers } from '@/lib/learning/quiz-answers'
+import { pendingQuizEvidence, recordAttemptEvidence, takenEarlierToday } from '@/lib/learning/quiz-evidence'
+import { getTimeZone } from '@/server/timezone'
 
 // The client sends answers only. Anything else in the body (a score, per-question
 // results) is dropped by zod and never read: the server grades from the stored questions.
+// An answer is the plain string (a quiz started before confidence existed) or an object with the
+// student's confidence and thinking; a confidence outside 0 to 1 is dropped by normalizeAnswers.
 const saveQuizAttemptSchema = z.object({
-  answers: z.record(z.string().max(5000)), // { questionIndex: answer }
+  answers: z.record(
+    z.union([
+      z.string().max(5000),
+      z.object({
+        answer: z.string().max(5000),
+        confidence: z.number().optional(),
+        confidenceLevel: z.enum(['guess', 'unsure', 'fairly', 'certain']).optional(),
+        thinking: z.string().max(4000).optional(),
+        idk: z.boolean().optional(),
+      }),
+    ])
+  ), // { questionIndex: answer | { answer, confidence, confidenceLevel, thinking, idk } }
   quizSetId: z.string().optional(),
 })
 
@@ -96,10 +112,14 @@ export async function POST(
       return NextResponse.json({ error: 'Quiz not found' }, { status: 404 })
     }
 
-    const answers = validation.data.answers
+    const given = normalizeAnswers(validation.data.answers)
+    const answers = plainAnswers(given)
+    const timeZone = await getTimeZone()
+    // The identical set again the same local day: the answers were seen minutes ago, so the evidence is level 2 (spec 7.3).
+    const sameDayRepeat = await takenEarlierToday({ userId: session.user.id, topicId, quizSetId, at: new Date(), timeZone })
     let graded
     try {
-      graded = await gradeAnswers(questions, answers)
+      graded = await gradeAnswers(questions, answersForGrader(given))
     } catch (gradeError) {
       if (gradeError instanceof GradingRejectedError) {
         // The grader refused the request itself (not the AI being away): an error, not a wait.
@@ -112,10 +132,41 @@ export async function POST(
         )
       }
       if (!(gradeError instanceof GradingUnavailableError)) throw gradeError
+      // Grade now whatever rules can (multiple choice, true or false, numerical): those results and their evidence are
+      // the student's at once, and only the short answers wait (spec 18.9). No overall score until all are graded.
+      const early = await gradeRuleItemsNow({
+        userId: session.user.id,
+        topic,
+        quizSetId,
+        questions,
+        given,
+        unavailableCode: gradeError.code,
+        timeZone,
+        sameDayRepeat,
+      })
+      if (early) {
+        return NextResponse.json(
+          {
+            status: 'partial',
+            submissionId: early.submission.submissionId,
+            jobId: early.submission.jobId,
+            started: early.submission.started,
+            code: gradeError.code,
+            partial: partialQuizOf(questions, early.ruleGraded, given),
+          },
+          { status: 202 }
+        )
+      }
       // Short answers need the model and it cannot be reached. The answers are the student's work:
       // they are stored whole and graded when the AI is back (the same wait exam grading has), and
       // the page says so. Nothing about the quiz touches mastery until it is graded in full.
-      const queued = await queueQuizSubmission({ userId: session.user.id, topic, quizSetId, questions, answers })
+      const queued = await queueQuizSubmission({
+        userId: session.user.id,
+        topic,
+        quizSetId,
+        questions,
+        answers: answersForStorage(given),
+      })
       return NextResponse.json(
         {
           status: 'waiting',
@@ -130,6 +181,16 @@ export async function POST(
 
     const score = graded.overall_score
     const results = toStoredResults(graded.graded_questions)
+    const evidence = {
+      userId: session.user.id,
+      projectId: topic.projectId,
+      topicId,
+      quizSetId,
+      questions,
+      answers: given,
+      graded: graded.graded_questions,
+      sameDayRepeat,
+    }
     const recorded = await recordQuizAttempt({
       userId: session.user.id,
       topic,
@@ -137,7 +198,16 @@ export async function POST(
       answers,
       results: results as unknown as Prisma.InputJsonValue,
       score,
+      // Kept with the attempt until the evidence below is written, so a failure there is tried again.
+      evidencePending: pendingQuizEvidence(evidence),
+      strongStart: isStrongStart(graded.graded_questions, given, sameDayRepeat),
     })
+    await recordAttemptEvidence({ ...evidence, attemptId: recorded.attempt.id, timeZone })
+    // Read once the evidence is written: the figures are the ones every other screen shows (topic-standing.ts).
+    const outcome = await quizOutcome(session.user.id, topicId, recorded.previousMastery)
+    const review = buildReview(questions, results, answers)
+    // Where to look for the questions that were missed, from stored claims (works with the AI down).
+    const help = await quizHelp(session.user.id, topicId, questions, review)
 
     return NextResponse.json({
       status: 'graded',
@@ -151,13 +221,12 @@ export async function POST(
       earnedPoints: graded.earned_points,
       totalPoints: graded.total_points,
       // The answer key is released here, after grading.
-      review: buildReview(questions, results),
+      review,
+      ...(help ?? {}),
+      // Confidence stays with the student's session and this response, to order the results (spec §5.7).
+      confidence: confidences(given),
       // What the attempt changed, so the results can say it: when the topic is next reviewed and how mastery moved.
-      outcome: {
-        nextReviewAt: recorded.outcome.nextReviewAt,
-        mastery: recorded.outcome.mastery,
-        previousMastery: recorded.outcome.previousMastery,
-      },
+      outcome,
     })
   } catch (error) {
     console.error('Save quiz attempt error:', error)
@@ -284,7 +353,7 @@ export async function GET(
       const questions = questionSets.get(attempt.quizSetId ?? null)
       return {
         ...attempt,
-        review: index < 5 && questions ? buildReview(questions, attempt.results) : null,
+        review: index < 5 && questions ? buildReview(questions, attempt.results, plainAnswers(normalizeAnswers(attempt.answers))) : null,
       }
     })
 

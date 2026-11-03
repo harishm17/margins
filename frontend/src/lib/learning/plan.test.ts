@@ -8,6 +8,7 @@ import {
   isDayString,
   learnMinutesLeft,
   learnOrder,
+  QUICK_PASS_MINUTES,
   localDay,
   todayItems,
   weekStart,
@@ -1168,4 +1169,56 @@ test('on a final day a suggested review of a stronger topic does not take the pl
   const roomy = plan({ topics, examDate: '2026-10-28', dailyMinutes: 30 })
   const roomyFinals = roomy.days.filter((day) => day.isFinalReview).flatMap((day) => day.items.filter((item) => item.kind === 'review')).map((item) => item.topicId)
   assert.ok(roomyFinals.includes('t3'))
+})
+
+// ---------------------------------------------------------------------------------------
+// Quick-pass triage (spec 18.8)
+
+const shortCourse = () => [
+  topic('intro', { orderIndex: 0 }),
+  topic('mid', { orderIndex: 1 }),
+  topic('hard', { orderIndex: 2 }),
+  topic('tricky', { orderIndex: 3 }),
+  topic('extra', { orderIndex: 4 }),
+]
+
+test('quick pass shortens the learn block to 20 minutes and re-fits', () => {
+  assert.equal(QUICK_PASS_MINUTES, 20)
+  assert.equal(learnMinutesLeft({ estimatedMinutes: 60, learned: false, started: false, triage: 'quick' }), 20)
+  // A learned topic needs nothing, however it was triaged; a started quick topic is still a 20-minute pass.
+  assert.equal(learnMinutesLeft({ estimatedMinutes: 60, learned: true, started: false, triage: 'quick' }), 0)
+  assert.equal(learnMinutesLeft({ estimatedMinutes: 60, learned: false, started: true, triage: 'quick' }), 20)
+  assert.equal(learnMinutesLeft({ estimatedMinutes: 60, learned: false, started: false, triage: null }), 60)
+
+  const before = plan({ topics: shortCourse(), examDate: '2026-10-30', dailyMinutes: 45 })
+  assert.ok(before.short)
+  const left = before.notScheduled?.topics.map((entry) => entry.id) ?? []
+  assert.ok(left.length > 0)
+
+  // The student takes a quick pass on every topic that did not fit: the plan is laid out again with 20 minutes for each.
+  const after = plan({ topics: shortCourse().map((entry) => (left.includes(entry.id) ? { ...entry, triage: 'quick' as const } : entry)), examDate: '2026-10-30', dailyMinutes: 45 })
+  const quick = items(after, 'learn').filter((item) => left.includes(item.topicId ?? ''))
+  assert.ok(quick.length > 0)
+  assert.ok(quick.every((item) => item.minutes === 20))
+  assert.ok((after.notScheduled?.topics.length ?? 0) < left.length)
+  const placed = new Set(items(after, 'learn').map((item) => item.topicId))
+  assert.ok(left.some((id) => placed.has(id)))
+})
+
+test('undoing a quick pass puts the full block back', () => {
+  const quick = shortCourse().map((entry) => ({ ...entry, triage: 'quick' as const }))
+  const undone = quick.map((entry) => ({ ...entry, triage: null }))
+  const total = (topics: PlanTopic[]) => topics.reduce((sum, entry) => sum + learnMinutesLeft(entry), 0)
+  assert.equal(total(quick), 100)
+  assert.equal(total(undone), 175)
+})
+
+test('the time-is-short note lists the unplaced topics', () => {
+  const result = plan({ topics: shortCourse(), examDate: '2026-10-27', dailyMinutes: 40 })
+  assert.ok(result.short)
+  const names = result.notScheduled?.topics.map((entry) => entry.name) ?? []
+  assert.ok(names.length > 0)
+  assert.match(result.shortMessage ?? '', new RegExp(`Left out: ${names.join(', ')}\\.`))
+  // The advice stays last.
+  assert.match(result.shortMessage ?? '', /Add study time or move the date to fit more\.$/)
 })

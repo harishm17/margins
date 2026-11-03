@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { ThemeProvider } from 'next-themes'
 import { Toaster } from '@/components/ui/toaster'
+import { NarrowScreenCookie } from '@/features/shell/narrow-screen-cookie'
 import { TimeZoneCookie } from '@/features/shell/time-zone-sync'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
@@ -13,6 +14,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <TooltipProvider>{children}</TooltipProvider>
       <Toaster />
       <TimeZoneCookie />
+      <NarrowScreenCookie />
     </ThemeProvider>
   )
 }

@@ -1,3 +1,4 @@
+import { framesPainted } from './helpers/settle'
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import { createEmptyCourse, signUpAndIn } from './helpers/loop'
@@ -49,7 +50,9 @@ test('uploading a file keeps the "new topics" alert in place: no layout shift, t
   await expect
     .poll(async () => (await (await page.request.get(`/api/projects/${courseId}/materials`)).json()).materials.map((m: { validationStatus: string }) => m.validationStatus).join(), { timeout: 120_000 })
     .toBe('valid,valid')
-  await page.waitForTimeout(3000)
+  // The reading has finished and the alert has turned into its link: nothing more is going to move.
+  await expect(alert.getByRole('link')).toBeVisible({ timeout: 30_000 })
+  await framesPainted(page)
 
   const { shift, gaps } = await page.evaluate(() => {
     const w = window as unknown as { __shift: number; __gaps: number; __stop: boolean }

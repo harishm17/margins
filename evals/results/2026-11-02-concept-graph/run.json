@@ -1,0 +1,54 @@
+{
+  "label": "concept-graph",
+  "date": "2026-11-02",
+  "code": {
+    "commit": "e76d188fef2d888686106922dbf125451e1912af",
+    "branch": "feat/v3-map",
+    "app_dirty": false
+  },
+  "corpora": [
+    "mit-18.05"
+  ],
+  "types": [
+    "concepts",
+    "warmup"
+  ],
+  "models": [
+    {
+      "slug": "sonnet-low",
+      "label": "sonnet:low",
+      "model_id": "claude-sonnet-5-5",
+      "effort": "low"
+    }
+  ],
+  "params": {
+    "examples": 3,
+    "questions": 10,
+    "difficulty": "medium",
+    "detail_level": "comprehensive"
+  },
+  "judge": null,
+  "mock": false,
+  "seed": 0,
+  "max_usd": 3.0,
+  "max_judge_usd": 3.0,
+  "notes_sections": [
+    "What you'll learn",
+    "The idea",
+    "Key concepts",
+    "Worked example",
+    "Check yourself",
+    "Common pitfalls",
+    "Summary",
+    "Overview",
+    "How it works",
+    "Exam-ready recap"
+  ],
+  "topics_source": "the app's course planner",
+  "stopped": null,
+  "spend": {
+    "generation": 0.3678,
+    "topics": 0.0994,
+    "judge": 0.0
+  }
+}

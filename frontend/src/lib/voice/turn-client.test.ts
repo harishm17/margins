@@ -71,6 +71,40 @@ describe('parseVoiceEvent', () => {
     assert.equal(ungraded?.type === 'evaluation' && ungraded.ungraded, true)
   })
 
+  it('keeps the page links of a wrong answer and of a closed idea, and drops one that links away', () => {
+    const links = '[{"label":"pp. 4-6","href":"/api/materials/m1/file#page=4"},{"label":"p. 9","href":"https://example.com/x"},{"label":"p. 2","href":"//example.com/x"},{"href":"/a"}]'
+    const wrong = parseVoiceEvent(`{"type":"evaluation","isCorrect":false,"score":0,"comment":"","explanation":"","lookLinks":${links}}`)
+    assert.deepEqual(wrong?.type === 'evaluation' && wrong.lookLinks, [{ label: 'pp. 4-6', href: '/api/materials/m1/file#page=4' }])
+    const closed = parseVoiceEvent(`{"type":"idea_done","name":"Collision","outcome":"taught","lookAgain":["pp. 4-6"],"lookLinks":${links}}`)
+    assert.deepEqual(closed?.type === 'idea_done' && closed.lookLinks, [{ label: 'pp. 4-6', href: '/api/materials/m1/file#page=4' }])
+  })
+
+  it('parses a board update with its page link, and drops one that is not well formed or links away', () => {
+    assert.deepEqual(
+      parseVoiceEvent('{"type":"board","kind":"claim","text":"The mean is $\\\\mu$.","question":"Why?","source":{"label":"p. 14","href":"/api/materials/m1/file#page=14"}}'),
+      { type: 'board', kind: 'claim', text: 'The mean is $\\mu$.', question: 'Why?', source: { label: 'p. 14', href: '/api/materials/m1/file#page=14' } }
+    )
+    assert.deepEqual(parseVoiceEvent('{"type":"board","kind":"concept","text":"Explain collisions"}'), { type: 'board', kind: 'concept', text: 'Explain collisions' })
+    assert.deepEqual(
+      parseVoiceEvent('{"type":"board","kind":"concept","text":"Explain collisions","idea":{"name":"Collision","conceptId":"c1"}}'),
+      { type: 'board', kind: 'concept', text: 'Explain collisions', idea: { name: 'Collision', conceptId: 'c1' } }
+    )
+    assert.equal(parseVoiceEvent('{"type":"board","kind":"claim","text":"  "}'), null)
+    assert.equal(parseVoiceEvent('{"type":"board","kind":"other","text":"x"}'), null)
+    const away = parseVoiceEvent('{"type":"board","kind":"claim","text":"x","source":{"label":"p. 1","href":"https://example.com"}}')
+    assert.deepEqual(away, { type: 'board', kind: 'claim', text: 'x' })
+  })
+
+  it('parses the v3.2 working and listen events and drops ones it does not know', () => {
+    assert.deepEqual(parseVoiceEvent('{"type":"working","step":"assess"}'), { type: 'working', step: 'assess' })
+    assert.deepEqual(parseVoiceEvent('{"type":"working","step":"record_check"}'), { type: 'working', step: 'record_check' })
+    assert.equal(parseVoiceEvent('{"type":"working","step":"grade"}'), null)
+    assert.equal(parseVoiceEvent('{"type":"working"}'), null)
+    assert.deepEqual(parseVoiceEvent('{"type":"listen","for":"explanation"}'), { type: 'listen', for: 'explanation' })
+    assert.deepEqual(parseVoiceEvent('{"type":"listen","for":"none"}'), { type: 'listen', for: 'none' })
+    assert.equal(parseVoiceEvent('{"type":"listen","for":"essay"}'), null)
+  })
+
   it('parses hint, session_complete, done and error', () => {
     assert.deepEqual(parseVoiceEvent('{"type":"hint","text":"Think about it"}'), { type: 'hint', text: 'Think about it' })
     assert.deepEqual(parseVoiceEvent('{"type":"session_complete"}'), { type: 'session_complete' })
@@ -198,6 +232,8 @@ describe('createSentenceChunker', () => {
     assert.equal(cleanForSpeech('**Great** answer, use `a map` here.'), 'Great answer, use a map here.')
     assert.equal(cleanForSpeech('- First point'), 'First point')
     assert.equal(cleanForSpeech('## Heading'), 'Heading')
+    assert.equal(cleanForSpeech('Use $x_i + y_j$ and **bold** here.'), 'Use $x_i + y_j$ and bold here.')
+    assert.equal(cleanForSpeech('It costs $5 and *then* $10.'), 'It costs $5 and then $10.')
     assert.deepEqual(chunk('**Nice.** Next one.', 4), ['Nice.', 'Next one.'])
   })
 })

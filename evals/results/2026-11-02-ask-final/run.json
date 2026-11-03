@@ -1,0 +1,14 @@
+{
+  "label": "ask-final",
+  "date": "2026-11-02",
+  "surface": "ask",
+  "patterns": null,
+  "limit": null,
+  "repeats": 2,
+  "scenarios": "/home/harish/code/margins-wt/learning-v3/evals/tutoring/scenarios/ask-original.jsonl",
+  "stopped": null,
+  "spend": {
+    "generation": 4.5087,
+    "max_usd": 5.0
+  }
+}

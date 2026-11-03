@@ -27,13 +27,18 @@ import python from 'highlight.js/lib/languages/python'
 import rust from 'highlight.js/lib/languages/rust'
 import sql from 'highlight.js/lib/languages/sql'
 import typescript from 'highlight.js/lib/languages/typescript'
-import { Check, Copy, Eye, EyeSlash } from '@phosphor-icons/react/dist/ssr'
+import { Check, Copy, Eye } from '@phosphor-icons/react/dist/ssr'
 import { formatLearningMarkdown } from '@/lib/utils/learning-markdown'
 import { protectMathText } from '@/lib/utils/math-text'
+import { statusLabel, useServerDraft } from '@/features/learning/use-server-draft'
+import { explainerCheckKey, parseExplainerCheckDraft, type ExplainerCheckDraft } from '@/lib/drafts/explainer-check-draft'
 import { createSlugger } from '@/lib/markdown-outline'
 import { rehypeBindMathPunctuation } from '@/lib/markdown/bind-math'
 import { parseCheckBlock } from '@/lib/markdown/check-block'
 import { Button } from './button'
+import { CheckGradeContext, ExplainerDraftContext } from './check-context'
+import { Textarea } from './textarea'
+import type { CheckGrade } from '@/lib/reader/checks'
 import { useScrollableFocus } from './scrollable'
 import { cn } from '@/lib/utils'
 
@@ -132,37 +137,139 @@ function reactText(node: React.ReactNode): string {
   return ''
 }
 
+const CHECK_GRADES: { id: CheckGrade; label: string }[] = [
+  { id: 'got_it', label: 'Got it' },
+  { id: 'partly', label: 'Partly' },
+  { id: 'missed', label: 'Missed' },
+]
+
+const DONT_KNOW = "I don't know"
+
 /**
- * A "Check yourself" item (a ```check block in the notes): the question is shown, the answer waits
- * behind a button. The button says what it does and reports its state, so it works with a keyboard
- * and a screen reader; the answer is labelled in words, not by colour.
+ * A "Check yourself" item (a ```check block in the lesson), attempt-first (spec §5.4): the student writes an answer, or
+ * taps "I don't know", before "Show answer" opens. Then the answer shows and the student grades themselves with Got it,
+ * Partly or Missed, which the screen records as level-2 evidence (CheckGradeContext). Each control says what it does
+ * and reports its state, so the block works with a keyboard and a screen reader; the answer is labelled in words.
  */
-function CheckYourself({ question, answer }: { question: string; answer: string }) {
+export function CheckYourself({ question, answer, conceptId = null }: { question: string; answer: string; conceptId?: string | null }) {
+  const onGrade = React.useContext(CheckGradeContext)
+  // Inside an explainer the answer being written lives on the server (spec 18.7): it survives a reload and another device.
+  const where = React.useContext(ExplainerDraftContext)
+  const draft = useServerDraft<ExplainerCheckDraft>('explainer_check', where ? explainerCheckKey(where.topicId, where.scope, question) : null, {
+    projectId: where?.projectId ?? null,
+    topicId: where?.topicId ?? null,
+    parse: parseExplainerCheckDraft,
+  })
+  // What was typed since the page showed; until then, the saved draft.
+  const [typed, setTyped] = React.useState<string | null>(null)
+  const text = typed ?? draft.value?.answer ?? ''
+  const setText = (value: string, keep = true) => {
+    setTyped(value)
+    if (value.trim() && keep) draft.set({ answer: value })
+    else void draft.clear()
+  }
+  const [idk, setIdk] = React.useState(false)
   const [open, setOpen] = React.useState(false)
-  const panelId = React.useId()
+  const [saved, setSaved] = React.useState<CheckGrade | null>(null)
+  const [saving, setSaving] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const id = React.useId()
+  const panelId = `${id}-answer`
+  const attempted = text.trim().length > 0
+
+  async function grade(value: CheckGrade) {
+    if (!onGrade || saving) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onGrade({ question, grade: value, idk, conceptId })
+      setSaved(value)
+      // Settled: the draft has done its work. The text stays on screen.
+      setTyped(text)
+      void draft.clear()
+    } catch {
+      setError('Could not save that. Try again.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="md-check rounded-card border border-border bg-surface p-4">
       <p className="mb-1.5 text-caption text-fg-3">Question</p>
       <Markdown variant="compact" className="text-[16px]! leading-[26px]!">
         {question}
       </Markdown>
-      <Button
-        size="sm"
-        variant="secondary"
-        className="mt-3"
-        icon={open ? <EyeSlash /> : <Eye />}
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((current) => !current)}
-      >
-        {open ? 'Hide answer' : 'Show answer'}
-      </Button>
+      <label htmlFor={`${id}-text`} className="mb-1 mt-3 block text-caption text-fg-3">
+        Your answer
+      </label>
+      <Textarea
+        id={`${id}-text`}
+        rows={2}
+        maxRows={6}
+        maxLength={2000}
+        value={text}
+        readOnly={open}
+        onChange={(event) => {
+          setText(event.target.value)
+          setIdk(false)
+        }}
+        placeholder="Write what you think before you look"
+        aria-describedby={open || attempted ? undefined : `${id}-hint`}
+      />
+      {where && attempted && !idk && !saved && statusLabel(draft.status) ? <p className="mt-1.5 text-caption text-fg-3">{statusLabel(draft.status)}</p> : null}
+      {open ? null : (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="secondary" icon={<Eye />} disabled={!attempted} aria-expanded={false} onClick={() => setOpen(true)}>
+            Show answer
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setText(DONT_KNOW, false)
+              setIdk(true)
+            }}
+          >
+            {DONT_KNOW}
+          </Button>
+          {attempted ? null : (
+            <span id={`${id}-hint`} className="text-caption text-fg-3">
+              Write an answer, or tap &ldquo;{DONT_KNOW}&rdquo;, to see the answer.
+            </span>
+          )}
+        </div>
+      )}
       {open ? (
         <div id={panelId} className="mt-3 rounded-control bg-surface-2 px-3.5 py-3">
           <p className="mb-1 text-caption text-fg-3">Answer</p>
           <Markdown variant="compact" className="text-[16px]! leading-[26px]!">
             {answer}
           </Markdown>
+        </div>
+      ) : null}
+      {open && onGrade ? (
+        <div className="mt-3">
+          {saved ? (
+            <p role="status" className="flex items-center gap-1.5 text-small text-fg-2">
+              <Check aria-hidden="true" weight="bold" className="size-4 shrink-0 text-accent" />
+              Saved: {CHECK_GRADES.find((item) => item.id === saved)?.label}
+            </p>
+          ) : (
+            <div role="group" aria-label="How did you do?" className="flex flex-wrap items-center gap-2">
+              <span className="text-small text-fg-2">How did you do?</span>
+              {CHECK_GRADES.filter((item) => !idk || item.id === 'missed').map((item) => (
+                <Button key={item.id} size="sm" variant="secondary" disabled={saving} onClick={() => void grade(item.id)}>
+                  {item.label}
+                </Button>
+              ))}
+            </div>
+          )}
+          {error ? (
+            <p role="alert" className="mt-2 text-small text-danger-soft-fg">
+              {error}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

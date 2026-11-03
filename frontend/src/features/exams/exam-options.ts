@@ -1,6 +1,6 @@
 /** The choices on the new mock exam form, and the rules that turn them into a request. */
 import { DEFAULT_DURATION_MINUTES, DEFAULT_TOTAL_QUESTIONS } from '@/lib/exams/form-defaults'
-import { LEARNING_BELOW, STRONG_FROM } from '@/lib/mastery'
+import { STRONG_FROM } from '@/lib/mastery'
 
 export { DEFAULT_DURATION_MINUTES, DEFAULT_TOTAL_QUESTIONS, QUESTION_COUNTS, TIME_LIMITS, examDefaultsFromParams, questionsForMinutes } from '@/lib/exams/form-defaults'
 export const DIFFICULTIES = ['easy', 'medium', 'hard'] as const
@@ -38,9 +38,6 @@ export function preselectTopics(topics: readonly TopicSignal[], now: number): st
   )
   return (wanted.length > 0 ? wanted : topics).map((topic) => topic.id)
 }
-
-/** True when a topic's mastery is low enough to show the warning tone. */
-export const isLowMastery = (mastery: number | null): boolean => mastery !== null && mastery < LEARNING_BELOW
 
 const DIFFICULTY_LABELS: Record<string, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 export const difficultyLabel = (value: string): string => DIFFICULTY_LABELS[value] ?? value

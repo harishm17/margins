@@ -30,6 +30,8 @@ const stageByJobType: Record<string, string> = {
   chunk_material: 'chunking',
   extract_topics: 'extracting',
   generate_content: 'generating',
+  generate_review_items: 'generating',
+  gap_explainer: 'generating',
   generate_exam: 'generating',
   grade_exam: 'grading',
   grade_quiz: 'grading',

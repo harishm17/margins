@@ -11,6 +11,8 @@ type VoiceOrbProps = {
   /** Source of the mic level while listening. */
   meter?: MicMeter
   size?: 'md' | 'sm'
+  /** The word under the orb when it is not the state's usual one ("Still listening"). */
+  label?: string
   className?: string
 }
 
@@ -19,7 +21,7 @@ type VoiceOrbProps = {
  * level and writes it to the --orb-level CSS variable on the orb element: no React state, so
  * a 60 fps meter never re-renders anything. Under reduced motion the loop does not run.
  */
-export function VoiceOrb({ state, meter, size = 'md', className }: VoiceOrbProps) {
+export function VoiceOrb({ state, meter, size = 'md', label, className }: VoiceOrbProps) {
   const orbRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
@@ -48,7 +50,7 @@ export function VoiceOrb({ state, meter, size = 'md', className }: VoiceOrbProps
         <span className="voice-orb__core" />
       </div>
       <p role="status" aria-live="polite" className="text-body-strong text-fg-2" data-testid="voice-orb-status">
-        {ORB_LABEL[state]}
+        {label ?? ORB_LABEL[state]}
       </p>
     </div>
   )

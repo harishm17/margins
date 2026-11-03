@@ -1,0 +1,304 @@
+{
+  "mit-18.05": {
+    "all": [
+      {
+        "id": "5f6b40ab-708b-4830-b2db-52fa376b2c3b",
+        "name": "Sets and counting principles",
+        "description": "Set notation, Venn diagrams, inclusion-exclusion and the rule of product.",
+        "keywords": [
+          "sets",
+          "Venn diagram",
+          "inclusion-exclusion",
+          "rule of product",
+          "complement"
+        ],
+        "unit": "Counting and Sets",
+        "objectives": [
+          "use set notation for union, intersection and complement",
+          "visualize set operations with Venn diagrams",
+          "apply inclusion-exclusion to count elements",
+          "apply the rule of product to count outcomes"
+        ],
+        "estimated_minutes": 45
+      },
+      {
+        "id": "21fb1f3a-2773-4146-9c0d-ed202360f983",
+        "name": "Independence of events",
+        "description": "Defining and checking independence of events and its paradoxes.",
+        "keywords": [
+          "independence",
+          "independent events",
+          "P(A\u2229B)=P(A)P(B)",
+          "paradox"
+        ],
+        "unit": "Conditional Probability and Bayes",
+        "objectives": [
+          "state the definition of independent events",
+          "check whether two events are independent",
+          "explain why a probability-zero event is independent of itself"
+        ],
+        "estimated_minutes": 25
+      },
+      {
+        "id": "a3bf754a-f85a-4ca8-9fd1-d5a604bb688c",
+        "name": "Random variables, pmf and cdf",
+        "description": "Random variables as payoff functions and their probability mass and cumulative distribution functions.",
+        "keywords": [
+          "random variable",
+          "pmf",
+          "cdf",
+          "probability mass function",
+          "distribution function"
+        ],
+        "unit": "Discrete Random Variables",
+        "objectives": [
+          "define a discrete random variable on a sample space",
+          "write the pmf of a random variable",
+          "compute and graph a cdf",
+          "state properties of the cdf"
+        ],
+        "estimated_minutes": 50
+      },
+      {
+        "id": "879b66d2-c502-49ed-91fc-32885339f893",
+        "name": "Repeated updating and screening",
+        "description": "Updating posteriors with successive data and revisiting the base rate fallacy.",
+        "keywords": [
+          "sequential updating",
+          "posterior as prior",
+          "base rate fallacy",
+          "screening test"
+        ],
+        "unit": "Bayesian Updating Discrete Priors",
+        "objectives": [
+          "use a posterior as the next prior",
+          "update on multiple data points at once",
+          "solve a screening test example with a Bayes table"
+        ],
+        "estimated_minutes": 25
+      },
+      {
+        "id": "5aa13176-f8f0-495a-946b-d11bcaad1de6",
+        "name": "Bayes tables: prior, likelihood, posterior",
+        "description": "Introduces hypotheses, data, prior, likelihood and posterior in tabular Bayesian updating with discrete prior pmfs.",
+        "keywords": [
+          "Bayesian updating",
+          "prior",
+          "likelihood",
+          "posterior",
+          "Bayes table",
+          "discrete prior"
+        ],
+        "unit": "Bayesian Updating Discrete Priors",
+        "objectives": [
+          "identify prior, likelihood and posterior in a problem",
+          "build a Bayes table for discrete hypotheses",
+          "compute posterior pmfs from prior pmfs",
+          "distinguish probabilities of data from probabilities of hypotheses"
+        ],
+        "estimated_minutes": 50
+      },
+      {
+        "id": "b174cf10-a1a3-4e4f-9ece-aa0bf76e1d68",
+        "name": "Conditional probability and multiplication rule",
+        "description": "Defines conditional probability and derives the multiplication rule from it.",
+        "keywords": [
+          "conditional probability",
+          "multiplication rule",
+          "P(A|B)",
+          "sample space"
+        ],
+        "unit": "Conditional Probability and Bayes",
+        "objectives": [
+          "compute a conditional probability from the definition",
+          "apply the multiplication rule to find joint probabilities",
+          "interpret conditioning as restricting the sample space"
+        ],
+        "estimated_minutes": 35
+      },
+      {
+        "id": "f71ea854-c9ba-41b2-8191-b326a8e4e093",
+        "name": "Law of total probability, trees",
+        "description": "Uses partitions of the sample space, urn models and trees to compute probabilities with the law of total probability.",
+        "keywords": [
+          "law of total probability",
+          "partition",
+          "urn",
+          "probability tree",
+          "conditional probability"
+        ],
+        "unit": "Conditional Probability and Bayes",
+        "objectives": [
+          "state the law of total probability for a partition",
+          "compute probabilities in urn problems",
+          "organize conditional computations with a probability tree",
+          "distinguish shorthand and precise tree labels"
+        ],
+        "estimated_minutes": 35
+      },
+      {
+        "id": "99627717-9a22-47dd-9598-c3f03c9584bb",
+        "name": "Bayes' theorem and base rate fallacy",
+        "description": "Introduces Bayes' theorem for inverting conditional probabilities and illustrates the base rate fallacy with screening tests.",
+        "keywords": [
+          "Bayes' theorem",
+          "base rate fallacy",
+          "screening test",
+          "false positive",
+          "inverting conditional probability"
+        ],
+        "unit": "Conditional Probability and Bayes",
+        "objectives": [
+          "state and derive Bayes' theorem",
+          "invert a conditional probability",
+          "explain the base rate fallacy",
+          "compute the probability of disease given a positive test"
+        ],
+        "estimated_minutes": 50
+      },
+      {
+        "id": "2c551aff-98ab-4c09-8bb0-97ea18b9bc82",
+        "name": "Bernoulli and binomial distributions",
+        "description": "Defines Bernoulli and binomial distributions and explains where the binomial probabilities come from.",
+        "keywords": [
+          "Bernoulli distribution",
+          "binomial distribution",
+          "binomial coefficient",
+          "independent trials",
+          "pmf"
+        ],
+        "unit": "Discrete Random Variables",
+        "objectives": [
+          "write the pmf of a Bernoulli random variable",
+          "model counts of successes with Binomial(n,p)",
+          "derive binomial probabilities using combinations",
+          "compute binomial probabilities"
+        ],
+        "estimated_minutes": 40
+      },
+      {
+        "id": "24c2aa04-caf3-4625-b17d-9b99f12eca66",
+        "name": "Geometric, uniform and other distributions",
+        "description": "Covers the geometric and discrete uniform distributions and how to look up other named distributions.",
+        "keywords": [
+          "geometric distribution",
+          "uniform distribution",
+          "discrete distributions applet",
+          "waiting time"
+        ],
+        "unit": "Discrete Random Variables",
+        "objectives": [
+          "model waiting times with a geometric distribution",
+          "compute geometric probabilities",
+          "describe the discrete uniform distribution",
+          "use resources to find other pmfs"
+        ],
+        "estimated_minutes": 30
+      },
+      {
+        "id": "1e36ec08-f344-4a3e-a37c-8f2d020ffefd",
+        "name": "Arithmetic with random variables",
+        "description": "Shows how to add, multiply and transform random variables and count with sums of indicator variables.",
+        "keywords": [
+          "sum of random variables",
+          "indicator variables",
+          "function of random variable",
+          "joint table"
+        ],
+        "unit": "Discrete Random Variables",
+        "objectives": [
+          "compute the pmf of a sum of random variables",
+          "use indicator sums to count successes",
+          "find the distribution of a function of a random variable"
+        ],
+        "estimated_minutes": 30
+      }
+    ],
+    "selected": [
+      {
+        "id": "5f6b40ab-708b-4830-b2db-52fa376b2c3b",
+        "name": "Sets and counting principles",
+        "description": "Set notation, Venn diagrams, inclusion-exclusion and the rule of product.",
+        "keywords": [
+          "sets",
+          "Venn diagram",
+          "inclusion-exclusion",
+          "rule of product",
+          "complement"
+        ],
+        "unit": "Counting and Sets",
+        "objectives": [
+          "use set notation for union, intersection and complement",
+          "visualize set operations with Venn diagrams",
+          "apply inclusion-exclusion to count elements",
+          "apply the rule of product to count outcomes"
+        ],
+        "estimated_minutes": 45,
+        "index": 0,
+        "key": "t00-sets-and-counting-principles"
+      },
+      {
+        "id": "879b66d2-c502-49ed-91fc-32885339f893",
+        "name": "Repeated updating and screening",
+        "description": "Updating posteriors with successive data and revisiting the base rate fallacy.",
+        "keywords": [
+          "sequential updating",
+          "posterior as prior",
+          "base rate fallacy",
+          "screening test"
+        ],
+        "unit": "Bayesian Updating Discrete Priors",
+        "objectives": [
+          "use a posterior as the next prior",
+          "update on multiple data points at once",
+          "solve a screening test example with a Bayes table"
+        ],
+        "estimated_minutes": 25,
+        "index": 3,
+        "key": "t03-repeated-updating-and-screening"
+      },
+      {
+        "id": "99627717-9a22-47dd-9598-c3f03c9584bb",
+        "name": "Bayes' theorem and base rate fallacy",
+        "description": "Introduces Bayes' theorem for inverting conditional probabilities and illustrates the base rate fallacy with screening tests.",
+        "keywords": [
+          "Bayes' theorem",
+          "base rate fallacy",
+          "screening test",
+          "false positive",
+          "inverting conditional probability"
+        ],
+        "unit": "Conditional Probability and Bayes",
+        "objectives": [
+          "state and derive Bayes' theorem",
+          "invert a conditional probability",
+          "explain the base rate fallacy",
+          "compute the probability of disease given a positive test"
+        ],
+        "estimated_minutes": 50,
+        "index": 7,
+        "key": "t07-bayes-theorem-and-base-rate-fallacy"
+      },
+      {
+        "id": "1e36ec08-f344-4a3e-a37c-8f2d020ffefd",
+        "name": "Arithmetic with random variables",
+        "description": "Shows how to add, multiply and transform random variables and count with sums of indicator variables.",
+        "keywords": [
+          "sum of random variables",
+          "indicator variables",
+          "function of random variable",
+          "joint table"
+        ],
+        "unit": "Discrete Random Variables",
+        "objectives": [
+          "compute the pmf of a sum of random variables",
+          "use indicator sums to count successes",
+          "find the distribution of a function of a random variable"
+        ],
+        "estimated_minutes": 30,
+        "index": 10,
+        "key": "t10-arithmetic-with-random-variables"
+      }
+    ]
+  }
+}

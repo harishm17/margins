@@ -80,7 +80,7 @@ function CoachTurn({ entry }: { entry: CoachEntry }) {
       <span className="pt-0.5 text-caption text-fg-3">Coach</span>
       <div className="min-w-0">
         {entry.text.trim() ? (
-          <p className="text-body text-fg">
+          <p className={cn('text-body', entry.note ? 'text-fg-2' : 'text-fg')} data-testid={entry.note ? 'voice-coach-note' : undefined}>
             {entry.text.trim()}
             {entry.streaming ? (
               <span aria-hidden="true" className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-caret bg-fg-3" />

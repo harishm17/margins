@@ -40,7 +40,11 @@ EVALS_DIR = HERE.parent
 RESULTS_DIR = EVALS_DIR / "results"
 DEFAULT_DB = "postgresql://postgres@127.0.0.1:5544/sb_evals"
 DEFAULT_MODELS = "opus:medium,sonnet:medium,haiku:medium"
-ALL_TYPES = ("notes", "solved", "interactive", "quiz")
+# Concepts and warm-up first, as in the app's chain: the later generators tag their items with the
+# concepts extraction stored, and the warm-up reads them too.
+ALL_TYPES = ("concepts", "warmup", "notes", "solved", "interactive", "quiz")
+GRAPH_TYPES = ("concepts", "warmup")
+JUDGED_TYPES = ("notes", "solved", "interactive", "quiz")
 EVAL_USER_ID = "eval-gen-user"
 
 # Run with `python -I`, so nothing is importable by accident; add exactly what is needed.
@@ -105,9 +109,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     bad = [t for t in types if t not in ALL_TYPES]
     if bad or not types:
         parser.error(f"--types: unknown {bad}; choose from {', '.join(ALL_TYPES)}")
-    args.type_list = types
+    args.type_list = [t for t in ALL_TYPES if t in types]  # the app's order, whatever order was typed
     args.corpus_list = [c.strip() for c in args.corpora.split(",") if c.strip()]
     args.model_specs = [s for s in args.models.split(",") if s.strip()]
+    if set(types) & set(GRAPH_TYPES) and len(args.model_specs) > 1:
+        args.sequential_models = True  # the graph and warm-up are stored per topic: models cannot share them
     return args
 
 
@@ -153,7 +159,7 @@ def load_topics_file(path: Path, corpus_id: str) -> Optional[dict]:
 
 # Prompt sizes for the estimate: 24 chunks of about 350 tokens plus the system prompt, the
 # instructions and (for structured calls) the schema.
-EST_PROMPT_TOKENS = {"notes": 9500, "solved": 11500, "interactive": 11500, "quiz": 11500}
+EST_PROMPT_TOKENS = {"concepts": 11000, "warmup": 10000, "notes": 9500, "solved": 11500, "interactive": 11500, "quiz": 11500}
 
 
 def print_plan(args: argparse.Namespace, tracker, specs, topics_per_corpus: Dict[str, int]) -> None:
@@ -175,8 +181,8 @@ def print_plan(args: argparse.Namespace, tracker, specs, topics_per_corpus: Dict
         jspec = adapters.parse_model_spec(args.judge if ":" in args.judge else f"{args.judge}:medium")
         prompt = 9000 + 3500 * len(specs)
         per_pair = tracker.estimate_call(jspec.model_id, "judge", prompt)
-        judge_total = per_pair * n_topics * len(args.type_list)
-        log(f"  judge {jspec.label}: about ${per_pair:.2f} per (topic, type), ${judge_total:.2f} for {n_topics * len(args.type_list)} pairs")
+        judge_total = per_pair * n_topics * len([t for t in args.type_list if t in JUDGED_TYPES])
+        log(f"  judge {jspec.label}: about ${per_pair:.2f} per (topic, type), ${judge_total:.2f} for {n_topics * len([t for t in args.type_list if t in JUDGED_TYPES])} pairs")
     log(f"  estimated total: ${total + judge_total:.2f} (generation ${total:.2f}). Caps: --max-usd {args.max_usd}, --max-judge-usd {args.max_judge_usd}")
     log("  These are rough: output length, thinking tokens and cache behaviour decide the real cost. Nothing was called.")
 
@@ -474,7 +480,7 @@ async def run(args: argparse.Namespace) -> int:
             outputs=outputs,
             excerpts=excerpts,
             model_slugs=[s.slug for s in specs],
-            content_types=args.type_list,
+            content_types=[t for t in args.type_list if t in JUDGED_TYPES],
             judge_dir=run_dir / "judge",
             seed=args.seed,
             log=log,

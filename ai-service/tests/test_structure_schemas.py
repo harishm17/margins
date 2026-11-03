@@ -22,7 +22,7 @@ def _step(**overrides):
     fields = dict(
         step_number=1,
         question="Which is faster for large n?",
-        hint="Think about growth.",
+        hints=["Look at the growth rates.", "Think about growth.", "Compare the leading terms."],
         answer_type="multiple_choice",
         options=[ChoiceOption(id=x, text=f"choice {x}") for x in "ABC"],
         correct_answer="B",
@@ -42,7 +42,7 @@ def _mcq(**overrides):
     fields = dict(
         question_type="multiple_choice",
         question_text="Q",
-        options=[ChoiceOption(id=x, text=f"text {x}") for x in "ABCD"],
+        options=[ChoiceOption(id=x, text=f"text {x}", misconception="wrong idea") for x in "ABCD"],
         correct_answer="C",
         explanation="E",
     )

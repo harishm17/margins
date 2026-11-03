@@ -1,4 +1,5 @@
 import { buildReview } from './quiz-review'
+import { localDateParts, zonedTimeToUtc } from './study-plan-time'
 
 type RawQuestion = Record<string, unknown>
 
@@ -91,4 +92,35 @@ export function pickPrerequisite(
 ): { id: string; mastery: number | null } | null {
   if (prerequisites.length === 0) return null
   return [...prerequisites].sort((a, b) => (a.mastery ?? 0) - (b.mastery ?? 0))[0]
+}
+
+/**
+ * When the identical questions can be retried: the start of the next local day after the last
+ * attempt. Re-answering the same question straight away mostly tests short-term memory (spec §5.7).
+ */
+export function retryAvailableAt(lastAttemptAt: Date, timeZone: string): Date {
+  const { year, month, day } = localDateParts(lastAttemptAt, timeZone)
+  const next = new Date(Date.UTC(year, month - 1, day + 1))
+  return zonedTimeToUtc({ year: next.getUTCFullYear(), month: next.getUTCMonth() + 1, day: next.getUTCDate() }, 0, 0, timeZone)
+}
+
+/** Why "Retry what you missed" is closed until the next local day (spec §5.7). */
+export const RETRY_WAIT_TEXT = 'Available tomorrow. Re-answering the same question right away mostly tests short-term memory.'
+
+/** When the retry opens, or null when it is open now (or there was no attempt). The server and the page use the same rule. */
+export function retryOpensAt(lastAttemptAt: Date | null, timeZone: string, now: Date): Date | null {
+  if (!lastAttemptAt) return null
+  const opens = retryAvailableAt(lastAttemptAt, timeZone)
+  return opens.getTime() > now.getTime() ? opens : null
+}
+
+/** The concept ids the missed questions test, each once, in the order they appear. */
+export function missedConceptIds(missed: MissedQuestion[], limit = 6): string[] {
+  const ids = new Set<string>()
+  for (const { question } of missed) {
+    for (const id of Array.isArray(question.concept_ids) ? question.concept_ids : []) {
+      if (typeof id === 'string' && id) ids.add(id)
+    }
+  }
+  return [...ids].slice(0, limit)
 }

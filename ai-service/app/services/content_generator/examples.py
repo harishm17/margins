@@ -11,8 +11,11 @@ from app.services.content_generator.context import (
     NoSourceMaterialError,
     attach_sources,
     content_messages,
+    fetch_concepts,
     fetch_topic_context,
     focus_line,
+    format_concept_block,
+    resolve_concept_ids,
 )
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
@@ -75,16 +78,20 @@ class ExamplesGenerator:
         if not chunks:
             raise NoSourceMaterialError(f"No source material is mapped to topic {topic_id}")
 
+        concepts = await fetch_concepts(topic_id)
+        concept_block = format_concept_block(concepts)
+
         if example_type == ExampleType.SOLVED:
             examples = await self._generate_solved_examples(
                 topic_name, topic_description, chunks, count, difficulty_level, focus, cache_excerpts,
-                context.course_map,
+                context.course_map, concept_block,
             )
         else:
             examples = await self._generate_interactive_examples(
                 topic_name, topic_description, chunks, count, difficulty_level, focus, cache_excerpts,
-                context.course_map,
+                context.course_map, concept_block,
             )
+        resolve_concept_ids(examples, concepts, chunks)
         # Each item says which excerpts it is based on; store the file and pages instead.
         attach_sources(examples, chunks)
 
@@ -105,13 +112,14 @@ class ExamplesGenerator:
         focus: Optional[str] = None,
         cache_excerpts: bool = False,
         course_map: str = "",
+        concepts: str = "",
     ) -> List[Dict]:
         """Fully solved examples with step-by-step solutions."""
         guidance = SOLVED_GUIDANCE.get(difficulty_level, SOLVED_GUIDANCE['medium'])
         instructions = f"""Write {count} distinct solved example problems on "{topic_name}" from the excerpts above.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
-
+{concepts}
 - Make each problem realistic for this course and vary the problem types across the topic.
 - Give complete step-by-step solutions. Each step has a one-line description, the work (math or reasoning), and why the step is taken.
 - Name the key principle or formula used in each step.
@@ -140,14 +148,16 @@ Difficulty: {difficulty_level}. {guidance}
         focus: Optional[str] = None,
         cache_excerpts: bool = False,
         course_map: str = "",
+        concepts: str = "",
     ) -> List[Dict]:
         """Problems the student solves one step at a time."""
         guidance = INTERACTIVE_GUIDANCE.get(difficulty_level, INTERACTIVE_GUIDANCE['medium'])
         instructions = f"""Write {count} interactive practice problems on "{topic_name}" from the excerpts above. The student solves each one step by step.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
-
-- Each step asks the student one short question, offers a hint that does not give the answer away, and has the correct answer plus other acceptable forms of it.
+{concepts}
+- Each step asks the student one short question and has the correct answer plus other acceptable forms of it.
+- Give three hints that get gradually more specific: where to look, which idea applies, then the general form of the step. None of them contains the answer. Put them in `hints`, in that order.
 - Each step builds on the one before.
 - Give an explanation, feedback for a correct answer, and guidance for a wrong one.
 - Answer types. Anything whose answer is a number (a count, a probability, a fraction, the result of arithmetic) is answer_type numeric: correct_answer is the number as a plain decimal or fraction, with no units or words, and tolerance is the accepted absolute difference (for example 0.005 for a probability to 3 decimals; 0 only for exact integers). Use multiple_choice when the student picks from options: put 2 to 5 options (ids A, B, C...) in `options`, never in the question text, and give the option id as correct_answer. Use text only for a short canonical word, term or expression (for example "independent" or "(1-p)^k p"); write it in one standard form. acceptable_answers lists other forms of the same answer, one form per entry; never put several answers in one entry.

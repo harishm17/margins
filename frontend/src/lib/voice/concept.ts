@@ -10,6 +10,8 @@ export type VoiceQuestion = {
   explanation?: string
   difficulty?: string
   concepts_tested?: string[]
+  /** Ids of the concepts the question tests (the concept graph); absent on drills from before it. */
+  concept_ids?: string[]
   source?: string
   topic_id?: string
 }
@@ -45,6 +47,7 @@ export const normalizeVoiceQuestion = (question: Partial<VoiceQuestion>): VoiceQ
     explanation: safeString(question.explanation).trim(),
     difficulty: safeString(question.difficulty).trim(),
     concepts_tested: safeStringArray(question.concepts_tested),
+    concept_ids: safeStringArray(question.concept_ids),
     source: safeString(question.source).trim(),
     topic_id: safeString(question.topic_id).trim(),
   }

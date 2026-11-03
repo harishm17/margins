@@ -13,6 +13,7 @@ import { voiceErrorMessage } from '@/lib/voice/errors'
 import type { VoiceBlock, VoiceMessage } from '@/lib/voice/history'
 import type { VoiceToolResult } from '@/lib/voice/tools'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
+import type { VoiceStreamExtra } from '@/lib/voice/turn-contract'
 
 /** Model calls in one turn: the reply, and up to three rounds of tool results. */
 export const MAX_MODEL_CALLS = 4
@@ -21,10 +22,17 @@ export type TurnDeps = {
   /** Starts a model call for the conversation so far. Throws VoiceModelError when it is refused. */
   openModel(messages: VoiceMessage[], callNumber: number): Promise<AsyncIterable<ModelEvent>>
   runTool(name: string, input: Record<string, unknown>): Promise<VoiceToolResult>
-  emit(event: VoiceEvent): void
+  emit(event: VoiceEvent | VoiceStreamExtra): void
   maxModelCalls?: number
+  /** Milliseconds on a monotonic clock; performance.now() unless a test brings its own. */
+  now?: () => number
+  /** When model call `call` was started, if that was before the engine was asked for it (the route opens the first one early). */
+  callStartedAt?: (call: number) => number | undefined
   log?: (message: string, error?: unknown) => void
 }
+
+/** One model call: milliseconds to its first token (null when it said and asked for nothing) and in all. */
+export type CallTiming = { ttftMs: number | null; totalMs: number }
 
 export type TurnOutcome = {
   /** The conversation up to the last complete step: tool results included, a failed call not. */
@@ -37,6 +45,10 @@ export type TurnOutcome = {
   toolsRan: boolean
   /** The drill finished during this turn. */
   sessionComplete: boolean
+  /** Timing of each model call, in order (spec 19.10). */
+  calls: CallTiming[]
+  /** Milliseconds spent running tools the model asked for. */
+  toolMs: number
 }
 
 function textOf(content: VoiceBlock[]): string {
@@ -49,6 +61,9 @@ function textOf(content: VoiceBlock[]): string {
 export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<TurnOutcome> {
   const log = deps.log ?? ((message, error) => console.error(`[VOICE] ${message}`, error ?? ''))
   const max = deps.maxModelCalls ?? MAX_MODEL_CALLS
+  const now = deps.now ?? (() => performance.now())
+  const calls: CallTiming[] = []
+  let toolMs = 0
   let messages = [...start]
   const spoken: string[] = []
   let toolsRan = false
@@ -64,6 +79,8 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
       error: { code, retryable: retryable ?? info.retryable },
       toolsRan,
       sessionComplete,
+      calls,
+      toolMs,
     }
   }
 
@@ -73,12 +90,14 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
       const name = String(block.name ?? '')
       const input = block.input && typeof block.input === 'object' ? (block.input as Record<string, unknown>) : {}
       let result: VoiceToolResult
+      const toolStarted = now()
       try {
         result = await deps.runTool(name, input)
       } catch (error) {
         log(`Tool ${name} failed`, error)
         result = { output: { error: 'The tool failed. Tell the student and carry on.' }, events: [], sessionComplete: false, isError: true }
       }
+      toolMs += now() - toolStarted
       toolsRan = true
       if (result.sessionComplete) sessionComplete = true
       for (const event of result.events) deps.emit(event)
@@ -94,6 +113,10 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
 
   for (let call = 1; call <= max; call += 1) {
     let events: AsyncIterable<ModelEvent>
+    const callStarted = deps.callStartedAt?.(call) ?? now()
+    let firstToken: number | null = null
+    // Whatever way the call ends, it is timed.
+    const timed = () => calls.push({ ttftMs: firstToken === null ? null : Math.round(firstToken - callStarted), totalMs: Math.round(now() - callStarted) })
     try {
       events = await deps.openModel(messages, call)
     } catch (error) {
@@ -109,6 +132,7 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
     let done: Extract<ModelEvent, { type: 'done' }> | null = null
     try {
       for await (const event of events) {
+        if ((event.type === 'text' || event.type === 'tool_use') && firstToken === null) firstToken = now()
         if (event.type === 'text') {
           // Two spoken segments in one turn (before and after a tool) need a space between them.
           if (!segment && spoken.length > 0 && !/\s$/.test(spoken[spoken.length - 1])) {
@@ -120,6 +144,7 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
           done = event
         } else if (event.type === 'error') {
           log(`The AI service reported ${event.code}: ${event.message}`)
+          timed()
           if (segment.trim()) spoken.push(segment.trim())
           return fail(event.code, event.retryable)
         }
@@ -127,9 +152,11 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
       }
     } catch (error) {
       log(`The AI service stream broke (call ${call})`, error)
+      timed()
       if (segment.trim()) spoken.push(segment.trim())
       return fail('VOICE_INTERRUPTED')
     }
+    timed()
     if (!done) {
       if (segment.trim()) spoken.push(segment.trim())
       return fail('VOICE_INTERRUPTED')
@@ -149,7 +176,7 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
         const results = await runTools(toolCalls)
         messages = [...messages, { role: 'user', content: results }]
       }
-      return { messages, text: spoken.join(' '), ok: true, error: null, toolsRan, sessionComplete }
+      return { messages, text: spoken.join(' '), ok: true, error: null, toolsRan, sessionComplete, calls, toolMs }
     }
 
     const results = await runTools(toolCalls)

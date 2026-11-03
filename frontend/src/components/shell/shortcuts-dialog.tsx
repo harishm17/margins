@@ -25,7 +25,7 @@ function sections(mod: string): { title: string; rows: Row[] }[] {
     {
       title: 'Topic page',
       rows: [
-        { label: 'Switch view: notes, examples, practice, quiz, voice', keys: [range('1', '5')] },
+        { label: 'Switch step: warm-up, read, recall, practice, quiz', keys: [range('1', '5')] },
         { label: 'Previous or next topic', keys: [chord('['), chord(']')] },
       ],
     },

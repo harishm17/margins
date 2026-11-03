@@ -33,6 +33,8 @@ export type ChatAnswerRequest = {
   question: string
   history: { role: 'user' | 'assistant'; content: string }[]
   topicId?: string | null
+  /** Where the thread's tutor state stands (see lib/ask/ask-turn.ts). Absent: the AI service answers at rung 0. */
+  tutor?: Record<string, unknown>
 }
 
 /** Ask the AI service for a streamed answer. Rejects on network failure or timeout. */
@@ -47,6 +49,7 @@ export function requestChatAnswer(request: ChatAnswerRequest, signal?: AbortSign
       question: request.question,
       history: request.history,
       topic_id: request.topicId ?? null,
+      ...(request.tutor ? { tutor: request.tutor } : {}),
     }),
     signal: signal ?? AbortSignal.timeout(CHAT_TIMEOUT_MS),
   })

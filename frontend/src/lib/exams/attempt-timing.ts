@@ -3,13 +3,22 @@
  * only clock that counts, and everything here takes `now` as an argument.
  */
 
+import { isConfidenceId, type ConfidenceId } from '@/lib/learning/calibration'
+
 /** Answers still count this long after the deadline, to cover the round trip of an auto-submit. */
 export const DEADLINE_GRACE_MS = 15_000
 
 /** Autosave never keeps more than this many characters for one answer. */
 export const MAX_ANSWER_LENGTH = 20_000
 
-export type AnswerValue = string | number | boolean | null
+export type PlainAnswer = string | number | boolean | null
+/**
+ * An answer with how sure the student was (0 to 1); the autosave carries the confidence inside the answer,
+ * with the level they tapped (two levels can store the same value on a true or false question).
+ */
+export type ConfidentAnswer = { answer: PlainAnswer; confidence: number; confidenceLevel?: ConfidenceId }
+/** A plain value (an exam started before confidence existed, or one with none given) or the object form. */
+export type AnswerValue = PlainAnswer | ConfidentAnswer
 export type AnswerMap = Record<string, AnswerValue>
 
 export function deadlineFor(startedAt: Date, durationMinutes: number): Date {
@@ -48,8 +57,42 @@ export function resolveFinalAnswers(input: {
   return { answers: input.saved, usedSubmitted: false }
 }
 
-const isAnswerValue = (value: unknown): value is AnswerValue =>
+const isPlainAnswer = (value: unknown): value is PlainAnswer =>
   value === null || ['string', 'number', 'boolean'].includes(typeof value)
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value)
+
+function cleanPlain(value: unknown): PlainAnswer | undefined {
+  if (!isPlainAnswer(value)) return undefined
+  if (typeof value === 'number' && !Number.isFinite(value)) return undefined
+  return typeof value === 'string' ? value.slice(0, MAX_ANSWER_LENGTH) : value
+}
+
+/** A usable answer: a plain value, or `{ answer, confidence, confidenceLevel? }`. A confidence outside 0 to 1 is dropped, the answer kept. */
+function cleanAnswer(value: unknown): AnswerValue | undefined {
+  if (!isRecord(value)) return cleanPlain(value)
+  const answer = cleanPlain(value.answer)
+  if (answer === undefined) return undefined
+  const { confidence } = value
+  if (typeof confidence !== 'number' || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) return answer
+  return isConfidenceId(value.confidenceLevel) ? { answer, confidence, confidenceLevel: value.confidenceLevel } : { answer, confidence }
+}
+
+/** The answer alone, whichever form it is stored in. */
+export function plainAnswerOf(value: unknown): PlainAnswer | undefined {
+  return isRecord(value) ? cleanPlain(value.answer) : cleanPlain(value)
+}
+
+/** The level the student tapped, when it was stored with the confidence. */
+export function confidenceLevelOfAnswer(value: unknown): ConfidenceId | undefined {
+  return isRecord(value) && isConfidenceId(value.confidenceLevel) ? value.confidenceLevel : undefined
+}
+
+/** How sure the student said they were, when they said. */
+export function confidenceOf(value: unknown): number | undefined {
+  return isRecord(value) && typeof value.confidence === 'number' ? value.confidence : undefined
+}
 
 /**
  * Keep only answers for real question indexes with a plain value, and cap their length.
@@ -61,9 +104,8 @@ export function sanitizeAnswers(input: unknown, questionCount: number): AnswerMa
   for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
     if (!/^\d{1,4}$/.test(key)) continue
     if (Number(key) >= questionCount) continue
-    if (!isAnswerValue(value)) continue
-    if (typeof value === 'number' && !Number.isFinite(value)) continue
-    clean[key] = typeof value === 'string' ? value.slice(0, MAX_ANSWER_LENGTH) : value
+    const answer = cleanAnswer(value)
+    if (answer !== undefined) clean[key] = answer
   }
   return clean
 }
@@ -73,7 +115,8 @@ export function readStoredAnswers(value: unknown): AnswerMap {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const clean: AnswerMap = {}
   for (const [key, answer] of Object.entries(value as Record<string, unknown>)) {
-    if (isAnswerValue(answer)) clean[key] = answer
+    const kept = cleanAnswer(answer)
+    if (kept !== undefined) clean[key] = kept
   }
   return clean
 }

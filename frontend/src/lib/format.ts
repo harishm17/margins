@@ -27,7 +27,6 @@ export function formatBytes(value: number | string | bigint): string {
 
 const dayMonth = new Intl.DateTimeFormat(LOCALE, { month: 'short', day: 'numeric' })
 const dayMonthYear = new Intl.DateTimeFormat(LOCALE, { month: 'short', day: 'numeric', year: 'numeric' })
-const weekday = new Intl.DateTimeFormat(LOCALE, { weekday: 'short' })
 const clock = new Intl.DateTimeFormat(LOCALE, { hour: 'numeric', minute: '2-digit' })
 
 /** "Oct 20", or "Oct 20, 2025" when the year is not the current one. */
@@ -35,9 +34,6 @@ export function formatDate(value: DateInput, now: DateInput = new Date()): strin
   const date = toDate(value)
   return date.getFullYear() === toDate(now).getFullYear() ? dayMonth.format(date) : dayMonthYear.format(date)
 }
-
-/** "Thu". */
-export const formatWeekday = (value: DateInput): string => weekday.format(toDate(value))
 
 /** "3:12 pm". */
 export function formatTime(value: DateInput): string {

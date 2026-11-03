@@ -34,6 +34,8 @@ from app.services.llm.schemas import (
 from tests.context_stub import stub_topic_context
 from tests.db_helpers import add_chunk, get_job, seed_job, seed_material, seed_project, seed_user
 
+
+
 EXAM_TEXT = """Problem 1. A bag holds three red marbles and two blue marbles. You draw two marbles without
 replacement. Compute the probability that both marbles are red. (10 points)
 
@@ -393,7 +395,7 @@ async def generate(config, merged):
     llm = MagicMock()
     llm.generate_structured = AsyncMock(return_value=QuestionSet(questions=[
         GeneratedQuestion(question_type="multiple_choice", question_text=f"Q{i}",
-                          options=[ChoiceOption(id=x, text=f"{i}{x}") for x in "ABCD"], correct_answer="A", explanation="E")
+                          options=[ChoiceOption(id=x, text=f"{i}{x}", misconception="wrong idea") for x in "ABCD"], correct_answer="A", explanation="E")
         for i in range(5)
     ]))
     lookup = AsyncMock(return_value=merged)
@@ -408,6 +410,7 @@ async def generate(config, merged):
     return exam, prompt, lookup
 
 
+@pytest.mark.usefixtures("passthrough_support")
 class TestMatchPastExams:
     async def test_the_merged_profile_reaches_the_prompt(self):
         exam, prompt, lookup = await generate({"match_past_exams": True}, stored(task_verbs=["justify"]))

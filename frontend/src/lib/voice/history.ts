@@ -83,3 +83,50 @@ export function toStoredHistory(messages: readonly VoiceMessage[], max = MAX_HIS
   }
   return trimHistory(cleaned, max)
 }
+
+/** Said in the stored turn after what the student heard (draft copy, for the model only). */
+export const INTERRUPTED_NOTE = '[The student interrupted here and did not hear the rest.]'
+const NOTHING_HEARD_NOTE = '[The student interrupted before hearing any of this reply.]'
+
+/** The most characters of heard text that are kept. */
+export const MAX_HEARD_CHARS = 4000
+
+function isToolResultMessage(message: VoiceMessage): boolean {
+  return hasToolResult(message)
+}
+
+/**
+ * The coach's last turn as the student heard it (spec 19.4). The browser says how much was spoken before the student
+ * interrupted; the turn is stored as that text followed by a note, so the next model call sees only what was said and is not
+ * led to think the student heard the rest. The turn is everything after the student's last words: the text of its
+ * assistant messages is replaced, its tool calls and results stay so they still pair. With nothing in the conversation to
+ * mark, or nothing said, the messages are returned as they are.
+ */
+export function markInterrupted(messages: readonly VoiceMessage[], heard: string): VoiceMessage[] {
+  let start = -1
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role === 'user' && !isToolResultMessage(messages[i])) {
+      start = i
+      break
+    }
+  }
+  const turn = messages.slice(start + 1)
+  const lastAssistant = (() => {
+    for (let i = turn.length - 1; i >= 0; i -= 1) if (turn[i].role === 'assistant') return i
+    return -1
+  })()
+  if (lastAssistant < 0) return [...messages]
+  const spoken = heard.replace(/\s+/g, ' ').trim().slice(0, MAX_HEARD_CHARS)
+  const text = spoken ? `${spoken} ${INTERRUPTED_NOTE}` : NOTHING_HEARD_NOTE
+  const edited: VoiceMessage[] = []
+  turn.forEach((message, index) => {
+    if (message.role !== 'assistant') {
+      edited.push(message)
+      return
+    }
+    const rest = blocksOf(message).filter((block) => block.type !== 'text')
+    const content = index === lastAssistant ? [{ type: 'text', text }, ...rest] : rest
+    if (content.length > 0) edited.push({ role: 'assistant', content })
+  })
+  return [...messages.slice(0, start + 1), ...edited]
+}
