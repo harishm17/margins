@@ -408,7 +408,16 @@
     scroll-padding-bottom: calc(var(--tabbar-height, 0px) + 16px);
   }
 
+  /* A student names things: a course, a topic, a file can be one 150-character word (a pasted address, a code with underscores).
+     Text breaks inside a word when the word is wider than its box, in every text element, instead of pushing the page sideways.
+     `anywhere` (not `break-word`) also lets such a box shrink to its container, so a link or a flex item holding the word fits.
+     Layer base: a utility such as `truncate` or `whitespace-nowrap` still wins. */
+  h1, h2, h3, h4, h5, h6, p, li, dt, dd, a, label, summary, th, td, figcaption, blockquote, legend {
+    overflow-wrap: anywhere;
+  }
+
   body {
+    overflow-wrap: break-word;
     min-height: 100dvh;
     font-size: 14px;
     line-height: 22px;
