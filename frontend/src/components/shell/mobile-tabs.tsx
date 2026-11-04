@@ -18,15 +18,32 @@ import {
 } from '@phosphor-icons/react/dist/ssr'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { isSectionNotReady, NOT_READY_REASON } from './course-nav'
 import { useShell } from './shell-provider'
 
 /** The bar's height. Other full-height pages and sticky bottoms subtract it (`var(--tabbar-height, 0px)`). */
 const BAR = '3.5rem'
 
-type Tab = { key: string; label: string; href: string; icon: React.ElementType; active: boolean; badge?: number }
+type Tab = { key: string; label: string; href: string; icon: React.ElementType; active: boolean; badge?: number; notReady?: boolean }
 
 function TabLink({ tab }: { tab: Tab }) {
   const Icon = tab.icon
+  if (tab.notReady) {
+    // Nothing behind it while the course is in setup: dimmed, not a link, and the reason is read out.
+    return (
+      <span
+        role="link"
+        aria-disabled="true"
+        aria-label={`${tab.label}. ${NOT_READY_REASON}`}
+        className="flex h-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-control text-caption text-fg-3 opacity-60"
+      >
+        <Icon aria-hidden="true" className="size-[22px] text-fg-3/60" />
+        <span className="max-w-full truncate" aria-hidden="true">
+          {tab.label}
+        </span>
+      </span>
+    )
+  }
   return (
     <Link
       href={tab.href}
@@ -50,7 +67,28 @@ function TabLink({ tab }: { tab: Tab }) {
   )
 }
 
-function MoreRow({ href, icon: Icon, label, badge }: { href: string; icon: React.ElementType; label: string; badge?: number }) {
+function MoreRow({
+  href,
+  icon: Icon,
+  label,
+  badge,
+  notReady,
+}: {
+  href: string
+  icon: React.ElementType
+  label: string
+  badge?: number
+  notReady?: boolean
+}) {
+  if (notReady) {
+    return (
+      <span role="link" aria-disabled="true" className="flex min-h-12 items-center gap-3 rounded-control px-3 text-body-strong text-fg-3 opacity-70">
+        <Icon aria-hidden="true" className="size-5 text-fg-3/70" />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className="shrink-0 text-caption font-normal">{NOT_READY_REASON}</span>
+      </span>
+    )
+  }
   return (
     <SheetClose asChild>
       <Link href={href} className="flex min-h-12 items-center gap-3 rounded-control px-3 text-body-strong text-fg hover:bg-surface-2">
@@ -90,11 +128,12 @@ export function MobileTabs() {
 
   const base = `/courses/${course.id}`
   const inMore = ['review', 'map', 'exams', 'materials', 'settings'].some((section) => pathname.startsWith(`${base}/${section}`))
+  const notReady = (key: string) => isSectionNotReady(key, course)
   const tabs: Tab[] = [
     { key: 'overview', label: 'Overview', href: base, icon: House, active: pathname === base, badge: course.dueCount },
-    { key: 'plan', label: 'Plan', href: `${base}/plan`, icon: CalendarCheck, active: pathname.startsWith(`${base}/plan`) },
-    { key: 'topics', label: 'Topics', href: `${base}/topics`, icon: ListBullets, active: pathname.startsWith(`${base}/topics`) },
-    { key: 'ask', label: 'Ask', href: `${base}/ask`, icon: ChatCircleText, active: pathname.startsWith(`${base}/ask`) },
+    { key: 'plan', notReady: notReady('plan'), label: 'Plan', href: `${base}/plan`, icon: CalendarCheck, active: pathname.startsWith(`${base}/plan`) },
+    { key: 'topics', notReady: notReady('topics'), label: 'Topics', href: `${base}/topics`, icon: ListBullets, active: pathname.startsWith(`${base}/topics`) },
+    { key: 'ask', notReady: notReady('ask'), label: 'Ask', href: `${base}/ask`, icon: ChatCircleText, active: pathname.startsWith(`${base}/ask`) },
   ]
 
   return (
@@ -132,9 +171,9 @@ export function MobileTabs() {
             <SheetDescription className="sr-only">More places in this course</SheetDescription>
           </div>
           <div className="flex flex-col gap-0.5 px-2 pb-[max(1rem,env(safe-area-inset-bottom))] pt-1">
-            <MoreRow href={`${base}/review`} icon={ArrowsClockwise} label="Review" badge={course.dueCount} />
-            <MoreRow href={`${base}/map`} icon={TreeStructure} label="Map" />
-            <MoreRow href={`${base}/exams`} icon={Exam} label="Mock exams" />
+            <MoreRow href={`${base}/review`} icon={ArrowsClockwise} label="Review" badge={course.dueCount} notReady={notReady('review')} />
+            <MoreRow href={`${base}/map`} icon={TreeStructure} label="Map" notReady={notReady('map')} />
+            <MoreRow href={`${base}/exams`} icon={Exam} label="Mock exams" notReady={notReady('exams')} />
             <MoreRow href={`${base}/materials`} icon={Files} label="Materials" />
             <MoreRow href={`${base}/settings`} icon={Gear} label="Course settings" />
             <button

@@ -186,10 +186,10 @@ export function Summary({ style, summary, reason, alert, back, practiceHref, onR
   )
 }
 
-/** One thing to do next: practise what came up short, or explain it again later to make it stick. Null when nothing happened. */
+/** One thing to do next: practice what came up short, or explain it again later to make it stick. Null when nothing happened. */
 function nextStepFor(style: VoiceStyle, summary: SessionSummary): { text: string; practice: boolean } | null {
   if (summary.taught.length > 0 || summary.revisit.length > 0 || summary.unfinished) {
-    return { text: 'Practise what came up short while it is fresh, then check the pages above.', practice: true }
+    return { text: 'Practice what came up short while it is fresh, then check the pages above.', practice: true }
   }
   if (style === 'teach_back' && summary.explained.length > 0) {
     return { text: 'Explain it again tomorrow, from memory. Saying it twice, a day apart, is what makes it stick.', practice: false }

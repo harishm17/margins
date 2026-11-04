@@ -38,7 +38,7 @@ const VERBS: Record<ActivityKind, string> = {
   review: 'Review',
   prerequisite_drill: 'Start the drill',
   quiz: 'Take quiz',
-  practice: 'Practise',
+  practice: 'Practice',
   teach_back: 'Explain it',
   transfer_quiz: 'Take a harder quiz',
   mock_exam: 'Create a mock exam',

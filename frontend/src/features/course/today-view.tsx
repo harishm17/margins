@@ -170,6 +170,8 @@ function ProgressCard({ average, counts, className }: { average: number | null; 
           ))}
         </dl>
       </div>
+      {/* One definition, the same as the percent on each topic and each unit. */}
+      <p className="text-caption font-normal text-fg-3">The average of your topics. A topic not started counts as 0%.</p>
     </Card>
   )
 }

@@ -27,7 +27,7 @@ export default async function VoicePracticePage({ params }: { params: Promise<{ 
       <div className="mx-auto w-full max-w-[720px] px-4 py-16 md:px-6">
         <EmptyState
           icon={<Microphone />}
-          title="Nothing to practise yet"
+          title="Nothing to practice yet"
           action={
             <Button asChild variant="primary">
               <Link href={`/courses/${courseId}/topics`}>Go to topics</Link>

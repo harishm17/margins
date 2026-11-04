@@ -6,6 +6,7 @@ import { pluralize } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { SetupData } from '@/server/queries/course'
 import { MaterialsManager } from './materials-manager'
+import { SetupPlanFields } from './setup-plan'
 import { CheckTopicsStep, StartStudyingStep } from './setup-steps'
 
 type StepState = 'done' | 'current' | 'upcoming'
@@ -125,6 +126,15 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
 
         <Step number={3} state={step === 3 ? 'current' : 'upcoming'} title="Start studying" last>
           <p className={description}>Notes, worked examples, practice and a quiz for each topic, written as you go.</p>
+          {step === 3 && setup.plan.askForExamDate ? (
+            <SetupPlanFields courseId={courseId} dailyMinutes={setup.plan.dailyMinutes} />
+          ) : null}
+          {step === 3 ? (
+            <p className="mt-3 text-small text-fg-2">
+              Inside each topic you start with a Warm-up of a few questions you try before reading, then Read your own pages, Recall them with
+              the book closed, Practice, and take a Quiz.
+            </p>
+          ) : null}
           {step === 3 ? (
             <StartStudyingStep courseId={courseId} firstTopic={setup.firstTopic} generation={setup.generation} />
           ) : null}

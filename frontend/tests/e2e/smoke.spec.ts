@@ -9,8 +9,8 @@ const courseName = `Smoke course ${stamp}`
 test('first sign-in, create a course, sign out, sign in, find it from home and the palette', async ({ page }) => {
   // The first sign-in makes the account and lands on an empty Home.
   await signIn(page, email)
-  await expect(page.getByRole('heading', { name: 'Add your first course' })).toBeVisible()
-  await page.getByRole('link', { name: 'Add a course' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Margins' })).toBeVisible()
+  await page.getByRole('link', { name: 'Add your first course' }).click()
 
   // Creating a course lands on its overview inside the shell.
   await page.getByLabel('Course name').fill(courseName)
