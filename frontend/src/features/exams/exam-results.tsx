@@ -169,11 +169,11 @@ function QuestionRow({
   const preview = questionText.replace(/\s+/g, ' ').replace(/\$/g, '').trim()
   return (
     <li className="border-b border-border last:border-b-0">
-      <h4 className="m-0">
+      <div>
         <button
           type="button"
           aria-expanded={open}
-          aria-controls={panelId}
+          aria-controls={open ? panelId : undefined}
           onClick={onToggle}
           className="flex min-h-11 w-full items-center gap-3 py-2.5 text-left focus-visible:rounded-control"
         >
@@ -190,7 +190,7 @@ function QuestionRow({
           )}
           <CaretDown aria-hidden="true" className={cn('size-4 shrink-0 text-fg-3 transition-transform duration-180', open && 'rotate-180')} />
         </button>
-      </h4>
+      </div>
       {open ? (
         <ul id={panelId} className="pb-1 pl-9">
           {children}

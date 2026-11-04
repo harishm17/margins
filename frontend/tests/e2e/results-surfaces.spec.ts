@@ -205,7 +205,7 @@ test('the exam results with its calibration line and sure-and-wrong group: no ax
     // each with its points spelled out. The first miss to read starts open and the rest collapsed.
     await expect(page.getByRole('radio', { name: 'Missed 2' })).toBeChecked()
     const rows = page.locator('section[aria-labelledby="exam-questions-review"]')
-    await expect(rows.locator('button[aria-controls]')).toHaveCount(2)
+    await expect(rows.locator('button[aria-expanded]')).toHaveCount(2)
     await expect(rows.locator('button[aria-expanded="true"]')).toHaveCount(1)
     await page.getByRole('button', { name: 'Expand all' }).click()
     await expect(page.getByText('0 of 2 pts')).toBeVisible()
