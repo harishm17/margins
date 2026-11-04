@@ -285,20 +285,6 @@ test.describe('sidebar unit groups', () => {
     expect(samples.filter((height) => height === 0), 'frames with an open group at height 0').toEqual([])
   })
 
-  test('the menu sheet on a phone mounts its open group at full height', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 })
-    await signIn(page, DEMO_EMAIL)
-    await page.goto(`/courses/${course}`, { waitUntil: 'networkidle' })
-    await sampleFromLoad(page)
-    await page.reload({ waitUntil: 'networkidle' })
-    await page.getByRole('button', { name: 'Open menu' }).click()
-    await expect(page.locator('ul[data-collapsible]:not([hidden]):visible').first()).toBeVisible()
-    await expect.poll(async () => (await openSamples(page)).length).toBeGreaterThan(3)
-    const samples = await openSamples(page)
-    expect(samples.length).toBeGreaterThan(3)
-    expect(new Set(samples.filter((height) => height > 0)).size, `open group heights per frame ${samples}`).toBe(1)
-  })
-
   test('the focus ring of the first and last link in a group is not clipped', async ({ page }) => {
     await signIn(page, DEMO_EMAIL)
     await page.goto(`/courses/${course}`, { waitUntil: 'networkidle' })

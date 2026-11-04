@@ -209,7 +209,7 @@ test('search keeps two files with the same name apart', async ({ page }) => {
   await expect(page.getByText('week-1.pdf', { exact: true })).toHaveCount(2)
 
   await page.keyboard.press('Control+k')
-  await page.getByPlaceholder(/^Search topics/).fill('week-1.pdf')
+  await page.getByPlaceholder(/^Search courses/).fill('week-1.pdf')
   const files = page.locator('[cmdk-group]').filter({ hasText: 'Files' }).locator('[cmdk-item]')
   await expect(files).toHaveCount(2)
   const selected = page.locator('[cmdk-item][data-selected="true"]')

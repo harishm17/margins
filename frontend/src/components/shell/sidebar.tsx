@@ -17,6 +17,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr'
 import { Kbd, KeyHint } from '@/components/ui/kbd'
 import { MasteryIndicator } from '@/components/ui/mastery-indicator'
+import { THEME_OPTIONS, useDeviceMode, useThemeChoice } from '@/components/ui/theme-switch'
 import { Tooltip } from '@/components/ui/tooltip'
 import { groupTopicsByUnit } from '@/lib/topics/units'
 import { useIsMac } from '@/lib/hooks/use-is-mac'
@@ -32,8 +33,6 @@ import { readUnitChoices, useUnitState } from './unit-state'
 import type { NavCourse, NavTopic } from '@/server/queries/courses'
 import { unitMastery } from '@/lib/topics/units'
 
-/** The course pages the phone tab bar (mobile-tabs.tsx) already holds. */
-const PHONE_TAB_KEYS: ReadonlySet<string> = new Set(['overview', 'plan', 'topics', 'ask'])
 /** The pages a course in the first two steps of setup has: its setup steps and its files. */
 const SETUP_KEYS: ReadonlySet<string> = new Set(['overview', 'materials'])
 
@@ -190,11 +189,39 @@ function TopicList({ course, activeTopicId }: { course: NavCourse; activeTopicId
   )
 }
 
+/** The theme on the phone sheet itself (two taps from anywhere): three large options, one pressed. */
+function PhoneTheme() {
+  const { choice, setChoice } = useThemeChoice()
+  const device = useDeviceMode()
+  return (
+    <div role="radiogroup" aria-label="Theme" className="mb-1 grid grid-cols-3 gap-1 px-0.5">
+      {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+        <button
+          key={value}
+          type="button"
+          role="radio"
+          aria-checked={(choice ?? 'system') === value}
+          onClick={() => setChoice(value)}
+          className={cn(
+            'flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-control border border-border px-1 text-small text-fg-2',
+            'transition-colors duration-120 hover:bg-surface-2',
+            'aria-checked:border-transparent aria-checked:bg-accent-soft aria-checked:text-accent-soft-fg'
+          )}
+        >
+          <Icon aria-hidden="true" className="size-4" />
+          {label}
+          {value === 'system' && device ? <span className="text-caption text-fg-3">Now {device}</span> : null}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /**
  * Everything in the sidebar. The desktop aside and the mobile sheet both render it; only the
  * desktop one can be a rail (`allowRail`).
  */
-export function SidebarContent({ allowRail = false, omitTabs = false }: { allowRail?: boolean; /** On a phone these four are in the tab bar already, so the menu leaves them out. */ omitTabs?: boolean }) {
+export function SidebarContent({ allowRail = false, phone = false }: { allowRail?: boolean; /** The phone's "Courses and account" sheet: switch course, search, theme, account. The course's own places are in the tab bar and its More sheet. */ phone?: boolean }) {
   const { nav, setPaletteOpen } = useShell()
   const pathname = usePathname()
   const params = useParams<{ courseId?: string; topicId?: string }>()
@@ -249,7 +276,8 @@ export function SidebarContent({ allowRail = false, omitTabs = false }: { allowR
   // Steps 1 and 2 of setup: the study pages have nothing behind them, so they are not listed as dead links. The
   // student sees Overview (the setup steps) and Materials, and a compact setup progress block saying what opens next.
   const settingUp = !!course && inFirstSetup(course)
-  const items = allItems.filter((item) => !(omitTabs && PHONE_TAB_KEYS.has(item.key))).filter((item) => !settingUp || SETUP_KEYS.has(item.key))
+  // On a phone every course destination is in the tab bar or its More sheet, so the sheet lists none of them.
+  const items = allItems.filter((item) => !phone).filter((item) => !settingUp || SETUP_KEYS.has(item.key))
   const settingUpStep = settingUp && course?.setupStep ? course.setupStep : null
 
   const search = (
@@ -258,7 +286,7 @@ export function SidebarContent({ allowRail = false, omitTabs = false }: { allowR
       onClick={() => setPaletteOpen(true)}
       aria-label={rail ? 'Search' : undefined}
       className={cn(
-        'flex h-[34px] w-full items-center gap-2.5 rounded-control px-2.5 text-body-strong text-fg-2',
+        'flex h-[34px] max-lg:min-h-11 w-full items-center gap-2.5 rounded-control px-2.5 text-body-strong text-fg-2',
         'transition-colors duration-120 hover:bg-surface-2 hover:text-fg',
         'rail:justify-center rail:px-0'
       )}
@@ -301,7 +329,7 @@ export function SidebarContent({ allowRail = false, omitTabs = false }: { allowR
 
       {settingUpStep ? <SetupProgress step={settingUpStep} className="mx-3 mt-4 rail:hidden" /> : null}
 
-      {course?.active && course.topics.length > 0 ? (
+      {!phone && course?.active && course.topics.length > 0 ? (
         // A labelled group, not a heading: the sidebar comes before <main> in the page, and its label
         // must not be the first heading a screen reader meets (the page's h1 is).
         <div role="group" aria-labelledby={topicsLabelId} className="mt-5 flex min-h-0 flex-1 flex-col rail:hidden">
@@ -322,6 +350,7 @@ export function SidebarContent({ allowRail = false, omitTabs = false }: { allowR
         ) : (
           search
         )}
+        {phone ? <PhoneTheme /> : null}
         <AccountMenu rail={rail} />
       </div>
     </div>

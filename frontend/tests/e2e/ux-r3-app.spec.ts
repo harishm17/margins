@@ -306,7 +306,7 @@ test.describe('menus', () => {
     await signIn(page, email)
     await page.goto('/home')
     await page.keyboard.press('Control+k')
-    await expect(page.getByPlaceholder('Search your courses')).toBeVisible()
+    await expect(page.getByPlaceholder('Search courses, topics and files')).toBeVisible()
     await page.keyboard.press('Escape')
     await page.getByRole('button', { name: /Open (the )?menu|Menu/i }).first().click()
     await page.getByRole('button', { name: new RegExp('account menu') }).click()
@@ -316,13 +316,16 @@ test.describe('menus', () => {
     expect(box!.x + box!.width).toBeLessThanOrEqual(390)
   })
 
-  test('the phone More sheet names its way to the full menu', async ({ page, context }) => {
+  test('the phone More sheet has a Switch course row and a Browse topics link', async ({ page, context }) => {
     await setZoneCookie(context)
     await page.setViewportSize({ width: 390, height: 844 })
     await signIn(page, DEMO_EMAIL)
     await page.goto(base)
     await page.getByRole('button', { name: 'More' }).click()
-    await expect(page.getByRole('dialog').getByRole('button', { name: 'Switch course or browse topics' })).toBeVisible()
+    const sheet = page.getByRole('dialog')
+    await expect(sheet.getByRole('link', { name: 'Browse topics' })).toHaveAttribute('href', `${base}/topics`)
+    await sheet.getByRole('button', { name: 'Switch course' }).click()
+    await expect(page.getByRole('dialog', { name: 'Courses and account' })).toBeVisible()
   })
 
   test('the course actions button is named for what it is', async ({ page, context }) => {

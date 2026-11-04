@@ -33,7 +33,7 @@ export function Avatar({ name, email, className }: { name: string | null; email:
   )
 }
 
-/** Avatar, name and a menu: email, Settings, theme (System, Light, Dark), sign out. */
+/** Avatar, name and a menu: email, Settings, theme (Light, Dark, Match device), sign out. */
 export function AccountMenu({ rail }: { rail?: boolean }) {
   const { user } = useShell()
   const router = useRouter()

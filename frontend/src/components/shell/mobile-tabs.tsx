@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams, usePathname } from 'next/navigation'
 import {
   ArrowsClockwise,
+  ArrowsLeftRight,
   CalendarCheck,
   ChatCircleText,
   DotsThree,
@@ -81,8 +82,8 @@ function MoreRow({
 /**
  * The course navigation on a phone or small tablet: a bar of five targets fixed to the bottom, inside
  * a course (research idea 9). Overview, Plan, Topics and Ask are one tap away; More holds Review, Map, Mock
- * exams, Materials and the course settings, and the full menu (courses, topic tree, account) stays
- * on the top bar's menu button. Hidden from 1024px, where the sidebar takes over.
+ * exams, Materials, the course settings, a way to browse the topics and a way to switch course. The top bar's menu
+ * button opens "Courses and account" (switch course, search, theme, account); topic trees live on the Topics page. Hidden from 1024px, where the sidebar takes over.
  */
 export function MobileTabs() {
   const { nav, setMobileNavOpen, attemptActive } = useShell()
@@ -175,6 +176,7 @@ export function MobileTabs() {
             <MoreRow href={`${base}/exams`} icon={Exam} label="Mock exams" />
             <MoreRow href={`${base}/materials`} icon={Files} label="Materials" />
             <MoreRow href={`${base}/settings`} icon={Gear} label="Course settings" />
+            <MoreRow href={`${base}/topics`} icon={ListBullets} label="Browse topics" />
             <button
               type="button"
               onClick={() => {
@@ -183,8 +185,8 @@ export function MobileTabs() {
               }}
               className="flex min-h-12 items-center gap-3 rounded-control px-3 text-left text-body-strong text-fg hover:bg-surface-2"
             >
-              <List aria-hidden="true" className="size-5 text-fg-3" />
-              <span className="min-w-0 flex-1 truncate">Switch course or browse topics</span>
+              <ArrowsLeftRight aria-hidden="true" className="size-5 text-fg-3" />
+              <span className="min-w-0 flex-1 truncate">Switch course</span>
             </button>
           </div>
         </SheetContent>

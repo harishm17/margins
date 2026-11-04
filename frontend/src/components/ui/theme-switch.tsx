@@ -14,7 +14,7 @@ export type ThemeChoice = 'light' | 'dark' | 'system'
 export const THEME_OPTIONS = [
   { value: 'light', label: 'Light', icon: Sun },
   { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Monitor },
+  { value: 'system', label: 'Match device', icon: Monitor },
 ] as const satisfies readonly { value: ThemeChoice; label: string; icon: React.ElementType }[]
 
 const subscribe = () => () => {}
@@ -30,9 +30,24 @@ export function useThemeChoice(): { choice: ThemeChoice | null; setChoice: (choi
   return { choice, setChoice: setTheme }
 }
 
+const subscribeDevice = (notify: () => void) => {
+  const query = window.matchMedia('(prefers-color-scheme: dark)')
+  query.addEventListener('change', notify)
+  return () => query.removeEventListener('change', notify)
+}
+
+/** The device's own light or dark setting, which "Match device" follows. Null on the server and during hydration. */
+export function useDeviceMode(): 'light' | 'dark' | null {
+  return React.useSyncExternalStore(
+    subscribeDevice,
+    () => (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+    () => null
+  )
+}
+
 /**
  * The theme control for pages without the app's account menu (the public pages, sign in and sign
- * up): an icon button that opens Light, Dark and System. The icon follows the theme class on
+ * up): an icon button that opens Light, Dark and Match device. The icon follows the theme class on
  * <html> through CSS, so the server and the browser render the same markup. Inside the signed-in
  * account menu the same choices are `ThemeMenuRadios`; both read and write the theme through
  * `useThemeChoice`.
@@ -74,6 +89,7 @@ export function ThemeSwitch({ align = 'end' }: { align?: 'start' | 'center' | 'e
  */
 export function ThemeMenuRadios({ className }: { className?: string }) {
   const { choice, setChoice } = useThemeChoice()
+  const device = useDeviceMode()
   return (
     <MenuPrimitive.RadioGroup
       aria-label="Theme"
@@ -94,6 +110,7 @@ export function ThemeMenuRadios({ className }: { className?: string }) {
         >
           <Icon aria-hidden="true" className="size-4" />
           {label}
+          {value === 'system' && device ? <span className="text-caption text-fg-3">Now {device}</span> : null}
           <MenuPrimitive.ItemIndicator className="absolute right-1 top-1 inline-flex">
             <Check weight="bold" aria-hidden="true" className="size-3 text-accent-soft-fg" />
           </MenuPrimitive.ItemIndicator>

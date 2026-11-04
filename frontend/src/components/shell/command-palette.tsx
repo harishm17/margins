@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, usePathname, useRouter } from 'next/navigation'
 import { Command } from 'cmdk'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { signOut } from 'next-auth/react'
@@ -28,7 +28,6 @@ import {
 } from '@phosphor-icons/react/dist/ssr'
 import { DialogOverlay } from '@/components/ui/dialog'
 import { IconButton } from '@/components/ui/icon-button'
-import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { Kbd, KeyHint } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
 import { paletteFilter, paletteItem } from './palette-search'
@@ -41,7 +40,7 @@ type Entry = {
   /** Quiet text after the label, e.g. the course a topic belongs to. */
   hint?: string
   icon: React.ElementType
-  group: 'Topics' | 'Files' | 'Courses' | 'Actions'
+  group: 'Topics' | 'Files' | 'Courses' | 'Commands'
   keywords?: string[]
   run: (ctx: { router: ReturnType<typeof useRouter> }) => void
   /** Whether to remember it under "Recent". Actions that change state are not remembered. */
@@ -50,6 +49,19 @@ type Entry = {
 
 const RECENT_KEY = 'margins:recent'
 const MAX_RECENT = 5
+
+/**
+ * Remembers a topic when the student opens it by any route (a link, the next button, the palette), so a blank search
+ * can offer the last few places they were. Same list and cap as the entries chosen in the palette.
+ */
+const rememberId = (id: string) => {
+  try {
+    const next = [id, ...readRecent().filter((item) => item !== id)].slice(0, MAX_RECENT)
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next))
+  } catch {
+    // Not remembering is fine.
+  }
+}
 
 const readRecent = (): string[] => {
   try {
@@ -84,8 +96,9 @@ function PaletteBody() {
   const params = useParams<{ courseId?: string }>()
   const { resolvedTheme, setTheme } = useTheme()
   const [search, setSearch] = React.useState('')
-  // The long placeholder is cut off on a phone and would no longer say what is searched: there it is the short one.
-  const narrow = useMediaQuery('(max-width: 639px)')
+  // Commands (new course, theme, settings, sign out) stay out of a blank search: they show for ">" or "Show commands".
+  const [showCommands, setShowCommands] = React.useState(false)
+  const commandMode = showCommands || search.startsWith('>')
   // The body mounts when the palette opens, so this reads the recent list fresh each time.
   const [recent] = React.useState<string[]>(readRecent)
 
@@ -132,17 +145,17 @@ function PaletteBody() {
         run: ({ router }) => router.push(`/courses/${course.id}`),
       })
     }
-    list.push({ id: 'action:new-course', label: 'New course', icon: Plus, group: 'Actions', run: ({ router }) => router.push('/courses/new') })
+    list.push({ id: 'action:new-course', label: 'New course', icon: Plus, group: 'Commands', run: ({ router }) => router.push('/courses/new') })
     if (currentCourse) {
       const base = `/courses/${currentCourse.id}`
       list.push(
-        { id: 'action:upload', label: 'Upload materials', icon: UploadSimple, group: 'Actions', keywords: ['files', 'add'], run: ({ router }) => router.push(`${base}/materials`) },
-        { id: 'action:ask', label: 'Ask a question', icon: ChatCircleText, group: 'Actions', run: ({ router }) => router.push(`${base}/ask`) },
-        { id: 'action:new-exam', label: 'New mock exam', icon: Exam, group: 'Actions', run: ({ router }) => router.push(`${base}/exams/new`) },
-        { id: 'action:plan', label: 'Open the plan', icon: CalendarCheck, group: 'Actions', keywords: ['today', 'schedule', 'exam date'], run: ({ router }) => router.push(`${base}/plan`) },
-        { id: 'action:review', label: 'Review what is due', icon: ArrowsClockwise, group: 'Actions', keywords: ['retry', 'missed'], run: ({ router }) => router.push(`${base}/review`) },
-        { id: 'action:map', label: 'Open the map', icon: TreeStructure, group: 'Actions', keywords: ['concepts', 'graph', 'prerequisites'], run: ({ router }) => router.push(`${base}/map`) },
-        { id: 'action:voice', label: 'Start voice practice', icon: Microphone, group: 'Actions', keywords: ['speak', 'talk', 'oral'], run: ({ router }) => router.push(`${base}/review/voice`) }
+        { id: 'action:upload', label: 'Upload materials', icon: UploadSimple, group: 'Commands', keywords: ['files', 'add'], run: ({ router }) => router.push(`${base}/materials`) },
+        { id: 'action:ask', label: 'Ask a question', icon: ChatCircleText, group: 'Commands', run: ({ router }) => router.push(`${base}/ask`) },
+        { id: 'action:new-exam', label: 'New mock exam', icon: Exam, group: 'Commands', run: ({ router }) => router.push(`${base}/exams/new`) },
+        { id: 'action:plan', label: 'Open the plan', icon: CalendarCheck, group: 'Commands', keywords: ['today', 'schedule', 'exam date'], run: ({ router }) => router.push(`${base}/plan`) },
+        { id: 'action:review', label: 'Review what is due', icon: ArrowsClockwise, group: 'Commands', keywords: ['retry', 'missed'], run: ({ router }) => router.push(`${base}/review`) },
+        { id: 'action:map', label: 'Open the map', icon: TreeStructure, group: 'Commands', keywords: ['concepts', 'graph', 'prerequisites'], run: ({ router }) => router.push(`${base}/map`) },
+        { id: 'action:voice', label: 'Start voice practice', icon: Microphone, group: 'Commands', keywords: ['speak', 'talk', 'oral'], run: ({ router }) => router.push(`${base}/review/voice`) }
       )
     }
     list.push(
@@ -150,12 +163,12 @@ function PaletteBody() {
         id: 'action:theme',
         label: 'Toggle theme',
         icon: CircleHalf,
-        group: 'Actions',
+        group: 'Commands',
         keywords: ['dark', 'light'],
         run: () => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'),
       },
-      { id: 'action:settings', label: 'Settings', icon: GearSix, group: 'Actions', keywords: ['account', 'allowance', 'delete'], run: ({ router }) => router.push('/settings') },
-      { id: 'action:sign-out', label: 'Sign out', icon: SignOut, group: 'Actions', run: () => void signOut({ callbackUrl: '/login' }) }
+      { id: 'action:settings', label: 'Settings', icon: GearSix, group: 'Commands', keywords: ['account', 'allowance', 'delete'], run: ({ router }) => router.push('/settings') },
+      { id: 'action:sign-out', label: 'Sign out', icon: SignOut, group: 'Commands', run: () => void signOut({ callbackUrl: '/login' }) }
     )
     return list
   }, [nav, params.courseId, currentCourse, resolvedTheme, setTheme])
@@ -166,18 +179,11 @@ function PaletteBody() {
 
   function select(entry: Entry) {
     setPaletteOpen(false)
-    if (entry.remember) {
-      try {
-        const next = [entry.id, ...readRecent().filter((id) => id !== entry.id)].slice(0, MAX_RECENT)
-        localStorage.setItem(RECENT_KEY, JSON.stringify(next))
-      } catch {
-        // Not remembering is fine.
-      }
-    }
+    if (entry.remember) rememberId(entry.id)
     entry.run({ router })
   }
 
-  const groups: Entry['group'][] = ['Topics', 'Files', 'Courses', 'Actions']
+  const groups: Entry['group'][] = commandMode ? ['Commands'] : ['Topics', 'Files', 'Courses', 'Commands']
 
   const renderItem = (entry: Entry, prefix = '') => {
     const Icon = entry.icon
@@ -196,13 +202,13 @@ function PaletteBody() {
   }
 
   return (
-    <Command loop label="Search and commands" filter={paletteFilter}>
+    <Command loop label="Search and commands" filter={(value, term, keywords) => paletteFilter(value, term.replace(/^>\s*/, ''), keywords)}>
             <div className="flex h-12 items-center gap-3 border-b border-border px-4">
               <MagnifyingGlass aria-hidden="true" className="size-[18px] shrink-0 text-fg-3" />
               <Command.Input
                 value={search}
                 onValueChange={setSearch}
-                placeholder={narrow ? 'Search your courses' : 'Search topics, files, courses and actions'}
+                placeholder="Search courses, topics and files"
                 className="h-full min-w-0 flex-1 bg-transparent text-[15px] max-sm:text-[16px] text-fg outline-none placeholder:text-fg-3"
               />
               <Kbd>Esc</Kbd>
@@ -212,10 +218,15 @@ function PaletteBody() {
               </DialogPrimitive.Close>
             </div>
             <Command.List className="max-h-[min(380px,50vh)] overflow-y-auto p-2">
-              <Command.Empty className="px-3 py-8 text-center text-small text-fg-2">
-                Nothing matches &ldquo;{search}&rdquo;.
-              </Command.Empty>
-              {search === '' && recentEntries.length > 0 ? (
+              {search === '' && !commandMode ? null : (
+                <Command.Empty className="px-3 py-8 text-center text-small text-fg-2">
+                  Nothing matches &ldquo;{search.replace(/^>\s*/, '')}&rdquo;.
+                </Command.Empty>
+              )}
+              {search === '' && !commandMode && recentEntries.length === 0 ? (
+                <p className="px-3 py-8 text-center text-small text-fg-2">Type to search your courses, topics and files.</p>
+              ) : null}
+              {search === '' && !commandMode && recentEntries.length > 0 ? (
                 <Command.Group heading="Recent" className={headingClass}>
                   {recentEntries.map((entry) => (
                     <Command.Item
@@ -230,7 +241,7 @@ function PaletteBody() {
                   ))}
                 </Command.Group>
               ) : null}
-              {groups.map((group) => {
+              {(search === '' && !commandMode ? [] : groups).map((group) => {
                 const items = entries.filter((entry) => entry.group === group)
                 if (items.length === 0) return null
                 return (
@@ -240,17 +251,29 @@ function PaletteBody() {
                 )
               })}
             </Command.List>
-            <KeyHint className="flex items-center gap-4 border-t border-border px-4 py-2 text-caption font-normal text-fg-3">
-              <span className="flex items-center gap-1.5">
-                <Kbd aria-label="Up arrow">&uarr;</Kbd>
-                <Kbd aria-label="Down arrow">&darr;</Kbd>
-                Navigate
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Kbd>Enter</Kbd>
-                Open
-              </span>
-            </KeyHint>
+            <div className="flex items-center gap-4 border-t border-border px-4 py-2 text-caption font-normal text-fg-3">
+              <KeyHint className="flex items-center gap-4">
+                <span className="flex items-center gap-1.5">
+                  <Kbd aria-label="Up arrow">&uarr;</Kbd>
+                  <Kbd aria-label="Down arrow">&darr;</Kbd>
+                  Navigate
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Kbd>Enter</Kbd>
+                  Open
+                </span>
+              </KeyHint>
+              {/* Outside the key hints: those hide on a phone, and commands must stay reachable there. */}
+              {commandMode ? null : (
+                <button
+                  type="button"
+                  onClick={() => setShowCommands(true)}
+                  className="inline-flex min-h-6 items-center rounded-chip text-small text-fg-2 underline-offset-2 hover:text-fg hover:underline max-sm:min-h-11 sm:ml-auto"
+                >
+                  Show commands
+                </button>
+              )}
+            </div>
           </Command>
   )
 }
@@ -258,6 +281,11 @@ function PaletteBody() {
 /** Ctrl or Cmd K. Topics, courses and actions from the nav index the layout already loaded. */
 export function CommandPalette() {
   const { paletteOpen, setPaletteOpen } = useShell()
+  const pathname = usePathname()
+  React.useEffect(() => {
+    const topicId = /^\/courses\/[^/]+\/topics\/([^/]+)/.exec(pathname)?.[1]
+    if (topicId) rememberId(`topic:${topicId}`)
+  }, [pathname])
   return (
     <DialogPrimitive.Root open={paletteOpen} onOpenChange={setPaletteOpen}>
       <DialogPrimitive.Portal>
