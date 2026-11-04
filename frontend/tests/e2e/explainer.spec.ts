@@ -106,7 +106,7 @@ test('explainer locked before recall', async ({ page }) => {
   // The gate is the task and says what is next: the topic's own "next" line does not name another step above it.
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
   // The topic has not been read: the sentence names both ways in, and the way round is a link to the reading, not a disabled button.
-  await expect(page.getByText('The explainer opens after you try recall, or after you read the topic.')).toBeVisible()
+  await expect(page.getByText('Try recall now, or finish reading the topic to unlock the explanation.')).toBeVisible()
   await expect(unlockButton(page)).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Read the topic' })).toHaveAttribute('href', /view=read/)
   // None of the lesson is on the page.

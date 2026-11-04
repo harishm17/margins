@@ -243,7 +243,7 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
 
           <div className="mt-5">
             <label htmlFor={predictedId} className="text-small text-fg-2">
-              Guess your score before you start (optional)
+              Guess your score to compare it with your result (optional)
             </label>
             <Select
               id={predictedId}

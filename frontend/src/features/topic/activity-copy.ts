@@ -28,7 +28,7 @@ export const ACTIVITY_KINDS: ActivityKind[] = [
 ]
 
 const VERBS: Record<ActivityKind, string> = {
-  start: 'Open the topic',
+  start: 'Start warm-up',
   instruct: 'Start learning',
   examples: 'See an example',
   done_for_now: 'Try a harder set',
@@ -48,6 +48,16 @@ const VERBS: Record<ActivityKind, string> = {
 
 /** The button label for an activity. */
 export const activityVerb = (kind: ActivityKind): string => VERBS[kind]
+
+/**
+ * The button label for an activity with its address: "Start learning" is the general word for a read-again pointer, but one
+ * that opens the explanation says so ("Read this explanation"), so a student who is already on the explainer is not told to
+ * start something they are in.
+ */
+export function activityLabel(activity: { kind: ActivityKind; href: string }): string {
+  if (activity.kind === 'instruct' && parseView(new URL(activity.href, 'http://margins.local').searchParams.get('view')) === 'explainer') return 'Read this explanation'
+  return VERBS[activity.kind]
+}
 
 /**
  * The view of this topic a bare topic address opens on. Most activities are a view of the topic; a drill, a

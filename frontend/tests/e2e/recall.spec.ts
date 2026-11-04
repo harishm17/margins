@@ -170,10 +170,10 @@ test('a recall answer is graded against the claims, with the student quoted firs
   // In order: what they got (their own words), what is not right (the source's words and page), what they missed.
   await expect(feedback.getByRole('heading')).toHaveText(['What you got', 'What is not right', 'What you missed'])
   await expect(feedback.getByText('“A hash table sends each key”')).toBeVisible()
-  await expect(feedback.getByText('Page text for: Chaining keeps a list of entries per bucket.')).toBeVisible()
-  await expect(feedback.getByText('(p. 5)')).toBeVisible()
+  await expect(feedback.getByText('Page text for: Chaining keeps a list of entries per bucket.').locator('visible=true')).toBeVisible()
+  await expect(feedback.getByText('(p. 5)').locator('visible=true')).toBeVisible()
   // What was missed is a pointer, never the claim itself.
-  await expect(feedback.getByText(/Look again at p\. 5/)).toBeVisible()
+  await expect(feedback.getByText(/Look again at p\. 5/).locator('visible=true')).toBeVisible()
   await expect(page.getByText('A collision is two keys that land in one bucket.')).toHaveCount(0)
   // Results first: the instructions fold into one line, and open again on a tap.
   const instructions = page.getByRole('button', { name: 'Show instructions' })
@@ -239,7 +239,7 @@ test('recall is shown finished only when every prompt has an answer', async ({ p
   // The last prompt answered: the count says so, the step ticks, and the way on is the primary button.
   await expect(page.getByTestId('recall-progress')).toHaveText(`${prompts.length} of ${prompts.length} prompts answered`)
   await expect(path.getByRole('img', { name: 'Completed' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Start learning' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Read this explanation' })).toBeVisible()
 })
 
 test('show me what I missed records level 3', async ({ page }) => {

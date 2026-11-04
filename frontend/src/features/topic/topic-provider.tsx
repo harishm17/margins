@@ -60,6 +60,18 @@ type TopicContextValue = {
   inProgress: boolean
   /** Counts one more view as working; the returned function takes it back. See useActivityInProgress. */
   claimInProgress: () => () => void
+  /** An attempt is open on screen (a warm-up question, a recall answer, a practice problem, a quiz): on a phone the topic's header and path give way to a small bar. Null when none. */
+  attempt: AttemptInfo | null
+  /** Registers an attempt; the returned function takes it back. See useAttemptFocus. */
+  claimAttempt: (info: AttemptInfo) => () => void
+}
+
+/** What the compact bar shows while an attempt is open: where Exit goes, or what it does instead of leaving the page. */
+export type AttemptInfo = {
+  /** Where Exit goes; the topics list when left out. */
+  exitHref?: string
+  /** Runs instead of leaving (the quiz asks first whether to save), when the page itself must answer. */
+  onExit?: () => void
 }
 
 const TopicContext = React.createContext<TopicContextValue | null>(null)
@@ -85,6 +97,27 @@ export function useTopic(): TopicContextValue {
 export function useActivityInProgress(active: boolean) {
   const { claimInProgress } = useTopic()
   React.useEffect(() => (active ? claimInProgress() : undefined), [active, claimInProgress])
+}
+
+/**
+ * Marks the view on screen as an attempt in progress while `active` is true, like the mock exam's and the review's focus
+ * views: on a phone the topic header, its status line and the five-step path give way to one small bar (identity, Exit),
+ * so the task and its next action sit on the first screen. A wide screen keeps the path. Outside the topic page (the map's
+ * teach-back uses the recall card) it does nothing. `onExit` is read when Exit is pressed, so it may change between renders.
+ */
+export function useAttemptFocus(active: boolean, options: { exitHref?: string; onExit?: () => void } = {}) {
+  const topic = useOptionalTopic()
+  const claim = topic?.claimAttempt
+  const onExit = React.useRef(options.onExit)
+  React.useEffect(() => {
+    onExit.current = options.onExit
+  })
+  const exitHref = options.exitHref
+  const hasExit = !!options.onExit
+  React.useEffect(() => {
+    if (!active || !claim) return undefined
+    return claim({ exitHref, onExit: hasExit ? () => onExit.current?.() : undefined })
+  }, [active, claim, exitHref, hasExit])
 }
 
 /** Generation state of one kind of content, with the action to start it. */
@@ -182,6 +215,14 @@ export function TopicProvider({
       released = true
       setClaims((count) => count - 1)
     }
+  }, [])
+  const [attempts, setAttempts] = React.useState<{ id: number; info: AttemptInfo }[]>([])
+  const attemptIds = React.useRef(0)
+  const attempt = attempts.length > 0 ? attempts[attempts.length - 1].info : null
+  const claimAttempt = React.useCallback((info: AttemptInfo) => {
+    const id = ++attemptIds.current
+    setAttempts((current) => [...current, { id, info }])
+    return () => setAttempts((current) => current.filter((item) => item.id !== id))
   }, [])
   const tracked = React.useRef(new Set<string>())
   // Opening a topic with no notes (and no failed attempt to retry by hand) starts its preparation once:
@@ -411,9 +452,19 @@ export function TopicProvider({
       setKeysSuspended,
       inProgress,
       claimInProgress,
+      attempt,
+      claimAttempt,
     }),
-    [topicId, courseId, running, startError, failure, starting, preparingNotes, generate, generateReview, dismiss, prefetchNext, keysSuspended, inProgress, claimInProgress]
+    [topicId, courseId, running, startError, failure, starting, preparingNotes, generate, generateReview, dismiss, prefetchNext, keysSuspended, inProgress, claimInProgress, attempt, claimAttempt]
   )
 
-  return <TopicContext.Provider value={value}>{children}</TopicContext.Provider>
+  // `data-attempt` lets the topic's chrome (header, path, panel spacing) step aside on a phone with plain CSS
+  // (`group-data-[attempt]/topic:`), without each piece needing the state; `contents` keeps the wrapper out of the layout.
+  return (
+    <TopicContext.Provider value={value}>
+      <div data-attempt={attempt ? '' : undefined} className="group/topic contents">
+        {children}
+      </div>
+    </TopicContext.Provider>
+  )
 }

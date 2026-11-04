@@ -9,13 +9,14 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toaster'
 import type { ConfidenceId } from '@/lib/learning/calibration'
 import { QuestionNavigator } from '@/components/learning/question-navigator'
 import { ConfidenceRow, optionCountOf } from '@/features/topic/quiz-confidence'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import type { AttemptView } from '@/lib/exams/attempts'
+import { shortExamTitle } from '@/lib/exams/display'
 import { formatClock } from '@/lib/format'
 import type { PublicQuizQuestion } from '@/lib/learning/quiz-questions'
 import { useQuestionMotion } from '@/lib/question-motion'
@@ -299,7 +300,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
   return (
     <>
       <FocusHeader
-        title={title}
+        title={shortExamTitle(title)}
         status={
           <>
             <SaveState status={autosave.status} text={saveText} onRetry={() => void autosave.saveNow()} />
@@ -404,6 +405,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         <SheetContent className="lg:hidden">
           <SheetHeader>
             <SheetTitle>Questions</SheetTitle>
+            <SheetDescription>{title}</SheetDescription>
           </SheetHeader>
           <div className="overflow-y-auto p-5">
             <QuestionNavigator
@@ -428,7 +430,23 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         confirmLabel="Submit exam"
         cancelLabel="Keep working"
         onConfirm={() => submit()}
-      />
+      >
+        {/* The counts first, so the dialog can be taken in at a glance; the sentence above says what submitting does. */}
+        <dl className="grid grid-cols-3 gap-3 rounded-control border border-border bg-surface-2 px-3 py-2.5 text-center" data-testid="submit-counts">
+          <div>
+            <dt className="text-caption text-fg-3">Answered</dt>
+            <dd className="tabular text-body-strong text-fg">{total - unanswered}</dd>
+          </div>
+          <div>
+            <dt className="text-caption text-fg-3">Unanswered</dt>
+            <dd className={cn('tabular text-body-strong', unanswered > 0 ? 'text-warning-soft-fg' : 'text-fg')}>{unanswered}</dd>
+          </div>
+          <div>
+            <dt className="text-caption text-fg-3">Flagged</dt>
+            <dd className="tabular text-body-strong text-fg">{flagged.size}</dd>
+          </div>
+        </dl>
+      </ConfirmDialog>
       <ConfirmDialog
         open={confirmExit}
         onOpenChange={setConfirmExit}

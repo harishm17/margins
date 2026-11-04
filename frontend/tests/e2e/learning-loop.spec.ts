@@ -319,7 +319,7 @@ test.describe('practice progress', () => {
     // before it is clicked, and Connect and Structure wait for an attempt (spec 18.4).
     await expect(reveal).toHaveCount(0)
     await page.getByRole('button', { name: 'Get help' }).click()
-    await expect(page.getByRole('button', { name: /Where to look \(still counts, as a harder try\)/ })).toBeEnabled()
+    await expect(page.getByRole('button', { name: /Where to look · your next try still counts, as a harder one/ })).toBeEnabled()
     await page.getByRole('button', { name: /Next hint: Locate/ }).click()
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
     await expect(page.getByRole('button', { name: /Next hint: Connect/ })).toBeDisabled()

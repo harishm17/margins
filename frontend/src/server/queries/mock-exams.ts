@@ -50,6 +50,8 @@ export type ExamListItem = {
   /** Best graded score, 0 to 100. */
   bestScore: number | null
   attemptCount: number
+  /** When the latest submitted attempt was handed in. */
+  lastTakenAt: string | null
   /** An attempt is running and its deadline has not passed. */
   inProgress: boolean
 }
@@ -66,7 +68,7 @@ export async function listExams(userId: string, courseId: string): Promise<ExamL
     questionCounts(ids),
     prisma.examSubmission.findMany({
       where: { sampleExamId: { in: ids }, userId },
-      select: { sampleExamId: true, status: true, deadlineAt: true, aiGrading: true },
+      select: { sampleExamId: true, status: true, deadlineAt: true, aiGrading: true, submittedAt: true },
     }),
   ])
   const now = Date.now()
@@ -87,6 +89,7 @@ export async function listExams(userId: string, courseId: string): Promise<ExamL
       difficulty: exam.difficultyLevel,
       bestScore: scores.length > 0 ? Math.max(...scores) : null,
       attemptCount: submitted.length,
+      lastTakenAt: submitted.length > 0 ? new Date(Math.max(...submitted.map((attempt) => attempt.submittedAt.getTime()))).toISOString() : null,
       inProgress: mine.some(
         (attempt) => attempt.status === ATTEMPT_IN_PROGRESS && !!attempt.deadlineAt && attempt.deadlineAt.getTime() > now
       ),
@@ -111,6 +114,8 @@ export type ExamLobby = {
   durationMinutes: number
   difficulty: string
   topics: string[]
+  /** Topics the student chose that the exam leaves out, for want of pages to write questions from (read from the job that wrote it). */
+  leftOut: string[]
   attempts: AttemptRow[]
   /** The attempt to resume, with the server's clock for the countdown. */
   inProgress: { deadlineAt: string; serverNow: string; remainingSeconds: number } | null
@@ -165,6 +170,14 @@ export async function getExamLobby(userId: string, courseId: string, examId: str
 
   const active = state.kind === 'active' ? state.attempt : null
   const titles = await getExamTitles(userId, courseId)
+  // The job that wrote this exam says which chosen topics it left out; the lobby says so above Start, not only in a note that goes.
+  const writer = await prisma.processingJob.findFirst({
+    where: { userId, projectId: courseId, jobType: 'generate_exam', status: 'completed', resultData: { path: ['exam_id'], equals: exam.id } },
+    orderBy: { createdAt: 'desc' },
+    select: { resultData: true },
+  })
+  const skipped = (writer?.resultData as { skipped_topics?: unknown } | null)?.skipped_topics
+  const leftOut = Array.isArray(skipped) ? skipped.filter((name): name is string => typeof name === 'string' && name !== '') : []
   return {
     id: exam.id,
     courseId: exam.projectId,
@@ -174,6 +187,7 @@ export async function getExamLobby(userId: string, courseId: string, examId: str
     durationMinutes: exam.durationMinutes,
     difficulty: exam.difficultyLevel,
     topics: exam.topicsCovered,
+    leftOut,
     attempts,
     inProgress: active
       ? { deadlineAt: active.deadlineAt, serverNow: active.serverNow, remainingSeconds: active.remainingSeconds }

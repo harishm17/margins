@@ -22,7 +22,7 @@ import { statusLabel, useServerDraft } from '@/features/learning/use-server-draf
 import { parseReviewDraft, type ReviewDraft } from '@/lib/drafts/review-draft'
 import { ConfidenceRow, optionCountOf } from './quiz-confidence'
 import { formatAnswer, formatKey } from './quiz-format'
-import { useActivityInProgress } from './topic-provider'
+import { useActivityInProgress, useAttemptFocus } from './topic-provider'
 import { useFocusWhen } from '@/lib/hooks/use-focus'
 
 /** A finished warm-up also says how many passages the reader marks Focus here. */
@@ -92,7 +92,7 @@ export function WarmupView({ topicId, courseId, readHref, quizHref, initial }: P
       </h2>
       <p className="mt-3 text-body text-fg-2">
         {state.status === 'ready' ? `${state.total} questions, one at a time. ` : ''}
-        You will probably miss some. That is the point: it shows you what to look for, and what you read afterwards sticks better.
+        It is fine to miss these: they show you where to focus your reading, and what you read afterwards sticks better.
       </p>
       <p className="mt-2 text-body text-fg-2">There are no hints, and none of this counts toward your quiz scores.</p>
       {error ? (
@@ -146,6 +146,8 @@ function Question({
   const headingRef = React.useRef<HTMLHeadingElement>(null)
   const motion = useQuestionMotion(state.position)
   const last = state.position === state.total
+  // A question being answered is an attempt: on a phone the topic's header and path give way to a small bar with Exit.
+  useAttemptFocus(true)
 
   React.useEffect(() => {
     if (moved) headingRef.current?.focus({ preventScroll: true })
@@ -191,8 +193,8 @@ function Question({
         </h2>
         <p className="text-small text-fg-2">No hints</p>
       </div>
-      <Progress aria-label="Warm-up questions answered" className="mt-4" value={((state.position - 1) / state.total) * 100} />
-      <div className={cn('mt-8', motion)} data-question="">
+      <Progress aria-label="Warm-up questions answered" className="mt-3 sm:mt-4" value={((state.position - 1) / state.total) * 100} />
+      <div className={cn('mt-5 sm:mt-8', motion)} data-question="">
         <QuestionRenderer question={state.question} value={draft.answer} onChange={(answer) => setDraft((d) => ({ ...d, answer }))} showPoints={false} shortcuts />
         <ConfidenceRow
           value={draft.confidence}
@@ -206,7 +208,7 @@ function Question({
             {error}
           </InlineAlert>
         ) : null}
-        <div className="mt-10 flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-border pt-4 sm:mt-10 sm:pt-5">
           {saved ? (
             <span role="status" className="mr-auto text-caption text-fg-3" data-testid="warmup-draft-status">
               {saved}
@@ -286,10 +288,10 @@ function Results({ state, readHref, quizHref, focusHeading }: { state: Extract<W
   return (
     <section aria-labelledby="warmup-done-heading" className="max-w-[640px]">
       <h2 ref={headingRef} id="warmup-done-heading" className="text-title text-fg outline-none">
-        Warm-up done
+        Warm-up done: here&apos;s what to focus on
       </h2>
       <p className="mt-2 text-body text-fg-2">
-        {right} of {plural(state.items.length, 'question')} right. The reading explains the rest: each answer below says where to find it.
+        Each answer below says where to find it, and the reading explains the rest. You got {right} of {plural(state.items.length, 'question')} right.
       </p>
       {right < state.items.length ? (
         <div aria-live="polite" className="mt-2">

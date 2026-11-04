@@ -55,10 +55,11 @@ function writeSettled(claimId: string, value: Settled) {
 type Source = { quote: string; pageStart: number | null }
 
 /**
- * "Before you go on": one short question after a section that holds a claim, set into the reading with a
+ * "Quick check": one short, optional question after a section that holds a claim, set into the reading with a
  * hairline above it rather than boxed. The student types an answer, or says they don't know, then asks to see the
  * sentence in their file (fetched then, not sent with the page) and grades themselves: Got it, Partly or Missed
- * (level 2, self-graded, spec §5.2). It can be skipped, and there is never more than one per section.
+ * (level 2, self-graded, spec §5.2). "Continue reading" leaves it, and there is never more than one per section.
+ * The way on is named for what it does, so the check reads as a pause in the reading and not a gate in front of it.
  */
 export function ReaderCheck({ topicId, check, filename, materialId, pdf }: { topicId: string; check: ReaderCheckView; filename: string; materialId: string; pdf: boolean }) {
   const stored = useStoredSettled(check.claimId)
@@ -156,7 +157,7 @@ export function ReaderCheck({ topicId, check, filename, materialId, pdf }: { top
   return (
     <div ref={groupRef} role="group" aria-labelledby={headingId} className="my-7 max-w-[680px] border-t border-border pt-3" data-check="">
       <h3 id={headingId} className="text-caption text-fg-3">
-        Before you go on
+        Quick check <span className="font-normal">(optional)</span>
       </h3>
       <p className="mt-0.5 text-body-strong text-fg">{check.question}</p>
 
@@ -188,7 +189,7 @@ export function ReaderCheck({ topicId, check, filename, materialId, pdf }: { top
           ) : (
             <>
               <Textarea
-                className="mt-2"
+                className="mt-2 max-sm:min-h-11"
                 rows={1}
                 maxRows={5}
                 value={answer}
@@ -212,7 +213,7 @@ export function ReaderCheck({ topicId, check, filename, materialId, pdf }: { top
                   I don&apos;t know
                 </Button>
                 <Button size="sm" variant="ghost" className="text-fg-2" onClick={skip}>
-                  Skip
+                  Continue reading
                 </Button>
               </div>
               {statusLabel(draft.status) && ready ? <p className="mt-1.5 text-caption text-fg-3">{statusLabel(draft.status)}</p> : null}

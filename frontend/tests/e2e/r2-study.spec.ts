@@ -37,9 +37,14 @@ test.describe('the Topics list', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'Not in a unit' })).toBeVisible()
     // The row is words and a bar with an edge, not a strip of icons that needed a hover.
     const row = page.getByRole('link', { name: /Sorting/ })
+    // One recommended move and one status at rest; the steps done, quiz score and mastery are one tap away in the row's details.
     await expect(row).toContainText('Next:')
-    await expect(row).toContainText(/0 of \d steps done/)
+    await expect(row).toContainText('Not started')
+    await expect(row).not.toContainText(/steps done/)
     await expect(row.getByRole('img')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Show details: Sorting' }).click()
+    await expect(page.getByText(/0 of \d steps done/).first()).toBeVisible()
+    await page.getByRole('button', { name: 'Hide details: Sorting' }).click()
     await screenshotIfAsked(page, 'r2-topics-list-1440x900')
     await expectNoAxeViolations(page, 'topics list, 1440')
     await page.setViewportSize(PHONE)
@@ -111,7 +116,7 @@ test.describe('the quiz', () => {
     await expect(page.getByRole('button', { name: 'Start quiz' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'New quiz set' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'New questions' })).toHaveCount(0)
-    await expect(page.getByText('Guess your score before you start (optional)')).toBeVisible()
+    await expect(page.getByText('Guess your score to compare it with your result (optional)')).toBeVisible()
     await expect(page.getByRole('group', { name: 'Tools' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Start quiz' }).click()

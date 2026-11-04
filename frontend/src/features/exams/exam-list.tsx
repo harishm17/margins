@@ -3,6 +3,7 @@ import { Exam } from '@phosphor-icons/react/dist/ssr'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { formatDate } from '@/lib/format'
 import type { ExamListItem } from '@/server/queries/mock-exams'
 import { examSummary, formatScore } from './exam-options'
 
@@ -17,7 +18,7 @@ export function ExamList({ courseId, exams }: { courseId: string; exams: ExamLis
           <li key={exam.id} className="relative flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border py-4">
             <div className="min-w-0 flex-1 basis-64">
               <h2 className="text-subheading text-fg">
-                <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-chip">
+                <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-chip max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
                   {exam.title}
                 </Link>
               </h2>
@@ -35,6 +36,11 @@ export function ExamList({ courseId, exams }: { courseId: string; exams: ExamLis
               ) : exam.bestScore !== null ? (
                 <span className="text-small text-fg-2">
                   Best score <span className="tabular text-body-strong text-fg">{formatScore(exam.bestScore)}</span>
+                  {exam.lastTakenAt ? (
+                    <span className="block text-caption font-normal text-fg-3 sm:text-right">
+                      {exam.attemptCount} {exam.attemptCount === 1 ? 'attempt' : 'attempts'} · last taken {formatDate(exam.lastTakenAt)}
+                    </span>
+                  ) : null}
                 </span>
               ) : exam.attemptCount > 0 ? (
                 <span className="text-small text-fg-3">Grading</span>

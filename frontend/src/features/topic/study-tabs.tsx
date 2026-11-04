@@ -193,7 +193,7 @@ export function StudyTabs({
         activeId={view}
         stickyPanel="[data-tab-panel]"
         trailing={quizTaking ? undefined : <ToolLinks courseId={courseId} topicId={topicId} />}
-        className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 max-sm:[&_a::after]:inset-x-1 max-sm:[&_[data-tab-indicator]]:inset-x-1 max-sm:[&_a]:gap-1 max-sm:[&>div]:h-[45px] max-sm:[&_a]:h-11 max-sm:[&_a]:px-1 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
+        className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 group-data-[attempt]/topic:max-sm:hidden max-sm:[&_a::after]:inset-x-1 max-sm:[&_[data-tab-indicator]]:inset-x-1 max-sm:[&_a]:gap-1 max-sm:[&>div]:h-[45px] max-sm:[&_a]:h-11 max-sm:[&_a]:px-1 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
       />
       {/* On the voice view the student is choosing what to do out loud; the way on can wait. */}
       {view === 'voice' || !showLine ? null : <NextActivityCard next={nextActivity} />}

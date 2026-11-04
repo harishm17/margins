@@ -50,18 +50,21 @@ export function ExplainerGate({ topicId, recallHref, readHref, canUnlock }: { to
       secondary={
         <div className="flex flex-col items-center gap-1.5">
           {canUnlock ? (
-            <Button variant="link" className="text-center text-small [&>span]:overflow-visible [&>span]:whitespace-normal" loading={busy} onClick={() => void unlock()}>
-              {EXPLAINER_ESCAPE_LABEL}
-            </Button>
+            <>
+              <p className="text-center text-small text-fg-2">You have finished reading this topic.</p>
+              <Button variant="link" className="text-center text-small [&>span]:overflow-visible [&>span]:whitespace-normal" loading={busy} onClick={() => void unlock()}>
+                {EXPLAINER_ESCAPE_LABEL}
+              </Button>
+            </>
           ) : (
-            // Not a disabled button with a reason under it: until the topic is read there is nothing to press, so the way to the other
-            // unlock is a real link (to the reading), said in a sentence.
+            // Not a disabled button with a reason under it: until the topic is read there is nothing to press, so the other way to the
+            // explanation is a real link (to the reading), said in a sentence that also says where the reading stands.
             <p className="text-center text-small text-fg-2">
-              Rather read an explanation first?{' '}
+              You have not finished reading this topic yet. Finish it to unlock the explanation:{' '}
               <Link href={readHref} scroll={false} className="rounded-chip text-accent underline underline-offset-2 hover:text-accent-hover max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
                 Read the topic
               </Link>
-              , and the explainer opens.
+              .
             </p>
           )}
           {error ? (
@@ -72,7 +75,7 @@ export function ExplainerGate({ topicId, recallHref, readHref, canUnlock }: { to
         </div>
       }
     >
-      Writing what you remember before you read an explanation makes the explanation stick. The explainer opens after you try recall, or after you read the topic.
+      Writing what you remember before you read an explanation makes the explanation stick. Try recall now, or finish reading the topic to unlock the explanation.
     </EmptyState>
   )
 }

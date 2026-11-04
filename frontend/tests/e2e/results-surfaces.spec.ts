@@ -235,13 +235,21 @@ test('the quiz results with the confidence it was answered with: no axe violatio
     await page.reload()
     await expect(page.getByText('Question 2 of')).toBeVisible()
     await expect(page.getByRole('radio', { name: 'Unsure', checked: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Question 3', exact: false }).first().click()
+    if (size.width < 640) {
+      // One navigator on a phone: the Questions button and its sheet.
+      await page.getByRole('button', { name: 'Questions', exact: true }).click()
+      await page.getByRole('dialog').getByRole('button', { name: /^Question 3/ }).click()
+    } else {
+      await page.getByRole('button', { name: /^Question 3/ }).first().click()
+    }
     await page.getByRole('button', { name: 'Submit quiz' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
 
     await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
     await expectNoAxeViolations(page, `quiz results, ${name}`)
     await screenshotIfAsked(page, `quiz-results-${name}`)
+    // On a phone the question-by-question review is one button away, so the score and the next step come first.
+    if (size.width < 640) await page.getByRole('button', { name: /Review the questions/ }).click()
     await page.getByRole('radio', { name: /Missed/ }).click()
     await expectNoAxeViolations(page, `quiz results, missed, ${name}`)
     await screenshotIfAsked(page, `quiz-results-missed-${name}`)

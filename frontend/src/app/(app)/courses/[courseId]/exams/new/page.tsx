@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { examDefaultsFromParams, preselectTopics } from '@/features/exams/exam-options'
 import { topicsFromParam } from '@/lib/exams/form-defaults'
 import { NewExamForm } from '@/features/exams/new-exam-form'
+import { prisma } from '@/lib/db/prisma'
 import { getCourseShell } from '@/server/queries/courses'
 import { findActiveExamJob, getExamStyleState } from '@/server/queries/mock-exams'
 import { requireUser } from '@/server/session'
@@ -31,10 +32,17 @@ export default async function NewExamPage({
   if (!course) notFound()
 
   const topics = course.topics.filter((topic) => topic.confirmed)
-  const [activeJob, examStyle] = await Promise.all([
+  const [activeJob, examStyle, withPages] = await Promise.all([
     findActiveExamJob(user.id, courseId),
     getExamStyleState(user.id, courseId),
+    // A topic with no pages linked to it has nothing to write questions from, and the exam leaves it out. Pages are linked when the
+    // topic is found in the files, or the first time it is opened; so "none yet" is said here as a warning, not as a certainty.
+    prisma.topic.findMany({
+      where: { projectId: courseId, id: { in: topics.map((topic) => topic.id) }, OR: [{ sources: { some: {} } }, { topicChunkMappings: { some: {} } }] },
+      select: { id: true },
+    }),
   ])
+  const linked = new Set(withPages.map((topic) => topic.id))
 
   return (
     <Page width="focus">
@@ -54,7 +62,7 @@ export default async function NewExamPage({
       ) : (
         <NewExamForm
           courseId={courseId}
-          topics={topics.map((topic) => ({ id: topic.id, name: topic.name, mastery: topic.mastery }))}
+          topics={topics.map((topic) => ({ id: topic.id, name: topic.name, mastery: topic.mastery, hasPages: linked.has(topic.id) }))}
           preselected={
             // A link from the plan names its topics; ids that are not confirmed topics of this course are ignored.
             topicsFromParam(query.topics, topics.map((topic) => topic.id)) ??

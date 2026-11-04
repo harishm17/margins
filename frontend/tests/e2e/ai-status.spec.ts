@@ -88,6 +88,7 @@ test('mock exam: submitted during an outage, the answers are saved and graded on
   test.setTimeout(300_000)
   await signIn(page)
   await page.goto(`${course}/exams/new`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '10', exact: true }).click()
   await page.getByRole('button', { name: 'Create exam' }).click()
   await expect(page).toHaveURL(/\/exams\/[0-9a-f-]{36}$/, { timeout: 180_000 })
@@ -146,6 +147,7 @@ test('mock exam: a failed exam goes back to the form with every choice kept', as
   test.setTimeout(240_000)
   await signIn(page)
   await page.goto(`${course}/exams/new`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '10', exact: true }).click()
   await page.getByRole('radio', { name: '30 min' }).click()
 

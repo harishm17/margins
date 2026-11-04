@@ -72,8 +72,8 @@ test('a topic nobody has opened is linked by its bare address, and no page calls
   await page.goto(`/courses/${course.courseId}/plan`)
   const bare = `/courses/${course.courseId}/topics/${course.topics['Hash tables']}`
   const row = page.getByRole('main').getByRole('listitem').filter({ has: page.locator(`a[href="${bare}"]`) }).last()
-  await expect(row.getByRole('link', { name: /^Open the topic/ })).toHaveAttribute('href', bare)
-  await expect(row).toContainText('Margins gets this topic ready when you open it, then starts you on its first step.')
+  await expect(row.getByRole('link', { name: /^Start warm-up/ })).toHaveAttribute('href', bare)
+  await expect(row).toContainText('Margins gets this topic ready when you open it, then starts you on a short warm-up.')
   await expect(page.getByText(/read the notes|Start with the notes/i)).toHaveCount(0)
   // The bare address opens on the reader (the topic is prepared as it opens); the line says nothing yet.
   await page.goto(bare)
@@ -123,9 +123,10 @@ test('the Topics list names the same five steps and the same next step as the to
   const row = page.getByRole('link', { name: /^Hash tables/ })
   await expect(row).toHaveAccessibleName(/Next: Warm-up/)
   await expect(row).not.toHaveAccessibleName(/Notes|Worked examples/)
-  // The row says where the topic stands in words and a bar: what is next, and how many of its steps are done. No strip of icons.
+  // The row says what is next and where the topic stands, in words; the steps done are in its details. No strip of icons.
   await expect(row).toContainText('Next: Warm-up')
-  await expect(row).toContainText(/0 of \d steps done/)
+  await page.getByRole('button', { name: 'Show details: Hash tables' }).click()
+  await expect(page.getByText(/0 of \d steps done/).first()).toBeVisible()
   await expect(row.locator('[role="img"]')).toHaveCount(0)
   await expectNoAxeViolations(page, 'topics list')
   // The topic opens on the step the row named.

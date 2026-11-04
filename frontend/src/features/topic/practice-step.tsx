@@ -282,7 +282,7 @@ export function ActiveStep({
         <span className="flex flex-col whitespace-normal">
           <span>Next hint: {HINT_KINDS[ladder].name}</span>
           <span className="text-caption font-normal text-fg-2">
-            {ladderOpen ? `${HINT_KINDS[ladder].gives} (${hintCostCopy(ladder as 0 | 1 | 2, { attempted, failedFirstTry })})` : 'Opens after your first try'}
+            {ladderOpen ? `${HINT_KINDS[ladder].gives} · ${hintCostCopy(ladder as 0 | 1 | 2, { attempted, failedFirstTry })}` : 'Opens after your first try'}
           </span>
         </span>
       </Button>

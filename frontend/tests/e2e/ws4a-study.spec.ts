@@ -66,10 +66,12 @@ test.describe('the first entry of a topic', () => {
       await screenshotIfAsked(page, 'ws4a-entry-preparing-390x844')
       const reading = page.getByRole('link', { name: 'Start reading instead' })
       expect((await reading.boundingBox())!.height, 'Start reading instead is a 44px target on a phone').toBeGreaterThanOrEqual(44)
-      for (const label of ['Warm-up', 'Read', 'Recall', 'Practice', 'Quiz']) {
-        expect((await path(page).getByRole('link', { name: new RegExp(label) }).boundingBox())!.height, `${label} is a 44px target on a phone`).toBeGreaterThanOrEqual(44)
-      }
+      // On a phone the panel is the page: the path of five steps gives way to the small bar (the topic, Exit), which is a 44px target.
+      await expect(path(page)).toBeHidden()
+      await expect(page.getByTestId('attempt-bar').getByRole('link', { name: 'Exit' })).toBeVisible()
+      expect((await page.getByTestId('attempt-bar').getByRole('link', { name: 'Exit' }).boundingBox())!.height, 'Exit is a 44px target on a phone').toBeGreaterThanOrEqual(44)
       await page.setViewportSize(DESKTOP)
+      await expect(path(page)).toBeVisible()
 
       // Reading is a choice, not a fallback: it leaves the preparation screen at once (this topic has no pages of its own to read yet,
       // so the Read step shows its notes being written).
@@ -106,21 +108,27 @@ test.describe('the question navigator', () => {
     await page.getByRole('radio').first().click()
     await page.getByRole('button', { name: 'Next', exact: true }).click()
 
+    // One navigator on a phone: the Questions button and its sheet. The row of numbers is for wide screens, where it is the only one.
+    await expect(page.getByRole('navigation', { name: 'Questions' })).toBeHidden()
+    await page.setViewportSize(DESKTOP)
     const nav = page.getByRole('navigation', { name: 'Questions' })
     const one = nav.getByRole('button', { name: /^Question 1,/ })
     const two = nav.getByRole('button', { name: /^Question 2,/ })
     await expect(one).toHaveAccessibleName('Question 1, answered')
-    expect((await one.boundingBox())!.height).toBeGreaterThanOrEqual(44)
-    expect((await one.boundingBox())!.width).toBeGreaterThanOrEqual(44)
+    await page.setViewportSize(PHONE)
     // Answered carries a check, not only a fill; the current one an accent outline of 2px, not a faint ring.
+    await page.setViewportSize(DESKTOP)
     await expect(one.locator('svg')).toHaveCount(1)
     await expect(two).toHaveAttribute('aria-current', 'step')
     expect(await two.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('2px')
     expect(await one.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('1px')
+    await page.setViewportSize(PHONE)
 
-    // Question 10 is out of the row's first view; the sheet lists every number without swiping.
-    await page.getByRole('button', { name: 'All questions' }).click()
+    // The sheet lists every number without swiping, as 44px targets.
+    await page.getByRole('button', { name: 'Questions', exact: true }).click()
     const sheet = page.getByRole('dialog', { name: 'Questions' })
+    expect((await sheet.getByRole('button', { name: /^Question 1,/ }).boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    expect((await sheet.getByRole('button', { name: /^Question 1,/ }).boundingBox())!.width).toBeGreaterThanOrEqual(44)
     await expect(sheet.getByRole('button', { name: /^Question 10,/ })).toBeVisible()
     expect((await sheet.getByRole('button', { name: /^Question 10,/ }).boundingBox())!.height).toBeGreaterThanOrEqual(44)
     await screenshotIfAsked(page, 'ws4a-quiz-navigator-sheet-390x844')
