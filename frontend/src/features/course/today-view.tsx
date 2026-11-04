@@ -207,9 +207,9 @@ function TopicTile({ courseId, topic }: { courseId: string; topic: TodayTopic })
         </div>
         <p className="line-clamp-2 min-h-10 text-body-strong text-fg">{topic.name}</p>
         {topic.due && topic.dueAt ? (
-          <DueLabel dueAt={topic.dueAt} className="text-caption font-normal" />
+          <DueLabel dueAt={topic.dueAt} className="text-caption font-normal max-sm:text-small" />
         ) : (
-          <p className="text-caption font-normal text-fg-3">{masteryLabel(topic.mastery)}</p>
+          <p className="text-caption font-normal text-fg-3 max-sm:text-small">{masteryLabel(topic.mastery)}</p>
         )}
       </Link>
     </Card>

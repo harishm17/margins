@@ -10,10 +10,7 @@ test.use({ viewport: { width: 390, height: 844 } })
 const { course } = demoIds()
 
 const PAGES = ['/', '/login', '/privacy', '/terms', '/evaluation']
-const COURSE_PAGES = ['/ask', '/review', '/map', '/exams', '/materials', '/settings']
-// Pages whose files belong to other workstreams of round 4 (Overview and Plan: W3, Topics list: W3). They are reported, not failed,
-// until their owners have moved the labels listed in the report to 13px; then move the path into COURSE_PAGES.
-const REPORTED_ONLY = ['', '/plan', '/topics']
+const COURSE_PAGES = ['', '/plan', '/topics', '/ask', '/review', '/map', '/exams', '/materials', '/settings']
 
 async function settle(page: import('@playwright/test').Page) {
   await page.waitForLoadState('networkidle')
@@ -38,16 +35,6 @@ test.describe('signed in', () => {
       await page.goto(`/courses/${course}${path}`)
       await settle(page)
       expect(await smallInteractiveText(page), `${path}: interactive text under 13px`).toEqual([])
-    })
-  }
-
-  for (const path of REPORTED_ONLY) {
-    test(`course${path || ' overview'}: report of interactive text under 13px`, async ({ page }) => {
-      await signIn(page, DEMO_EMAIL)
-      await page.goto(`/courses/${course}${path}`)
-      await settle(page)
-      const found = await smallInteractiveText(page)
-      test.info().annotations.push({ type: 'under 13px', description: found.join('; ') || 'none' })
     })
   }
 

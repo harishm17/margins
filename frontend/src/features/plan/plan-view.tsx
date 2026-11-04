@@ -175,7 +175,7 @@ function DayLine({ day, items, rest }: { day: PlanDay; items: DescribedPlanItem[
           </h3>
           <span className="flex shrink-0 items-center gap-1.5 sm:order-last">
             <DayBadges day={day} collapsed />
-            <span className="tabular text-caption font-normal text-fg-3">{minutes} min</span>
+            <span className="tabular text-caption font-normal text-fg-3 max-sm:text-small">{minutes} min</span>
             <CaretDown aria-hidden="true" className="size-4 text-fg-3 transition-transform duration-180 group-open:rotate-180" />
           </span>
           <span className="min-w-0 flex-1 truncate text-small text-fg-2 max-sm:order-last max-sm:basis-full">
@@ -229,7 +229,7 @@ function EmptyRun({ days, rest, mode, settingsHref }: { days: PlanDay[]; rest: s
         ) : null}
       </div>
       <details className="group border-t border-border">
-        <summary className="inline-flex min-h-11 w-full cursor-pointer list-none items-center gap-1.5 px-4 text-caption text-fg-3 hover:text-fg [&::-webkit-details-marker]:hidden">
+        <summary className="inline-flex min-h-11 w-full cursor-pointer list-none items-center gap-1.5 px-4 text-caption text-fg-3 hover:text-fg max-sm:text-small [&::-webkit-details-marker]:hidden">
           Show every day
           <CaretDown aria-hidden="true" className="size-3.5 transition-transform duration-180 group-open:rotate-180" />
         </summary>

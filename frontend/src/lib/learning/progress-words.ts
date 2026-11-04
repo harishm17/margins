@@ -28,7 +28,7 @@ export const TOPIC_PROGRESS_WORDS = {
 
 /** The bands of idea recall, keyed by the concept label the map computes. */
 export const IDEA_RECALL_WORDS: Record<ConceptLabel, string> = {
-  not_started: 'New',
+  not_started: 'Not started',
   inferred: 'Inferred',
   shaky: 'Shaky',
   getting_there: 'Getting there',
@@ -39,6 +39,6 @@ export const IDEA_RECALL_WORDS: Record<ConceptLabel, string> = {
 /** One paragraph per measure, for the "What these mean" disclosure. */
 export const PROGRESS_GLOSSARY = {
   topic: `${PROGRESS_MEASURE.topic} is how well you know a whole topic, from your recent answers and how long ago they were. It is the average of the topic's ideas.`,
-  idea: `${PROGRESS_MEASURE.idea} is the same idea for one idea inside a topic. Ideas are Solid, Shaky, Getting there or Fading; a new idea has not been tried yet.`,
+  idea: `${PROGRESS_MEASURE.idea} is how well you remember one idea inside a topic. Ideas are Solid, Getting there, Shaky or Fading, or Not started before you have tried them.`,
   quiz: `${PROGRESS_MEASURE.quiz} is how you did on one quiz. It counts toward topic progress along with your later reviews, but it is not the progress itself.`,
 } as const

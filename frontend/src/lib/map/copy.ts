@@ -1,17 +1,12 @@
 import type { ConceptLabel } from '@/lib/learning/concept-mastery'
+import { IDEA_RECALL_WORDS } from '@/lib/learning/progress-words'
 import { daysBetween, localDay } from '@/lib/learning/plan'
 import type { PanelLinkKind } from '@/server/queries/map'
 
 /** The words of the knowledge map (spec §9). Every state is words as well as an icon and a colour. */
 
-export const LABEL_TEXT: Record<ConceptLabel, string> = {
-  solid: 'Solid',
-  getting_there: 'Getting there',
-  shaky: 'Shaky',
-  fading: 'Fading',
-  inferred: 'Inferred',
-  not_started: 'Not started',
-}
+/** The idea-recall words live in the one progress glossary (lib/learning/progress-words.ts), so the map and every idea list agree. */
+export const LABEL_TEXT: Record<ConceptLabel, string> = IDEA_RECALL_WORDS
 
 /** In the order a student moves through them, for the key under the map. */
 export const LABEL_ORDER: ConceptLabel[] = ['not_started', 'inferred', 'shaky', 'getting_there', 'solid', 'fading']

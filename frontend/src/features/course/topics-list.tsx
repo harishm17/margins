@@ -53,7 +53,7 @@ const SEGMENT: Record<PathGlyphState, string> = {
 function PathStatus({ path, percent }: { path: ListTopic['path']; percent: number | null }) {
   const done = path.glyphs.filter((glyph) => glyph.state === 'done').length
   return (
-    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 whitespace-nowrap text-caption font-normal text-fg-2">
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 whitespace-nowrap text-caption font-normal text-fg-2 max-sm:text-small">
       <span aria-hidden="true" className="flex items-center gap-0.5">
         {path.glyphs.map((glyph) => (
           <span key={glyph.step} className={cn('h-1.5 w-4 rounded-full', SEGMENT[glyph.state])} />
@@ -108,7 +108,7 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
             {topic.timing ? (
               <span
                 suppressHydrationWarning
-                className={cn('text-caption font-normal', topic.timing.due ? 'text-warning-soft-fg' : 'text-fg-3')}
+                className={cn('text-caption font-normal max-sm:text-small', topic.timing.due ? 'text-warning-soft-fg' : 'text-fg-3')}
               >
                 {topic.timing.text}
               </span>
