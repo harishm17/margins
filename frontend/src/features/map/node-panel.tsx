@@ -157,7 +157,7 @@ export function NodePanel({
         <button
           type="button"
           aria-expanded={othersOpen}
-          aria-controls="map-other-ways"
+          aria-controls={othersOpen ? 'map-other-ways' : undefined}
           onClick={() => setOthersOpenFor(othersOpenFor === panel.id && !explaining ? null : panel.id)}
           className="inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg max-sm:min-h-11"
         >

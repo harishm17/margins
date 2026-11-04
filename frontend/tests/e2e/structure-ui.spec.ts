@@ -238,7 +238,7 @@ test.describe('a course built to be edited', () => {
     await expect(body(page).getByText('5 topics in 3 units')).toBeVisible()
 
     // Move "Slicing" from Arrays to Trees.
-    await page.getByRole('button', { name: 'Actions for Slicing' }).click()
+    await page.getByRole('button', { name: 'Move Slicing' }).click()
     await page.getByRole('menuitem', { name: 'Move to unit...' }).click()
     const dialog = page.getByRole('dialog', { name: 'Move topic' })
     await expect(dialog).toBeVisible()
@@ -277,7 +277,9 @@ test.describe('a course built to be edited', () => {
     await signIn(page, email)
     await page.goto(`/courses/${courseId}/topics?edit=1`)
 
-    await page.getByRole('button', { name: 'Add unit' }).click()
+    // Adding a unit is a course action, not a header button.
+    await page.getByRole('button', { name: 'Course actions' }).click()
+    await page.getByRole('menuitem', { name: 'Add unit' }).click()
     const dialog = page.getByRole('dialog', { name: 'Add a unit' })
     await dialog.getByLabel('Title').fill('Graphs')
     await dialog.getByLabel('Week').fill('Week 4')

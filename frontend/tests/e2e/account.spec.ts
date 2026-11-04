@@ -72,8 +72,11 @@ test('settings shows the account and allowance; deleting the account removes its
   await expect(dialog).toContainText(email)
   const confirm = dialog.getByRole('button', { name: 'Delete account' })
   await expect(confirm).toBeDisabled()
-  await dialog.getByLabel('Type "DELETE"').fill('delete')
+  await dialog.getByLabel('Type "DELETE"').fill('delet')
   await expect(confirm).toBeDisabled()
+  // Capitals do not matter (a phone's keyboard starts in lower case).
+  await dialog.getByLabel('Type "DELETE"').fill('delete')
+  await expect(confirm).toBeEnabled()
   await dialog.getByLabel('Type "DELETE"').fill('DELETE')
   await confirm.click()
   await expect(page).toHaveURL(/\/account-deleted$/, { timeout: 60_000 })

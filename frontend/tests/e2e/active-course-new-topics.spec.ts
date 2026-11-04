@@ -39,7 +39,7 @@ test('new topics on an active course wait for review and join the plan when conf
   await expect(page.getByRole('region', { name: /Up next/ })).toBeVisible()
   const notice = page.getByRole('status').filter({ hasText: '2 new topics to review' })
   await expect(notice).toBeVisible()
-  await expect(notice.getByRole('link', { name: 'Review topics' })).toHaveAttribute('href', `${base}/topics?edit=1`)
+  await expect(notice.getByRole('link', { name: 'Review new topics' })).toHaveAttribute('href', `${base}/topics?edit=1`)
   await expect(page.getByRole('link', { name: /Bayes rule/, includeHidden: true })).toHaveCount(0)
   await expect(page.getByRole('heading', { level: 2, name: 'Check the topics' })).toHaveCount(0)
 

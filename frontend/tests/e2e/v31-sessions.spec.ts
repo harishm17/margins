@@ -372,7 +372,7 @@ test.describe('S4: review sessions and drills', () => {
     await expect(page.getByTestId('length-notice')).toHaveText('Misses come back once at the end in a new form.')
     await expect(page.getByTestId('where-to-look').getByRole('link')).toHaveText(/^p\. (12|31)$/)
     await shot(page, 'review-first-miss')
-    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await page.getByRole('button', { name: 'Next question', exact: true }).click()
     // The counter says a retest is to come.
     await expect(page.getByRole('heading', { name: /^Question 2 of 2 \(\+1 to retest\)/ })).toBeVisible()
     // The notice is for the first miss only.
@@ -444,7 +444,7 @@ test.describe('S4: review sessions and drills', () => {
     for (let i = 0; i < total; i += 1) {
       await page.getByRole('radio', { name: 'False' }).click()
       await page.getByRole('button', { name: 'Check answer' }).click()
-      await page.getByRole('button', { name: /^(Next|See summary|Continue)$/ }).click()
+      await page.getByRole('button', { name: /^(Next question|See session summary|Continue)$/ }).click()
     }
     await expect(page.getByRole('heading', { name: 'Drill done' })).toBeVisible()
     await expect(page.getByText(`You got 0 of ${total} questions right.`)).toBeVisible()
@@ -538,15 +538,15 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
     // Miss all six: the counter caps the retests at two.
     await page.getByRole('radio', { name: 'False' }).click()
     await page.getByRole('button', { name: 'Check answer' }).click()
-    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await page.getByRole('button', { name: 'Next question', exact: true }).click()
     await expect(page.getByRole('heading', { name: /^Question 2 of 6 \(\+1 to retest\)/ })).toBeVisible()
     await page.getByRole('radio', { name: 'False' }).click()
     await page.getByRole('button', { name: 'Check answer' }).click()
-    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await page.getByRole('button', { name: 'Next question', exact: true }).click()
     await expect(page.getByRole('heading', { name: /^Question 3 of 6 \(\+2 to retest\)/ })).toBeVisible()
     await page.getByRole('radio', { name: 'False' }).click()
     await page.getByRole('button', { name: 'Check answer' }).click()
-    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await page.getByRole('button', { name: 'Next question', exact: true }).click()
     // A third miss does not raise it past the cap.
     await expect(page.getByRole('heading', { name: /^Question 4 of 6 \(\+2 to retest\)/ })).toBeVisible()
   })

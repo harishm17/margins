@@ -37,6 +37,11 @@ export function NodePanelFrame({
       <SheetContent
         aria-describedby="map-sheet-description"
         hideClose
+        onOpenAutoFocus={(event) => {
+          // Focus goes to the idea's name, as it did when the details were under the list.
+          event.preventDefault()
+          document.getElementById('map-panel-heading')?.focus()
+        }}
         onCloseAutoFocus={(event) => {
           event.preventDefault()
           opener.current?.focus()

@@ -405,7 +405,7 @@ test('"Quick practice" says how many questions the session has: exact when they 
   await addQuizSet(topicId, [0, 1].flatMap((n) => (['easy', 'medium', 'hard'] as const).map((difficulty) => item(ids[n], `Concept ${n}`, difficulty))))
   const card = page.getByTestId('short-session').filter({ visible: true })
   await page.goto(`/courses/${course.courseId}/review`)
-  await expect(card).toContainText('Up to 3 reviews', { timeout: 30_000 })
+  await expect(card).toContainText('up to 3 reviews', { timeout: 30_000 })
   // All three have questions: the number is exact.
   await addQuizSet(topicId, (['easy', 'medium', 'hard'] as const).map((difficulty) => item(ids[2], 'Concept 2', difficulty)))
   await page.goto(`/courses/${course.courseId}/review`)

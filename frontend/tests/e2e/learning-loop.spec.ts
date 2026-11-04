@@ -804,7 +804,7 @@ test.describe('review sessions', () => {
     await page.getByRole('radio', { name: /False/ }).click()
     await page.getByRole('button', { name: 'Check answer' }).click()
   }
-  const next = (page: Page) => page.getByRole('button', { name: /^(Next|See summary|Continue)$/ })
+  const next = (page: Page) => page.getByRole('button', { name: /^(Next question|See session summary|Continue)$/ })
 
   /** A course with two topics and three due concepts, each with three items to draw on. */
   async function dueCourse(page: Page, label: string) {
