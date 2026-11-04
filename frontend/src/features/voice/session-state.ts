@@ -432,7 +432,7 @@ export function summarize(state: Pick<SessionState, 'answered' | 'entries' | 'st
     else if (seen.lookLinks.length === 0 && item.lookLinks) seen.lookLinks = item.lookLinks
   }
   const openIdea = state.board?.kind === 'concept' ? (state.board.idea ?? null) : null
-  const seconds = state.startedAt && state.endedAt ? Math.max(0, (state.endedAt - state.startedAt) / 1000) : 0
+  const seconds = state.startedAt !== null && state.endedAt !== null ? Math.max(0, (state.endedAt - state.startedAt) / 1000) : 0
   return {
     answered: state.answered.length,
     correct,

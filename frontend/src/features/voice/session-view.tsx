@@ -24,6 +24,7 @@ import type { VoiceAlert } from './errors'
 import { isDoneShortcut } from './shortcuts'
 import { ORB_LABEL, orbLabel, type MicNotice, type OrbState, type SessionState } from './session-state'
 import { Transcript } from './transcript'
+import { useVoiceDraft } from './use-voice-draft'
 import type { VoiceController } from './voice-controller'
 import { VoiceOrb } from './voice-orb'
 import { VoiceSettings } from './voice-settings'
@@ -32,6 +33,7 @@ type SessionViewProps = {
   state: SessionState
   orb: OrbState
   controller: VoiceController
+  courseId: string
   /** The topic's name, or null for a sprint. */
   title: string
   /** Quiz style: Hint and Skip make sense. */
@@ -57,9 +59,10 @@ const MIC_NOTICES: Record<MicNotice, { tone: 'neutral' | 'warning'; title?: stri
   unstable: { tone: 'warning', title: 'Voice input keeps stopping', text: 'You can type your answers.', retry: true },
 }
 
-export function SessionView({ state, orb, controller, title, hasQuestions, recognitionSupported }: SessionViewProps) {
+export function SessionView({ state, orb, controller, courseId, title, hasQuestions, recognitionSupported }: SessionViewProps) {
   const { question, board, entries, interim, inputMode, micPaused, speech, turnActive, alert, micNotice } = state
-  const [draft, setDraft] = React.useState('')
+  // What is typed and not sent survives a reload (use-voice-draft.ts), and a continued practice shows the earlier lines above the new ones.
+  const { draft, setDraft, clear: clearDraft, restoredTranscript } = useVoiceDraft(courseId)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
   const textMode = inputMode === 'text'
   // No speech recognition here (the lobby said so before the start): the text box is the way in, with no mic to look at.
@@ -86,7 +89,7 @@ export function SessionView({ state, orb, controller, title, hasQuestions, recog
     event.preventDefault()
     if (!draft.trim() || turnActive) return
     controller.sendText(draft)
-    setDraft('')
+    clearDraft()
   }
 
   return (
@@ -147,6 +150,12 @@ export function SessionView({ state, orb, controller, title, hasQuestions, recog
             {alert ? <TurnAlert alert={alert} onRetry={() => controller.retry()} onDismiss={() => controller.dismissAlert()} /> : null}
           </div>
 
+          {restoredTranscript.length > 0 ? (
+            <div data-testid="voice-restored">
+              <p className="text-caption text-fg-3">Earlier, before the page reloaded</p>
+              <Transcript entries={restoredTranscript} interim="" className="min-h-0 opacity-80" />
+            </div>
+          ) : null}
           <Transcript entries={entries} interim={interim} />
 
           <div className="flex flex-col gap-3 max-md:sticky max-md:bottom-0 max-md:mt-auto max-md:bg-canvas max-md:pb-[max(1rem,env(safe-area-inset-bottom))] max-md:pt-3">

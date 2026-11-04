@@ -188,7 +188,7 @@ describe('evaluationBadge', () => {
 })
 
 describe('summarize', () => {
-  it('counts graded answers, lists what to revisit once, and rounds minutes up to one', () => {
+  it('counts graded answers, lists what to revisit once, and reports the length in seconds', () => {
     const state: Pick<SessionState, 'answered' | 'entries' | 'startedAt' | 'endedAt' | 'ideas'> = {
       ideas: [],
       answered: [
