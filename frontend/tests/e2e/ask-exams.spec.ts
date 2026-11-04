@@ -563,7 +563,8 @@ test.describe('attempt-first Ask', () => {
       const box = await target.boundingBox()
       return box !== null && box.y + box.height <= (await composerTop())
     }
-    const confidence = card.getByText('How sure are you?')
+    // On a phone the row is a single "Confidence (optional)" chip until it is tapped; either way the row's own box is what must clear the composer.
+    const confidence = card.locator('[data-confidence-row]')
     await expect.poll(() => clearOfComposer(confidence), { timeout: 5_000, message: 'the confidence row ends above the composer' }).toBe(true)
     await expect.poll(() => clearOfComposer(card.getByRole('button', { name: "I don't know" })), { timeout: 5_000, message: 'the card buttons end above the composer' }).toBe(true)
     await animationsSettled(page)

@@ -74,6 +74,12 @@ export function useAskChat({
     acceptedRef.current.add(listener)
     return () => void acceptedRef.current.delete(listener)
   }, [])
+  // Listeners told that a send failed for good before the server kept the question: the text is unsent, not in flight.
+  const rejectedRef = React.useRef(new Set<(question: string) => void>())
+  const subscribeRejected = React.useCallback((listener: (question: string) => void) => {
+    rejectedRef.current.add(listener)
+    return () => void rejectedRef.current.delete(listener)
+  }, [])
 
   const controllerRef = React.useRef<AbortController | null>(null)
   // Opening a stored conversation is defined further down; `send` reaches it through here.
@@ -156,6 +162,7 @@ export function useAskChat({
       let answer: AnswerState = INITIAL_ANSWER
       let doneStopReason = null as string | null
       let notSaved = false
+      let acceptedByServer = false
       // The conversation this question started, if it started one.
       let startedThread: string | null = null
       setLive({ question, answer })
@@ -165,14 +172,18 @@ export function useAskChat({
         setLive(null)
         if (message) setMessages((current) => [...current, message])
       }
-      const failure = (message: string, retryable: boolean): FailureMessage => ({
-        kind: 'failure',
-        id: nextId(),
-        message,
-        retryable,
-        question,
-        requestId: clientRequestId,
-      })
+      const failure = (message: string, retryable: boolean): FailureMessage => {
+        // A failure before the thread event (the server never kept the question) makes the saved text a plain unsent draft again.
+        if (!acceptedByServer) rejectedRef.current.forEach((listener) => listener(question))
+        return {
+          kind: 'failure',
+          id: nextId(),
+          message,
+          retryable,
+          question,
+          requestId: clientRequestId,
+        }
+      }
 
       try {
         const result = await streamChat({
@@ -188,6 +199,7 @@ export function useAskChat({
           onEvent: (event) => {
             if (event.type === 'thread') {
               // The server has the question: from here a failure is shown as a failed answer, not as an unsent question.
+              acceptedByServer = true
               acceptedRef.current.forEach((listener) => listener(question))
               threadRef.current = event.threadId
               setThreadId(event.threadId)
@@ -341,9 +353,7 @@ export function useAskChat({
       setLoadError(null)
       setLoadingThread(true)
       try {
-        const data = await apiFetch<ThreadPayload>(
-          `/api/projects/${encodeURIComponent(courseId)}/chat/threads/${encodeURIComponent(id)}`
-        )
+        const data = await apiFetch<ThreadPayload>(`/api/projects/${encodeURIComponent(courseId)}/chat/threads/${encodeURIComponent(id)}`)
         if (token !== loadTokenRef.current) return
         setWorkedAllowed(data.thread.workedAllowed === true)
         setMessages(
@@ -389,6 +399,7 @@ export function useAskChat({
     loadError,
     workedAllowed,
     edit,
+    subscribeRejected,
     send,
     stop,
     retry,

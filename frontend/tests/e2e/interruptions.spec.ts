@@ -144,7 +144,7 @@ test.describe('voice practice', () => {
     // The snapshot is written a moment after the last change.
     await expect.poll(() => page.evaluate(() => Object.keys(sessionStorage).filter((key) => key.startsWith('margins-voice:')).length)).toBe(1)
     await expect
-      .poll(() => page.evaluate(() => Object.entries(sessionStorage).find(([key]) => key.startsWith('margins-voice:'))?.[1] ?? ''))
+      .poll(() => page.evaluate(() => Object.entries(sessionStorage).find(([key]) => key.startsWith('margins-voice-draft:'))?.[1] ?? ''))
       .toContain('An unsent second answer')
   }
 

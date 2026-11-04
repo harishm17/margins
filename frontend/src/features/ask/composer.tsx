@@ -40,6 +40,8 @@ type ComposerProps = {
   draft?: { courseId: string; key: string }
   /** Hears, as it happens, that the server accepted a question; the draft is cleared then and not before. */
   subscribeAccepted?: (listener: (question: string) => void) => () => void
+  /** Hears that a send failed before the server kept the question: the saved text is then plainly unsent. */
+  subscribeRejected?: (listener: (question: string) => void) => () => void
   /** The conversation already has a reply: the box invites an answer or a follow-up instead of a first question. */
   hasMessages?: boolean
   /** Text to put in the box now (a failed question sent back by "Edit question"). A new `nonce` puts it there again. */
@@ -78,6 +80,7 @@ export function Composer({
   initialValue = '',
   draft: draftAt,
   subscribeAccepted,
+  subscribeRejected,
   hasMessages = false,
   edit = null,
   onRecovered,
@@ -128,6 +131,15 @@ export function Composer({
   React.useEffect(() => {
     draftRef.current = draft
   })
+  // A send that failed in front of the student: its text stays as an ordinary draft, so a reload gives it back at once.
+  React.useEffect(() => {
+    if (!subscribeRejected) return
+    return subscribeRejected(() => {
+      const held = draftRef.current.value
+      if (held?.sending) draftRef.current.set({ text: held.text })
+    })
+  }, [subscribeRejected])
+
   const recoveredRef = React.useRef(onRecovered)
   React.useEffect(() => {
     recoveredRef.current = onRecovered

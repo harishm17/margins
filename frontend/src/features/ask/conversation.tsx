@@ -55,7 +55,7 @@ export function Conversation({
   topicName,
   draftNewKey = 'new',
 }: ConversationProps) {
-  const { messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry, editFailed, recover, edit, subscribeAccepted, threadId } = chat
+  const { messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry, editFailed, recover, edit, subscribeAccepted, subscribeRejected, threadId } = chat
   const [moreSuggestions, setMoreSuggestions] = React.useState(false)
   const { blocked } = useAiStatus()
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -206,6 +206,7 @@ export function Conversation({
               initialValue={initialDraft}
               draft={{ courseId, key: threadId ?? draftNewKey }}
               subscribeAccepted={subscribeAccepted}
+              subscribeRejected={subscribeRejected}
               hasMessages={messages.some((message) => message.kind === 'assistant')}
               edit={edit}
               onRecovered={recover}
