@@ -175,7 +175,7 @@ test.describe('the mock exam', () => {
     await expect(page.getByRole('textbox', { name: 'Name' })).toBeVisible()
     await screenshotIfAsked(page, 'r3-exam-new-settings-390x844')
     // A topic with no pages linked says so beside its name, before the exam is written.
-    await expect(page.getByText('No pages linked yet, so it may be left out').first()).toBeVisible()
+    await expect(page.getByText('Add source pages to include.').first()).toBeVisible()
     await expectNoAxeViolations(page, 'new exam, 390')
   })
 })

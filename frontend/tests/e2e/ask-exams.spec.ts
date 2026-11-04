@@ -59,8 +59,14 @@ test('mock exam: a topic with no pages is left out and said so, and the exam is 
   test.setTimeout(240_000)
   await signIn(page, DEMO_EMAIL)
   await page.goto(`${course}/exams/new`)
-  // The demo's "Discrete random variables" has no file behind it; every topic is chosen by default, and the form says it may be left out.
-  await expect(page.getByText('No pages linked yet, so it may be left out').first()).toBeVisible()
+  // The demo's "Discrete random variables" has no file behind it: it starts unticked and says why, and the count says what is covered.
+  const noPages = page.getByRole('checkbox', { name: /Discrete random variables/ })
+  await expect(page.getByText('Add source pages to include.').first()).toBeVisible()
+  await expect(noPages).not.toBeChecked()
+  await expect(page.getByTestId('exam-footer-summary')).not.toContainText('left out')
+  // Ticking it anyway is allowed; the form then says it is left out.
+  await noPages.check()
+  await expect(page.getByTestId('exam-footer-summary')).toContainText('without pages is left out')
   await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '5', exact: true }).click()
   await page.getByRole('radio', { name: '30 min' }).click()

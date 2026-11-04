@@ -124,7 +124,7 @@ test('a 0% exam result is a small calm ring, a blank answer has no "Explain this
   }
 })
 
-test('the weakest topic offers Study; every row links to its topic, and a topic scored 100% does not say Study', async ({ page }) => {
+test('the weakest topic is the one recommended first step; every row links to its topic, and a topic scored 100% is not recommended', async ({ page }) => {
   const seeded = await seed(page, 'exam-full', ['Graph search', 'Hashing'])
   // Both topics' questions in one exam: full marks on the first topic's, none on the second's.
   const exam = await withPrisma((prisma) =>
@@ -169,12 +169,11 @@ test('the weakest topic offers Study; every row links to its topic, and a topic 
   )
   await page.goto(`/courses/${seeded.courseId}/exams/${exam.id}/results/${id}`)
   const focus = page.locator('section[aria-labelledby="where-to-focus"]')
-  // The row is the link to the topic; only the weakest also has a button, so four rows do not say "Study" four times.
+  // The row is the link to the topic; the weakest topic's "Review" button above is the one recommended step, so rows do not repeat it.
   await expect(focus.getByRole('link', { name: 'Graph search', exact: true })).toHaveAttribute('href', `/courses/${seeded.courseId}/topics/${seeded.topics['Graph search']}`)
-  await expect(focus.getByRole('link', { name: 'Study Hashing' })).toHaveText('Study')
-  await expect(focus.getByRole('link', { name: 'Study Graph search' })).toHaveCount(0)
-  await expect(focus.getByRole('link', { name: 'Open Graph search' })).toHaveCount(0)
-  await expect(focus.getByRole('link', { name: 'Study' })).toHaveCount(1)
+  await expect(page.getByRole('link', { name: 'Review Hashing' })).toHaveAttribute('href', `/courses/${seeded.courseId}/topics/${seeded.topics.Hashing}`)
+  await expect(page.getByRole('link', { name: /^Review / })).toHaveCount(1)
+  await expect(focus.getByRole('link', { name: /^(Study|Open|Review) / })).toHaveCount(0)
 })
 
 test('exams made on one day are told apart by the topics they cover', async ({ page }) => {
@@ -182,12 +181,17 @@ test('exams made on one day are told apart by the topics they cover', async ({ p
   const first = await makeExam(seeded, 'Graph search', new Date(Date.now() - 2 * 60_000))
   const second = await makeExam(seeded, 'Hashing', new Date(Date.now() - 60_000))
   await page.goto(`/courses/${seeded.courseId}/exams`)
-  await expect(page.getByText(/^Mock exam, [A-Z][a-z]{2} \d{1,2}: Graph search$/)).toBeVisible()
-  await expect(page.getByText(/^Mock exam, [A-Z][a-z]{2} \d{1,2}: Hashing$/)).toBeVisible()
+  // The name is the date (one line); the topics are told apart on their own "Covers" line.
+  await expect(page.getByRole('heading', { name: /^Mock exam · [A-Z][a-z]{2} \d{1,2}$/ })).toHaveCount(2)
+  await expect(page.getByText('Covers: Graph search')).toBeVisible()
+  await expect(page.getByText('Covers: Hashing')).toBeVisible()
   await screenshotIfAsked(page, 'final-exam-titles-1440x900')
-  // The same title is on the lobby and the results of each.
+  // The lobby heading is the short name, with the topics it covers listed below.
   await page.goto(`/courses/${seeded.courseId}/exams/${second.id}`)
-  await expect(page.getByRole('heading', { name: /Mock exam, [A-Z][a-z]{2} \d{1,2}: Hashing/ }).first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^Mock exam · [A-Z][a-z]{2} \d{1,2}$/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Covers' })).toBeVisible()
+  await expect(page.getByText('Hashing', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Your attempts' })).toHaveCount(0)
   expect(first.id).not.toBe(second.id)
 })
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { examTitle, examTitles, shortExamTitle, topicsLabel } from './display'
+import { examTitle, examTitles, shortExamTitle, splitExamTitle, topicsLabel } from './display'
 
 describe('examTitle', () => {
   it('names generated exams "Mock exam" by date and keeps custom names', () => {
@@ -67,5 +67,19 @@ describe('shortExamTitle', () => {
     assert.equal(shortExamTitle('Mock exam, Nov 4: Sorting, Hash tables'), 'Sorting · Mock')
     assert.equal(shortExamTitle('Mock exam, Nov 4: Sorting algorithms and 3 more (2)'), 'Sorting algorithms · Mock 2')
     assert.equal(shortExamTitle('Mock exam, Nov 4'), 'Mock exam, Nov 4')
+  })
+})
+
+describe('splitExamTitle', () => {
+  it('splits a generated title into a short name and the topics it covers', () => {
+    assert.deepEqual(splitExamTitle('Mock exam, Nov 4: Sorting, Hash tables'), { name: 'Mock exam · Nov 4', covers: 'Sorting, Hash tables' })
+    assert.deepEqual(splitExamTitle('Mock exam, Nov 4: Sorting and 3 more (2)'), { name: 'Mock exam · Nov 4 (2)', covers: 'Sorting and 3 more' })
+    assert.deepEqual(splitExamTitle('Mock exam, Nov 4'), { name: 'Mock exam · Nov 4', covers: null })
+    assert.deepEqual(splitExamTitle('Mock exam, Nov 4, 2025: Graphs'), { name: 'Mock exam · Nov 4, 2025', covers: 'Graphs' })
+  })
+
+  it('keeps a name the student gave', () => {
+    assert.deepEqual(splitExamTitle('Midterm practice'), { name: 'Midterm practice', covers: null })
+    assert.deepEqual(splitExamTitle('Mock exam, final review'), { name: 'Mock exam, final review', covers: null })
   })
 })

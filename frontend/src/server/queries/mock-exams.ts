@@ -52,6 +52,8 @@ export type ExamListItem = {
   attemptCount: number
   /** When the latest submitted attempt was handed in. */
   lastTakenAt: string | null
+  /** The latest submitted attempt, for a "Latest results" link. */
+  latestSubmissionId: string | null
   /** An attempt is running and its deadline has not passed. */
   inProgress: boolean
 }
@@ -68,7 +70,7 @@ export async function listExams(userId: string, courseId: string): Promise<ExamL
     questionCounts(ids),
     prisma.examSubmission.findMany({
       where: { sampleExamId: { in: ids }, userId },
-      select: { sampleExamId: true, status: true, deadlineAt: true, aiGrading: true, submittedAt: true },
+      select: { id: true, sampleExamId: true, status: true, deadlineAt: true, aiGrading: true, submittedAt: true },
     }),
   ])
   const now = Date.now()
@@ -90,6 +92,10 @@ export async function listExams(userId: string, courseId: string): Promise<ExamL
       bestScore: scores.length > 0 ? Math.max(...scores) : null,
       attemptCount: submitted.length,
       lastTakenAt: submitted.length > 0 ? new Date(Math.max(...submitted.map((attempt) => attempt.submittedAt.getTime()))).toISOString() : null,
+      latestSubmissionId: submitted.reduce<(typeof submitted)[number] | null>(
+        (latest, attempt) => (!latest || attempt.submittedAt.getTime() > latest.submittedAt.getTime() ? attempt : latest),
+        null
+      )?.id ?? null,
       inProgress: mine.some(
         (attempt) => attempt.status === ATTEMPT_IN_PROGRESS && !!attempt.deadlineAt && attempt.deadlineAt.getTime() > now
       ),
