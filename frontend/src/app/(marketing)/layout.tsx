@@ -9,11 +9,12 @@ import { MarketingMenu } from '@/features/marketing/marketing-menu'
 import { SECTION_LINKS } from '@/features/marketing/nav-links'
 import { SectionLink } from '@/features/marketing/section-link'
 import { ThemeSwitch } from '@/components/ui/theme-switch'
+import { phoneRow } from '@/components/ui/styles'
 import { AiStatusBanner, AiStatusProvider } from '@/features/ai/ai-status'
 
 const navLink =
   'rounded-chip px-2 py-1.5 text-body text-fg-2 transition-colors duration-120 hover:text-fg'
-const footerLink = 'rounded-chip text-small text-fg-2 transition-colors duration-120 hover:text-fg hover:underline'
+const footerLink = `${phoneRow} rounded-chip text-small text-fg-2 transition-colors duration-120 hover:text-fg hover:underline`
 const footerHeading = 'text-small font-medium text-fg'
 
 /** Public pages: a 64px nav with the theme switch, the content, and a footer that says where things are. Fully static; sign in state is a client island. */
@@ -24,7 +25,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         <SkipLink />
         <AiStatusBanner />
         <header className="mx-auto flex h-16 w-full max-w-[1280px] items-center gap-6 px-4 md:px-8">
-          <Link href="/" aria-label={`${BRAND_NAME} home`} className="rounded-chip">
+          <Link href="/" aria-label={`${BRAND_NAME} home`} className="inline-flex rounded-chip max-sm:min-h-11 max-sm:items-center">
             <Brand />
           </Link>
           <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
@@ -44,12 +45,12 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           {children}
         </main>
         <footer className="border-t border-border">
-          <div className="mx-auto grid w-full max-w-[1280px] gap-10 px-4 py-12 md:px-8 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
-            <div>
+          <div className="mx-auto grid w-full max-w-[1280px] grid-cols-2 gap-x-6 gap-y-8 px-4 py-12 sm:gap-10 md:px-8 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+            <div className="col-span-2 lg:col-span-1">
               <Brand />
               <p className="mt-3 max-w-[32ch] text-small text-fg-2">Study from your own course files, with a plan to your exam date.</p>
             </div>
-            <nav aria-label="Product" className="flex flex-col gap-2.5">
+            <nav aria-label="Product" className="flex flex-col gap-2.5 max-sm:gap-0">
               <p className={footerHeading}>Product</p>
               {SECTION_LINKS.map((link) => (
                 <SectionLink key={link.section} section={link.section} className={footerLink}>
@@ -63,7 +64,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                 Sign in
               </Link>
             </nav>
-            <nav aria-label="Open source" className="flex flex-col gap-2.5">
+            <nav aria-label="Open source" className="flex flex-col gap-2.5 max-sm:gap-0">
               <p className={footerHeading}>Open source</p>
               <a href={LINKS.github} className={footerLink} target="_blank" rel="noopener noreferrer">
                 GitHub
@@ -75,7 +76,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
                 MIT license
               </a>
             </nav>
-            <nav aria-label="Legal and contact" className="flex flex-col gap-2.5">
+            <nav aria-label="Legal and contact" className="flex flex-col gap-2.5 max-sm:gap-0">
               <p className={footerHeading}>Company</p>
               <Link href="/privacy" className={footerLink}>
                 Privacy
@@ -90,7 +91,7 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           </div>
           <div className="mx-auto w-full max-w-[1280px] border-t border-border px-4 py-5 text-small text-fg-2 md:px-8">
             &copy; <span className="tabular">{new Date().getFullYear()}</span> {BRAND_NAME}. Built by{' '}
-            <a href={CREDIT_URL} rel="author" className="rounded-chip underline underline-offset-2 transition-colors duration-120 hover:text-fg">
+            <a href={CREDIT_URL} rel="author" className="rounded-chip max-sm:inline-flex max-sm:min-h-11 max-sm:items-center underline underline-offset-2 transition-colors duration-120 hover:text-fg">
               {AUTHOR.name}
             </a>
           </div>

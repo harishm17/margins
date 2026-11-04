@@ -10,8 +10,8 @@ export default function FocusNotFound() {
     <div className="px-4 pt-16">
       <NotFoundPanel
         body="The exam may have been deleted, or the address is not quite right."
-        action={courseId ? { href: `/courses/${courseId}/exams`, label: 'Back to mock exams' } : { href: '/home', label: 'Go to home' }}
-        secondary={courseId ? { href: '/home', label: 'Go to home' } : undefined}
+        action={courseId ? { href: `/courses/${courseId}/exams`, label: 'Back to mock exams' } : { href: '/home', label: 'Go to your courses' }}
+        secondary={courseId ? { href: '/home', label: 'Go to your courses' } : undefined}
       />
     </div>
   )

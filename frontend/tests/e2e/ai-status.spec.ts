@@ -40,12 +40,12 @@ test('while AI is unavailable: a banner on every page, and AI actions are off wi
 
   await page.goto(`${course}/exams/new`)
   await expect(page.getByRole('button', { name: 'Create exam' })).toBeDisabled()
-  await expect(page.getByText(PAUSED)).toBeVisible()
+  await expect(page.locator('main').getByText(PAUSED)).toBeVisible()
 
   await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
   await page.getByLabel('Ask about your materials').fill('What is hashing?')
   await expect(page.getByRole('button', { name: 'Send question' })).toBeDisabled()
-  await expect(page.getByText(PAUSED)).toBeVisible()
+  await expect(page.locator('main').getByText(PAUSED)).toBeVisible()
 
   // The API refuses too, before anything is created, with a typed code and no operator wording.
   const refused = await page.request.post(`/api/projects/${demoIds().course}/generate-exam`, {
@@ -88,6 +88,7 @@ test('mock exam: submitted during an outage, the answers are saved and graded on
   test.setTimeout(300_000)
   await signIn(page)
   await page.goto(`${course}/exams/new`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '10', exact: true }).click()
   await page.getByRole('button', { name: 'Create exam' }).click()
   await expect(page).toHaveURL(/\/exams\/[0-9a-f-]{36}$/, { timeout: 180_000 })
@@ -146,6 +147,7 @@ test('mock exam: a failed exam goes back to the form with every choice kept', as
   test.setTimeout(240_000)
   await signIn(page)
   await page.goto(`${course}/exams/new`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '10', exact: true }).click()
   await page.getByRole('radio', { name: '30 min' }).click()
 

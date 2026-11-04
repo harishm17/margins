@@ -7,7 +7,7 @@ import { Button, type ButtonProps } from '@/components/ui/button'
 import { toast } from '@/components/ui/toaster'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { track as trackEvent } from '@/lib/analytics/track'
-import { formatClock } from '@/lib/format'
+import { formatClock, pluralize } from '@/lib/format'
 
 /** Whole seconds left, counted down in the browser from the server's figure. */
 function useCountdown(initialSeconds: number | null): number | null {
@@ -57,6 +57,40 @@ export function StartExamButton({ courseId, examId, resumeSeconds = null, label,
   return (
     <Button variant={variant} size={size} loading={busy} onClick={start} className="tabular">
       {text}
+    </Button>
+  )
+}
+
+/**
+ * "Practice what you missed": a review session of new questions on the ideas the missed ones were about (not the exam's own
+ * questions again). The count is what the session is set up to serve, and it is on the button.
+ */
+export function PracticeMissedButton({ courseId, submissionId, count }: { courseId: string; submissionId: string; count: number }) {
+  const router = useRouter()
+  const [busy, setBusy] = React.useState(false)
+
+  async function start() {
+    setBusy(true)
+    try {
+      const created = await apiFetch<{ status: 'created' | 'empty'; sessionId?: string }>(`/api/projects/${courseId}/review-sessions`, {
+        method: 'POST',
+        body: JSON.stringify({ examSubmissionId: submissionId }),
+      })
+      if (created.status !== 'created' || !created.sessionId) {
+        toast("There's nothing new to practise from this exam yet.")
+        setBusy(false)
+        return
+      }
+      router.push(`/courses/${courseId}/review/session?session=${encodeURIComponent(created.sessionId)}`)
+    } catch (error) {
+      toast.error(isApiError(error) ? error.message : "Couldn't start the practice. Try again.")
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Button variant="primary" size="md" loading={busy} onClick={start} className="tabular">
+      {`Practice ${pluralize(count, 'new question')} on what you missed`}
     </Button>
   )
 }

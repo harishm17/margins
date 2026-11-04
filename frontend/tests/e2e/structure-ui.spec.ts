@@ -35,8 +35,8 @@ test.describe('the demo course', () => {
     await expect(second.getByText('Week 2', { exact: true })).toBeVisible()
     await expect(second.getByRole('listitem')).toHaveCount(2)
 
-    // The topic that belongs to no unit sits in a plain "Topics" group.
-    const loose = page.getByRole('region', { name: 'Topics', exact: true })
+    // The topic that belongs to no unit sits in a group of its own, named for what it is.
+    const loose = page.getByRole('region', { name: 'Not in a unit', exact: true })
     await expect(loose.getByRole('link', { name: /Discrete random variables/ })).toBeVisible()
 
     // "Needs work" is one list across units.
@@ -81,6 +81,9 @@ test.describe('the demo course', () => {
 
   test('the topic header shows objectives, prerequisites, sources and time', async ({ page }) => {
     await page.goto(`/courses/${course}/topics/${topics[1]}?view=read`)
+    // The title and one status line stay; what the topic covers opens from "About this topic".
+    await expect(page.getByRole('region', { name: 'About this topic' })).toHaveCount(0)
+    await page.getByRole('button', { name: /About this topic/ }).click()
     const about = page.getByRole('region', { name: 'About this topic' })
     await expect(about.getByRole('heading', { level: 2, name: 'By the end you can' })).toBeVisible()
     await expect(about.getByRole('listitem').filter({ hasText: 'run breadth-first and depth-first search by hand' })).toBeVisible()
@@ -90,6 +93,7 @@ test.describe('the demo course', () => {
     // Prerequisites link to the topic.
     await about.getByRole('link', { name: 'Sorting algorithms' }).click()
     await expect(page).toHaveURL(new RegExp(`/topics/${topics[0]}`))
+    await page.getByRole('button', { name: /About this topic/ }).click()
 
     // Sources link to the file viewer at the page; math in an objective is typeset.
     const source = page.getByRole('region', { name: 'About this topic' }).getByRole('link', { name: 'algorithms.pdf, pp. 1-2' })
@@ -152,6 +156,8 @@ test.describe('the demo course', () => {
     await expect(body(page).getByText('From lecture-notes.pdf, p. 7')).toBeVisible()
 
     await page.goto(`/courses/${course}/topics/${mathTopic}?view=practice`)
+    // A problem's kind, time and sources are one folded row, "About this problem".
+    await page.getByRole('button', { name: 'About this problem' }).click()
     await expect(page.getByRole('link', { name: 'algorithms.pdf, pp. 3-4' })).toBeVisible()
 
     // Content written by the mock service carries sources too.
@@ -186,10 +192,10 @@ test.describe('the demo course', () => {
   test('materials show a role badge on each file', async ({ page }) => {
     await page.goto(`/courses/${course}/materials`)
     await expect(page.getByRole('columnheader', { name: 'Used as' })).toBeVisible()
-    // One label per file: the role. The upload category is not a column of its own.
+    // One label per file: the category it was uploaded under while its role is still content. The upload category is not a column of its own.
     await expect(page.getByRole('columnheader', { name: 'Type' })).toHaveCount(0)
-    await expect(page.getByRole('row', { name: /algorithms\.pdf/ }).getByText('Content', { exact: true }).filter({ visible: true })).toBeVisible()
-    await expect(page.getByRole('radiogroup', { name: 'Use these as:' }).getByRole('radio', { name: 'Syllabus or schedule' })).toBeVisible()
+    await expect(page.getByRole('row', { name: /algorithms\.pdf/ }).getByText('Lecture notes', { exact: true }).filter({ visible: true })).toBeVisible()
+    await expect(page.getByRole('radiogroup', { name: 'For the next upload:' }).getByRole('radio', { name: 'Syllabus or schedule' })).toBeVisible()
     // One uploader on the page (a second one can only be a view that is still leaving).
     const hint = page.getByText("PDFs need selectable text. Scans can't be read.", { exact: false })
     await expect(hint).toHaveCount(1)
@@ -234,7 +240,7 @@ test.describe('a course built to be edited', () => {
     await expect(body(page).getByText('5 topics in 3 units')).toBeVisible()
 
     // Move "Slicing" from Arrays to Trees.
-    await page.getByRole('button', { name: 'Actions for Slicing' }).click()
+    await page.getByRole('button', { name: 'Move Slicing' }).click()
     await page.getByRole('menuitem', { name: 'Move to unit...' }).click()
     const dialog = page.getByRole('dialog', { name: 'Move topic' })
     await expect(dialog).toBeVisible()
@@ -273,7 +279,9 @@ test.describe('a course built to be edited', () => {
     await signIn(page, email)
     await page.goto(`/courses/${courseId}/topics?edit=1`)
 
-    await page.getByRole('button', { name: 'Add unit' }).click()
+    // Adding a unit is a course action, not a header button.
+    await page.getByRole('button', { name: 'Course actions' }).click()
+    await page.getByRole('menuitem', { name: 'Add unit' }).click()
     const dialog = page.getByRole('dialog', { name: 'Add a unit' })
     await dialog.getByLabel('Title').fill('Graphs')
     await dialog.getByLabel('Week').fill('Week 4')
@@ -325,7 +333,7 @@ test.describe('a course built to be edited', () => {
     expect(upload.ok()).toBeTruthy()
     await page.goto(`/courses/${courseId}/materials`)
     const row = page.getByRole('row', { name: /notes\.pdf/ })
-    await expect(row.getByText('Content', { exact: true }).filter({ visible: true })).toBeVisible()
+    await expect(row.getByText('Lecture notes', { exact: true }).filter({ visible: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Actions for notes.pdf' }).click()
     await page.getByRole('menuitem', { name: 'Use as' }).click()

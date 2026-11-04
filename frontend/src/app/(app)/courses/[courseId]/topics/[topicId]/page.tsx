@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { ChatsCircle, Hourglass } from '@phosphor-icons/react/dist/ssr'
 import { bareTopicRedirect } from '@/features/topic/activity-copy'
+import { EntryPreparing } from '@/features/topic/entry-preparing'
 import { ExamplesView } from '@/features/topic/examples-view'
 import { ContentGate } from '@/features/topic/generation-ui'
 import { ExplainerGate } from '@/features/topic/explainer-gate'
@@ -14,6 +15,7 @@ import { StepPlaceholder } from '@/features/topic/step-placeholder'
 import { parseView } from '@/features/topic/types'
 import { VoiceView } from '@/features/topic/voice-view'
 import { WarmupView } from '@/features/topic/warmup-view'
+import { voiceQuizStatus } from '@/lib/voice/drill-pack'
 import { explainerAccess, loadGapExplainer } from '@/lib/learning/explainer-server'
 import { prisma } from '@/lib/db/prisma'
 import { fadeStart, type FadeLevel } from '@/lib/learning/fade'
@@ -39,13 +41,16 @@ type SearchParams = Promise<{
   focus?: string | string[]
   /** The examples' starting level when the next activity asks for it (`full` after two fails). */
   fade?: string | string[]
+  /** `1` on the address a topic nobody has started opens on: the preparation screen, which moves on to the warm-up when it is written. */
+  entry?: string | string[]
 }>
 
 export async function generateMetadata({ params }: { params: Params }) {
   const user = await requireUser()
   const { courseId, topicId } = await params
   const data = await getTopicPage(user.id, courseId, topicId)
-  return { title: data?.topic.name ?? 'Topic' }
+  // A topic that does not exist shows the not-found page, so the tab says so.
+  return { title: data?.topic.name ?? 'Page not found' }
 }
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value)
@@ -62,7 +67,7 @@ const FADE_LEVELS: FadeLevel[] = ['full', 'partial', 'problem_first']
 export default async function TopicPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const user = await requireUser()
   const { courseId, topicId } = await params
-  const { view: requested, set: requestedSet, start, difficulty, mode, concept, style, focus, fade } = await searchParams
+  const { view: requested, set: requestedSet, start, difficulty, mode, concept, style, focus, fade, entry } = await searchParams
   const focusConceptId = first(focus) ?? null
   const data = await getTopicPage(user.id, courseId, topicId)
   if (!data) notFound()
@@ -70,7 +75,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
   const base = `/courses/${courseId}/topics/${topicId}`
   const wanted = parseView(first(requested))
   // The layout has already sent a bare address on; this is the same decision for a request it did not see the path of.
-  if (!wanted) redirect(bareTopicRedirect(base, null, data.nextActivity) ?? base)
+  if (!wanted) redirect(bareTopicRedirect(base, null, data.nextActivity, data.preparingEntry) ?? base)
 
   const { content, topic } = data
   // After the notes: recall when the path has it, else practice (a topic without concepts is Read, Practice, Quiz).
@@ -96,11 +101,19 @@ export default async function TopicPage({ params, searchParams }: { params: Para
     </>
   )
 
+  // The address a topic nobody has started opens on. While its warm-up is being written it is the preparation screen; once
+  // the topic is ready the screen replaces itself with the bare address, which names the first step (the warm-up).
+  if (first(entry) === '1' && (wanted === 'read' || wanted === 'warmup')) {
+    return <EntryPreparing ready={!data.preparingEntry} intro={data.showEffortIntro} target={bareTopicRedirect(base, null, data.nextActivity) ?? base} readHref={`${base}?view=read`} />
+  }
+
   switch (wanted) {
     case 'warmup':
+      // Being prepared: the step is in the path, and says so until the questions are written.
+      if (data.preparingEntry) return <EntryPreparing ready={false} intro={data.showEffortIntro} target={base} readHref={`${base}?view=read`} />
       // No bank and none taken: the step is not offered, and its address goes on to reading.
       if (!data.pathSteps.includes('warmup')) redirect(`${base}?view=read`)
-      return <WarmupView topicId={topicId} readHref={`${base}?view=read`} quizHref={`${base}?view=quiz`} initial={await withFocusCount(user.id, topicId, await loadWarmupState(user.id, topicId))} />
+      return <WarmupView topicId={topicId} courseId={courseId} readHref={`${base}?view=read`} quizHref={`${base}?view=quiz`} initial={await withFocusCount(user.id, topicId, await loadWarmupState(user.id, topicId))} />
     case 'recall':
       // A topic without concepts (from before v3, or extraction failed) has no recall; its path is Read, Practice, Quiz.
       if (!data.pathSteps.includes('recall')) redirect(`${base}?view=practice`)
@@ -159,7 +172,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
     // The explainer (spec §5.4): locked until a recall or the thin-source unlock, and the server refuses its text until then.
     case 'explainer': {
       const access = await explainerAccess(user.id, topicId)
-      if (!access?.open) return <ExplainerGate topicId={topicId} recallHref={`${base}?view=recall`} canUnlock={access?.canUnlock ?? false} />
+      if (!access?.open) return <ExplainerGate topicId={topicId} recallHref={`${base}?view=recall`} readHref={`${base}?view=read`} canUnlock={access?.canUnlock ?? false} />
       const gaps = await loadGapExplainer(user.id, topicId)
       // The explainer opened for a concept (from the next activity, a pointer list or the map) is instruction on it
       // (spec 18.5): the gap explainer when there are gaps, else the full lesson. Once per concept per day.
@@ -192,6 +205,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
           {content.examples ? (
             <ExamplesView
               topicId={topicId}
+              courseId={courseId}
               examples={content.examples}
               completed={topic.progress.examples}
               nextHref={`${base}?view=practice`}
@@ -229,7 +243,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
         </ContentGate>
       )
     default: {
-      const claims = await teachBackClaims(topicId, first(concept))
+      const [claims, quiz] = await Promise.all([teachBackClaims(topicId, first(concept)), voiceQuizStatus([topicId], user.id)])
       return (
         <VoiceView
           courseId={courseId}
@@ -238,6 +252,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
           conceptId={first(concept)}
           hasClaims={claims.hasClaims}
           claimsOfIdea={claims.ofIdea}
+          quiz={quiz}
         />
       )
     }

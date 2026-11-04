@@ -18,9 +18,11 @@ import { WARMUP_IDK_ANSWER } from '@/lib/learning/warmup-idk'
 import type { WarmupDoneItem, WarmupState } from '@/lib/learning/warmup-session'
 import { useQuestionMotion } from '@/lib/question-motion'
 import { cn } from '@/lib/utils'
+import { statusLabel, useServerDraft } from '@/features/learning/use-server-draft'
+import { parseReviewDraft, type ReviewDraft } from '@/lib/drafts/review-draft'
 import { ConfidenceRow, optionCountOf } from './quiz-confidence'
 import { formatAnswer, formatKey } from './quiz-format'
-import { useActivityInProgress } from './topic-provider'
+import { useActivityInProgress, useAttemptFocus } from './topic-provider'
 import { useFocusWhen } from '@/lib/hooks/use-focus'
 
 /** A finished warm-up also says how many passages the reader marks Focus here. */
@@ -28,6 +30,8 @@ export type WarmupDisplay = WarmupState | (Extract<WarmupState, { status: 'done'
 
 type Props = {
   topicId: string
+  /** The course, which the unsent answer is kept under. */
+  courseId: string
   /** Where "Start reading" goes. */
   readHref: string
   /** Where the test-out offer goes. */
@@ -42,7 +46,7 @@ const LEVEL_WORDS = CONFIDENCE_WORDS
  * hints. Nothing is marked while the student is answering; the answers, and where in their files to find each,
  * come at the end. Skipping ("Start reading") sets nothing.
  */
-export function WarmupView({ topicId, readHref, quizHref, initial }: Props) {
+export function WarmupView({ topicId, courseId, readHref, quizHref, initial }: Props) {
   const router = useRouter()
   const [state, setState] = React.useState<WarmupDisplay>(initial)
   const [starting, setStarting] = React.useState(false)
@@ -77,7 +81,7 @@ export function WarmupView({ topicId, readHref, quizHref, initial }: Props) {
   }, [router])
 
   if (state.status === 'asking') {
-    return <Question key={`${state.sessionId}:${state.index}`} topicId={topicId} state={state} moved={moved} onState={advance} onFinished={finished} />
+    return <Question key={`${state.sessionId}:${state.index}`} topicId={topicId} courseId={courseId} state={state} moved={moved} onState={advance} onFinished={finished} />
   }
   if (state.status === 'done') return <Results state={state} readHref={readHref} quizHref={quizHref} focusHeading={moved} />
 
@@ -88,7 +92,7 @@ export function WarmupView({ topicId, readHref, quizHref, initial }: Props) {
       </h2>
       <p className="mt-3 text-body text-fg-2">
         {state.status === 'ready' ? `${state.total} questions, one at a time. ` : ''}
-        You will probably miss some. That is the point: it shows you what to look for, and what you read afterwards sticks better.
+        It is fine to miss these: they show you where to focus your reading, and what you read afterwards sticks better.
       </p>
       <p className="mt-2 text-body text-fg-2">There are no hints, and none of this counts toward your quiz scores.</p>
       {error ? (
@@ -112,23 +116,38 @@ export function WarmupView({ topicId, readHref, quizHref, initial }: Props) {
 
 function Question({
   topicId,
+  courseId,
   state,
   moved,
   onState,
   onFinished,
 }: {
   topicId: string
+  courseId: string
   state: Extract<WarmupState, { status: 'asking' }>
   moved: boolean
   onState: (state: WarmupDisplay) => void
   onFinished: () => void
 }) {
-  const [draft, setDraft] = React.useState<QuizAnswer>({ answer: '' })
+  // The unsent answer and its confidence live on the server (spec 18.7): a reload, a closed tab or another device keeps them.
+  // Warm-up sessions are item sessions like a review's, so they share its draft shape.
+  const draftHook = useServerDraft<ReviewDraft>('review', `${state.sessionId}:${state.index}`, { projectId: courseId, parse: parseReviewDraft })
+  const [typed, setTyped] = React.useState<QuizAnswer | null>(null)
+  const draft: QuizAnswer = typed ?? (draftHook.value as QuizAnswer | null) ?? { answer: '' }
+  const setDraft = (update: (current: QuizAnswer) => QuizAnswer) => {
+    const next = update(draft)
+    setTyped(next)
+    if (next.answer || next.confidence !== undefined) draftHook.set(next as ReviewDraft)
+    else void draftHook.clear()
+  }
+  const saved = draft.answer || draft.confidence !== undefined ? statusLabel(draftHook.status) : null
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const headingRef = React.useRef<HTMLHeadingElement>(null)
   const motion = useQuestionMotion(state.position)
   const last = state.position === state.total
+  // A question being answered is an attempt: on a phone the topic's header and path give way to a small bar with Exit.
+  useAttemptFocus(true)
 
   React.useEffect(() => {
     if (moved) headingRef.current?.focus({ preventScroll: true })
@@ -155,6 +174,8 @@ function Question({
               },
         },
       })
+      // The answer is in: the draft has done its work. Cleared only now, so a failed save keeps what was typed.
+      await draftHook.clear()
       onState(next)
       if (next.status === 'done') onFinished()
     } catch (caught) {
@@ -172,8 +193,8 @@ function Question({
         </h2>
         <p className="text-small text-fg-2">No hints</p>
       </div>
-      <Progress aria-label="Warm-up questions answered" className="mt-4" value={((state.position - 1) / state.total) * 100} />
-      <div className={cn('mt-8', motion)} data-question="">
+      <Progress aria-label="Warm-up questions answered" className="mt-3 sm:mt-4" value={((state.position - 1) / state.total) * 100} />
+      <div className={cn('mt-5 sm:mt-8', motion)} data-question="">
         <QuestionRenderer question={state.question} value={draft.answer} onChange={(answer) => setDraft((d) => ({ ...d, answer }))} showPoints={false} shortcuts />
         <ConfidenceRow
           value={draft.confidence}
@@ -187,11 +208,16 @@ function Question({
             {error}
           </InlineAlert>
         ) : null}
-        <div className="mt-10 flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
+        <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-border pt-4 sm:mt-10 sm:pt-5">
+          {saved ? (
+            <span role="status" className="mr-auto text-caption text-fg-3" data-testid="warmup-draft-status">
+              {saved}
+            </span>
+          ) : null}
           <Button variant="ghost" onClick={() => void submit(true)} disabled={submitting} data-testid="warmup-idk">
             I don&apos;t know
           </Button>
-          <Button variant="primary" onClick={() => void submit()} loading={submitting} disabled={!draft.answer.trim() || draft.confidence === undefined}>
+          <Button variant="primary" onClick={() => void submit()} loading={submitting} disabled={!draft.answer.trim() || draft.confidence === undefined} disabledReason={!draft.answer.trim() ? 'Pick an answer first.' : 'Tap how sure you are first.'}>
             <span className="inline-flex items-center gap-1.5">
               {last ? 'See answers' : 'Next question'}
               <ArrowRight className="size-4" />
@@ -220,7 +246,7 @@ function ResultRow({ item }: { item: WarmupDoneItem }) {
           <MinusCircle aria-hidden="true" weight="fill" className="mt-0.5 size-5 shrink-0 text-fg-3" />
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-caption text-fg-3">
+          <p className={cn('text-small font-medium', item.correct ? 'text-accent' : 'text-fg-2')}>
             {item.position}. {item.correct ? 'Right' : 'Not quite'}
           </p>
           <h3 className="mt-0.5 text-body-strong text-fg">
@@ -262,26 +288,37 @@ function Results({ state, readHref, quizHref, focusHeading }: { state: Extract<W
   return (
     <section aria-labelledby="warmup-done-heading" className="max-w-[640px]">
       <h2 ref={headingRef} id="warmup-done-heading" className="text-title text-fg outline-none">
-        Warm-up done
+        Warm-up done: here&apos;s what to focus on
       </h2>
       <p className="mt-2 text-body text-fg-2">
-        {right} of {plural(state.items.length, 'question')} right. The reading explains the rest: each answer below says where to find it.
+        Each answer below says where to find it, and the reading explains the rest. You got {right} of {plural(state.items.length, 'question')} right.
       </p>
       {right < state.items.length ? (
         <div aria-live="polite" className="mt-2">
           <ExpectedMiss surface="warmup_results" />
         </div>
       ) : null}
-      <ol className="mt-6 divide-y divide-border">
+      {/* The way on is at the top, with what the reading will mark: the answers below are for looking things up, not a page to get through first. */}
+      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button asChild variant="primary">
+          <Link href={readHref} scroll={false}>
+            <span className="inline-flex items-center gap-1.5">
+              Start reading
+              <ArrowRight className="size-4" />
+            </span>
+          </Link>
+        </Button>
+        {focus > 0 ? (
+          <p className="min-w-0 flex-1 basis-56 text-small text-fg-2">
+            {plural(focus, 'passage')} in the reading {focus === 1 ? 'is' : 'are'} marked Focus here, for the ideas you missed or guessed. Everything is still there to read.
+          </p>
+        ) : null}
+      </div>
+      <ol className="mt-6 divide-y divide-border border-t border-border pt-5">
         {state.items.map((item) => (
           <ResultRow key={item.position} item={item} />
         ))}
       </ol>
-      {focus > 0 ? (
-        <InlineAlert className="mt-6" tone="neutral">
-          {plural(focus, 'passage')} in the reading {focus === 1 ? 'is' : 'are'} marked Focus here, for the ideas you missed or guessed. Everything is still there to read.
-        </InlineAlert>
-      ) : null}
       {state.testOut ? (
         <InlineAlert
           className="mt-4"
@@ -299,16 +336,6 @@ function Results({ state, readHref, quizHref, focusHeading }: { state: Extract<W
           You got every question right and were sure of each one.
         </InlineAlert>
       ) : null}
-      <div className="mt-8 flex items-center gap-3 border-t border-border pt-5">
-        <Button asChild variant="primary">
-          <Link href={readHref} scroll={false}>
-            <span className="inline-flex items-center gap-1.5">
-              Start reading
-              <ArrowRight className="size-4" />
-            </span>
-          </Link>
-        </Button>
-      </div>
     </section>
   )
 }

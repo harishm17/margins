@@ -9,13 +9,15 @@ type FieldProps = {
   error?: React.ReactNode
   /** Adds "(optional)" after the label. Required fields are never starred. */
   optional?: boolean
+  /** Adds "(required)" after the label: for the one required field among optional ones, so it is not the unmarked one. */
+  required?: boolean
   /** One form control. It receives id, aria-invalid, aria-describedby and (unless it is named already) aria-labelledby. */
   children: React.ReactElement<Record<string, unknown>>
   className?: string
   id?: string
 }
 
-export function Field({ label, hint, error, optional, children, className, id }: FieldProps) {
+export function Field({ label, hint, error, optional, required, children, className, id }: FieldProps) {
   const generated = React.useId()
   const controlId = id ?? generated
   const hintId = `${controlId}-hint`
@@ -38,11 +40,12 @@ export function Field({ label, hint, error, optional, children, className, id }:
       <label id={labelId} htmlFor={controlId} className="text-small font-medium text-fg">
         {label}
         {optional ? <span className="font-normal text-fg-3"> (optional)</span> : null}
+        {required ? <span className="font-normal text-fg-3"> (required)</span> : null}
       </label>
       {control}
       {error ? (
-        <p id={errorId} role="alert" className="flex items-start gap-1.5 text-caption font-normal text-danger-soft-fg">
-          <WarningCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+        <p id={errorId} role="alert" className="flex items-start gap-1.5 text-small font-normal text-danger-soft-fg">
+          <WarningCircle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
           {error}
         </p>
       ) : hint ? (

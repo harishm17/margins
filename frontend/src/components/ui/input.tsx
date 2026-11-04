@@ -39,7 +39,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
         ref={ref}
         aria-invalid={invalid || undefined}
         className={cn(
-          'h-full min-w-0 flex-1 bg-transparent text-body text-fg outline-none placeholder:text-fg-3 disabled:cursor-not-allowed',
+          'h-full min-w-0 flex-1 bg-transparent text-body max-sm:-my-px max-sm:h-[calc(100%+2px)] max-sm:text-[16px] text-fg outline-none placeholder:text-fg-3 disabled:cursor-not-allowed',
           className
         )}
         {...props}

@@ -13,6 +13,8 @@ import { unitTopicIds } from './unit-topics'
  */
 
 export type ActivityKind =
+  /** A topic nobody has opened yet: opening it starts its preparation, and the topic then names its first step. */
+  | 'start'
   | 'instruct'
   | 'fix_misconception'
   | 'warmup'
@@ -69,6 +71,12 @@ export type TopicConceptState = {
 export type TopicLearningState = {
   /** The topic's active concepts. Empty for a topic whose extraction failed, has not run, or predates v3. */
   concepts: TopicConceptState[]
+  /** Something has been prepared for the topic: concepts, a warm-up bank or any written content. False only for a topic nobody has opened yet. */
+  prepared: boolean
+  /** At least 80% of the practice steps are solved (the same share the path and the Topics list use for a finished Practice). */
+  practiceDone: boolean
+  /** Practice problems are written for the topic. Without them, opening Practice has to write them, which needs the model. */
+  practiceWritten: boolean
   /** The warm-up bank exists. */
   warmupReady: boolean
   warmupAt: Date | null
@@ -121,6 +129,7 @@ type StretchKind = (typeof STRETCH_ORDER)[number]
 
 /** The activities that need the model, and the sentence that says so when one is passed over (spec 18.9). */
 const AI_DOWN_NOTE = {
+  practice: 'Practice is not written yet and needs the AI, which is down. This works without it.',
   recall: 'Recall needs the AI, which is down. This works without it.',
   explainer: "The explainer isn't written yet and needs the AI, which is down. This works without it.",
   teach_back: 'Explaining it back needs the AI, which is down. This works without it.',
@@ -175,12 +184,28 @@ export function nextActivity(s: TopicLearningState, ctx: NextActivityContext): N
   // with a strong quiz, and for a quick pass (spec 18.6, 18.8).
   const skipsReadAndRecall = s.testedOutAt !== null || s.triage === 'quick'
 
-  // A topic without concepts keeps the old path: read the notes, take the quiz, then practise. Recall,
-  // reviews and drills all need concepts.
+  // Practice comes before the first quiz on the path. It is left for the quiz when the student chose a quick pass, when it is
+  // done, and when it would have to be written with the AI down (then the quiz's reason says so).
+  const practiceBeforeQuiz = !s.practiceDone && s.triage !== 'quick'
+  const practiceFirst = practiceBeforeQuiz && (aiUp || s.practiceWritten)
+
+  // A topic nobody has opened yet has no first step to name: its warm-up, concepts and reading are all made when it is
+  // opened, and which of them comes first depends on what that makes. It goes to the topic itself, which names the step
+  // once it is ready (the page and the path do), instead of to a step it may not start with.
+  if (!s.prepared && !s.hasAnyEvidence && !s.readAt && !skipsReadAndRecall) {
+    return { kind: 'start', conceptIds: [], reason: 'Margins gets this topic ready when you open it, then starts you on a short warm-up.' }
+  }
+
+  // A topic without concepts keeps the old path, in the order the path shows it: Read, Practice, Quiz. Recall,
+  // reviews and drills all need concepts. Practice comes before the first quiz; after it, practice keeps the topic fresh.
   if (s.concepts.length === 0) {
-    if (!s.readAt && !skipsReadAndRecall) return { kind: 'read', conceptIds: [], reason: 'Start with the notes for this topic.' }
-    if (!s.hasAnyEvidence) return { kind: 'quiz', conceptIds: [], reason: 'Take the quiz to see what you know.' }
-    return { kind: 'practice', conceptIds: [], reason: 'Practise to keep it fresh.' }
+    if (!s.readAt && !skipsReadAndRecall) return { kind: 'read', conceptIds: [], reason: 'Read the topic next.' }
+    if (!s.hasAnyEvidence) {
+      if (practiceFirst) return { kind: 'practice', conceptIds: [], reason: 'Work through the practice, then take the quiz.' }
+      if (practiceBeforeQuiz) passOver('practice')
+      return pick({ kind: 'quiz', conceptIds: [], reason: 'Take the quiz to see what you know.' })
+    }
+    return { kind: 'practice', conceptIds: [], reason: 'Practice to keep it fresh.' }
   }
 
   // 1. Instruction: a concept whose latest retrieval failed, with nothing shown since. It goes to the gap explainer when a
@@ -254,11 +279,17 @@ export function nextActivity(s: TopicLearningState, ctx: NextActivityContext): N
   // 10. Not yet solid: a quiz when there is no quiz evidence, practice otherwise.
   const open = s.concepts.filter((c) => c.mastery < SOLID).sort(byLowest((c) => c.mastery))
   const unquizzed = open.filter((c) => !c.hasQuizEvidence)
+  // The path is Practice, then Quiz, so the first quiz waits for the practice. A quick pass goes straight to the quiz
+  // (it skips the slow steps), and so does a topic whose practice is already worked through.
+  if (unquizzed.length > 0 && practiceFirst) {
+    return pick({ kind: 'practice', conceptIds: unquizzed.map((c) => c.id), reason: 'Work through the practice, then take the quiz.' })
+  }
   if (unquizzed.length > 0) {
+    if (practiceBeforeQuiz) passOver('practice')
     return pick({ kind: 'quiz', conceptIds: unquizzed.map((c) => c.id), reason: 'Take the quiz to see where you stand.' })
   }
   if (open.length > 0) {
-    return pick({ kind: 'practice', conceptIds: open.map((c) => c.id), reason: 'Practise what is not solid yet.' })
+    return pick({ kind: 'practice', conceptIds: open.map((c) => c.id), reason: 'Practice what is not solid yet.' })
   }
 
   // 11. Everything solid: the stretch rotation once each concept has enough unaided evidence. With the AI down it uses the
@@ -308,6 +339,9 @@ export type ActivityContext = {
 export function activityHref(kind: ActivityKind, ctx: ActivityContext): string {
   const base = `/courses/${ctx.courseId}/topics/${ctx.topicId}`
   switch (kind) {
+    case 'start':
+      // The bare topic address: the topic sends the student on to its first step (bareTopicRedirect).
+      return base
     case 'fix_misconception':
     case 'prerequisite_drill':
       // A drill on one concept; the session adds its weakest prerequisite or confusable.

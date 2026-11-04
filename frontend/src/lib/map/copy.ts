@@ -26,7 +26,7 @@ export const START_HERE_TEXT = 'Start here'
  */
 export function frontierKeyText(count: number): string {
   const line = `${FRONTIER_TEXT}: what you need is well remembered`
-  return count > 1 ? `${line}. ${START_HERE_TEXT} is the first of them.` : line
+  return count > 1 ? `${line}. The ring marks ${START_HERE_TEXT}, the first of them.` : `${line}. The ring marks it.`
 }
 
 /**

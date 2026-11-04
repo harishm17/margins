@@ -60,6 +60,7 @@ test('a mock exam resumed after a reload shows its question without moving (at 2
   test.setTimeout(240_000)
   await signIn(page, DEMO_EMAIL)
   await page.goto(`/courses/${course}/exams/new`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '10', exact: true }).click()
   await page.getByRole('radio', { name: '30 min' }).click()
   await page.getByRole('button', { name: 'Create exam' }).click()

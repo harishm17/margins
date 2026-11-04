@@ -138,7 +138,7 @@ async function sweep(userId: string, files: DeletionFiles, log: DeletionLog) {
 /** What the student types to confirm. */
 export const CONFIRM_WORD = 'DELETE'
 
-/** True when the typed text confirms the deletion: the word, ignoring surrounding spaces. */
+/** True when the typed text confirms the deletion: the word, ignoring surrounding spaces and capitals (a phone's keyboard starts lower case). */
 export function confirmsDeletion(typed: string): boolean {
-  return typed.trim() === CONFIRM_WORD
+  return typed.trim().toUpperCase() === CONFIRM_WORD
 }

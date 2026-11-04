@@ -137,6 +137,8 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
   const takenToday = refused === true || (hydratedToday !== null && setAttempts.some((attempt) => dayOf(new Date(attempt.takenAt), browserTimeZone()) === hydratedToday))
   const [predicted, setPredicted] = React.useState(SKIP)
   const predictedId = React.useId()
+  const retryNoteId = React.useId()
+  const showNewSet = !(takenToday && onNewQuestions)
   // A prediction was for the set it was made on.
   const predictedHere = predicted === SKIP || Number(predicted) <= set.questions.length ? predicted : SKIP
 
@@ -144,11 +146,14 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
     <div className="max-w-[720px]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-heading text-fg">Quiz</h2>
-        <GenerateOptions kind="quiz" mode="regenerate" submitLabel="Create quiz set" align="end">
-          <Button size="sm" variant="secondary" icon={<Plus />} disabled={generating}>
-            New quiz set
-          </Button>
-        </GenerateOptions>
+        {/* One way to a new set at a time: once this set has been taken today, "New questions" below is it. */}
+        {showNewSet ? (
+          <GenerateOptions kind="quiz" mode="regenerate" submitLabel="Create quiz set" align="end">
+            <Button size="sm" variant="ghost" icon={<Plus />} disabled={generating}>
+              New quiz set
+            </Button>
+          </GenerateOptions>
+        ) : null}
       </div>
 
       {harder && !generating ? (
@@ -238,7 +243,7 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
 
           <div className="mt-5">
             <label htmlFor={predictedId} className="text-small text-fg-2">
-              How many do you expect to get right? Optional.
+              Guess your score to compare it with your result (optional)
             </label>
             <Select
               id={predictedId}
@@ -275,12 +280,20 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
             </div>
           ) : takenToday ? (
             <div className="mt-6" data-testid="retry-tomorrow">
-              <p className="text-small text-fg-2">{RETRY_WAIT_TEXT}</p>
-              {onNewQuestions ? (
-                <Button className="mt-3" size="lg" variant="primary" icon={<Sparkle />} onClick={onNewQuestions}>
-                  New questions
+              <p id={retryNoteId} className="text-small text-fg-2">
+                {RETRY_WAIT_TEXT}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                {/* The attempted set has a visible state of its own: it is not lost, it opens tomorrow. */}
+                <Button size="lg" variant="secondary" disabled disabledReason="The same questions open tomorrow.">
+                  Retake tomorrow
                 </Button>
-              ) : null}
+                {onNewQuestions ? (
+                  <Button size="lg" variant="primary" icon={<Sparkle />} onClick={onNewQuestions}>
+                    New questions
+                  </Button>
+                ) : null}
+              </div>
             </div>
           ) : (
             <Button className="mt-6" size="lg" variant="primary" onClick={() => onStart(predictedHere === SKIP ? undefined : Number(predictedHere))}>

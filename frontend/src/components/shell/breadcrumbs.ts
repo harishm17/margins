@@ -40,6 +40,8 @@ export function buildCrumbs(pathname: string, nav: NavLike[]): Crumb[] {
 
   if (parts[0] === 'home') return [{ label: 'Home' }]
 
+  if (parts[0] === 'settings') return [{ label: 'Home', href: '/home' }, { label: 'Settings' }]
+
   if (parts[0] !== 'courses') return []
   if (parts[1] === 'new') return [{ label: 'Home', href: '/home' }, { label: 'New course' }]
 
@@ -67,7 +69,7 @@ export function buildCrumbs(pathname: string, nav: NavLike[]): Crumb[] {
     case 'review':
       return [courseCrumb(false), { label: 'Review' }]
     case 'settings':
-      return [courseCrumb(false), { label: 'Settings' }]
+      return [courseCrumb(false), { label: 'Course settings' }]
     case 'topics': {
       const topicId = parts[3]
       if (!topicId) return [courseCrumb(false), { label: 'Topics' }]

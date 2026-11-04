@@ -1,4 +1,6 @@
-import { resolveTopicActivity } from '@/lib/learning/next-activity-server'
+import { loadTopicLearningState, resolveTopicActivity } from '@/lib/learning/next-activity-server'
+import { nextPathStep } from '@/features/topic/activity-copy'
+import { nextStepWords, pathGlyphs, pathSteps, type PathGlyph } from '@/features/topic/path-steps'
 import type { NextStep } from '@/lib/learning/next-step'
 import { overlayActivity, wantsTopicActivity, type ActivityOverlay } from '@/features/topic/step-activity'
 
@@ -26,6 +28,46 @@ type TopicRef = { id: string; unitId: string | null; confirmed: boolean }
 export async function topicActivity(userId: string, courseId: string, topicId: string, topics: TopicRef[], listConfirmed: boolean): Promise<ActivityOverlay> {
   const { kind, reason, href } = await resolveTopicActivity({ userId, courseId, topicId, topics, listConfirmed })
   return { kind, reason, href }
+}
+
+export type TopicPathSummary = { glyphs: PathGlyph[]; nextWords: string }
+
+/**
+ * Each topic's path for the Topics list: the steps it offers, which are done, and what is next in words. Every topic is read
+ * with the loader and the cascade the topic page uses, and its steps are decided by the same `pathSteps`, so a row names the
+ * step that the topic's own path tags as Next.
+ */
+export async function topicPaths(
+  userId: string,
+  courseId: string,
+  rows: { id: string; progress: { notes: boolean; quizScore: number | null } }[],
+  topics: TopicRef[],
+  listConfirmed: boolean
+): Promise<Record<string, TopicPathSummary>> {
+  const entries = await Promise.all(
+    rows.map(async (row) => {
+      const state = await loadTopicLearningState({ userId, topicId: row.id })
+      const next = await resolveTopicActivity({ userId, courseId, topicId: row.id, topics, listConfirmed, state })
+      const steps = pathSteps({
+        hasConcepts: state.concepts.length > 0,
+        warmupReady: state.warmupReady,
+        warmupDone: state.warmupAt !== null,
+        readDone: state.readAt !== null,
+        preparingConcepts: false,
+      })
+      const done = {
+        warmup: state.warmupAt !== null,
+        read: state.readAt !== null || row.progress.notes,
+        recall: state.recallAt !== null,
+        practice: state.practiceDone,
+        quiz: row.progress.quizScore !== null,
+      }
+      // The step the topic's own path tags Next: the same function the path bar uses.
+      const glyphs = pathGlyphs({ steps, done, nextStep: nextPathStep(next, steps, done) })
+      return [row.id, { glyphs, nextWords: nextStepWords(next.kind) }] as const
+    })
+  )
+  return Object.fromEntries(entries)
 }
 
 /** The next activity of each of these topics, for the plan page (see `topicActivity`). */

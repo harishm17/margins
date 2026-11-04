@@ -6,7 +6,7 @@ import { MathText } from '@/components/ui/math-text'
 import type { TopicStructure } from '@/server/queries/topic'
 
 const linkClass =
-  'rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] transition-colors duration-120 hover:text-fg hover:decoration-fg-3'
+  'rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] transition-colors duration-120 hover:text-fg hover:decoration-fg-3 max-sm:inline-flex max-sm:min-h-11 max-sm:items-center'
 
 /** "Week 3: Sorting", "Sorting" or "Week 3" for the unit a topic belongs to. */
 export function unitLabel(unit: { title: string; weekLabel: string | null }): string {

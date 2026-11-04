@@ -4,10 +4,12 @@ import { usePolling } from '@/lib/hooks/use-polling'
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { CaretDown } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toaster'
 import { Checkbox } from '@/components/ui/checkbox'
 import { InlineAlert } from '@/components/ui/inline-alert'
+import { Input } from '@/components/ui/input'
 import { JobStatus } from '@/components/ui/job-status'
 import { MasteryIndicator } from '@/components/ui/mastery-indicator'
 import { SegmentedControl } from '@/components/ui/segmented-control'
@@ -29,11 +31,12 @@ import {
   QUESTION_MIXES,
   TIME_LIMITS,
   difficultyLabel,
+  examSummary,
   type Difficulty,
   type QuestionMix,
 } from './exam-options'
 
-export type ExamTopicChoice = { id: string; name: string; mastery: number | null }
+export type ExamTopicChoice = { id: string; name: string; mastery: number | null; /** Pages are linked to it, so questions can be written from it. */ hasPages: boolean }
 
 type Props = {
   courseId: string
@@ -85,7 +88,7 @@ function SectionLabel({ id, children, hint }: { id: string; children: React.Reac
       <h2 id={id} className="text-small font-medium text-fg">
         {children}
       </h2>
-      {hint ? <p className="mt-0.5 text-caption font-normal text-fg-3">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-small font-normal text-fg-2">{hint}</p> : null}
     </div>
   )
 }
@@ -99,6 +102,10 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
   const [difficulty, setDifficulty] = React.useState<Difficulty>(DEFAULT_EXAM_CONFIG.difficultyLevel)
   const [mix, setMix] = React.useState<QuestionMix>(DEFAULT_EXAM_CONFIG.mix)
   const [matchPastExams, setMatchPastExams] = React.useState(true)
+  const [name, setName] = React.useState('')
+  // One recommended exam is the default: pick topics and create. The size, time, difficulty, mix and name are behind one button.
+  const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const settingsId = React.useId()
   const [phase, setPhase] = React.useState<Phase>(() =>
     activeJob ? { kind: 'writing', jobId: activeJob.id, startedAt: activeJob.startedAt } : { kind: 'idle' }
   )
@@ -155,6 +162,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
           difficultyLevel: difficulty,
           questionTypeDistribution: QUESTION_MIXES[mix].distribution,
           ...(matchStyle ? { matchPastExams: true } : {}),
+          ...(name.trim() ? { name: name.trim() } : {}),
         },
       })
       setPhase({ kind: 'writing', jobId: result.jobId, startedAt: new Date().toISOString() })
@@ -193,8 +201,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
     )
   }
 
-  const allSelected = selected.size === topics.length
-  const distribution = QUESTION_MIXES[mix].distribution
+    const distribution = QUESTION_MIXES[mix].distribution
   const failure = phase.kind === 'failed' ? phase.message : null
 
   return (
@@ -230,15 +237,16 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
             Topics
           </SectionLabel>
           <div className="flex shrink-0 items-center gap-1">
-            <Button type="button" size="sm" variant="ghost" disabled={allSelected} onClick={() => setSelected(new Set(topics.map((t) => t.id)))}>
+            {/* Neither greys out: a button that disables and re-enables swapped which of the two looked live. */}
+            <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(new Set(topics.map((t) => t.id)))}>
               Select all
             </Button>
-            <Button type="button" size="sm" variant="ghost" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               Clear
             </Button>
           </div>
         </div>
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {topics.map((topic) => {
             const checked = selected.has(topic.id)
             return (
@@ -251,8 +259,13 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
                   )}
                 >
                   <Checkbox checked={checked} onCheckedChange={(value) => toggle(topic.id, value === true)} className="mt-0" />
-                  <span className="min-w-0 flex-1 truncate">{topic.name}</span>
-                  <MasteryIndicator mastery={topic.mastery} variant="ring" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{topic.name}</span>
+                    {topic.hasPages ? null : (
+                      <span className="block text-caption font-normal text-warning-soft-fg">No pages linked yet, so it may be left out</span>
+                    )}
+                  </span>
+                  <MasteryIndicator mastery={topic.mastery} className="shrink-0" />
                 </label>
               </li>
             )
@@ -260,6 +273,31 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
         </ul>
       </section>
 
+      <section aria-labelledby="exam-preset" className="flex flex-col gap-2">
+        <SectionLabel id="exam-preset">Your exam</SectionLabel>
+        <p className="text-body text-fg" data-testid="exam-preset">
+          {examSummary({ questionCount: totalQuestions, durationMinutes, difficulty })}, {QUESTION_MIXES[mix].label.toLowerCase()} mix
+          {matchStyle ? ', in the style of your past exams' : ''}
+        </p>
+        <div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="-ml-2.5"
+            aria-expanded={settingsOpen}
+            aria-controls={settingsId}
+            onClick={() => setSettingsOpen((current) => !current)}
+          >
+            <span className="inline-flex items-center gap-1">
+              Change settings
+              <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', settingsOpen && 'rotate-180')} />
+            </span>
+          </Button>
+        </div>
+      </section>
+
+      <div id={settingsId} hidden={!settingsOpen} className="flex flex-col gap-8">
       <section aria-labelledby="exam-questions" className="flex flex-col gap-2">
         <SectionLabel id="exam-questions">Questions</SectionLabel>
         <SegmentedControl
@@ -267,7 +305,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
           value={String(totalQuestions)}
           onValueChange={(value) => setTotalQuestions(Number(value))}
           options={QUESTION_COUNTS.map((count) => ({ value: String(count), label: String(count) }))}
-          className="self-start"
+          className="self-start max-sm:flex-wrap"
         />
       </section>
 
@@ -278,7 +316,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
           value={String(durationMinutes)}
           onValueChange={(value) => setDurationMinutes(Number(value))}
           options={TIME_LIMITS.map((minutes) => ({ value: String(minutes), label: `${minutes} min` }))}
-          className="self-start"
+          className="self-start max-sm:flex-wrap"
         />
       </section>
 
@@ -336,9 +374,24 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
         <ExamStyleStatus courseId={courseId} state={examStyle} />
       ) : null}
 
+        <section aria-labelledby="exam-name" className="flex flex-col gap-2">
+          <SectionLabel id="exam-name" hint="Optional. Without one, the exam is named by its date and topics.">
+            Name
+          </SectionLabel>
+          <Input
+            aria-labelledby="exam-name"
+            value={name}
+            maxLength={80}
+            placeholder="e.g. Midterm practice"
+            onChange={(event) => setName(event.target.value)}
+            containerClassName="max-w-sm"
+          />
+        </section>
+      </div>
+
       <div className="flex flex-col gap-3 border-t border-border pt-6">
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={selected.size === 0 || !!blocked}>
+          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={selected.size === 0 || !!blocked} disabledReason={selected.size === 0 ? 'Pick at least one topic first.' : 'AI is unavailable right now.'}>
             Create exam
           </Button>
           <Button asChild variant="ghost" size="lg">
@@ -354,17 +407,17 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
 
 const STYLE_COPY: Record<Exclude<ExamStyleState['kind'], 'ready' | 'none'>, { title: string; text: string }> = {
   analysing: {
-    title: 'Your past exams are being analysed',
+    title: 'Your past exams are being analyzed',
     text: 'Matching their style will be an option here once that is done, usually within a minute.',
   },
-  failed: { title: "We couldn't analyse your past exams", text: '' },
+  failed: { title: "We couldn't analyze your past exams", text: '' },
   unavailable: {
     title: 'No exam style found',
     text: "We couldn't find a style to match in the past exams you uploaded. Questions will use the default style.",
   },
 }
 
-/** The Style section when there is no style to match yet: why, and a way to analyse again. */
+/** The Style section when there is no style to match yet: why, and a way to analyze again. */
 function ExamStyleStatus({ courseId, state }: { courseId: string; state: ExamStyleState }) {
   const router = useRouter()
   const { blocked, report } = useAiStatus()
@@ -401,7 +454,7 @@ function ExamStyleStatus({ courseId, state }: { courseId: string; state: ExamSty
         action={
           kind === 'analysing' ? undefined : (
             <Button type="button" size="sm" variant="secondary" loading={starting} disabled={!!blocked} onClick={() => void retry()}>
-              Analyse again
+              Analyze again
             </Button>
           )
         }

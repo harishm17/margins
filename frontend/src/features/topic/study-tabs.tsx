@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, type TabItem } from '@/components/ui/tabs'
 import type { ActivityKind } from '@/lib/learning/next-activity'
-import { pathStepFor } from './activity-copy'
-import { NextActivityCard, NextTag, StepMarker, StepStatus, ToolLinks } from './path'
+import { nextLineShows, nextPathStep } from './activity-copy'
+import { NextActivityCard, NextTag, QUIZ_LOW_SCORE, StepMarker, StepStatus, ToolLinks } from './path'
 import { PRACTICE_DONE_SHARE, solvedCount } from './practice-keys'
 import { usePracticeProgress } from './practice-progress'
 import { useTopic } from './topic-provider'
@@ -24,10 +24,14 @@ type StudyTabsProps = {
   nextId: string | null
   /** Which steps of the path are done. */
   pathDone: { warmup: boolean; read: boolean; recall: boolean }
+  /** Recall prompts answered, of all. Recall counts as done from the first, but is shown finished at the last. */
+  recallProgress: { answered: number; total: number }
   /** The steps this topic offers, in order (a topic without concepts has no Recall). */
   steps: PathView[]
   /** What to do next on this topic: the path tags its step, and a card offers it. */
   nextActivity: { kind: ActivityKind; reason: string; href: string }
+  /** The topic is not started and still being prepared: Warm-up and Recall say so, and no step is tagged Next until it settles. */
+  preparingEntry?: boolean
 }
 
 const Missing = () => (
@@ -40,6 +44,12 @@ const Missing = () => (
 
 const Writing = () => (
   <span role="img" aria-label="Being written" className="inline-flex max-sm:sr-only">
+    <Spinner className="size-3.5 text-fg-3" />
+  </span>
+)
+
+const Preparing = () => (
+  <span role="img" aria-label="Being prepared" className="inline-flex max-sm:sr-only">
     <Spinner className="size-3.5 text-fg-3" />
   </span>
 )
@@ -74,10 +84,10 @@ function useTopicShortcuts(hrefs: { views: string[]; previous: string | null; ne
           event.preventDefault()
           router.push(href, { scroll: false })
         }
-      } else if (event.key === '[' && current.previous) {
+      } else if (event.key === '[' && current.previous && !suspended) {
         event.preventDefault()
         router.push(current.previous)
-      } else if (event.key === ']' && current.next) {
+      } else if (event.key === ']' && current.next && !suspended) {
         event.preventDefault()
         router.push(current.next)
       }
@@ -101,16 +111,17 @@ export function StudyTabs({
   previousId,
   nextId,
   pathDone,
+  recallProgress,
   steps,
   nextActivity,
+  preparingEntry = false,
 }: StudyTabsProps) {
   const view = useTopicView()
-  const { running, preparingNotes } = useTopic()
+  const { running, preparingNotes, keysSuspended: quizTaking } = useTopic()
   const practice = usePracticeProgress(topicId)
   const base = `/courses/${courseId}/topics/${topicId}`
   const solved = solvedCount(practice.progress, practiceKeys)
   const practiceDone = practiceKeys.length > 0 && solved / practiceKeys.length >= PRACTICE_DONE_SHARE
-  const nextStep = pathStepFor(nextActivity.kind)
 
   const hrefs = steps.map((id) => `${base}?view=${id}`)
   useTopicShortcuts({
@@ -122,13 +133,20 @@ export function StudyTabs({
   const done: Record<PathView, boolean> = {
     warmup: pathDone.warmup,
     read: pathDone.read || progress.notes,
-    recall: pathDone.recall,
+    // The first graded answer counts the topic as recalled, but the step is finished when every prompt has one.
+    recall: pathDone.recall && recallProgress.answered >= recallProgress.total,
     practice: practiceDone,
     quiz: progress.quizScore !== null,
   }
+  // While the topic is being prepared the first step is not known yet, so none is tagged (the tag would move when the warm-up arrives).
+  // Otherwise the tag is on the step the next activity belongs to while that is not done, else the first step that is not done.
+  const nextStep = preparingEntry ? null : nextPathStep(nextActivity, steps, done)
+  // One next signal: the tag in the path. The line below it only shows where the open view has no action of its own (see nextLineShows).
+  const showLine = !preparingEntry && nextLineShows(nextActivity, view, steps)
 
   /** A status after the label: content being written or missing, solved steps, the best quiz score. */
   function glyphFor(id: PathView): React.ReactNode {
+    if (preparingEntry && (id === 'warmup' || id === 'recall')) return <Preparing />
     switch (id) {
       case 'read':
         // A just-opened topic's notes count as being written from the first paint.
@@ -142,6 +160,9 @@ export function StudyTabs({
         if (running.quiz && !running.quiz.done) return <Writing />
         if (!present.quiz) return <Missing />
         return progress.quizScore !== null ? <StepStatus>{`${Math.round(progress.quizScore)}%`}</StepStatus> : null
+      case 'recall':
+        // Recalled by the first answer, finished by the last: say how far it is.
+        return pathDone.recall && recallProgress.answered < recallProgress.total ? <StepStatus>{`${recallProgress.answered}/${recallProgress.total}`}</StepStatus> : null
       default:
         return null
     }
@@ -152,7 +173,7 @@ export function StudyTabs({
     id,
     label: (
       <>
-        <StepMarker number={index + 1} done={done[id]} next={nextStep === id} />
+        <StepMarker number={index + 1} done={done[id]} next={nextStep === id} lowScore={id === 'quiz' && progress.quizScore !== null && progress.quizScore < QUIZ_LOW_SCORE ? progress.quizScore : null} />
         <span className="sm:hidden">{SHORT_LABELS[id]}</span>
         <span className="max-sm:hidden">{VIEW_LABELS[id]}</span>
         {nextStep === id ? <NextTag /> : null}
@@ -171,11 +192,11 @@ export function StudyTabs({
         items={items}
         activeId={view}
         stickyPanel="[data-tab-panel]"
-        trailing={<ToolLinks courseId={courseId} topicId={topicId} />}
-        className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 max-sm:[&_a::after]:inset-x-1 max-sm:[&_[data-tab-indicator]]:inset-x-1 max-sm:[&_a]:gap-1 max-sm:[&_a]:px-1 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
+        trailing={quizTaking ? undefined : <ToolLinks courseId={courseId} topicId={topicId} />}
+        className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 group-data-[attempt]/topic:max-sm:hidden max-sm:[&_a::after]:inset-x-1 max-sm:[&_[data-tab-indicator]]:inset-x-1 max-sm:[&_a]:gap-1 max-sm:[&>div]:h-[45px] max-sm:[&_a]:h-11 max-sm:[&_a]:px-1 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
       />
       {/* On the voice view the student is choosing what to do out loud; the way on can wait. */}
-      {view === 'voice' ? null : <NextActivityCard next={nextActivity} />}
+      {view === 'voice' || !showLine ? null : <NextActivityCard next={nextActivity} />}
     </>
   )
 }

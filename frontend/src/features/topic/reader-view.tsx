@@ -27,6 +27,47 @@ type Props = {
   focusConceptId?: string | null
 }
 
+const PDF_NOTE_KEY = 'margins.readerPdfNoteClosed'
+const pdfNoteListeners = new Set<() => void>()
+const subscribePdfNote = (listener: () => void) => {
+  pdfNoteListeners.add(listener)
+  return () => void pdfNoteListeners.delete(listener)
+}
+const pdfNoteClosed = () => {
+  try {
+    return window.localStorage.getItem(PDF_NOTE_KEY) !== null
+  } catch {
+    return false
+  }
+}
+
+/** The caveat about text taken from a PDF: said once, then gone. Each page keeps its own link to the original. */
+function PdfNote() {
+  // Closed on the server so the first paint never flashes it for a student who has dismissed it.
+  const closed = React.useSyncExternalStore(subscribePdfNote, pdfNoteClosed, () => true)
+  if (closed) return null
+  return (
+    <div className="mb-8 flex max-w-[680px] flex-wrap items-center gap-x-3 gap-y-1 text-small text-fg-2" data-testid="reader-pdf-note">
+      <p className="min-w-0 flex-1 basis-64">Text taken from a PDF can lose its layout and maths. The original is the better view for figures and equations: each page links to it.</p>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="shrink-0"
+        onClick={() => {
+          try {
+            window.localStorage.setItem(PDF_NOTE_KEY, '1')
+          } catch {
+            // Private mode: it comes back next time, which is harmless.
+          }
+          pdfNoteListeners.forEach((listener) => listener())
+        }}
+      >
+        Got it
+      </Button>
+    </div>
+  )
+}
+
 function jumpTo(id: string) {
   const element = document.getElementById(id)
   if (!element) return
@@ -109,7 +150,7 @@ function PageDivider({ file, page }: { file: ReaderFile; page: number }) {
           href={originalHref(file, page)}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex shrink-0 items-center gap-1 rounded-chip text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg"
+          className="inline-flex shrink-0 items-center gap-1 rounded-chip text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg max-sm:min-h-11"
         >
           Open the original at p. {page}
           <ArrowSquareOut aria-hidden="true" className="size-3.5" />
@@ -142,7 +183,7 @@ function Passage({ topicId, file, passage, focused, number, notes, check, onAdd,
   return (
     <>
       {passage.divider !== null ? <PageDivider file={file} page={passage.divider} /> : null}
-      <div id={passageDomId(passage.chunkId)} className="scroll-mt-[140px] lg:grid lg:grid-cols-[minmax(0,680px)_minmax(240px,1fr)] lg:gap-x-10" data-passage="">
+      <div id={passageDomId(passage.chunkId)} className="group/passage scroll-mt-[140px] lg:grid lg:grid-cols-[minmax(0,680px)_minmax(240px,1fr)] lg:gap-x-10" data-passage="">
         <div className={marked ? 'border-l-2 border-accent pl-4' : undefined} data-focus={marked ? '' : undefined}>
           {marked ? (
             <Badge tone="accent" icon={<Crosshair aria-hidden="true" />} className="mb-2">
@@ -175,7 +216,7 @@ function Passage({ topicId, file, passage, focused, number, notes, check, onAdd,
 
 /**
  * The source reader (spec §5.2, D10): the student's own pages as text, in order, with a margin for notes and
- * "Explain this passage" beside each passage, "Before you go on" checks after the sections that hold a claim,
+ * "Explain this passage" beside each passage, "Quick check" checks after the sections that hold a claim,
  * and "Focus here" on the passages the warm-up says to look at. Nothing is hidden: the student reads it all.
  * Text taken from a PDF can lose layout and maths, so each page links to the original.
  */
@@ -208,7 +249,7 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
           <h2 id="read-to-answer" className="text-body-strong text-fg">
             Read to answer
           </h2>
-          <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-5 text-small text-fg">
+          <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-5 text-small text-fg max-sm:gap-0">
             {questions.map((item) => (
               <li key={`${item.objectiveIndex}:${item.question}`}>
                 {item.chunkId ? (
@@ -218,7 +259,7 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
                       event.preventDefault()
                       jumpTo(passageDomId(item.chunkId as string))
                     }}
-                    className="rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] hover:decoration-fg-3"
+                    className="rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] hover:decoration-fg-3 max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
                   >
                     {item.question}
                     <span className="sr-only"> (go to the passage)</span>
@@ -232,11 +273,7 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
         </section>
       ) : null}
 
-      {hasPdf ? (
-        <p className="mb-8 max-w-[680px] text-small text-fg-3">
-          Text taken from a PDF can lose its layout and maths. The original is the better view for figures and equations: each page links to it.
-        </p>
-      ) : null}
+      {hasPdf ? <PdfNote /> : null}
 
       {reader.files.map((file) => (
         <section key={file.materialId} aria-labelledby={`file-${file.materialId}`} className="mb-10">
@@ -251,7 +288,7 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
               href={originalHref(file, null)}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg"
+              className="inline-flex items-center gap-1 rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg max-sm:min-h-11"
             >
               Open the original
               <ArrowSquareOut aria-hidden="true" className="size-3.5" />

@@ -1019,7 +1019,8 @@ async def generate_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
         RETURNING id
         """,
         input_data.projectId,
-        f"Sample Exam - {result['generated_at'][:10]}",
+        # The student's own name for the exam when they gave one; else the dated name the frontend words by date and topics.
+        (str(input_data.config.get('exam_name') or '').strip()[:80]) or f"Sample Exam - {result['generated_at'][:10]}",
         json.dumps(result['questions']),
         result['duration_minutes'],
         result['difficulty_level'],

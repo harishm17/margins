@@ -116,14 +116,18 @@ test.describe('knowledge map', () => {
     await expect(nodeLink(page, 'Chaining')).toHaveAccessibleName('Chaining Not started Next up')
     await expect(nodeLink(page, 'Open addressing')).toHaveAccessibleName('Open addressing Not started Next up')
 
-    // The key is folded away, and lists only what this unit shows.
+    // The key opens by itself the first time this browser sees a map, and is folded away after that.
     const key = page.locator('details').filter({ has: page.getByText('Key', { exact: true }) })
-    await expect(key.getByText('Leads to')).toBeHidden()
+    await expect(key.getByText('Leads to')).toBeVisible()
+    await page.reload()
+    await expect(key.getByText('Key', { exact: true }).locator('visible=true').first()).toBeVisible()
+    await expect(key.getByText('Leads to').first()).toBeHidden()
+    // It lists only what this unit shows.
     await key.getByText('Key', { exact: true }).click()
     await expect(key.getByRole('list', { name: 'States' }).getByRole('listitem')).toHaveText(['Not started', /^(Shaky|Fading|Getting there)$/])
     await expect(key.getByText('Leads to')).toBeVisible()
     await expect(key.getByText('Easy to mix up')).toBeVisible()
-    await expect(key.getByText(/^Next up: what you need is well remembered/)).toContainText('Start here is the first of them')
+    await expect(key.getByText(/^Next up: what you need is well remembered/)).toContainText('The ring marks Start here, the first of them')
     await expect(key.getByText('Suggested, not confirmed')).toHaveCount(0)
     await expect(key.getByText('Inferred means')).toHaveCount(0)
     await screenshotIfAsked(page, 'final-map-key-1440x900')
@@ -182,6 +186,8 @@ test.describe('knowledge map', () => {
     const w = await world(page, 'map-topic')
     await withPrisma((prisma) => prisma.topic.update({ where: { id: w.topics['Probing'] }, data: { evidenceBackfilledAt: new Date() } }))
     await open(page, `/courses/${w.courseId}/topics/${w.topics.Probing}`)
+    // What the topic covers, the map link among it, is behind "About this topic".
+    await page.getByRole('button', { name: /About this topic/ }).click()
     await page.getByRole('link', { name: 'Show on the map' }).locator('visible=true').click()
     await expect(page).toHaveURL(new RegExp(`/map\\?unit=${w.units.Hashing}&topic=${w.topics.Probing}`))
     // The topic's first idea is open in the panel.
@@ -234,7 +240,8 @@ test.describe('knowledge map', () => {
     await expect(answers.nth(0)).toContainText('Drill · 50% · with help')
     await expect(answers.nth(1)).toContainText('Quiz · 100%')
     await expect(panel.getByText('Needed by Collisions').or(panel.getByText('Collisions needs this'))).toBeVisible()
-    // Out loud goes to the voice lobby for this idea.
+    // Out loud goes to the voice lobby for this idea (one of the other ways to study, behind one button).
+    await panel.getByRole('button', { name: 'Other ways to study' }).click()
     await expect(panel.getByTestId('do-it-out-loud')).toHaveAttribute('href', new RegExp(`view=voice&style=teach_back&concept=${w.concepts['Hash function']}`))
     // Ask about this carries the idea.
     await expect(panel.getByRole('link', { name: 'Ask about this' })).toHaveAttribute('href', `/courses/${w.courseId}/ask?concept=${w.concepts['Hash function']}`)
@@ -264,7 +271,10 @@ test.describe('knowledge map', () => {
     const panel = page.getByTestId('node-panel')
     await expect(panel.getByText('Missed last time: p. 4')).toBeVisible()
     // Reading comes first, practice second; the other idea's panel is unchanged.
+    // Reading is the one recommended move; practice is one of the other ways to study.
     const actions = panel.getByRole('link', { name: /^(Read about it first|Practice this)$/ })
+    await expect(actions).toHaveText(['Read about it first'])
+    await panel.getByRole('button', { name: 'Other ways to study' }).click()
     await expect(actions).toHaveText(['Read about it first', 'Practice this'])
     await expect(panel.getByTestId('read-first')).toHaveAttribute('href', new RegExp(`view=read&focus=${conceptId}#chunk-${chunkId}$`))
     for (const size of SIZES) {
@@ -321,6 +331,7 @@ test.describe('knowledge map', () => {
     })
     await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts['Hash function']}`))
     const panel = page.getByTestId('node-panel')
+    await panel.getByRole('button', { name: 'Other ways to study' }).click()
     await panel.getByRole('button', { name: 'Explain it' }).click()
     const prompt = 'Explain "Hash function" in your own words, as if you were teaching it to a classmate.'
     await panel.getByRole('textbox', { name: prompt }).fill('A hash function turns a key into a number that picks the bucket the key is stored in.')
@@ -342,6 +353,7 @@ test.describe('knowledge map', () => {
       })
     })
     await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts['Hash function']}`))
+    await page.getByTestId('node-panel').getByRole('button', { name: 'Other ways to study' }).click()
     await page.getByTestId('node-panel').getByRole('link', { name: 'Do it out loud' }).click()
     // The voice page of the topic, not written recall: its lobby, with Teach it back chosen and the idea carried along.
     await expect(page).toHaveURL(new RegExp(`/topics/${w.topics['Hash tables']}\\?view=voice&style=teach_back&concept=${w.concepts['Hash function']}$`))
@@ -351,11 +363,15 @@ test.describe('knowledge map', () => {
 
     // An idea with no claims from the pages cannot be taught back, though another idea of the topic has some: the lobby starts on Quiz me and says the idea is the one missing them.
     await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts['Open addressing']}`))
+    await page.getByTestId('node-panel').getByRole('button', { name: 'Other ways to study' }).click()
     await page.getByTestId('node-panel').getByRole('link', { name: 'Do it out loud' }).click()
     await expect(page.getByTestId('voice-lobby')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByRole('radio', { name: /Quiz me/ })).toHaveAttribute('aria-checked', 'true')
     await expect(page.getByText("This idea isn't read from your pages yet")).toBeVisible()
     await expect(page.getByText("Your pages aren't read into ideas yet")).toHaveCount(0)
+    // This topic has no quiz either, so Quiz me cannot begin: that is said too, and the claims line does not promise it works.
+    await expect(page.getByTestId('voice-quiz-missing')).toBeVisible()
+    await expect(page.getByText('Quiz me still works.')).toHaveCount(0)
   })
 
   test('on a phone the teach-back card opened from the panel ends above the tab bar', async ({ page }) => {
@@ -364,17 +380,18 @@ test.describe('knowledge map', () => {
     await page.setViewportSize({ width: 390, height: 844 })
     await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts['Hash function']}&view=list`))
     const panel = page.getByTestId('node-panel')
+    await panel.getByRole('button', { name: 'Other ways to study' }).click()
     await panel.getByRole('button', { name: 'Explain it' }).click()
     const check = panel.getByRole('button', { name: 'Check my answer' })
     await expect(check).toBeVisible()
-    // Nothing was focused: the card itself was brought into view.
+    // On a phone the details are a bottom sheet over the tab bar: the card was brought into view inside the screen.
     await expect
       .poll(
         async () => {
-          const [bar, box] = await Promise.all([page.getByRole('navigation', { name: 'Course tabs' }).boundingBox(), check.boundingBox()])
-          return bar !== null && box !== null && box.y + box.height <= bar.y
+          const box = await check.boundingBox()
+          return box !== null && box.y >= 0 && box.y + box.height <= 844
         },
-        { timeout: 5_000, message: 'Check my answer ends above the tab bar' }
+        { timeout: 5_000, message: 'Check my answer is inside the screen' }
       )
       .toBe(true)
     await animationsSettled(page)
@@ -385,6 +402,7 @@ test.describe('knowledge map', () => {
     test.setTimeout(90_000)
     const w = await world(page, 'map-ask')
     await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts.Collisions}`))
+    await page.getByTestId('node-panel').getByRole('button', { name: 'Other ways to study' }).click()
     await page.getByTestId('node-panel').getByRole('link', { name: 'Ask about this' }).click()
     await expect(page).toHaveURL(new RegExp(`/ask\\?concept=${w.concepts.Collisions}`))
     await expect(page.getByText('Your next question is about Collisions.')).toBeVisible()
@@ -518,9 +536,9 @@ test.describe('knowledge map', () => {
     await expect(page.getByRole('link', { name: /^Skip to the details/ })).toHaveCount(0)
 
     // The lines are drawn for the eye: each idea says how it connects in its description.
-    await expect(nodeLink(page, 'Collisions')).toHaveAccessibleDescription('Needs Hash function.')
-    await expect(nodeLink(page, 'Hash function')).toHaveAccessibleDescription('Needed by Collisions.')
-    await expect(nodeLink(page, 'Chaining')).toHaveAccessibleDescription('Easy to mix up with Open addressing.')
+    await expect(nodeLink(page, 'Collisions')).toHaveAccessibleDescription(/^Needs Hash function\. In Hash tables\.?$/)
+    await expect(nodeLink(page, 'Hash function')).toHaveAccessibleDescription(/^Needed by Collisions\. In Hash tables\.?$/)
+    await expect(nodeLink(page, 'Chaining')).toHaveAccessibleDescription(/^Easy to mix up with Open addressing\. In Hash tables\.?$/)
 
     // Tab reaches the ideas in the order of the list, and Enter chooses one without taking focus from it.
     await nodeLink(page, 'Hash function').focus()
@@ -584,6 +602,7 @@ test.describe('knowledge map', () => {
       await screenshotIfAsked(page, `map-list-${size.name}`)
 
       await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=list&node=${w.concepts.Chaining}`))
+      await page.getByTestId('node-panel').getByRole('button', { name: 'Other ways to study' }).click()
       await page.getByTestId('node-panel').getByRole('button', { name: 'Explain it' }).click()
       await expect(page.getByRole('textbox', { name: /Explain "Chaining"/ })).toBeVisible()
       await expectNoAxeViolations(page, `list with panel and teach-back ${size.name}`)
@@ -613,12 +632,13 @@ test.describe('knowledge map on a phone', () => {
     // No redirect: the address stays as it was, with its topic, and the idea of that topic is open.
     expect(new URL(page.url()).searchParams.get('topic')).toBe(w.topics.Probing)
     expect(new URL(page.url()).searchParams.get('view')).toBeNull()
-    await expect(page.getByRole('radio', { name: 'List view' })).toBeChecked()
+    // The idea of the topic is open in the phone's bottom sheet; the list is behind it.
+    await expect(page.getByRole('radio', { name: 'List view', includeHidden: true })).toBeChecked()
     await expect(page.getByTestId('node-panel').getByRole('heading', { level: 2, name: 'Open addressing' })).toBeVisible()
-    // Choosing the map keeps the topic too.
+    await page.getByRole('dialog').getByRole('link', { name: 'Back to the list' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
     await page.getByRole('radio', { name: 'Map', exact: true }).click()
     await expect(page).toHaveURL(/view=map/)
-    expect(new URL(page.url()).searchParams.get('topic')).toBe(w.topics.Probing)
     // A wide window gets the map without a view in the address.
     await page.setViewportSize({ width: 1024, height: 800 })
     await expect.poll(async () => (await page.context().cookies()).find((cookie) => cookie.name === 'margins_narrow')?.value).toBe('0')

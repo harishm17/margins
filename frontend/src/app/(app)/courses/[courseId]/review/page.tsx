@@ -9,7 +9,7 @@ import { ShortSessionCard } from '@/features/home/short-session-card'
 import { ProgressPanel, WeeklyFocus } from '@/features/review/progress-panel'
 import { ReviewList } from '@/features/review/review-list'
 import { activeSession } from '@/lib/learning/review-session'
-import { shortSessionOffer } from '@/lib/learning/short-session-server'
+import { REVIEW_EXTRAS_LOCKED_TEXT, hasFirstQuizOrRecall, shortSessionOffer } from '@/lib/learning/short-session-server'
 import { getProgress } from '@/server/queries/progress'
 import { getReviewPageData } from '@/server/queries/review'
 import { describeSprintTopics, getSprintTopics } from '@/server/queries/voice'
@@ -27,8 +27,10 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
   const data = await getReviewPageData(user.id, courseId, timeZone)
   if (!data) notFound()
   // The progress figures are an extra: if they cannot be read the list and the sessions still open.
+  // The extras (the 10-minute check, voice practice) are for a student who has something to go over: not before a first quiz or recall.
+  const unlocked = data.hasTopics ? await hasFirstQuizOrRecall(user.id, courseId).catch(() => false) : false
   const [sprint, progress, active, short] = await Promise.all([
-    getSprintTopics(user.id, courseId),
+    unlocked ? getSprintTopics(user.id, courseId) : { topics: [], studied: false },
     data.hasTopics
       ? getProgress(user.id, courseId, { timeZone }).catch((error) => {
           console.error('[REVIEW] Progress could not be read:', error)
@@ -37,12 +39,13 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
       : null,
     // A review started today and not finished: the page offers to resume it (spec 18.7).
     activeSession(user.id, courseId, timeZone).catch(() => null),
-    // "Have 10 minutes?" (spec 18.8): an extra, so a failure to work it out leaves the page as it was.
-    data.hasTopics ? shortSessionOffer(user.id, courseId, timeZone).catch(() => null) : null,
+    // Quick practice (spec 18.8): an extra, so a failure to work it out leaves the page as it was.
+    unlocked ? shortSessionOffer(user.id, courseId, timeZone).catch(() => null) : null,
   ])
 
+  const nothingDue = data.dueConceptCount === 0 && data.due.length === 0 && active === null
   return (
-    <Page>
+    <Page width="wide">
       <PageIntro title="Review" description="Go over the topics that are due, most overdue first." />
       {!data.hasTopics ? (
         <EmptyState
@@ -58,9 +61,16 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-10">
-          {progress ? <WeeklyFocus courseId={courseId} focus={progress.focus} /> : null}
+          {/* When nothing is due the focus ideas are extras: they come after "Nothing is due", not before it, so due work and optional practice are not mixed up. */}
+          {progress && !nothingDue ? <WeeklyFocus courseId={courseId} focus={progress.focus} /> : null}
           <ReviewList data={data} active={active} />
           {short ? <ShortSessionCard courseId={courseId} plan={short.plan} /> : null}
+          {progress && nothingDue ? <WeeklyFocus courseId={courseId} focus={progress.focus} optional /> : null}
+          {!unlocked ? (
+            <p className="text-small text-fg-2" data-testid="review-extras-locked">
+              {REVIEW_EXTRAS_LOCKED_TEXT}
+            </p>
+          ) : null}
           {sprint.topics.length > 0 ? (
             // The session itself has its own screen: it runs full height and does not scroll under this list.
             <section

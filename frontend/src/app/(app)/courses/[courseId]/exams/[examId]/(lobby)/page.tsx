@@ -17,7 +17,7 @@ export default async function ExamLobbyPage({ params }: { params: Promise<{ cour
   if (!course || !lobby) notFound()
 
   return (
-    <Page width="medium">
+    <Page width="focus">
       <PageHeader crumbs={examCrumbs({ id: course.id, name: course.name }, { id: lobby.id, name: lobby.title })} />
       <PageIntro title={lobby.title} description="A timed mock exam built from your topics." />
       <ExamLobbyView lobby={lobby} />

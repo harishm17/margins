@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { Page } from '@/components/shell/page'
 import { practiceKeys } from '@/features/topic/practice-keys'
 import { bareTopicRedirect, viewInPath } from '@/features/topic/activity-copy'
+import { AttemptBar } from '@/features/topic/attempt-bar'
 import { OnboardingCard } from '@/features/topic/onboarding-card'
 import { PracticeProgressSync } from '@/features/topic/practice-progress'
 import { StudyTabs } from '@/features/topic/study-tabs'
@@ -39,7 +40,7 @@ export default async function TopicLayout({
   const requestHeaders = await headers()
   const path = requestHeaders.get('x-pathname')
   if (path !== null && requestHeaders.get('sec-fetch-mode') === 'navigate') {
-    const bare = bareTopicRedirect(`/courses/${courseId}/topics/${topicId}`, viewInPath(path), { kind: data.nextActivity.kind, href: data.nextActivity.href })
+    const bare = bareTopicRedirect(`/courses/${courseId}/topics/${topicId}`, viewInPath(path), { kind: data.nextActivity.kind, href: data.nextActivity.href }, data.preparingEntry)
     if (bare) redirect(bare)
   }
   const { topic, content } = data
@@ -63,14 +64,15 @@ export default async function TopicLayout({
     >
       <TopicActions courseId={courseId} topicId={topicId} name={topic.name} />
       <PracticeProgressSync topicId={topicId} server={data.practiceProgress} />
-      <Page className="pt-3 sm:pt-6">
+      <Page width="wide" className="pt-3 sm:pt-6">
+        <AttemptBar courseId={courseId} name={topic.name} />
         <TopicHeader
           courseId={courseId}
           topicId={topicId}
           name={topic.name}
           description={topic.description}
           mastery={topic.mastery}
-          started={data.pathDone.warmup || data.pathDone.read || data.pathDone.recall || topic.progress.notes || topic.progress.examples || topic.progress.quizScore !== null}
+          started={data.begun || topic.progress.notes || topic.progress.examples || topic.progress.quizScore !== null}
           earnedMastery={topic.earnedMastery}
           dueAt={topic.dueAt}
           daysUntilDue={topic.daysUntilDue}
@@ -91,10 +93,12 @@ export default async function TopicLayout({
           previousId={data.previous?.id ?? null}
           nextId={data.next?.id ?? null}
           pathDone={data.pathDone}
+          recallProgress={data.recallProgress}
           steps={data.pathSteps}
           nextActivity={data.nextActivity}
+          preparingEntry={data.preparingEntry}
         />
-        <div data-tab-panel="" className="pt-5 sm:pt-8">
+        <div data-tab-panel="" className="pt-5 group-data-[attempt]/topic:max-sm:pt-3 sm:pt-8">
           {children}
         </div>
       </Page>

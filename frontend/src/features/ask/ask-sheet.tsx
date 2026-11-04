@@ -60,6 +60,7 @@ function AskSheetBody({ courseId, topicId, topicName, open, onOpenChange }: AskS
           examples={examples}
           fixedScope={topicName}
           topicName={topicName}
+          draftNewKey={`new-${topicId}`}
         />
       </SheetContent>
     </Sheet>

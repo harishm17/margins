@@ -14,3 +14,10 @@ export function activeStatusLine(levels: MasteryLevel[]): string {
   if (counts.learning > 0) return `${topics}, ${counts.learning} learning`
   return topics
 }
+
+/**
+ * The colour legend explains what the squares mean. While every topic is "Not started" all squares are
+ * the same grey and there is nothing to explain, so the legend waits for the first coloured one.
+ */
+export const hasMasteryColours = (levelsPerCourse: MasteryLevel[][]): boolean =>
+  levelsPerCourse.some((levels) => levels.some((level) => level !== 'none'))

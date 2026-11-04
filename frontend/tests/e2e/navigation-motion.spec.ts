@@ -126,12 +126,19 @@ test('the loop does not advance with reduced motion or on a phone', async ({ pag
   await expect(page.getByRole('button', { name: /the steps$/ })).toHaveCount(0)
 })
 
+/** Course settings keep the description behind "Add a description" until the course has one. */
+async function fillDescription(page: Page, text: string) {
+  const open = page.getByRole('button', { name: 'Add a description' })
+  if (await open.isVisible().catch(() => false)) await open.click()
+  await page.getByLabel('Description').fill(text)
+}
+
 test('on a phone a toast sits above the tab bar, so the tabs stay usable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await signUpAndIn(page, 'toast-place')
   const { courseId } = await createCourse(page, 'Toast course', [{ name: 'Sets' }])
   await page.goto(`/courses/${courseId}/settings`)
-  await page.getByLabel('Description').fill('Midterm practice')
+  await fillDescription(page, 'Midterm practice')
   await page.getByRole('button', { name: 'Save changes' }).click()
 
   const toast = page.locator('[data-sonner-toast]').filter({ hasText: 'Course saved' })
@@ -154,7 +161,7 @@ test('the toast moves to the top at the same width Sonner switches to its phone 
   for (const [width, where] of [[600, 'top'], [601, 'bottom']] as const) {
     await page.setViewportSize({ width, height: 844 })
     await page.goto(`/courses/${courseId}/settings`)
-    await page.getByLabel('Description').fill(`Midterm practice at ${width}`)
+    await fillDescription(page, `Midterm practice at ${width}`)
     await page.getByRole('button', { name: 'Save changes' }).click()
     const toast = page.locator('[data-sonner-toast]').filter({ hasText: 'Course saved' })
     await expect(toast).toBeVisible()
@@ -192,8 +199,12 @@ test('search keeps two files with the same name apart', async ({ page }) => {
   // The course page's setup uploader and this page's both exist while the navigation settles: wait for the old one to go.
   const upload = page.getByLabel('Choose files to upload')
   await expect(upload).toHaveCount(1)
-  await upload.setInputFiles([pdf, pdf])
-  await expect(page.getByText('Every file here has been read.')).toBeVisible({ timeout: 60_000 })
+  // The second copy is the same name and size, so the page asks first: keep both.
+  await upload.setInputFiles([pdf])
+  await expect(page.getByText('Ready', { exact: true })).toHaveCount(1, { timeout: 60_000 })
+  await upload.setInputFiles([pdf])
+  await page.getByRole('dialog', { name: 'This file is already here' }).getByRole('button', { name: 'Keep both' }).click()
+  await expect(page.getByText('Ready', { exact: true })).toHaveCount(2, { timeout: 60_000 })
   await page.reload()
   await expect(page.getByText('week-1.pdf', { exact: true })).toHaveCount(2)
 

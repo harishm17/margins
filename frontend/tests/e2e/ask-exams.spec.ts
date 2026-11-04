@@ -59,13 +59,21 @@ test('mock exam: a topic with no pages is left out and said so, and the exam is 
   test.setTimeout(240_000)
   await signIn(page, DEMO_EMAIL)
   await page.goto(`${course}/exams/new`)
-  // The demo's "Discrete random variables" has no file behind it; every topic is chosen by default.
+  // The demo's "Discrete random variables" has no file behind it; every topic is chosen by default, and the form says it may be left out.
+  await expect(page.getByText('No pages linked yet, so it may be left out').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '5', exact: true }).click()
   await page.getByRole('radio', { name: '30 min' }).click()
   await page.getByRole('button', { name: 'Create exam' }).click()
   await expect(page).toHaveURL(/\/exams\/[0-9a-f-]{36}$/, { timeout: 180_000 })
   // Said before the exam opens, and kept up for a while.
   await expect(page.getByText('Left out of the exam: Discrete random variables.')).toBeVisible()
+  // And it stays in the lobby, above Start, once the note is gone.
+  const leftOut = page.getByText('Left out of this exam: Discrete random variables')
+  await expect(leftOut).toBeVisible()
+  const leftOutBox = (await leftOut.boundingBox())!
+  const startBox = (await page.getByRole('button', { name: /^(Start exam|Resume)/ }).boundingBox())!
+  expect(leftOutBox.y, 'the exclusion is above Start exam').toBeLessThan(startBox.y)
   const facts = page.getByText('Questions', { exact: true }).locator('..')
   await expect(facts).toContainText('5')
   await expect(page.getByText('Covers').locator('..')).not.toContainText('Discrete random variables')
@@ -88,6 +96,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   test.setTimeout(240_000)
   await signIn(page, DEMO_EMAIL)
   await page.goto(`${course}/exams/new`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '10', exact: true }).click()
   await page.getByRole('radio', { name: '30 min' }).click()
   await page.getByRole('button', { name: 'Create exam' }).click()
@@ -116,12 +125,33 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await expect(page.getByRole('heading', { name: /Question 2 of/ })).toBeVisible()
   await page.getByRole('button', { name: 'Flag', exact: true }).click()
   await expect(page.getByText(/1 answered, 1 flagged/)).toBeVisible()
+  // The same navigator the quiz uses: answered has a check, the current one an outline, a flagged one a flag.
+  const navigator = page.getByRole('complementary', { name: 'Question navigator' })
+  await expect(navigator.getByRole('button', { name: 'Question 1, answered' }).locator('svg')).toHaveCount(1)
+  await expect(navigator.getByRole('button', { name: 'Question 2, not answered, flagged' })).toHaveAttribute('aria-current', 'step')
+  expect(await navigator.getByRole('button', { name: /^Question 2,/ }).evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('2px')
   await expect(page.getByText('Saved')).toBeVisible({ timeout: 15_000 })
 
   // Exit asks first.
   await page.getByRole('link', { name: 'Exit' }).click()
   await expect(page.getByRole('dialog', { name: 'Leave the exam?' })).toBeVisible()
   await page.getByRole('button', { name: 'Stay' }).click()
+
+  // One filled button: Next. Submit is final, so it is the quiet one until the last question (where "Submit exam" is the way on).
+  const fill = (name: string) => page.getByRole('button', { name, exact: true }).evaluate((el) => getComputedStyle(el).backgroundColor)
+  expect(await fill('Submit')).not.toBe(await fill('Next'))
+
+  // The course's "in progress" line is on every page but the exam's own lobby, which already says Resume.
+  const takeUrl = page.url()
+  const examId = /\/exams\/([0-9a-f-]{36})\//.exec(takeUrl)![1]
+  await page.goto(`${course}/exams`)
+  await expect(page.getByRole('complementary', { name: 'Mock exam in progress' })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Resume Mock exam/ })).toBeVisible()
+  await page.goto(`${course}/exams/${examId}`)
+  await expect(page.getByRole('heading', { name: 'Before you start' })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Mock exam in progress' })).toHaveCount(0)
+  await page.goto(takeUrl)
+  await expect(page.getByRole('heading', { name: /Question \d+ of/ })).toBeVisible()
 
   // Submitting with blanks asks for confirmation, and says how many are unanswered and flagged.
   await page.getByRole('button', { name: 'Submit', exact: true }).click()
@@ -146,6 +176,8 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await screenshotIfAsked(page, 'exam-submit-prompt')
   await prompt.getByRole('button', { name: 'Submit exam' }).click()
   await expect(page).toHaveURL(/\/results\/[0-9a-f-]{36}$/, { timeout: 30_000 })
+  // The exam is over: the course's "in progress" line is gone on its own results, at once, not after a fresh load.
+  await expect(page.getByRole('complementary', { name: 'Mock exam in progress' })).toHaveCount(0)
 
   // Grading, then the score and the review.
   await expect(page.getByText('of ').first()).toBeVisible({ timeout: 120_000 })

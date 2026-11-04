@@ -4,6 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { getSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
+import { NotFoundPanel } from '@/components/shell/not-found-panel'
 import { BRAND_NAME } from '@/config/brand'
 import { SectionLink } from './section-link'
 
@@ -85,5 +86,18 @@ export function FinalCta() {
     <Button asChild variant="primary" size="lg">
       <Link href={signedIn ? '/home' : '/login'}>{signedIn ? `Open ${BRAND_NAME}` : 'Get started'}</Link>
     </Button>
+  )
+}
+
+/**
+ * The way back on the public not-found page. A signed-in student goes to their home; a visitor goes to the
+ * landing page (and the label says which), not to a sign-in page they did not ask for.
+ */
+export function NotFoundBack() {
+  const signedIn = useSignedIn()
+  return (
+    <NotFoundPanel
+      action={signedIn ? { href: '/home', label: 'Go to your courses' } : { href: '/', label: 'Go to the home page' }}
+    />
   )
 }

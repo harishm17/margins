@@ -8,6 +8,7 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { MAX_QUESTION_CHARS } from '@/lib/ask/explain'
 import { cn } from '@/lib/utils'
 import { AiBlockedNote, useAiStatus } from '@/features/ai/ai-status'
+import { statusLabel, useServerDraft } from '@/features/learning/use-server-draft'
 
 export { MAX_QUESTION_CHARS }
 const COUNT_FROM = 1800
@@ -30,7 +31,19 @@ type ComposerProps = {
   autoFocus?: boolean
   /** Text the box starts with (not sent). The cursor goes to its end. */
   initialValue?: string
+  /**
+   * Where the unsent question is kept (spec 18.7): the course and the conversation (`<courseId>:<threadId>`, or `new` before the
+   * first message). A reload, a closed tab or another device brings it back. Omit to keep nothing.
+   */
+  draft?: { courseId: string; key: string }
+  /** Hears, as it happens, that the server accepted a question; the draft is cleared then and not before. */
+  subscribeAccepted?: (listener: (question: string) => void) => () => void
 }
+
+const parseAskDraft = (raw: unknown): { text: string } | null =>
+  raw && typeof raw === 'object' && typeof (raw as { text?: unknown }).text === 'string' && (raw as { text: string }).text !== ''
+    ? { text: (raw as { text: string }).text }
+    : null
 
 /** Auto-growing question box with the scope and the send or stop button inside one frame. */
 export function Composer({
@@ -44,8 +57,42 @@ export function Composer({
   disabled,
   autoFocus,
   initialValue = '',
+  draft: draftAt,
+  subscribeAccepted,
 }: ComposerProps) {
-  const [value, setValue] = React.useState(initialValue)
+  const draft = useServerDraft<{ text: string }>('ask', draftAt ? `${draftAt.courseId}:${draftAt.key}` : null, {
+    projectId: draftAt?.courseId ?? null,
+    parse: parseAskDraft,
+  })
+  // What was typed since the box showed; until then, a link's prefill, else the saved draft.
+  // It belongs to one conversation: another conversation shows its own draft.
+  const draftKey = draftAt ? `${draftAt.courseId}:${draftAt.key}` : null
+  const [typedState, setTypedState] = React.useState<{ key: string | null; text: string | null }>({ key: draftKey, text: initialValue || null })
+  const typed = typedState.key === draftKey ? typedState.text : null
+  const setTyped = (text: string) => setTypedState({ key: draftKey, text })
+  const value = typed ?? draft.value?.text ?? ''
+  // The box was filled from a saved draft (a reload, another device, a send that never got an answer), not typed or prefilled
+  // here: say so, quietly, until the student changes it.
+  const restored = typed === null && !!draft.value?.text && !disabled
+  const setValue = (next: string) => {
+    setTyped(next)
+    if (next.trim()) draft.set({ text: next })
+    else void draft.clear()
+  }
+  // Sending empties the box but not the draft: it goes only when the server has accepted the question, so a failed send,
+  // a closed tab or a reload in between still has the text.
+  const valueRef = React.useRef(value)
+  React.useEffect(() => {
+    valueRef.current = value
+  })
+  const clearDraft = draft.clear
+  React.useEffect(() => {
+    if (!subscribeAccepted) return
+    // Not while the student is already typing the next question: that is the draft now.
+    return subscribeAccepted(() => {
+      if (valueRef.current.trim() === '') void clearDraft()
+    })
+  }, [subscribeAccepted, clearDraft])
   const ref = React.useRef<HTMLTextAreaElement>(null)
 
   const resize = React.useCallback(() => {
@@ -75,7 +122,8 @@ export function Composer({
   const submit = () => {
     if (!canSend) return
     onSend(trimmed)
-    setValue('')
+    setTyped('')
+    valueRef.current = ''
   }
 
   return (
@@ -111,24 +159,36 @@ export function Composer({
             onStop()
           }
         }}
-        className="block max-h-48 w-full resize-none bg-transparent px-2 py-1 text-[15px] leading-6 text-fg outline-none placeholder:text-fg-3 disabled:cursor-not-allowed"
+        className="block max-h-48 w-full resize-none max-sm:min-h-11 bg-transparent px-2 py-1 text-[15px] max-sm:text-[16px] leading-6 text-fg outline-none placeholder:text-fg-3 disabled:cursor-not-allowed"
         style={{ height: LINE + 8 }}
       />
+      {restored ? (
+        <p role="status" className="px-2 pb-0.5 text-caption font-normal text-fg-3" data-testid="ask-restored">
+          Your unsent question was restored.
+        </p>
+      ) : null}
       <div className="mt-1 flex items-center gap-2">
+        {/* The scope says what the question is about, not a filter on the conversation: the words are on screen, not only in the name. */}
+        {fixedScope || (scopeOptions && onScopeChange) ? <span className="shrink-0 text-small text-fg-2">Ask about</span> : null}
         {fixedScope ? (
           <span className="inline-flex h-7 min-w-0 max-w-[60%] items-center truncate rounded-control bg-surface-2 px-2.5 text-small text-fg-2">
             <span className="truncate">{fixedScope}</span>
           </span>
         ) : scopeOptions && onScopeChange ? (
           <Select
-            aria-label="Search in"
+            aria-label="Ask about"
             value={scope}
             onValueChange={onScopeChange}
             options={scopeOptions}
-            className="h-7 w-auto max-w-[220px] border-transparent bg-surface-2 px-2.5 text-small max-sm:h-9"
+            className="h-7 w-auto max-w-[220px] border-transparent bg-surface-2 px-2.5 text-small"
           />
         ) : null}
         <span className="flex-1" />
+        {value.trim() && draftAt && statusLabel(draft.status) ? (
+          <span role="status" className="text-caption text-fg-3" data-testid="ask-draft-status">
+            {statusLabel(draft.status)}
+          </span>
+        ) : null}
         {value.length > COUNT_FROM ? (
           <span
             className={cn('tabular text-caption', value.length >= MAX_QUESTION_CHARS ? 'text-danger-soft-fg' : 'text-fg-3')}
@@ -147,6 +207,15 @@ export function Composer({
             variant="primary"
             icon={<ArrowUp weight="bold" />}
             disabled={!canSend}
+            disabledReason={
+              blocked
+                ? 'AI features are paused right now.'
+                : disabled
+                  ? undefined
+                  : trimmed.length === 0
+                    ? 'Type a question first.'
+                    : undefined
+            }
             shortcut="Enter"
           />
         )}

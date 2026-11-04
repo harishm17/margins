@@ -1,3 +1,4 @@
+import { phoneInlineHit } from '@/components/ui/styles'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -19,7 +20,7 @@ export default function AccountDeletedPage() {
       </p>
       <p>
         Questions? Email{' '}
-        <a className="text-accent underline underline-offset-4 hover:text-accent-hover" href={`mailto:${CONTACT_EMAIL}`}>
+        <a className={`${phoneInlineHit} text-accent underline underline-offset-4 hover:text-accent-hover`} href={`mailto:${CONTACT_EMAIL}`}>
           {CONTACT_EMAIL}
         </a>
         .

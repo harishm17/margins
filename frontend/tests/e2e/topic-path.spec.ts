@@ -114,12 +114,16 @@ test('path marks the current step', async ({ page }) => {
   await expect(recall).toContainText('Next')
   await expect(recall).toContainText('(next up)')
   await expect(nav.getByRole('link', { name: /Practice/ })).not.toContainText('Next')
-  // The same activity is offered as a card with its reason and a button, since the student is on another step.
+  // One next signal: on a step (it has its own action) the tag above is all there is, and there is no line under the path.
   const card = page.getByRole('region', { name: 'Next on this topic' })
-  await expect(card).toContainText('Close the book and say what you remember.')
-  await expect(card.getByRole('link', { name: /Start recall/ })).toHaveAttribute('href', /\?view=recall$/)
+  await expect(card).toHaveCount(0)
   await screenshotIfAsked(page, 'topic-path-midway-1440x900')
   await expectNoAxeViolations(page, 'topic path, mid-path, 1440')
+  // A tool is no step: the same activity is offered there as a line with its reason and a way in.
+  await page.getByRole('group', { name: 'Tools' }).getByRole('link', { name: 'Examples' }).click()
+  await expect(page).toHaveURL(/view=examples/)
+  await expect(card).toContainText('Close the book and say what you remember.')
+  await expect(card.getByRole('link', { name: /Start recall/ })).toHaveAttribute('href', /\?view=recall$/)
 
   // Moving on moves the current step; the next one stays marked. On the next step itself the card steps aside.
   await recall.click()
@@ -153,8 +157,10 @@ test('a new topic shows the whole path with its first step marked', async ({ pag
   await expect(nav.getByRole('link', { name: /Warm-up/ })).toContainText('Next')
   // On the step the next activity points to, no card repeats it.
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
-  // Concepts show as chips: an icon is decoration, the state is words.
-  const chips = page.getByRole('list', { name: 'Concepts in this topic' })
+  // Concepts show as chips behind "About this topic" on every width: an icon is decoration, the state is words.
+  const chips = page.getByRole('list', { name: 'Ideas in this topic' })
+  await expect(chips).toBeHidden()
+  await page.getByRole('button', { name: /About this topic/ }).click()
   await expect(chips.getByRole('listitem')).toHaveCount(2)
   await expect(chips.getByRole('listitem').first()).toContainText('Hash function')
   await expect(chips.getByRole('listitem').first()).toContainText('Not started')
@@ -171,7 +177,8 @@ test('concept chips say a wrong idea in words, and a drill is offered', async ({
   await page.goto(topicUrl('No warm-up topic'))
   // A drill is its own page: the topic opens on Practice and the card offers the drill.
   await expect(page).toHaveURL(/\?view=practice$/)
-  const chips = page.getByRole('list', { name: 'Concepts in this topic' })
+  const chips = page.getByRole('list', { name: 'Ideas in this topic' })
+  await page.getByRole('button', { name: /About this topic/ }).click()
   await expect(chips).toContainText('Pointers')
   // The chip says the word the map says for the same idea (Shaky), and that a wrong idea is on record.
   await expect(chips.getByRole('listitem').filter({ hasText: 'Pointers' })).toContainText('Shaky, wrong idea')
@@ -204,8 +211,10 @@ test('phone shows stepper and tools menu at 390px', async ({ page }) => {
   // The tools are not a row of links here: one menu.
   await expect(page.getByRole('group', { name: 'Tools' })).toBeHidden()
   // The concept chips fold into one line on a phone and open on a tap; the state stays in words.
-  const chipList = page.getByRole('list', { name: 'Concepts in this topic' })
-  const fold = page.getByRole('button', { name: '3 ideas, 0 solid' })
+  const chipList = page.getByRole('list', { name: 'Ideas in this topic' })
+  const fold = page.getByRole('button', { name: /About this topic/ })
+  await expect(fold).toHaveAccessibleName(/^About this topic ?: 3 ideas, 0 solid$/)
+  expect((await fold.boundingBox())!.height, 'a 44px target on a phone').toBeGreaterThanOrEqual(44)
   await expect(chipList).toBeHidden()
   await fold.click()
   await expect(chipList.getByRole('listitem')).toHaveCount(3)
@@ -242,32 +251,32 @@ test('the status says In progress once a step is done, and Not started before', 
   await expect(pathNav(page).getByRole('link', { name: /Read/ }).getByRole('img', { name: 'Completed' })).toBeVisible()
   await expect(header.getByText('In progress', { exact: true })).toBeVisible()
   // Only the three concepts' own chips still say "Not started" (nothing has been answered on them yet).
+  await header.getByRole('button', { name: /About this topic/ }).click()
   await expect(header.getByText('Not started', { exact: true })).toHaveCount(3)
-  await expect(header.getByRole('list', { name: 'Concepts in this topic' }).getByText('Not started')).toHaveCount(3)
+  await expect(header.getByRole('list', { name: 'Ideas in this topic' }).getByText('Not started')).toHaveCount(3)
   await screenshotIfAsked(page, 'topic-path-status-1440x900')
 })
 
 test('on a phone the topic header is compact: the content starts near the top, and nothing is lost', async ({ page }) => {
   await page.setViewportSize(PHONE)
   const { topicUrl } = await world(page, 'tp-compact')
-  await page.goto(`${topicUrl('Midway topic')}?view=read`)
+  await page.goto(`${topicUrl('Midway topic')}?view=examples`)
   await expect(page.getByRole('heading', { level: 1, name: 'Midway topic' })).toBeVisible()
   const header = page.locator('main header')
   // Status, the ideas summary and the Tools menu share the line under the title.
   await expect(header.getByText('In progress', { exact: true })).toBeVisible()
-  await expect(header.getByRole('button', { name: '3 ideas, 0 solid' })).toBeVisible()
+  await expect(header.getByRole('button', { name: /About this topic/ })).toBeVisible()
   await expect(header.getByRole('button', { name: 'Tools' })).toBeVisible()
   const top = async (selector: string) => (await page.locator(selector).first().boundingBox())!.y
-  // The next-step card is one short row (reason and button), not a block of its own.
+  // On a tool the next-step line is one tidy block: the tag and the reason (two lines at most), the way on under it. No "Why" fold.
   const next = page.getByRole('region', { name: 'Next on this topic' })
   await expect(next).toBeVisible()
-  expect((await next.boundingBox())!.height).toBeLessThan(60)
-  // The reason is behind "Why"; the way on and its name are on the line.
-  await expect(next.getByRole('link', { name: /Start recall/ })).toBeVisible()
-  await expect(next.getByText('Close the book and say what you remember.')).toBeHidden()
-  await next.getByRole('button', { name: 'Why' }).click()
+  expect((await next.boundingBox())!.height).toBeLessThan(110)
   await expect(next.getByText('Close the book and say what you remember.')).toBeVisible()
-  await next.getByRole('button', { name: 'Why' }).click()
+  await expect(next.getByRole('button', { name: 'Why' })).toHaveCount(0)
+  const reason = (await next.getByText('Close the book and say what you remember.').boundingBox())!
+  const way = (await next.getByRole('link', { name: /Start recall/ }).boundingBox())!
+  expect(way.y, 'the way on is under the reason on a phone').toBeGreaterThanOrEqual(reason.y + reason.height - 2)
   await screenshotIfAsked(page, 'topic-path-compact-midway-390x844')
   await expectNoAxeViolations(page, 'topic header, phone, 390')
 
@@ -432,7 +441,7 @@ test('a topic without concepts has no warm-up and no recall: Read, Practice, Qui
   await page.goto(`${topicUrl('Legacy topic')}?view=read`)
   const nav = pathNav(page)
   await expect(nav.getByRole('link')).toHaveText([/Read/, /Practice/, /Quiz/, /Examples/, /Explainer/, /Voice/])
-  await expect(page.getByRole('list', { name: 'Concepts in this topic' })).toHaveCount(0)
+  await expect(page.getByRole('list', { name: 'Ideas in this topic' })).toHaveCount(0)
   // The addresses of the hidden steps still work, and go on to a step that does.
   await page.goto(`${topicUrl('Legacy topic')}?view=recall`)
   await expect(page).toHaveURL(/view=practice/)
@@ -900,18 +909,23 @@ test.describe('a question starts high on the screen', () => {
     await expect(page.getByRole('link', { name: 'Show on the map' })).toBeVisible()
   })
 
-  test('phone: the quiz numbers are one row and the answers are above the tab bar', async ({ page }) => {
+  test('phone: the quiz has one question picker and the answers are above the tab bar', async ({ page }) => {
     await page.setViewportSize(PHONE)
     const { topicId, topicUrl } = await readerWorld(page, 'high-quiz')
     await addQuizSet(topicId, quizQuestions(10))
     await page.goto(`${topicUrl}?view=quiz`)
     await page.getByRole('button', { name: 'Start quiz' }).click()
     await expect(page.getByRole('heading', { name: 'Question 1 of 10' })).toBeVisible()
-    const nav = page.getByRole('navigation', { name: 'Questions' })
-    const [one, ten] = await Promise.all([nav.getByRole('button', { name: /^Question 1,/ }).boundingBox(), nav.getByRole('button', { name: /^Question 10,/ }).boundingBox()])
-    expect(ten!.y, 'tile 10 is in the same row as tile 1').toBe(one!.y)
+    // One navigator, not two: the Questions button opens the sheet of numbers; the row of numbers is for wide screens.
+    await expect(page.getByRole('navigation', { name: 'Questions' })).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Questions', exact: true })).toBeVisible()
     const last = await page.getByRole('radio').last().boundingBox()
     expect(last!.y + last!.height, 'the last answer ends above the tab bar (56px)').toBeLessThan(PHONE.height - 56)
+    // The confidence row, I don't know and Next are above the tab bar too.
+    for (const name of ['Certain', "I don't know", 'Next']) {
+      const box = await page.getByRole(name === 'Certain' ? 'radio' : 'button', { name, exact: true }).boundingBox()
+      expect(box!.y + box!.height, `${name} ends above the tab bar (56px)`).toBeLessThan(PHONE.height - 56)
+    }
   })
 })
 
@@ -1023,7 +1037,7 @@ test.describe('the reader', () => {
     await expect(second).toContainText("I don't know")
     await second.getByRole('button', { name: 'Missed' }).click()
     await expect(second.getByText('Saved: Missed')).toBeVisible()
-    await checks.nth(2).getByRole('button', { name: 'Skip' }).click()
+    await checks.nth(2).getByRole('button', { name: 'Continue reading' }).click()
     await expect(checks).toHaveCount(2)
     // The check left the page: focus did not fall back to it.
     await expect(page.locator('body')).not.toBeFocused()

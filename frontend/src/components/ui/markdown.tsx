@@ -197,7 +197,7 @@ export function CheckYourself({ question, answer, conceptId = null }: { question
   return (
     <div className="md-check rounded-card border border-border bg-surface p-4">
       <p className="mb-1.5 text-caption text-fg-3">Question</p>
-      <Markdown variant="compact" className="text-[16px]! leading-[26px]!">
+      <Markdown variant="question">
         {question}
       </Markdown>
       <label htmlFor={`${id}-text`} className="mb-1 mt-3 block text-caption text-fg-3">
@@ -243,7 +243,7 @@ export function CheckYourself({ question, answer, conceptId = null }: { question
       {open ? (
         <div id={panelId} className="mt-3 rounded-control bg-surface-2 px-3.5 py-3">
           <p className="mb-1 text-caption text-fg-3">Answer</p>
-          <Markdown variant="compact" className="text-[16px]! leading-[26px]!">
+          <Markdown variant="question">
             {answer}
           </Markdown>
         </div>
@@ -317,8 +317,9 @@ type MarkdownProps = {
    * "reading" is 17px for notes and answers; "compact" is 14px for cards and feedback; "stem" is a
    * question: its paragraphs are drawn like the heading of a question, tables and code stay body size;
    * "stem-compact" is the same inside a review list, where a question is a line of 14px semibold text.
+   * "question" is the compact reading style, 16px: the text of a practice question or a worked example.
    */
-  variant?: 'reading' | 'compact' | 'stem' | 'stem-compact'
+  variant?: 'reading' | 'compact' | 'question' | 'stem' | 'stem-compact'
   /** Run the notes normaliser first (escaped newlines, dense prose). */
   learning?: boolean
   /** Renders `[n](#cite-n)` links. Chat passes this; the renderer knows nothing else about citations. */
@@ -332,7 +333,7 @@ export function Markdown({ children, variant = 'reading', learning, renderCitati
   const ref = React.useRef<HTMLDivElement>(null)
   useScrollableFocus(ref, source)
   return (
-    <div ref={ref} className={cn('md', variant === 'reading' ? 'md-reading' : 'md-compact', variant === 'stem' && 'md-stem', variant === 'stem-compact' && 'md-stem-compact', className)}>
+    <div ref={ref} className={cn('md', variant === 'reading' ? 'md-reading' : variant === 'question' ? 'md-question' : 'md-compact', variant === 'stem' && 'md-stem', variant === 'stem-compact' && 'md-stem-compact', className)}>
       <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
         {source}
       </ReactMarkdown>

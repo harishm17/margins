@@ -232,7 +232,7 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     test.setTimeout(120_000)
     const w = await nineQuestionWorld(page, `s2-strong-${stamp}`)
     const card = page.getByRole('region', { name: 'Next on this topic' })
-    await page.goto(quizUrl(w.courseId, w.topics.Graphs))
+    await page.goto(`/courses/${w.courseId}/topics/${w.topics.Graphs}?view=examples`)
     await expect(card).toContainText('Read the topic next.')
 
     // Eight of nine right and not guessed (one queue statement wrong: its concept still grades Good).
@@ -242,7 +242,7 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     expect((await response.json()).score).toBeGreaterThan(80)
 
     await expect.poll(() => withPrisma((prisma) => prisma.topicProgress.findFirst({ where: { topicId: w.topics.Graphs }, select: { testedOutAt: true } }))).toMatchObject({ testedOutAt: expect.any(Date) })
-    await page.goto(quizUrl(w.courseId, w.topics.Graphs))
+    await page.goto(`/courses/${w.courseId}/topics/${w.topics.Graphs}?view=examples`)
     await expect(card).not.toContainText('Read the topic next.')
     await page.goto(`/courses/${w.courseId}/topics/${w.topics.Graphs}`)
     await expect(page).not.toHaveURL(/view=read/)
@@ -278,6 +278,10 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     const first = pointers.first().getByRole('link')
     await expect(first).toHaveText(/^p\. \d+$/)
     await expect(first).toHaveAttribute('href', /view=read&focus=.*#chunk-/)
+    // After a miss the one primary step is going back to the first missed idea; new questions and voice practice are secondary.
+    await expect(page.getByTestId('review-first-missed')).toHaveText('Review the first missed idea')
+    await expect(page.getByTestId('review-first-missed')).toHaveAttribute('href', /view=read&focus=/)
+    await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
     await expectNoAxeViolations(page, 'quiz results with pointers')
     await shot(page, 'quiz-results-pointers')
     await first.click()
@@ -368,7 +372,7 @@ test.describe('S4: review sessions and drills', () => {
     await expect(page.getByTestId('length-notice')).toHaveText('Misses come back once at the end in a new form.')
     await expect(page.getByTestId('where-to-look').getByRole('link')).toHaveText(/^p\. (12|31)$/)
     await shot(page, 'review-first-miss')
-    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await page.getByRole('button', { name: 'Next question', exact: true }).click()
     // The counter says a retest is to come.
     await expect(page.getByRole('heading', { name: /^Question 2 of 2 \(\+1 to retest\)/ })).toBeVisible()
     // The notice is for the first miss only.
@@ -440,7 +444,7 @@ test.describe('S4: review sessions and drills', () => {
     for (let i = 0; i < total; i += 1) {
       await page.getByRole('radio', { name: 'False' }).click()
       await page.getByRole('button', { name: 'Check answer' }).click()
-      await page.getByRole('button', { name: /^(Next|See summary|Continue)$/ }).click()
+      await page.getByRole('button', { name: /^(Next question|See session summary|Continue)$/ }).click()
     }
     await expect(page.getByRole('heading', { name: 'Drill done' })).toBeVisible()
     await expect(page.getByText(`You got 0 of ${total} questions right.`)).toBeVisible()
@@ -455,7 +459,8 @@ test.describe('S4: review sessions and drills', () => {
     await expectNoAxeViolations(page, 'drill end screen')
     await shot(page, 'drill-end-screen')
     // After the drill the next activity is the explanation or the pages, not the same drill again (spec 8.1).
-    await page.goto(`/courses/${course.courseId}/topics/${topicId}?view=quiz`)
+    // The topic's one next signal says to read again (the tag is on Read); a tool carries the sentence, the quiz step has its own buttons.
+    await page.goto(`/courses/${course.courseId}/topics/${topicId}?view=examples`)
     const card = page.getByRole('region', { name: 'Next on this topic' })
     await expect(card).toContainText('Read p. 12 again before trying again.')
   })
@@ -481,6 +486,8 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
         reviewItem(conceptId, `Concept ${n} statement four holds.`, 'easy'),
       ])
     }
+    // The 10-minute check opens after a first quiz: give the first topic a score.
+    await setProgress(email, topicIds[0], { quizScore: 70 })
     // Seeded memories have no evidence behind them: mark the topics converted, or opening one would rebuild its concepts from nothing.
     await withPrisma((prisma) => prisma.topic.updateMany({ where: { projectId: course.courseId }, data: { evidenceBackfilledAt: new Date() } }))
     return { email, course }
@@ -491,8 +498,8 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
     await dueWorld(page, `s5-home-${stamp}`, 8)
     await page.goto('/home')
     const card = page.getByTestId('short-session').locator('visible=true')
-    await expect(card.getByRole('heading', { name: 'Have 10 minutes?' })).toBeVisible()
-    await expect(card).toContainText('6 reviews, about 9 minutes')
+    await expect(card.getByRole('heading', { name: 'Quick practice' })).toBeVisible()
+    await expect(card).toContainText('About 9 minutes · 6 reviews')
     await expectNoAxeViolations(page, 'home with the short session')
     // A long course name is cut inside its card, not pushed past the screen edge (the page was 402px wide on a 390px phone).
     const original = page.viewportSize()
@@ -525,21 +532,21 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
     const w = await dueWorld(page, `s5-review-${stamp}`, 8)
     await page.goto(`/courses/${w.course.courseId}/review`)
     const card = page.getByTestId('short-session').locator('visible=true')
-    await expect(card).toContainText('Have 10 minutes?')
+    await expect(card).toContainText('Quick practice')
     await card.getByRole('button', { name: 'Start' }).click()
     await expect(page.getByRole('heading', { name: /^Question 1 of 6/ })).toBeVisible({ timeout: 60_000 })
     // Miss all six: the counter caps the retests at two.
     await page.getByRole('radio', { name: 'False' }).click()
     await page.getByRole('button', { name: 'Check answer' }).click()
-    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await page.getByRole('button', { name: 'Next question', exact: true }).click()
     await expect(page.getByRole('heading', { name: /^Question 2 of 6 \(\+1 to retest\)/ })).toBeVisible()
     await page.getByRole('radio', { name: 'False' }).click()
     await page.getByRole('button', { name: 'Check answer' }).click()
-    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await page.getByRole('button', { name: 'Next question', exact: true }).click()
     await expect(page.getByRole('heading', { name: /^Question 3 of 6 \(\+2 to retest\)/ })).toBeVisible()
     await page.getByRole('radio', { name: 'False' }).click()
     await page.getByRole('button', { name: 'Check answer' }).click()
-    await page.getByRole('button', { name: 'Next', exact: true }).click()
+    await page.getByRole('button', { name: 'Next question', exact: true }).click()
     // A third miss does not raise it past the cap.
     await expect(page.getByRole('heading', { name: /^Question 4 of 6 \(\+2 to retest\)/ })).toBeVisible()
   })
@@ -552,17 +559,19 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
     const topicId = course.topics['Hash tables']
     const concepts = await seedConcepts(topicId, ['Hashing', 'Collisions'])
     await addQuizSet(topicId, Object.values(concepts).map((id, n) => reviewItem(id, `Statement ${n} holds.`, 'easy')))
-    await setProgress(email, topicId, { readAt: new Date(Date.now() - 3_600_000) })
+    // A first quiz (a score on the topic) opens the 10-minute check; before it Home says what opens it.
+    await setProgress(email, topicId, { readAt: new Date(Date.now() - 3_600_000), quizScore: 70 })
 
     await page.goto('/home')
     const card = page.getByTestId('short-session').locator('visible=true')
-    await expect(card).toContainText('One recall card, about 5 minutes')
+    await expect(card).toContainText('About 5 minutes · one recall card')
     await expect(card.getByRole('link', { name: 'Start' })).toHaveAttribute('href', `/courses/${course.courseId}/topics/${topicId}?view=recall`)
 
     // With the AI down the recall card is not offered: a short check on rule-graded items stands in.
     await markAiUnavailable()
     await page.goto('/home')
-    await expect(page.getByTestId('short-session').locator('visible=true')).toContainText('A 4-question check, about 4 minutes')
+    // The card says the number the session really has (the world holds two questions), not the format's ceiling of four.
+    await expect(page.getByTestId('short-session').locator('visible=true')).toContainText('About 2 minutes · 2 questions')
     await page.getByTestId('short-session').locator('visible=true').getByRole('button', { name: 'Start' }).click()
     await expect(page.getByRole('heading', { name: /^Question 1 of 2/ })).toBeVisible({ timeout: 60_000 })
   })
@@ -607,7 +616,7 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
 
     // A quick topic skips read and recall: its next activity is the warm-up or the quiz.
     const quickTopicId = quick[0].topicId
-    await page.goto(`/courses/${course.courseId}/topics/${quickTopicId}?view=practice`)
+    await page.goto(`/courses/${course.courseId}/topics/${quickTopicId}?view=examples`)
     const next = page.getByRole('region', { name: 'Next on this topic' }).locator('visible=true')
     await expect(next).toContainText('Take the quiz to see what you know.')
     await expect(next).not.toContainText(/Read the topic next|Close the book/)

@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { ChatCircleText, CheckCircle, MinusCircle, NotePencil, Trash, XCircle } from '@phosphor-icons/react/dist/ssr'
+import { ArrowCounterClockwise, ChatCircleText, CheckCircle, MinusCircle, NotePencil, Trash } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Textarea } from '@/components/ui/textarea'
@@ -28,14 +28,16 @@ const isTutorItem = (note: MarginNoteView) => note.reply !== null && (note.kind 
 const isAnswer = (note: MarginNoteView) => note.kind === 'answer'
 
 /** The icon says the verdict as well as the word does, so the verdict never rests on colour. */
-const VERDICT_ICONS: Record<CheckVerdict, React.ElementType> = { right: CheckCircle, partly: MinusCircle, not_yet: XCircle }
+const VERDICT_ICONS: Record<CheckVerdict, React.ElementType> = { right: CheckCircle, partly: MinusCircle, not_yet: ArrowCounterClockwise }
+/** The same colours as Practice and Recall: a miss is amber (a place to look again), never the red kept for real errors. */
+const VERDICT_TONES: Record<CheckVerdict, string> = { right: 'text-accent', partly: 'text-warning-soft-fg', not_yet: 'text-warning-soft-fg' }
 
 /** The tutor's verdict on an answer: an icon and the word, with a spoken lead-in for a screen reader. */
 function Verdict({ verdict }: { verdict: CheckVerdict }) {
   const Icon = VERDICT_ICONS[verdict]
   return (
     <p className="flex items-center gap-1.5 text-body-strong" data-verdict={verdict}>
-      <Icon aria-hidden="true" weight="fill" className="size-4 shrink-0" />
+      <Icon aria-hidden="true" weight="fill" className={`size-4 shrink-0 ${VERDICT_TONES[verdict]}`} />
       <span className="sr-only">Tutor&apos;s verdict: </span>
       <span>{VERDICT_LABELS[verdict]}</span>
     </p>
@@ -246,7 +248,10 @@ export function MarginPanel({ topicId, chunkId, passageName, notes, onAdd, onRem
       ) : null}
 
       {mode === 'idle' ? (
-        <div className="flex flex-wrap gap-1.5">
+        // Help on request: on a wide screen with a pointer the two buttons show when the passage is hovered or has focus
+        // (they stay in the tab order, and focus shows them); on touch and on a phone the passage's one "Margin notes"
+        // control opens this panel. Reading comes first.
+        <div className="flex flex-wrap gap-1.5 transition-opacity duration-120 lg:[@media(hover:hover)]:opacity-0 lg:[@media(hover:hover)]:group-focus-within/passage:opacity-100 lg:[@media(hover:hover)]:group-hover/passage:opacity-100">
           <Button ref={focus.register('add')} size="sm" variant="secondary" icon={<NotePencil />} onClick={() => open('note')} aria-label={`Add a note on ${passageName}`}>
             Add a note
           </Button>
@@ -266,7 +271,7 @@ export function MarginPanel({ topicId, chunkId, passageName, notes, onAdd, onRem
         >
           <Textarea ref={fieldRef} rows={3} maxRows={8} value={text} onChange={(event) => setText(event.target.value)} aria-label={`Your note on ${passageName}`} placeholder="Write in the margin" maxLength={4000} />
           <div className="flex gap-2">
-            <Button type="submit" size="sm" variant="primary" loading={busy === 'note'} disabled={!text.trim()}>
+            <Button type="submit" size="sm" variant="primary" loading={busy === 'note'} disabled={!text.trim()} disabledReason="Write the note first.">
               Save note
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => cancel('add')}>
@@ -293,7 +298,7 @@ export function MarginPanel({ topicId, chunkId, passageName, notes, onAdd, onRem
           </p>
           <AiBlockedNote />
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" size="sm" variant="primary" loading={busy === 'explain'} disabled={!isAttempt(text) || !!blocked}>
+            <Button type="submit" size="sm" variant="primary" loading={busy === 'explain'} disabled={!isAttempt(text) || !!blocked} disabledReason={blocked ? undefined : `Write at least ${MIN_TAKE_CHARS} characters first.`}>
               Ask the tutor
             </Button>
             <Button type="button" size="sm" variant="secondary" disabled={busy === 'explain' || !!blocked} onClick={() => void explain(true)}>

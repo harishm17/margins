@@ -148,9 +148,15 @@ test('a recall answer is graded against the claims, with the student quoted firs
   await expect(page.getByText('Write what you can remember of each idea, without looking back.')).toBeVisible()
   await expect(page.getByRole('button', { name: /instructions/ })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
+  // One prompt is open (the first); each of the others is one labelled row, not another box and another Check button.
   await expect(card(page)).toBeVisible()
-  await expect(card(page, 'Explain what the load factor tells you.')).toBeVisible()
-  await expect(card(page, 'Explain this topic in your own words: its main ideas and how they fit together.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Check my answer' })).toHaveCount(1)
+  for (const prompt of ['Explain what the load factor tells you.', 'Explain this topic in your own words: its main ideas and how they fit together.']) {
+    await expect(card(page, prompt)).toHaveCount(0)
+    const row = page.getByRole('button', { name: new RegExp(prompt.slice(0, 30)) })
+    await expect(row).toContainText('Not answered yet')
+    expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+  }
   // The pages are closed: no reader on the step.
   await expect(page.getByRole('region', { name: 'Reading' })).toHaveCount(0)
   await screenshotIfAsked(page, 'e4-recall-prompt-1440x900')
@@ -164,10 +170,10 @@ test('a recall answer is graded against the claims, with the student quoted firs
   // In order: what they got (their own words), what is not right (the source's words and page), what they missed.
   await expect(feedback.getByRole('heading')).toHaveText(['What you got', 'What is not right', 'What you missed'])
   await expect(feedback.getByText('“A hash table sends each key”')).toBeVisible()
-  await expect(feedback.getByText('Page text for: Chaining keeps a list of entries per bucket.')).toBeVisible()
-  await expect(feedback.getByText('(p. 5)')).toBeVisible()
+  await expect(feedback.getByText('Page text for: Chaining keeps a list of entries per bucket.').locator('visible=true')).toBeVisible()
+  await expect(feedback.getByText('(p. 5)').locator('visible=true')).toBeVisible()
   // What was missed is a pointer, never the claim itself.
-  await expect(feedback.getByText(/Look again at p\. 5/)).toBeVisible()
+  await expect(feedback.getByText(/Look again at p\. 5/).locator('visible=true')).toBeVisible()
   await expect(page.getByText('A collision is two keys that land in one bucket.')).toHaveCount(0)
   // Results first: the instructions fold into one line, and open again on a tap.
   const instructions = page.getByRole('button', { name: 'Show instructions' })
@@ -180,9 +186,20 @@ test('a recall answer is graded against the claims, with the student quoted firs
   // One clear next step: the topic's next activity is the primary button, and "Show me what I missed" is the quiet choice.
   // The answer held a wrong idea and failed the concept, so the topic's next activity is to read about it first (spec 18.5); the
   // drill that pairs it with its confusable comes after the instruction.
-  await expect(page.getByRole('link', { name: 'Read about it' })).toHaveAttribute('href', /view=(read|explainer)&focus=/)
-  await expect(page.getByRole('link', { name: 'Go to Practice' })).toHaveCount(0)
+  // The first answer counts the topic as recalled, but the step is not finished: the page says how far it is and keeps
+  // the other prompts as the thing to do, with moving on as the quiet choice (not the primary button).
+  await expect(page.getByTestId('recall-progress').locator('visible=true')).toHaveText(/^1 of \d+ prompts answered\. Answer the rest, or move on\.$/)
+  await expect(page.getByRole('link', { name: 'Go to Practice' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Start learning' })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
+  // The feedback ends in one primary step, the next prompt; answering this one again is the quiet link beside it, and the
+  // way on to Practice is the secondary button until every prompt has an answer.
+  await expect(feedback.getByRole('button', { name: 'Answer the next prompt' })).toBeVisible()
+  await expect(feedback.getByRole('button', { name: 'Answer again' })).toBeVisible()
+  await feedback.getByRole('button', { name: 'Answer the next prompt' }).click()
+  await expect(box(page, 'Explain what the load factor tells you.')).toBeFocused()
+  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ }).getByRole('img', { name: 'Completed' })).toHaveCount(0)
+  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ })).toContainText(/1\/\d+/)
   await screenshotIfAsked(page, 'e4-recall-graded-1440x900')
   await expectNoAxeViolations(page, 'recall graded, 1440')
 
@@ -199,7 +216,30 @@ test('a recall answer is graded against the claims, with the student quoted firs
   // It is still there after a reload.
   await page.reload()
   await expect(card(page).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible()
-  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ }).getByRole('img', { name: 'Completed' })).toBeVisible()
+  await expect(page.getByTestId('recall-progress').locator('visible=true')).toHaveText(/^1 of \d+ prompts answered/)
+  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ })).toContainText(/1\/\d+/)
+})
+
+test('recall is shown finished only when every prompt has an answer', async ({ page }) => {
+  test.setTimeout(120_000)
+  await page.setViewportSize(DESKTOP)
+  const { email, topicUrl, topicId } = await world(page, 'rc-all')
+  await seedConcepts(email, topicId('Hash tables'))
+  await page.goto(`${topicUrl('Hash tables')}?view=recall`)
+  const prompts = ['Explain how a hash table handles keys that share a bucket.', 'Explain what the load factor tells you.', 'Explain this topic in your own words: its main ideas and how they fit together.']
+  const path = page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ })
+  for (const [index, prompt] of prompts.entries()) {
+    await answer(page, ANSWER, prompt)
+    await expect(card(page, prompt).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible()
+    if (index < prompts.length - 1) {
+      await expect(page.getByTestId('recall-progress')).toHaveText(new RegExp(`^${index + 1} of ${prompts.length} prompts answered`))
+      await expect(path.getByRole('img', { name: 'Completed' })).toHaveCount(0)
+    }
+  }
+  // The last prompt answered: the count says so, the step ticks, and the way on is the primary button.
+  await expect(page.getByTestId('recall-progress')).toHaveText(`${prompts.length} of ${prompts.length} prompts answered`)
+  await expect(path.getByRole('img', { name: 'Completed' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Read this explanation' })).toBeVisible()
 })
 
 test('show me what I missed records level 3', async ({ page }) => {
@@ -211,6 +251,8 @@ test('show me what I missed records level 3', async ({ page }) => {
   const feedback = card(page).getByRole('region', { name: 'Feedback on your answer' })
   await expect(feedback).toBeVisible()
 
+  // Help on request: "Show me what I missed" is behind "More help".
+  await feedback.getByRole('button', { name: 'More help' }).click()
   await feedback.getByRole('button', { name: 'Show me what I missed' }).click()
   await expect(feedback.getByRole('heading', { name: 'What your pages say' })).toBeVisible()
   await expect(feedback.getByText('Chaining keeps a list of entries per bucket.', { exact: true })).toBeVisible()
@@ -385,6 +427,7 @@ test('recall on a phone', async ({ page }) => {
 
   await answer(page)
   await expect(card(page).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible()
+  await card(page).getByRole('button', { name: 'More help' }).click()
   await card(page).getByRole('button', { name: 'Show me what I missed' }).click()
   await expect(card(page).getByRole('heading', { name: 'What your pages say' })).toBeVisible()
   await screenshotIfAsked(page, 'e4-recall-graded-390x844')

@@ -25,6 +25,9 @@ test('the topic page and the overview give the same mock exam address', () => {
   const concept = { id: 'k', mastery: 0.9, label: 'solid' as const, retrievability: 0.95, misconception: null, consecutiveFails: 0, nUnassisted: 4, hasCard: true, hasQuizEvidence: true, prerequisiteIds: [], band: 1 as const, needsInstruction: false, easierStepSinceFail: false, latestGroupGoodToday: false, lastFailAt: null, firstClaim: null, prerequisiteWeak: false }
   const state = {
     concepts: [concept],
+    prepared: true,
+    practiceDone: true,
+    practiceWritten: true,
     warmupReady: true,
     warmupAt: d('2026-09-01'),
     readAt: d('2026-09-02'),

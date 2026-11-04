@@ -2,8 +2,8 @@
 
 import * as React from 'react'
 import { preload } from 'react-dom'
-import { Pause, Play } from '@phosphor-icons/react/dist/ssr'
-import { IconButton } from '@/components/ui/icon-button'
+import { CaretDown, Pause, Play } from '@phosphor-icons/react/dist/ssr'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { type LoopStep } from './content'
 import { LOOP_AUTOPLAY, LOOP_IN_VIEW_RATIO, LOOP_STEP_MS, LoopAutoplay, loopInView, pauseKeepsFocusOnBlur, shouldRestoreFocusToStep, type AutoplayState } from './loop-autoplay'
@@ -229,7 +229,7 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
             })}
           </div>
           {autoplaying ? (
-            <IconButton
+            <Button
               onFocus={() => {
                 pauseHadFocus.current = true
               }}
@@ -237,14 +237,14 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
                 // Switching to another application also blurs the button; it keeps focus then.
                 pauseHadFocus.current = pauseKeepsFocusOnBlur(document.hasFocus())
               }}
-              label={userPaused ? 'Play the steps' : 'Pause the steps'}
               icon={userPaused ? <Play weight="fill" /> : <Pause weight="fill" />}
               variant="ghost"
               size="sm"
-              tooltipSide="right"
-              className="-ml-3 mt-3"
+              className="-ml-2.5 mt-3 text-fg-2"
               onClick={() => autoplay.setPaused(!userPaused)}
-            />
+            >
+              {userPaused ? 'Play the steps' : 'Pause the steps'}
+            </Button>
           ) : null}
         </div>
         <div {...autoplay.area('panel')}>
@@ -270,21 +270,33 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
         </div>
       </div>
 
-      <ol className="flex flex-col gap-14 lg:hidden">
-        {steps.map((step) => (
-          <li key={step.id}>
-            <h3 className="text-heading text-fg">{step.title}</h3>
-            <p className="mt-2 max-w-[52ch] text-reading text-fg-2">{step.text}</p>
-            <div className={cn(FRAME, 'mx-auto mt-5 max-w-[420px] md:max-w-none')}>
-              <Shot
-                name={step.shot}
-                mobile
-                desktopMedia="(min-width: 768px) and (max-width: 1023px)"
-                alt={step.alt}
-                sizes={SLOT_SIZES.loopList}
-                className="h-auto w-full"
-              />
-            </div>
+      {/* On a phone the six steps are a short list; one opens at a time, with its text and picture, so the
+          page is six lines long before the visitor chooses to read more. The first is open. */}
+      <ol className="flex flex-col border-t border-border lg:hidden">
+        {steps.map((step, index) => (
+          <li key={step.id} className="border-b border-border">
+            <details name="loop-steps" open={index === 0} className="group">
+              <summary className="flex min-h-11 list-none items-center justify-between gap-4 rounded-chip py-4 text-heading text-fg marker:hidden [&::-webkit-details-marker]:hidden">
+                <span>
+                  <span aria-hidden="true" className="tabular mr-3 text-fg-3">
+                    {index + 1}
+                  </span>
+                  {step.title}
+                </span>
+                <CaretDown aria-hidden="true" className="size-4 shrink-0 text-fg-3 transition-transform duration-180 group-open:rotate-180" />
+              </summary>
+              <p className="max-w-[52ch] pb-1 text-reading text-fg-2">{step.text}</p>
+              <div className={cn(FRAME, 'mx-auto my-5 max-w-[420px] md:max-w-none')}>
+                <Shot
+                  name={step.shot}
+                  mobile
+                  desktopMedia="(min-width: 768px) and (max-width: 1023px)"
+                  alt={step.alt}
+                  sizes={SLOT_SIZES.loopList}
+                  className="h-auto w-full"
+                />
+              </div>
+            </details>
           </li>
         ))}
       </ol>

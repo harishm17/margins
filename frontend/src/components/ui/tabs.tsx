@@ -144,7 +144,7 @@ export function Tabs({ items, activeId, className, scroll = false, stickyPanel, 
         onScroll={measure}
         style={{ maskImage: mask, WebkitMaskImage: mask }}
         className={cn(
-          'flex h-[41px] overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          'flex h-[41px] max-sm:h-[45px] overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
           trailing && 'min-w-0 flex-1'
         )}
       >
@@ -158,7 +158,7 @@ export function Tabs({ items, activeId, className, scroll = false, stickyPanel, 
               onClick={(event) => noteStuck(event, item.id)}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'relative inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-body-strong text-fg-2 transition-colors duration-120 hover:text-fg [&:has([data-tab-pending])]:text-fg',
+                'relative inline-flex h-10 max-sm:h-11 shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-body-strong text-fg-2 transition-colors duration-120 hover:text-fg [&:has([data-tab-pending])]:text-fg',
                 active && 'text-fg after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-accent'
               )}
             >
@@ -169,7 +169,7 @@ export function Tabs({ items, activeId, className, scroll = false, stickyPanel, 
           )
         })}
       </div>
-      {trailing ? <div className="flex h-[41px] shrink-0 items-center border-b border-border pl-2"><TabPinContext.Provider value={noteStuck}>{trailing}</TabPinContext.Provider></div> : null}
+      {trailing ? <div className="flex h-[41px] max-sm:h-[45px] shrink-0 items-center border-b border-border pl-2"><TabPinContext.Provider value={noteStuck}>{trailing}</TabPinContext.Provider></div> : null}
     </nav>
   )
 }

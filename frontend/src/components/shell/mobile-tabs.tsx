@@ -18,6 +18,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
+import { inFirstSetup } from './course-nav'
 import { useShell } from './shell-provider'
 
 /** The bar's height. Other full-height pages and sticky bottoms subtract it (`var(--tabbar-height, 0px)`). */
@@ -33,13 +34,13 @@ function TabLink({ tab }: { tab: Tab }) {
       aria-current={tab.active ? 'page' : undefined}
       className={cn(
         'relative flex h-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-control text-caption transition-colors duration-120',
-        tab.active ? 'text-fg' : 'text-fg-2 active:bg-surface-2'
+        tab.active ? 'text-fg after:absolute after:inset-x-3 after:top-0 after:h-0.5 after:rounded-full after:bg-accent' : 'text-fg-2 active:bg-surface-2'
       )}
     >
       <span className="relative">
         <Icon aria-hidden="true" weight={tab.active ? 'fill' : 'regular'} className={cn('size-[22px]', tab.active ? 'text-accent' : 'text-fg-3')} />
         {tab.badge ? (
-          <span className="absolute -right-3 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-chip bg-warning-soft px-1 text-[11px] leading-none text-warning-soft-fg tabular">
+          <span className="absolute -right-3 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-chip bg-warning-soft px-1 text-caption leading-none text-warning-soft-fg tabular">
             <span className="sr-only">{tab.badge} due for review</span>
             <span aria-hidden="true">{tab.badge}</span>
           </span>
@@ -50,7 +51,17 @@ function TabLink({ tab }: { tab: Tab }) {
   )
 }
 
-function MoreRow({ href, icon: Icon, label, badge }: { href: string; icon: React.ElementType; label: string; badge?: number }) {
+function MoreRow({
+  href,
+  icon: Icon,
+  label,
+  badge,
+}: {
+  href: string
+  icon: React.ElementType
+  label: string
+  badge?: number
+}) {
   return (
     <SheetClose asChild>
       <Link href={href} className="flex min-h-12 items-center gap-3 rounded-control px-3 text-body-strong text-fg hover:bg-surface-2">
@@ -90,6 +101,32 @@ export function MobileTabs() {
 
   const base = `/courses/${course.id}`
   const inMore = ['review', 'map', 'exams', 'materials', 'settings'].some((section) => pathname.startsWith(`${base}/${section}`))
+  // Steps 1 and 2 of setup: no dead study tabs. The bar holds the setup steps, the files, the course settings and the way
+  // back to the courses (the setup page itself shows the steps and where the student is).
+  if (inFirstSetup(course)) {
+    const setupTabs: Tab[] = [
+      { key: 'overview', label: 'Setup', href: base, icon: House, active: pathname === base },
+      { key: 'materials', label: 'Materials', href: `${base}/materials`, icon: Files, active: pathname.startsWith(`${base}/materials`) },
+      { key: 'settings', label: 'Settings', href: `${base}/settings`, icon: Gear, active: pathname.startsWith(`${base}/settings`) },
+      { key: 'courses', label: 'Courses', href: '/home', icon: List, active: false },
+    ]
+    return (
+      <>
+        <style>{`@media (max-width: 1023px) { :root { --tabbar-height: calc(${BAR} + env(safe-area-inset-bottom)); } }`}</style>
+        <div aria-hidden="true" className="h-(--tabbar-height) lg:hidden" />
+        <nav
+          aria-label="Course tabs"
+          className="fixed inset-x-0 bottom-0 z-topbar border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:hidden"
+        >
+          <div className="grid h-14 grid-cols-4 px-1">
+            {setupTabs.map((tab) => (
+              <TabLink key={tab.key} tab={tab} />
+            ))}
+          </div>
+        </nav>
+      </>
+    )
+  }
   const tabs: Tab[] = [
     { key: 'overview', label: 'Overview', href: base, icon: House, active: pathname === base, badge: course.dueCount },
     { key: 'plan', label: 'Plan', href: `${base}/plan`, icon: CalendarCheck, active: pathname.startsWith(`${base}/plan`) },
@@ -146,7 +183,7 @@ export function MobileTabs() {
               className="flex min-h-12 items-center gap-3 rounded-control px-3 text-left text-body-strong text-fg hover:bg-surface-2"
             >
               <List aria-hidden="true" className="size-5 text-fg-3" />
-              <span className="min-w-0 flex-1 truncate">All courses and topics</span>
+              <span className="min-w-0 flex-1 truncate">Switch course or browse topics</span>
             </button>
           </div>
         </SheetContent>

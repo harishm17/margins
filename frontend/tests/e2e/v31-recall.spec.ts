@@ -62,6 +62,9 @@ test.describe('recall: I don\'t remember', () => {
     await expect(links).toHaveCount(2)
     await expect(links.nth(0)).toHaveText(`Look again at p. ${CLAIM_PAGES[0]}`)
     await expect(links.nth(1)).toHaveText(`Look again at p. ${CLAIM_PAGES[1]}`)
+    // Help on request: the explanation is behind "More help".
+    await expect(feedback.getByTestId('recall-explainer-link')).toBeHidden()
+    await feedback.getByRole('button', { name: 'More help' }).click()
     await expect(feedback.getByTestId('recall-explainer-link')).toBeVisible()
     // Nothing red: a miss on recall is not an error.
     await screenshotIfAsked(page, 'v31r-recall-idk-1440x900')

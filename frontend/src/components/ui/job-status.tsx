@@ -17,7 +17,7 @@ export const STAGE_LABELS: Record<string, string> = {
   waiting_for_ai: 'Waiting for AI to be available',
   validating: 'Checking the file',
   chunking: 'Reading pages',
-  embedding: 'Indexing for search',
+  embedding: 'Getting your pages ready for study and search',
   extracting: 'Finding topics',
   generating: 'Writing',
   saving: 'Saving',

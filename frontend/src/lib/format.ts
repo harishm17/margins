@@ -108,6 +108,20 @@ export function greetingForHour(hour: number): string {
   return 'Good evening'
 }
 
+/**
+ * The Home heading. A student who has studied before is greeted by the time of day ("Good evening,
+ * Harish"), or "Welcome back" until the browser's hour is known. An account that has not studied yet
+ * is never "welcomed back": it gets "Welcome" (the hour is not needed, so nothing changes under it).
+ */
+export function homeGreeting({ name, hour, firstVisit }: { name: string | null | undefined; hour: number | null; firstVisit: boolean }): string {
+  const first = firstName(name)
+  const opening = firstVisit ? 'Welcome' : hour === null ? 'Welcome back' : greetingForHour(hour)
+  return first ? `${opening}, ${first}` : opening
+}
+
+/** The line under the Home heading. */
+export const homeIntro = (firstVisit: boolean): string => (firstVisit ? 'Start with the step below.' : "Here's where you left off.")
+
 export const firstName = (name: string | null | undefined): string | null => {
   const first = name?.trim().split(/\s+/)[0]
   return first || null

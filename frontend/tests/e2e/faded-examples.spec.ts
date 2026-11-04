@@ -55,6 +55,28 @@ const openExample = async (page: Page, title: string) => {
   if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click()
 }
 
+test('the final answer waits for the guesses the example asks for, and "I don\'t know" counts as one', async ({ page }) => {
+  await page.setViewportSize(DESKTOP)
+  const { url } = await world(page, 'fade-answer')
+  await page.goto(url('Novice topic'))
+  await streamedPartsArrived(page)
+  const answerPanel = page.getByRole('region', { name: 'Answer: Alpha' })
+  const whys = page.getByRole('group', { name: 'Why this step? Write your guess' })
+  await expect(whys).toHaveCount(3)
+  // Every step is shown, but the whys are owed: the answer is not, and a line says when it opens.
+  await expect(answerPanel).toHaveCount(0)
+  await expect(page.getByText('The answer opens once you have written your guesses.')).toBeVisible()
+  await whys.first().getByLabel('Your guess').fill('Because the key landed in a used bucket.')
+  await whys.first().getByRole('button', { name: 'Show why' }).click()
+  await expect(whys).toHaveCount(2)
+  await expect(answerPanel).toHaveCount(0)
+  await whys.first().getByRole('button', { name: "I don't know" }).click()
+  await expect(answerPanel).toHaveCount(0)
+  await whys.first().getByRole('button', { name: "I don't know" }).click()
+  await expect(answerPanel).toBeVisible()
+  await expect(page.getByText('The answer opens once you have written your guesses.')).toHaveCount(0)
+})
+
 test('a novice sees the first example worked with the whys waiting for a guess', async ({ page }) => {
   await page.setViewportSize(DESKTOP)
   const { email, url, conceptId } = await world(page, 'fade-novice')
@@ -67,13 +89,15 @@ test('a novice sees the first example worked with the whys waiting for a guess',
   // In the step itself: the solution below repeats the work, and may be on the page too.
   await expect(page.getByRole('listitem').filter({ hasText: 'Alpha step 3: apply the rule to the next key' }).getByText('Work for Alpha step 3.')).toBeVisible()
   await expect(page.getByText('Reason for Alpha step 1.')).toHaveCount(0)
-  await expect(page.getByText('Every step is shown. Write your guess for why before you read it.')).toBeVisible()
+  await expect(page.getByText('The steps are shown. Write a guess for why before each explanation opens.')).toBeVisible()
   const whys = page.getByRole('group', { name: 'Why this step? Write your guess' })
   await expect(whys).toHaveCount(3)
 
   // A guess is needed before the reason shows.
   const first = whys.first()
-  await expect(first.getByRole('button', { name: 'Show why' })).toBeDisabled()
+  // The button that shows the reason appears with the guess (a disabled twin beside the hint said the same thing twice).
+  await expect(first.getByRole('button', { name: 'Show why' })).toHaveCount(0)
+  await expect(first.getByText(/Write a guess, or tap/)).toBeVisible()
   await first.getByLabel('Your guess').fill('Because the key landed in a used bucket.')
   await screenshotIfAsked(page, 'e6-faded-novice-1440x900')
   await expectNoAxeViolations(page, 'faded examples novice, 1440')
@@ -200,7 +224,7 @@ test('a good warm-up, sure and right, starts the topic at problem first; a guess
   })
   await page.goto(url('Novice topic'))
   await streamedPartsArrived(page)
-  await expect(page.getByText('Every step is shown. Write your guess for why before you read it.')).toBeVisible()
+  await expect(page.getByText('The steps are shown. Write a guess for why before each explanation opens.')).toBeVisible()
   await expect(page.getByText('Alpha step 1: apply the rule to the next key')).toBeVisible()
 
   // The same answers, sure of each: the newer warm-up counts, and the topic starts with the problem first.
@@ -254,7 +278,7 @@ test('band 0 starts fully worked', async ({ page }) => {
   const { url } = await world(page, 'fade-band0')
   await page.goto(url('Novice topic'))
   await streamedPartsArrived(page)
-  await expect(page.getByText('Fully worked', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('Steps shown, guess each reason first', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('Alpha step 3: apply the rule to the next key').first()).toBeVisible()
   await expect(page.getByText('Reason for Alpha step 1.')).toHaveCount(0)
 })
@@ -273,8 +297,8 @@ test('a missed prediction makes the next example more worked', async ({ page }) 
   await page.getByRole('group', { name: 'Predict the next step' }).getByRole('button', { name: "I don't know" }).click()
   await openExample(page, 'Beta')
   await expect(page.getByText('Beta step 3: apply the rule to the next key').first()).toBeVisible()
-  await expect(page.getByText('Every step is shown. Write your guess for why before you read it.')).toBeVisible()
-  await expect(page.getByText('Fully worked', { exact: true }).first()).toBeVisible()
+  await expect(page.getByText('The steps are shown. Write a guess for why before each explanation opens.')).toBeVisible()
+  await expect(page.getByText('Steps shown, guess each reason first', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('Reason for Beta step 1.')).toHaveCount(0)
 })
 

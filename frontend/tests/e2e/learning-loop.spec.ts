@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
+import { openMoreHelp, workingBox } from './helpers/practice'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import {
@@ -47,7 +48,7 @@ test.describe('plan', () => {
     // No date yet: a rolling two weeks, and the page says how to plan up to an exam.
     await page.goto(`/courses/${course.courseId}/plan`)
     await expect(page.getByRole('heading', { level: 1, name: 'Plan' })).toBeVisible()
-    await expect(page.getByText(/The next 14 days, planned for 45 minutes a day/).locator('visible=true')).toBeVisible()
+    await expect(page.getByText(/A rolling 14-day plan until you set an exam date, planned for 45 minutes a day/).locator('visible=true')).toBeVisible()
 
     await page.goto(`/courses/${course.courseId}/settings`)
     await page.getByLabel('Exam date').locator('visible=true').fill(dayIn(ZONE, 21))
@@ -179,10 +180,13 @@ test.describe('plan', () => {
     const box = await card.boundingBox()
     expect(bar).not.toBeNull()
     expect(box).not.toBeNull()
-    // On the first paint, with nothing scrolled, the whole line (its date field and both buttons) is above the fixed bar.
+    // On the first paint, with nothing scrolled, the whole line (the sentence and its one button) is above the fixed bar.
     expect(await page.evaluate(() => window.scrollY)).toBe(0)
     expect(box!.y + box!.height, `the exam-date line ends at ${Math.round(box!.y + box!.height)}px, the tab bar starts at ${Math.round(bar!.y)}px`).toBeLessThanOrEqual(bar!.y)
     await screenshotIfAsked(page, 'final-exam-prompt-390x844')
+    // The date field and its two buttons open from the one button, and stay clear of the bar.
+    await expectClearOfTabBar(page, card.getByRole('button', { name: 'Set exam date' }), 'Set exam date')
+    await card.getByRole('button', { name: 'Set exam date' }).click()
     await expectClearOfTabBar(page, card.getByRole('button', { name: 'Save date' }), 'Save date')
   })
 
@@ -311,37 +315,39 @@ test.describe('practice progress', () => {
     await page.goto(`/courses/${course.courseId}/topics/${course.topics.Squares}?view=practice`)
 
     const reveal = page.getByRole('button', { name: 'Show answer' }).locator('visible=true')
-    await expect(reveal).toBeDisabled()
-    // The cost is on the button before it is clicked; Connect and Structure wait for an attempt (spec 18.4).
-    await expect(page.getByRole('button', { name: /Name the idea \(this step will count as a miss\)/ })).toBeDisabled()
-    await expect(page.getByRole('button', { name: /Where to look \(still counts, as a harder try\)/ })).toBeEnabled()
-    await expect(page.getByRole('button', { name: /Structure/ })).toBeDisabled()
-    await page.getByRole('button', { name: /Locate/ }).click()
+    // Show answer is not offered before an attempt. The help is one button with one hint ladder: the cost is on the next hint
+    // before it is clicked, and Connect and Structure wait for an attempt (spec 18.4).
+    await expect(reveal).toHaveCount(0)
+    await page.getByRole('button', { name: 'Get help' }).click()
+    await expect(page.getByRole('button', { name: /Where to look · your next try still counts, as a harder one/ })).toBeEnabled()
+    await page.getByRole('button', { name: /Next hint: Locate/ }).click()
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
-    await expect(reveal).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Next hint: Connect/ })).toBeDisabled()
+    await expect(reveal).toHaveCount(0)
     // A reload keeps the opened hint and the gate.
     await expect
       .poll(async () => (await (await page.request.get(`/api/topics/${course.topics.Squares}/practice-progress`)).json()).problems[0]?.maxRungs)
       .toEqual({ '0': 1 })
     await page.reload()
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
-    await expect(reveal).toBeDisabled()
+    await expect(reveal).toHaveCount(0)
     await page.getByRole('button', { name: 'Get help' }).click()
-    await expect(page.getByRole('button', { name: /Connect/ })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Next hint: Connect/ })).toBeDisabled()
 
     // One wrong check is the attempt: now Connect and Structure open, and Show answer.
     await answer(page).fill('5')
     await page.getByRole('button', { name: 'Check', exact: true }).click()
     await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
     await page.getByRole('button', { name: 'Try again' }).click()
-    await page.getByRole('button', { name: /Connect/ }).click()
-    await page.getByRole('button', { name: /Structure/ }).click()
+    await page.getByRole('button', { name: /Next hint: Connect/ }).click()
+    await page.getByRole('button', { name: /Next hint: Structure/ }).click()
     await expect(reveal).toBeEnabled()
     // Opened hints count after a reload too.
     await expect
       .poll(async () => (await (await page.request.get(`/api/topics/${course.topics.Squares}/practice-progress`)).json()).problems[0]?.maxRungs)
       .toEqual({ '0': 4 })
     await page.reload()
+    await openMoreHelp(page)
     await expect(reveal).toBeEnabled()
     await reveal.click()
     await expect(page.getByText("The answer is shown, so this step won't count as solved", { exact: false }).locator('visible=true')).toBeVisible()
@@ -381,7 +387,7 @@ test.describe('practice progress', () => {
 
     await page.goto(`/courses/${course.courseId}/topics/${course.topics.Squares}?view=practice`)
     // The working box is optional and does not change the check.
-    const working = page.getByLabel('Your working (optional)').locator('visible=true')
+    const working = await workingBox(page)
     await expect(working).toBeVisible()
     await working.fill('2 times 2, maybe 5?')
     await answer(page).fill('5')
@@ -478,16 +484,17 @@ test.describe('practice progress', () => {
     ] as const) {
       await page.setViewportSize(size)
       await page.goto(`/courses/${course.courseId}/topics/${course.topics.Squares}?view=practice`)
-      await expect(page.getByRole('button', { name: /Locate/ })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Get help' })).toBeVisible()
       if (shots) await page.screenshot({ path: `${shots}/practice-${name}-start.png` })
-      await page.getByRole('button', { name: /Locate/ }).click()
+      await page.getByRole('button', { name: 'Get help' }).click()
+      await page.getByRole('button', { name: /Next hint: Locate/ }).click()
       // Connect and Structure wait for an attempt: a wrong check opens them.
       await answer(page).fill('5')
       await page.getByRole('button', { name: 'Check', exact: true }).click()
       await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
       await page.getByRole('button', { name: 'Try again' }).click()
       // After a miss the helps stay open.
-      await page.getByRole('button', { name: /Connect/ }).click()
+      await page.getByRole('button', { name: /Next hint: Connect/ }).click()
       await checkAxe(`${name}, hints open`)
       await answer(page).fill('5')
       await page.getByRole('button', { name: 'Check', exact: true }).click()
@@ -797,7 +804,7 @@ test.describe('review sessions', () => {
     await page.getByRole('radio', { name: /False/ }).click()
     await page.getByRole('button', { name: 'Check answer' }).click()
   }
-  const next = (page: Page) => page.getByRole('button', { name: /^(Next|See summary|Continue)$/ })
+  const next = (page: Page) => page.getByRole('button', { name: /^(Next question|See session summary|Continue)$/ })
 
   /** A course with two topics and three due concepts, each with three items to draw on. */
   async function dueCourse(page: Page, label: string) {

@@ -419,9 +419,11 @@ const SHOTS: Shot[] = [
     name: 'exam-new',
     viewport: { width: 1180, height: 860 },
     url: (ids) => `${course(ids)}/exams/new`,
-    // From "Questions" to the Create exam button: the options, and the Match my past exams choice. The form is
+    // From "Questions" down to the Match my past exams choice (and the Create exam button when it fits). The form is
     // centred in the crop (a crop from the sidebar edge left an empty gutter on the left).
     prepare: async (page) => {
+      // The form opens on its preset; the shot shows the settings under it, with Match my past exams.
+      await page.getByRole('button', { name: /Change settings/ }).click()
       await scrollTo(page.getByRole('heading', { name: 'Questions', exact: true }), 120)
     },
     crop: async (page) => {
@@ -431,9 +433,12 @@ const SHOTS: Shot[] = [
       const style = await box(page, page.getByText('Match my past exams').locator('xpath=ancestor::label[1]'), 'the Match my past exams option')
       // Below the topic list above "Questions", so no sliver of it shows.
       const above = (await previousBottom(label.locator('xpath=ancestor::section[1]'))) + 4
-      const left = heading.x - 32
+      const left = Math.max(heading.x - 32, MAIN.left)
       const top = Math.max(heading.y - 32, above)
-      return fitRatio(page, [left, top, style.x + style.width + 32 - left, create.y + create.height + 32 - top], FRAME, { left: MAIN.left, top: above })
+      // The settings grew (a name, the preset line), so the crop ends under Match my past exams, the option this shot is about;
+      // the Create exam button is used only when it still fits in 4:3.
+      const bottom = create.y + create.height + 32 - top <= ((style.x + style.width + 32 - left) * 3) / 4 + 40 ? create.y + create.height + 32 : style.y + style.height + 32
+      return fitRatio(page, [left, top, style.x + style.width + 32 - left, bottom - top], FRAME, { left: MAIN.left, top: above })
     },
   },
   {
@@ -532,6 +537,7 @@ const SHOTS: Shot[] = [
     viewport: PHONE,
     url: (ids) => `${course(ids)}/exams/new`,
     prepare: async (page) => {
+      await page.getByRole('button', { name: /Change settings/ }).click()
       await scrollTo(page.getByRole('heading', { name: 'Style', exact: true }), 120)
     },
   },

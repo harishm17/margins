@@ -9,7 +9,7 @@ const step = (overrides: Partial<NextStep> = {}, actionOverrides: Record<string,
   overdueCount: 0,
   deferredDue: 0,
   title: 'Learn Hash tables',
-  reason: 'Read the notes, then work through the examples.',
+  reason: 'Read it, recall it, then practise.',
   action: { verb: 'Start', href: '/courses/c1/topics/t1', topicId: 't1', itemKind: 'learn', ...actionOverrides },
   etaLabel: 'About 35 min',
   partLabel: null,
@@ -37,7 +37,7 @@ test('the instruction, easier-step and solid-for-now kinds word a learn item too
   const instruct = { kind: 'instruct' as const, reason: 'You missed Hash tables last time. Read p. 14 again before trying again.', href: '/courses/c1/topics/t1?view=read&focus=k1#chunk-c' }
   const out = overlayActivity(step(), instruct)
   assert.equal(out.reason, instruct.reason)
-  assert.equal(out.action?.verb, 'Read about it')
+  assert.equal(out.action?.verb, 'Start learning')
   assert.equal(out.action?.href, instruct.href)
   const done = { kind: 'done_for_now' as const, reason: 'Solid for now. It comes back for review on Nov 13.', href: '/courses/c1/topics/t1?view=quiz&difficulty=hard' }
   assert.equal(overlayActivity(step(), done).action?.verb, 'Try a harder set')

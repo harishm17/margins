@@ -1,7 +1,7 @@
 /**
  * The source reader's text (spec §5.2).
  * GET /api/topics/[topicId]/reader - the topic's primary chunks in document order with their ids, pages and
- * file, the focus questions, the "Before you go on" checks, the student's margin notes, and which passages
+ * file, the focus questions, the "Quick check" checks, the student's margin notes, and which passages
  * the warm-up marks Focus here. Overlap between chunks is already removed.
  */
 

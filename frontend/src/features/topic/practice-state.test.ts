@@ -23,7 +23,7 @@ test('a step is a failed first try once its record is decided as one', () => {
 })
 
 test('the label beside a hint says what it costs, from the one policy', () => {
-  assert.equal(hintCostCopy(0, { attempted: false, failedFirstTry: false }), 'still counts, as a harder try')
+  assert.equal(hintCostCopy(0, { attempted: false, failedFirstTry: false }), 'your next try still counts, as a harder one')
   assert.equal(hintCostCopy(1, { attempted: true, failedFirstTry: false }), 'this step will count as a miss')
   assert.equal(hintCostCopy(2, { attempted: true, failedFirstTry: false }), 'this step will count as a miss')
   assert.equal(hintCostCopy(1, { attempted: true, failedFirstTry: true }), 'no extra cost: this step already counts as a miss')

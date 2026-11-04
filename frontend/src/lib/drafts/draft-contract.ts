@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { isConfidenceId } from '@/lib/learning/calibration'
 import { LEGACY_IDK_MARKER } from '@/lib/learning/quiz-answers'
 
-export const DRAFT_SURFACES = ['quiz', 'recall', 'reader_check', 'explainer_check', 'review', 'practice'] as const
+export const DRAFT_SURFACES = ['quiz', 'recall', 'reader_check', 'explainer_check', 'review', 'practice', 'ask', 'worked_example'] as const
 export type DraftSurface = (typeof DRAFT_SURFACES)[number]
 
 export const isDraftSurface = (value: unknown): value is DraftSurface =>
@@ -38,6 +38,8 @@ const KEY_SHAPE: Record<DraftSurface, { parts: number; indexes: number[]; topicA
   explainer_check: { parts: 2, indexes: [], topicAt: 0 }, // <topicId>:<blockId>
   review: { parts: 2, indexes: [1] }, // <sessionId>:<index>
   practice: { parts: 3, indexes: [1, 2] }, // <contentId>:<problemIndex>:<stepIndex>
+  ask: { parts: 2, indexes: [] }, // <courseId>:<threadId, or "new" (or "new-<topicId>" in a topic's sheet) before the first message>
+  worked_example: { parts: 2, indexes: [], topicAt: 0 }, // <topicId>:examples (every example of the topic in one draft)
 }
 
 /** The key's parts when it has this surface's shape, else null. */
@@ -95,6 +97,24 @@ const QUIZ = z.object({
   predicted: z.number().int().min(0).max(1000).optional(),
 })
 
+const fadeGrade = z.enum(['got_it', 'partly', 'missed'])
+const WORKED_EXAMPLE = z.object({
+  // By the example's position; `sig` names its title, so a regenerated set does not inherit another example's work.
+  items: z
+    .record(
+      z.string().regex(INDEX),
+      z.object({
+        sig: text(40),
+        // What the student predicted for each hidden part (`step-2`, `why-0`).
+        drafts: z.record(text(40), text(2000)).refine((d) => Object.keys(d).length <= 60),
+        // What they did with each: opened it (or said "I don't know"), and the grade they gave.
+        done: z.record(text(40), z.object({ idk: z.boolean(), grade: fadeGrade.nullable(), recorded: z.boolean() })).refine((d) => Object.keys(d).length <= 60),
+        level: z.enum(['full', 'partial', 'problem_first']).optional(),
+      })
+    )
+    .refine((items) => Object.keys(items).length <= 30),
+})
+
 const PAYLOADS: Record<DraftSurface, z.ZodType<unknown>> = {
   quiz: QUIZ,
   recall: z.object({ text: text(12_000), voice: z.boolean() }),
@@ -107,6 +127,8 @@ const PAYLOADS: Record<DraftSurface, z.ZodType<unknown>> = {
     confidenceLevel: confidenceLevel.optional(),
   }),
   practice: z.object({ answer: text(4000), working: text(8000) }),
+  ask: z.object({ text: text(4000) }),
+  worked_example: WORKED_EXAMPLE,
 }
 
 export type QuizDraftPayload = z.output<typeof QUIZ>
@@ -117,6 +139,8 @@ export type DraftPayloads = {
   explainer_check: { answer: string }
   review: { answer: string; thinking?: string; confidence?: number; confidenceLevel?: string }
   practice: { answer: string; working: string }
+  ask: { text: string }
+  worked_example: z.output<typeof WORKED_EXAMPLE>
 }
 
 export type PayloadCheck = { ok: true; payload: unknown } | { ok: false; reason: 'too_large' | 'invalid'; message: string }

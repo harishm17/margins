@@ -13,8 +13,9 @@ export function SourceIcon({ filename }: { filename: string }) {
   return <File />
 }
 
+// On a phone the link's own box is 44px high (padding on an inline box does not move the lines), not only its touch area.
 const linkClass =
-  'rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] transition-colors duration-120 hover:text-fg hover:decoration-fg-3'
+  'relative rounded-chip max-sm:py-3.5 underline decoration-border-strong decoration-1 underline-offset-[3px] transition-colors duration-120 hover:text-fg hover:decoration-fg-3 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:top-1/2 max-sm:after:h-11 max-sm:after:-translate-y-1/2 max-sm:after:content-[""]'
 
 /** "lecture3.pdf, pp. 4-9" as a link to the file viewer at that page (plain text for a file with no id). */
 export function SourceLink({ source, className }: { source: SourceRef; className?: string }) {

@@ -31,3 +31,9 @@ export const canBeTopicSource = (role: MaterialRole): boolean => role === 'conte
 
 /** A stored role as a MaterialRole (anything unknown reads as content, the column default). */
 export const readRole = (value: unknown): MaterialRole => (isMaterialRole(value) ? value : 'content')
+
+/** The words for a file's badge in the list: the student's own category (Lecture notes, Book chapters) while the role is still the content it started as. */
+const CATEGORY_BADGE: Record<string, string> = { lecture_notes: 'Lecture notes', book_chapters: 'Book chapters' }
+export function roleBadgeLabel(role: MaterialRole, category: string): string {
+  return role === 'content' ? (CATEGORY_BADGE[category] ?? ROLE_LABELS.content) : ROLE_LABELS[role]
+}

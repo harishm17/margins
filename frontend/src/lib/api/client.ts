@@ -61,7 +61,7 @@ export function codeFromStatus(status: number): string {
 }
 
 export function defaultMessage(status: number): string {
-  if (status === 0) return 'You seem to be offline. Check your connection and try again.'
+  if (status === 0) return "That didn't go through. Check your connection and try again."
   if (status === 401) return 'You are signed out. Sign in again to continue.'
   if (status === 403) return 'You do not have access to that.'
   if (status === 404) return 'We could not find that.'

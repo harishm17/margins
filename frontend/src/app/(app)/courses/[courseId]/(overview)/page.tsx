@@ -10,7 +10,8 @@ import { getTimeZoneState } from '@/server/timezone'
 export async function generateMetadata({ params }: { params: Promise<{ courseId: string }> }) {
   const user = await requireUser()
   const course = await getCourseShell(user.id, (await params).courseId)
-  return { title: course?.name ?? 'Course' }
+  // A course that does not exist (or is not the student's) shows the not-found page, so the tab says so.
+  return { title: course?.name ?? 'Page not found' }
 }
 
 export default async function CourseOverviewPage({ params }: { params: Promise<{ courseId: string }> }) {

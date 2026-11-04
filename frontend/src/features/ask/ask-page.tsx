@@ -121,11 +121,11 @@ export default function AskPage({
   }
 
   const scopeOptions = React.useMemo<SelectOption[]>(
-    () => [{ value: ALL_MATERIALS, label: 'All materials' }, ...topics.map((t) => ({ value: t.id, label: t.name }))],
+    () => [{ value: ALL_MATERIALS, label: 'All topics' }, ...topics.map((t) => ({ value: t.id, label: t.name }))],
     [topics]
   )
   const examples = React.useMemo(() => {
-    if (concept) return [`Explain ${concept.name} in simple terms`, `Why does ${concept.name} matter?`]
+    if (concept) return [`Ask me to explain ${concept.name} in my own words, then check what I say`, `What should I look for before I read about ${concept.name}?`]
     const focus = scope === ALL_MATERIALS ? topics.map((t) => t.name) : topics.filter((t) => t.id === scope).map((t) => t.name)
     return exampleQuestions(focus, 4)
   }, [topics, scope, concept])

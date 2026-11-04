@@ -3,7 +3,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 export default function MapLoading() {
   return (
-    <Page key="loading-shape">
+    <Page key="loading-shape" width="wide">
       <div aria-busy="true" aria-label="Loading">
         <div className="mb-8">
           <Skeleton className="h-8 w-20 rounded-chip" />

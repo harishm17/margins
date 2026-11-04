@@ -24,8 +24,11 @@ import {
   Plus,
   SignOut,
   UploadSimple,
+  X,
 } from '@phosphor-icons/react/dist/ssr'
 import { DialogOverlay } from '@/components/ui/dialog'
+import { IconButton } from '@/components/ui/icon-button'
+import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { Kbd, KeyHint } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
 import { paletteFilter, paletteItem } from './palette-search'
@@ -58,9 +61,19 @@ const readRecent = (): string[] => {
 }
 
 const itemClass = cn(
-  'flex h-10 cursor-default select-none items-center gap-3 rounded-control px-3 text-[13.5px] text-fg outline-none',
+  'flex min-h-10 max-sm:min-h-11 cursor-default select-none items-center gap-3 rounded-control px-3 text-[13.5px] text-fg outline-none',
   'data-[selected=true]:bg-surface-2 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-fg-3'
 )
+
+/** The label, and after it the course or unit; on a phone the hint goes on a second line so a truncated name can still be told apart. */
+function EntryText({ entry }: { entry: Entry }) {
+  return (
+    <span className="flex min-w-0 flex-col max-sm:py-1 sm:flex-row sm:items-center sm:gap-3">
+      <span className="min-w-0 truncate">{entry.label}</span>
+      {entry.hint ? <span className="min-w-0 truncate text-small text-fg-3">{entry.hint}</span> : null}
+    </span>
+  )
+}
 
 const headingClass =
   '[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:text-fg-3'
@@ -71,6 +84,8 @@ function PaletteBody() {
   const params = useParams<{ courseId?: string }>()
   const { resolvedTheme, setTheme } = useTheme()
   const [search, setSearch] = React.useState('')
+  // The long placeholder is cut off on a phone and would no longer say what is searched: there it is the short one.
+  const narrow = useMediaQuery('(max-width: 639px)')
   // The body mounts when the palette opens, so this reads the recent list fresh each time.
   const [recent] = React.useState<string[]>(readRecent)
 
@@ -174,8 +189,7 @@ function PaletteBody() {
         className={itemClass}
       >
         <Icon aria-hidden="true" />
-        <span className="min-w-0 truncate">{entry.label}</span>
-        {entry.hint ? <span className="min-w-0 truncate text-small text-fg-3">{entry.hint}</span> : null}
+        <EntryText entry={entry} />
         <CaretRight aria-hidden="true" className="ml-auto !size-3 opacity-0 [[data-selected=true]_&]:opacity-100" />
       </Command.Item>
     )
@@ -188,10 +202,14 @@ function PaletteBody() {
               <Command.Input
                 value={search}
                 onValueChange={setSearch}
-                placeholder="Search topics, files, courses and actions"
-                className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-3"
+                placeholder={narrow ? 'Search your courses' : 'Search topics, files, courses and actions'}
+                className="h-full min-w-0 flex-1 bg-transparent text-[15px] max-sm:text-[16px] text-fg outline-none placeholder:text-fg-3"
               />
               <Kbd>Esc</Kbd>
+              {/* No Esc key on a phone: a button closes the search there. */}
+              <DialogPrimitive.Close asChild>
+                <IconButton label="Close search" icon={<X />} noTooltip className="-mr-2 sm:hidden" />
+              </DialogPrimitive.Close>
             </div>
             <Command.List className="max-h-[min(380px,50vh)] overflow-y-auto p-2">
               <Command.Empty className="px-3 py-8 text-center text-small text-fg-2">
@@ -207,8 +225,7 @@ function PaletteBody() {
                       className={itemClass}
                     >
                       <Clock aria-hidden="true" />
-                      <span className="min-w-0 truncate">{entry.label}</span>
-                      {entry.hint ? <span className="min-w-0 truncate text-small text-fg-3">{entry.hint}</span> : null}
+                      <EntryText entry={entry} />
                     </Command.Item>
                   ))}
                 </Command.Group>
@@ -225,8 +242,8 @@ function PaletteBody() {
             </Command.List>
             <KeyHint className="flex items-center gap-4 border-t border-border px-4 py-2 text-caption font-normal text-fg-3">
               <span className="flex items-center gap-1.5">
-                <Kbd>Up</Kbd>
-                <Kbd>Down</Kbd>
+                <Kbd aria-label="Up arrow">&uarr;</Kbd>
+                <Kbd aria-label="Down arrow">&darr;</Kbd>
                 Navigate
               </span>
               <span className="flex items-center gap-1.5">

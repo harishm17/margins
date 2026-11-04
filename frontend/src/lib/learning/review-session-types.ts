@@ -41,6 +41,12 @@ export type SessionSummary = {
   stillShaky: string[]
   /** Missed concepts that got no fresh question to retest (none could be written). Always empty for a drill. */
   notRetested: string[]
+  /**
+   * Missed concepts the session left without a retest on purpose: a short session retests only a few misses, or none. They
+   * come back in the next review. `retestLimit` is that few (0 for none), so the words can say which.
+   */
+  leftOut: string[]
+  retestLimit: number | null
   /** What to look at for the missed concepts: pointers, the explainer and an easier step (spec 18.5). Null when nothing was missed. */
   helpAfterMiss: HelpAfterMiss | null
 }

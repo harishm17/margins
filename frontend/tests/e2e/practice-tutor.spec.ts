@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { openMoreHelp, workingBox } from './helpers/practice'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { withPrisma } from './helpers/db'
 import { addContent, createCourse, practiceProblem, signUpAndIn } from './helpers/loop'
@@ -29,7 +30,7 @@ const tryAgain = (page: Page) => page.getByRole('button', { name: 'Try again' })
 const workedButton = (page: Page) => page.getByRole('button', { name: /Show me a worked example/ }).locator('visible=true')
 const askButton = (page: Page) => page.getByRole('button', { name: 'Ask about my working' }).locator('visible=true')
 const clarifyButton = (page: Page) => page.getByRole('button', { name: 'What is this asking?' }).locator('visible=true')
-// After a miss or an opened hint the helps sit behind one "Get help" row.
+// Before a first try the helps sit behind one "Get help" button; after a miss they are in view.
 const openHelp = async (page: Page) => {
   const toggle = page.getByRole('button', { name: 'Get help' }).locator('visible=true')
   if ((await toggle.count()) > 0 && (await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click()
@@ -49,6 +50,9 @@ async function open(
   const conceptId = conceptOf ? await conceptOf(course.courseId, topicId) : undefined
   await addContent(topicId, { interactive_examples: [tutoredProblem('Squares', conceptId)] })
   await page.goto(`/courses/${course.courseId}/topics/${topicId}?view=practice`)
+  // Before a first try the help is one button, "Get help", under Check; these specs use it, so it is opened here.
+  await expect(page.getByRole('button', { name: 'Check', exact: true })).toBeVisible()
+  await openHelp(page)
   await expect(clarifyButton(page)).toBeVisible()
   return { course, topicId }
 }
@@ -73,23 +77,24 @@ test.describe('the practice tutor', () => {
     const hint = (name: string) => page.getByRole('button', { name: `Hint: ${name}` }).locator('visible=true')
     const getHelp = page.getByRole('button', { name: 'Get help' }).locator('visible=true')
 
-    // Nothing is folded before a hint is opened: the three hints and the tutor are all in view.
-    await expect(getHelp).toHaveCount(0)
-    await page.getByRole('button', { name: /Locate/ }).click()
+    // Before a first try the help is one button (open here by `open`): one hint ladder, with the next hint only.
+    await expect(getHelp).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('group', { name: 'Hints' }).locator('visible=true').getByRole('button')).toHaveCount(1)
+    await page.getByRole('button', { name: /Next hint: Locate/ }).click()
     await expect(hint('Locate')).toHaveAttribute('aria-expanded', 'true')
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
-    // With a hint open the other helps are one row.
-    await expect(getHelp).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.getByRole('group', { name: 'Hints' }).locator('visible=true')).toHaveCount(0)
-    await expect(clarifyButton(page)).toHaveCount(0)
+    // The next hint waits for an attempt and says so; it is not a second button of costs.
+    await expect(page.getByRole('button', { name: /Next hint: Connect/ }).locator('visible=true')).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Next hint: Connect/ }).locator('visible=true')).toContainText('Opens after your first try')
     // Connect waits for an attempt (spec 18.4): a wrong check opens it.
     await check(page, '5')
     await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
     // After a miss the helps are open, not behind "Get help" (spec 18.4).
     await expect(getHelp).toHaveCount(0)
     await tryAgain(page)
-    await expect(page.getByRole('group', { name: 'Hints' })).toBeVisible()
-    await page.getByRole('button', { name: /Connect/ }).click()
+    // The next hint stays beside Check for a step that has been missed.
+    await expect(page.getByRole('button', { name: /Next hint: Connect/ }).locator('visible=true')).toBeVisible()
+    await page.getByRole('button', { name: /Next hint: Connect/ }).click()
     // The newest hint is open, the one before it is a line that opens on a tap.
     await expect(hint('Connect')).toHaveAttribute('aria-expanded', 'true')
     await expect(hint('Locate')).toHaveAttribute('aria-expanded', 'false')
@@ -131,15 +136,16 @@ test.describe('the practice tutor', () => {
   test('worked example button disabled before an attempt', async ({ page }) => {
     test.setTimeout(120_000)
     await open(page, 'tutor-worked')
-    await expect(workedButton(page)).toBeDisabled()
-    // Why, in words, and what it costs before it is used.
-    await expect(page.getByText("Check an answer first, or say you don't know, then a worked example is available.").locator('visible=true')).toBeVisible()
-    await expect(page.getByText('This step will count as a miss, and comes back later').locator('visible=true')).toBeVisible()
+    // Not a disabled button: it is not there until the first try. One sentence says what opens, and when.
+    await expect(workedButton(page)).toHaveCount(0)
+    await expect(page.getByText("Check an answer first, or say you don't know, to open the later hints, a worked example and questions about your working.").locator('visible=true')).toBeVisible()
     // A wrong check is an attempt.
     await check(page, '5')
     await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
     await openHelp(page)
     await expect(workedButton(page)).toBeEnabled()
+    // What it costs is on the button once it can be used.
+    await expect(page.getByText('This step will count as a miss, and comes back later').locator('visible=true')).toBeVisible()
   })
 
   test('tutor offers to talk after two wrong checks and never interrupts before', async ({ page }) => {
@@ -193,7 +199,7 @@ test.describe('the practice tutor', () => {
     await check(page, '5')
     await openHelp(page)
     await expect(askButton(page)).toBeDisabled()
-    await page.getByLabel('Your working (optional)').locator('visible=true').fill('I multiplied 2 by 3 because I thought squaring adds one.')
+    await (await workingBox(page)).fill('I multiplied 2 by 3 because I thought squaring adds one.')
     await expect(askButton(page)).toBeEnabled()
     await askButton(page).click()
     await expect(thread(page)).toContainText('You')
@@ -203,7 +209,7 @@ test.describe('the practice tutor', () => {
     const text = (await thread(page).innerText()).split('Tutor').pop() ?? ''
     expect((text.match(/\?/g) ?? []).length).toBe(1)
     // The working box is empty again for the next turn.
-    await expect(page.getByLabel('Your working (optional)').locator('visible=true')).toHaveValue('')
+    await expect(await workingBox(page)).toHaveValue('')
     // One wrong check and one piece of reasoning: two attempts on the step's ladder, keyed by content, problem and step.
     await expect.poll(async () => (await tutorRows(email, topicId)).map((row) => [row.attempts, row.scopeKey.split(':').slice(1).join(':')])).toEqual([[2, '0:0']])
   })
@@ -215,8 +221,8 @@ test.describe('the practice tutor', () => {
     await clarifyButton(page).click()
     await expect(thread(page)).toContainText('Tutor')
     await expect.poll(async () => (await tutorRows(email, topicId)).map((row) => [row.rung, row.attempts, row.lowEffortTurns])).toEqual([[0, 0, 0]])
-    // The step has no hint or rung on it, so Show answer is still waiting for an attempt.
-    await expect(page.getByRole('button', { name: 'Show answer' }).locator('visible=true')).toBeDisabled()
+    // The step has no hint or rung on it, so Show answer is still waiting for an attempt (it is not offered before one).
+    await expect(page.getByRole('button', { name: 'Show answer' }).locator('visible=true')).toHaveCount(0)
   })
 
   test('the worked example surrenders the step: level 3, flagged, and the problem stays open', async ({ page }) => {
@@ -268,7 +274,8 @@ test.describe('the practice tutor', () => {
     await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
     await page.getByRole('button', { name: 'Next step' }).locator('visible=true').click()
     // Step two: the locate hint first, then the right answer on the first try.
-    await page.getByRole('button', { name: /Locate/ }).click()
+    await openHelp(page)
+    await page.getByRole('button', { name: /Next hint: Locate/ }).click()
     await check(page, '9')
     await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
 
@@ -347,7 +354,8 @@ test.describe('the practice tutor', () => {
     await withPrisma((prisma) => prisma.aiStatus.upsert({ where: { id: 'global' }, create: { id: 'global', ...row }, update: row }))
     try {
       await page.reload()
-      await expect(page.getByLabel('Your working (optional)').locator('visible=true')).toBeVisible()
+      await openHelp(page)
+      await expect(await workingBox(page)).toBeVisible()
       await expect(clarifyButton(page)).toHaveCount(0)
       await expect(askButton(page)).toHaveCount(0)
       await expect(workedButton(page)).toHaveCount(0)
@@ -362,11 +370,12 @@ test.describe('the practice tutor', () => {
   test('ask about my working waits for a checked answer', async ({ page }) => {
     test.setTimeout(120_000)
     await open(page, 'tutor-effort')
-    const working = page.getByLabel('Your working (optional)').locator('visible=true')
+    const working = await workingBox(page)
     await working.fill('I think the square is the number times itself.')
-    // Text alone is not enough: effort first, one checked answer opens it (right or wrong).
-    await expect(askButton(page)).toBeDisabled()
-    await expect(page.getByText('Check an answer first, then you can ask about your working.').locator('visible=true')).toBeVisible()
+    // Text alone is not enough: effort first, one checked answer opens it (right or wrong). Before it the button is not drawn.
+    await openHelp(page)
+    await expect(askButton(page)).toHaveCount(0)
+    await expect(page.getByText("Check an answer first, or say you don't know, to open the later hints, a worked example and questions about your working.").locator('visible=true')).toBeVisible()
     await check(page, '5')
     await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
     await openHelp(page)
@@ -389,7 +398,7 @@ test.describe('the practice tutor', () => {
       seen.push(`done:${event}`)
       await route.fulfill({ response })
     })
-    const working = page.getByLabel('Your working (optional)').locator('visible=true')
+    const working = await workingBox(page)
     await working.fill('I think the square is the number times itself.')
     await check(page, '5')
     await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
@@ -414,11 +423,13 @@ test.describe('the practice tutor', () => {
     await recorded
     await page.reload()
     // The server's count of two wrong checks is what shows the offer again: the page itself starts from nothing.
+    await openMoreHelp(page)
     await expect(workedButton(page)).toBeEnabled()
     await expect(offer(page)).toBeVisible()
     // Not now is remembered across a reload too.
     await page.getByRole('button', { name: 'Not now' }).locator('visible=true').click()
     await page.reload()
+    await openMoreHelp(page)
     await expect(workedButton(page)).toBeEnabled()
     await expect(offer(page)).toHaveCount(0)
   })
@@ -432,7 +443,8 @@ test.describe('the practice tutor', () => {
     await expect(page.getByRole('button', { name: 'Check my understanding' })).toHaveCount(0)
     await page.getByRole('button', { name: 'Next step' }).locator('visible=true').click()
     // Step two: a hint, then the right answer.
-    await page.getByRole('button', { name: /Locate/ }).click()
+    await openHelp(page)
+    await page.getByRole('button', { name: /Next hint: Locate/ }).click()
     await check(page, '9')
     await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
     const confirm = page.getByRole('button', { name: 'Check my understanding' }).locator('visible=true')
@@ -522,6 +534,7 @@ test.describe('the practice tutor', () => {
         data: { problemIndex: 0, problemTitle: 'Squares', solvedSteps: [], revealedSteps: [], hintedSteps: [], attemptedSteps: [], firstTrySteps: [], maxRungs: {}, missRungs: {} },
       })
       await page.reload()
+      await openHelp(page)
       await expect(clarifyButton(page)).toBeVisible()
       await screenshotIfAsked(page, `tutor-${name}-start`)
       await expectNoAxeViolations(page, `${name}, start`)
@@ -536,7 +549,7 @@ test.describe('the practice tutor', () => {
       await page.getByRole('button', { name: 'Yes, talk it through' }).locator('visible=true').click()
       await expect(thread(page)).toBeVisible()
       await openHelp(page)
-      await page.getByLabel('Your working (optional)').locator('visible=true').fill('I squared by adding the number to itself.')
+      await (await workingBox(page)).fill('I squared by adding the number to itself.')
       await askButton(page).click()
       await expect(thread(page)).toContainText('I squared by adding')
       await workedButton(page).click()

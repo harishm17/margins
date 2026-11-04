@@ -9,13 +9,16 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { Spinner } from '@/components/ui/spinner'
+import { SHORT_SESSION_NAME } from '@/lib/learning/short-session'
+import { useStartShortSession } from '@/features/home/short-session-card'
 import { ConfidenceRow, optionCountOf, ThinkingBox } from '@/features/topic/quiz-confidence'
 import { ReviewList as ResultList, type ReviewEntry } from '@/features/topic/quiz-review-list'
 import { useAiStatus } from '@/features/ai/ai-status'
 import { ExpectedMiss } from '@/features/learning/expected-miss'
 import { statusLabel, useServerDraft } from '@/features/learning/use-server-draft'
 import { apiFetch, isApiError } from '@/lib/api/client'
-import { normalizeAnswers, type QuizAnswer } from '@/lib/learning/quiz-answers'
+import { type QuizAnswer } from '@/lib/learning/quiz-answers'
+import { parseReviewDraft, type ReviewDraft } from '@/lib/drafts/review-draft'
 import { reviewSessionHref } from '@/lib/learning/review-links'
 import type { PublicSessionItem, SessionSummary, SessionView } from '@/lib/learning/review-session-types'
 import { useQuestionMotion } from '@/lib/question-motion'
@@ -33,8 +36,8 @@ type Props = {
 
 const POLL_MS = 2000
 
+// The easy questions a review opens with carry no label: "Warm-up" is the topic's own step (questions before reading), not this.
 const PHASE_LABEL: Partial<Record<PublicSessionItem['phase'], string>> = {
-  opening: 'Warm-up',
   retest: 'Fresh retest',
   prerequisite: 'Before this',
 }
@@ -150,24 +153,16 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
           }
           secondary={<Link href={`/courses/${courseId}/review`}>Back to Review</Link>}
         >
-          Its review is due, but this topic has no concept questions yet, so it is reviewed with the questions from its quizzes.
+          Its review is due, but this topic has no idea questions yet, so it is reviewed with the questions from its quizzes.
         </EmptyState>
       )
     }
     return (
-      <EmptyState
-        icon={<CheckCircle />}
-        title={conceptId ? 'Nothing to drill on this yet' : 'Nothing is due'}
-        action={
-          <Button asChild variant="primary">
-            <Link href={`/courses/${courseId}/review`}>Back to Review</Link>
-          </Button>
-        }
-      >
+      <NothingDue courseId={courseId} drill={!!conceptId}>
         {conceptId
-          ? 'This idea has no questions to practise with yet. Open its topic and take a quiz first.'
-          : 'No concept needs another look today. Your next reviews appear on the Review page as they come due.'}
-      </EmptyState>
+          ? 'This idea has no questions to practice with yet. Open its topic and take a quiz first.'
+          : 'No idea needs another look today. Your next reviews appear on the Review page as they come due.'}
+      </NothingDue>
     )
   }
   if (loading.state === 'error') {
@@ -231,6 +226,12 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
           <span data-session-context="">{[item.topicName, ...item.conceptNames].filter(Boolean).join(' · ')}</span>
         </p>
       </div>
+      {/* Why the student is here, said until the first answer: a quick practice names its size, a drill says what it is for. */}
+      {answeredCount === 0 && (session.short || session.kind === 'drill') ? (
+        <p className="mt-1 text-small text-fg-2" data-testid="session-entry-note">
+          {session.short ? `${SHORT_SESSION_NAME} · ${plural(total, 'question')}` : 'Practising one idea that needs another look.'}
+        </p>
+      ) : null}
       <Progress aria-label="Questions answered" className="mt-4" value={(answeredCount / total) * 100} />
       <RightNote courseId={courseId} session={session} position={rightNote} />
       <Step
@@ -264,20 +265,39 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
   )
 }
 
-/** What is being written on one question: the draft payload of the review surface (spec 18.7). */
-type ReviewDraft = { answer: string; thinking?: string; confidence?: number; confidenceLevel?: string }
-
-function parseDraft(raw: unknown): ReviewDraft | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const value = raw as Record<string, unknown>
-  if (typeof value.answer !== 'string') return null
-  const answer = normalizeAnswers({ '0': value })['0']
-  return {
-    answer: value.answer,
-    ...(answer?.thinking ? { thinking: answer.thinking } : {}),
-    ...(answer?.confidence !== undefined ? { confidence: answer.confidence } : {}),
-    ...(answer?.confidenceLevel ? { confidenceLevel: answer.confidenceLevel } : {}),
-  }
+/**
+ * Nothing is due (or a drill with no questions). Quick practice is offered below as a plain alternative, so the student does not have
+ * to work out whether optional practice exists; a drill has none to offer, it points at the topic's quiz instead.
+ */
+function NothingDue({ courseId, drill, children }: { courseId: string; drill: boolean; children: React.ReactNode }) {
+  const { start, starting, error } = useStartShortSession(courseId)
+  return (
+    <EmptyState
+      icon={<CheckCircle />}
+      title={drill ? 'Nothing to drill on this yet' : 'Nothing is due'}
+      action={
+        drill ? (
+          <Button asChild variant="primary">
+            <Link href={`/courses/${courseId}/review`}>Back to Review</Link>
+          </Button>
+        ) : (
+          <Button variant="primary" onClick={() => void start()} loading={starting}>
+            Try {SHORT_SESSION_NAME.toLowerCase()} instead
+          </Button>
+        )
+      }
+      secondary={
+        drill ? undefined : (
+          <Button asChild variant="link">
+            <Link href={`/courses/${courseId}/review`}>Back to Review</Link>
+          </Button>
+        )
+      }
+    >
+      {children}
+      {error ? <InlineAlert className="mt-3 text-left" tone="danger">{error}</InlineAlert> : null}
+    </EmptyState>
+  )
 }
 
 function Status({ title, detail, busy }: { title: string; detail?: string; busy?: boolean }) {
@@ -365,7 +385,7 @@ type StepProps = {
 
 /** One question: the answer form, then (after a miss) the feedback with Next. A right answer goes straight on. Remounts for each question. */
 function Step({ courseId, sessionId, position, motion, item, result, isLast, canSkip, complete, firstMiss, closingRetests, onGraded, onNext, onRight }: StepProps) {
-  const draftHook = useServerDraft<ReviewDraft>('review', `${sessionId}:${position}`, { projectId: courseId, parse: parseDraft })
+  const draftHook = useServerDraft<ReviewDraft>('review', `${sessionId}:${position}`, { projectId: courseId, parse: parseReviewDraft })
   // The text is kept here as it is typed; the draft hook saves it (a closed tab, a reload or another device loses nothing).
   const [typed, setTyped] = React.useState<ReviewDraft | null>(null)
   const draft: ReviewDraft = typed ?? draftHook.value ?? { answer: '' }
@@ -431,14 +451,17 @@ function Step({ courseId, sessionId, position, motion, item, result, isLast, can
   }
 
   if (result) {
-    const resultEntries: ReviewEntry[] = [{ index: position, question: item.question, review: { ...result.review, questionIndex: position }, answer: result.answer }]
+    const resultEntries: ReviewEntry[] = [{ index: position, question: item.question, review: { ...result.review, questionIndex: position, dontKnow: result.idk === true || result.review.dontKnow === true }, answer: result.answer }]
     return (
       <div className={cn('mt-8', motion)} data-question="">
         <h2 ref={headingRef} tabIndex={-1} className="sr-only outline-none">
           {result.correct ? 'Correct' : result.idk ? "You said you don't know" : 'Not quite'}. Feedback for question {position + 1}.
         </h2>
         <ResultList entries={resultEntries} courseId={courseId} topicId={item.topicId} />
-        {!result.correct ? <Pointers pointers={result.pointers ?? []} /> : null}
+        {/* The card already ends with "From file, p. N" when the question has a source. One pointer to the same page would say it twice. */}
+        {!result.correct && !((result.review.sources?.length ?? 0) > 0 && (result.pointers?.length ?? 0) <= 1) ? (
+          <Pointers pointers={result.pointers ?? []} />
+        ) : null}
         {!result.correct && firstMiss && closingRetests ? (
           <p className="mt-3 text-small text-fg-2" data-testid="length-notice">
             Misses come back once at the end in a new form.
@@ -447,7 +470,7 @@ function Step({ courseId, sessionId, position, motion, item, result, isLast, can
         <div className="mt-6 flex items-center justify-end gap-3 border-t border-border pt-5">
           <Button variant="primary" onClick={onNext}>
             <span className="inline-flex items-center gap-1.5">
-              {isLast && !complete ? 'Continue' : isLast ? 'See summary' : 'Next'}
+              {isLast && !complete ? 'Continue' : isLast ? 'See session summary' : 'Next question'}
               <ArrowRight className="size-4" />
             </span>
           </Button>
@@ -551,7 +574,18 @@ function Summary({ courseId, session, summary, conceptId }: { courseId: string; 
             </dd>
           </div>
         ) : null}
-        {summary.recovered.length === 0 && summary.stillShaky.length === 0 && summary.notRetested.length === 0 && !trouble ? (
+        {summary.leftOut.length > 0 ? (
+          <div>
+            <dt className="text-body-strong text-fg">Left for next time</dt>
+            <dd className="mt-0.5 text-small text-fg-2" data-testid="left-out">
+              {list(summary.leftOut)}.{' '}
+              {summary.retestLimit
+                ? `This session retests ${summary.retestLimit === 1 ? 'one miss' : `only ${summary.retestLimit} misses`}, so ${summary.leftOut.length === 1 ? 'this one comes' : 'these come'} back in your next review.`
+                : `This session doesn't retest misses, so ${summary.leftOut.length === 1 ? 'this one comes' : 'these come'} back in your next review.`}
+            </dd>
+          </div>
+        ) : null}
+        {summary.recovered.length === 0 && summary.stillShaky.length === 0 && summary.notRetested.length === 0 && summary.leftOut.length === 0 && !trouble ? (
           <div>
             <dt className="text-body-strong text-fg">Nothing missed</dt>
             <dd className="mt-0.5 text-small text-fg-2">Every question was right, so nothing needed a retest.</dd>

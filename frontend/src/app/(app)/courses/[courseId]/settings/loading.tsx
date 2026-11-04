@@ -3,7 +3,7 @@ import { Skeleton, SkeletonField, SkeletonIntro, SkeletonPage } from '@/componen
 /** Course settings: the intro, the four fields, Save, then the delete section. */
 export default function SettingsLoading() {
   return (
-    <SkeletonPage width="narrow">
+    <SkeletonPage width="form">
       <SkeletonIntro />
       <div aria-hidden="true" className="flex flex-col gap-5">
         <SkeletonField labelWidth="w-24" />

@@ -38,10 +38,11 @@ test('the landing page tells the loop from files to exam day', async ({ page }) 
   // Trust: claims with their links.
   await expect(page.getByRole('link', { name: /Read the evaluation/ })).toHaveAttribute('href', /evals\/results\/2026-10-21-structure\.md$/)
   await expect(page.getByRole('link', { name: /View the code on GitHub/ })).toHaveAttribute('href', 'https://github.com/harishm17/margins')
-  await expect(page.getByText('it scored correctness 4.88 out of 5 and grounding in the source pages 4.91')).toBeVisible()
+  // The landing page says it in words; the scores and the failed checks are on /evaluation.
+  await expect(page.getByText('Every answer cites your page, and we publish how often the generators get things wrong')).toBeVisible()
   // The judge is the same model as the writer, and the automatic checks that failed are shown next to the scores.
   await expect(page.getByText('The judge is Claude Opus, the same model that writes the text')).toBeVisible()
-  await expect(page.getByText('0 of 8 notes had all the expected sections, and 0 of 8 stayed within the requested length')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'See the scores and the failures' })).toHaveAttribute('href', '/evaluation')
   await expect(page.getByRole('link', { name: 'Read the privacy policy' })).toHaveAttribute('href', '/privacy')
 
   // The questions: the first is open, the free answer says what is true, and opening another closes it.
@@ -93,6 +94,10 @@ test('on a phone every step shows its own phone-sized screenshot', async ({ page
   await expect(page.getByRole('tablist')).toBeHidden()
   const steps = page.locator('#how-it-works ol > li')
   await expect(steps).toHaveCount(6)
+  // One step is open at a time (the first); the rest are a line each until opened.
+  await expect(steps.locator('details[open]')).toHaveCount(1)
+  await steps.nth(2).locator('summary').click()
+  await expect(steps.locator('details[open]')).toHaveCount(1)
   await steps.nth(2).scrollIntoViewIfNeeded()
   const image = steps.nth(2).locator('img:visible')
   await expect(image).toHaveCount(1)

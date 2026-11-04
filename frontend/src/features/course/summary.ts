@@ -33,7 +33,7 @@ export function problemMessage(problem: FileProblem, maxUploadMb: number): strin
   return `Files can be up to ${maxUploadMb} MB.`
 }
 
-/** The upload picker's words ("Use these as:"). They only set a file's starting role (lib/materials/role.ts). */
+/** The upload picker's words ("For the next upload:"). They only set a file's starting role (lib/materials/role.ts). */
 export const CATEGORY_LABELS: Record<string, string> = {
   lecture_notes: 'Lecture notes',
   sample_exams: 'Past exams',
@@ -64,37 +64,4 @@ export function reviewTiming(dueAt: string | null, now: number, timeZone = 'UTC'
   if (!dueAt) return null
   if (isReviewDue(dueAt, dueBoundary(new Date(now), timeZone))) return { due: true, text: formatDueLabel(dueAt, now) }
   return { due: false, text: `Next review ${formatRelative(dueAt, now)}` }
-}
-
-export type GlyphState = 'done' | 'ready' | 'missing'
-
-/** Notes, examples, practice and quiz states for the topics list. Practice is done when the server has most of its steps solved. */
-export function studyPath(topic: {
-  content: string[]
-  progress: { notes: boolean; examples: boolean; quiz: boolean; quizScore: number | null }
-  /** At least 80% of the practice steps are solved (stored on the server). */
-  practiceDone?: boolean
-}): { notes: GlyphState; examples: GlyphState; practice: GlyphState; quiz: GlyphState; quizScore: number | null } {
-  const has = (type: string) => topic.content.includes(type)
-  const state = (type: string, done: boolean): GlyphState => (done ? 'done' : has(type) ? 'ready' : 'missing')
-  return {
-    notes: state('section_notes', topic.progress.notes),
-    examples: state('solved_examples', topic.progress.examples),
-    practice: state('interactive_examples', topic.practiceDone === true),
-    quiz: state('topic_quiz', topic.progress.quiz),
-    quizScore: topic.progress.quizScore,
-  }
-}
-
-const PATH_STEPS = [
-  { key: 'notes', label: 'Notes' },
-  { key: 'examples', label: 'Worked examples' },
-  { key: 'practice', label: 'Practice' },
-  { key: 'quiz', label: 'Quiz' },
-] as const
-
-/** What is next on a topic's study path, in words for a screen reader: "Next: Notes", or that the path is done. */
-export function nextStepWords(path: Record<(typeof PATH_STEPS)[number]['key'], GlyphState>): string {
-  const next = PATH_STEPS.find((step) => path[step.key] !== 'done')
-  return next ? `Next: ${next.label}` : 'Study path done'
 }

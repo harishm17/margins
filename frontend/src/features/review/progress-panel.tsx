@@ -28,14 +28,18 @@ import {
  * session card, so its buttons are outlined and "Start today's review" stays the one filled button. The cards
  * are compact on a phone (button beside the text) to keep that button near the top.
  */
-export function WeeklyFocus({ courseId, focus }: { courseId: string; focus: Progress['focus'] }) {
+export function WeeklyFocus({ courseId, focus, optional = false }: { courseId: string; focus: Progress['focus']; optional?: boolean }) {
   if (focus.length === 0) return null
   return (
     <section aria-labelledby="focus-heading">
       <h2 id="focus-heading" className="text-heading text-fg">
-        This week&apos;s focus
+        {optional ? 'Optional focus' : "This week's focus"}
       </h2>
-      <p className="mt-1 text-small text-fg-2">The few ideas most worth your time, so you do not have to pick from everything.</p>
+      <p className="mt-1 text-small text-fg-2">
+        {optional
+          ? 'Nothing is due, so these are extra: the few ideas most worth your time if you want to keep going.'
+          : 'The few ideas most worth your time, so you do not have to pick from everything.'}
+      </p>
       <ol className="mt-3 flex flex-col gap-2 sm:gap-3">
         {focus.map((item) => (
           <li key={item.conceptId} className="flex items-center justify-between gap-3 rounded-card border border-border bg-surface px-3 py-2.5 sm:p-4">
@@ -158,7 +162,7 @@ function Calibration({ calibration }: { calibration: Progress['calibration'] }) 
                 <td className="py-1.5">
                   {n > 0 && bin ? (
                     <span className="flex items-center justify-end gap-2">
-                      <span aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-3">
+                      <span aria-hidden="true" className="h-2 w-16 overflow-hidden rounded-full border border-control bg-surface-3">
                         <span className="block h-full rounded-full bg-accent" style={{ width: percent(bin.accuracy) }} />
                       </span>
                       <span className="tabular w-10 text-right text-fg">{percent(bin.accuracy)}</span>

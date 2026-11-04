@@ -1,5 +1,6 @@
 'use client'
 
+import { sprintSizeLine } from '@/lib/voice/sprint-size'
 import * as React from 'react'
 import Link from 'next/link'
 import * as RadioGroup from '@radix-ui/react-radio-group'
@@ -13,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { quizIsMissing, quizMissingCopy, styleNeedsQuiz, type VoiceQuizStatus } from './quiz-status'
 import { startingStyleFor } from './starting-style'
 import type { LobbyAlert } from './errors'
 import { focusPlaceholder, minutesLeftLabel } from './format'
@@ -65,6 +67,8 @@ type LobbyProps = {
   hasClaims?: boolean
   /** The claims counted by `hasClaims` are the named idea's own, so the lobby says the idea is missing them, not the topic. */
   claimsOfIdea?: boolean
+  /** Whether Quiz me can begin, known before Start. Absent: not known, and a start that finds no questions says so. */
+  quiz?: VoiceQuizStatus
   onStart: (config: StartConfig) => void
 }
 
@@ -84,11 +88,12 @@ export function Lobby({
   conceptId,
   hasClaims = true,
   claimsOfIdea = false,
+  quiz,
   onStart,
 }: LobbyProps) {
   // Never begin on a style that cannot run: without claims only Quiz me can (a start that fails for lack of them says so too).
   const needsClaims = !hasClaims || lobbyAlert?.kind === 'needs-claims'
-  const startingStyle = startingStyleFor(hasClaims, initialStyle)
+  const startingStyle = startingStyleFor(hasClaims, initialStyle, quizIsMissing(quiz))
   const [style, setStyle] = React.useState<VoiceStyle>(startingStyle)
   // The page can be asked again for another idea or topic without the lobby being remounted: the choice starts over from what the link now says.
   const [seenStart, setSeenStart] = React.useState(`${startingStyle}|${conceptId ?? ''}`)
@@ -146,10 +151,24 @@ export function Lobby({
           ? 'Works best in Chrome, Edge or Safari with a microphone.'
           : null
 
+  // Quiz me with nothing to ask from cannot begin: said here, before Start, with what is missing.
+  const quizBlocked = quizIsMissing(quiz) && styleNeedsQuiz(mode, effectiveStyle)
+  // Why Teach it back is not on offer stays said even when Quiz me cannot begin either: the quiz line follows it.
   const alert: LobbyAlert | null = lobbyAlert ?? (hasClaims || mode === 'sprint' ? null : { kind: 'needs-claims', ofIdea: claimsOfIdea })
 
+  // Why the start buttons are off, said to a screen reader with the button and as a tooltip.
+  const startReason = outOfTime
+    ? 'No voice minutes are left today.'
+    : blocked
+      ? 'AI features are paused right now.'
+      : quizBlocked
+        ? 'Quiz me needs a quiz first. The note above says how to make one.'
+        : usage === null
+          ? 'Checking your minutes for today.'
+          : undefined
+
   const begin = (typed: boolean) => {
-    if (outOfTime || starting || blocked) return
+    if (outOfTime || starting || blocked || quizBlocked) return
     onStart({
       style: effectiveStyle,
       language,
@@ -159,8 +178,10 @@ export function Lobby({
     })
   }
 
+  // Quiz me asks from the topic's quiz, so that is where the student goes to make one (a sprint spans topics: the list).
   const createContentHref =
-    mode === 'topic' && topic ? `/courses/${courseId}/topics/${topic.id}?view=read` : `/courses/${courseId}/topics`
+    mode === 'topic' && topic ? `/courses/${courseId}/topics/${topic.id}?view=quiz` : `/courses/${courseId}/topics`
+  const quizCopy = quizIsMissing(quiz) ? quizMissingCopy(mode, quiz, mode === 'topic') : null
 
   return (
     <div className="flex max-w-[640px] flex-col gap-6" data-testid="voice-lobby">
@@ -182,6 +203,12 @@ export function Lobby({
         <p className="text-body text-fg-2">
           {recognitionSupported ? 'Answer questions out loud and get feedback, like a study partner.' : 'Answer questions and get feedback, like a study partner.'}
         </p>
+        {mode === 'sprint' ? (
+          // The size is known before the start: say it here, beside the minutes left, not only once the questions come.
+          <p className="text-small text-fg-2" data-testid="voice-sprint-size">
+            {sprintSizeLine()}
+          </p>
+        ) : null}
         {recognitionSupported ? null : (
           <p className="mt-1 flex items-start gap-2 text-small text-fg-2" data-testid="voice-no-recognition">
             <Keyboard aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-3" />
@@ -190,7 +217,21 @@ export function Lobby({
         )}
       </div>
 
-      {alert ? <LobbyAlertView alert={alert} createContentHref={createContentHref} mode={mode} /> : null}
+      {alert ? <LobbyAlertView alert={alert} createContentHref={createContentHref} mode={mode} quizWorks={!quizBlocked} /> : null}
+      {quizBlocked && quizCopy && (!alert || alert.kind === 'needs-claims') ? (
+        <InlineAlert
+          tone="warning"
+          title={quizCopy.title}
+          data-testid="voice-quiz-missing"
+          action={
+            <Button asChild size="sm" variant="secondary">
+              <Link href={createContentHref}>{quizCopy.action}</Link>
+            </Button>
+          }
+        >
+          {quizCopy.text}
+        </InlineAlert>
+      ) : null}
       {!alert && usage && usage !== 'unavailable' && usage.hasLiveSession ? (
         <InlineAlert tone="warning" title="Another voice practice looks open">
           If it is open in another tab or window, end it there first. It also clears by itself after about a minute.
@@ -233,6 +274,11 @@ export function Lobby({
                   )}
                 >
                   <span className="flex text-accent max-sm:row-span-2 max-sm:mt-0.5 [&>svg]:size-5">{option.icon}</span>
+                  {/* An empty circle with a 3:1 edge when it is not chosen, so the choice shows without the colour of the card. */}
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-3 top-3 size-4 shrink-0 rounded-full border-[1.5px] border-control group-data-[state=checked]:hidden"
+                  />
                   <CheckCircle
                     weight="fill"
                     aria-hidden
@@ -277,16 +323,6 @@ export function Lobby({
               <span>
                 {privacyLine} {PRIVACY_TYPING}
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-auto min-h-0 px-1 py-0 text-small font-medium text-accent hover:text-accent-hover max-sm:min-h-11"
-                disabled={outOfTime || starting || !!blocked || usage === null}
-                onClick={() => begin(true)}
-              >
-                Start by typing
-              </Button>
             </p>
           ) : null}
         </div>
@@ -298,10 +334,24 @@ export function Lobby({
             size="lg"
             icon={<Microphone />}
             loading={starting}
-            disabled={outOfTime || usage === null || !!blocked}
+            disabled={outOfTime || usage === null || !!blocked || quizBlocked}
+            disabledReason={startReason}
           >
             {mode === 'sprint' ? 'Start sprint' : 'Start voice practice'}
           </Button>
+          {recognitionSupported ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              icon={<Keyboard />}
+              disabled={outOfTime || starting || !!blocked || usage === null || quizBlocked}
+              disabledReason={startReason}
+              onClick={() => begin(true)}
+            >
+              Start by typing
+            </Button>
+          ) : null}
           {note ? <p className="max-w-[34ch] text-small text-fg-2">{note}</p> : null}
         </div>
       </form>
@@ -313,25 +363,28 @@ function LobbyAlertView({
   alert,
   createContentHref,
   mode,
+  quizWorks,
 }: {
   alert: LobbyAlert
   createContentHref: string
   mode: 'topic' | 'sprint'
+  /** Whether Quiz me can begin: the claims alert says so only when it is true. */
+  quizWorks: boolean
 }) {
   if (alert.kind === 'needs-generation') {
+    // The page did not know (or the quiz changed since): the same words the lobby shows up front.
+    const copy = quizMissingCopy(mode, { state: 'missing', reason: 'no_quiz', total: 0 }, mode === 'topic')
     return (
       <InlineAlert
         tone="warning"
-        title="Create notes and a quiz first"
+        title={copy.title}
         action={
           <Button asChild size="sm" variant="secondary">
-            <Link href={createContentHref}>Create them</Link>
+            <Link href={createContentHref}>{copy.action}</Link>
           </Button>
         }
       >
-        {mode === 'sprint'
-          ? "These topics don't have quiz questions yet. Create their notes and a quiz, then come back."
-          : "There are no questions to ask yet. Create this topic's notes and a quiz, then come back. Teach it back and Read it with me work without a quiz."}
+        {copy.text}
       </InlineAlert>
     )
   }
@@ -339,8 +392,8 @@ function LobbyAlertView({
     return (
       <InlineAlert tone="warning" title={alert.ofIdea ? "This idea isn't read from your pages yet" : "Your pages aren't read into ideas yet"}>
         {alert.ofIdea
-          ? "Teach it back uses what your own pages say about an idea, and this idea doesn't have anything yet. Quiz me still works."
-          : "Teach it back and Read it with me use the ideas from your own pages, and this topic doesn't have any yet. Quiz me still works."}
+          ? `Teach it back uses what your own pages say about an idea, and this idea doesn't have anything yet.${quizWorks ? ' Quiz me still works.' : ''}`
+          : `Teach it back and Read it with me use the ideas from your own pages, and this topic doesn't have any yet.${quizWorks ? ' Quiz me still works.' : ''}`}
       </InlineAlert>
     )
   }

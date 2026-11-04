@@ -1,4 +1,11 @@
-export const MATH_PATTERN = /(\d+|=|±|sqrt|integral|derive|calculate|solve|equation|formula|sum|delta|percent|percentage|compute)/i
+/**
+ * Working that cannot be asked or answered out loud: an expression with operators between numbers, an equation, a math symbol,
+ * or a word that asks for a calculation. A bare number is not math ("step 2", "O(1) lookup", "a tree with 5 nodes"), and a word
+ * counts only whole ("assume", "summary" and "resolve" are not "sum" and "solve"). The first version of this matched any digit and
+ * any substring, which dropped most questions of a real quiz and left Quiz me with "no questions".
+ */
+export const MATH_PATTERN =
+  /(\d\s*[-+*/^×÷±<>]\s*\d|\d\s*%|[\w)\]]\s*[=≈≠≤≥]\s*[\w(\[-]|[±√∫∑∆]|\\[a-z]+|\$[^$]+\$|\b(sqrt|integral|derivative|derive|calculate|solve|equation|formula|compute)\b)/i
 
 export type VoiceQuestion = {
   question_type: string
@@ -57,13 +64,11 @@ export const isConceptualQuestion = (question: VoiceQuestion) => {
   if (!question) return false
   if (question.question_type === 'numerical') return false
 
+  // What the coach says aloud: the question, its options and the answer. The key points and tags are only its notes.
   const fields = [
     question.question_text,
-    question.explanation,
     question.sample_answer,
     safeString(question.correct_answer),
-    ...(question.key_points || []),
-    ...(question.concepts_tested || []),
     ...(question.options?.map(opt => opt.text) || []),
   ]
 

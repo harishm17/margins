@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   ArrowDown,
   ArrowUp,
+  ArrowsDownUp,
   ArrowsLeftRight,
   DotsSixVertical,
   DotsThree,
@@ -13,6 +14,8 @@ import {
 } from '@phosphor-icons/react/dist/ssr'
 import { SourceIcon } from '@/components/learning/source-link'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +48,7 @@ function Keywords({ keywords }: { keywords: string[] }) {
   const rest = keywords.slice(3)
   return (
     <span className="flex flex-wrap items-center gap-1.5">
+      <span className="text-caption font-normal text-fg-3">Keywords:</span>
       {shown.map((keyword) => (
         <Badge key={keyword} className="max-w-[160px] truncate">
           {keyword}
@@ -132,6 +136,15 @@ function EditFields({
         onChange={(event) => setDescription(event.target.value)}
         onKeyDown={keys}
       />
+      {/* Enter, Escape and leaving the fields still save or cancel; the two buttons say so on a screen with no keyboard. */}
+      <div className="flex items-center gap-2">
+        <Button type="button" size="sm" variant="primary" className="max-sm:min-h-11" onClick={commit}>
+          Save
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className="max-sm:min-h-11" onClick={cancel}>
+          Cancel
+        </Button>
+      </div>
     </div>
   )
 }
@@ -163,6 +176,10 @@ export type RowProps = {
   onDragOver: (event: React.DragEvent) => void
   onDrop: (event: React.DragEvent) => void
   onDragEnd: () => void
+  /** Merge mode: the row is a checkbox to pick, and the row's own actions are put away. */
+  selectMode?: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
 }
 
 /** One topic in the editor: handle, number, name and description, sources, and its menu. */
@@ -189,8 +206,10 @@ export function TopicEditorRow({
   onDragOver,
   onDrop,
   onDragEnd,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
 }: RowProps) {
-  const renameRequested = React.useRef(false)
   const hasOthers = mergeGroups.some((group) => group.topics.length > 0)
 
   function onHandleKey(event: React.KeyboardEvent) {
@@ -210,12 +229,20 @@ export function TopicEditorRow({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      className={cn('relative flex items-start gap-2 py-3 max-sm:gap-1.5', dragging && 'opacity-40')}
+      className={cn('relative flex items-start gap-2 py-3 max-sm:gap-1.5', dragging && 'opacity-40', selectMode && selected && 'bg-accent-soft/40')}
     >
       {indicator ? (
         <span
           aria-hidden="true"
           className={cn('absolute inset-x-0 h-0.5 rounded-full bg-accent', indicator === 'before' ? '-top-px' : '-bottom-px')}
+        />
+      ) : null}
+      {selectMode ? (
+        <Checkbox
+          aria-label={`Select ${topic.name} to merge`}
+          checked={selected}
+          onCheckedChange={() => onToggleSelect?.()}
+          className="mt-1.5 max-sm:mt-3"
         />
       ) : null}
       <button
@@ -225,7 +252,8 @@ export function TopicEditorRow({
         onKeyDown={onHandleKey}
         onPointerDown={() => onArm(true)}
         onPointerUp={() => onArm(false)}
-        className="mt-0.5 inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-chip text-fg-3 hover:bg-surface-2 hover:text-fg active:cursor-grabbing max-sm:size-8"
+        className="mt-0.5 inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-chip text-fg-3 hover:bg-surface-2 hover:text-fg active:cursor-grabbing max-sm:hidden"
+        hidden={selectMode}
       >
         <DotsSixVertical aria-hidden="true" weight="bold" className="size-4" />
       </button>
@@ -236,16 +264,21 @@ export function TopicEditorRow({
           <EditFields topic={topic} onSave={onSave} onCancel={onCancelEdit} />
         ) : (
           <>
-            <button
-              type="button"
-              onClick={onStartEdit}
-              aria-label={`Rename ${topic.name}`}
-              className="block max-w-full truncate rounded-chip text-left text-body-strong text-fg hover:underline"
-            >
-              {topic.name}
-            </button>
+            {selectMode ? (
+              <button
+                type="button"
+                onClick={onToggleSelect}
+                className="block max-w-full rounded-chip text-left text-body-strong text-fg max-sm:min-h-11 max-sm:py-2.5"
+                aria-hidden="true"
+                tabIndex={-1}
+              >
+                {topic.name}
+              </button>
+            ) : (
+              <p className="max-w-full wrap-anywhere text-body-strong text-fg">{topic.name}</p>
+            )}
             {topic.description ? (
-              <p className="mt-0.5 truncate text-small text-fg-2" title={topic.description}>
+              <p className="mt-0.5 line-clamp-3 text-small text-fg-2 sm:line-clamp-1" title={topic.description}>
                 {topic.description}
               </p>
             ) : null}
@@ -255,75 +288,75 @@ export function TopicEditorRow({
               </div>
             ) : null}
             <SourcesNote topic={topic} />
+            {selectMode ? null : (
+              // Rename and Move are on the row, not behind a menu: they are what checking the topics is for.
+              <div className="-ml-2.5 mt-1 flex flex-wrap items-center gap-1">
+                <Button variant="ghost" size="sm" icon={<PencilSimple />} aria-label={`Rename ${topic.name}`} onClick={onStartEdit}>
+                  Rename
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" icon={<ArrowsDownUp />} aria-label={`Move ${topic.name}`}>
+                      Move
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-[200px]">
+                    <DropdownMenuItem icon={<ArrowUp />} disabled={index === 0} onSelect={() => onMove(index - 1)}>
+                      Move up
+                    </DropdownMenuItem>
+                    <DropdownMenuItem icon={<ArrowDown />} disabled={index === total - 1} onSelect={() => onMove(index + 1)}>
+                      Move down
+                    </DropdownMenuItem>
+                    {hasUnits ? (
+                      <DropdownMenuItem icon={<ArrowsLeftRight />} onSelect={onMoveToUnit}>
+                        Move to unit...
+                      </DropdownMenuItem>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            )}
           </>
         )}
       </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton label={`Actions for ${topic.name}`} icon={<DotsThree weight="bold" />} size="sm" noTooltip />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          className="min-w-[200px]"
-          onCloseAutoFocus={(event) => {
-            // Rename opens an input that has focus; the menu must not take it back.
-            if (renameRequested.current) {
-              event.preventDefault()
-              renameRequested.current = false
-            }
-          }}
-        >
-          <DropdownMenuItem
-            icon={<PencilSimple />}
-            onSelect={() => {
-              renameRequested.current = true
-              onStartEdit()
-            }}
-          >
-            Rename
-          </DropdownMenuItem>
-          {hasUnits ? (
-            <DropdownMenuItem icon={<ArrowsLeftRight />} onSelect={onMoveToUnit}>
-              Move to unit...
+      {selectMode ? null : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton label={`Actions for ${topic.name}`} icon={<DotsThree weight="bold" />} size="sm" noTooltip />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[200px]">
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger icon={<GitMerge />} disabled={!hasOthers}>
+                Merge into...
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
+                {mergeGroups.map((group, position) =>
+                  group.topics.length === 0 ? null : (
+                    <React.Fragment key={group.label ?? 'loose'}>
+                      {group.label ? (
+                        <>
+                          {position > 0 ? <DropdownMenuSeparator /> : null}
+                          <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
+                        </>
+                      ) : null}
+                      {group.topics.map((other) => (
+                        <DropdownMenuItem key={other.id} onSelect={() => onMerge(other)}>
+                          {other.name}
+                        </DropdownMenuItem>
+                      ))}
+                    </React.Fragment>
+                  )
+                )}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem icon={<Trash />} destructive onSelect={onDelete}>
+              Delete
             </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger icon={<GitMerge />} disabled={!hasOthers}>
-              Merge into...
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="max-h-72 overflow-y-auto">
-              {mergeGroups.map((group, position) =>
-                group.topics.length === 0 ? null : (
-                  <React.Fragment key={group.label ?? 'loose'}>
-                    {group.label ? (
-                      <>
-                        {position > 0 ? <DropdownMenuSeparator /> : null}
-                        <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
-                      </>
-                    ) : null}
-                    {group.topics.map((other) => (
-                      <DropdownMenuItem key={other.id} onSelect={() => onMerge(other)}>
-                        {other.name}
-                      </DropdownMenuItem>
-                    ))}
-                  </React.Fragment>
-                )
-              )}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-          <DropdownMenuItem icon={<ArrowUp />} disabled={index === 0} onSelect={() => onMove(index - 1)}>
-            Move up
-          </DropdownMenuItem>
-          <DropdownMenuItem icon={<ArrowDown />} disabled={index === total - 1} onSelect={() => onMove(index + 1)}>
-            Move down
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem icon={<Trash />} destructive onSelect={onDelete}>
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </li>
   )
 }

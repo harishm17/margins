@@ -78,9 +78,10 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   const { courseId, ids } = (course = await createCourse(page))
   const base = `/courses/${courseId}/topics/${ids[0]}`
 
-  // No view in the address: it goes to the first unfinished one.
+  // No view in the address: it goes to the first unfinished one. A topic nobody has started is prepared first (a preparation screen),
+  // then it opens on its warm-up, not on the reader.
   await page.goto(base)
-  await expect(page).toHaveURL(/\?view=read$/)
+  await expect(page).toHaveURL(/\?view=warmup$/, { timeout: 90_000 })
   await expect(page.getByRole('heading', { level: 1, name: TOPICS[0] })).toBeVisible()
   // "Ask about this" opens the Ask sheet scoped to the topic, with a link to the full page.
   await page.getByRole('button', { name: 'Ask about this' }).click()
@@ -92,6 +93,10 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   )
   await page.keyboard.press('Escape')
   await expect(sheet).toBeHidden()
+
+  // Reading is a choice, one tap on the path away.
+  await page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Read/ }).click()
+  await expect(page).toHaveURL(/\?view=read$/)
 
   // The reader shows the student's own pages, and the topic's notes are written without a click in the meantime.
   await expect(page.locator('[data-passage]').first()).toBeVisible({ timeout: 90_000 })
@@ -205,7 +210,7 @@ test('quiz records confidence per question', async ({ page }) => {
   await page.goto(`/courses/${own.courseId}/topics/${own.topics['Graph search']}?view=quiz`)
   await expect(page.getByRole('button', { name: 'Start quiz' })).toBeVisible({ timeout: 30_000 })
   // The prediction is optional and stays in the session with the answers.
-  await page.getByRole('combobox', { name: /expect to get right/ }).click()
+  await page.getByRole('combobox', { name: /Guess your score/ }).click()
   await page.getByRole('option', { name: /^1 of/ }).click()
   await page.getByRole('button', { name: 'Start quiz' }).click()
   await expect(page.getByText('Question 1 of')).toBeVisible()
@@ -255,7 +260,7 @@ test('Prepare all topics now writes the rest of the course, one topic at a time'
   // The overview has no bulk "build" action any more; it is a course menu item with an estimate.
   await page.goto(`/courses/${courseId}`)
   await expect(page.getByRole('button', { name: /Build the missing study content|Build missing content|Generate/ })).toHaveCount(0)
-  await page.getByRole('button', { name: 'More course actions' }).click()
+  await page.getByRole('button', { name: 'Course actions' }).click()
   await page.getByRole('menuitem', { name: 'Prepare all topics now' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toContainText(/about \d+ topics/)
@@ -265,7 +270,7 @@ test('Prepare all topics now writes the rest of the course, one topic at a time'
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   expect(await writtenTypes(page, ids[ids.length - 1])).not.toContain('topic_quiz')
 
-  await page.getByRole('button', { name: 'More course actions' }).click()
+  await page.getByRole('button', { name: 'Course actions' }).click()
   await page.getByRole('menuitem', { name: 'Prepare all topics now' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Prepare all topics' }).click()
 

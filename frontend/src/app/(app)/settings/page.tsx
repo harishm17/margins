@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { Page } from '@/components/shell/page'
+import { Page, PageIntro } from '@/components/shell/page'
 import { AccountDetails, AiAllowance, DeleteAccount, SettingsSection, ThemeSetting } from '@/features/settings/settings-sections'
 import { getAccountDetails } from '@/server/account'
 import { requireUser } from '@/server/session'
@@ -15,10 +15,9 @@ export default async function SettingsPage() {
   if (!account) redirect('/login')
 
   return (
-    <Page width="narrow" className="pt-8">
-      <h1 className="text-title text-fg">Settings</h1>
-      <p className="mt-1.5 text-body text-fg-2">Your account, today&apos;s AI allowance and how Margins looks.</p>
-      <div className="mt-8 flex flex-col gap-8">
+    <Page width="form">
+      <PageIntro title="Settings" description="Your account, today's AI allowance and how Margins looks." />
+      <div className="flex flex-col gap-8">
         <SettingsSection id="account-heading" title="Account">
           <AccountDetails email={account.email} signInProvider={account.signInProvider} />
         </SettingsSection>

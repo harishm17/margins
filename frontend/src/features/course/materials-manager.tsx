@@ -1,5 +1,6 @@
 'use client'
 
+import { materialsSummary, type MaterialsCounts } from './materials-summary'
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -7,6 +8,7 @@ import {
   CheckCircle,
   Tag,
   DotsThree,
+  File as FileGeneric,
   FileDoc,
   FilePdf,
   FilePpt,
@@ -33,8 +35,10 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Spinner } from '@/components/ui/spinner'
@@ -46,11 +50,12 @@ import { apiFetch, isApiError } from '@/lib/api/client'
 import { track as trackEvent } from '@/lib/analytics/track'
 import { estimateWords } from '@/lib/jobs/estimate'
 import { formatBytes, formatElapsed } from '@/lib/format'
-import { isMaterialRole, MATERIAL_ROLES, ROLE_LABELS, roleForCategory, type MaterialRole } from '@/lib/materials/role'
+import { isMaterialRole, MATERIAL_ROLES, ROLE_LABELS, roleBadgeLabel, roleForCategory, type MaterialRole } from '@/lib/materials/role'
 import { UploadAbortedError, uploadMaterial } from '@/lib/uploads/upload-file'
 import { cn } from '@/lib/utils'
 import type { MaterialRow } from '@/server/queries/course'
 import { useRefreshSoon } from './use-refresh-soon'
+import { splitDuplicates, type KnownFile } from './duplicate-files'
 import {
   ACCEPT_ATTRIBUTE,
   CATEGORY_LABELS,
@@ -62,6 +67,11 @@ import { fillResetTime } from '@/lib/budget/copy'
 import { jobFailureMessage } from '@/lib/jobs/failure-message'
 
 type Category = 'lecture_notes' | 'sample_exams' | 'book_chapters' | 'syllabus'
+
+/** Marks the id of a file this browser is still sending (no server id yet) among the files a new one may repeat. */
+const LOCAL_PREFIX = 'local:'
+
+const newUploadKey = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 const CATEGORY_OPTIONS = (Object.keys(CATEGORY_LABELS) as Category[]).map((value) => ({
   value,
@@ -85,7 +95,14 @@ type LocalUpload = {
 
 function FileIcon({ filename }: { filename: string }) {
   const lower = filename.toLowerCase()
-  const Icon = lower.endsWith('.pdf') ? FilePdf : lower.endsWith('.pptx') ? FilePpt : FileDoc
+  // A neutral page for anything the app does not read (a refused .txt or .exe), not the Word glyph.
+  const Icon = lower.endsWith('.pdf')
+    ? FilePdf
+    : lower.endsWith('.pptx')
+      ? FilePpt
+      : lower.endsWith('.docx') || lower.endsWith('.doc')
+        ? FileDoc
+        : FileGeneric
   return <Icon aria-hidden="true" className="size-5 shrink-0 text-fg-3" />
 }
 
@@ -102,12 +119,14 @@ function StatusText({ children, tone = 'neutral', icon, announce }: StatusProps)
     <span
       role={announce ? 'alert' : undefined}
       className={cn(
-        'flex min-w-0 items-center gap-1.5 text-small',
-        tone === 'danger' ? 'text-danger-soft-fg' : tone === 'accent' ? 'text-fg' : 'text-fg-2'
+        'flex min-w-0 gap-1.5 text-small',
+        // A problem is told in full, over as many lines as it needs: "Use a PDF, DOCX, PPTX or DOC file." was cut at "DO...".
+        tone === 'danger' ? 'items-start text-danger-soft-fg' : 'items-center',
+        tone === 'accent' ? 'text-fg' : tone === 'neutral' ? 'text-fg-2' : null
       )}
     >
-      {icon}
-      <span className="min-w-0 truncate">{children}</span>
+      <span className={cn('inline-flex shrink-0', tone === 'danger' && 'mt-0.5')}>{icon}</span>
+      <span className={cn('min-w-0', tone === 'danger' ? 'break-words' : 'truncate')}>{children}</span>
     </span>
   )
 }
@@ -126,7 +145,7 @@ const FAILED_ICON = <WarningCircle aria-hidden="true" className="size-4 shrink-0
 const PIPELINE = [
   { stage: 'validating', label: 'Checking the file' },
   { stage: 'chunking', label: 'Reading pages' },
-  { stage: 'embedding', label: 'Indexing for search' },
+  { stage: 'embedding', label: 'Getting your pages ready for study and search' },
 ] as const
 
 function pipelineIndex(stage: string | null | undefined, jobType?: string): number {
@@ -166,8 +185,13 @@ function PipelineStatus({
             <span
               key={item.stage}
               className={cn(
-                'h-1 flex-1 rounded-full',
-                position < index ? 'bg-accent' : position === index ? 'animate-pulse bg-accent/60' : 'bg-surface-3'
+                // Each segment has an edge in the control-border colour, so the ones still to come show against the page.
+                'h-[6px] flex-1 rounded-full border',
+                position < index
+                  ? 'border-accent bg-accent'
+                  : position === index
+                    ? 'animate-pulse border-accent bg-accent/60'
+                    : 'border-control bg-surface-3'
               )}
             />
           ))}
@@ -185,27 +209,32 @@ function PipelineStatus({
 // Rows
 
 /** What the file is for. Syllabus and past exam files are shown in the accent tone; the word carries the meaning. */
-function RoleBadge({ role }: { role: MaterialRole }) {
-  return <Badge tone={role === 'syllabus' || role === 'exam' ? 'accent' : 'neutral'}>{ROLE_LABELS[role]}</Badge>
+function RoleBadge({ role, category }: { role: MaterialRole; category: string }) {
+  return <Badge tone={role === 'syllabus' || role === 'exam' ? 'accent' : 'neutral'}>{roleBadgeLabel(role, category)}</Badge>
 }
 
 /**
- * One file. It shows one label for what the file is for: its role, which decides how the file is
- * used and which the student can change. The upload category is not shown: it only sets the
- * starting role, so after a change the two can disagree.
+ * One file. It shows one label for what the file is for. Its role decides how the file is used and the student can change it; while
+ * the role is still the content the file started as, the label is the category the student uploaded it under (Lecture notes, Book
+ * chapters), so "Content" is only the word for a file that no category names.
  */
 function RowShell({
   filename,
   role,
+  category,
   size,
   status,
   menu,
+  unused,
 }: {
   filename: string
   role: MaterialRole
+  category: string
   size: number
   status: React.ReactNode
   menu: React.ReactNode
+  /** The file will not be used (refused, unreadable, failed): what it would be used as, and its size, mean nothing. */
+  unused?: boolean
 }) {
   return (
     <tr className="min-h-12 max-md:grid max-md:grid-cols-[minmax(0,1fr)_auto] max-md:items-center max-md:gap-x-2 max-md:gap-y-1 max-md:py-3">
@@ -214,17 +243,22 @@ function RowShell({
           <FileIcon filename={filename} />
           <div className="min-w-0">
             <p className="truncate text-body-strong text-fg">{filename}</p>
-            <p className="flex min-w-0 items-center gap-2 text-caption font-normal text-fg-3 md:hidden">
-              <span className="truncate">{formatBytes(size)}</span>
-              <RoleBadge role={role} />
-            </p>
+            {unused ? null : (
+              <p className="flex min-w-0 items-center gap-2 text-caption font-normal text-fg-3 md:hidden">
+                <span className="truncate">{formatBytes(size)}</span>
+                <RoleBadge role={role} category={category} />
+              </p>
+            )}
           </div>
         </div>
       </td>
       <td className="whitespace-nowrap px-3 py-2.5 max-md:hidden">
-        <RoleBadge role={role} />
+        {unused ? <span aria-hidden="true" className="text-fg-3">&ndash;</span> : <RoleBadge role={role} category={category} />}
+        {unused ? <span className="sr-only">Not used</span> : null}
       </td>
-      <td className="whitespace-nowrap px-3 py-2.5 text-small tabular text-fg-2 max-md:hidden">{formatBytes(size)}</td>
+      <td className="whitespace-nowrap px-3 py-2.5 text-small tabular text-fg-2 max-md:hidden">
+        {unused ? <span aria-hidden="true" className="text-fg-3">&ndash;</span> : formatBytes(size)}
+      </td>
       <td className="min-w-0 px-3 py-2.5 max-md:col-span-2 max-md:row-start-2 max-md:p-0 max-md:pl-8"><div className="md:w-52">{status}</div></td>
       <td className="py-1.5 pl-3 text-right max-md:col-start-2 max-md:row-start-1 max-md:p-0">{menu}</td>
     </tr>
@@ -246,7 +280,7 @@ function RowMenu({ filename, children }: { filename: string; children: React.Rea
 
 /**
  * A past exam that was read but whose style could not be analysed: say so on its row, with a way
- * to analyse the course's past exams again.
+ * to analyze the course's past exams again.
  */
 function ExamAnalysisFailed({
   courseId,
@@ -279,13 +313,13 @@ function ExamAnalysisFailed({
       <Tooltip content={text} side="top" align="start">
         <span className="block min-w-0">
           <StatusText icon={FAILED_ICON} tone="danger">
-            {"Read, but its exam style couldn't be analysed"}
+            {"Read, but its exam style couldn't be analyzed"}
           </StatusText>
         </span>
       </Tooltip>
       {blocked ? null : (
         <Button size="sm" variant="link" className="h-auto p-0 text-small" loading={pending} onClick={() => void retry()}>
-          Analyse again
+          Analyze again
         </Button>
       )}
     </div>
@@ -391,8 +425,10 @@ function ServerRow({
       <RowShell
         filename={row.filename}
         role={role}
+        category={row.category}
         size={row.sizeBytes}
         status={status}
+        unused={row.status === 'failed' || row.status === 'unusable'}
         menu={
           <RowMenu filename={row.filename}>
             <DropdownMenuItem
@@ -424,11 +460,34 @@ function ServerRow({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete ${row.filename}?`}
-        description="Topics built from it keep their content."
+        description="Topics built from it keep their content. Links to this file from Ask answers and notes stop opening."
         confirmLabel="Delete file"
         destructive
         onConfirm={onDelete}
-      />
+      >
+        {row.topics.length > 0 ? (
+          // Optional: look before deleting. The topics open in the course's topic list; nothing here is a required step.
+          <details className="group text-small text-fg-2">
+            <summary className="inline-flex min-h-6 cursor-pointer list-none items-center gap-1.5 rounded-chip text-accent hover:underline max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
+              View affected topics ({row.topics.length})
+            </summary>
+            <ul className="mt-2 flex flex-col gap-1">
+              {row.topics.map((topic) => (
+                <li key={topic.id}>
+                  <a
+                    href={`/courses/${courseId}/topics/${topic.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-6 items-center rounded-chip text-fg underline underline-offset-2 max-sm:min-h-11"
+                  >
+                    {topic.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </ConfirmDialog>
     </>
   )
 }
@@ -458,8 +517,10 @@ function LocalRow({ upload, onDismiss, typicalSeconds }: { upload: LocalUpload; 
     <RowShell
       filename={upload.filename}
       role={roleForCategory(upload.category)}
+      category={upload.category}
       size={upload.size}
       status={status}
+      unused={upload.phase === 'error'}
       menu={
         upload.phase === 'sent' ? null : (
           <IconButton
@@ -523,10 +584,19 @@ export function MaterialsManager({
   const removeUpload = React.useCallback((key: string) => {
     setUploads((current) => current.filter((item) => item.key !== key))
   }, [])
+  // A file deleted on the server leaves no trace here: the row this browser kept for it (while it waited for the server's) would
+  // otherwise show again as a file still being checked.
+  const removeUploadsOf = React.useCallback((materialId: string) => {
+    setUploads((current) => current.filter((item) => item.materialId !== materialId))
+  }, [])
+
+  // Files that match one already in the course wait here for the student's choice (cancel, replace, keep both).
+  const [duplicates, setDuplicates] = React.useState<{ file: File; matches: KnownFile[] }[] | null>(null)
+  const [removeFailedOpen, setRemoveFailedOpen] = React.useState(false)
 
   /** Starts one file; the promise says whether it reached the server (for the count of files uploaded). */
   function startUpload(file: File): Promise<boolean> {
-    const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const key = newUploadKey()
     const problem = fileProblem(file, maxUploadMb)
     if (problem) {
       setUploads((current) => [
@@ -560,13 +630,68 @@ export function MaterialsManager({
       })
   }
 
-  function addFiles(list: FileList | File[] | null) {
-    if (!list) return
-    // One event per batch: how many of the files arrived (a number only, never a name).
-    void Promise.all(Array.from(list).map(startUpload)).then((results) => {
+  /** Uploads the files and reports how many arrived (a number only, never a name). */
+  function uploadAll(files: File[], afterEach?: (file: File, arrived: boolean) => void) {
+    void Promise.all(
+      files.map((file) =>
+        startUpload(file).then((arrived) => {
+          afterEach?.(file, arrived)
+          return arrived
+        })
+      )
+    ).then((results) => {
       const count = results.filter(Boolean).length
       if (count > 0) trackEvent('files_uploaded', { file_count: count })
     })
+  }
+
+  /** Everything the course has or is about to have, for noticing a file added twice. */
+  function knownFiles(): KnownFile[] {
+    const local = uploads
+      .filter((item) => item.phase !== 'error' && !(item.materialId && serverIds.has(item.materialId)))
+      .map((item) => ({ id: `${LOCAL_PREFIX}${item.key}`, filename: item.filename, sizeBytes: item.size }))
+    return [...materials.map((row) => ({ id: row.id, filename: row.filename, sizeBytes: row.sizeBytes })), ...local]
+  }
+
+  function addFiles(list: FileList | File[] | null) {
+    if (!list) return
+    const { fresh, duplicates: same } = splitDuplicates(Array.from(list), knownFiles())
+    // New files go at once; a file that is already here waits until the student says what to do with it.
+    uploadAll(fresh)
+    if (same.length > 0) setDuplicates(same)
+  }
+
+  /** Cancel drops the repeated files. Keep both uploads them as new files. Replace uploads them, then removes the files they repeat. */
+  function resolveDuplicates(choice: 'cancel' | 'keep' | 'replace') {
+    const waiting = duplicates ?? []
+    setDuplicates(null)
+    if (choice === 'cancel') return
+    uploadAll(
+      waiting.map((item) => item.file),
+      choice === 'replace'
+        ? (file, arrived) => {
+            // Only once the new copy has reached the server, so a failed upload never leaves the course with neither.
+            if (!arrived) return
+            for (const match of waiting.find((item) => item.file === file)?.matches ?? []) void removeKnown(match.id)
+          }
+        : undefined
+    )
+  }
+
+  async function removeKnown(id: string) {
+    if (id.startsWith(LOCAL_PREFIX)) {
+      const key = id.slice(LOCAL_PREFIX.length)
+      uploads.find((item) => item.key === key)?.abort?.abort()
+      removeUpload(key)
+      return
+    }
+    try {
+      await apiFetch(`/api/materials/${id}`, { method: 'DELETE' })
+      removeUploadsOf(id)
+      router.refresh()
+    } catch {
+      toast.error("Couldn't remove the earlier copy. You can delete it from its menu.")
+    }
   }
 
   const serverIds = new Set(materials.map((row) => row.id))
@@ -588,8 +713,30 @@ export function MaterialsManager({
     return rows
   }, [uploads, materials])
   const empty = materials.length === 0 && visibleUploads.length === 0
-  const working = visibleUploads.some((item) => item.phase !== 'error') || materials.some((row) => row.status === 'processing')
+  // Every row the list shows is counted once: a row the server has taken over is a server row, so the
+  // browser's copy of it is not counted twice.
+  const counts: MaterialsCounts = {
+    ready: materials.filter((row) => row.status === 'ready').length,
+    working:
+      visibleUploads.filter((item) => item.phase !== 'error').length + materials.filter((row) => row.status === 'processing').length,
+    needsAttention:
+      visibleUploads.filter((item) => item.phase === 'error').length +
+      materials.filter((row) => row.status !== 'ready' && row.status !== 'processing').length,
+  }
   const inline = variant === 'inline'
+  const failedRows = materials.filter((row) => row.status !== 'ready' && row.status !== 'processing')
+  const failedUploads = visibleUploads.filter((item) => item.phase === 'error')
+
+  async function removeFailed() {
+    for (const item of failedUploads) removeUpload(item.key)
+    const results = await Promise.allSettled(failedRows.map((row) => apiFetch(`/api/materials/${row.id}`, { method: 'DELETE' })))
+    router.refresh()
+    if (results.some((result) => result.status === 'rejected')) {
+      toast.error("Couldn't remove every file. Try again, or delete them from their menus.")
+      throw new Error('remove failed')
+    }
+    toast.success('Files with problems removed')
+  }
 
   return (
     <div className={cn(!inline && 'flex flex-col gap-6')}>
@@ -629,19 +776,23 @@ export function MaterialsManager({
           inline && 'mt-4'
         )}
       >
-        <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-body-strong text-fg">
+        {/* Nothing can be dropped on a phone: there it is one button, "Choose files". */}
+        <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-body-strong text-fg max-sm:hidden">
           <UploadSimple aria-hidden="true" className="size-5 text-fg-3" />
           Drop files here or
           <Button variant="link" className="h-auto px-0 text-body-strong" onClick={() => inputRef.current?.click()}>
             browse
           </Button>
         </p>
+        <Button variant="secondary" icon={<UploadSimple />} className="sm:hidden" onClick={() => inputRef.current?.click()}>
+          Choose files
+        </Button>
         <p className="text-small text-fg-2">
           PDF, DOCX, PPTX or DOC, up to {maxUploadMb} MB each. PDFs need selectable text. Scans can&apos;t be read.
         </p>
         <div className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-2">
           <span id={`category-label-${variant}`} className="text-small text-fg-2">
-            Use these as:
+            For the next upload:
           </span>
           <SegmentedControl
             aria-labelledby={`category-label-${variant}`}
@@ -697,18 +848,76 @@ export function MaterialsManager({
                 item.kind === 'local' ? (
                   <LocalRow key={item.upload.key} upload={item.upload} typicalSeconds={typicalSeconds} onDismiss={() => removeUpload(item.upload.key)} />
                 ) : (
-                  <ServerRow key={item.row.id} courseId={courseId} row={item.row} typicalSeconds={typicalSeconds} onDeleted={() => router.refresh()} />
+                  <ServerRow key={item.row.id} courseId={courseId} row={item.row} typicalSeconds={typicalSeconds} onDeleted={() => {
+                      removeUploadsOf(item.row.id)
+                      router.refresh()
+                    }}
+                  />
                 )
               )}
             </tbody>
           </table>
-          <p className="mt-3 min-h-5 text-small text-fg-2" aria-live="polite">
-            {working
-              ? "You can leave this page. Files keep being read."
-              : 'Every file here has been read.'}
-          </p>
+          {counts.needsAttention > 0 ? (
+            // A file that cannot be used is a problem to fix, so the line is an alert with the way to fix it, not grey small print.
+            <InlineAlert
+              tone="danger"
+              className="mt-3"
+              action={
+                <Button size="sm" onClick={() => setRemoveFailedOpen(true)}>
+                  Remove files with problems
+                </Button>
+              }
+            >
+              <span aria-live="polite">{materialsSummary(counts)}</span>
+            </InlineAlert>
+          ) : (
+            <p className="mt-3 min-h-5 text-small text-fg-2" aria-live="polite">
+              {materialsSummary(counts)}
+            </p>
+          )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={removeFailedOpen}
+        onOpenChange={setRemoveFailedOpen}
+        title="Remove the files with problems?"
+        description="Files that were refused or could not be read. They are not used for your topics, and the files that were read are not touched."
+        confirmLabel="Remove files with problems"
+        destructive
+        onConfirm={removeFailed}
+      />
+
+      <Dialog open={duplicates !== null} onOpenChange={(open) => (open ? undefined : resolveDuplicates('cancel'))}>
+        <DialogContent size="sm" hideClose>
+          <DialogHeader className="mb-0 pr-0">
+            <DialogTitle>{(duplicates?.length ?? 0) === 1 ? 'This file is already here' : 'These files are already here'}</DialogTitle>
+            <DialogDescription>
+              The name and size match a file in this course. Adding it again would read it a second time and ask for another topic review.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="mt-4 flex flex-col gap-1 text-small text-fg" data-testid="duplicate-files">
+            {(duplicates ?? []).map((item, index) => (
+              <li key={`${item.file.name}-${index}`} className="flex min-w-0 items-center gap-2">
+                <FileIcon filename={item.file.name} />
+                <span className="min-w-0 flex-1 truncate">{item.file.name}</span>
+                <span className="shrink-0 tabular text-fg-3">{formatBytes(item.file.size)}</span>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => resolveDuplicates('cancel')}>
+              Cancel
+            </Button>
+            <Button variant="secondary" onClick={() => resolveDuplicates('keep')}>
+              Keep both
+            </Button>
+            <Button variant="primary" onClick={() => resolveDuplicates('replace')}>
+              Replace
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

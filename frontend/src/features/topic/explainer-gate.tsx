@@ -9,16 +9,19 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { EXPLAINER_ESCAPE_LABEL } from '@/features/learning/expected-miss-copy'
+import { useActivityInProgress } from './topic-provider'
 
 /**
  * The explainer before a recall (spec §5.4): "Try recalling first." The way on is Start recall. A student who would
  * rather read an explanation now can open the explainer once they have read the topic; that is recorded as `asked`
  * ("I'd rather read an explanation now", spec 18.10). The server refuses the explainer's text until one of the two has happened.
  */
-export function ExplainerGate({ topicId, recallHref, canUnlock }: { topicId: string; recallHref: string; canUnlock: boolean }) {
+export function ExplainerGate({ topicId, recallHref, readHref, canUnlock }: { topicId: string; recallHref: string; readHref: string; canUnlock: boolean }) {
   const router = useRouter()
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  // The gate says what to do next (Start recall), so the topic's own "next" line steps aside rather than name another step above it.
+  useActivityInProgress(true)
 
   async function unlock() {
     setBusy(true)
@@ -46,13 +49,23 @@ export function ExplainerGate({ topicId, recallHref, canUnlock }: { topicId: str
       }
       secondary={
         <div className="flex flex-col items-center gap-1.5">
-          <Button variant="link" className="text-center text-small [&>span]:overflow-visible [&>span]:whitespace-normal" disabled={!canUnlock} loading={busy} aria-describedby={canUnlock ? undefined : 'explainer-unlock-hint'} onClick={() => void unlock()}>
-            {EXPLAINER_ESCAPE_LABEL}
-          </Button>
-          {canUnlock ? null : (
-            <span id="explainer-unlock-hint" className="text-caption text-fg-3">
-              Available once you have read this topic.
-            </span>
+          {canUnlock ? (
+            <>
+              <p className="text-center text-small text-fg-2">You have finished reading this topic.</p>
+              <Button variant="link" className="text-center text-small [&>span]:overflow-visible [&>span]:whitespace-normal" loading={busy} onClick={() => void unlock()}>
+                {EXPLAINER_ESCAPE_LABEL}
+              </Button>
+            </>
+          ) : (
+            // Not a disabled button with a reason under it: until the topic is read there is nothing to press, so the other way to the
+            // explanation is a real link (to the reading), said in a sentence that also says where the reading stands.
+            <p className="text-center text-small text-fg-2">
+              You have not finished reading this topic yet. Finish it to unlock the explanation:{' '}
+              <Link href={readHref} scroll={false} className="rounded-chip text-accent underline underline-offset-2 hover:text-accent-hover max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
+                Read the topic
+              </Link>
+              .
+            </p>
           )}
           {error ? (
             <InlineAlert tone="danger" className="mt-2 text-left">
@@ -62,7 +75,7 @@ export function ExplainerGate({ topicId, recallHref, canUnlock }: { topicId: str
         </div>
       }
     >
-      Writing what you remember before you read an explanation makes the explanation stick. The explainer opens as soon as you have tried.
+      Writing what you remember before you read an explanation makes the explanation stick. Try recall now, or finish reading the topic to unlock the explanation.
     </EmptyState>
   )
 }

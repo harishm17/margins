@@ -31,6 +31,8 @@ type ConversationProps = {
   fixedScope?: string
   /** Shown in the sheet's empty state, e.g. "Graph traversal". */
   topicName?: string
+  /** The draft key before the first message: a conversation of its own, so the sheet of one topic and the page do not share a box. */
+  draftNewKey?: string
 }
 
 const NEAR_BOTTOM = 160
@@ -49,8 +51,9 @@ export function Conversation({
   onScopeChange,
   fixedScope,
   topicName,
+  draftNewKey = 'new',
 }: ConversationProps) {
-  const { messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry } = chat
+  const { messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry, subscribeAccepted, threadId } = chat
   const { blocked } = useAiStatus()
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const stickRef = React.useRef(true)
@@ -185,6 +188,8 @@ export function Conversation({
               disabled={loadingThread}
               autoFocus={!isSheet}
               initialValue={initialDraft}
+              draft={{ courseId, key: threadId ?? draftNewKey }}
+              subscribeAccepted={subscribeAccepted}
             />
           </div>
         </div>

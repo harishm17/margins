@@ -25,7 +25,8 @@ import {
 import { topicBand, type Band } from '@/lib/learning/level'
 import type { NextActivity } from '@/lib/learning/next-activity'
 import { loadTopicLearningState, resolveTopicActivity } from '@/lib/learning/next-activity-server'
-import { findActiveConceptsJob } from '@/lib/learning/topic-preparation'
+import { loadRecallProgress } from '@/lib/learning/recall-server'
+import { findActiveConceptsJob, preparationInFlight } from '@/lib/learning/topic-preparation'
 import { pathSteps } from '@/features/topic/path-steps'
 import type { PathView } from '@/features/topic/types'
 import { getCourseShell } from './courses'
@@ -133,10 +134,19 @@ export type TopicPageData = {
   topicBand: Band
   /** Which path steps are done (the warm-up taken, the topic read, recall done). */
   pathDone: { warmup: boolean; read: boolean; recall: boolean }
+  /** The student has begun the topic: any answer (a warm-up one included), reading, or a step done. The header says "In progress" then. */
+  begun: boolean
+  /** Recall prompts with an answer, of all of them. The first graded answer counts the topic as recalled; the step is finished at all. */
+  recallProgress: { answered: number; total: number }
   /** The steps of the path this topic can offer (no warm-up without a bank, no recall without concepts). */
   pathSteps: PathView[]
   /** Concept extraction is queued or running: Recall shows a preparing state. */
   preparingConcepts: boolean
+  /**
+   * A topic the student has not started is still being prepared (nothing opened yet, or its concepts and warm-up are being written):
+   * it opens on a preparation screen and then on the warm-up, instead of on the reader with a path that changes underneath.
+   */
+  preparingEntry: boolean
   /** The one-time card about trying before help has not been closed yet. */
   showEffortIntro: boolean
 }
@@ -321,6 +331,15 @@ export const getTopicPage = cache(async function getTopicPage(
   // The same function Home, the overview and the plan use (it also reads whether the AI is up).
   const nextWithHref = await resolveTopicActivity({ userId, courseId, topicId, topics: course.topics, listConfirmed: course.setup.topics.listConfirmed, state: learningState })
 
+  // Not started: no reading, warm-up or evidence yet, and the warm-up is not written. Preparation then runs (or has not been
+  // asked for yet, for a topic nobody has opened) and the first step is not known until it settles. A failed job ends the wait.
+  const notStarted = !learningState.hasAnyEvidence && learningState.readAt === null && learningState.warmupAt === null && !learningState.warmupReady
+  const preparingEntry =
+    notStarted &&
+    (nextWithHref.kind === 'start' || nextWithHref.kind === 'read') &&
+    Object.keys(failures).length === 0 &&
+    (nextWithHref.kind === 'start' || preparingConcepts || (await preparationInFlight(topicId)))
+
   const contentVersion = [
     ...contentRows.map((row) => `${row.contentType}:${row.updatedAt.getTime()}`),
     ...quizRows.map((row) => row.id),
@@ -357,11 +376,20 @@ export const getTopicPage = cache(async function getTopicPage(
       .map((row) => practiceRowProgress(row, content.practice?.items[row.problemIndex]?.steps.length ?? 0)),
     failures,
     nextActivity: nextWithHref,
-    pathSteps: pathSteps({ hasConcepts, warmupReady: learningState.warmupReady, warmupDone: learningState.warmupAt !== null, readDone: learningState.readAt !== null, preparingConcepts }),
+    pathSteps: pathSteps({ hasConcepts, warmupReady: learningState.warmupReady, warmupDone: learningState.warmupAt !== null, readDone: learningState.readAt !== null, preparingConcepts, preparingEntry }),
     preparingConcepts,
+    preparingEntry,
     concepts: learningState.concepts.map((concept) => ({ id: concept.id, name: concept.name ?? '', label: concept.label, wrongIdea: concept.misconception !== null, band: concept.band })),
     topicBand: topicBand(learningState.concepts.map((concept) => ({ band: concept.band, solid: concept.label === 'solid' }))),
     pathDone: { warmup: learningState.warmupAt !== null, read: learningState.readAt !== null, recall: learningState.recallAt !== null },
+    // A warm-up answer is not mastery evidence (hasAnyEvidence leaves it out), but it does mean the topic is begun.
+    begun:
+      learningState.hasAnyEvidence ||
+      learningState.readAt !== null ||
+      learningState.warmupAt !== null ||
+      learningState.recallAt !== null ||
+      (await prisma.evidenceEvent.count({ where: { userId, topicId, source: 'warmup' } })) > 0,
+    recallProgress: hasConcepts && learningState.recallAt !== null ? await loadRecallProgress(userId, topicId) : { answered: 0, total: 0 },
     showEffortIntro: effortIntro?.seenEffortIntroAt == null,
   }
 })

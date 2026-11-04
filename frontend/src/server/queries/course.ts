@@ -14,9 +14,8 @@ import {
 import { maxUploadMb } from '@/lib/storage/upload-limits'
 import { courseMastery, masteryLevel, countMasteryLevels, type MasteryCounts } from '@/lib/mastery'
 import { readRole, type MaterialRole } from '@/lib/materials/role'
-import { parsePracticeProblems } from '@/features/topic/content'
+import { practiceDoneTopics } from '@/lib/learning/practice-done'
 import { mergeSources, type SourceRef } from '@/lib/topics/sources'
-import { PRACTICE_DONE_SHARE } from '@/features/topic/practice-keys'
 import type { CourseSetup, TopicListState } from '@/lib/course-setup'
 import { getCourseShell, type CourseShell, type ShellTopic, type ShellUnit } from '@/server/queries/courses'
 import { getPlanData } from '@/server/queries/plan'
@@ -80,6 +79,8 @@ export type MaterialRow = {
   job: (JobRef & { jobType: string }) | null
   /** A past exam whose style analysis failed: the job's error code (null when it did not fail). */
   examAnalysisFailure: { errorCode: string | null } | null
+  /** The topics taught from this file, so deleting it can say which ones lose their source. */
+  topics: { id: string; name: string }[]
 }
 
 export type MaterialsData = {
@@ -196,6 +197,20 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
     else jobsByMaterial.set(materialId, [job])
   }
 
+  const taught = materials.length
+    ? await prisma.topicSource.findMany({
+        where: { materialId: { in: materials.map((material) => material.id) }, topic: { projectId: courseId } },
+        orderBy: { topic: { orderIndex: 'asc' } },
+        select: { materialId: true, topic: { select: { id: true, name: true } } },
+      })
+    : []
+  const topicsByMaterial = new Map<string, { id: string; name: string }[]>()
+  for (const { materialId, topic } of taught) {
+    const list = topicsByMaterial.get(materialId) ?? []
+    if (!list.some((item) => item.id === topic.id)) list.push(topic)
+    topicsByMaterial.set(materialId, list)
+  }
+
   const rows: MaterialRow[] = materials.map((material) => {
     const jobs = jobsByMaterial.get(material.id) ?? []
     // Newest first, so the first active job is the one in front.
@@ -220,6 +235,7 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
       examAnalysisFailure: examState.failedFileIds.includes(material.id)
         ? { errorCode: examFailureCode.get(material.id) ?? null }
         : null,
+      topics: topicsByMaterial.get(material.id) ?? [],
     }
   })
 
@@ -377,6 +393,8 @@ export type SetupData = {
   /** The first confirmed topic in course order, where "Start studying" goes. */
   firstTopic: { id: string; name: string } | null
   generation: GenerationState
+  /** The exam date (YYYY-MM-DD) and daily time, so step 3 can ask for the date when the course has none. */
+  plan: { examDate: string | null; dailyMinutes: number; askForExamDate: boolean }
 }
 
 export type CourseOverview =
@@ -439,6 +457,11 @@ export async function getCourseOverview(
         label: course.setup.label,
         firstTopic: course.topics.find((topic) => topic.confirmed) ?? null,
         generation,
+        plan: {
+          examDate: course.examDate,
+          dailyMinutes: course.dailyMinutes,
+          askForExamDate: !course.examDate && !course.examPromptDismissed,
+        },
       },
     }
   }
@@ -593,15 +616,7 @@ export async function getTopicsData(userId: string, courseId: string): Promise<T
     }),
   ])
   // Practice is done when 80% of the steps of the current problems are solved.
-  const practiceDone = new Set<string>()
-  for (const content of practiceContent) {
-    const problems = parsePracticeProblems(content.contentData, content.updatedAt.toISOString())?.items ?? []
-    const total = problems.reduce((sum, problem) => sum + problem.steps.length, 0)
-    const solved = practiceRows
-      .filter((row) => row.contentId === content.id && problems[row.problemIndex]?.title === row.problemTitle)
-      .reduce((sum, row) => sum + row.stepsSolved, 0)
-    if (total > 0 && solved / total >= PRACTICE_DONE_SHARE) practiceDone.add(content.topicId)
-  }
+  const practiceDone = practiceDoneTopics(practiceContent, practiceRows)
   const extraById = new Map(extra.map((row) => [row.id, row]))
   const sourcesByTopic = new Map<string, SourceRef[]>()
   for (const row of sourceRows) {

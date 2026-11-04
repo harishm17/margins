@@ -2,14 +2,15 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Check, Exam, Lightbulb, Notebook, PencilSimple, PencilSimpleLine } from '@phosphor-icons/react/dist/ssr'
+import { CaretDown, PencilSimple } from '@phosphor-icons/react/dist/ssr'
 import { PageIntro } from '@/components/shell/page'
+import { StatusGuide } from '@/components/learning/status-guide'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { ProgressRing } from '@/components/ui/progress-ring'
 import { SegmentedControl } from '@/components/ui/segmented-control'
-import { Tooltip } from '@/components/ui/tooltip'
 import { MathText } from '@/components/ui/math-text'
 import { MasteryIndicator } from '@/components/ui/mastery-indicator'
 import { pluralize } from '@/lib/format'
@@ -18,7 +19,8 @@ import { groupTopicsByUnit, unitMastery, type UnitGroup as UnitGroupOf } from '@
 import { cn } from '@/lib/utils'
 import type { GenerationState, TopicsData } from '@/server/queries/course'
 import { BuildingContent } from './building-content'
-import { needsWorkOrder, nextStepWords, type GlyphState } from './summary'
+import type { PathGlyph, PathGlyphState } from '@/features/topic/path-steps'
+import { needsWorkOrder } from './summary'
 
 export type ListTopic = {
   id: string
@@ -33,96 +35,103 @@ export type ListTopic = {
   dueAt: string | null
   /** "Due today" or "Next review in 4 days", worked out on the server. */
   timing: { due: boolean; text: string } | null
-  path: { notes: GlyphState; examples: GlyphState; practice: GlyphState; quiz: GlyphState; quizScore: number | null }
+  /** The steps this topic offers (the topic page's own list), each done, next or later, and what is next in words. */
+  path: { glyphs: PathGlyph[]; nextWords: string; quizScore: number | null }
 }
 
-type GlyphProps = {
-  label: string
-  state: GlyphState
-  icon: React.ReactNode
-  score?: number | null
+const SEGMENT: Record<PathGlyphState, string> = {
+  done: 'bg-accent',
+  next: 'bg-accent-soft ring-1 ring-inset ring-accent',
+  later: 'bg-surface-3 ring-1 ring-inset ring-control',
 }
 
-const STATE_WORDS: Record<GlyphState, string> = {
-  done: 'done',
-  ready: 'ready',
-  missing: 'not written yet',
-}
-
-/** One of the four study path circles: filled with a check when done, ringed when it exists, dashed when missing. */
-function Glyph({ label, state, icon, score }: GlyphProps) {
-  const hasScore = score !== null && score !== undefined
-  const words = hasScore ? `${label}: best ${Math.round(score)}%` : `${label}: ${STATE_WORDS[state]}`
-  const base = 'inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium tabular [&>svg]:size-3'
-  const look =
-    state === 'done'
-      ? 'bg-accent text-accent-fg'
-      : state === 'ready'
-        ? 'border-2 border-accent text-accent'
-        : 'border border-dashed border-border-strong text-fg-3'
+/**
+ * How far the topic has come, for the row's detail: one segment per step of its path and the count in words, with the quiz score
+ * and mastery. The segments are for the eye (each has an edge, so an empty one is still a shape); the words carry the meaning.
+ */
+function PathStatus({ path, percent }: { path: ListTopic['path']; percent: number | null }) {
+  const done = path.glyphs.filter((glyph) => glyph.state === 'done').length
   return (
-    <Tooltip content={words}>
-      <span role="img" aria-label={words} className={cn(base, look, hasScore && 'px-1.5')}>
-        {hasScore ? `${Math.round(score)}%` : state === 'done' ? <Check weight="bold" /> : icon}
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 whitespace-nowrap text-caption font-normal text-fg-2">
+      <span aria-hidden="true" className="flex items-center gap-0.5">
+        {path.glyphs.map((glyph) => (
+          <span key={glyph.step} className={cn('h-1.5 w-4 rounded-full', SEGMENT[glyph.state])} />
+        ))}
       </span>
-    </Tooltip>
+      <span className="tabular">
+        {done} of {path.glyphs.length} steps done
+        {path.quizScore !== null ? `, quiz ${Math.round(path.quizScore)}%` : ''}
+        {percent !== null ? `, mastery ${percent}%` : ''}
+      </span>
+    </span>
   )
 }
 
+/** A step is done, or the quiz taken, but no mastery is earned yet: the topic header says "In progress" then, and so does the list. */
+const started = (topic: ListTopic) => topic.path.glyphs.some((glyph) => glyph.state === 'done')
+
+/**
+ * A topic is one recommended move ("Next: Read") and one status ("Learning", and when its review is due). Completion and mastery
+ * in numbers, and what the topic covers, are one tap away in the row's detail, so the list can be read down in a glance.
+ */
 function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic }) {
   const level = masteryLevel(topic.mastery)
   const percent = masteryPercent(topic.mastery)
   const { path } = topic
+  const [open, setOpen] = React.useState(false)
+  const detailId = React.useId()
   return (
     <li>
-      <Link
-        href={`/courses/${courseId}/topics/${topic.id}`}
-        className="group flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 rounded-control px-2 py-2.5 transition-colors duration-120 hover:bg-surface-2 sm:flex-nowrap"
-      >
-        <ProgressRing
-          size={28}
-          value={level === 'none' ? null : topic.mastery}
-          tone={masteryTone(level) === 'warning' ? 'warning' : 'accent'}
+      <div className="flex items-center gap-1">
+        <Link
+          href={`/courses/${courseId}/topics/${topic.id}`}
+          className="group flex min-h-14 min-w-0 flex-1 items-center gap-x-4 rounded-control px-2 py-2.5 transition-colors duration-120 hover:bg-surface-2"
+        >
+          <ProgressRing
+            size={28}
+            value={level === 'none' ? null : topic.mastery}
+            tone={masteryTone(level) === 'warning' ? 'warning' : 'accent'}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-2 text-body-strong text-fg">
+              <span className="min-w-0 truncate">{topic.name}</span>
+              {topic.examRelevant ? <Badge tone="accent" className="max-sm:hidden">On past exams</Badge> : null}
+            </p>
+            <p className="truncate text-small text-fg-2">{path.nextWords}</p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end text-right">
+            <span className="text-small text-fg">{level === 'none' && started(topic) ? 'In progress' : masteryLabel(topic.mastery)}</span>
+            {topic.timing ? (
+              <span
+                suppressHydrationWarning
+                className={cn('text-caption font-normal', topic.timing.due ? 'text-warning-soft-fg' : 'text-fg-3')}
+              >
+                {topic.timing.text}
+              </span>
+            ) : null}
+          </div>
+        </Link>
+        <IconButton
+          label={open ? `Hide details: ${topic.name}` : `Show details: ${topic.name}`}
+          icon={<CaretDown className={cn('transition-transform duration-180', open && 'rotate-180')} />}
+          size="sm"
+          aria-expanded={open}
+          aria-controls={detailId}
+          onClick={() => setOpen((current) => !current)}
         />
-        <div className="min-w-0 flex-1 basis-40">
-          <p className="flex items-center gap-2 text-body-strong text-fg">
-            <span className="min-w-0 truncate">{topic.name}</span>
-            {topic.examRelevant ? <Badge tone="accent">On past exams</Badge> : null}
-          </p>
-          {topic.description ? <p className="truncate text-small text-fg-2">{topic.description}</p> : null}
-        </div>
-        {/* The path circles are for the eye; the row says what is next in words (below), so its name is what it shows. */}
-        <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
-          <Glyph label="Notes" state={path.notes} icon={<Notebook />} />
-          <Glyph label="Worked examples" state={path.examples} icon={<Lightbulb />} />
-          <Glyph label="Practice" state={path.practice} icon={<PencilSimpleLine />} />
-          <span className="inline-flex w-10 justify-center">
-            <Glyph label="Quiz" state={path.quiz} icon={<Exam />} score={path.quizScore} />
-          </span>
-        </div>
-        <div className="flex w-full shrink-0 flex-col sm:w-40 sm:items-end">
-          <span className="text-small text-fg">
-            {masteryLabel(topic.mastery)}
-            {percent !== null ? <span className="sr-only">, {percent}%</span> : null}
-          </span>
-          {topic.timing ? (
-            <span
-              suppressHydrationWarning
-              className={cn('text-caption font-normal', topic.timing.due ? 'text-warning-soft-fg' : 'text-fg-3')}
-            >
-              {topic.timing.text}
-            </span>
-          ) : null}
-          <span className="sr-only">{nextStepWords(topic.path)}</span>
-        </div>
-      </Link>
+      </div>
+      <div id={detailId} hidden={!open} className="flex flex-col gap-1.5 px-2 pb-3 pl-[52px]">
+        {topic.examRelevant ? <Badge tone="accent" className="self-start sm:hidden">On past exams</Badge> : null}
+        {topic.description ? <p className="max-w-[68ch] text-small text-fg-2">{topic.description}</p> : null}
+        <PathStatus path={path} percent={percent} />
+      </div>
     </li>
   )
 }
 
 type Group = UnitGroupOf<ListTopic, TopicsData['units'][number]>
 
-/** One unit: its title, week, size and mastery, then its topics. The topics with no unit get a plain "Topics" heading. */
+/** One unit: its title, week, size and mastery, then its topics. Topics with no unit (a topic added by hand) are "Not in a unit": a list only groups when the course has units. */
 function UnitGroup({ courseId, group }: { courseId: string; group: Group }) {
   const headingId = React.useId()
   const { unit, topics } = group
@@ -131,17 +140,17 @@ function UnitGroup({ courseId, group }: { courseId: string; group: Group }) {
     <section aria-labelledby={headingId}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pb-2">
         <h2 id={headingId} className="min-w-0 text-heading text-fg">
-          {unit ? <MathText>{unit.title}</MathText> : 'Topics'}
+          {unit ? <MathText>{unit.title}</MathText> : 'Not in a unit'}
         </h2>
         {unit?.weekLabel ? <Badge>{unit.weekLabel}</Badge> : null}
         <span className="text-small tabular text-fg-3">{pluralize(topics.length, 'topic')}</span>
-        {unit ? <MasteryIndicator mastery={mastery} showPercent className="ml-auto text-small" /> : null}
+        {unit ? <MasteryIndicator mastery={mastery} showPercent emptyLabel={topics.some(started) ? 'In progress' : undefined} className="ml-auto text-small" /> : null}
       </div>
       {unit?.summary ? <p className="-mt-1 mb-2 max-w-[68ch] px-2 text-small text-fg-2">
           <MathText>{unit.summary}</MathText>
         </p> : null}
       <ul
-        aria-label={unit ? `Topics in ${unit.title}` : 'Topics'}
+        aria-label={unit ? `Topics in ${unit.title}` : 'Topics not in a unit'}
         className="divide-y divide-border border-y border-border"
       >
         {topics.map((topic) => (
@@ -194,7 +203,7 @@ export function TopicsList({ courseId, topics, units, summary, generation, now, 
             title={newTopics}
             action={
               <Button asChild size="sm" variant="primary">
-                <Link href={`/courses/${courseId}/topics?edit=1`}>Review topics</Link>
+                <Link href={`/courses/${courseId}/topics?edit=1`}>Review new topics</Link>
               </Button>
             }
           >
@@ -203,7 +212,9 @@ export function TopicsList({ courseId, topics, units, summary, generation, now, 
         ) : null}
         {building ? <BuildingContent courseId={courseId} generation={generation} /> : null}
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <StatusGuide parts={['topic', 'steps', 'quiz']} id="topics-status-guide" />
+            <div className="flex items-center gap-3">
             <span id="sort-label" className="text-small text-fg-2">
               Sort by
             </span>
@@ -216,6 +227,7 @@ export function TopicsList({ courseId, topics, units, summary, generation, now, 
                 { value: 'needs-work', label: 'Needs work' },
               ]}
             />
+            </div>
           </div>
           {grouped ? (
             <div className="flex flex-col gap-8">

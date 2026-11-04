@@ -23,11 +23,19 @@ import { useIsMac } from '@/lib/hooks/use-is-mac'
 import { cn } from '@/lib/utils'
 import { AccountMenu } from './account-menu'
 import { Brand } from './brand'
+import { inFirstSetup } from './course-nav'
 import { CourseSwitcher } from './course-switcher'
+import { SetupProgress } from './setup-progress'
 import { useShell } from './shell-provider'
 import { useSidebarCollapsed } from './sidebar-state'
 import { readUnitChoices, useUnitState } from './unit-state'
 import type { NavCourse, NavTopic } from '@/server/queries/courses'
+import { unitMastery } from '@/lib/topics/units'
+
+/** The course pages the phone tab bar (mobile-tabs.tsx) already holds. */
+const PHONE_TAB_KEYS: ReadonlySet<string> = new Set(['overview', 'plan', 'topics', 'ask'])
+/** The pages a course in the first two steps of setup has: its setup steps and its files. */
+const SETUP_KEYS: ReadonlySet<string> = new Set(['overview', 'materials'])
 
 type NavItem = {
   key: string
@@ -49,7 +57,7 @@ function NavLink({ item, rail }: { item: NavItem; rail: boolean }) {
         'group flex h-[34px] max-lg:h-11 items-center gap-2.5 rounded-control px-2.5 text-body-strong text-fg-2',
         'transition-colors duration-120 hover:bg-surface-2 hover:text-fg',
         'rail:justify-center rail:px-0',
-        item.active && 'bg-surface-2 text-fg'
+        item.active && 'relative bg-surface-2 text-fg before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-accent'
       )}
     >
       <Icon
@@ -79,7 +87,7 @@ function TopicLink({ courseId, topic, active }: { courseId: string; topic: NavTo
         className={cn(
           'flex h-8 max-lg:h-11 items-center gap-2.5 rounded-control px-2.5 text-[13.5px] text-fg-2',
           'transition-colors duration-120 hover:bg-surface-2 hover:text-fg',
-          active && 'bg-surface-2 text-fg'
+          active && 'relative bg-surface-2 text-fg before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-accent'
         )}
       >
         <MasteryIndicator mastery={topic.mastery} variant="ring" />
@@ -89,9 +97,8 @@ function TopicLink({ courseId, topic, active }: { courseId: string; topic: NavTo
   )
 }
 
-/** A mastery value for a unit: the mean over its topics, not-started ones counting as 0. */
-const unitMasteryOf = (topics: NavTopic[]): number | null =>
-  topics.length === 0 ? null : topics.reduce((sum, topic) => sum + (topic.mastery ?? 0), 0) / topics.length
+/** A unit's mastery, worked out as on the Topics page: a unit nobody has touched is "Not started", not "Learning 0%". */
+const unitMasteryOf = (topics: NavTopic[]): number | null => unitMastery(topics.map((topic) => topic.mastery))
 
 /**
  * The sidebar's topic list. A flat course is one plain list; with units each unit is a button that
@@ -187,7 +194,7 @@ function TopicList({ course, activeTopicId }: { course: NavCourse; activeTopicId
  * Everything in the sidebar. The desktop aside and the mobile sheet both render it; only the
  * desktop one can be a rail (`allowRail`).
  */
-export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
+export function SidebarContent({ allowRail = false, omitTabs = false }: { allowRail?: boolean; /** On a phone these four are in the tab bar already, so the menu leaves them out. */ omitTabs?: boolean }) {
   const { nav, setPaletteOpen } = useShell()
   const pathname = usePathname()
   const params = useParams<{ courseId?: string; topicId?: string }>()
@@ -199,7 +206,7 @@ export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
   const course = nav.find((item) => item.id === params.courseId)
   const base = course ? `/courses/${course.id}` : null
 
-  const items: NavItem[] = base
+  const allItems: NavItem[] = base
     ? [
         {
           key: 'overview',
@@ -239,6 +246,11 @@ export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
         { key: 'map', label: 'Map', href: `${base}/map`, icon: TreeStructure, active: pathname.startsWith(`${base}/map`) },
       ]
     : []
+  // Steps 1 and 2 of setup: the study pages have nothing behind them, so they are not listed as dead links. The
+  // student sees Overview (the setup steps) and Materials, and a compact setup progress block saying what opens next.
+  const settingUp = !!course && inFirstSetup(course)
+  const items = allItems.filter((item) => !(omitTabs && PHONE_TAB_KEYS.has(item.key))).filter((item) => !settingUp || SETUP_KEYS.has(item.key))
+  const settingUpStep = settingUp && course?.setupStep ? course.setupStep : null
 
   const search = (
     <button
@@ -286,6 +298,8 @@ export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
           />
         </nav>
       )}
+
+      {settingUpStep ? <SetupProgress step={settingUpStep} className="mx-3 mt-4 rail:hidden" /> : null}
 
       {course?.active && course.topics.length > 0 ? (
         // A labelled group, not a heading: the sidebar comes before <main> in the page, and its label

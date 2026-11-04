@@ -66,13 +66,13 @@ export function ThinkingBox({ value, onChange }: { value: string; onChange: (thi
   const [open, setOpen] = React.useState(value.length > 0)
   const panelId = React.useId()
   return (
-    <div className="mt-5">
+    <div className="mt-4">
       <button
         type="button"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex min-h-8 items-center gap-1 rounded-chip text-small text-fg-2 hover:text-fg max-sm:min-h-11"
+        className="inline-flex min-h-8 items-center gap-1 rounded-chip text-small text-fg-2 underline decoration-border-strong decoration-1 underline-offset-[3px] hover:text-fg max-sm:min-h-11"
       >
         Show your thinking
         <CaretDown className={cn('size-3.5 transition-transform duration-180', open && 'rotate-180')} aria-hidden />

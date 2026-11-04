@@ -57,7 +57,7 @@ export function planItemHref(item: PlanItem, courseId: string, conceptTopicIds?:
   }
 }
 
-/** Names the copy can use, so a row says more than "Read the notes", and the plan's daily minutes. */
+/** Names the copy can use, so a row says more than "Read it", and the plan's daily minutes. */
 export type DescribeContext = {
   unitTitles?: Record<string, string>
   dailyMinutes?: number
@@ -108,10 +108,10 @@ export function describePlanItem(item: PlanItem, courseId: string, context: Desc
   switch (item.kind) {
     case 'learn': {
       const unit = item.unitId ? context.unitTitles?.[item.unitId] : undefined
-      let reason = unit ? `${unit}: read the notes, then work through the examples.` : 'Read the notes, then work through the examples.'
+      let reason = unit ? `${unit}: read it, recall it, then practise.` : 'Read it, recall it, then practise.'
       if (item.part && item.part.number > 1) reason = 'Pick up where you stopped.'
       else if (item.note === 'On past exams') reason = 'This topic is on your past exams.'
-      else if (item.note === 'You have started this one') reason = 'You have started this one. Finish the notes and the examples.'
+      else if (item.note === 'You have started this one') reason = 'You have started this one. Finish the steps that are left.'
       return { ...common, reason, verb: item.note === 'You have started this one' ? 'Continue' : 'Start' }
     }
     case 'quiz':

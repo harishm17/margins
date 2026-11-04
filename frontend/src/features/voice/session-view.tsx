@@ -18,7 +18,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { InlineAlert } from '@/components/ui/inline-alert'
-import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Board } from './board'
 import type { VoiceAlert } from './errors'
 import { isDoneShortcut } from './shortcuts'
@@ -60,7 +60,7 @@ const MIC_NOTICES: Record<MicNotice, { tone: 'neutral' | 'warning'; title?: stri
 export function SessionView({ state, orb, controller, title, hasQuestions, recognitionSupported }: SessionViewProps) {
   const { question, board, entries, interim, inputMode, micPaused, speech, turnActive, alert, micNotice } = state
   const [draft, setDraft] = React.useState('')
-  const inputRef = React.useRef<HTMLInputElement>(null)
+  const inputRef = React.useRef<HTMLTextAreaElement>(null)
   const textMode = inputMode === 'text'
   // No speech recognition here (the lobby said so before the start): the text box is the way in, with no mic to look at.
   const textOnly = textMode && !recognitionSupported
@@ -151,18 +151,29 @@ export function SessionView({ state, orb, controller, title, hasQuestions, recog
 
           <div className="flex flex-col gap-3 max-md:sticky max-md:bottom-0 max-md:mt-auto max-md:bg-canvas max-md:pb-[max(1rem,env(safe-area-inset-bottom))] max-md:pt-3">
             {textMode ? (
-              <form onSubmit={send} className="flex gap-2">
-                <Input
+              // A voice answer is an explanation, so the typed one is a multiline field: two lines to start, growing as it fills.
+              // With a keyboard, Enter sends and Shift+Enter starts a new line; on a touch screen Enter is a new line and Send sends.
+              <form onSubmit={send} className="flex items-end gap-2">
+                <Textarea
                   ref={inputRef}
                   value={draft}
+                  rows={2}
+                  maxRows={8}
                   onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+                    if (!window.matchMedia('(pointer: fine)').matches) return
+                    event.preventDefault()
+                    event.currentTarget.form?.requestSubmit()
+                  }}
                   placeholder="Type your answer"
                   aria-label="Your answer"
                   maxLength={2000}
                   autoComplete="off"
-                  containerClassName="flex-1"
+                  enterKeyHint="enter"
+                  className="min-w-0 flex-1"
                 />
-                <Button type="submit" variant="primary" icon={<PaperPlaneRight />} disabled={!draft.trim() || turnActive}>
+                <Button type="submit" variant="primary" icon={<PaperPlaneRight />} disabled={!draft.trim() || turnActive} className="shrink-0">
                   Send
                 </Button>
               </form>

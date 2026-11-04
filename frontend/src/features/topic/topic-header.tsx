@@ -39,12 +39,13 @@ import { fadeNote } from '@/lib/learning/consequence'
 import type { TopicStructure } from '@/server/queries/topic'
 import { StateIcon } from '@/features/map/state-icon'
 import { LABEL_TEXT } from '@/lib/map/copy'
+import { StatusGuide } from '@/components/learning/status-guide'
 import type { ConceptLabel } from '@/lib/learning/concept-mastery'
 import { KIND_COPY } from './copy'
 import { RegenerateDialog } from './generation-ui'
 import { ToolsMenu } from './path'
-import { TopicStructureBlock, unitLabel } from './topic-structure'
 import { useTopic } from './topic-provider'
+import { TopicStructureBlock, unitLabel } from './topic-structure'
 import { useTopicView } from './use-topic-view'
 import { CONTENT_KINDS, type ContentKind } from './types'
 
@@ -108,7 +109,7 @@ function conceptSummary(concepts: TopicConceptChip[]): string {
 function ConceptChips({ concepts, className }: { concepts: TopicConceptChip[]; className?: string }) {
   if (concepts.length === 0) return null
   return (
-    <ul aria-label="Concepts in this topic" className={cn('flex flex-wrap gap-1.5', className)}>
+    <ul aria-label="Ideas in this topic" className={cn('flex flex-wrap gap-1.5', className)}>
       {concepts.map((concept) => (
         <li
           key={concept.id}
@@ -147,15 +148,14 @@ export function TopicHeader({
 }: TopicHeaderProps) {
   const router = useRouter()
   const view = useTopicView()
-  // On a phone what the topic covers (its ideas, objectives, sources) folds behind one button next to the status.
+  // A quiz being taken is a focus view, like the mock exam's: the tools and the topic arrows are put away until it is done.
+  const { keysSuspended: quizTaking } = useTopic()
+  // What the topic covers (its description, ideas, objectives, sources and the map link) is behind one button next to the status
+  // line, on every width: the title and that line are all that stand between the student and the step's task.
   const [aboutOpen, setAboutOpen] = React.useState(false)
   const aboutId = React.useId()
   const descriptionId = React.useId()
-  // While a question is on screen (a warm-up, quiz or recall being answered) what the topic covers steps aside, so the
-  // question starts near the top instead of below a screen of introduction. The same button opens it, on every width.
-  const { inProgress } = useTopic()
-  const folded = inProgress && !aboutOpen
-  const fold = folded ? 'hidden' : !aboutOpen && 'max-sm:hidden'
+  const fold = !aboutOpen && 'hidden'
   // Why the ring is lower than the last score: mastery fades while a review is late.
   const fade =
     daysUntilDue !== null && daysUntilDue < 0
@@ -166,20 +166,16 @@ export function TopicHeader({
   }
   const wrong = concepts.filter((concept) => concept.wrongIdea).length
   const hasAbout = concepts.length > 0 || structure.objectives.length > 0 || structure.prerequisites.length > 0 || structure.sources.length > 0 || !!description
-  const aboutLabel =
-    concepts.length > 0
-      ? conceptSummary(concepts)
-      : structure.objectives.length > 0
-        ? `By the end you can (${structure.objectives.length})`
-        : 'About this topic'
 
   return (
-    <header className="pb-4 sm:pb-6">
+    // While an attempt is open on a phone the small attempt bar stands in for this header (see AttemptBar).
+    <header className="pb-4 group-data-[attempt]/topic:max-sm:hidden sm:pb-6">
       {structure.unit ? (
-        <p className="mb-1 text-small text-fg-3">
+        <p className="mb-1 text-small text-fg-3 max-sm:-my-3">
+          {/* A standalone link: 44px high on a phone, pulled back by the margin so the header does not grow by that much. */}
           <Link
             href={`/courses/${courseId}/topics`}
-            className="rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] hover:text-fg"
+            className="rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] hover:text-fg max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
           >
             {unitLabel(structure.unit)}
           </Link>
@@ -187,8 +183,8 @@ export function TopicHeader({
       ) : null}
       <div className="flex items-start justify-between gap-4">
         <h1 className="min-w-0 text-title text-fg">{name}</h1>
-        <ToolsMenu courseId={courseId} topicId={topicId} neighbours={{ previous, next }} className="shrink-0" />
-        <div className="flex shrink-0 items-center gap-1 max-sm:hidden">
+        {quizTaking ? null : <ToolsMenu courseId={courseId} topicId={topicId} neighbours={{ previous, next }} className="shrink-0" />}
+        <div className={cn('flex shrink-0 items-center gap-1 max-sm:hidden', quizTaking && 'hidden')}>
           <IconButton
             label={previous ? `Previous: ${previous.name}` : 'No previous topic'}
             shortcut="["
@@ -210,7 +206,7 @@ export function TopicHeader({
         </div>
       </div>
       {description ? (
-        <p id={descriptionId} className={cn('mt-1.5 max-w-[68ch] text-body text-fg-2 sm:line-clamp-2', fold)}>
+        <p id={descriptionId} className={cn('mt-1.5 max-w-[68ch] text-body text-fg-2', fold)}>
           <MathText>{description}</MathText>
         </p>
       ) : null}
@@ -230,16 +226,20 @@ export function TopicHeader({
             aria-expanded={aboutOpen}
             aria-controls={description ? `${descriptionId} ${aboutId}` : aboutId}
             onClick={() => setAboutOpen((current) => !current)}
-            className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg', !inProgress && 'sm:hidden')}
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg max-sm:min-h-11"
           >
             {wrong > 0 ? <WarningCircle aria-hidden="true" weight="fill" className="size-4 text-warning" /> : null}
-            {aboutLabel}
+            About this topic
+            {concepts.length > 0 ? <span className="sr-only">: {conceptSummary(concepts)}</span> : null}
             <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', aboutOpen && 'rotate-180')} />
           </button>
         ) : null}
       </div>
       {fade ? <p className="mt-1.5 text-caption font-normal text-fg-3">{fade}</p> : null}
+      {/* Beside the numbers on a laptop; on a phone it is in "About this topic", so the header stays short. */}
+      <StatusGuide parts={['topic', 'steps', 'quiz']} id="topic-status-guide" className="mt-1 max-sm:hidden" />
       <div id={aboutId} className={cn(fold)}>
+        <StatusGuide parts={['topic', 'steps', 'quiz']} id="topic-status-guide-phone" className="mt-3 sm:hidden" />
         <ConceptChips concepts={concepts} className="mt-3" />
         {concepts.length > 0 ? (
           <p className="mt-2 text-small">
@@ -349,11 +349,14 @@ export function TopicActions({ courseId, topicId, name }: { courseId: string; to
     setAskOpen(true)
   }
   const askHref = `/courses/${courseId}/ask?topic=${topicId}`
+  // Not while a quiz is being taken: Ask is help, and the quiz is the attempt (the mock exam's focus view has none either).
+  const { keysSuspended: quizTaking } = useTopic()
 
   return (
     <>
       <PageHeader
         actions={
+          quizTaking ? null : (
           <>
             <Button
               variant="secondary"
@@ -394,6 +397,7 @@ export function TopicActions({ courseId, topicId, name }: { courseId: string; to
               </DropdownMenuContent>
             </DropdownMenu>
           </>
+          )
         }
       />
       {regenerate ? (

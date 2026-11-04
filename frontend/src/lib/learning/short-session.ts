@@ -35,6 +35,11 @@ export type ShortSessionPlan = {
   /** Closing retests at most; none for a recall card. */
   retestCap?: number
   minutes: number
+  /**
+   * How many questions the session will have, once it is known (`sizeShortSession`): `exact` when they are all ready, else
+   * `count` is the most it can have, because some are still to be written. Absent: only `limit` is known, which is a ceiling.
+   */
+  size?: { count: number; exact: boolean }
   /** Where a recall card opens; a review or mini quiz is started by the route (it makes the session), so it has none. */
   href: string | null
 }
@@ -55,9 +60,28 @@ export function shortSessionPlan(state: ShortSessionState): ShortSessionPlan | n
   return { kind: 'mini_quiz', limit: SHORT_QUIZ_ITEMS, retestCap: 0, minutes: itemMinutes(SHORT_QUIZ_ITEMS, state.ai), href: null }
 }
 
-/** The line under "Have 10 minutes?" (copy drafts, spec 18.8). */
+/**
+ * The plan with the size the session really has: `ready` questions are in the bank, `toWrite` still have to be written (and a
+ * failed write leaves the session shorter, so the card says "up to"). The estimate follows the size, not the ceiling.
+ */
+export function sizeShortSession(plan: ShortSessionPlan, size: { ready: number; toWrite: number }, ai: 'up' | 'down'): ShortSessionPlan {
+  if (plan.kind === 'recall') return plan
+  const count = Math.min(plan.limit ?? size.ready + size.toWrite, size.ready + size.toWrite)
+  return { ...plan, size: { count, exact: size.toWrite === 0 }, minutes: itemMinutes(count, ai) }
+}
+
+/** The name of the offer wherever it is shown: the Home and Review card, and the session's own header. */
+export const SHORT_SESSION_NAME = 'Quick practice'
+
+/**
+ * The one duration statement for the quick practice, "About 5 minutes · up to 3 questions": the time first, then what is in it.
+ * The card, the Review page and the session header all say it this way (the heading no longer promises ten minutes).
+ */
 export function shortSessionLabel(plan: ShortSessionPlan): string {
-  if (plan.kind === 'review') return `${plan.limit ?? 0} ${plan.limit === 1 ? 'review' : 'reviews'}, about ${plan.minutes} minutes`
-  if (plan.kind === 'recall') return `One recall card, about ${plan.minutes} minutes`
-  return `A ${plan.limit ?? SHORT_QUIZ_ITEMS}-question check, about ${plan.minutes} minutes`
+  const time = `About ${plan.minutes} minutes`
+  if (plan.kind === 'recall') return `${time} · one recall card`
+  const count = plan.size?.count ?? plan.limit ?? 0
+  const lead = plan.size && !plan.size.exact ? 'up to ' : ''
+  const noun = plan.kind === 'review' ? (count === 1 ? 'review' : 'reviews') : count === 1 ? 'question' : 'questions'
+  return `${time} · ${lead}${count} ${noun}`
 }

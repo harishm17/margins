@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { VoiceQuizStatus } from './quiz-status'
 
 export type VoiceReviewProps = {
   courseId: string
@@ -17,6 +18,8 @@ export type VoiceReviewProps = {
   hasClaims?: boolean
   /** The claims counted are the named idea's, not the topic's (the lobby says which is missing). */
   claimsOfIdea?: boolean
+  /** Whether Quiz me can begin (worked out on the server). Absent: not known, so the lobby only finds out at Start. */
+  quiz?: VoiceQuizStatus
 }
 
 function LobbySkeleton() {

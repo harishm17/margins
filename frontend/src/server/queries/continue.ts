@@ -78,3 +78,17 @@ export async function continueAction(userId: string, timeZone: string): Promise<
   const step = await withTopicActivity(userId, course.id, planned, data.course.topics, data.course.setup.topics.listConfirmed)
   return { course, step }
 }
+
+/**
+ * Whether this account has studied anything yet: opened a topic, taken a quiz or left a learning
+ * signal (the same three things that decide which course "Up next" follows). Home greets an
+ * account that has not as a new student, not as one coming back.
+ */
+export async function hasStudied(userId: string): Promise<boolean> {
+  const [progress, attempt, signal] = await Promise.all([
+    prisma.topicProgress.findFirst({ where: { userId, lastAccessedAt: { not: null }, topic: { project: { userId } } }, select: { id: true } }),
+    prisma.quizAttempt.findFirst({ where: { userId, topic: { project: { userId } } }, select: { id: true } }),
+    prisma.learningSignal.findFirst({ where: { userId, project: { userId } }, select: { id: true } }),
+  ])
+  return Boolean(progress || attempt || signal)
+}

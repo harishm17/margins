@@ -173,11 +173,13 @@ export function StartStudyingStep({
       <div>
         <Button asChild variant="primary">
           <Link href={firstTopic ? `/courses/${courseId}/topics/${firstTopic.id}` : `/courses/${courseId}/topics`}>
-            {firstTopic ? `Start ${firstTopic.name}` : 'Open topics'}
+            {firstTopic ? `Start warm-up: ${firstTopic.name}` : 'Open topics'}
           </Link>
         </Button>
         <p className="mt-2 text-caption font-normal text-fg-3">
-          The notes are written when you open a topic, which takes about a minute.
+          {firstTopic
+            ? 'A warm-up is a few questions you try before reading. A topic is prepared when you open it, which takes about a minute.'
+            : 'A topic is prepared when you open it, which takes about a minute.'}
         </p>
       </div>
     </div>

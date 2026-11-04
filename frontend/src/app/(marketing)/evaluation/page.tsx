@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import { ArrowUpRight } from '@phosphor-icons/react/dist/ssr'
+import { phoneInlineHit } from '@/components/ui/styles'
 import { BRAND_NAME } from '@/config/brand'
 import { AUTHOR, SITE_URL } from '@/config/site'
-import { LEARNING_V3_EVAL_DRAFT, type DraftCheck } from '@/features/marketing/content'
+import { EVAL_FACTS, LEARNING_V3_EVAL_DRAFT, type DraftCheck } from '@/features/marketing/content'
 import { EVAL_FILES, GENERATION, MODEL_CHOICE, RETRIEVAL } from '@/features/marketing/evals'
 
 /**
@@ -50,13 +51,20 @@ const jsonLd = {
   publisher: { '@type': 'Organization', '@id': `${SITE_URL}/#organization`, name: BRAND_NAME, url: SITE_URL },
 }
 
-const h2 = 'mt-14 text-reading-h2 text-fg'
+const h2 = 'mt-14 scroll-mt-20 text-reading-h2 text-fg'
 const h3 = 'mt-8 text-heading text-fg'
 const p = 'mt-4 text-reading text-fg-2'
 const ul = 'mt-4 flex list-disc flex-col gap-3 pl-6 text-reading text-fg-2 marker:text-fg-3'
-const link = 'rounded-chip text-accent underline underline-offset-4 hover:text-accent-hover'
+const link = `${phoneInlineHit} rounded-chip text-accent underline underline-offset-4 hover:text-accent-hover`
 const th = 'px-3 py-2 text-left text-small font-medium text-fg'
 const td = 'px-3 py-2 text-small text-fg-2 tabular'
+
+const CONTENTS = [
+  { id: 'retrieval', label: 'Retrieval' },
+  { id: 'generation', label: 'Generation quality' },
+  { id: 'model-choice', label: 'Model choice' },
+  { id: 'raw-results', label: 'Raw results' },
+]
 
 function External({ href, children }: { href: string; children: React.ReactNode }) {
   return (
@@ -69,9 +77,15 @@ function External({ href, children }: { href: string; children: React.ReactNode 
 /** A scrollable region keeps a wide table inside the page on a phone and reachable from the keyboard. */
 function TableBox({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div role="region" aria-label={label} tabIndex={0} className="mt-5 overflow-x-auto rounded-control border border-border">
-      {children}
-    </div>
+    <>
+      {/* The tables are wider than a phone: say so before the table, so the cut-off column is not a surprise. */}
+      <p aria-hidden="true" className="mt-5 text-caption font-normal text-fg-3 sm:hidden">
+        Swipe the table sideways for more columns.
+      </p>
+      <div role="region" aria-label={label} tabIndex={0} className="mt-2 overflow-x-auto rounded-control border border-border sm:mt-5">
+        {children}
+      </div>
+    </>
   )
 }
 
@@ -175,6 +189,27 @@ export default function EvaluationPage() {
   return (
     <article className="mx-auto w-full max-w-[760px] px-4 pb-24 pt-10 md:px-8 md:pt-16">
       <h1 className="text-title text-fg">{TITLE}</h1>
+      <section aria-labelledby="for-you" className="mt-6 rounded-card border border-border bg-surface-2 p-4 md:p-5">
+        <h2 id="for-you" className="text-heading text-fg">
+          What this means for you
+        </h2>
+        <ul className="mt-3 flex flex-col gap-2 text-reading text-fg-2">
+          <li>
+            <strong className="font-medium text-fg">How often an answer is wrong.</strong> In the latest check the judge
+            scored correctness {EVAL_FACTS.correctness} out of 5 and listed {GENERATION.errors} errors in{' '}
+            {GENERATION.topics} topics, {GENERATION.mathErrors} of them in maths. The judge is the model that writes the
+            text, so this is a limited check.
+          </li>
+          <li>
+            <strong className="font-medium text-fg">What is checked.</strong> Whether the right pages are found for a
+            topic, and whether the notes, examples, practice and quizzes are correct, complete and based on the pages.
+          </li>
+          <li>
+            <strong className="font-medium text-fg">What is not.</strong> Ask replies, voice practice, scanned or
+            handwritten files, and whether students learn more with {BRAND_NAME}.
+          </li>
+        </ul>
+      </section>
       <p className={p}>
         {BRAND_NAME} has two evaluations. A retrieval eval measures how well the app maps a topic to the chunks of the
         course material that explain it. A generation eval runs the app&apos;s real generators (notes, worked examples,
@@ -186,7 +221,20 @@ export default function EvaluationPage() {
         runs are from October 20 and 21, 2026.
       </p>
 
-      <h2 className={h2}>Retrieval</h2>
+      <nav aria-label="On this page" className="mt-8 rounded-card border border-border bg-surface-2 px-4 py-3">
+        <p className="text-small font-medium text-fg">On this page</p>
+        <ul className="mt-1 flex flex-col sm:flex-row sm:flex-wrap sm:gap-x-5">
+          {CONTENTS.map((item) => (
+            <li key={item.id}>
+              <a href={`#${item.id}`} className="flex min-h-11 items-center rounded-chip text-small text-accent underline underline-offset-4 hover:text-accent-hover sm:min-h-8">
+                {item.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <h2 id="retrieval" className={h2}>Retrieval</h2>
       <p className={p}>
         When the extract-topics job finds a topic, it looks up that topic&apos;s source chunks, keeps the top{' '}
         {RETRIEVAL.k} and stores them. Every notes, quiz and exam generator later reads only those chunks. If the right
@@ -214,8 +262,19 @@ export default function EvaluationPage() {
       </ul>
 
       <h3 className={h3}>Results</h3>
+      {/* The column names are the field's own; each gets one plain line here, before the numbers. */}
+      <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1 text-small text-fg-2 sm:grid-cols-[max-content_minmax(0,1fr)]">
+        <dt className="font-medium text-fg">recall@{RETRIEVAL.k}</dt>
+        <dd className="mb-2 sm:mb-0">Of the right chunks, the share that made it into the top {RETRIEVAL.k}.</dd>
+        <dt className="font-medium text-fg">MRR</dt>
+        <dd className="mb-2 sm:mb-0">How high the first right chunk ranks. 1 means it is first.</dd>
+        <dt className="font-medium text-fg">nDCG@{RETRIEVAL.k}</dt>
+        <dd className="mb-2 sm:mb-0">How well all the right chunks are ordered, with the highest ones counting most.</dd>
+        <dt className="font-medium text-fg">hit@5</dt>
+        <dd>Whether at least one right chunk is in the first five.</dd>
+      </dl>
       <ComparisonTable
-        caption={`Retrieval, run of October 20, 2026. Averages over ${RETRIEVAL.topics} topics, top ${RETRIEVAL.k}.`}
+        caption={`Retrieval, run of October 20, 2026. Hybrid search with fusion, the search the app uses now, finds and ranks the right pages best. Averages over ${RETRIEVAL.topics} topics, top ${RETRIEVAL.k}.`}
         rowHeader="System"
         columns={RETRIEVAL.columns}
         rows={RETRIEVAL.rows}
@@ -256,7 +315,7 @@ export default function EvaluationPage() {
         </li>
       </ul>
 
-      <h2 className={h2}>Generation quality</h2>
+      <h2 id="generation" className={h2}>Generation quality</h2>
       <p className={p}>
         The latest run is from October 21, 2026. It generated {GENERATION.topics} topics ({GENERATION.topicsPerCourse}{' '}
         from MIT 18.05, probability and statistics, and {GENERATION.topicsPerCourse} from MIT 6.006, algorithms) with
@@ -369,7 +428,7 @@ export default function EvaluationPage() {
         </li>
       </ul>
 
-      <h2 className={h2}>Model choice</h2>
+      <h2 id="model-choice" className={h2}>Model choice</h2>
       <p className={p}>
         Before the run, a rule was set: per purpose, the cheapest model whose judge correctness mean is at least 4.5 with
         no mathematical error, and whose teaching and question-quality mean is within 0.3 of Opus. The runs used the
@@ -377,7 +436,7 @@ export default function EvaluationPage() {
         three models.
       </p>
       <ComparisonTable
-        caption={`Model choice, runs of ${MODEL_CHOICE.runs}. Cost per topic covers the four content types.`}
+        caption={`Model choice, runs of ${MODEL_CHOICE.runs}. Only Opus passes the rule for every content type. Cost per topic covers the four content types.`}
         rowHeader="Model"
         columns={MODEL_CHOICE.columns}
         rows={MODEL_CHOICE.rows}
@@ -402,29 +461,29 @@ export default function EvaluationPage() {
         </>
       ) : null}
 
-      <h2 className={h2}>Raw results</h2>
+      <h2 id="raw-results" className={h2}>Raw results</h2>
       <p className={p}>Every table above comes from one of these files in the public repository.</p>
       <ul className={ul}>
         <li>
-          <External href={EVAL_FILES.retrieval}>Retrieval, hybrid search with fusion (2026-10-20)</External>
+          <External href={EVAL_FILES.retrieval}>Finding the right pages: the search the app uses now (2026-10-20)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.retrievalBaseline}>Retrieval, the old search (2026-10-20)</External>
+          <External href={EVAL_FILES.retrievalBaseline}>Finding the right pages: the old search it replaced (2026-10-20)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.retrievalComparison}>Retrieval, the two compared (2026-10-20)</External>
+          <External href={EVAL_FILES.retrievalComparison}>Finding the right pages: old and new side by side (2026-10-20)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.generation}>Generation quality, with every error the judge listed (2026-10-21)</External>
+          <External href={EVAL_FILES.generation}>Quality of notes, examples, practice and quizzes, with every error the judge listed (2026-10-21)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.modelChoice}>Model choice run (2026-10-20)</External>
+          <External href={EVAL_FILES.modelChoice}>Which model writes each kind of content: Opus, Sonnet and Haiku compared (2026-10-20)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.opusEffort}>Opus low against medium effort (2026-10-21)</External>
+          <External href={EVAL_FILES.opusEffort}>Whether lower effort is good enough: Opus low against medium (2026-10-21)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.modelDecision}>The model decision (2026-10-21)</External>
+          <External href={EVAL_FILES.modelDecision}>Why the app uses Opus at medium effort (2026-10-21)</External>
         </li>
         <li>
           <External href={EVAL_FILES.readme}>The evals README: method, metrics and limitations</External>

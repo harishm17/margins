@@ -1,5 +1,5 @@
 /**
- * POST /api/projects/[projectId]/exam-style: analyse the course's past exams again.
+ * POST /api/projects/[projectId]/exam-style: analyze the course's past exams again.
  *
  * Starts the style job (profile_exam) for each past-exam file that has been read but has no style
  * yet, and the job that matches past-exam questions to topics (exam_relevance). Refused like any

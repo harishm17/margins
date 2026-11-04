@@ -9,18 +9,19 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toaster'
 import type { ConfidenceId } from '@/lib/learning/calibration'
+import { QuestionNavigator } from '@/components/learning/question-navigator'
 import { ConfidenceRow, optionCountOf } from '@/features/topic/quiz-confidence'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import type { AttemptView } from '@/lib/exams/attempts'
+import { shortExamTitle } from '@/lib/exams/display'
 import { formatClock } from '@/lib/format'
 import type { PublicQuizQuestion } from '@/lib/learning/quiz-questions'
 import { useQuestionMotion } from '@/lib/question-motion'
 import { cn } from '@/lib/utils'
 import { joinAnswers, splitAnswers, submitSummary } from './exam-answers'
-import { ExamNavigator } from './exam-navigator'
 import { parseFlagState, timeNotice, timerTone, type FlagState } from './exam-timer'
 import { useExamAutosave, type SaveStatus } from './use-exam-autosave'
 import { useSessionValue } from './use-session-value'
@@ -45,7 +46,29 @@ const SAVE_TEXT: Record<SaveStatus, string> = {
   idle: '',
   saving: 'Saving...',
   saved: 'Saved',
-  error: 'Offline, will retry',
+  error: 'Not saved',
+}
+
+/**
+ * Whether the answers are safe, in the header on every screen size: a compact Saving or Saved, and when a save fails a
+ * "Not saved" that says so and a Retry (the autosave also tries again by itself). A failure is never left out for want of room.
+ */
+function SaveState({ status, text, onRetry }: { status: SaveStatus; text: string; onRetry: () => void }) {
+  if (status === 'error') {
+    return (
+      <span role="alert" className="flex shrink-0 items-center gap-1.5 text-caption text-warning-soft-fg sm:text-small" data-testid="exam-save-status">
+        {text}
+        <button type="button" onClick={onRetry} className="rounded-chip px-1.5 font-medium underline underline-offset-2 max-sm:min-h-11 max-sm:px-2">
+          Retry
+        </button>
+      </span>
+    )
+  }
+  return (
+    <span aria-live="polite" className="shrink-0 text-right text-caption text-fg-3 sm:min-w-[6.5rem] sm:text-small" data-testid="exam-save-status">
+      {text}
+    </span>
+  )
 }
 
 function Timer({ secondsLeft }: { secondsLeft: number }) {
@@ -129,7 +152,12 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
   const leaveTo = React.useCallback(
     (href: string) => {
       leavingRef.current = true
-      router.push(href)
+      // The course layout is kept while the student moves between its pages, and it is what says "Mock exam in progress":
+      // it is read again with the move, so a submitted exam does not still show as open on its own results.
+      React.startTransition(() => {
+        router.push(href)
+        router.refresh()
+      })
     },
     [router]
   )
@@ -272,17 +300,16 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
   return (
     <>
       <FocusHeader
-        title={title}
+        title={shortExamTitle(title)}
         status={
           <>
-            <span className={cn('hidden min-w-[6.5rem] text-right text-small sm:inline', autosave.status === 'error' ? 'text-warning-soft-fg' : 'text-fg-3')}>
-              {saveText}
-            </span>
+            <SaveState status={autosave.status} text={saveText} onRetry={() => void autosave.saveNow()} />
             <Timer secondsLeft={secondsLeft} />
           </>
         }
         actions={
-          <Button variant="primary" size="sm" loading={submitting} onClick={requestSubmit}>
+          // Secondary: submitting is final, and the one filled button of the page is the way on (Next, or Submit exam on the last question).
+          <Button variant="secondary" size="sm" loading={submitting} onClick={requestSubmit}>
             Submit
           </Button>
         }
@@ -339,7 +366,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
           </div>
 
           <div className="mt-10 flex items-center gap-2">
-            <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} onClick={() => goTo(current - 1)}>
+            <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} disabledReason="This is the first question." onClick={() => goTo(current - 1)}>
               Previous
             </Button>
             <Button
@@ -369,7 +396,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         <aside aria-label="Question navigator" className="hidden lg:block">
           <div className="sticky top-[88px]">
             <h2 className="mb-3 text-small font-medium text-fg">Questions</h2>
-            <ExamNavigator total={total} current={current} answered={answeredSet} flagged={flagged} onSelect={goTo} />
+            <QuestionNavigator total={total} current={current} answered={answeredSet} flagged={flagged} onSelect={goTo} />
           </div>
         </aside>
       </div>
@@ -378,9 +405,10 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         <SheetContent className="lg:hidden">
           <SheetHeader>
             <SheetTitle>Questions</SheetTitle>
+            <SheetDescription>{title}</SheetDescription>
           </SheetHeader>
           <div className="overflow-y-auto p-5">
-            <ExamNavigator
+            <QuestionNavigator
               total={total}
               current={current}
               answered={answeredSet}
@@ -402,7 +430,23 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         confirmLabel="Submit exam"
         cancelLabel="Keep working"
         onConfirm={() => submit()}
-      />
+      >
+        {/* The counts first, so the dialog can be taken in at a glance; the sentence above says what submitting does. */}
+        <dl className="grid grid-cols-3 gap-3 rounded-control border border-border bg-surface-2 px-3 py-2.5 text-center" data-testid="submit-counts">
+          <div>
+            <dt className="text-caption text-fg-3">Answered</dt>
+            <dd className="tabular text-body-strong text-fg">{total - unanswered}</dd>
+          </div>
+          <div>
+            <dt className="text-caption text-fg-3">Unanswered</dt>
+            <dd className={cn('tabular text-body-strong', unanswered > 0 ? 'text-warning-soft-fg' : 'text-fg')}>{unanswered}</dd>
+          </div>
+          <div>
+            <dt className="text-caption text-fg-3">Flagged</dt>
+            <dd className="tabular text-body-strong text-fg">{flagged.size}</dd>
+          </div>
+        </dl>
+      </ConfirmDialog>
       <ConfirmDialog
         open={confirmExit}
         onOpenChange={setConfirmExit}

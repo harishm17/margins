@@ -10,7 +10,8 @@ import { getPlanData } from '@/server/queries/plan'
 import { todayItems, type Plan } from './plan'
 import { countDueConcepts } from './review-bank'
 import { loadTopicLearningState } from './next-activity-server'
-import { shortSessionPlan, type ShortSessionPlan, type ShortSessionState } from './short-session'
+import { previewReviewSize } from './review-session'
+import { shortSessionPlan, sizeShortSession, type ShortSessionPlan, type ShortSessionState } from './short-session'
 
 /**
  * The topic the plan is on now: the first learn or quiz item left today, else the first learn item of the plan. Null when the
@@ -41,12 +42,45 @@ export async function loadShortSessionState(userId: string, courseId: string, ti
   return { courseId, due, currentTopic, ai: blockedCode(status) ? 'down' : 'up' }
 }
 
+/**
+ * Whether the student has a first quiz or a first graded recall on any topic of this course. The short session and the
+ * voice practice are for a student who has something to go over; before that Home and Review say what opens them.
+ */
+export async function hasFirstQuizOrRecall(userId: string, courseId: string): Promise<boolean> {
+  const [events, attempts, scored, scheduled] = await Promise.all([
+    prisma.evidenceEvent.count({ where: { userId, projectId: courseId, source: { in: ['quiz', 'recall'] } } }),
+    prisma.quizAttempt.count({ where: { userId, topic: { projectId: courseId } } }),
+    // A quiz score kept on the topic's progress (from before attempts were stored one by one).
+    prisma.topicProgress.count({ where: { userId, quizScore: { not: null }, topic: { projectId: courseId } } }),
+    // A review is scheduled only after a quiz.
+    prisma.reviewSchedule.count({ where: { userId, projectId: courseId } }),
+  ])
+  return events > 0 || attempts > 0 || scored > 0 || scheduled > 0
+}
+
+/** Said in place of the extras before the first quiz or recall: what opens them. */
+export const SHORT_SESSION_LOCKED_TEXT = 'A 10-minute check opens after your first quiz or recall.'
+export const REVIEW_EXTRAS_LOCKED_TEXT = 'The 10-minute check and voice practice open after your first quiz or recall.'
+
 /** The short session on offer for a course, or null when there is nothing to offer. */
 export async function shortSessionOffer(userId: string, courseId: string, timeZone: string): Promise<{ plan: ShortSessionPlan; currentTopicId: string | null } | null> {
   const state = await loadShortSessionState(userId, courseId, timeZone)
   if (!state) return null
   const plan = shortSessionPlan(state)
-  return plan ? { plan, currentTopicId: state.currentTopic?.id ?? null } : null
+  if (!plan) return null
+  const currentTopicId = state.currentTopic?.id ?? null
+  if (plan.kind === 'recall') return { plan, currentTopicId }
+  // The card says how many questions the session will really have, worked out the way the session is made (the route starts it
+  // with the same limit and topics): concepts due are not the same as questions ready, and a short format leaves some out.
+  const size = await previewReviewSize({
+    userId,
+    projectId: courseId,
+    timeZone,
+    limit: plan.limit,
+    ...(plan.kind === 'mini_quiz' ? { includeNotDue: true, topicIds: [currentTopicId ?? ''] } : {}),
+  })
+  if (size.ready + size.toWrite === 0) return null
+  return { plan: sizeShortSession(plan, size, state.ai), currentTopicId }
 }
 
 /** The topics of a course the student chose a quick pass for. */
