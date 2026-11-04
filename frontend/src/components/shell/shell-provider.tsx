@@ -16,6 +16,10 @@ type ShellValue = {
   setPaletteOpen: (open: boolean) => void
   shortcutsOpen: boolean
   setShortcutsOpen: (open: boolean) => void
+  /** True while a study attempt is open (a question, a recall answer, a quiz); the phone shell drops its bars for it. */
+  attemptActive: boolean
+  /** Internal: the count behind `useShellAttempt`. */
+  adjustAttempts: (delta: 1 | -1) => void
 }
 
 const ShellContext = React.createContext<ShellValue | null>(null)
@@ -24,6 +28,16 @@ export function useShell(): ShellValue {
   const value = React.useContext(ShellContext)
   if (!value) throw new Error('useShell must be used inside the app shell')
   return value
+}
+
+/** Tells the shell an attempt is open while `active` is true. A counter, so nested attempts work and each one restores on exit. */
+export function useShellAttempt(active: boolean) {
+  const { adjustAttempts } = useShell()
+  React.useEffect(() => {
+    if (!active) return
+    adjustAttempts(1)
+    return () => adjustAttempts(-1)
+  }, [active, adjustAttempts])
 }
 
 const isTyping = (target: EventTarget | null) => {
@@ -44,6 +58,8 @@ export function ShellProvider({
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false)
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
+  const [attempts, setAttempts] = React.useState(0)
+  const adjustAttempts = React.useCallback((delta: 1 | -1) => setAttempts((n) => Math.max(0, n + delta)), [])
   const pathname = usePathname()
 
   // A navigation closes the mobile menu.
@@ -70,8 +86,19 @@ export function ShellProvider({
   }, [])
 
   const value = React.useMemo(
-    () => ({ user, nav, mobileNavOpen, setMobileNavOpen, paletteOpen, setPaletteOpen, shortcutsOpen, setShortcutsOpen }),
-    [user, nav, mobileNavOpen, paletteOpen, shortcutsOpen]
+    () => ({
+      user,
+      nav,
+      mobileNavOpen,
+      setMobileNavOpen,
+      paletteOpen,
+      setPaletteOpen,
+      shortcutsOpen,
+      setShortcutsOpen,
+      attemptActive: attempts > 0,
+      adjustAttempts,
+    }),
+    [user, nav, mobileNavOpen, paletteOpen, shortcutsOpen, attempts, adjustAttempts]
   )
 
   return (
