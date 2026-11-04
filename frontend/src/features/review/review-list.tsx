@@ -80,7 +80,7 @@ function SessionCard({ courseId, dueConceptCount, active }: { courseId: string; 
       <Button asChild variant="primary" icon={<Play weight="fill" />} className="shrink-0 self-start sm:self-center">
         {active && resumeHref ? (
           <Link href={resumeHref}>
-            Resume {active.short ? 'your short review' : "today's review"} ({active.answered} of {active.total})
+            Resume {active.short ? 'your quick practice' : "today's review"} ({active.answered} of {active.total})
           </Link>
         ) : (
           <Link href={reviewSessionHref(courseId)}>Start today&apos;s review</Link>

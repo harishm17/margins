@@ -39,10 +39,11 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
       : null,
     // A review started today and not finished: the page offers to resume it (spec 18.7).
     activeSession(user.id, courseId, timeZone).catch(() => null),
-    // "Have 10 minutes?" (spec 18.8): an extra, so a failure to work it out leaves the page as it was.
+    // Quick practice (spec 18.8): an extra, so a failure to work it out leaves the page as it was.
     unlocked ? shortSessionOffer(user.id, courseId, timeZone).catch(() => null) : null,
   ])
 
+  const nothingDue = data.dueConceptCount === 0 && data.due.length === 0 && active === null
   return (
     <Page width="wide">
       <PageIntro title="Review" description="Go over the topics that are due, most overdue first." />
@@ -60,9 +61,11 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-10">
-          {progress ? <WeeklyFocus courseId={courseId} focus={progress.focus} /> : null}
+          {/* When nothing is due the focus ideas are extras: they come after "Nothing is due", not before it, so due work and optional practice are not mixed up. */}
+          {progress && !nothingDue ? <WeeklyFocus courseId={courseId} focus={progress.focus} /> : null}
           <ReviewList data={data} active={active} />
           {short ? <ShortSessionCard courseId={courseId} plan={short.plan} /> : null}
+          {progress && nothingDue ? <WeeklyFocus courseId={courseId} focus={progress.focus} optional /> : null}
           {!unlocked ? (
             <p className="text-small text-fg-2" data-testid="review-extras-locked">
               {REVIEW_EXTRAS_LOCKED_TEXT}

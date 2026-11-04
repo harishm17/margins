@@ -48,7 +48,7 @@ test.describe('plan', () => {
     // No date yet: a rolling two weeks, and the page says how to plan up to an exam.
     await page.goto(`/courses/${course.courseId}/plan`)
     await expect(page.getByRole('heading', { level: 1, name: 'Plan' })).toBeVisible()
-    await expect(page.getByText(/The next 14 days, planned for 45 minutes a day/).locator('visible=true')).toBeVisible()
+    await expect(page.getByText(/A rolling 14-day plan until you set an exam date, planned for 45 minutes a day/).locator('visible=true')).toBeVisible()
 
     await page.goto(`/courses/${course.courseId}/settings`)
     await page.getByLabel('Exam date').locator('visible=true').fill(dayIn(ZONE, 21))
@@ -804,7 +804,7 @@ test.describe('review sessions', () => {
     await page.getByRole('radio', { name: /False/ }).click()
     await page.getByRole('button', { name: 'Check answer' }).click()
   }
-  const next = (page: Page) => page.getByRole('button', { name: /^(Next|See summary|Continue)$/ })
+  const next = (page: Page) => page.getByRole('button', { name: /^(Next question|See session summary|Continue)$/ })
 
   /** A course with two topics and three due concepts, each with three items to draw on. */
   async function dueCourse(page: Page, label: string) {

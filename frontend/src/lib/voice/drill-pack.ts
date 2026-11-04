@@ -10,6 +10,8 @@ import {
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 import type { VoiceQuizStatus } from '@/features/voice/quiz-status'
 
+import { SPRINT_MAX_QUESTIONS, SPRINT_QUESTIONS_PER_TOPIC, SPRINT_TOPICS } from './sprint-size'
+
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 const MAX_NOTES_CHARS = 24000
 
@@ -174,7 +176,7 @@ export const buildSprintQuestionSet = async (
     })
     .sort((a, b) => a.priority - b.priority)
 
-  const selected = ranked.slice(0, 3)
+  const selected = ranked.slice(0, SPRINT_TOPICS)
   const combined: VoiceQuestion[] = []
 
   for (const entry of selected) {
@@ -190,12 +192,12 @@ export const buildSprintQuestionSet = async (
       }
     }
 
-    combined.push(...questions.slice(0, 4).map(q => ({
+    combined.push(...questions.slice(0, SPRINT_QUESTIONS_PER_TOPIC).map(q => ({
       ...q,
       source: q.source || topic.name,
       topic_id: q.topic_id || topic.id,
     })))
   }
 
-  return dedupeQuestions(combined).slice(0, 12)
+  return dedupeQuestions(combined).slice(0, SPRINT_MAX_QUESTIONS)
 }

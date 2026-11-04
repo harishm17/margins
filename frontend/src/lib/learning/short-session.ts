@@ -70,12 +70,18 @@ export function sizeShortSession(plan: ShortSessionPlan, size: { ready: number; 
   return { ...plan, size: { count, exact: size.toWrite === 0 }, minutes: itemMinutes(count, ai) }
 }
 
-/** The line under "Have 10 minutes?" (copy drafts, spec 18.8). */
+/** The name of the offer wherever it is shown: the Home and Review card, and the session's own header. */
+export const SHORT_SESSION_NAME = 'Quick practice'
+
+/**
+ * The one duration statement for the quick practice, "About 5 minutes · up to 3 questions": the time first, then what is in it.
+ * The card, the Review page and the session header all say it this way (the heading no longer promises ten minutes).
+ */
 export function shortSessionLabel(plan: ShortSessionPlan): string {
-  if (plan.kind === 'recall') return `One recall card, about ${plan.minutes} minutes`
+  const time = `About ${plan.minutes} minutes`
+  if (plan.kind === 'recall') return `${time} · one recall card`
   const count = plan.size?.count ?? plan.limit ?? 0
-  const upTo = plan.size ? !plan.size.exact : false
-  const lead = upTo ? 'Up to ' : ''
-  if (plan.kind === 'review') return `${lead}${count} ${count === 1 ? 'review' : 'reviews'}, about ${plan.minutes} minutes`
-  return upTo ? `Up to ${count} questions, about ${plan.minutes} minutes` : `A ${count}-question check, about ${plan.minutes} minutes`
+  const lead = plan.size && !plan.size.exact ? 'up to ' : ''
+  const noun = plan.kind === 'review' ? (count === 1 ? 'review' : 'reviews') : count === 1 ? 'question' : 'questions'
+  return `${time} · ${lead}${count} ${noun}`
 }

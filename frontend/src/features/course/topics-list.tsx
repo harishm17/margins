@@ -4,6 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { CaretDown, PencilSimple } from '@phosphor-icons/react/dist/ssr'
 import { PageIntro } from '@/components/shell/page'
+import { StatusGuide } from '@/components/learning/status-guide'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -202,7 +203,7 @@ export function TopicsList({ courseId, topics, units, summary, generation, now, 
             title={newTopics}
             action={
               <Button asChild size="sm" variant="primary">
-                <Link href={`/courses/${courseId}/topics?edit=1`}>Review topics</Link>
+                <Link href={`/courses/${courseId}/topics?edit=1`}>Review new topics</Link>
               </Button>
             }
           >
@@ -211,7 +212,9 @@ export function TopicsList({ courseId, topics, units, summary, generation, now, 
         ) : null}
         {building ? <BuildingContent courseId={courseId} generation={generation} /> : null}
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <StatusGuide parts={['topic', 'steps', 'quiz']} id="topics-status-guide" />
+            <div className="flex items-center gap-3">
             <span id="sort-label" className="text-small text-fg-2">
               Sort by
             </span>
@@ -224,6 +227,7 @@ export function TopicsList({ courseId, topics, units, summary, generation, now, 
                 { value: 'needs-work', label: 'Needs work' },
               ]}
             />
+            </div>
           </div>
           {grouped ? (
             <div className="flex flex-col gap-8">

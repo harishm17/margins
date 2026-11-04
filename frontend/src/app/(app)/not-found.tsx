@@ -10,7 +10,7 @@ export default function AppNotFound() {
       <NotFoundPanel
         className="py-24"
         body="The page may have moved, or the course may have been deleted."
-        action={{ href: '/home', label: 'Go to home' }}
+        action={{ href: '/home', label: 'Go to your courses' }}
       />
     </Page>
   )

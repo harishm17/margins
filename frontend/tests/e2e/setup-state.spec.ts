@@ -100,8 +100,8 @@ test('failed topic finding, topics added by hand, then Confirm finishes setup ev
   await page.goto(base)
   await expect(step2.getByText('You added 2 topics.')).toBeVisible()
   await expect(step2.getByRole('link', { name: 'Confirm topics' })).toBeVisible()
-  // The Topics page is held back in the menu while setup is open: the overview's button is the way in.
-  await expect(page.getByRole('navigation', { name: 'Course', exact: true }).getByRole('link', { name: 'Topics', exact: true })).toHaveAttribute('aria-disabled', 'true')
+  // The Topics page is not in the menu while setup is open: the overview's button is the way in.
+  await expect(page.getByRole('navigation', { name: 'Course', exact: true }).getByRole('link', { name: 'Topics', exact: true })).toHaveCount(0)
   await page.goto('/home')
   await expect(upNext(page)).toContainText('Confirm topics')
   await page.goto(`${base}/plan`)

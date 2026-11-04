@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { phoneRow } from '@/components/ui/styles'
 
 /** A legal page: a 680px reading column, the last updated date, then h2 sections. */
 export function LegalPage({ title, children }: { title: string; children: React.ReactNode }) {
@@ -23,9 +24,29 @@ export function LegalList({ items }: { items: { name: string; text: React.ReactN
   )
 }
 
-export function LegalSection({ heading, children }: { heading: string; children: React.ReactNode }) {
+/** Jump links to the page's sections, above the first one: a long policy on a phone is found by its labels. */
+export function LegalContents({ sections }: { sections: { id: string; heading: string }[] }) {
   return (
-    <section className="flex flex-col gap-4">
+    <nav aria-label="On this page">
+      <ul className="flex flex-wrap gap-x-5 gap-y-0 text-small">
+        {sections.map((section) => (
+          <li key={section.id}>
+            <a
+              href={`#${section.id}`}
+              className={`${phoneRow} rounded-chip text-accent underline underline-offset-4 hover:text-accent-hover`}
+            >
+              {section.heading}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}
+
+export function LegalSection({ heading, id, children }: { heading: string; id?: string; children: React.ReactNode }) {
+  return (
+    <section id={id} className="flex scroll-mt-20 flex-col gap-4">
       <h2 className="mt-5 text-reading-h2 text-fg">{heading}</h2>
       {children}
     </section>

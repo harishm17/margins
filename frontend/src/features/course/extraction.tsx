@@ -10,7 +10,7 @@ import { toast } from '@/components/ui/toaster'
 import { useAiStatus } from '@/features/ai/ai-status'
 import { useJob } from '@/features/jobs/use-job'
 import { apiFetch, isApiError } from '@/lib/api/client'
-import { needsTopicReview, topicOriginSentence, type CourseSetup } from '@/lib/course-setup'
+import { needsTopicReview, reviewTopicsLabel, topicOriginSentence, type CourseSetup } from '@/lib/course-setup'
 import type { JobRef } from '@/server/queries/course'
 
 /**
@@ -107,7 +107,7 @@ export function ExtractionBanner({
   // The alert holds its place while a new file is read (button off), so the page below does not jump up
   // when the upload starts and back down when the file is ready.
   if ((filesReady || reading) && needsTopicReview(setup)) {
-    const label = setup.mode === 'setup' ? setup.label : 'Review topics'
+    const label = reviewTopicsLabel(setup)
     return (
       <InlineAlert
         tone="accent"
@@ -124,9 +124,11 @@ export function ExtractionBanner({
           )
         }
       >
-        {setup.topics.listConfirmed
-          ? 'They join your plan once you confirm them.'
-          : 'Check the list before Margins builds your study content.'}
+        {setup.topics.sourceRemoved > 0 && setup.topics.sourceRemoved >= setup.topics.unconfirmed
+          ? 'Review them to keep the ones you want, or remove them in the topic editor. They join your plan once you confirm them.'
+          : setup.topics.listConfirmed
+            ? 'They join your plan once you confirm them.'
+            : 'Check the list before Margins builds your study content.'}
       </InlineAlert>
     )
   }

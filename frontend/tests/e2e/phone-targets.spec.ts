@@ -66,7 +66,7 @@ test.describe('signed in', () => {
 
   test('the course actions menu rows are 44px', async ({ page }) => {
     await page.goto(`/courses/${course}`)
-    await page.getByRole('button', { name: 'More course actions' }).click()
+    await page.getByRole('button', { name: 'Course actions' }).click()
     await expect(page.getByRole('menuitem', { name: 'Course settings' })).toBeVisible()
     await expectBig(page, 'course actions menu')
   })

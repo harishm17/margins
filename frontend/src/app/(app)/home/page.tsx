@@ -33,7 +33,7 @@ export default async function HomePage() {
   // An account that has not studied yet is a new student, not one coming back.
   const firstVisit = !studied
 
-  // "Have 10 minutes?" for the course in "Up next" (spec 18.8). An extra: if it cannot be worked out Home still shows.
+  // Quick practice for the course in "Up next" (spec 18.8). An extra: if it cannot be worked out Home still shows.
   // Not before the student has a first quiz or recall: there is nothing to go over yet, so Home says what opens it.
   const unlocked = next ? await hasFirstQuizOrRecall(user.id, next.course.id).catch(() => false) : false
   const short = next && unlocked ? await shortSessionOffer(user.id, next.course.id, timeZone).catch(() => null) : null

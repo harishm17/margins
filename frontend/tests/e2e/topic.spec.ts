@@ -260,7 +260,7 @@ test('Prepare all topics now writes the rest of the course, one topic at a time'
   // The overview has no bulk "build" action any more; it is a course menu item with an estimate.
   await page.goto(`/courses/${courseId}`)
   await expect(page.getByRole('button', { name: /Build the missing study content|Build missing content|Generate/ })).toHaveCount(0)
-  await page.getByRole('button', { name: 'More course actions' }).click()
+  await page.getByRole('button', { name: 'Course actions' }).click()
   await page.getByRole('menuitem', { name: 'Prepare all topics now' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toContainText(/about \d+ topics/)
@@ -270,7 +270,7 @@ test('Prepare all topics now writes the rest of the course, one topic at a time'
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   expect(await writtenTypes(page, ids[ids.length - 1])).not.toContain('topic_quiz')
 
-  await page.getByRole('button', { name: 'More course actions' }).click()
+  await page.getByRole('button', { name: 'Course actions' }).click()
   await page.getByRole('menuitem', { name: 'Prepare all topics now' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Prepare all topics' }).click()
 

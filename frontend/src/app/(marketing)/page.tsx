@@ -1,4 +1,4 @@
-import { phoneStandaloneLink } from '@/components/ui/styles'
+import { phoneInlineHit, phoneStandaloneLink } from '@/components/ui/styles'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowUpRight } from '@phosphor-icons/react/dist/ssr'
@@ -7,7 +7,7 @@ import { AUTHOR, CONTACT_EMAIL, DEFAULT_DESCRIPTION, GITHUB_URL, SITE_HOST, SITE
 import { FinalCta, HeroActions } from '@/features/marketing/auth-actions'
 import { EVAL_FACTS, FAQ, LINKS, LOOP_STEPS } from '@/features/marketing/content'
 import { Loop } from '@/features/marketing/loop'
-import { SectionArrival } from '@/features/marketing/section-link'
+import { SectionArrival, SectionLink } from '@/features/marketing/section-link'
 import { Shot } from '@/features/marketing/shot'
 import { SLOT_SIZES } from '@/features/marketing/shot-sources'
 
@@ -256,7 +256,11 @@ function ClosingCta() {
         Start with one course.
       </h2>
       <p className="mx-auto mt-4 max-w-[44ch] text-reading text-fg-2">
-        Free to use, with a daily AI allowance. Add your files and see what to do today.
+        Free to use, with a{' '}
+        <SectionLink section="faq" className={`${phoneInlineHit} rounded-chip underline underline-offset-2 hover:text-fg`}>
+          daily AI allowance
+        </SectionLink>
+        . Add your files and see what to do today.
       </p>
       <div className="mt-8 flex justify-center">
         <FinalCta />

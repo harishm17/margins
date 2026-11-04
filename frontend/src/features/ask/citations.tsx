@@ -51,7 +51,7 @@ export function ExcerptDialog({
 function SourceAction({ source, onExcerpt, className }: { source: ChatSource; onExcerpt: () => void; className?: string }) {
   if (isPdf(source.filename)) {
     return (
-      <Button asChild variant="link" size="sm" className={cn('h-auto p-0', className)} icon={<ArrowSquareOut />}>
+      <Button asChild variant="link" size="sm" className={cn('h-auto p-0 max-sm:min-h-11', className)} icon={<ArrowSquareOut />}>
         <a href={viewerUrl(source)} target="_blank" rel="noopener noreferrer">
           Open page
         </a>
@@ -59,7 +59,7 @@ function SourceAction({ source, onExcerpt, className }: { source: ChatSource; on
     )
   }
   return (
-    <Button variant="link" size="sm" className={cn('h-auto p-0', className)} icon={<FileText />} onClick={onExcerpt}>
+    <Button variant="link" size="sm" className={cn('h-auto p-0 max-sm:min-h-11', className)} icon={<FileText />} onClick={onExcerpt}>
       View excerpt
     </Button>
   )
@@ -134,11 +134,12 @@ export function SourcesList({ sources }: { sources: readonly ChatSource[] }) {
       <h2 className="text-caption text-fg-3">Sources</h2>
       <ol className="mt-1.5 flex flex-col">
         {shown.map((source) => (
-          <li key={source.marker} className="flex min-h-8 items-center gap-2.5 py-1 text-small">
+          <li key={source.marker} className="flex min-h-8 items-center gap-2.5 py-1 text-small max-sm:min-h-11">
             <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-chip bg-accent-soft px-1 font-mono text-[12px] font-medium text-accent-soft-fg">
               {source.marker}
             </span>
-            <span className="min-w-0 flex-1 truncate text-fg-2" title={sourceLabel(source)}>
+            {/* On a phone the file name and place may take two lines, so a long location is not cut after a few words. */}
+            <span className="min-w-0 flex-1 text-fg-2 wrap-anywhere max-sm:line-clamp-2 sm:truncate" title={sourceLabel(source)}>
               {sourceLabel(source)}
             </span>
             <SourceAction source={source} onExcerpt={() => setExcerpt(source)} className="shrink-0 text-small" />

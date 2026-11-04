@@ -1,5 +1,6 @@
 'use client'
 
+import { sprintSizeLine } from '@/lib/voice/sprint-size'
 import * as React from 'react'
 import Link from 'next/link'
 import * as RadioGroup from '@radix-ui/react-radio-group'
@@ -202,6 +203,12 @@ export function Lobby({
         <p className="text-body text-fg-2">
           {recognitionSupported ? 'Answer questions out loud and get feedback, like a study partner.' : 'Answer questions and get feedback, like a study partner.'}
         </p>
+        {mode === 'sprint' ? (
+          // The size is known before the start: say it here, beside the minutes left, not only once the questions come.
+          <p className="text-small text-fg-2" data-testid="voice-sprint-size">
+            {sprintSizeLine()}
+          </p>
+        ) : null}
         {recognitionSupported ? null : (
           <p className="mt-1 flex items-start gap-2 text-small text-fg-2" data-testid="voice-no-recognition">
             <Keyboard aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-3" />

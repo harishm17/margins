@@ -67,8 +67,11 @@ export function AccountMenu({ rail }: { rail?: boolean }) {
       ) : (
         trigger
       )}
-      <DropdownMenuContent side="top" align="start" className="min-w-[232px]">
-        <DropdownMenuLabel className="truncate">{user.email}</DropdownMenuLabel>
+      <DropdownMenuContent side="top" align="start" className="min-w-[232px] max-w-[calc(100vw-1.5rem)]">
+        {/* The address is what tells two accounts apart, so it wraps (to two lines, then is cut) instead of losing its end. */}
+        <DropdownMenuLabel className="line-clamp-2 whitespace-normal wrap-anywhere" title={user.email}>
+          {user.email}
+        </DropdownMenuLabel>
         <DropdownMenuItem icon={<GearSix />} onSelect={() => router.push('/settings')}>
           Settings
         </DropdownMenuItem>

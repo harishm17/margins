@@ -264,7 +264,7 @@ function summaryLine(plan: Plan): string {
           : `Your exam is in ${plan.daysToExam} days`
     return `${when}, ${dayLabel(plan.examDate as string, { long: true })}. Planned for ${minutes}.`
   }
-  return `The next 14 days, planned for ${minutes}. Set your exam date to plan up to it.`
+  return `A rolling 14-day plan until you set an exam date, planned for ${minutes}.`
 }
 
 /** The study plan: a week by week list of what to do each day, today highlighted. */

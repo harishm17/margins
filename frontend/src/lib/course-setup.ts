@@ -29,6 +29,8 @@ export type CourseSetupInput = {
   extractedTopicCount: number
   /** Extracted topics the student has already confirmed. */
   confirmedExtractedTopicCount: number
+  /** Topics waiting for review that have lost their files: found in a file that was deleted since. A topic made by hand is confirmed when it is made, so an unconfirmed topic with no source is one of these. */
+  sourceRemovedTopicCount?: number
   contentBlockCount: number
   extraction: ExtractionOutcome
 }
@@ -43,6 +45,8 @@ export type TopicListState = {
   extracted: number
   /** Added by hand. */
   manual: number
+  /** Waiting for review, and the file they were found in has been deleted. */
+  sourceRemoved: number
   /** Unconfirmed topics found after the student had already confirmed the list (or some found ones). */
   newSinceConfirm: number
   /** The student confirmed the list and some confirmed topics remain: steps 1 and 2 are done and the plan can be built. New unconfirmed topics do not undo it. */
@@ -64,7 +68,8 @@ export function deriveSetup(input: CourseSetupInput): CourseSetup {
     confirmed: input.confirmedTopicCount,
     unconfirmed,
     extracted: input.extractedTopicCount,
-    manual: Math.max(0, input.topicCount - input.extractedTopicCount),
+    manual: Math.max(0, input.topicCount - input.extractedTopicCount - (input.sourceRemovedTopicCount ?? 0)),
+    sourceRemoved: input.sourceRemovedTopicCount ?? 0,
     newSinceConfirm: listConfirmed || input.confirmedExtractedTopicCount > 0 ? unconfirmed : 0,
     listConfirmed,
     extraction: input.extraction,
@@ -104,6 +109,16 @@ export const needsTopicReview = (setup: CourseSetup): boolean =>
     ? setup.topics.unconfirmed > 0
     : setup.mode === 'setup' && setup.step === 2 && setup.topics.total > 0
 
+/**
+ * What the button to the topic editor says when topics wait for the student: it opens the topic list to check, never
+ * the first topic ("Start studying" was the setup step's name and sent a student to review). Step 2 says its own
+ * label (Review topics, Confirm topics); a confirmed course with new topics says so.
+ */
+export function reviewTopicsLabel(setup: CourseSetup): string {
+  if (setup.mode === 'setup' && setup.step === 2) return setup.label
+  return setup.topics.newSinceConfirm > 0 ? 'Review new topics' : 'Review topics'
+}
+
 /** "3 new topics to review": shown on a confirmed course while found topics wait for the student. */
 export const newTopicsLabel = (topics: TopicListState): string | null =>
   topics.listConfirmed && topics.unconfirmed > 0 ? `${pluralize(topics.unconfirmed, 'new topic')} to review` : null
@@ -113,11 +128,18 @@ export const newTopicsLabel = (topics: TopicListState): string | null =>
  * counts topics that came from the files; hand-added ones read as added.
  */
 export function topicOriginSentence(topics: TopicListState): string {
-  if (topics.newSinceConfirm > 0) return `We found ${pluralize(topics.newSinceConfirm, 'new topic')} in your files.`
-  if (topics.extracted > 0 && topics.manual > 0) {
-    return `We found ${pluralize(topics.extracted, 'topic')} in your files and you added ${pluralize(topics.manual, 'topic')}.`
+  const removed = topics.sourceRemoved
+  // Everything waiting for review came from a file that has since been deleted: say so, rather than "We found...".
+  if (removed > 0 && removed >= topics.unconfirmed) {
+    return `${pluralize(removed, 'new topic')} ${removed === 1 ? 'is' : 'are'} waiting, and the file ${removed === 1 ? 'it' : 'they'} came from was deleted.`
   }
-  if (topics.extracted > 0) return `We found ${pluralize(topics.extracted, 'topic')} in your files.`
+  const found = Math.max(0, topics.newSinceConfirm - removed)
+  const note = removed > 0 ? ` ${removed === 1 ? 'One' : removed} came from a file you deleted.` : ''
+  if (topics.newSinceConfirm > 0) return `We found ${pluralize(found, 'new topic')} in your files.${note}`
+  if (topics.extracted > 0 && topics.manual > 0) {
+    return `We found ${pluralize(topics.extracted, 'topic')} in your files and you added ${pluralize(topics.manual, 'topic')}.${note}`
+  }
+  if (topics.extracted > 0) return `We found ${pluralize(topics.extracted, 'topic')} in your files.${note}`
   if (topics.manual > 0) return `You added ${pluralize(topics.manual, 'topic')}.`
   return ''
 }

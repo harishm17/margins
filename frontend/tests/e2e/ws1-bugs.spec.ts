@@ -380,7 +380,7 @@ test('a review session labels no question Warm-up, and a short session says what
   await expect(page.getByText('Warm-up', { exact: true })).toHaveCount(0)
 })
 
-test('"Have 10 minutes?" says how many questions the session has: exact when they are all written, up to when some are not', async ({ page }) => {
+test('"Quick practice" says how many questions the session has: exact when they are all written, up to when some are not', async ({ page }) => {
   await setZoneCookie(page.context())
   const { email } = await signUpAndIn(page, 'ws1-short', { own: true })
   await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
@@ -405,9 +405,9 @@ test('"Have 10 minutes?" says how many questions the session has: exact when the
   await addQuizSet(topicId, [0, 1].flatMap((n) => (['easy', 'medium', 'hard'] as const).map((difficulty) => item(ids[n], `Concept ${n}`, difficulty))))
   const card = page.getByTestId('short-session').filter({ visible: true })
   await page.goto(`/courses/${course.courseId}/review`)
-  await expect(card).toContainText('Up to 3 reviews', { timeout: 30_000 })
+  await expect(card).toContainText('up to 3 reviews', { timeout: 30_000 })
   // All three have questions: the number is exact.
   await addQuizSet(topicId, (['easy', 'medium', 'hard'] as const).map((difficulty) => item(ids[2], 'Concept 2', difficulty)))
   await page.goto(`/courses/${course.courseId}/review`)
-  await expect(card).toContainText(/^Have 10 minutes\?\s*3 reviews, about/, { timeout: 30_000 })
+  await expect(card).toContainText(/^Quick practice\s*About \d+ minutes · 3 reviews/, { timeout: 30_000 })
 })

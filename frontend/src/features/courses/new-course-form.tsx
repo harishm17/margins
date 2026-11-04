@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { track as trackEvent } from '@/lib/analytics/track'
 import { DEFAULT_DAILY_MINUTES } from '@/lib/learning/plan-settings'
+import { DescriptionField } from './description-field'
 import { PlanFields } from './plan-fields'
 
 export function NewCourseForm() {
@@ -56,7 +56,7 @@ export function NewCourseForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5">
-      <Field label="Course name" error={nameError}>
+      <Field label="Course name" required error={nameError}>
         <Input
           ref={nameRef}
           name="name"
@@ -68,16 +68,9 @@ export function NewCourseForm() {
           onChange={(event) => setName(event.target.value)}
         />
       </Field>
-      <Field label="Description" optional hint="What are you preparing for?">
-        <Textarea
-          name="description"
-          rows={2}
-          maxLength={1000}
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-        />
-      </Field>
-      <PlanFields examDate={examDate} dailyMinutes={dailyMinutes} onExamDate={setExamDate} onDailyMinutes={setDailyMinutes} />
+      {/* The name, then what the plan is built from (the exam date and the daily time), then the optional description. */}
+      <PlanFields heading="Study plan" examDate={examDate} dailyMinutes={dailyMinutes} onExamDate={setExamDate} onDailyMinutes={setDailyMinutes} />
+      <DescriptionField value={description} onChange={setDescription} rows={2} maxLength={1000} />
       {error ? <InlineAlert tone="danger">{error}</InlineAlert> : null}
       <div className="flex items-center gap-2">
         <Button type="submit" variant="primary" loading={pending}>

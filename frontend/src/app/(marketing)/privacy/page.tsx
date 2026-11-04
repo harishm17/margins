@@ -1,13 +1,21 @@
 import { phoneInlineHit } from '@/components/ui/styles'
 import type { Metadata } from 'next'
 import { CONTACT_EMAIL } from '@/config/site'
-import { LegalList, LegalPage, LegalSection } from '@/features/marketing/legal-page'
+import { LegalContents, LegalList, LegalPage, LegalSection } from '@/features/marketing/legal-page'
 
 export const metadata: Metadata = {
   title: 'Privacy',
   description: 'What Margins stores, why, and the choices you have.',
   alternates: { canonical: '/privacy' },
 }
+
+const SECTIONS = [
+  { id: 'store', heading: 'What we store' },
+  { id: 'use', heading: "How it's used" },
+  { id: 'services', heading: 'Services we use' },
+  { id: 'choices', heading: 'Your choices' },
+  { id: 'contact', heading: 'Contact' },
+]
 
 export default function PrivacyPage() {
   return (
@@ -16,23 +24,23 @@ export default function PrivacyPage() {
         Margins is a study tool run by Harish Manoharan. This page explains what we store and why. Last updated
         November 3, 2026.
       </p>
-      <LegalSection heading="What we store">
-        <p>
-          Your account: your email address, your name and your Google account ID, from signing in with Google.
-          Accounts made with a password before Google sign-in also still have that password stored, hashed and no
-          longer used. Your course files and what Margins creates from them: notes,
-          examples, practice, quizzes, mock exams, chat answers, your answers and scores, and voice practice
-          transcripts. Basic usage records, such as how much AI processing your account used each day, so we can
-          keep the service within its limits.
-        </p>
+      <LegalContents sections={SECTIONS} />
+      <LegalSection id="store" heading="What we store">
+        <LegalList
+          items={[
+            { name: 'Your account', text: 'your email address, your name and your Google account ID, from signing in with Google. Accounts made with a password before Google sign-in also still have that password stored, hashed and no longer used.' },
+            { name: 'Your files and what Margins makes from them', text: 'notes, examples, practice, quizzes, mock exams, chat answers, your answers and scores, and voice practice transcripts.' },
+            { name: 'Basic usage records', text: 'such as how much AI processing your account used each day, so we can keep the service within its limits.' },
+          ]}
+        />
       </LegalSection>
-      <LegalSection heading="How it's used">
+      <LegalSection id="use" heading="How it's used">
         <p>
           Only to run Margins for you: to process your files, create study material, grade your answers and show
           your progress. We don&apos;t sell your data, show ads, or use your files to train AI models.
         </p>
       </LegalSection>
-      <LegalSection heading="Services we use">
+      <LegalSection id="services" heading="Services we use">
         <LegalList
           items={[
             { name: 'Anthropic', text: 'processes the text of your files and your questions to create study material and answers. It does not use this data to train its models by default.' },
@@ -43,7 +51,7 @@ export default function PrivacyPage() {
           ]}
         />
       </LegalSection>
-      <LegalSection heading="Your choices">
+      <LegalSection id="choices" heading="Your choices">
         <p>
           When you delete a course, its files and everything created from them are deleted. To delete your account
           entirely, open Settings and choose Delete account: your account, your courses, your files and everything
@@ -51,7 +59,7 @@ export default function PrivacyPage() {
           with nothing that identifies you). If you can&apos;t sign in or need help, email {CONTACT_EMAIL}.
         </p>
       </LegalSection>
-      <LegalSection heading="Contact">
+      <LegalSection id="contact" heading="Contact">
         <p>
           <a className={`${phoneInlineHit} text-accent underline underline-offset-4 hover:text-accent-hover`} href={`mailto:${CONTACT_EMAIL}`}>
             {CONTACT_EMAIL}

@@ -10,6 +10,7 @@ import {
   DotsThree,
   Files,
   FolderSimplePlus,
+  GitMerge,
   ListBullets,
   PencilSimple,
   Plus,
@@ -43,6 +44,7 @@ import { groupTopicsByUnit, unitForRetry } from '@/lib/topics/units'
 import { topicOriginSentence, type TopicListState } from '@/lib/course-setup'
 import type { JobRef } from '@/server/queries/course'
 import type { ShellUnit } from '@/server/queries/courses'
+import { CourseMenu } from './course-menu'
 import { MoveTopicDialog, UnitDialog } from './editor-dialogs'
 import { useExtraction } from './extraction'
 import { AiBlockedNote } from '@/features/ai/ai-status'
@@ -189,6 +191,11 @@ export function TopicEditor({
   const [unitDialog, setUnitDialog] = React.useState<{ unit: ShellUnit | null } | null>(null)
   const [deletingUnit, setDeletingUnit] = React.useState<ShellUnit | null>(null)
   const [findAgainOpen, setFindAgainOpen] = React.useState(false)
+  // Select-to-merge mode: the rows become checkboxes, the student picks two or more and says which one stays.
+  const [merging, setMerging] = React.useState(false)
+  const [picked, setPicked] = React.useState<string[]>([])
+  const [keepId, setKeepId] = React.useState<string | null>(null)
+  const [mergeMany, setMergeMany] = React.useState(false)
   const [newName, setNewName] = React.useState('')
   const [newUnit, setNewUnit] = React.useState<string | null>(null)
   const [confirming, setConfirming] = React.useState(false)
@@ -310,6 +317,48 @@ export function TopicEditor({
     setItems((current) => renumber(current.filter((item) => item.id !== mergePair.source.id), unitItems))
     toast.success(`Merged into ${mergePair.target.name}`)
     router.refresh()
+  }
+
+  /** Merge mode: every picked topic except the one kept goes into it, one after another. */
+  async function mergePicked() {
+    const keep = items.find((item) => item.id === (keepId && picked.includes(keepId) ? keepId : picked[0]))
+    if (!keep) return
+    const sources = picked.filter((id) => id !== keep.id)
+    const merged: string[] = []
+    try {
+      await queue.current
+      for (const sourceTopicId of sources) {
+        await apiFetch(`/api/projects/${courseId}/topics/merge`, { method: 'POST', json: { sourceTopicId, targetTopicId: keep.id } })
+        merged.push(sourceTopicId)
+      }
+    } catch (error) {
+      // Whatever was merged before the failure stays merged: show it, and leave the rest picked to try again.
+      setItems((current) => renumber(current.filter((item) => !merged.includes(item.id)), unitItems))
+      setPicked((current) => current.filter((id) => !merged.includes(id)))
+      toast.error(isApiError(error) ? error.message : "Couldn't merge the topics. Try again.")
+      router.refresh()
+      throw error
+    }
+    setItems((current) => renumber(current.filter((item) => !merged.includes(item.id)), unitItems))
+    toast.success(`Merged ${pluralize(sources.length, 'topic')} into ${keep.name}`)
+    stopMerging()
+    router.refresh()
+  }
+
+  function startMerging() {
+    setEditingId(null)
+    setPicked([])
+    setKeepId(null)
+    setMerging(true)
+    setAnnouncement('Merge mode. Tick two or more topics, then choose the one that stays.')
+  }
+  function stopMerging() {
+    setMerging(false)
+    setPicked([])
+    setKeepId(null)
+  }
+  function togglePicked(id: string) {
+    setPicked((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]))
   }
 
   async function deleteTopic() {
@@ -507,27 +556,18 @@ export function TopicEditor({
           <>
             <Button
               variant="secondary"
-              icon={<ArrowsClockwise />}
-              disabled={running || filesReady === 0 || !!extraction.blocked}
-              disabledReason={
-                running
-                  ? 'Topics are being found now.'
-                  : filesReady === 0
-                    ? 'Add and read a file first.'
-                    : extraction.blocked
-                      ? 'AI features are paused right now.'
-                      : undefined
-              }
-              onClick={() => setFindAgainOpen(true)}
+              icon={<GitMerge />}
+              disabled={running || items.length < 2}
+              disabledReason={running ? 'Topics are being found now.' : items.length < 2 ? 'You need two topics to merge.' : undefined}
+              aria-pressed={merging}
+              onClick={merging ? stopMerging : startMerging}
             >
-              Find topics again
-            </Button>
-            <Button variant="secondary" icon={<FolderSimplePlus />} onClick={() => setUnitDialog({ unit: null })}>
-              Add unit
+              {merging ? 'Cancel merge' : 'Merge topics'}
             </Button>
             <Button
               variant="secondary"
               icon={<Plus />}
+              disabled={merging}
               onClick={() => {
                 addRef.current?.scrollIntoView({ block: 'center' })
                 addRef.current?.focus()
@@ -535,6 +575,31 @@ export function TopicEditor({
             >
               Add topic
             </Button>
+            {/* Finding topics again and adding a unit are rare: they sit with the other course actions, not in the header. */}
+            <CourseMenu
+              courseId={courseId}
+              hideEditTopics
+              extraItems={
+                <>
+                  <DropdownMenuItem
+                    icon={<ArrowsClockwise />}
+                    disabled={running || filesReady === 0 || !!extraction.blocked}
+                    onSelect={() => setFindAgainOpen(true)}
+                  >
+                    Find topics again
+                  </DropdownMenuItem>
+                  {running || filesReady === 0 || extraction.blocked ? (
+                    <DropdownMenuLabel className="max-w-[220px] whitespace-normal">
+                      {running ? 'Topics are being found now.' : filesReady === 0 ? 'Add and read a file first.' : 'AI features are paused right now.'}
+                    </DropdownMenuLabel>
+                  ) : null}
+                  <DropdownMenuItem icon={<FolderSimplePlus />} onSelect={() => setUnitDialog({ unit: null })}>
+                    Add unit
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              }
+            />
           </>
         }
       />
@@ -683,6 +748,9 @@ export function TopicEditor({
                             endDrag()
                           }}
                           onDragEnd={endDrag}
+                          selectMode={merging}
+                          selected={picked.includes(topic.id)}
+                          onToggleSelect={() => togglePicked(topic.id)}
                         />
                       )
                     })}
@@ -757,6 +825,34 @@ export function TopicEditor({
       ) : null}
 
       <div className="sticky bottom-(--tabbar-height,0px) z-sticky -mx-4 -mb-16 mt-auto border-t border-border bg-surface px-4 py-3 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8">
+        {merging ? (
+          <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-x-4 gap-y-2" role="group" aria-label="Merge topics">
+            <p className="min-w-0 flex-1 basis-56 text-small text-fg-2" aria-live="polite">
+              {picked.length < 2 ? 'Tick two or more topics to merge into one.' : `${pluralize(picked.length, 'topic')} picked. Choose the one that stays; the others are merged into it.`}
+            </p>
+            {picked.length >= 2 ? (
+              <div className="w-full sm:w-56">
+                <Select
+                  aria-label="The topic that stays"
+                  value={keepId && picked.includes(keepId) ? keepId : picked[0]}
+                  onValueChange={setKeepId}
+                  options={picked.flatMap((id) => {
+                    const topic = items.find((item) => item.id === id)
+                    return topic ? [{ value: id, label: topic.name }] : []
+                  })}
+                />
+              </div>
+            ) : null}
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={stopMerging}>
+                Cancel
+              </Button>
+              <Button variant="primary" disabled={picked.length < 2} onClick={() => setMergeMany(true)}>
+                Merge {picked.length >= 2 ? pluralize(picked.length, 'topic') : 'topics'}
+              </Button>
+            </div>
+          </div>
+        ) : (
         <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-4">
           <p className="text-small tabular text-fg-2">
             {running ? 'Finding topics' : hasUnits ? `${pluralize(items.length, 'topic')} in ${pluralize(unitItems.length, 'unit')}` : pluralize(items.length, 'topic')}
@@ -785,6 +881,7 @@ export function TopicEditor({
             </Button>
           )}
         </div>
+        )}
       </div>
 
       <UnitDialog
@@ -806,6 +903,14 @@ export function TopicEditor({
         description="Topics you already confirmed stay."
         confirmLabel="Find topics again"
         onConfirm={() => extraction.start()}
+      />
+      <ConfirmDialog
+        open={mergeMany}
+        onOpenChange={setMergeMany}
+        title={`Merge ${pluralize(picked.length, 'topic')} into ${items.find((item) => item.id === (keepId && picked.includes(keepId) ? keepId : picked[0]))?.name ?? 'one'}?`}
+        description="Content and quiz history of the others move to the topic that stays."
+        confirmLabel="Merge topics"
+        onConfirm={mergePicked}
       />
       <ConfirmDialog
         open={!!mergePair}

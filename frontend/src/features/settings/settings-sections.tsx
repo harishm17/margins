@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { SignOut } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
@@ -78,6 +79,13 @@ export function AiAllowance({ timeZone }: { timeZone: string }) {
         <dt className="text-fg-2">AI features</dt>
         <dd className="text-fg">{status.available ? 'Available' : 'Paused'}</dd>
       </dl>
+      <p className="max-w-[56ch] text-small text-fg-2" data-testid="allowance-explainer">
+        Different actions use different amounts, so the percentage is a share of the day&apos;s allowance, not a count of questions left. When it
+        runs out, new notes, quizzes and answers wait until it resets; what is already written stays readable.{' '}
+        <Link href="/#faq" target="_blank" rel="noopener noreferrer" className="rounded-chip text-accent underline underline-offset-2 hover:text-accent-hover max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
+          What happens at the limit
+        </Link>
+      </p>
       {view.kind === 'used' ? (
         <div className="flex max-w-[420px] flex-col gap-2">
           <div className="flex items-baseline justify-between gap-4 text-small">
@@ -154,7 +162,7 @@ export function DeleteAccount({ email }: { email: string }) {
         title="Delete your account?"
         description={
           <>
-            This deletes <span className="font-medium text-fg">{email}</span> and everything in it. Type {CONFIRM_WORD}{' '}
+            This deletes <span className="font-medium text-fg wrap-anywhere">{email}</span> and everything in it. Type {CONFIRM_WORD}{' '}
             to confirm.
           </>
         }

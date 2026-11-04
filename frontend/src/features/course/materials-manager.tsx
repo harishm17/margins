@@ -145,7 +145,7 @@ const FAILED_ICON = <WarningCircle aria-hidden="true" className="size-4 shrink-0
 const PIPELINE = [
   { stage: 'validating', label: 'Checking the file' },
   { stage: 'chunking', label: 'Reading pages' },
-  { stage: 'embedding', label: 'Indexing for search' },
+  { stage: 'embedding', label: 'Getting your pages ready for study and search' },
 ] as const
 
 function pipelineIndex(stage: string | null | undefined, jobType?: string): number {
@@ -464,7 +464,30 @@ function ServerRow({
         confirmLabel="Delete file"
         destructive
         onConfirm={onDelete}
-      />
+      >
+        {row.topics.length > 0 ? (
+          // Optional: look before deleting. The topics open in the course's topic list; nothing here is a required step.
+          <details className="group text-small text-fg-2">
+            <summary className="inline-flex min-h-6 cursor-pointer list-none items-center gap-1.5 rounded-chip text-accent hover:underline max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
+              View affected topics ({row.topics.length})
+            </summary>
+            <ul className="mt-2 flex flex-col gap-1">
+              {row.topics.map((topic) => (
+                <li key={topic.id}>
+                  <a
+                    href={`/courses/${courseId}/topics/${topic.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-6 items-center rounded-chip text-fg underline underline-offset-2 max-sm:min-h-11"
+                  >
+                    {topic.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </ConfirmDialog>
     </>
   )
 }
@@ -712,7 +735,7 @@ export function MaterialsManager({
       toast.error("Couldn't remove every file. Try again, or delete them from their menus.")
       throw new Error('remove failed')
     }
-    toast.success('Failed files removed')
+    toast.success('Files with problems removed')
   }
 
   return (
@@ -769,7 +792,7 @@ export function MaterialsManager({
         </p>
         <div className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-2">
           <span id={`category-label-${variant}`} className="text-small text-fg-2">
-            Use these as:
+            For the next upload:
           </span>
           <SegmentedControl
             aria-labelledby={`category-label-${variant}`}
@@ -841,7 +864,7 @@ export function MaterialsManager({
               className="mt-3"
               action={
                 <Button size="sm" onClick={() => setRemoveFailedOpen(true)}>
-                  Remove failed files
+                  Remove files with problems
                 </Button>
               }
             >
@@ -858,9 +881,9 @@ export function MaterialsManager({
       <ConfirmDialog
         open={removeFailedOpen}
         onOpenChange={setRemoveFailedOpen}
-        title="Remove the files that failed?"
-        description="They are not used for your topics. The files that were read are not touched."
-        confirmLabel="Remove failed files"
+        title="Remove the files with problems?"
+        description="Files that were refused or could not be read. They are not used for your topics, and the files that were read are not touched."
+        confirmLabel="Remove files with problems"
         destructive
         onConfirm={removeFailed}
       />

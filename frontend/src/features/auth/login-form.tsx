@@ -5,6 +5,7 @@ import { phoneInlineHit } from '@/components/ui/styles'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { BRAND_NAME } from '@/config/brand'
 import { GoogleButton } from './google-button'
+import { SectionLink } from '@/features/marketing/section-link'
 import { TestLoginForm } from './test-login-form'
 
 type LoginFormProps = {
@@ -25,7 +26,11 @@ export function LoginForm({ googleEnabled, testLoginEnabled, next, initialError 
       {/* The product picture beside this form is hidden below 1024px, so say in a line what the account is for. */}
       <p className="mt-1.5 text-body text-fg lg:hidden">Upload your course files and get a plan to your exam date.</p>
       <p className="mt-1.5 text-body text-fg-2">
-        New and returning students both continue with Google. Free to use, with a daily AI allowance.
+        New and returning students both continue with Google. Free to use, with a{' '}
+        <SectionLink section="faq" className={`${phoneInlineHit} rounded-chip underline underline-offset-2 hover:text-fg`}>
+          daily AI allowance
+        </SectionLink>
+        .
       </p>
 
       <div className="mt-8 flex flex-col gap-5">

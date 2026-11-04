@@ -9,6 +9,8 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { Spinner } from '@/components/ui/spinner'
+import { SHORT_SESSION_NAME } from '@/lib/learning/short-session'
+import { useStartShortSession } from '@/features/home/short-session-card'
 import { ConfidenceRow, optionCountOf, ThinkingBox } from '@/features/topic/quiz-confidence'
 import { ReviewList as ResultList, type ReviewEntry } from '@/features/topic/quiz-review-list'
 import { useAiStatus } from '@/features/ai/ai-status'
@@ -156,19 +158,11 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
       )
     }
     return (
-      <EmptyState
-        icon={<CheckCircle />}
-        title={conceptId ? 'Nothing to drill on this yet' : 'Nothing is due'}
-        action={
-          <Button asChild variant="primary">
-            <Link href={`/courses/${courseId}/review`}>Back to Review</Link>
-          </Button>
-        }
-      >
+      <NothingDue courseId={courseId} drill={!!conceptId}>
         {conceptId
           ? 'This idea has no questions to practice with yet. Open its topic and take a quiz first.'
           : 'No idea needs another look today. Your next reviews appear on the Review page as they come due.'}
-      </EmptyState>
+      </NothingDue>
     )
   }
   if (loading.state === 'error') {
@@ -232,6 +226,12 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
           <span data-session-context="">{[item.topicName, ...item.conceptNames].filter(Boolean).join(' · ')}</span>
         </p>
       </div>
+      {/* Why the student is here, said until the first answer: a quick practice names its size, a drill says what it is for. */}
+      {answeredCount === 0 && (session.short || session.kind === 'drill') ? (
+        <p className="mt-1 text-small text-fg-2" data-testid="session-entry-note">
+          {session.short ? `${SHORT_SESSION_NAME} · ${plural(total, 'question')}` : 'Practising one idea that needs another look.'}
+        </p>
+      ) : null}
       <Progress aria-label="Questions answered" className="mt-4" value={(answeredCount / total) * 100} />
       <RightNote courseId={courseId} session={session} position={rightNote} />
       <Step
@@ -262,6 +262,41 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
         }}
       />
     </div>
+  )
+}
+
+/**
+ * Nothing is due (or a drill with no questions). Quick practice is offered below as a plain alternative, so the student does not have
+ * to work out whether optional practice exists; a drill has none to offer, it points at the topic's quiz instead.
+ */
+function NothingDue({ courseId, drill, children }: { courseId: string; drill: boolean; children: React.ReactNode }) {
+  const { start, starting, error } = useStartShortSession(courseId)
+  return (
+    <EmptyState
+      icon={<CheckCircle />}
+      title={drill ? 'Nothing to drill on this yet' : 'Nothing is due'}
+      action={
+        drill ? (
+          <Button asChild variant="primary">
+            <Link href={`/courses/${courseId}/review`}>Back to Review</Link>
+          </Button>
+        ) : (
+          <Button variant="primary" onClick={() => void start()} loading={starting}>
+            Try {SHORT_SESSION_NAME.toLowerCase()} instead
+          </Button>
+        )
+      }
+      secondary={
+        drill ? undefined : (
+          <Button asChild variant="link">
+            <Link href={`/courses/${courseId}/review`}>Back to Review</Link>
+          </Button>
+        )
+      }
+    >
+      {children}
+      {error ? <InlineAlert className="mt-3 text-left" tone="danger">{error}</InlineAlert> : null}
+    </EmptyState>
   )
 }
 
@@ -435,7 +470,7 @@ function Step({ courseId, sessionId, position, motion, item, result, isLast, can
         <div className="mt-6 flex items-center justify-end gap-3 border-t border-border pt-5">
           <Button variant="primary" onClick={onNext}>
             <span className="inline-flex items-center gap-1.5">
-              {isLast && !complete ? 'Continue' : isLast ? 'See summary' : 'Next'}
+              {isLast && !complete ? 'Continue' : isLast ? 'See session summary' : 'Next question'}
               <ArrowRight className="size-4" />
             </span>
           </Button>
