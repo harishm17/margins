@@ -144,9 +144,10 @@ export function Conversation({
                       type="button"
                       title={question}
                       onClick={() => ask(question)}
-                      className="w-full rounded-control border border-border bg-surface px-3.5 py-2.5 text-left text-body text-fg-2 transition-[background-color,border-color,color] duration-120 hover:border-border-strong hover:bg-surface-2 hover:text-fg max-sm:line-clamp-1 max-sm:min-h-11 max-sm:py-3"
+                      className="w-full rounded-control border border-border bg-surface px-3.5 py-2.5 text-left text-body text-fg-2 transition-[background-color,border-color,color] duration-120 hover:border-border-strong hover:bg-surface-2 hover:text-fg max-sm:min-h-11 max-sm:py-3"
                     >
-                      {question}
+                      {/* One line on a phone, cut with an ellipsis; the full question is the button's title and what is sent. */}
+                      <span className="block max-sm:truncate">{question}</span>
                     </button>
                   </li>
                 ))}
