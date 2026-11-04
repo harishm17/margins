@@ -13,7 +13,7 @@ export default function PrivacyPage() {
     <LegalPage title="Privacy Policy">
       <p>
         Margins is a study tool run by Harish Manoharan. This page explains what we store and why. Last updated
-        October 28, 2026.
+        November 3, 2026.
       </p>
       <LegalSection heading="What we store">
         <p>
@@ -35,9 +35,11 @@ export default function PrivacyPage() {
         <p>
           Anthropic processes the text of your files and your questions to create study material and answers
           (Anthropic does not use this data to train its models by default). Railway hosts the app, the database
-          and file storage in the United States. Google provides sign-in if you choose it. Voice practice uses your
-          browser&apos;s built-in speech recognition, which may send audio to your browser vendor (Google for
-          Chrome, Apple for Safari).
+          and file storage in the United States. Google provides sign-in. Voice practice sends your voice to Deepgram, a speech
+          service, to turn it into text, or to AssemblyAI if Deepgram is unavailable. Neither keeps the audio after
+          turning it into text or uses it to train models, and Margins stores only the text. If you turn off Better
+          speech recognition before a session, your browser&apos;s built-in speech recognition is used instead, which
+          may send audio to your browser vendor (Google for Chrome, Apple for Safari).
         </p>
       </LegalSection>
       <LegalSection heading="Your choices">

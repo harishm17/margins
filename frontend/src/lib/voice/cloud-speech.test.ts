@@ -47,7 +47,7 @@ describe('keytermsFor', () => {
 })
 
 describe('deepgramUrl', () => {
-  it('names the model, the audio, the endpointing, the language and each term', () => {
+  it('names the model, the audio, the endpointing, the language, the training opt-out and each term', () => {
     const url = new URL(deepgramUrl({ language: 'es', terms: ['teorema de Bayes', 'prior'] }))
     assert.equal(url.origin + url.pathname, 'wss://api.deepgram.com/v1/listen')
     assert.equal(url.searchParams.get('model'), 'nova-3')
@@ -56,6 +56,7 @@ describe('deepgramUrl', () => {
     assert.equal(url.searchParams.get('interim_results'), 'true')
     assert.equal(url.searchParams.get('endpointing'), '300')
     assert.equal(url.searchParams.get('language'), 'es')
+    assert.equal(url.searchParams.get('mip_opt_out'), 'true')
     assert.deepEqual(url.searchParams.getAll('keyterm'), ['teorema de Bayes', 'prior'])
   })
 

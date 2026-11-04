@@ -43,10 +43,10 @@ export const LOOP_STEPS: LoopStep[] = [
   {
     id: 'study',
     title: 'Study each topic',
-    // README step 3: notes, examples, quiz; notes list the files and pages they came from.
-    text: 'Read notes written from your own pages, work through examples and practice one step at a time, then take a quiz. Each section names the files and pages it came from.',
+    // README step 3: the path Warm-up, Read, Recall, Practice, Quiz; reading shows your own pages and links the original.
+    text: 'Each topic follows a path: a short warm-up, your own pages to read, recall with the book closed, practice one step at a time, then a quiz. Everything points back to the file and page it came from.',
     shot: 'notes-detail',
-    alt: 'Topic notes with a Python code block, an outline of the page and a list of the source files and pages',
+    alt: "A topic's Read step: a note that Margins asks you to try first, the study path, and the student's own PDF pages with links to the original",
   },
   {
     id: 'mock',
@@ -131,7 +131,7 @@ export const FAQ: Faq[] = [
     // Privacy page, "What we store", "How it's used", "Services we use", "Your choices".
     answer: [
       'They stay in your account and are used only to run Margins for you. The text of your files and your questions are sent to Anthropic to write study material and answers; Anthropic does not use this data to train its models by default. We do not sell your data, show ads or use your files to train AI models.',
-      `When you delete a course, its files and everything made from them are deleted. You can delete your whole account yourself in Settings; if you need help, email ${CONTACT_EMAIL}. Voice practice uses your browser's speech recognition, which may send audio to Google (Chrome) or Apple (Safari).`,
+      `When you delete a course, its files and everything made from them are deleted. You can delete your whole account yourself in Settings; if you need help, email ${CONTACT_EMAIL}. Voice practice sends your voice to Deepgram (or AssemblyAI) to turn it into text; neither keeps the audio or trains on it. You can switch to your browser's own speech recognition before a session.`,
     ],
   },
   {

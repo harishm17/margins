@@ -400,29 +400,19 @@ const SHOTS: Shot[] = [
     crop: (page) => rowsCrop(page, 'the topic list', 'main li:not(li li)'),
     padTo: FRAME,
   },
-  // The part of the notes with code, the outline and the sources: from "How it works" to the end of the
-  // breadth-first search section, so no heading is cut in half.
+  // The Read step of a topic: the try-first note, the study path, and the student's own pages with their links to
+  // the original. (The generated notes this shot used to show became the Explainer, opened after recall.)
   {
     name: 'notes-detail',
-    viewport: { width: 1440, height: 1000 },
-    url: (ids) => `${topic(ids)}?view=notes`,
+    viewport: { width: 1180, height: 1000 },
+    url: (ids) => `${topic(ids)}?view=read`,
     prepare: async (page) => {
-      // Just under the outline, which sticks 120px from the top: the outline marks "How it works" as the
-      // section being read, and the crop fits between the sticky topic tabs and the next heading.
-      await scrollTo(page.getByRole('heading', { name: 'How it works', level: 2 }).first(), 130)
+      await scrollTo(page.getByText('Margins asks you to try before it helps.').first(), 72)
     },
     crop: async (page) => {
-      const heading = page.getByRole('heading', { name: 'How it works', level: 2 }).first()
-      const section = await box(page, heading, '"How it works"')
-      const next = await box(page, page.getByRole('heading', { name: 'Depth-first search', level: 3 }).first(), '"Depth-first search"')
-      const outline = await box(page, page.getByText('On this page', { exact: true }), 'the outline')
-      const tabs = await box(page, page.getByLabel('Study path').first(), 'the topic tabs')
-      // From above both "How it works" and the outline beside it, to just above the next heading.
-      const top = Math.round(Math.min(section.y, outline.y) - 12)
-      return fitRatio(page, [300, top, 1000, next.y - 8 - top], FRAME, {
-        top: Math.max(tabs.y + tabs.height, await previousBottom(heading)) + 4,
-        bottom: next.y - 4,
-      })
+      const note = await box(page, page.getByText('Margins asks you to try before it helps.').first(), 'the try-first note')
+      const top = Math.round(note.y - 20)
+      return fitRatio(page, [MAIN.left, top, MAIN.width, Math.round((MAIN.width * 3) / 4)], FRAME, { left: MAIN.left, top })
     },
   },
   {
@@ -473,7 +463,7 @@ const SHOTS: Shot[] = [
       await page.getByLabel('Your answer').fill('a queue')
       await page.getByRole('button', { name: 'Check' }).click()
       await page.getByRole('button', { name: 'Next step' }).click()
-      await page.getByRole('button', { name: 'Hint' }).click()
+      // The hint stays locked until the step has a first try (attempt first), which is what the shot shows.
       await page.getByLabel('Your answer').fill('2')
     },
     crop: [MAIN.left, 0, MAIN.width, 760],
@@ -532,9 +522,9 @@ const SHOTS: Shot[] = [
   {
     name: 'notes-detail-mobile',
     viewport: PHONE,
-    url: (ids) => `${topic(ids)}?view=notes`,
+    url: (ids) => `${topic(ids)}?view=read`,
     prepare: async (page) => {
-      await scrollTo(page.getByRole('heading', { name: 'How it works', level: 2 }).first(), 140)
+      await scrollTo(page.getByRole('link', { name: /Open the original/ }).first(), 100)
     },
   },
   {

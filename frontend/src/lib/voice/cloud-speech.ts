@@ -89,6 +89,9 @@ export function deepgramUrl(input: { language: string; terms: string[]; model?: 
     interim_results: 'true',
     smart_format: 'true',
     endpointing: String(DEEPGRAM_ENDPOINTING_MS),
+    // Out of Deepgram's Model Improvement Program: the audio is kept only while the request runs and never used for
+    // training (the privacy page promises a student's material is not used to train models). No price change.
+    mip_opt_out: 'true',
   })
   const language = input.language.toLowerCase()
   params.set('language', VOICE_LANGUAGES.has(language) ? language : 'en')
