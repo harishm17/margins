@@ -1,6 +1,19 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { joinAnswers, splitAnswers, submitSummary } from './exam-answers'
+import { joinAnswers, splitAnswers, submitDialogCopy, submitSummary } from './exam-answers'
+
+test('the submit dialog says "all blank" once, and names the empty submit', () => {
+  const blank = submitDialogCopy({ total: 10, unanswered: 10, flagged: 2 })
+  assert.equal(blank.blank, true)
+  assert.equal(blank.title, 'All 10 questions are blank')
+  assert.equal(blank.confirmLabel, 'Submit empty exam')
+  assert.doesNotMatch(blank.description, /unanswered/)
+  const mixed = submitDialogCopy({ total: 10, unanswered: 4, flagged: 0 })
+  assert.equal(mixed.blank, false)
+  assert.equal(mixed.title, 'Submit your exam?')
+  assert.equal(mixed.confirmLabel, 'Submit exam')
+  assert.equal(submitDialogCopy({ total: 1, unanswered: 1, flagged: 0 }).title, 'The question is blank')
+})
 
 test('answers split into text and confidence, and join back the same', () => {
   const stored = { '0': { answer: 'B', confidence: 0.75 }, '1': 'true', '2': 4 }

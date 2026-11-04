@@ -21,7 +21,7 @@ import { formatClock } from '@/lib/format'
 import type { PublicQuizQuestion } from '@/lib/learning/quiz-questions'
 import { useQuestionMotion } from '@/lib/question-motion'
 import { cn } from '@/lib/utils'
-import { joinAnswers, splitAnswers, submitSummary } from './exam-answers'
+import { joinAnswers, splitAnswers, submitDialogCopy } from './exam-answers'
 import { parseFlagState, timeNotice, timerTone, type FlagState } from './exam-timer'
 import { useExamAutosave, type SaveStatus } from './use-exam-autosave'
 import { useSessionValue } from './use-session-value'
@@ -44,6 +44,8 @@ const subscribeToClock = (callback: () => void) => {
 
 const SAVE_TEXT: Record<SaveStatus, string> = {
   idle: '',
+  // A change the server has not confirmed yet: "Saved" is only said for what is saved.
+  dirty: 'Not saved yet',
   saving: 'Saving...',
   saved: 'Saved',
   error: 'Not saved',
@@ -56,16 +58,28 @@ const SAVE_TEXT: Record<SaveStatus, string> = {
 function SaveState({ status, text, onRetry }: { status: SaveStatus; text: string; onRetry: () => void }) {
   if (status === 'error') {
     return (
-      <span role="alert" className="flex shrink-0 items-center gap-1.5 text-caption text-warning-soft-fg sm:text-small" data-testid="exam-save-status">
+      <span
+        role="alert"
+        className="flex shrink-0 items-center gap-1.5 text-caption text-warning-soft-fg sm:text-small"
+        data-testid="exam-save-status"
+      >
         {text}
-        <button type="button" onClick={onRetry} className="rounded-chip px-1.5 font-medium underline underline-offset-2 max-sm:min-h-11 max-sm:px-2">
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-chip px-1.5 font-medium underline underline-offset-2 max-sm:min-h-11 max-sm:px-2"
+        >
           Retry
         </button>
       </span>
     )
   }
   return (
-    <span aria-live="polite" className="shrink-0 text-right text-caption text-fg-3 sm:min-w-[6.5rem] sm:text-small" data-testid="exam-save-status">
+    <span
+      aria-live="polite"
+      className="shrink-0 text-right text-caption text-fg-3 sm:min-w-[6.5rem] sm:text-small"
+      data-testid="exam-save-status"
+    >
       {text}
     </span>
   )
@@ -173,9 +187,10 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
 
   const resync = React.useCallback(async () => {
     try {
-      const data = await apiFetch<{ attempt: AttemptView | null; submitted?: { submissionId: string } }>(
-        `/api/exams/${examId}/attempt`
-      )
+      const data = await apiFetch<{
+        attempt: AttemptView | null
+        submitted?: { submissionId: string }
+      }>(`/api/exams/${examId}/attempt`)
       if (data.attempt) setEndsAt(clientNow() + data.attempt.remainingSeconds * 1000)
       else if (data.submitted) leaveTo(`${base}/results/${data.submitted.submissionId}`)
       else if (!submittingRef.current) leaveTo(base)
@@ -201,14 +216,30 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
 
   const autosave = useExamAutosave({
     examId,
+    attemptId: attempt.id,
     answers: stored,
     savedAnswers,
     enabled: !submitting,
+    // The page was reloaded before the last change reached the server: the copy kept in this browser is newer, so start from it.
+    onRestore: (restored) => {
+      const next = splitAnswers(restored as AttemptView['answers'])
+      setAnswers(next.answers)
+      setConfidence(next.confidence)
+      setLevels(next.levels)
+    },
     onEnded: (submissionId) => {
       toast(submissionId ? 'Time is up. Your saved answers were submitted.' : 'This exam is no longer in progress.')
       leaveTo(submissionId ? `${base}/results/${submissionId}` : base)
     },
   })
+
+  // Moving to another question sends what has been answered so far, so the window for losing an answer is never longer than one question.
+  const { saveNow, clearLocal } = autosave
+  React.useEffect(() => {
+    void saveNow()
+    // Only when the question changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current])
 
   const submit = React.useCallback(async () => {
     if (submittingRef.current) return
@@ -220,6 +251,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         method: 'POST',
         json: { answers: storedRef.current },
       })
+      clearLocal()
       leaveTo(`${base}/results/${result.submissionId}`)
       return
     } catch (error) {
@@ -228,11 +260,13 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         if (error.status === 502 && typeof submissionId === 'string') {
           // Submitted, but grading did not start: the results page offers "Grade again".
           toast(error.message)
+          clearLocal()
           leaveTo(`${base}/results/${submissionId}`)
           return
         }
         if (error.status === 409) {
           toast('This exam was already submitted.')
+          clearLocal()
           leaveTo(base)
           return
         }
@@ -243,7 +277,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
     }
     submittingRef.current = false
     setSubmitting(false)
-  }, [examId, base, leaveTo])
+  }, [examId, base, leaveTo, clearLocal])
 
   // At zero the exam submits itself, once.
   const autoSubmitted = React.useRef(false)
@@ -296,6 +330,11 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
   const notice = timeNotice(secondsLeft)
   const isLast = current === total - 1
   const saveText = SAVE_TEXT[autosave.status]
+  const dialogCopy = submitDialogCopy({
+    total,
+    unanswered,
+    flagged: flagged.size,
+  })
 
   return (
     <>
@@ -310,7 +349,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         actions={
           // Secondary: submitting is final, and the one filled button of the page is the way on (Next, or Submit exam on the last question).
           <Button variant="secondary" size="sm" loading={submitting} onClick={requestSubmit}>
-            Submit
+            Submit exam
           </Button>
         }
       />
@@ -341,7 +380,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
               Question {current + 1} of {total}
             </h1>
             <Button variant="secondary" size="sm" icon={<SquaresFour />} className="lg:hidden" onClick={() => setNavOpen(true)}>
-              Questions
+              Questions · {answeredSet.size}/{total} answered
             </Button>
           </div>
           <Progress aria-label="Questions answered" className="mt-3" value={total ? (answeredSet.size / total) * 100 : 0} />
@@ -359,19 +398,30 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
               level={levels[String(current)]}
               optionCount={optionCountOf(question)}
               onChange={(level, value) => {
-                setConfidence((prev) => ({ ...prev, [String(current)]: value }))
+                setConfidence((prev) => ({
+                  ...prev,
+                  [String(current)]: value,
+                }))
                 setLevels((prev) => ({ ...prev, [String(current)]: level }))
               }}
             />
           </div>
 
           <div className="mt-10 flex items-center gap-2">
-            <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} disabledReason="This is the first question." onClick={() => goTo(current - 1)}>
+            <Button
+              variant="secondary"
+              icon={<ArrowLeft />}
+              disabled={current === 0}
+              disabledReason="This is the first question."
+              onClick={() => goTo(current - 1)}
+            >
               Previous
             </Button>
             <Button
               variant="ghost"
-              icon={<Flag weight={flagged.has(current) ? 'fill' : 'regular'} className={flagged.has(current) ? 'text-warning' : undefined} />}
+              icon={
+                <Flag weight={flagged.has(current) ? 'fill' : 'regular'} className={flagged.has(current) ? 'text-warning' : undefined} />
+              }
               aria-pressed={flagged.has(current)}
               onClick={toggleFlag}
             >
@@ -425,27 +475,32 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
       <ConfirmDialog
         open={confirmSubmit}
         onOpenChange={setConfirmSubmit}
-        title="Submit your exam?"
-        description={submitSummary({ total, unanswered, flagged: flagged.size })}
-        confirmLabel="Submit exam"
+        title={dialogCopy.title}
+        description={dialogCopy.description}
+        confirmLabel={dialogCopy.confirmLabel}
         cancelLabel="Keep working"
         onConfirm={() => submit()}
       >
-        {/* The counts first, so the dialog can be taken in at a glance; the sentence above says what submitting does. */}
-        <dl className="grid grid-cols-3 gap-3 rounded-control border border-border bg-surface-2 px-3 py-2.5 text-center" data-testid="submit-counts">
-          <div>
-            <dt className="text-caption text-fg-3">Answered</dt>
-            <dd className="tabular text-body-strong text-fg">{total - unanswered}</dd>
-          </div>
-          <div>
-            <dt className="text-caption text-fg-3">Unanswered</dt>
-            <dd className={cn('tabular text-body-strong', unanswered > 0 ? 'text-warning-soft-fg' : 'text-fg')}>{unanswered}</dd>
-          </div>
-          <div>
-            <dt className="text-caption text-fg-3">Flagged</dt>
-            <dd className="tabular text-body-strong text-fg">{flagged.size}</dd>
-          </div>
-        </dl>
+        {/* The counts first, so the dialog can be taken in at a glance; the sentence above says what submitting does. A blank exam says so in the title instead. */}
+        {dialogCopy.blank ? null : (
+          <dl
+            className="grid grid-cols-3 gap-3 rounded-control border border-border bg-surface-2 px-3 py-2.5 text-center"
+            data-testid="submit-counts"
+          >
+            <div>
+              <dt className="text-caption text-fg-3">Answered</dt>
+              <dd className="tabular text-body-strong text-fg">{total - unanswered}</dd>
+            </div>
+            <div>
+              <dt className="text-caption text-fg-3">Unanswered</dt>
+              <dd className={cn('tabular text-body-strong', unanswered > 0 ? 'text-warning-soft-fg' : 'text-fg')}>{unanswered}</dd>
+            </div>
+            <div>
+              <dt className="text-caption text-fg-3">Flagged</dt>
+              <dd className="tabular text-body-strong text-fg">{flagged.size}</dd>
+            </div>
+          </dl>
+        )}
       </ConfirmDialog>
       <ConfirmDialog
         open={confirmExit}
