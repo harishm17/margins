@@ -134,10 +134,19 @@ export function Composer({
   // A send that failed in front of the student: its text stays as an ordinary draft, so a reload gives it back at once.
   React.useEffect(() => {
     if (!subscribeRejected) return
-    return subscribeRejected(() => {
-      const held = draftRef.current.value
-      if (held?.sending) draftRef.current.set({ text: held.text })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const stop = subscribeRejected(() => {
+      // A page that is being reloaded fails its open request too, and that is not a refusal: the timer dies with the page, so only a
+      // failure the student is still looking at changes the draft.
+      timer = setTimeout(() => {
+        const held = draftRef.current.value
+        if (held?.sending) draftRef.current.set({ text: held.text })
+      }, 400)
     })
+    return () => {
+      stop()
+      if (timer) clearTimeout(timer)
+    }
   }, [subscribeRejected])
 
   const recoveredRef = React.useRef(onRecovered)
