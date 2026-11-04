@@ -8,5 +8,5 @@ export async function openKeepStudying(page: Page) {
   const box = page.getByTestId('keep-studying')
   if ((await box.count()) === 0) return
   if (await box.evaluate((element) => (element as HTMLDetailsElement).open)) return
-  await box.locator('summary').click()
+  await box.locator('summary').first().click()
 }

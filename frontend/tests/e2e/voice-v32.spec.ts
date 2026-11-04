@@ -211,3 +211,20 @@ test('silence: ten seconds after a question there is one gentle line, once, and 
   expect(turns.length).toBe(base)
   await page.getByRole('button', { name: 'End', exact: true }).click()
 })
+
+test('the lobby has one Start button, and a choice of speaking or typing before it', async ({ page }) => {
+  await installVoiceStubs(page)
+  await page.goto(voiceUrl())
+  await waitForLobby(page)
+  await expect(page.getByRole('button', { name: /Start/ })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Start by typing' })).toHaveCount(0)
+  const choice = page.getByRole('radiogroup', { name: 'How you answer' })
+  await expect(choice.getByRole('radio', { name: 'Speak your answers' })).toBeChecked()
+  await expect(page.getByText(/sprint/i)).toHaveCount(0)
+  await choice.getByRole('radio', { name: 'Type answers instead' }).click()
+  await startButton(page).click()
+  // Typing: the field comes with a heading and, when replies are not spoken, no orb is drawn.
+  await expect(page.getByLabel('Your answer')).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('Type your answer', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'End', exact: true }).click()
+})

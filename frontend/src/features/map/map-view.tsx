@@ -163,7 +163,7 @@ export function MapView({
                 href={hrefFor(node.id)}
                 scroll={false}
                 aria-current={selected ? 'true' : undefined}
-                aria-label={`${node.name}. ${LABEL_TEXT[node.label]}${frontier[node.id] ? `. ${frontier[node.id]}` : ''}`}
+                aria-label={`${node.name} ${LABEL_TEXT[node.label]}${frontier[node.id] ? ` ${frontier[node.id]}` : ''}`}
                 aria-describedby={`${relationsOf(node.id, nodes, edges).length > 0 ? `map-relations-${node.id} ` : ''}map-topic-${node.id}`}
                 data-node-link=""
                 className="group outline-none"

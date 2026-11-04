@@ -303,7 +303,7 @@ export function SidebarContent({ allowRail = false, phone = false }: { allowRail
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-14 shrink-0 items-center px-4 rail:justify-center rail:px-0">
-        <Link href="/home" aria-label="Margins home" className="rounded-chip">
+        <Link href="/home" aria-label="Margins home" className="rounded-chip max-lg:inline-flex max-lg:min-h-11 max-lg:items-center">
           <Brand wordmarkClassName="rail:hidden" />
         </Link>
       </div>
