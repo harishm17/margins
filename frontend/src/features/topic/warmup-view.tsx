@@ -3,7 +3,8 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, CheckCircle, Lightning, MinusCircle } from '@phosphor-icons/react/dist/ssr'
+import { ArrowRight, CaretDown, CheckCircle, Lightning, MinusCircle } from '@phosphor-icons/react/dist/ssr'
+import { outcomeLabel } from '@/lib/learning/outcome-words'
 import { SourceLink } from '@/components/learning/source-link'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
@@ -42,8 +43,8 @@ type Props = {
 const LEVEL_WORDS = CONFIDENCE_WORDS
 
 /**
- * The warm-up before reading (spec §5.1): a few questions, one at a time, each with a one-tap confidence and no
- * hints. Nothing is marked while the student is answering; the answers, and where in their files to find each,
+ * The warm-up before reading (spec §5.1): a few questions, one at a time, each with an optional one-tap confidence and
+ * nothing to look up. Nothing is marked while the student is answering; the answers, and where in their files to find each,
  * come at the end. Skipping ("Start reading") sets nothing.
  */
 export function WarmupView({ topicId, courseId, readHref, quizHref, initial }: Props) {
@@ -92,9 +93,9 @@ export function WarmupView({ topicId, courseId, readHref, quizHref, initial }: P
       </h2>
       <p className="mt-3 text-body text-fg-2">
         {state.status === 'ready' ? `${state.total} questions, one at a time. ` : ''}
-        It is fine to miss these: they show you where to focus your reading, and what you read afterwards sticks better.
+        Try what you know; answers and page pointers come at the end. This won&apos;t affect your quiz score.
       </p>
-      <p className="mt-2 text-body text-fg-2">There are no hints, and none of this counts toward your quiz scores.</p>
+      <p className="mt-2 text-body text-fg-2">Missing some is fine: it shows what to focus on when you read, and what you read afterwards sticks better.</p>
       {error ? (
         <InlineAlert className="mt-5" tone="danger">
           {error}
@@ -156,7 +157,7 @@ function Question({
   /** The answer, or "I don't know" (spec 18.3): a miss with no confidence, which the bracket answers by going easier. */
   async function submit(dontKnow = false) {
     if (submitting) return
-    if (!dontKnow && (!draft.answer.trim() || draft.confidence === undefined)) return
+    if (!dontKnow && !draft.answer.trim()) return
     setSubmitting(true)
     setError(null)
     try {
@@ -191,7 +192,7 @@ function Question({
         <h2 ref={headingRef} tabIndex={-1} className="tabular text-body-strong text-fg outline-none">
           Warm-up question {state.position} of {state.total}
         </h2>
-        <p className="text-small text-fg-2">No hints</p>
+        <p className="text-small text-fg-2">Answers come at the end</p>
       </div>
       <Progress aria-label="Warm-up questions answered" className="mt-3 sm:mt-4" value={((state.position - 1) / state.total) * 100} />
       <div className={cn('mt-5 sm:mt-8', motion)} data-question="">
@@ -200,7 +201,6 @@ function Question({
           value={draft.confidence}
           level={draft.confidenceLevel}
           optionCount={optionCountOf(state.question)}
-          required
           onChange={(confidenceLevel, confidence) => setDraft((d) => ({ ...d, confidence, confidenceLevel }))}
         />
         {error ? (
@@ -217,7 +217,7 @@ function Question({
           <Button variant="ghost" onClick={() => void submit(true)} disabled={submitting} data-testid="warmup-idk">
             I don&apos;t know
           </Button>
-          <Button variant="primary" onClick={() => void submit()} loading={submitting} disabled={!draft.answer.trim() || draft.confidence === undefined} disabledReason={!draft.answer.trim() ? 'Pick an answer first.' : 'Tap how sure you are first.'}>
+          <Button variant="primary" onClick={() => void submit()} loading={submitting} disabled={!draft.answer.trim()} disabledReason="Pick an answer first.">
             <span className="inline-flex items-center gap-1.5">
               {last ? 'See answers' : 'Next question'}
               <ArrowRight className="size-4" />
@@ -236,23 +236,30 @@ function ResultRow({ item }: { item: WarmupDoneItem }) {
   const key = formatKey(item.question, item.correctAnswer)
   const source = item.sources[0]
   const level = CONFIDENCE_LEVELS.find((l) => l.id === item.confidenceLevel)?.id
+  const outcome = { correct: item.correct, idk: item.idk }
   return (
-    <li className="py-5 first:pt-0">
-      <div className="flex items-start gap-2.5">
-        {item.correct ? (
-          <CheckCircle aria-hidden="true" weight="fill" className="mt-0.5 size-5 shrink-0 text-accent" />
-        ) : (
-          // A pretest miss is expected, and is what the reading is for: a quiet mark, not the red of a failed test.
-          <MinusCircle aria-hidden="true" weight="fill" className="mt-0.5 size-5 shrink-0 text-fg-3" />
-        )}
-        <div className="min-w-0 flex-1">
-          <p className={cn('text-small font-medium', item.correct ? 'text-accent' : 'text-fg-2')}>
-            {item.position}. {item.correct ? 'Right' : 'Not quite'}
-          </p>
-          <h3 className="mt-0.5 text-body-strong text-fg">
-            <QuestionText compact>{item.question.question_text}</QuestionText>
-          </h3>
-          <dl className="mt-3 flex flex-col gap-2">
+    <li className="py-1 first:pt-0">
+      {/* One line per question (its number, how it went, the question), the detail opens from it: the answers are for looking things up. */}
+      <details className="group">
+        <summary className="flex min-h-11 cursor-pointer list-none items-start gap-2.5 py-2.5 [&::-webkit-details-marker]:hidden">
+          {item.correct ? (
+            <CheckCircle aria-hidden="true" weight="fill" className="mt-0.5 size-5 shrink-0 text-accent" />
+          ) : (
+            // A pretest miss is expected, and is what the reading is for: a quiet mark, not the red of a failed test.
+            <MinusCircle aria-hidden="true" weight="fill" className="mt-0.5 size-5 shrink-0 text-fg-3" />
+          )}
+          <span className="min-w-0 flex-1">
+            <span className={cn('block text-small font-medium', item.correct ? 'text-accent' : 'text-fg-2')}>
+              {item.position}. {outcomeLabel(outcome, 'short')}
+            </span>
+            <span className="mt-0.5 block text-body-strong text-fg">
+              <QuestionText compact>{item.question.question_text}</QuestionText>
+            </span>
+          </span>
+          <CaretDown aria-hidden="true" className="mt-1.5 size-4 shrink-0 text-fg-3 transition-transform duration-180 group-open:rotate-180" />
+        </summary>
+        <div className="pb-4 pl-[30px]">
+          <dl className="flex flex-col gap-2">
             <div>
               <dt className="text-caption text-fg-3">Your answer</dt>
               <dd className="mt-0.5 text-small text-fg">
@@ -274,7 +281,7 @@ function ResultRow({ item }: { item: WarmupDoneItem }) {
             </p>
           ) : null}
         </div>
-      </div>
+      </details>
     </li>
   )
 }
@@ -284,14 +291,18 @@ function Results({ state, readHref, quizHref, focusHeading }: { state: Extract<W
   const headingRef = React.useRef<HTMLHeadingElement>(null)
   useFocusWhen(focusHeading, headingRef)
   const right = state.items.filter((item) => item.correct).length
+  const toFocus = state.items.length - right
   const focus = state.focusCount ?? 0
+  // The questions to focus on come first: they are why the reading marks passages Focus. The ones answered right follow.
+  const ordered = [...state.items].sort((a, b) => Number(a.correct) - Number(b.correct) || a.position - b.position)
   return (
     <section aria-labelledby="warmup-done-heading" className="max-w-[640px]">
       <h2 ref={headingRef} id="warmup-done-heading" className="text-title text-fg outline-none">
-        Warm-up done: here&apos;s what to focus on
+        Ready to read
       </h2>
       <p className="mt-2 text-body text-fg-2">
-        Each answer below says where to find it, and the reading explains the rest. You got {right} of {plural(state.items.length, 'question')} right.
+        {toFocus > 0 ? `${plural(toFocus, 'idea')} to focus on. ` : 'You answered every question right. '}
+        You got {right} of {plural(state.items.length, 'question')} right. Open a question below to see its answer and where to find it.
       </p>
       {right < state.items.length ? (
         <div aria-live="polite" className="mt-2">
@@ -314,8 +325,8 @@ function Results({ state, readHref, quizHref, focusHeading }: { state: Extract<W
           </p>
         ) : null}
       </div>
-      <ol className="mt-6 divide-y divide-border border-t border-border pt-5">
-        {state.items.map((item) => (
+      <ol className="mt-6 divide-y divide-border border-t border-border pt-3">
+        {ordered.map((item) => (
           <ResultRow key={item.position} item={item} />
         ))}
       </ol>

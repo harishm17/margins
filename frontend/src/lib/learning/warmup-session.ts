@@ -234,9 +234,9 @@ export async function answerWarmup(input: { userId: string; topicId: string; ses
   const given = normalizeAnswers({ '0': input.answer })['0']
   if (!given || !given.answer.trim()) return { status: 'invalid', message: 'Give an answer first.' }
   const idk = given.answer === WARMUP_IDK_ANSWER
-  // One tap of confidence goes with every warm-up answer (spec §5.1); it is what the bracket and the test-out offer read.
+  // Confidence is optional here as it is everywhere (a one-tap rating when the student gives one). It is what the bracket and the
+  // test-out offer read, so an answer without it keeps the level and never offers the test-out: only rated answers count as sure.
   // "I don't know" has none: nothing was chosen to be sure of.
-  if (!idk && given.confidence === undefined) return { status: 'invalid', message: 'Say how sure you are first.' }
 
   // An "I don't know" is wrong by rule: no grader, so it works with the AI down.
   const result = idk
