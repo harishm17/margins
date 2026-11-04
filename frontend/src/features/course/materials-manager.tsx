@@ -2,6 +2,7 @@
 
 import { materialsSummary, type MaterialsCounts } from './materials-summary'
 import * as React from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   ArrowSquareOut,
@@ -49,7 +50,7 @@ import { useJob } from '@/features/jobs/use-job'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { track as trackEvent } from '@/lib/analytics/track'
 import { estimateWords } from '@/lib/jobs/estimate'
-import { formatBytes, formatElapsed } from '@/lib/format'
+import { formatBytes, formatElapsed, pluralize } from '@/lib/format'
 import { isMaterialRole, MATERIAL_ROLES, ROLE_LABELS, roleBadgeLabel, roleForCategory, type MaterialRole } from '@/lib/materials/role'
 import { UploadAbortedError, uploadMaterial } from '@/lib/uploads/upload-file'
 import { cn } from '@/lib/utils'
@@ -73,7 +74,17 @@ const LOCAL_PREFIX = 'local:'
 
 const newUploadKey = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
-const CATEGORY_OPTIONS = (Object.keys(CATEGORY_LABELS) as Category[]).map((value) => ({
+const isCategory = (value: string): value is Category => value in CATEGORY_LABELS
+
+/** One short line under the choice that says what the chosen kind of file is, so "Past exams" is not left to guess. */
+const CATEGORY_EXAMPLES: Record<Category, string> = {
+  lecture_notes: 'Slides or notes from class.',
+  sample_exams: 'Exam papers or practice tests. Margins matches their style.',
+  book_chapters: 'Textbook or reading chapters.',
+  syllabus: 'Your syllabus or schedule. It is not used to find topics.',
+}
+
+const CATEGORY_OPTIONS =(Object.keys(CATEGORY_LABELS) as Category[]).map((value) => ({
   value,
   label: CATEGORY_LABELS[value],
 }))
@@ -92,6 +103,12 @@ type LocalUpload = {
   materialId?: string
   abort?: AbortController
 }
+
+/**
+ * A change to the files that the student should still be able to read after the toast is gone: what happened and what it did to
+ * the topics. It stays under the upload area until the next material action (an upload, a delete, a role change) replaces it.
+ */
+type Notice = { text: string; /** Offer the way to the topics that were built from the file. */ reviewTopics?: boolean }
 
 function FileIcon({ filename }: { filename: string }) {
   const lower = filename.toLowerCase()
@@ -330,11 +347,18 @@ function ServerRow({
   courseId,
   row,
   onDeleted,
+  onNotice,
+  onReplace,
   typicalSeconds,
 }: {
   courseId: string
   row: MaterialRow
-  onDeleted: () => void
+  /** Called once the file is gone, with how many topics were built from it (for the status that stays after the toast). */
+  onDeleted: (topicCount: number) => void
+  /** A status line that stays under the upload area after a change made from this row's menu. */
+  onNotice: (notice: Notice | null) => void
+  /** Opens the file picker to swap this file for a new one instead of deleting it. */
+  onReplace: () => void
   typicalSeconds: number | null
 }) {
   const router = useRouter()
@@ -394,25 +418,27 @@ function ServerRow({
       throw new Error('delete failed')
     }
     toast.success('File deleted')
-    onDeleted()
+    onDeleted(row.topics.length)
   }
 
   async function onRole(next: string) {
     if (!isMaterialRole(next) || next === role) return
     setPicked({ value: next, base: row.role })
+    onNotice(null)
     try {
       const result = await apiFetch<{ material: { removedSources: number } }>(`/api/materials/${row.id}`, {
         method: 'PATCH',
         json: { role: next },
       })
       const dropped = next === 'syllabus' || next === 'exam'
-      toast.success(
-        dropped
-          ? result.material.removedSources > 0
-            ? `Marked as ${ROLE_LABELS[next].toLowerCase()}. Topics no longer use it. Find topics again to update them.`
-            : `Marked as ${ROLE_LABELS[next].toLowerCase()}`
-          : `Marked as ${ROLE_LABELS[next].toLowerCase()}. Find topics again to use it.`
-      )
+      const message = dropped
+        ? result.material.removedSources > 0
+          ? `Marked as ${ROLE_LABELS[next].toLowerCase()}. Topics no longer use it. Find topics again to update them.`
+          : `Marked as ${ROLE_LABELS[next].toLowerCase()}`
+        : `Marked as ${ROLE_LABELS[next].toLowerCase()}. Find topics again to use it.`
+      toast.success(message)
+      // The toast goes in a few seconds; what changed for the topics stays under the upload area.
+      onNotice({ text: `${row.filename}: ${message}` })
       router.refresh()
     } catch {
       setPicked(null)
@@ -460,7 +486,7 @@ function ServerRow({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete ${row.filename}?`}
-        description="Topics built from it keep their content. Links to this file from Ask answers and notes stop opening."
+        description="Existing topic content stays. Links to this file from Ask answers and notes will stop opening."
         confirmLabel="Delete file"
         destructive
         onConfirm={onDelete}
@@ -487,6 +513,19 @@ function ServerRow({
             </ul>
           </details>
         ) : null}
+        {/* Deleting is not the only way to change a source: a new copy can take this file's place. */}
+        <div className={cn(row.topics.length > 0 && 'mt-3')}>
+          <Button
+            variant="link"
+            className="h-auto px-0 text-small max-sm:min-h-11"
+            onClick={() => {
+              setConfirmOpen(false)
+              onReplace()
+            }}
+          >
+            Replace this file instead
+          </Button>
+        </div>
       </ConfirmDialog>
     </>
   )
@@ -574,11 +613,24 @@ export function MaterialsManager({
   // then 40, then 30). A reload starts again from the server's figure.
   const [typicalSeconds, setTypicalSeconds] = React.useState(typicalReadSeconds)
   if (typicalSeconds === null && typicalReadSeconds !== null) setTypicalSeconds(typicalReadSeconds)
-  const [category, setCategory] = React.useState<Category>('lecture_notes')
+  const [chosenCategory, setCategory] = React.useState<Category>('lecture_notes')
   const [dragging, setDragging] = React.useState(false)
   const [uploads, setUploads] = React.useState<LocalUpload[]>([])
+  const [notice, setNotice] = React.useState<Notice | null>(null)
+  // The file the picker is open for when the student chose "Replace this file instead"; null for a plain upload.
+  const replacing = React.useRef<MaterialRow | null>(null)
 
-  const patchUpload = React.useCallback((key: string, patch: Partial<LocalUpload>) => {
+  // A picker closed without a choice must not leave the next, ordinary pick to be read as a replacement.
+  React.useEffect(() => {
+    const input = inputRef.current
+    const forget = () => {
+      replacing.current = null
+    }
+    input?.addEventListener('cancel', forget)
+    return () => input?.removeEventListener('cancel', forget)
+  }, [])
+
+  const patchUpload =React.useCallback((key: string, patch: Partial<LocalUpload>) => {
     setUploads((current) => current.map((item) => (item.key === key ? { ...item, ...patch } : item)))
   }, [])
   const removeUpload = React.useCallback((key: string) => {
@@ -595,7 +647,7 @@ export function MaterialsManager({
   const [removeFailedOpen, setRemoveFailedOpen] = React.useState(false)
 
   /** Starts one file; the promise says whether it reached the server (for the count of files uploaded). */
-  function startUpload(file: File): Promise<boolean> {
+  function startUpload(file: File, category: Category = chosenCategory): Promise<boolean> {
     const key = newUploadKey()
     const problem = fileProblem(file, maxUploadMb)
     if (problem) {
@@ -631,10 +683,11 @@ export function MaterialsManager({
   }
 
   /** Uploads the files and reports how many arrived (a number only, never a name). */
-  function uploadAll(files: File[], afterEach?: (file: File, arrived: boolean) => void) {
+  function uploadAll(files: File[], afterEach?: (file: File, arrived: boolean) => void, category?: Category) {
+    setNotice(null)
     void Promise.all(
       files.map((file) =>
-        startUpload(file).then((arrived) => {
+        startUpload(file, category).then((arrived) => {
           afterEach?.(file, arrived)
           return arrived
         })
@@ -651,6 +704,28 @@ export function MaterialsManager({
       .filter((item) => item.phase !== 'error' && !(item.materialId && serverIds.has(item.materialId)))
       .map((item) => ({ id: `${LOCAL_PREFIX}${item.key}`, filename: item.filename, sizeBytes: item.size }))
     return [...materials.map((row) => ({ id: row.id, filename: row.filename, sizeBytes: row.sizeBytes })), ...local]
+  }
+
+  /** Opens the file picker; with a file given, what is chosen takes that file's place instead of being added. */
+  function pickFiles(target: MaterialRow | null = null) {
+    replacing.current = target
+    inputRef.current?.click()
+  }
+
+  /** "Replace this file instead": the new copy is uploaded in the old one's role, and the old one goes once the new one has arrived. */
+  function replaceFile(target: MaterialRow, file: File) {
+    uploadAll(
+      [file],
+      (_, arrived) => {
+        if (!arrived) return
+        void removeKnown(target.id)
+        setNotice({
+          text: `Replaced ${target.filename} with ${file.name}. Topics built from the old file keep their content, but their links to it no longer open.`,
+          reviewTopics: target.topics.length > 0,
+        })
+      },
+      isCategory(target.category) ? target.category : undefined
+    )
   }
 
   function addFiles(list: FileList | File[] | null) {
@@ -727,6 +802,16 @@ export function MaterialsManager({
   const failedRows = materials.filter((row) => row.status !== 'ready' && row.status !== 'processing')
   const failedUploads = visibleUploads.filter((item) => item.phase === 'error')
 
+  // A refused or broken upload in this browser was never stored, so clearing it only dismisses it; "Remove" is for files that are on
+  // the server. A mix says "Dismiss", the milder word, and the dialog says which of the two happens to which.
+  const problemCount = failedUploads.length + failedRows.length
+  const dismissOnly = failedRows.length === 0
+  const problemAction = dismissOnly
+    ? `Dismiss ${failedUploads.length === 1 ? 'failed upload' : 'failed uploads'}`
+    : failedUploads.length === 0
+      ? `Remove ${pluralize(failedRows.length, 'failed file')}`
+      : `Dismiss ${pluralize(problemCount, 'failed upload')}`
+
   async function removeFailed() {
     for (const item of failedUploads) removeUpload(item.key)
     const results = await Promise.allSettled(failedRows.map((row) => apiFetch(`/api/materials/${row.id}`, { method: 'DELETE' })))
@@ -735,7 +820,7 @@ export function MaterialsManager({
       toast.error("Couldn't remove every file. Try again, or delete them from their menus.")
       throw new Error('remove failed')
     }
-    toast.success('Files with problems removed')
+    toast.success(dismissOnly ? 'Failed uploads dismissed' : 'Files with problems removed')
   }
 
   return (
@@ -749,8 +834,6 @@ export function MaterialsManager({
           description="Lecture notes, a syllabus, past exams and book chapters for this course."
         />
       )}
-      {banner}
-
       <div
         onDragEnter={(event) => {
           event.preventDefault()
@@ -776,32 +859,39 @@ export function MaterialsManager({
           inline && 'mt-4'
         )}
       >
+        {/* What the files are comes first: it is the answer the upload needs, and a student who has already picked files
+            would otherwise find it after the button they just used. A default is selected, so nothing has to be chosen. */}
+        <div className="flex max-w-full flex-col items-center gap-1.5">
+          <div className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-2">
+            <span id={`category-label-${variant}`} className="text-small font-medium text-fg">
+              These files are:
+            </span>
+            <SegmentedControl
+              aria-labelledby={`category-label-${variant}`}
+              options={CATEGORY_OPTIONS}
+              value={chosenCategory}
+              onValueChange={setCategory}
+              className="min-w-0 flex-wrap justify-center overflow-visible"
+            />
+          </div>
+          <p className="text-caption font-normal text-fg-3" aria-live="polite">
+            {CATEGORY_EXAMPLES[chosenCategory]}
+          </p>
+        </div>
         {/* Nothing can be dropped on a phone: there it is one button, "Choose files". */}
         <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-body-strong text-fg max-sm:hidden">
           <UploadSimple aria-hidden="true" className="size-5 text-fg-3" />
           Drop files here or
-          <Button variant="link" className="h-auto px-0 text-body-strong" onClick={() => inputRef.current?.click()}>
+          <Button variant="link" className="h-auto px-0 text-body-strong" onClick={() => pickFiles()}>
             browse
           </Button>
         </p>
-        <Button variant="secondary" icon={<UploadSimple />} className="sm:hidden" onClick={() => inputRef.current?.click()}>
+        <Button variant="secondary" icon={<UploadSimple />} className="sm:hidden" onClick={() => pickFiles()}>
           Choose files
         </Button>
         <p className="text-small text-fg-2">
           PDF, DOCX, PPTX or DOC, up to {maxUploadMb} MB each. PDFs need selectable text. Scans can&apos;t be read.
         </p>
-        <div className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-2">
-          <span id={`category-label-${variant}`} className="text-small text-fg-2">
-            For the next upload:
-          </span>
-          <SegmentedControl
-            aria-labelledby={`category-label-${variant}`}
-            options={CATEGORY_OPTIONS}
-            value={category}
-            onValueChange={setCategory}
-            className="min-w-0 flex-wrap justify-center overflow-visible"
-          />
-        </div>
         <input
           ref={inputRef}
           type="file"
@@ -811,7 +901,11 @@ export function MaterialsManager({
           tabIndex={-1}
           aria-label="Choose files to upload"
           onChange={(event) => {
-            addFiles(event.target.files)
+            const target = replacing.current
+            replacing.current = null
+            const picked = event.target.files
+            if (target && picked && picked.length > 0) replaceFile(target, picked[0])
+            else addFiles(picked)
             event.target.value = ''
           }}
         />
@@ -848,8 +942,21 @@ export function MaterialsManager({
                 item.kind === 'local' ? (
                   <LocalRow key={item.upload.key} upload={item.upload} typicalSeconds={typicalSeconds} onDismiss={() => removeUpload(item.upload.key)} />
                 ) : (
-                  <ServerRow key={item.row.id} courseId={courseId} row={item.row} typicalSeconds={typicalSeconds} onDeleted={() => {
+                  <ServerRow
+                    key={item.row.id}
+                    courseId={courseId}
+                    row={item.row}
+                    typicalSeconds={typicalSeconds}
+                    onNotice={setNotice}
+                    onReplace={() => pickFiles(item.row)}
+                    onDeleted={(topicCount) => {
                       removeUploadsOf(item.row.id)
+                      setNotice({
+                        text: `Deleted ${item.row.filename}. Existing topics keep their content${
+                          topicCount > 0 ? `, but ${pluralize(topicCount, 'topic')} can no longer open links to it` : ''
+                        }.`,
+                        reviewTopics: topicCount > 0,
+                      })
                       router.refresh()
                     }}
                   />
@@ -864,7 +971,7 @@ export function MaterialsManager({
               className="mt-3"
               action={
                 <Button size="sm" onClick={() => setRemoveFailedOpen(true)}>
-                  Remove files with problems
+                  {problemAction}
                 </Button>
               }
             >
@@ -878,12 +985,34 @@ export function MaterialsManager({
         </div>
       )}
 
+      {/* Under the file list, not above the upload area: the status of the last change and the topic-finding banner come and
+          go as files are read, and above the list they pushed the rows down each time. */}
+      {notice ? (
+        <InlineAlert tone="neutral" data-testid="materials-notice">
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>{notice.text}</span>
+            {notice.reviewTopics ? (
+              <Link href={`/courses/${courseId}/topics?edit=1`} className="rounded-chip font-medium text-accent underline-offset-[3px] hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
+                Review topics
+              </Link>
+            ) : null}
+          </span>
+        </InlineAlert>
+      ) : null}
+      {banner}
+
       <ConfirmDialog
         open={removeFailedOpen}
         onOpenChange={setRemoveFailedOpen}
-        title="Remove the files with problems?"
-        description="Files that were refused or could not be read. They are not used for your topics, and the files that were read are not touched."
-        confirmLabel="Remove files with problems"
+        title={dismissOnly ? 'Dismiss the failed uploads?' : 'Remove the files with problems?'}
+        description={
+          dismissOnly
+            ? 'These files were refused or did not arrive, so nothing was saved. The files that were read are not touched.'
+            : failedUploads.length === 0
+              ? 'These files could not be read, so they are not used for your topics. They are deleted from the course. The files that were read are not touched.'
+              : 'Files that did not arrive are dismissed. Files that could not be read are deleted from the course. The files that were read are not touched.'
+        }
+        confirmLabel={problemAction}
         destructive
         onConfirm={removeFailed}
       />

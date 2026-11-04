@@ -216,7 +216,7 @@ test.describe('materials', () => {
   test('the upload category says it is for the next upload; deleting a file offers its affected topics', async ({ page }) => {
     await signIn(page, DEMO_EMAIL)
     await page.goto(`${base}/materials`)
-    await expect(page.getByRole('radiogroup', { name: 'For the next upload:' })).toBeVisible()
+    await expect(page.getByRole('radiogroup', { name: 'These files are:' })).toBeVisible()
     await expect(page.getByText('Use these as:')).toHaveCount(0)
     await page.getByRole('button', { name: /^Actions for / }).first().click()
     await page.getByRole('menuitem', { name: 'Delete' }).click()
