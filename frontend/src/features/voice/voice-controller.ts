@@ -1099,6 +1099,13 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     if (ctx.cloud) {
       const sessionId = created.sessionId
       ctx.capture = createMicCapture()
+      // The microphone went away and would not come back: the browser's recognizer tries with its own capture (and
+      // reports "no microphone" if it cannot hear either), so the screen never says "Listening" to a dead mic.
+      const captureGeneration = generation
+      ctx.capture.onFailed(() => {
+        if (captureGeneration !== ctx.generation || ctx.ended || !ctx.cloud || ctx.inputMode !== 'voice') return
+        fallBackFromCloud()
+      })
       ctx.cloudClass = cloudRecognitionClass({
         capture: ctx.capture,
         grant: () => getCloudSpeechGrant(sessionId, ctx.refusedProviders),

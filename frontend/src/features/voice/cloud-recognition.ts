@@ -156,8 +156,33 @@ export type MicCapture = {
   stop: () => void
   /** Every 100 ms frame while open. Returns the unsubscribe. */
   onFrame: (listener: (frame: Int16Array) => void) => () => void
+  /** The microphone was lost and could not be opened again (see `createMicCapture`). Returns the unsubscribe. */
+  onFailed: (listener: () => void) => () => void
   readonly active: boolean
 }
+
+/**
+ * How often a lost microphone may be opened again: at most `max` times in `windowMs`. Past that it is not coming back
+ * (unplugged, taken by another app), and voice mode should stop waiting for it.
+ */
+export function createRecoveryBudget(options: { max?: number; windowMs?: number; now?: () => number } = {}) {
+  const max = options.max ?? 3
+  const windowMs = options.windowMs ?? 30_000
+  const now = options.now ?? Date.now
+  let times: number[] = []
+  return {
+    allow(): boolean {
+      const at = now()
+      times = times.filter((time) => at - time < windowMs)
+      if (times.length >= max) return false
+      times.push(at)
+      return true
+    },
+  }
+}
+
+/** No frame for this long while open means the capture has stalled (the worklet makes one every 100 ms). */
+export const CAPTURE_STALL_MS = 2000
 
 export const FRAME_MS = 100
 const WORKLET_URL = '/voice/pcm16-worklet.js'
@@ -169,24 +194,70 @@ export function canCaptureAudio(): boolean {
   return !!navigator.mediaDevices?.getUserMedia && !!Ctor && typeof AudioWorkletNode !== 'undefined' && typeof WebSocket !== 'undefined'
 }
 
+/**
+ * The page's own microphone capture. A microphone can go away mid-session: a headset connects or is unplugged, the
+ * system switches devices, iOS hands the audio to a call. The browser's recognizer copes with that by itself, so this
+ * must too. When the track ends, or no frame has come for `CAPTURE_STALL_MS`, the microphone is opened again with the
+ * same listeners, quickly enough that the recognizer's stream stays open (Deepgram closes after 10 s without audio).
+ * A suspended audio context (iOS after an interruption) is resumed. When reopening keeps failing, `onFailed` fires and
+ * the capture stays closed.
+ */
 export function createMicCapture(): MicCapture {
   let stream: MediaStream | null = null
   let context: AudioContext | null = null
   let node: AudioWorkletNode | null = null
   let starting: Promise<void> | null = null
+  let watchdog: ReturnType<typeof setInterval> | null = null
+  let lastFrameAt = 0
+  let recovering = false
+  let budget = createRecoveryBudget()
   const listeners = new Set<(frame: Int16Array) => void>()
+  const failedListeners = new Set<() => void>()
 
-  const stop = () => {
-    starting = null
+  /** Let go of the current microphone and audio graph; the listeners stay. */
+  const release = () => {
     if (node) {
       node.port.onmessage = null
       node.disconnect()
     }
     node = null
-    stream?.getTracks().forEach((track) => track.stop())
+    stream?.getTracks().forEach((track) => {
+      track.onended = null
+      track.stop()
+    })
     stream = null
-    if (context) void context.close().catch(() => undefined)
+    if (context) {
+      context.onstatechange = null
+      void context.close().catch(() => undefined)
+    }
     context = null
+  }
+
+  const stop = () => {
+    starting = null
+    recovering = false
+    if (watchdog) clearInterval(watchdog)
+    watchdog = null
+    release()
+  }
+
+  const fail = () => {
+    stop()
+    for (const listener of [...failedListeners]) listener()
+  }
+
+  const recover = async () => {
+    if (recovering || !stream) return
+    if (!budget.allow()) return fail()
+    recovering = true
+    release()
+    try {
+      await open()
+    } catch {
+      recovering = false
+      return fail()
+    }
+    recovering = false
   }
 
   const open = async () => {
@@ -201,13 +272,25 @@ export function createMicCapture(): MicCapture {
       const source = audio.createMediaStreamSource(media)
       const worklet = new AudioWorkletNode(audio, 'margins-pcm16', { numberOfInputs: 1, numberOfOutputs: 0 })
       worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+        lastFrameAt = Date.now()
         const frame = new Int16Array(event.data)
         for (const listener of listeners) listener(frame)
       }
       source.connect(worklet)
+      for (const track of media.getAudioTracks()) track.onended = () => void recover()
+      // iOS suspends the context for a call or another app's audio; it does not resume by itself.
+      audio.onstatechange = () => {
+        if (audio.state === 'suspended') void audio.resume().catch(() => undefined)
+      }
       stream = media
       context = audio
       node = worklet
+      lastFrameAt = Date.now()
+      if (!watchdog) {
+        watchdog = setInterval(() => {
+          if (stream && !recovering && Date.now() - lastFrameAt > CAPTURE_STALL_MS) void recover()
+        }, 1000)
+      }
     } catch (error) {
       media.getTracks().forEach((track) => track.stop())
       void audio.close().catch(() => undefined)
@@ -219,6 +302,7 @@ export function createMicCapture(): MicCapture {
     start() {
       if (stream) return Promise.resolve()
       if (!starting) {
+        budget = createRecoveryBudget()
         starting = open().catch((error) => {
           starting = null
           throw error
@@ -230,6 +314,10 @@ export function createMicCapture(): MicCapture {
     onFrame(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
+    },
+    onFailed(listener) {
+      failedListeners.add(listener)
+      return () => failedListeners.delete(listener)
     },
     get active() {
       return stream !== null
