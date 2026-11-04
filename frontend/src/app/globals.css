@@ -65,6 +65,13 @@
   --topbar-height: calc(56px + env(safe-area-inset-top, 0px));
 }
 
+/* While a study attempt is open the phone hides the app bar (see useShellAttempt); sticky offsets drop its height too. */
+@media (max-width: 1023px) {
+  :root[data-shell-attempt] {
+    --topbar-height: env(safe-area-inset-top, 0px);
+  }
+}
+
 .dark {
   color-scheme: dark;
 

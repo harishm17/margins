@@ -85,7 +85,7 @@ function MoreRow({
  * on the top bar's menu button. Hidden from 1024px, where the sidebar takes over.
  */
 export function MobileTabs() {
-  const { nav, setMobileNavOpen } = useShell()
+  const { nav, setMobileNavOpen, attemptActive } = useShell()
   const params = useParams<{ courseId?: string }>()
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = React.useState(false)
@@ -97,7 +97,8 @@ export function MobileTabs() {
     setLastPath(pathname)
     setMoreOpen(false)
   }
-  if (!course) return null
+  // An open attempt owns the phone screen: no bar, no --tabbar-height, no spacer.
+  if (!course || attemptActive) return null
 
   const base = `/courses/${course.id}`
   const inMore = ['review', 'map', 'exams', 'materials', 'settings'].some((section) => pathname.startsWith(`${base}/${section}`))

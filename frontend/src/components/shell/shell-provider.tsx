@@ -16,6 +16,9 @@ type ShellValue = {
   setPaletteOpen: (open: boolean) => void
   shortcutsOpen: boolean
   setShortcutsOpen: (open: boolean) => void
+  /** True while any study attempt (quiz, recall, practice, ...) is open. Phones hide the app bar and course tabs then. */
+  attemptActive: boolean
+  setAttemptCount: React.Dispatch<React.SetStateAction<number>>
 }
 
 const ShellContext = React.createContext<ShellValue | null>(null)
@@ -24,6 +27,20 @@ export function useShell(): ShellValue {
   const value = React.useContext(ShellContext)
   if (!value) throw new Error('useShell must be used inside the app shell')
   return value
+}
+
+/**
+ * Tells the shell that an attempt is open while `active` is true. A counter, so two attempts that overlap for a render
+ * (one unmounting as the next mounts) never leave the bar hidden or show it early. Phones then hide the app bar and the
+ * course tabs; desktop keeps the sidebar.
+ */
+export function useShellAttempt(active: boolean) {
+  const { setAttemptCount } = useShell()
+  React.useEffect(() => {
+    if (!active) return
+    setAttemptCount((count) => count + 1)
+    return () => setAttemptCount((count) => Math.max(0, count - 1))
+  }, [active, setAttemptCount])
 }
 
 const isTyping = (target: EventTarget | null) => {
@@ -44,7 +61,15 @@ export function ShellProvider({
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false)
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
+  const [attemptCount, setAttemptCount] = React.useState(0)
+  const attemptActive = attemptCount > 0
   const pathname = usePathname()
+
+  // The document flag lets CSS drop the bar's height (`--topbar-height`) for sticky offsets while the bar is hidden.
+  React.useEffect(() => {
+    document.documentElement.toggleAttribute('data-shell-attempt', attemptActive)
+    return () => document.documentElement.removeAttribute('data-shell-attempt')
+  }, [attemptActive])
 
   // A navigation closes the mobile menu.
   const [lastPath, setLastPath] = React.useState(pathname)
@@ -70,8 +95,8 @@ export function ShellProvider({
   }, [])
 
   const value = React.useMemo(
-    () => ({ user, nav, mobileNavOpen, setMobileNavOpen, paletteOpen, setPaletteOpen, shortcutsOpen, setShortcutsOpen }),
-    [user, nav, mobileNavOpen, paletteOpen, shortcutsOpen]
+    () => ({ user, nav, mobileNavOpen, setMobileNavOpen, paletteOpen, setPaletteOpen, shortcutsOpen, setShortcutsOpen, attemptActive, setAttemptCount }),
+    [user, nav, mobileNavOpen, paletteOpen, shortcutsOpen, attemptActive]
   )
 
   return (
