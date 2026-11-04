@@ -52,10 +52,12 @@ test('setup guide: upload materials and wait for topics', async ({ page }) => {
   await page.getByLabel('Choose files to upload').setInputFiles([DOCX])
   await expect(page.getByText('hashing.docx')).toBeVisible()
 
-  // Files read: each shows its phase while it is read, step 1 keeps its list and says so when every file is done.
-  await expect(page.getByText('Every file here has been read.')).toBeVisible({ timeout: 60_000 })
-  await expect(page.getByText('Ready', { exact: true })).toHaveCount(2)
+  // Files read: each shows its phase while it is read. Once the topics are found step 1 folds to a line, and "Add more files"
+  // opens the list again with every file in it.
   await expect(page.getByRole('link', { name: 'Review topics' })).toBeVisible({ timeout: 90_000 })
+  await page.getByText('Add more files', { exact: true }).click()
+  await expect(page.getByText('Every file here has been read.')).toBeVisible()
+  await expect(page.getByText('Ready', { exact: true })).toHaveCount(2)
 })
 
 test('topic editor: rename, add, reorder, merge, delete, confirm', async ({ page }) => {

@@ -2,6 +2,9 @@ import * as React from 'react'
 import Link from 'next/link'
 import { CaretDown, Check } from '@phosphor-icons/react/dist/ssr'
 import { Page, PageIntro } from '@/components/shell/page'
+import { Button } from '@/components/ui/button'
+import { InlineAlert } from '@/components/ui/inline-alert'
+import { newTopicsLabel } from '@/lib/course-setup'
 import { pluralize } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { SetupData } from '@/server/queries/course'
@@ -94,6 +97,21 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
   return (
     <Page width="focus">
       <PageIntro title={name} description={introLine(setup)} />
+      {/* Topics found after the list was confirmed wait for review here too, with the same words as on the overview. */}
+      {step === 3 && newTopicsLabel(setup.topics) ? (
+        <InlineAlert
+          tone="accent"
+          className="mb-6 max-w-[720px]"
+          title={newTopicsLabel(setup.topics)}
+          action={
+            <Button asChild size="sm" variant="primary">
+              <Link href={`/courses/${courseId}/topics?edit=1`}>Review new topics</Link>
+            </Button>
+          }
+        >
+          They join your plan once you confirm them.
+        </InlineAlert>
+      ) : null}
       <ol className="max-w-[720px]" aria-label="Setup steps">
         <Step number={1} state={step > 1 ? 'done' : 'current'} title={COURSE_STAGES[0].title}>
           {step <= 2 ? (
@@ -104,9 +122,7 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
                 <p className={description}>{pluralize(materials.readyCount, 'file')} ready.</p>
               ) : (
                 <p className={description}>
-                  {materials.materials.length === 0
-                    ? "You haven't added any files yet. Upload lecture notes, past exams or book chapters. Margins reads them to find your topics."
-                    : 'Upload lecture notes, past exams or book chapters. Margins reads them to find your topics.'}
+                  Upload lecture notes, past exams or book chapters. Margins reads them to find your topics.
                 </p>
               )}
               {filesDone ? (

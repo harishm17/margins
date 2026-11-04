@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { deriveSetup, needsTopicReview, newTopicsLabel, topicOriginSentence, readyToStudy, type CourseSetupInput } from './course-setup'
+import { deriveSetup, needsTopicReview, newTopicsLabel, reviewTopicsLabel, topicOriginSentence, readyToStudy, type CourseSetupInput } from './course-setup'
 
 // An active course with five topics found in the files, all confirmed, and some content.
 const base: CourseSetupInput = {
@@ -152,4 +152,29 @@ test('no files but content, list not confirmed (hand-added topics opened before 
   assert.equal(setup.step, 2)
   assert.equal(setup.label, 'Confirm topics')
   assert.equal(readyToStudy(setup), false)
+})
+
+test('the button to the topic editor never says "Start studying": it names the review', () => {
+  // A first list waiting: step 2 says its own label.
+  assert.equal(reviewTopicsLabel(deriveSetup({ ...fresh, status: 'topics_pending', topicCount: 5, extractedTopicCount: 5 })), 'Review topics')
+  assert.equal(reviewTopicsLabel(deriveSetup({ ...fresh, topicCount: 2, confirmedTopicCount: 2, extraction: 'failed' })), 'Confirm topics')
+  // A confirmed course with no content yet is "step 3" (label "Start studying"), and new topics wait: the button still reviews them.
+  const waiting = deriveSetup({ ...base, contentBlockCount: 0, topicCount: 8, extractedTopicCount: 8 })
+  assert.equal(waiting.mode === 'setup' && waiting.label, 'Start studying')
+  assert.equal(reviewTopicsLabel(waiting), 'Review new topics')
+  // An active course with new topics.
+  assert.equal(reviewTopicsLabel(deriveSetup({ ...base, topicCount: 8, extractedTopicCount: 8 })), 'Review new topics')
+})
+
+test('topics whose file was deleted are said to have lost it, not "found"', () => {
+  // Three new topics waiting on a confirmed course, and their file is gone: they have no source and are not confirmed.
+  const removed = deriveSetup({ ...base, topicCount: 8, extractedTopicCount: 5, sourceRemovedTopicCount: 3 })
+  assert.equal(removed.topics.sourceRemoved, 3)
+  assert.equal(removed.topics.manual, 0)
+  assert.equal(topicOriginSentence(removed.topics), '3 new topics are waiting, and the file they came from was deleted.')
+  // One of two new topics lost its file: the sentence says so after what was found.
+  const some = deriveSetup({ ...base, topicCount: 7, extractedTopicCount: 6, sourceRemovedTopicCount: 1 })
+  assert.equal(topicOriginSentence(some.topics), 'We found 1 new topic in your files. One came from a file you deleted.')
+  // Nothing removed: unchanged.
+  assert.equal(topicOriginSentence(deriveSetup({ ...base, topicCount: 8, extractedTopicCount: 8 }).topics), 'We found 3 new topics in your files.')
 })

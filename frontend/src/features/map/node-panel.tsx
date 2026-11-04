@@ -66,7 +66,7 @@ export function NodePanel({
     if (box && box.top >= 0 && box.top < window.innerHeight * 0.6) return
     headingRef.current?.focus({ preventScroll: true })
     sectionRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [panel.id])
+  }, [panel.id, inSheet])
 
   // The card opens at the bottom of a long panel: on a phone it is scrolled up until its button is clear of the tab bar.
   React.useEffect(() => {
