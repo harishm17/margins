@@ -76,18 +76,25 @@ export function MasteryLegend({ className }: { className?: string }) {
   )
 }
 
+/**
+ * Courses being studied come first, most recently touched first (the list arrives in that order); a course still
+ * in setup has nothing to study yet, so it goes after them, in the same order.
+ */
+export function orderCourses<T extends { setup: { mode: string } }>(courses: readonly T[]): T[] {
+  return [...courses.filter((course) => course.setup.mode !== 'setup'), ...courses.filter((course) => course.setup.mode === 'setup')]
+}
+
 export function CourseGrid({ courses }: { courses: CourseListItem[] }) {
   const anySquares = hasMasteryColours(courses.map((course) => course.levels))
   return (
     <section aria-labelledby="courses-heading">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <h2 id="courses-heading" className="text-heading text-fg">
-          Courses
-        </h2>
-        {anySquares ? <MasteryLegend /> : null}
-      </div>
+      <h2 id="courses-heading" className="text-heading text-fg">
+        Courses
+      </h2>
+      {/* Right under the heading, one line above the squares it explains. */}
+      {anySquares ? <MasteryLegend className="mt-1" /> : null}
       <ul className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {courses.map((course) => (
+        {orderCourses(courses).map((course) => (
           <li key={course.id}>
             <CourseCard course={course} />
           </li>

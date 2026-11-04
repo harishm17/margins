@@ -135,7 +135,7 @@ export function NodePanel({
         <Button asChild variant="secondary" icon={<ChatCircleText />}>
           <Link href={`/courses/${courseId}/ask?concept=${encodeURIComponent(panel.id)}`}>Ask about this</Link>
         </Button>
-        <Button asChild variant="ghost" icon={<Microphone />}>
+        <Button asChild variant="secondary" icon={<Microphone />}>
           <Link href={`${base}?view=voice&style=teach_back&concept=${encodeURIComponent(panel.id)}`} data-testid="do-it-out-loud">
             Do it out loud
           </Link>

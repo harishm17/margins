@@ -13,7 +13,7 @@ export function PlanSetupGate({ courseId, setup }: { courseId: string; setup: Ex
   const base = `/courses/${courseId}`
   const needsFiles = setup.step === 1
   return (
-    <Page>
+    <Page width="wide">
       <PageIntro title="Plan" description="What to study each day." />
       <EmptyState
         icon={<CalendarCheck />}

@@ -71,7 +71,7 @@ export function CitationPill({ source, marker }: { source: ChatSource | undefine
   const [excerptOpen, setExcerptOpen] = React.useState(false)
 
   if (!source) {
-    return <sup className="mx-0.5 font-mono text-[11px] text-fg-3">[{marker}]</sup>
+    return <sup className="mx-0.5 font-mono text-[12px] text-fg-3">[{marker}]</sup>
   }
   const pages = pageLabel(source)
 
@@ -85,10 +85,10 @@ export function CitationPill({ source, marker }: { source: ChatSource | undefine
             onClick={() => setOpen(true)}
             className={cn(
               'relative -top-[0.35em] mx-[1px] inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-chip px-1 align-baseline',
-              'bg-accent-soft font-mono text-[11px] font-medium leading-none text-accent-soft-fg',
+              'bg-accent-soft font-mono text-[12px] font-medium leading-none text-accent-soft-fg',
               'transition-colors duration-120 hover:bg-accent hover:text-accent-fg',
               // A larger tap area on touch screens without growing the pill.
-              'before:absolute before:-inset-2 before:content-[""]'
+              'before:absolute before:-inset-2 max-sm:before:-inset-3.5 before:content-[""]'
             )}
           >
             {marker}
@@ -135,7 +135,7 @@ export function SourcesList({ sources }: { sources: readonly ChatSource[] }) {
       <ol className="mt-1.5 flex flex-col">
         {shown.map((source) => (
           <li key={source.marker} className="flex min-h-8 items-center gap-2.5 py-1 text-small">
-            <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-chip bg-accent-soft px-1 font-mono text-[11px] font-medium text-accent-soft-fg">
+            <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-chip bg-accent-soft px-1 font-mono text-[12px] font-medium text-accent-soft-fg">
               {source.marker}
             </span>
             <span className="min-w-0 flex-1 truncate text-fg-2" title={sourceLabel(source)}>

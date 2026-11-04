@@ -17,7 +17,7 @@ export default async function MaterialsPage({ params }: { params: Promise<{ cour
   const data = await getMaterialsData(user.id, courseId)
 
   return (
-    <Page>
+    <Page width="wide">
       <MaterialsManager
         courseId={courseId}
         maxUploadMb={data.maxUploadMb}

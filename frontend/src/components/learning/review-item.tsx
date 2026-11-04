@@ -25,7 +25,7 @@ export function reviewStatus(item: { isCorrect: boolean; pointsEarned: number; n
 const STATUS_LABEL: Record<ReviewStatus, string> = {
   correct: 'Correct',
   partial: 'Partly correct',
-  incorrect: 'Incorrect',
+  incorrect: 'Not quite',
   review: 'Needs review',
 }
 

@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { preload } from 'react-dom'
 import { Pause, Play } from '@phosphor-icons/react/dist/ssr'
-import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { type LoopStep } from './content'
 import { LOOP_AUTOPLAY, LOOP_IN_VIEW_RATIO, LOOP_STEP_MS, LoopAutoplay, loopInView, pauseKeepsFocusOnBlur, shouldRestoreFocusToStep, type AutoplayState } from './loop-autoplay'
@@ -229,7 +229,7 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
             })}
           </div>
           {autoplaying ? (
-            <IconButton
+            <Button
               onFocus={() => {
                 pauseHadFocus.current = true
               }}
@@ -237,14 +237,14 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
                 // Switching to another application also blurs the button; it keeps focus then.
                 pauseHadFocus.current = pauseKeepsFocusOnBlur(document.hasFocus())
               }}
-              label={userPaused ? 'Play the steps' : 'Pause the steps'}
               icon={userPaused ? <Play weight="fill" /> : <Pause weight="fill" />}
               variant="ghost"
               size="sm"
-              tooltipSide="right"
-              className="-ml-3 mt-3"
+              className="-ml-2.5 mt-3 text-fg-2"
               onClick={() => autoplay.setPaused(!userPaused)}
-            />
+            >
+              {userPaused ? 'Play the steps' : 'Pause the steps'}
+            </Button>
           ) : null}
         </div>
         <div {...autoplay.area('panel')}>

@@ -18,11 +18,13 @@ test('a new account lands on a welcome page that explains the stages and has one
 
   await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Margins' })).toBeVisible()
   const stages = page.getByRole('region', { name: 'How a course goes' })
-  await expect(stages.getByRole('listitem')).toHaveCount(4)
+  // The same three steps as the course's own setup page (features/course/course-stages.ts).
+  await expect(stages.getByRole('listitem')).toHaveCount(3)
+  await expect(stages.getByRole('heading', { level: 3 })).toHaveText([/^Add your materials/, /^Check the topics/, /^Start studying/])
   await expect(stages).toContainText('A couple of minutes')
   await expect(stages).toContainText('About a minute')
   await expect(stages).toContainText('Warm-up (try a few questions first)')
-  await expect(page.getByRole('region', { name: 'Have these ready' })).toContainText('The date of your exam')
+  await expect(stages).toContainText('Set your exam date and daily time')
   await expect(page.getByText('Welcome back')).toHaveCount(0)
 
   await page.getByRole('link', { name: 'Add your first course' }).click()

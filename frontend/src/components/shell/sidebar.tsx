@@ -11,6 +11,7 @@ import {
   Files,
   House,
   ListBullets,
+  Lock,
   MagnifyingGlass,
   ArrowsClockwise,
   TreeStructure,
@@ -29,6 +30,9 @@ import { useShell } from './shell-provider'
 import { useSidebarCollapsed } from './sidebar-state'
 import { readUnitChoices, useUnitState } from './unit-state'
 import type { NavCourse, NavTopic } from '@/server/queries/courses'
+
+/** The course pages the phone tab bar (mobile-tabs.tsx) already holds. */
+const PHONE_TAB_KEYS: ReadonlySet<string> = new Set(['overview', 'plan', 'topics', 'ask'])
 
 type NavItem = {
   key: string
@@ -53,12 +57,14 @@ function NavLink({ item, rail, reasonId }: { item: NavItem; rail: boolean; reaso
         aria-describedby={reasonId}
         tabIndex={0}
         className={cn(
-          'flex h-[34px] max-lg:h-11 cursor-not-allowed items-center gap-2.5 rounded-control px-2.5 text-body-strong text-fg-3 opacity-60',
+          // Meta-text colour, not a faded copy of the link: the label stays readable (5.3:1), and the lock says why it is off.
+          'flex h-[34px] max-lg:h-11 cursor-not-allowed items-center gap-2.5 rounded-control px-2.5 text-body-strong text-fg-3',
           'rail:justify-center rail:px-0'
         )}
       >
-        <Icon aria-hidden="true" className="size-[18px] shrink-0 text-fg-3/70" />
+        <Icon aria-hidden="true" className="size-[18px] shrink-0 text-fg-3" />
         <span className="min-w-0 flex-1 truncate rail:hidden">{item.label}</span>
+        <Lock aria-hidden="true" className="size-3.5 shrink-0 text-fg-3 rail:hidden" />
       </span>
     )
     return rail ? (
@@ -216,7 +222,7 @@ function TopicList({ course, activeTopicId }: { course: NavCourse; activeTopicId
  * Everything in the sidebar. The desktop aside and the mobile sheet both render it; only the
  * desktop one can be a rail (`allowRail`).
  */
-export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
+export function SidebarContent({ allowRail = false, omitTabs = false }: { allowRail?: boolean; /** On a phone these four are in the tab bar already, so the menu leaves them out. */ omitTabs?: boolean }) {
   const { nav, setPaletteOpen } = useShell()
   const pathname = usePathname()
   const params = useParams<{ courseId?: string; topicId?: string }>()
@@ -268,7 +274,9 @@ export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
         { key: 'map', label: 'Map', href: `${base}/map`, icon: TreeStructure, active: pathname.startsWith(`${base}/map`) },
       ]
     : []
-  const items = allItems.map((item) => ({ ...item, notReady: course ? isSectionNotReady(item.key, course) : false }))
+  const items = allItems
+    .filter((item) => !(omitTabs && PHONE_TAB_KEYS.has(item.key)))
+    .map((item) => ({ ...item, notReady: course ? isSectionNotReady(item.key, course) : false }))
   const anyNotReady = items.some((item) => item.notReady)
   const reasonId = `${topicsLabelId}-not-ready`
 

@@ -26,7 +26,7 @@ export function Checkbox({ className, label, description, trailing, id, ...props
         'after:absolute after:-inset-1 after:content-[""] max-sm:after:-inset-3',
         'transition-colors duration-120',
         'data-[state=checked]:border-accent data-[state=checked]:bg-accent data-[state=indeterminate]:border-accent data-[state=indeterminate]:bg-accent',
-        'disabled:opacity-50',
+        'disabled:border-border-strong disabled:bg-surface-3 disabled:text-fg-3',
         className
       )}
       {...props}

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { Brand } from '@/components/shell/brand'
-import { NotFoundPanel } from '@/components/shell/not-found-panel'
+import { NotFoundBack } from '@/features/marketing/auth-actions'
 
 export const metadata = { title: 'Page not found' }
 
@@ -14,7 +14,7 @@ export default function NotFound() {
         </Link>
       </header>
       <main id="main" className="flex flex-1 items-center justify-center">
-        <NotFoundPanel action={{ href: '/home', label: 'Go to home' }} />
+        <NotFoundBack />
       </main>
     </div>
   )

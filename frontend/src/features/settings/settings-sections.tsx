@@ -136,8 +136,10 @@ export function DeleteAccount({ email }: { email: string }) {
 
   return (
     <>
+      {/* Quiet until the dialog: the red filled button is the one that confirms. Red text says what it is without out-shouting the page's real actions. */}
       <Button
-        variant="danger"
+        variant="secondary"
+        className="text-danger-soft-fg"
         onClick={() => {
           setTyped('')
           setFailed(false)
@@ -159,6 +161,7 @@ export function DeleteAccount({ email }: { email: string }) {
         confirmLabel="Delete account"
         destructive
         confirmDisabled={!confirmsDeletion(typed)}
+        confirmDisabledReason={`Type ${CONFIRM_WORD} to turn this on.`}
         onConfirm={onConfirm}
       >
         <div className="flex flex-col gap-4">

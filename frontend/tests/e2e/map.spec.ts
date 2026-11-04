@@ -116,14 +116,18 @@ test.describe('knowledge map', () => {
     await expect(nodeLink(page, 'Chaining')).toHaveAccessibleName('Chaining Not started Next up')
     await expect(nodeLink(page, 'Open addressing')).toHaveAccessibleName('Open addressing Not started Next up')
 
-    // The key is folded away, and lists only what this unit shows.
+    // The key opens by itself the first time this browser sees a map, and is folded away after that.
     const key = page.locator('details').filter({ has: page.getByText('Key', { exact: true }) })
+    await expect(key.getByText('Leads to')).toBeVisible()
+    await page.reload()
+    await expect(key.getByText('Key', { exact: true })).toBeVisible()
     await expect(key.getByText('Leads to')).toBeHidden()
+    // It lists only what this unit shows.
     await key.getByText('Key', { exact: true }).click()
     await expect(key.getByRole('list', { name: 'States' }).getByRole('listitem')).toHaveText(['Not started', /^(Shaky|Fading|Getting there)$/])
     await expect(key.getByText('Leads to')).toBeVisible()
     await expect(key.getByText('Easy to mix up')).toBeVisible()
-    await expect(key.getByText(/^Next up: what you need is well remembered/)).toContainText('Start here is the first of them')
+    await expect(key.getByText(/^Next up: what you need is well remembered/)).toContainText('The ring marks Start here, the first of them')
     await expect(key.getByText('Suggested, not confirmed')).toHaveCount(0)
     await expect(key.getByText('Inferred means')).toHaveCount(0)
     await screenshotIfAsked(page, 'final-map-key-1440x900')
@@ -523,9 +527,9 @@ test.describe('knowledge map', () => {
     await expect(page.getByRole('link', { name: /^Skip to the details/ })).toHaveCount(0)
 
     // The lines are drawn for the eye: each idea says how it connects in its description.
-    await expect(nodeLink(page, 'Collisions')).toHaveAccessibleDescription('Needs Hash function.')
-    await expect(nodeLink(page, 'Hash function')).toHaveAccessibleDescription('Needed by Collisions.')
-    await expect(nodeLink(page, 'Chaining')).toHaveAccessibleDescription('Easy to mix up with Open addressing.')
+    await expect(nodeLink(page, 'Collisions')).toHaveAccessibleDescription(/^Needs Hash function\. In Hash tables\.?$/)
+    await expect(nodeLink(page, 'Hash function')).toHaveAccessibleDescription(/^Needed by Collisions\. In Hash tables\.?$/)
+    await expect(nodeLink(page, 'Chaining')).toHaveAccessibleDescription(/^Easy to mix up with Open addressing\. In Hash tables\.?$/)
 
     // Tab reaches the ideas in the order of the list, and Enter chooses one without taking focus from it.
     await nodeLink(page, 'Hash function').focus()

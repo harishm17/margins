@@ -13,6 +13,7 @@ import {
   liveTurn,
   retryPlan,
   toChatMessages,
+  withoutRepeatedFailure,
   type AssistantMessage,
   type ChatMessage,
   type FailureMessage,
@@ -144,7 +145,7 @@ export function useAskChat({
 
       const controller = new AbortController()
       controllerRef.current = controller
-      setMessages((current) => [...current, { kind: 'user', id: nextId(), text: question }])
+      setMessages((current) => [...withoutRepeatedFailure(current, question), { kind: 'user', id: nextId(), text: question }])
 
       let answer: AnswerState = INITIAL_ANSWER
       let doneStopReason = null as string | null

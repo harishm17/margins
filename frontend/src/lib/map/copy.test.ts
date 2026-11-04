@@ -62,7 +62,7 @@ test('with several ideas next up, the first in list order says where to start an
 })
 
 test('the key says what the ring tests: prerequisites remembered at R >= 0.8, not prerequisites that are Solid', () => {
-  assert.equal(frontierKeyText(1), 'Next up: what you need is well remembered')
-  assert.equal(frontierKeyText(2), 'Next up: what you need is well remembered. Start here is the first of them.')
+  assert.equal(frontierKeyText(1), 'Next up: what you need is well remembered. The ring marks it.')
+  assert.equal(frontierKeyText(2), 'Next up: what you need is well remembered. The ring marks Start here, the first of them.')
   assert.doesNotMatch(frontierKeyText(1), /solid/i)
 })

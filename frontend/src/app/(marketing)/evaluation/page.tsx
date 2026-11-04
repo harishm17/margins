@@ -3,7 +3,7 @@ import { ArrowUpRight } from '@phosphor-icons/react/dist/ssr'
 import { phoneInlineHit } from '@/components/ui/styles'
 import { BRAND_NAME } from '@/config/brand'
 import { AUTHOR, SITE_URL } from '@/config/site'
-import { LEARNING_V3_EVAL_DRAFT, type DraftCheck } from '@/features/marketing/content'
+import { EVAL_FACTS, LEARNING_V3_EVAL_DRAFT, type DraftCheck } from '@/features/marketing/content'
 import { EVAL_FILES, GENERATION, MODEL_CHOICE, RETRIEVAL } from '@/features/marketing/evals'
 
 /**
@@ -189,6 +189,27 @@ export default function EvaluationPage() {
   return (
     <article className="mx-auto w-full max-w-[760px] px-4 pb-24 pt-10 md:px-8 md:pt-16">
       <h1 className="text-title text-fg">{TITLE}</h1>
+      <section aria-labelledby="for-you" className="mt-6 rounded-card border border-border bg-surface-2 p-4 md:p-5">
+        <h2 id="for-you" className="text-heading text-fg">
+          What this means for you
+        </h2>
+        <ul className="mt-3 flex flex-col gap-2 text-reading text-fg-2">
+          <li>
+            <strong className="font-medium text-fg">How often an answer is wrong.</strong> In the latest check the judge
+            scored correctness {EVAL_FACTS.correctness} out of 5 and listed {GENERATION.errors} errors in{' '}
+            {GENERATION.topics} topics, {GENERATION.mathErrors} of them in maths. The judge is the model that writes the
+            text, so this is a limited check.
+          </li>
+          <li>
+            <strong className="font-medium text-fg">What is checked.</strong> Whether the right pages are found for a
+            topic, and whether the notes, examples, practice and quizzes are correct, complete and based on the pages.
+          </li>
+          <li>
+            <strong className="font-medium text-fg">What is not.</strong> Ask replies, voice practice, scanned or
+            handwritten files, and whether students learn more with {BRAND_NAME}.
+          </li>
+        </ul>
+      </section>
       <p className={p}>
         {BRAND_NAME} has two evaluations. A retrieval eval measures how well the app maps a topic to the chunks of the
         course material that explain it. A generation eval runs the app&apos;s real generators (notes, worked examples,
@@ -242,7 +263,7 @@ export default function EvaluationPage() {
 
       <h3 className={h3}>Results</h3>
       <ComparisonTable
-        caption={`Retrieval, run of October 20, 2026. Averages over ${RETRIEVAL.topics} topics, top ${RETRIEVAL.k}.`}
+        caption={`Retrieval, run of October 20, 2026. Hybrid search with fusion, the search the app uses now, finds and ranks the right pages best. Averages over ${RETRIEVAL.topics} topics, top ${RETRIEVAL.k}.`}
         rowHeader="System"
         columns={RETRIEVAL.columns}
         rows={RETRIEVAL.rows}
@@ -404,7 +425,7 @@ export default function EvaluationPage() {
         three models.
       </p>
       <ComparisonTable
-        caption={`Model choice, runs of ${MODEL_CHOICE.runs}. Cost per topic covers the four content types.`}
+        caption={`Model choice, runs of ${MODEL_CHOICE.runs}. Only Opus passes the rule for every content type. Cost per topic covers the four content types.`}
         rowHeader="Model"
         columns={MODEL_CHOICE.columns}
         rows={MODEL_CHOICE.rows}
@@ -433,25 +454,25 @@ export default function EvaluationPage() {
       <p className={p}>Every table above comes from one of these files in the public repository.</p>
       <ul className={ul}>
         <li>
-          <External href={EVAL_FILES.retrieval}>Retrieval, hybrid search with fusion (2026-10-20)</External>
+          <External href={EVAL_FILES.retrieval}>Finding the right pages: the search the app uses now (2026-10-20)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.retrievalBaseline}>Retrieval, the old search (2026-10-20)</External>
+          <External href={EVAL_FILES.retrievalBaseline}>Finding the right pages: the old search it replaced (2026-10-20)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.retrievalComparison}>Retrieval, the two compared (2026-10-20)</External>
+          <External href={EVAL_FILES.retrievalComparison}>Finding the right pages: old and new side by side (2026-10-20)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.generation}>Generation quality, with every error the judge listed (2026-10-21)</External>
+          <External href={EVAL_FILES.generation}>Quality of notes, examples, practice and quizzes, with every error the judge listed (2026-10-21)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.modelChoice}>Model choice run (2026-10-20)</External>
+          <External href={EVAL_FILES.modelChoice}>Which model writes each kind of content: Opus, Sonnet and Haiku compared (2026-10-20)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.opusEffort}>Opus low against medium effort (2026-10-21)</External>
+          <External href={EVAL_FILES.opusEffort}>Whether lower effort is good enough: Opus low against medium (2026-10-21)</External>
         </li>
         <li>
-          <External href={EVAL_FILES.modelDecision}>The model decision (2026-10-21)</External>
+          <External href={EVAL_FILES.modelDecision}>Why the app uses Opus at medium effort (2026-10-21)</External>
         </li>
         <li>
           <External href={EVAL_FILES.readme}>The evals README: method, metrics and limitations</External>
