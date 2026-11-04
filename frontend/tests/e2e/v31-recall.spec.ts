@@ -4,6 +4,7 @@ import { withPrisma } from './helpers/db'
 import { streamedPartsArrived } from './helpers/settle'
 import { ZONE } from './helpers/loop'
 import { ANSWER, CLAIM_PAGES, PROMPT_0, recallWorld } from './helpers/v31-recall'
+import { chooseConfidence } from './helpers/confidence'
 
 // Workstream R (spec 18): "I don't remember" and linked pointers on recall, the reader focus and the checks'
 // drafts, the warm-up that expects misses, and the map and progress panels. The AI service runs on the mock
@@ -221,7 +222,7 @@ test.describe('warm-up', () => {
     await page.getByTestId('warmup-idk').click()
     await expect(page.getByRole('heading', { name: 'Warm-up question 2 of 3' })).toBeVisible()
     await page.getByRole('radio').nth(1).click()
-    await page.getByRole('radio', { name: 'Fairly sure' }).click()
+    await chooseConfidence(page, 'Fairly sure')
     await page.getByRole('button', { name: 'Next question' }).click()
     await expect(page.getByRole('heading', { name: 'Warm-up question 3 of 3' })).toBeVisible()
     await page.getByTestId('warmup-idk').click()

@@ -3,6 +3,7 @@ import { animationsSettled } from './helpers/settle'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import { addContent, createCourse, practiceProblem, quizQuestions, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
+import { chooseConfidence } from './helpers/confidence'
 
 // The topic's "Next" card (spec §8.1) steps aside while the student is in the middle of an activity and is
 // back, with the refreshed next activity, once it is done; and the quiz results and the topic header say the
@@ -49,7 +50,7 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await expect(card(page)).toHaveCount(0)
   await screenshotIfAsked(page, 'next-card-quiz-taking-1440x900')
   await page.getByRole('radio', { name: 'False' }).click()
-  await page.getByRole('radio', { name: 'Certain' }).click()
+  await chooseConfidence(page, 'Certain')
   await page.getByRole('button', { name: 'Next', exact: true }).click()
   await expect(card(page)).toHaveCount(0)
   await page.getByRole('button', { name: 'Question 3', exact: false }).first().click()
@@ -74,7 +75,7 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await expect(page.getByText('Question 1 of')).toBeVisible()
   await expect(card(page)).toHaveCount(0)
   await page.getByRole('radio', { name: 'False' }).click()
-  await page.getByRole('radio', { name: 'Certain' }).click()
+  await chooseConfidence(page, 'Certain')
   await page.getByRole('button', { name: 'Question 3', exact: false }).first().click()
   await page.getByRole('button', { name: 'Submit quiz' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
@@ -107,7 +108,7 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
     expect((await results.getByRole('heading', { name: /points/ }).boundingBox())!.width, `score heading width, ${name}`).toBeGreaterThanOrEqual(150)
   }
   await page.setViewportSize(SIZES[0][1])
-  await results.getByRole('radio', { name: 'Guessing' }).click()
+  await chooseConfidence(results, 'Guessing')
   await expect(results.getByText('Next review tomorrow').first()).toBeVisible()
   await expect(header.getByText('Next review tomorrow')).toBeVisible()
   await screenshotIfAsked(page, 'next-card-quiz-results-rated-1440x900')

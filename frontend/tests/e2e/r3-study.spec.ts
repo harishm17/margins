@@ -53,7 +53,7 @@ test.describe('an attempt on a phone', () => {
     // The lobby keeps the path and says the misses are fine.
     await expect(pathTabs(page)).toBeVisible()
     await expect(attemptBar(page)).toHaveCount(0)
-    await expect(page.getByText('Try what you know; answers and page pointers come at the end')).toBeVisible()
+    await expect(page.getByText('Try what you know; answers and page pointers come at the end').locator('visible=true')).toBeVisible()
     await screenshotIfAsked(page, 'r3-warmup-intro-390x844')
     await page.getByRole('button', { name: 'Start warm-up' }).click()
 

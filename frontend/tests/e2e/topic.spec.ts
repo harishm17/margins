@@ -4,6 +4,7 @@ import { signIn } from './helpers/auth'
 import { withPrisma } from './helpers/db'
 import { FIXTURE_PDF } from './helpers/seed-demo'
 import { choice, world } from './helpers/v31-sessions'
+import { chooseConfidence } from './helpers/confidence'
 
 // One account per run. The AI service behind the dev stack is a mock, so generating content is
 // free and fast; the spec writes every kind of content through the page itself.
@@ -183,7 +184,7 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
   await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
   await page.getByRole('radio', { name: /Missed/ }).click()
-  await page.getByRole('radio', { name: 'Fairly sure' }).click()
+  await chooseConfidence(page, 'Fairly sure')
   await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
 
   // The attempt is in the lobby's history, with a review.
@@ -218,7 +219,7 @@ test('quiz records confidence per question', async ({ page }) => {
 
   // Question 1: an answer, a confidence and some thinking. The chosen level is marked in text, not only by style.
   await page.keyboard.press('b')
-  await page.getByRole('radio', { name: 'Fairly sure' }).click()
+  await chooseConfidence(page, 'Fairly sure')
   await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
   await page.getByRole('button', { name: 'Show your thinking' }).click()
   await page.getByLabel('Your thinking').fill('B looked like the queue one.')

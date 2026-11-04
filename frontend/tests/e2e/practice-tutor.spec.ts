@@ -79,7 +79,7 @@ test.describe('the practice tutor', () => {
 
     // Before a first try the help is one button (open here by `open`): one hint ladder, with the next hint only.
     await expect(getHelp).toHaveAttribute('aria-expanded', 'true')
-    await expect(page.getByRole('group', { name: 'Hints' }).locator('visible=true').getByRole('button')).toHaveCount(1)
+    await expect(page.getByRole('group', { name: 'Hints' }).locator('visible=true').getByRole('button', { name: /^Show / })).toHaveCount(1)
     await page.getByRole('button', { name: /Show where to look/ }).click()
     await expect(hint('Where to look')).toHaveAttribute('aria-expanded', 'true')
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()

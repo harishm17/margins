@@ -4,6 +4,7 @@ import { withPrisma } from './helpers/db'
 import { animationsSettled, streamedPartsArrived } from './helpers/settle'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { addContent, addQuizSet, createCourse, quizQuestions, signUpAndIn, ZONE } from './helpers/loop'
+import { chooseConfidence } from './helpers/confidence'
 
 // The surfaces that show confidence and calibration: the quiz results, the mock exam's question
 // screen with its confidence row, and the exam results. Each is opened at a desktop and a phone size
@@ -226,11 +227,11 @@ test('the quiz results with the confidence it was answered with: no axe violatio
     await screenshotIfAsked(page, `quiz-question-${name}`)
     // Question 1 wrong and certain; question 2 right and unsure; question 3 left blank.
     await page.getByRole('radio', { name: 'False' }).click()
-    await page.getByRole('radio', { name: 'Certain' }).click()
+    await chooseConfidence(page, 'Certain')
     await page.getByRole('button', { name: 'Next', exact: true }).click()
     await expect(page.getByText('Question 2 of')).toBeVisible()
     await page.getByRole('radio', { name: 'True' }).click()
-    await page.getByRole('radio', { name: 'Unsure' }).click()
+    await chooseConfidence(page, 'Unsure')
     // True or false: "Unsure" stores the same 0.5 as "Guessing", and still comes back as "Unsure" after a reload.
     await page.reload()
     await expect(page.getByText('Question 2 of')).toBeVisible()

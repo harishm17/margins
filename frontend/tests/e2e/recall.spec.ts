@@ -144,9 +144,10 @@ test('a recall answer is graded against the claims, with the student quoted firs
   await page.goto(`${topicUrl('Hash tables')}?view=recall`)
 
   await expect(page.getByRole('heading', { name: 'Close the book and say what you remember' })).toBeVisible()
-  // Nothing is graded yet: the instructions are in full, and no card repeats the next step above the work.
-  await expect(page.getByText('Write what you can remember of each idea, without looking back.')).toBeVisible()
-  await expect(page.getByRole('button', { name: /instructions/ })).toHaveCount(0)
+  // Nothing is graded yet: one sentence of instruction, the scoring text behind a button, and no card repeating the next step above the work.
+  await expect(page.getByText('Write what you can remember of each idea. Gaps are fine')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'How this is scored' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByRole('link', { name: 'Skip recall for now' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
   // One prompt is open (the first); each of the others is one labelled row, not another box and another Check button.
   await expect(card(page)).toBeVisible()

@@ -5,6 +5,7 @@ import { signIn } from './helpers/auth'
 import { addMaterial, createCourse, createEmptyCourse, signUpAndIn } from './helpers/loop'
 import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
 import { animationsSettled } from './helpers/settle'
+import { chooseConfidence } from './helpers/confidence'
 
 // Runs against the demo course (seeded by global-setup.ts) on a stack with the mock AI service.
 const course = `/courses/${demoIds().course}`
@@ -113,14 +114,14 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   // Answer the first question, flag the second, and the navigator shows both.
   await answerQuestion(page, kinds[0])
   // How sure the student is rides along with the answer.
-  await page.getByRole('radio', { name: 'Certain' }).click()
+  await chooseConfidence(page, 'Certain')
   await expect(page.getByRole('radio', { name: 'Certain', checked: true })).toBeVisible()
   // The tapped level, not just its value, is saved: "Guessing" on a true or false question stores 0.5, like "Unsure".
-  await page.getByRole('radio', { name: 'Guessing' }).click()
+  await chooseConfidence(page, 'Guessing')
   await expect(page.getByText('Saved')).toBeVisible({ timeout: 15_000 })
   await page.reload()
   await expect(page.getByRole('radio', { name: 'Guessing', checked: true })).toBeVisible()
-  await page.getByRole('radio', { name: 'Certain' }).click()
+  await chooseConfidence(page, 'Certain')
   await page.getByRole('button', { name: 'Next' }).click()
   await expect(page.getByRole('heading', { name: /Question 2 of/ })).toBeVisible()
   await page.getByRole('button', { name: 'Flag', exact: true }).click()
@@ -291,7 +292,7 @@ test.describe('attempt-first Ask', () => {
     // Answer from memory, say how sure, look at the answer, grade it.
     await expect(card.getByRole('button', { name: 'Show the answer' })).toBeDisabled()
     await card.getByLabel(/^Your answer:/).fill('Keys divided by buckets')
-    await card.getByRole('radio', { name: 'Fairly sure' }).click()
+    await chooseConfidence(card, 'Fairly sure')
     await card.getByRole('button', { name: 'Show the answer' }).click()
     await expect(card.getByText('The answer', { exact: true })).toBeVisible()
     await expect(card.getByRole('group', { name: 'How did you do?' })).toBeVisible()

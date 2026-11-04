@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { expectNoSidewaysScroll } from './helpers/overflow'
 import { withPrisma } from './helpers/db'
 import { addContent, addQuizSet, createCourse, practiceProblem, quizQuestions, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
@@ -39,11 +40,15 @@ test.describe('the phone study shell', () => {
     expect(heading, 'the warm-up heading is on screen').not.toBeNull()
     expect(heading!.y).toBeLessThan(PHONE.height * 0.45)
     await expectNoSidewaysScroll(page, page.url())
+    await screenshotIfAsked(page, 'r4w2-warmup-intro-390x844')
 
     // The steps open in a sheet, and a step goes to its view.
+    await screenshotIfAsked(page, 'r4w2-warmup-intro-390x844')
     await phonePath(page).click()
     const list = page.getByRole('navigation', { name: 'Topic path' })
     await expect(list.getByRole('link')).toHaveCount(5)
+    await screenshotIfAsked(page, 'r4w2-path-sheet-390x844')
+    await expectNoAxeViolations(page, 'path sheet, 390')
     await list.getByRole('link', { name: /Read/ }).click()
     await expect(page).toHaveURL(/view=read/)
     await expect(phonePath(page)).toHaveText(/Step 2 of 5: Read/)
@@ -95,6 +100,7 @@ test.describe('the warm-up', () => {
     await firstRow.locator('summary').click()
     await expect(firstRow.getByText('Your answer')).toBeVisible()
     await expectNoSidewaysScroll(page, page.url())
+    await screenshotIfAsked(page, 'r4w2-warmup-results-390x844')
 
     // Nothing was rated: the evidence carries no confidence.
     await withPrisma(async (prisma) => {
@@ -119,6 +125,7 @@ test.describe('the reading', () => {
     const passage = await page.locator('[data-passage]').first().boundingBox()
     expect(passage!.y).toBeLessThan(PHONE.height)
 
+    await screenshotIfAsked(page, 'r4w2-read-390x844')
     await note.getByRole('button', { name: 'Close this note' }).click()
     await expect(note).toHaveCount(0)
     await expect.poll(() => withPrisma(async (prisma) => (await prisma.user.findUniqueOrThrow({ where: { email } })).seenReaderNoteAt !== null)).toBeTruthy()
@@ -159,6 +166,7 @@ test.describe('recall', () => {
     // One way on: the explanation of the gaps, with the next step as the plain choice beside it, and the skip link gone.
     await expect(page.getByRole('link', { name: 'Read the explanation of your gaps' })).toBeVisible()
     await expect(page.getByTestId('recall-skip-explainer')).toHaveText('Continue to Practice')
+    await screenshotIfAsked(page, 'r4w2-recall-graded-390x844')
     await expect(page.getByRole('link', { name: 'Skip recall for now' })).toHaveCount(0)
 
     // The path and the button name the same thing: Practice is tagged next (the explanation leads back to it), and the explainer
@@ -201,6 +209,7 @@ test.describe('practice and the quiz', () => {
     expect((await hint.boundingBox())!.y).toBeGreaterThan((await retry.boundingBox())!.y)
     await expect(hint).not.toContainText(/harder one|count/i)
     await expect(page.getByText(/Opening this hint/)).toBeHidden()
+    await screenshotIfAsked(page, 'r4w2-practice-miss-390x844')
     await page.getByRole('button', { name: 'How hints count' }).click()
     await expect(page.getByText(/Opening this hint: /)).toBeVisible()
     await retry.click()
@@ -213,6 +222,7 @@ test.describe('practice and the quiz', () => {
     await page.getByRole('button', { name: 'Check', exact: true }).click()
     await page.getByRole('button', { name: 'Finish' }).click()
     await expect(page.getByText('Problem complete')).toBeVisible()
+    await screenshotIfAsked(page, 'r4w2-practice-done-390x844')
     const toQuiz = page.getByTestId('practice-to-quiz')
     await expect(toQuiz).toBeVisible()
     await expect(page.getByRole('button', { name: 'Start over' })).toBeVisible()
@@ -243,6 +253,7 @@ test.describe('practice and the quiz', () => {
     await page.getByRole('button', { name: 'Finish and submit' }).click()
     const dialog = page.getByRole('dialog', { name: 'Submit your quiz?' })
     await expect(dialog).toContainText('4 unanswered. They\'ll be marked wrong.')
+    await screenshotIfAsked(page, 'r4w2-quiz-submit-390x844')
     await dialog.getByRole('button', { name: 'Keep working' }).click()
     await expect(page.getByRole('heading', { name: 'Question 1 of 4' })).toBeVisible()
 

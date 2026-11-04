@@ -4,6 +4,7 @@ import { animationsSettled } from './helpers/settle'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import { addQuizSet, createCourse, dayIn, reviewItem, seedDueConcept, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
 import { addClaim, answeredChips, applyScreenSize, shot, seedConcepts, setProgress, trueFalse, world } from './helpers/v31-sessions'
+import { chooseConfidence } from './helpers/confidence'
 
 // v3.1 workstream S: quiz drafts and the retake rule, quiz results with help after misses, AI-down partial
 // grading, review sessions and drills, the ten-minute session and quick-pass triage.
@@ -168,7 +169,7 @@ test.describe('S1: quiz drafts, save and finish later, retake rule, I do not kno
     await page.getByRole('button', { name: 'Start quiz' }).click()
     // Question 1: right and certain. Question 2: I don't know. Question 3: right.
     await page.getByRole('radio', { name: 'True' }).click()
-    await page.getByRole('radio', { name: 'Certain' }).click()
+    await chooseConfidence(page, 'Certain')
     await page.getByRole('button', { name: 'Next', exact: true }).click()
     await page.getByRole('button', { name: "I don't know" }).click()
     await expect(page.getByTestId('idk-marked')).toBeVisible()
@@ -295,7 +296,7 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     await page.getByRole('button', { name: 'Start quiz' }).click()
     for (let i = 0; i < 9; i += 1) {
       await page.getByRole('radio', { name: 'True' }).click()
-      await page.getByRole('radio', { name: 'Certain' }).click()
+      await chooseConfidence(page, 'Certain')
       if (i < 8) await page.getByRole('button', { name: 'Next', exact: true }).click()
     }
     await page.getByRole('button', { name: 'Submit quiz' }).click()

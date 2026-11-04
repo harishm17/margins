@@ -24,6 +24,7 @@ import {
 } from './helpers/loop'
 import { expectClearOfTabBar } from './helpers/overflow'
 import { animationsSettled, streamedPartsArrived } from './helpers/settle'
+import { chooseConfidence } from './helpers/confidence'
 
 // The learning loop: exam date and plan, practice progress on the server, reviews (retry what you
 // missed, fresh review) and graded mock exams that move mastery. Every spec has its own account and
@@ -1126,7 +1127,7 @@ test.describe('review sessions', () => {
 
       // A miss with a confidence tap: the feedback.
       await page.getByRole('radio', { name: /False/ }).click()
-      await page.getByRole('radio', { name: 'Certain' }).click()
+      await chooseConfidence(page, 'Certain')
       await page.getByRole('button', { name: 'Check answer' }).click()
       await expect(page.getByRole('heading', { level: 2, name: /^Not quite/ })).toBeVisible()
       await animationsSettled(page)
@@ -1161,16 +1162,16 @@ test.describe('review sessions', () => {
     // The draft (answer and confidence) is kept across a reload.
     await page.getByRole('radio', { name: /False/ }).click()
     // True or false: "Guessing" and "Unsure" both store 0.5, so each must come back as the one tapped.
-    await page.getByRole('radio', { name: 'Unsure' }).click()
+    await chooseConfidence(page, 'Unsure')
     await page.reload()
     await expect(page.getByRole('radio', { name: /False/ })).toBeChecked()
     await expect(page.getByRole('radio', { name: 'Unsure', checked: true })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'Guessing', checked: true })).toHaveCount(0)
-    await page.getByRole('radio', { name: 'Guessing' }).click()
+    await chooseConfidence(page, 'Guessing')
     await page.reload()
     await expect(page.getByRole('radio', { name: 'Guessing', checked: true })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'Unsure', checked: true })).toHaveCount(0)
-    await page.getByRole('radio', { name: 'Certain' }).click()
+    await chooseConfidence(page, 'Certain')
     await page.reload()
     await expect(page.getByRole('radio', { name: 'Certain', checked: true })).toBeVisible()
 

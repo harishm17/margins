@@ -235,14 +235,14 @@ export function TopicHeader({
       {/* A phone shows the title and one button here: the numbers (progress, best score, next review, time) are in "Details", so the
           first task sits high on the screen. A wide screen keeps them beside the button. */}
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-fg-2 sm:mt-3">
-        <span className="contents max-sm:hidden">{statusItems}</span>
+        <span className={cn('contents', !aboutOpen && 'max-sm:hidden')}>{statusItems}</span>
         {/* On a phone the numbers are in the details too, so the button is always there; a wide screen shows it only when there is more to read. */}
         <button
           type="button"
           aria-expanded={aboutOpen}
           aria-controls={description ? `${descriptionId} ${aboutId}` : aboutId}
           onClick={() => setAboutOpen((current) => !current)}
-          className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg max-sm:min-h-11', !hasAbout && 'sm:hidden')}
+          className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg max-sm:-order-1 max-sm:min-h-11', !hasAbout && 'sm:hidden')}
         >
           {wrong > 0 ? <WarningCircle aria-hidden="true" weight="fill" className="size-4 text-warning" /> : null}
           Details
@@ -250,12 +250,10 @@ export function TopicHeader({
           <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', aboutOpen && 'rotate-180')} />
         </button>
       </div>
-      {fade ? <p className="mt-1.5 text-caption font-normal text-fg-3 max-sm:hidden">{fade}</p> : null}
+      {fade ? <p className={cn('mt-1.5 text-caption font-normal text-fg-3', !aboutOpen && 'max-sm:hidden')}>{fade}</p> : null}
       {/* Beside the numbers on a laptop; on a phone it is in "Details", so the header stays short. */}
       <StatusGuide parts={['topic', 'steps', 'quiz']} id="topic-status-guide" className="mt-1 max-sm:hidden" />
       <div id={aboutId} className={cn(fold)}>
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-fg-2 sm:hidden">{statusItems}</div>
-        {fade ? <p className="mt-1.5 text-caption font-normal text-fg-3 sm:hidden">{fade}</p> : null}
         <StatusGuide parts={['topic', 'steps', 'quiz']} id="topic-status-guide-phone" className="mt-3 sm:hidden" />
         <ConceptChips concepts={concepts} className="mt-3" />
         {concepts.length > 0 ? (

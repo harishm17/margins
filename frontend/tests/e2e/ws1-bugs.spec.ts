@@ -6,6 +6,7 @@ import { DEMO_EMAIL, FIXTURE_PDF, demoIds } from './helpers/seed-demo'
 import { recallWorld } from './helpers/v31-recall'
 import { seedConcepts } from './helpers/v31-sessions'
 import { streamedPartsArrived } from './helpers/settle'
+import { chooseConfidence } from './helpers/confidence'
 
 // UX review fixes, workstream 1: bugs that lose work or break a flow (items 1, 2, 5, 6, 7 and 14 of the review).
 test.use({ timezoneId: ZONE })
@@ -52,7 +53,7 @@ test.describe('unsent text survives a reload', () => {
     await page.getByRole('button', { name: 'Start warm-up' }).click()
     await expect(page.getByRole('heading', { name: /Warm-up question 1 of/ })).toBeVisible()
     await page.getByRole('radio', { name: /Option B for question/ }).click()
-    await page.getByRole('radio', { name: 'Fairly sure' }).click()
+    await chooseConfidence(page, 'Fairly sure')
     await expect(page.getByTestId('warmup-draft-status')).toHaveText('Saved', { timeout: 15_000 })
     await page.reload()
     await expect(page.getByRole('heading', { name: /Warm-up question 1 of/ })).toBeVisible()

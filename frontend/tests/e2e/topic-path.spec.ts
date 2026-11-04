@@ -4,6 +4,7 @@ import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import { addContent, addQuizSet, createCourse, quizQuestions, seedDueConcept, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
 import { expectClearOfTabBar, expectNoSidewaysScroll } from './helpers/overflow'
 import { animationsSettled, streamedPartsArrived } from './helpers/settle'
+import { chooseConfidence } from './helpers/confidence'
 
 // The topic path (spec §5): Warm-up, Read, Recall, Practice, Quiz as a stepper, the tools beside it (in one
 // menu on a phone), the topic opening on its next activity, the concept chips and the one-time card.
@@ -199,7 +200,11 @@ test('phone shows stepper and tools menu at 390px', async ({ page }) => {
   await screenshotIfAsked(page, 'topic-path-new-390x844')
   await expectNoSidewaysScroll(page, url)
 
-  // All five steps are on screen without scrolling the row, with short labels.
+  // The path is one line, "Step 2 of 5: Read"; the five steps open from it in a sheet, each a link inside the window.
+  const pathButton = page.getByTestId('phone-path')
+  await expect(pathButton).toHaveText(/Step 2 of 5: Read/)
+  await expect(pathNav(page)).toHaveCount(0)
+  await pathButton.click()
   const nav = pathNav(page)
   for (const label of ['Warm-up', 'Read', 'Recall', 'Practice', 'Quiz']) {
     const link = nav.getByRole('link', { name: new RegExp(label) })
@@ -208,6 +213,8 @@ test('phone shows stepper and tools menu at 390px', async ({ page }) => {
     expect(box && box.x >= 0 && box.x + box.width <= PHONE.width, `${label} is inside the window`).toBeTruthy()
   }
   await expect(nav.getByRole('link', { name: /Recall/ })).toContainText('(next up)')
+  await page.keyboard.press('Escape')
+  await expect(nav).toHaveCount(0)
   // The tools are not a row of links here: one menu.
   await expect(page.getByRole('group', { name: 'Tools' })).toBeHidden()
   // The concept chips fold into one line on a phone and open on a tap; the state stays in words.
@@ -263,10 +270,13 @@ test('on a phone the topic header is compact: the content starts near the top, a
   await page.goto(`${topicUrl('Midway topic')}?view=examples`)
   await expect(page.getByRole('heading', { level: 1, name: 'Midway topic' })).toBeVisible()
   const header = page.locator('main header')
-  // Status, the ideas summary and the Tools menu share the line under the title.
-  await expect(header.getByText('In progress', { exact: true })).toBeVisible()
+  // The title, one Details button and the Tools menu are all there is under the unit link; the status is in Details.
+  await expect(header.getByText('In progress', { exact: true }).locator('visible=true')).toHaveCount(0)
   await expect(header.getByRole('button', { name: /Details/ })).toBeVisible()
   await expect(header.getByRole('button', { name: 'Tools' })).toBeVisible()
+  await header.getByRole('button', { name: /Details/ }).click()
+  await expect(header.getByText('In progress', { exact: true })).toBeVisible()
+  await header.getByRole('button', { name: /Details/ }).click()
   const top = async (selector: string) => (await page.locator(selector).first().boundingBox())!.y
   // On a tool the next-step line is one tidy block: the tag and the reason (two lines at most), the way on under it. No "Why" fold.
   const next = page.getByRole('region', { name: 'Next on this topic' })
@@ -673,7 +683,7 @@ async function answerWarmup(page: Page, choice: number, confidence: string | nul
   const title = (await page.getByRole('heading', { name: /^Warm-up question \d of 3$/ }).textContent()) ?? ''
   const number = Number(/(\d) of 3/.exec(title)?.[1])
   await page.getByRole('radio').nth(choice).click()
-  if (confidence) await page.getByRole('radio', { name: confidence }).click()
+  if (confidence) await chooseConfidence(page, confidence)
   await page.getByRole('button', { name: /Next question|See answers/ }).click()
   // The next question (or the answers) replaces this one once the server has answered.
   if (number < 3) await expect(page.getByRole('heading', { name: `Warm-up question ${number + 1} of 3` })).toBeVisible()
@@ -742,7 +752,7 @@ test.describe('the warm-up', () => {
     // The confidence is optional: an answer alone is enough to go on, and rating it still works.
     await page.getByRole('radio').nth(0).click()
     await expect(page.getByRole('button', { name: 'Next question' })).toBeEnabled()
-    await page.getByRole('radio', { name: 'Certain' }).click()
+    await chooseConfidence(page, 'Certain')
     await expect(page.getByRole('button', { name: 'Next question' })).toBeEnabled()
     await screenshotIfAsked(page, 'e3-warmup-question-1440x900')
     await expectNoAxeViolations(page, 'warm-up question, 1440')
@@ -875,7 +885,7 @@ test.describe('the warm-up', () => {
     await expectNoSidewaysScroll(page, page.url())
     await expect(page.getByRole('heading', { name: 'Warm-up question 1 of 3' })).toBeVisible()
     await page.getByRole('radio').nth(0).click()
-    await page.getByRole('radio', { name: 'Fairly sure' }).click()
+    await chooseConfidence(page, 'Fairly sure')
     await expectClearOfTabBar(page, page.getByRole('button', { name: 'Next question' }), 'Next question')
     await screenshotIfAsked(page, 'e3-warmup-question-390x844')
     await expectNoAxeViolations(page, 'warm-up question, 390')
@@ -966,7 +976,7 @@ test.describe('the reader', () => {
     await expect(original).toHaveAttribute('href', `/api/materials/${materialId}/file#page=3`)
     await expect(page.getByRole('link', { name: /Open the original at p\. 6/ })).toBeVisible()
     await expect(page.getByRole('link', { name: /Open the original at p\. 7/ })).toBeVisible()
-    await expect(page.getByText('Text taken from a PDF can lose its layout and maths.')).toBeVisible()
+    await expect(page.getByText(/Text from a PDF can lose its layout and maths/)).toBeVisible()
     // Read to answer: the focus question links to its passage.
     const question = page.getByRole('region', { name: 'Read to answer' })
     await expect(question).toContainText('How are two keys in one bucket handled?')
