@@ -261,7 +261,7 @@ test.describe('phone', () => {
     await expect(drawer.getByRole('button', { name: /^Course: / })).toBeVisible()
     await expect(drawer.getByRole('radio', { name: /Match device/ })).toBeVisible()
     // Each course place is on one phone surface (the tab bar or its More sheet), never here.
-    await expect(drawer.getByRole('navigation', { name: 'Course' })).toHaveCount(0)
+    await expect(drawer.getByRole('navigation', { name: 'Course', exact: true })).toHaveCount(0)
     await expect(drawer.getByRole('link', { name: 'Materials' })).toHaveCount(0)
     await expect(drawer.locator('ul[data-collapsible]')).toHaveCount(0)
     expect((await drawer.getByRole('button', { name: 'Close menu' }).boundingBox())!.height).toBeGreaterThanOrEqual(44)

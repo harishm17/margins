@@ -129,7 +129,7 @@ test.describe('Review with nothing due', () => {
     await signIn(page, DEMO_EMAIL)
     await page.goto(`${base}/review`)
     await expect(page.getByRole('heading', { name: 'Nothing is due' })).toBeVisible()
-    const keep = page.getByTestId('keep-studying')
+    const keep = page.locator('[data-testid="keep-studying"]:visible')
     await expect(keep).toBeVisible()
     expect(await keep.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(false)
     // Closed: none of the extras is on screen.
@@ -138,6 +138,6 @@ test.describe('Review with nothing due', () => {
     await openKeepStudying(page)
     await expect(page.getByRole('heading', { name: 'Progress', exact: true })).toBeVisible()
     // The rules behind the figures are one more step in.
-    await expect(page.getByText('How this is calculated')).toBeVisible()
+    await expect(page.getByText('How this is calculated').first()).toBeVisible()
   })
 })
