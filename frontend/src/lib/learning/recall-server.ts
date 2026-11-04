@@ -225,20 +225,38 @@ async function withHelp(userId: string, topicId: string, feedback: RecallFeedbac
 
 // ------------------------------------------------------------------------------------------ the state of the recall step
 
+/** The cards a recall step shows, in order: one per objective, then one for the whole topic. */
+function recallTargets(concepts: RecallConcept[], prompts: Awaited<ReturnType<typeof loadRecallPrompts>>, mode: 'recall' | 'teach_back', conceptId: string | null) {
+  const requests: TargetRequest[] =
+    mode === 'teach_back'
+      ? [{ kind: 'teach_back', conceptId }]
+      : [...[...prompts.keys()].sort((a, b) => a - b).map((objectiveIndex) => ({ kind: 'recall' as const, objectiveIndex })), { kind: 'recall' as const }]
+  return requests.flatMap((request) => {
+    const target = resolveTarget(concepts, prompts, request)
+    return target ? [target] : []
+  })
+}
+
+/**
+ * How many of the recall step's prompts have an answer. The first graded answer sets `recallAt` (the learning model's
+ * "recalled"), so the path cannot tell from that alone whether the step is finished; this is what it shows.
+ */
+export async function loadRecallProgress(userId: string, topicId: string): Promise<{ answered: number; total: number }> {
+  const [concepts, prompts] = await Promise.all([loadRecallConcepts(topicId), loadRecallPrompts(topicId)])
+  const targets = recallTargets(concepts, prompts, 'recall', null)
+  if (targets.length === 0) return { answered: 0, total: 0 }
+  const attempts = await prisma.recallAttempt.findMany({ where: { userId, topicId, kind: 'recall' }, distinct: ['objectiveIndex'], select: { objectiveIndex: true } })
+  const answered = targets.filter((target) => attempts.some((attempt) => attempt.objectiveIndex === target.objectiveIndex)).length
+  return { answered, total: targets.length }
+}
+
 /** The cards of the recall step. A topic with no concept that has claims has none. */
 export async function loadRecallState(userId: string, topicId: string, options: { mode?: 'recall' | 'teach_back'; conceptId?: string | null } = {}): Promise<RecallState | null> {
   const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true } })
   if (!topic) return null
   const mode = options.mode ?? 'recall'
   const [concepts, prompts] = await Promise.all([loadRecallConcepts(topicId), loadRecallPrompts(topicId)])
-  const requests: TargetRequest[] =
-    mode === 'teach_back'
-      ? [{ kind: 'teach_back', conceptId: options.conceptId ?? null }]
-      : [...[...prompts.keys()].sort((a, b) => a - b).map((objectiveIndex) => ({ kind: 'recall' as const, objectiveIndex })), { kind: 'recall' as const }]
-  const targets = requests.flatMap((request) => {
-    const target = resolveTarget(concepts, prompts, request)
-    return target ? [target] : []
-  })
+  const targets = recallTargets(concepts, prompts, mode, options.conceptId ?? null)
   if (targets.length === 0) return { mode, cards: [] }
 
   // The newest attempt of each card (a recall's card is its objective; a teach-back's concept is in the result).

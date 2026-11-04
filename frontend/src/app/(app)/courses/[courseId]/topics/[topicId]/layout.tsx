@@ -91,6 +91,7 @@ export default async function TopicLayout({
           previousId={data.previous?.id ?? null}
           nextId={data.next?.id ?? null}
           pathDone={data.pathDone}
+          recallProgress={data.recallProgress}
           steps={data.pathSteps}
           nextActivity={data.nextActivity}
         />

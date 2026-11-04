@@ -78,14 +78,19 @@ export function RecallView({ topicId, state, nextHref, nextLabel, next, voiceHre
   const teachBack = state.mode === 'teach_back'
   const pathname = usePathname()
   const search = useSearchParams()
-  const [graded, setGraded] = React.useState(() => state.cards.some((card) => card.latest !== null))
+  // The first graded answer counts as "recalled" for the topic (the learning model needs one), but the step is only
+  // finished when every prompt has an answer, so the page counts them and keeps the rest in front of the student.
+  const [answeredKeys, setAnsweredKeys] = React.useState(() => new Set(state.cards.filter((card) => card.latest !== null).map((card) => card.key)))
+  const graded = answeredKeys.size > 0
+  const total = state.cards.length
+  const complete = answeredKeys.size >= total
   const [instructionsOpen, setInstructionsOpen] = React.useState(false)
   const instructionsId = React.useId()
   // This view ends in its own next step, so the topic's next-activity card does not repeat it above.
   useActivityInProgress(true)
   // Once something is graded the way on is the topic's next activity, as the primary button; with nothing
   // graded yet (or the next activity being recall itself) the step offers to skip on to the one after it.
-  const onward = graded && !opensHere(next.href, pathname, search) ? { href: next.href, label: activityVerb(next.kind) } : { href: nextHref, label: nextLabel }
+  const onward = graded && complete && !opensHere(next.href, pathname, search) ? { href: next.href, label: activityVerb(next.kind) } : { href: nextHref, label: nextLabel }
   // With results on the page they come first: the instructions fold into one line.
   const folded = graded && !instructionsOpen
   return (
@@ -113,15 +118,20 @@ export function RecallView({ topicId, state, nextHref, nextLabel, next, voiceHre
         </p>
         <p className="mt-2 text-body text-fg-2">The reading stays closed while you answer. If you open it, the answer won&apos;t count toward your score.</p>
       </div>
+      {total > 1 ? (
+        <p className="mt-4 text-small text-fg-2" data-testid="recall-progress">
+          {answeredKeys.size} of {total} prompts answered{complete ? '' : '. Answer the rest, or move on.'}
+        </p>
+      ) : null}
       <ol className="mt-8 divide-y divide-border">
         {state.cards.map((card) => (
           <li key={card.key} className="py-8 first:pt-0">
-            <Card topicId={topicId} card={card} onGraded={() => setGraded(true)} />
+            <Card topicId={topicId} card={card} onGraded={() => setAnsweredKeys((current) => new Set(current).add(card.key))} />
           </li>
         ))}
       </ol>
       <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
-        <Button asChild variant={graded ? 'primary' : 'secondary'}>
+        <Button asChild variant={graded && complete ? 'primary' : 'secondary'}>
           <Link href={onward.href} scroll={false}>
             <span className="inline-flex items-center gap-1.5">
               {onward.label}
