@@ -6,7 +6,6 @@
 
 Upload your lecture notes, textbook chapters and past exams. Margins splits them into topics, then writes notes, worked examples, quizzes and timed practice exams from that material, with sources you can click back to. A voice coach quizzes you out loud.
 
-<!-- draft for Harish -->
 Margins asks you to try before it helps. Each topic starts with a few questions you will probably miss, then the reading, then writing what you remember with the book closed. The AI writes the questions, grades the answers, plans your days and gives the smallest hint that unblocks you. It does not hand you the answer first.
 
 **[studymargins.com](https://studymargins.com)**
@@ -24,7 +23,6 @@ Margins asks you to try before it helps. Each topic starts with a few questions 
 
 1. **Upload** PDF, DOCX, PPTX or DOC files: lecture notes, book chapters, sample exams.
 2. **Review the course plan** Margins proposes: units (the syllabus's chapters or weeks) of topics, each tied to the pages that teach it, with learning objectives, prerequisites and an estimated time. Rename, merge, move, add or remove topics before anything is generated.
-<!-- draft for Harish -->
 3. **Study each topic along a path**: Warm-up, Read, Recall, Practice, Quiz. The topic opens on the step Margins thinks you need next, and says why in one sentence. Worked examples, the explainer and voice practice are tools beside the path.
    - **Warm-up**: a few questions before you read. You will miss some. That is the point: it shows what to look for. Nothing here counts toward quiz scores.
    - **Read**: your own pages, with the passages your warm-up pointed to marked "Focus here", margin notes, short check questions between sections, and a link to the original page. Asking the tutor about a passage needs your own attempt first.
@@ -37,7 +35,6 @@ Margins asks you to try before it helps. Each topic starts with a few questions 
 4. **Take practice exams** across topics: timed, autosaved, with per-question feedback and regrading. Upload past exams and **Match my past exams** writes new ones in their style (question mix, points, phrasing, conventions); the topics those exams test are flagged.
 5. **Plan to your exam date.** Give the date and your daily minutes and Margins lays out each day: new topics in prerequisite order, a quiz the next day, spaced reviews, a mock exam after each unit and two full mocks before the exam. Mastery comes from what you answered yourself in quizzes, exams, recall, review, voice and practice, not from reading; **Retry what you missed** and **Fresh review** target weak spots.
 6. **Ask your materials**: a chat that answers from your files with numbered citations, and says so when the files don't cover the question.
-<!-- draft for Harish -->
    Finding a fact gets a direct, cited answer. Asking to understand an idea first asks what you think, then explains the gap and ends with a check card you answer from memory. Asking for help with a problem of your own never gets the solution: it asks about your attempt, and after a real try you can ask for a worked example with different numbers. While a mock exam is in progress, Ask declines questions that match the exam.
 7. **Review in mixed sessions.** The Review page starts a session of up to 12 questions from the ideas that are due across your topics, never two in a row on the same idea. A miss is followed by a fresh question on the same idea, so you are not re-answering the same wording.
 8. **See where you stand.** The map shows one unit's ideas and what builds on what, with a state on each (Solid, Getting there, Shaky, Fading, Inferred, Not started). This week's focus names the few ideas worth your time. The progress panel shows only what you answered yourself, how much help you used and how well your confidence matched your results. There are no streaks, points or badges.
@@ -77,7 +74,7 @@ Browser ──▶ Next.js 16 (web) ──────────────▶
 - **Parsing and chunking.** Files are read as markdown (PDFs with pymupdf4llm; DOCX, PPTX, and DOC through LibreOffice when installed) and split at headings and paragraphs into chunks of about 350 tokens, each tagged with its heading path and pages.
 - **Local embeddings.** Chunks are embedded in-process with `BAAI/bge-small-en-v1.5` (384 dimensions, no API cost) and stored in pgvector with an HNSW index.
 - **Topic-scoped retrieval.** Each topic is mapped to at most 24 chunks by hybrid search: vector similarity and Postgres full-text search, merged with Reciprocal Rank Fusion, with a similarity floor so a barely covered topic gets a short list instead of loose matches. Generators only ever see those chunks, so prompt size stays flat as a course grows, and the shared excerpt block is prompt-cached across notes, examples, quizzes and exams.
-- **Models.** Claude Opus writes notes, examples, quizzes and exams, plans each course in one low-effort call and answers Ask questions; Claude Haiku handles file validation, short-answer grading and the voice coach. <!-- draft for Harish --> The learning features add three more purposes: Sonnet at low effort writes the practice tutor's replies and grades recall answers, and Haiku at low effort routes Ask messages and judges tutor replies for leaks. Each purpose has its own setting (`MODEL_TUTOR`, `MODEL_RECALL_GRADING`, `MODEL_ROUTER`).
+- **Models.** Claude Opus writes notes, examples, quizzes and exams, plans each course in one low-effort call and answers Ask questions; Claude Haiku handles file validation, short-answer grading and the voice coach. The learning features add three more purposes: Sonnet at low effort writes the practice tutor's replies and grades recall answers, and Haiku at low effort routes Ask messages and judges tutor replies for leaks. Each purpose has its own setting (`MODEL_TUTOR`, `MODEL_RECALL_GRADING`, `MODEL_ROUTER`).
 - **Streaming speech-to-text from the browser.** The page streams the microphone (16 kHz PCM from an AudioWorklet) straight to Deepgram Nova-3, opted out of Deepgram's model training, with the browser's Web Speech API as the fallback. AssemblyAI is built in as an optional second provider (`CLOUD_SPEECH_PROVIDERS`), off by default because it trains on audio unless a paid account opts out. The server only mints a short-lived token per session, so no API key reaches the page, and passes the course's key terms so technical words come out right. Text-to-speech stays in the browser. The server runs Claude with drill tools (next question, record answer, hint) and streams each turn back as NDJSON.
 - **Jobs.** Long tasks run as jobs that are claimed with one atomic update and hold a lease; a reaper re-dispatches jobs whose worker died. Each job records its tokens and cost; a per-user daily allowance and a site-wide daily cap bound spend.
 - **AI outages and the daily allowance.** One shared status record (`ai_status`, read at `GET /status/ai`) says whether the AI is available. Out-of-credit, key and configuration errors mark it unavailable at once; rate limits and overloads do so after three in a row. While it is down, the app shows a site-wide notice and turns the AI buttons off with the reason. The daily allowance is checked before a job is created, not after. A failure that can be retried puts the job back to `pending`; `failed` is final. Mock exam answers are always saved, and grading waits for the AI to come back, for up to 7 days. If `OPS_ALERT_WEBHOOK_URL` is set, the owner gets a message when the AI goes down and when it comes back.
@@ -85,10 +82,9 @@ Browser ──▶ Next.js 16 (web) ──────────────▶
 - **Isolation.** Only the web service can call the AI service (shared internal token), which is reachable only on Railway's private network.
 - **Storage.** The web app streams each upload through size and file-type checks into an S3-compatible bucket (a Railway bucket in production); the AI service downloads it from there to process it. Without a bucket, both use a local uploads folder.
 
-<!-- draft for Harish -->
 ## Effort before help
 
-Research on learning keeps finding the same thing: help given before you try does not stick, and students cannot feel the difference. Margins is built around that. The AI plans, writes questions, grades, diagnoses and gives the smallest hint that unblocks you. The student does the generative work first, and the app enforces the order instead of asking nicely.
+Research on learning keeps finding the same thing: help given before you try does not stick, and students cannot feel the difference (in [one 2025 experiment](https://www.pnas.org/doi/10.1073/pnas.2422633122), students with a plain chatbot scored higher on practice and lower on the later exam without it). Margins is built around that. The reasons for each design choice are in [docs/design/DECISIONS.md](docs/design/DECISIONS.md). The AI plans, writes questions, grades, diagnoses and gives the smallest hint that unblocks you. The student does the generative work first, and the app enforces the order instead of asking nicely.
 
 Every answer, from any screen, goes through one path:
 
@@ -114,7 +110,7 @@ Every answer, from any screen, goes through one path:
 
 ## Evals
 
-The method and latest results are also on [studymargins.com/evaluation](https://studymargins.com/evaluation).
+The retrieval and generation results are also on [studymargins.com/evaluation](https://studymargins.com/evaluation). The tutoring and concept-graph results below are in [`evals/results/`](evals/results/) only.
 
 ### Retrieval
 
@@ -155,14 +151,21 @@ Latest run: [2026-10-21](evals/results/2026-10-21-structure.md), 8 topics, Opus 
 
 The same judge also picked the model: [Sonnet and Haiku made maths errors and fell short of the bar set before the run](evals/results/2026-10-21-model-decision.md), so generation stays on Opus and cost is held down by generating each topic only when it is opened.
 
-<!-- draft for Harish -->
 ### Learning checks
 
-The learning features add three checks. Their numbers are pending, and this section stays a placeholder until the runs are in.
+The learning features add three checks. Results are from November 2, 2026, on the code of that day.
 
-- **Tutoring gates** (`evals/tutoring/`). Scripted students, not a model, play conversations against the practice tutor, Ask and the voice teach-back coach. Code checks every reply for answer leaks, one question per turn, length, a clear next step, rung jumps, the worked-example rule, pointing at the first wrong step, and prompt injection. Gates and results: (eval numbers pending).
-- **Recall grader.** The grader labels each claim covered, partial, missing or incorrect, and each label must carry a quote that is a substring of the student's answer or it is downgraded. It can decline to grade a short answer. Results against hand labels: (eval numbers pending).
-- **Generation checks** (`evals/generation/`). Claim quotes that are substrings of their chunk, 3 to 8 concepts per topic, every objective mapped, an acyclic prerequisite graph, valid concept ids on every item, and warm-up questions not reused in the quiz. Results: (eval numbers pending).
+- **Tutoring gates** (`evals/tutoring/`). Scripted students, not a model, play conversations against the practice tutor, Ask and the voice teach-back coach. Code checks every reply for answer leaks, one question per turn, length, a clear next step, rung jumps, the worked-example rule, pointing at the first wrong step, and prompt injection. No model judge is used as a gate.
+
+| Surface (latest run) | Size | Gates |
+|---|---|---|
+| Practice tutor ([`practice-final-rerun`](evals/results/2026-11-02-practice-final-rerun.md)) | 50 scenarios, 172 replies | All 11 pass: 0 of 172 replies leak the answer; 95.3% end with one question or one next step (gate 95%); 90.0% locate the first wrong step (gate 90%); 0 of 21 planted instructions followed. $0.0108 per reply. |
+| Ask ([`ask-final`](evals/results/2026-11-02-ask-final.md)) | 132 scenarios, 239 replies | All 7 pass: 0.7% of replies to a student's own problem leak (1 of 143; gate 2%); 24 of 24 lookups answered directly; 0 of 6 planted instructions followed; the exam guard declined exactly the planted turns. $4.51 for the run. |
+| Voice teach-back ([`teach-final-rerun`](evals/results/2026-11-02-teach-final-rerun.md)) | 20 scenarios, 96 coach turns | 3 of 4 pass: no claim said before the app released it (0 of 96), 0 of 10 planted instructions followed, one question per turn (100%). **"No lecture before two probes" fails: 5 of 69 turns.** |
+
+  These are the last runs of several that day. The practice tutor passed on its fifth run (the first had 3 leaks in 172 replies and failed five gates), and Ask on its third (the first had 2 leaks in 71 replies). The teach-back gate counted sentences, and the turns it flagged were mostly greetings, acknowledgements and refusals. It has since been replaced by a judged check (`teaches_before_probe`, see [`evals/README.md`](evals/README.md)); a full run of the judged gate is still to do. Scripted students do not behave like real ones: the gates show the tutor holds the line against these patterns, not that it teaches well.
+- **Recall grader.** The grader labels each claim covered, partial, missing or incorrect, and each label must carry a quote that is a substring of the student's answer or it is downgraded. It can decline to grade a short answer. Agreement with hand labels is not measured yet: there is no labelled set and no result file.
+- **Generation checks** (`evals/generation/`). Claim quotes that are substrings of their chunk, 3 to 8 concepts per topic, every objective mapped, an acyclic prerequisite graph, valid concept ids on every item, and warm-up questions not reused in the quiz. Latest run ([`full-generation`](evals/results/2026-11-02-full-generation.md), Opus at medium effort, 8 topics from two MIT courses, no model judge): 149 of 149 claim quotes found in their chunk (gate 98%); 8 of 8 topics with 3 to 8 concepts (mean 5.9), every objective mapped and an acyclic graph; 155 of 155 items with valid concept ids (gate 100%); 0 warm-up questions repeated in the quiz. The same run failed the format checks on notes (0 of 8 with every expected section, 0 of 8 inside the word band), 3 of 8 quizzes missed the requested question count, and one warm-up generation failed (1 usable question of 5). It cost $0.928 per topic, $7.50 in all.
 
 ## Run it locally
 
@@ -308,9 +311,9 @@ Light visit analytics on studymargins.com only: page views, where a visit came f
 .railway/railway.ts   Railway project as code
 frontend/             Next.js app: pages, API routes, Prisma schema, Playwright e2e
 ai-service/           FastAPI service: parsing, embeddings, generation, grading
-evals/                retrieval and generation evals, results
+evals/                retrieval, generation and tutoring evals, and their results
 scripts/              e2e-stack.sh, the stack the Playwright specs run against
-docs/                 deployment guide (RAILWAY.md) and old design screenshots (`design/`)
+docs/                 deployment guide (RAILWAY.md), the design decisions record (design/DECISIONS.md) and design screenshots (`design/`)
 ```
 
 ## License

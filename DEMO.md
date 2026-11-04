@@ -45,7 +45,7 @@ ANTHROPIC_API_KEY=sk-ant-your-key-here
 
 For the test sign-in, also `export ENABLE_TEST_LOGIN=true` before `docker compose up`.
 
-The voice coach, the practice tutor, Ask and the recall grader run on the same Claude key; the browser does the speech. On the mock provider they return placeholder text, so the tutoring scenes only show the flow, not real replies. All other variables are configured in `docker-compose.yml`. Key defaults:
+The voice coach, the practice tutor, Ask and the recall grader run on the same Claude key; speech output stays in the browser, and speech recognition uses the browser's own recognizer unless `DEEPGRAM_API_KEY` is set, in which case voice practice streams the microphone to Deepgram. On the mock provider they return placeholder text, so the tutoring scenes only show the flow, not real replies. All other variables are configured in `docker-compose.yml`. Key defaults:
 
 | Variable            | Value                |
 |---------------------|----------------------|

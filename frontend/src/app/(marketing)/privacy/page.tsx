@@ -22,14 +22,14 @@ export default function PrivacyPage() {
     <LegalPage title="Privacy Policy">
       <p>
         Margins is a study tool run by Harish Manoharan. This page explains what we store and why. Last updated
-        November 3, 2026.
+        November 4, 2026.
       </p>
       <LegalContents sections={SECTIONS} />
       <LegalSection id="store" heading="What we store">
         <LegalList
           items={[
             { name: 'Your account', text: 'your email address, your name and your Google account ID, from signing in with Google. Accounts made with a password before Google sign-in also still have that password stored, hashed and no longer used.' },
-            { name: 'Your files and what Margins makes from them', text: 'notes, examples, practice, quizzes, mock exams, chat answers, your answers and scores, and voice practice transcripts.' },
+            { name: 'Your files and what Margins makes from them', text: 'notes, examples, practice, quizzes, mock exams, chat answers, your answers and scores, and voice practice transcripts. Transcripts are deleted after 180 days; the scores they produced stay.' },
             { name: 'Basic usage records', text: 'such as how much AI processing your account used each day, so we can keep the service within its limits.' },
           ]}
         />

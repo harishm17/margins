@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { ArrowUpRight } from '@phosphor-icons/react/dist/ssr'
 import { phoneInlineHit } from '@/components/ui/styles'
 import { BRAND_NAME } from '@/config/brand'
-import { AUTHOR, SITE_URL } from '@/config/site'
+import { AUTHOR, GITHUB_URL, SITE_URL } from '@/config/site'
 import { EVAL_FACTS, LEARNING_V3_EVAL_DRAFT, type DraftCheck } from '@/features/marketing/content'
 import { EVAL_FILES, GENERATION, MODEL_CHOICE, RETRIEVAL } from '@/features/marketing/evals'
 
@@ -17,7 +17,7 @@ const TITLE = 'How Margins is evaluated'
 const DESCRIPTION =
   'The method and latest results of the two Margins evaluations: finding the right pages in course files, and the quality of the notes and quizzes it writes. Sample sizes, limits and failed checks included.'
 const PUBLISHED = '2026-10-28'
-const MODIFIED = '2026-10-28'
+const MODIFIED = '2026-11-04'
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -205,8 +205,11 @@ export default function EvaluationPage() {
             topic, and whether the notes, examples, practice and quizzes are correct, complete and based on the pages.
           </li>
           <li>
-            <strong className="font-medium text-fg">What is not.</strong> Ask replies, voice practice, scanned or
-            handwritten files, and whether students learn more with {BRAND_NAME}.
+            <strong className="font-medium text-fg">What is not shown here.</strong> Whether the practice tutor, Ask
+            and the voice coach give the answer away is checked with scripted students, and those results are in{' '}
+            <a href={`${GITHUB_URL}/tree/main/evals/results`} className={link}>the repository</a>, not on this page yet.
+            Not checked at all: scanned or handwritten files, how often the recall grader agrees with hand labels, and
+            whether students learn more with {BRAND_NAME}.
           </li>
         </ul>
       </section>
@@ -218,7 +221,7 @@ export default function EvaluationPage() {
       </p>
       <p className={p}>
         The numbers on this page are copied from the result files in the repository, which are linked at the end. The
-        runs are from October 20 and 21, 2026.
+        runs are from October 20 and 21, 2026. The tutoring checks were run on November 2, 2026, and their numbers are not on this page yet.
       </p>
 
       <nav aria-label="On this page" className="mt-8 rounded-card border border-border bg-surface-2 px-4 py-3">
