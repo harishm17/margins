@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowRight } from '@phosphor-icons/react/dist/ssr'
+import { ArrowLeft, ArrowRight } from '@phosphor-icons/react/dist/ssr'
 import { SourceLink } from '@/components/learning/source-link'
 import { AiBlockedNote, useAiStatus } from '@/features/ai/ai-status'
 import { Button } from '@/components/ui/button'
@@ -100,10 +100,24 @@ export function GapExplainer({
   /** The idea the student came here for (a pointer, the next activity): the page scrolls to it. */
   focusConceptId?: string | null
 }) {
-  const grade = useCheckGrader(topicId)
+  const saveGrade = useCheckGrader(topicId)
   const projectId = useOptionalTopic()?.courseId ?? null
   const { waitedOut, checkAgain } = useRefreshWhile(state.status === 'pending')
   const hasGaps = state.gaps.length > 0
+  // One idea at a time. The questions the student has tried (a grade of their own, or "I don't know") unlock the way on at the end.
+  const [picked, setPicked] = React.useState<number | null>(null)
+  // Coming for one idea (a pointer, the next activity): the page opens at its explanation until the student moves to another.
+  const focusAt = focusConceptId ? state.gaps.findIndex((gap) => gap.conceptId === focusConceptId) : -1
+  const index = picked ?? Math.max(0, focusAt)
+  const [tried, setTried] = React.useState<ReadonlySet<string>>(() => new Set())
+  const grade = React.useCallback<typeof saveGrade>(
+    async (input) => {
+      const result = await saveGrade(input)
+      setTried((current) => new Set(current).add(input.question))
+      return result
+    },
+    [saveGrade]
+  )
   // The first time the explanations are on screen, they are recorded as help the AI gave (level 3), once per attempt.
   React.useEffect(() => {
     if (hasGaps) void apiFetch(`/api/topics/${topicId}/explainer`, { method: 'POST', json: { action: 'gaps_shown' } }).catch(() => undefined)
@@ -113,21 +127,28 @@ export function GapExplainer({
   useSeenInView(
     () => [...(listRef.current?.querySelectorAll<HTMLElement>('[data-concept-id]') ?? [])].map((element) => ({ key: element.dataset.conceptId as string, element, payload: element.dataset.conceptId as string })),
     (conceptId) => void apiFetch(`/api/topics/${topicId}/explainer`, { method: 'POST', json: { action: 'section_viewed', kind: 'gap_explainer', conceptIds: [conceptId] } }).catch(() => undefined),
-    { watch: listRef, deps: [state.gaps.length] }
+    { watch: listRef, deps: [state.gaps.length, index] }
   )
-  // Coming for one idea: the page opens at its explanation. Once, when its section is there.
-  const scrolled = React.useRef(false)
-  React.useEffect(() => {
-    if (!focusConceptId || scrolled.current) return
-    const target = [...(listRef.current?.querySelectorAll<HTMLElement>('[data-concept-id]') ?? [])].find((element) => element.dataset.conceptId === focusConceptId)
-    if (!target) return
-    scrolled.current = true
-    scrollToElement(target)
-  }, [focusConceptId, state.gaps.length])
   // Two gaps under one concept get "part 1 of 2" so their headings differ.
   const parts = new Map<string, number>()
-  for (const gap of state.gaps) parts.set(gap.conceptName, (parts.get(gap.conceptName) ?? 0) + 1)
-  const seen = new Map<string, number>()
+  const partOf = new Map<string, number>()
+  for (const gap of state.gaps) {
+    parts.set(gap.conceptName, (parts.get(gap.conceptName) ?? 0) + 1)
+    partOf.set(gap.claimId, parts.get(gap.conceptName) ?? 1)
+  }
+  const gapCount = state.gaps.length
+  const current = Math.min(index, Math.max(0, gapCount - 1))
+  const last = current >= gapCount - 1
+  const allTried = hasGaps && state.gaps.every((gap) => tried.has(gap.check.question))
+  const untried = hasGaps ? state.gaps.filter((gap) => !tried.has(gap.check.question)).length : 0
+  const go = (to: number) => {
+    setPicked(to)
+    // The next idea starts at its top, not wherever the last one was scrolled to.
+    requestAnimationFrame(() => {
+      const heading = listRef.current
+      if (heading) scrollToElement(heading)
+    })
+  }
 
   return (
     <CheckGradeContext.Provider value={grade}>
@@ -160,11 +181,15 @@ export function GapExplainer({
           </InlineAlert>
         ) : null}
 
-        <ol ref={listRef} className="mt-6 flex flex-col gap-10" aria-label="Ideas to look at again">
-          {state.gaps.map((gap) => {
+        {hasGaps ? (
+          <p aria-live="polite" data-testid="gap-counter" className="tabular mt-6 text-small text-fg-2">
+            Idea {current + 1} of {gapCount}
+          </p>
+        ) : null}
+        <ol ref={listRef} className="mt-2 flex flex-col gap-10" aria-label="Ideas to look at again">
+          {state.gaps.slice(current, current + 1).map((gap) => {
             const total = parts.get(gap.conceptName) ?? 1
-            const part = (seen.get(gap.conceptName) ?? 0) + 1
-            seen.set(gap.conceptName, part)
+            const part = partOf.get(gap.claimId) ?? 1
             return (
             <li key={gap.claimId} aria-labelledby={`gap-${gap.claimId}`} data-concept-id={gap.conceptId || undefined} className="scroll-mt-[140px]">
               <h2 id={`gap-${gap.claimId}`} className="text-subheading text-fg">
@@ -186,7 +211,23 @@ export function GapExplainer({
           })}
         </ol>
 
-        {state.skipped.length > 0 ? (
+        {hasGaps ? (
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <Button variant="ghost" icon={<ArrowLeft />} disabled={current === 0} onClick={() => go(current - 1)}>
+              Previous idea
+            </Button>
+            {last ? null : (
+              <Button variant="secondary" onClick={() => go(current + 1)} data-testid="gap-next">
+                <span className="inline-flex items-center gap-1.5">
+                  Next idea
+                  <ArrowRight aria-hidden="true" className="size-4" />
+                </span>
+              </Button>
+            )}
+          </div>
+        ) : null}
+
+        {state.skipped.length > 0 && (last || !hasGaps) ? (
           <section aria-labelledby="gap-skipped" className="mt-10 border-t border-border pt-6">
             <h2 id="gap-skipped" className="text-body-strong text-fg">
               Look at these in your pages
@@ -203,14 +244,23 @@ export function GapExplainer({
           </section>
         ) : null}
 
-        <div className="mt-10 border-t border-border pt-6">
-          <Button asChild variant="secondary">
-            <Link href={nextHref} scroll={false}>
-              {nextLabel}
-              <ArrowRight aria-hidden="true" className="ml-1 size-4" />
-            </Link>
-          </Button>
-        </div>
+        {/* The way on is one button, and only on the last idea. It is the primary once every question has been tried; before that it is a
+            quiet link, so a student who comes back to the page later (their grades are saved, this page's count starts again) is never stuck. */}
+        {last || !hasGaps ? (
+          <div className="mt-10 border-t border-border pt-6">
+            {hasGaps && !allTried ? (
+              <p className="mb-3 text-small text-fg-2" data-testid="gap-untried">
+                {untried === 1 ? '1 question left to try' : `${untried} questions left to try`} before you go on.
+              </p>
+            ) : null}
+            <Button asChild variant={allTried || !hasGaps ? 'primary' : 'link'}>
+              <Link href={nextHref} scroll={false} data-testid="gap-onward">
+                {allTried || !hasGaps ? nextLabel : nextLabel.replace(/^Next: /, 'Skip to ')}
+                <ArrowRight aria-hidden="true" className="ml-1 size-4" />
+              </Link>
+            </Button>
+          </div>
+        ) : null}
       </div>
     </CheckGradeContext.Provider>
   )

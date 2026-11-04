@@ -40,6 +40,7 @@ import type { TopicStructure } from '@/server/queries/topic'
 import { StateIcon } from '@/features/map/state-icon'
 import { LABEL_TEXT } from '@/lib/map/copy'
 import { StatusGuide } from '@/components/learning/status-guide'
+import { PROGRESS_MEASURE } from '@/lib/learning/progress-words'
 import type { ConceptLabel } from '@/lib/learning/concept-mastery'
 import { KIND_COPY } from './copy'
 import { RegenerateDialog } from './generation-ui'
@@ -166,6 +167,27 @@ export function TopicHeader({
   }
   const wrong = concepts.filter((concept) => concept.wrongIdea).length
   const hasAbout = concepts.length > 0 || structure.objectives.length > 0 || structure.prerequisites.length > 0 || structure.sources.length > 0 || !!description
+  // The topic's numbers, named once (W2-22): progress is the topic's, the score is one quiz's (the best), never "Learning" for an idea.
+  const statusItems = (
+    <>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="text-fg-3">{PROGRESS_MEASURE.topic}</span>
+        <MasteryIndicator mastery={mastery} showPercent emptyLabel={started ? 'In progress' : undefined} className="text-small" />
+      </span>
+      {bestQuiz !== null ? (
+        <span className="tabular">
+          <span className="text-fg-3">{PROGRESS_MEASURE.quiz} (best)</span> {Math.round(bestQuiz)}%
+        </span>
+      ) : null}
+      {dueAt && daysUntilDue !== null ? <NextReview dueAt={dueAt} daysUntil={daysUntilDue} label={nextReviewText} /> : null}
+      {structure.estimatedMinutes ? (
+        <span className="inline-flex items-center gap-1.5 tabular">
+          <Clock aria-hidden="true" className="size-4 text-fg-3" />
+          About {structure.estimatedMinutes} min
+        </span>
+      ) : null}
+    </>
+  )
 
   return (
     // While an attempt is open on a phone the small attempt bar stands in for this header (see AttemptBar).
@@ -210,33 +232,26 @@ export function TopicHeader({
           <MathText>{description}</MathText>
         </p>
       ) : null}
+      {/* A phone shows the title and one button here: the numbers (progress, best score, next review, time) are in "Details", so the
+          first task sits high on the screen. A wide screen keeps them beside the button. */}
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-small text-fg-2 sm:mt-3">
-        <MasteryIndicator mastery={mastery} showPercent emptyLabel={started ? 'In progress' : undefined} className="text-small" />
-        {bestQuiz !== null ? <span className="tabular max-sm:hidden">Best quiz {Math.round(bestQuiz)}%</span> : null}
-        {dueAt && daysUntilDue !== null ? <NextReview dueAt={dueAt} daysUntil={daysUntilDue} label={nextReviewText} /> : null}
-        {structure.estimatedMinutes ? (
-          <span className="inline-flex items-center gap-1.5 tabular">
-            <Clock aria-hidden="true" className="size-4 text-fg-3" />
-            About {structure.estimatedMinutes} min
-          </span>
-        ) : null}
-        {hasAbout ? (
-          <button
-            type="button"
-            aria-expanded={aboutOpen}
-            aria-controls={description ? `${descriptionId} ${aboutId}` : aboutId}
-            onClick={() => setAboutOpen((current) => !current)}
-            className="inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg max-sm:min-h-11"
-          >
-            {wrong > 0 ? <WarningCircle aria-hidden="true" weight="fill" className="size-4 text-warning" /> : null}
-            About this topic
-            {concepts.length > 0 ? <span className="sr-only">: {conceptSummary(concepts)}</span> : null}
-            <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', aboutOpen && 'rotate-180')} />
-          </button>
-        ) : null}
+        <span className={cn('contents', !aboutOpen && 'max-sm:hidden')}>{statusItems}</span>
+        {/* On a phone the numbers are in the details too, so the button is always there; a wide screen shows it only when there is more to read. */}
+        <button
+          type="button"
+          aria-expanded={aboutOpen}
+          aria-controls={description ? `${descriptionId} ${aboutId}` : aboutId}
+          onClick={() => setAboutOpen((current) => !current)}
+          className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg max-sm:-order-1 max-sm:min-h-11', !hasAbout && 'sm:hidden')}
+        >
+          {wrong > 0 ? <WarningCircle aria-hidden="true" weight="fill" className="size-4 text-warning" /> : null}
+          Details
+          {concepts.length > 0 ? <span className="sr-only">: {conceptSummary(concepts)}</span> : null}
+          <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', aboutOpen && 'rotate-180')} />
+        </button>
       </div>
-      {fade ? <p className="mt-1.5 text-caption font-normal text-fg-3">{fade}</p> : null}
-      {/* Beside the numbers on a laptop; on a phone it is in "About this topic", so the header stays short. */}
+      {fade ? <p className={cn('mt-1.5 text-caption font-normal text-fg-3', !aboutOpen && 'max-sm:hidden')}>{fade}</p> : null}
+      {/* Beside the numbers on a laptop; on a phone it is in "Details", so the header stays short. */}
       <StatusGuide parts={['topic', 'steps', 'quiz']} id="topic-status-guide" className="mt-1 max-sm:hidden" />
       <div id={aboutId} className={cn(fold)}>
         <StatusGuide parts={['topic', 'steps', 'quiz']} id="topic-status-guide-phone" className="mt-3 sm:hidden" />

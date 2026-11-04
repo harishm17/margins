@@ -71,7 +71,7 @@ test.describe('signed in', () => {
   test('the objectives open on a phone without widening the page', async ({ page }) => {
     await page.goto(topic + '?view=read', { waitUntil: 'networkidle' })
     // One button in the header's status line opens everything the topic covers: its ideas, objectives and sources.
-    const toggle = page.locator('main header').getByRole('button', { name: /By the end you can|ideas?, \d+ solid|About this topic/ })
+    const toggle = page.locator('main header').getByRole('button', { name: /By the end you can|ideas?, \d+ solid|Details/ })
     await expect(toggle).toHaveAttribute('aria-expanded', 'false')
     // It controls everything it shows or hides: the description (when the topic has one) and the ideas and objectives. Each id exists.
     const controls = ((await toggle.getAttribute('aria-controls')) ?? '').split(' ').filter(Boolean)

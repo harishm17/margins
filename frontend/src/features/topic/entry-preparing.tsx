@@ -50,10 +50,14 @@ export function EntryPreparing({ ready, target, readHref, intro = false }: { rea
       <div aria-hidden="true" className="grid size-10 place-items-center rounded-card bg-surface-2 text-fg-2 [&>svg]:size-5">
         <Hourglass />
       </div>
-      <h2 className="mt-4 text-subheading text-fg">{ready ? 'Ready' : 'Getting this topic ready'}</h2>
+      {/* The stage and the wait come first, in the heading: that is what the student is waiting on. The one-line reason follows. */}
+      <h2 className="mt-4 inline-flex items-center gap-2 text-subheading text-fg">
+        {ready || blocked ? null : <Spinner />}
+        {ready ? 'Ready' : blocked ? 'Preparation is paused' : 'Writing your warm-up questions, about a minute'}
+      </h2>
       {intro && !ready ? (
         <p className="mt-1.5 text-small text-fg" data-testid="entry-intro">
-          Margins asks you to try before it helps. It will feel slower than reading a summary, and it sticks better.
+          Margins asks you to try before it helps.
         </p>
       ) : null}
       <p className="mt-1.5 text-small text-fg-2">
@@ -63,14 +67,8 @@ export function EntryPreparing({ ready, target, readHref, intro = false }: { rea
             ? 'Opening the warm-up.'
             : long
               ? 'This is taking longer than usual. You can read the topic now; the warm-up will be waiting when it is written.'
-              : 'Margins is writing a few warm-up questions from your pages. They come before the reading, and the warm-up opens by itself in about a minute.'}
+              : 'The questions come before the reading, and the warm-up opens by itself.'}
       </p>
-      {ready ? null : (
-        <p className="mt-4 inline-flex items-center gap-2 text-small text-fg-3">
-          {blocked ? null : <Spinner />}
-          {blocked ? 'Preparation is paused.' : 'Writing the warm-up'}
-        </p>
-      )}
       {ready ? null : (
         <Button asChild variant={stuck ? 'primary' : 'secondary'} className="mt-5 max-sm:min-h-11">
           <Link href={readHref} scroll={false}>

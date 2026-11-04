@@ -4,6 +4,7 @@ import { withPrisma } from './helpers/db'
 import { addContent, addQuizSet, createCourse, quizQuestions, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
 import { streamedPartsArrived } from './helpers/settle'
 import { seedTutorReading } from './helpers/v31-tutors'
+import { newQuestionsButton } from './helpers/quiz-results'
 
 // The study screens after the second design review (round 2, workstream S): the Topics list in words, the margin that offers
 // help on request, the quiz as a focus view with one way to a new set, the tracks that can be seen.
@@ -80,14 +81,14 @@ test.describe('the reader margin', () => {
     await expect.poll(() => opacityOf(add)).toBe(1)
     await screenshotIfAsked(page, 'r2-read-margin-1440x900')
 
-    // The PDF caveat is said once and can be put away for good.
-    const note = page.getByTestId('reader-pdf-note')
+    // The note above the reading (Focus and the PDF caveat) is one row and can be put away for good, on the account.
+    const note = page.getByTestId('reader-note')
     if ((await note.count()) > 0) {
-      await note.getByRole('button', { name: 'Got it' }).click()
+      await note.getByRole('button', { name: 'Close this note' }).click()
       await expect(note).toHaveCount(0)
       await page.reload()
       await streamedPartsArrived(page)
-      await expect(page.getByTestId('reader-pdf-note')).toHaveCount(0)
+      await expect(page.getByTestId('reader-note')).toHaveCount(0)
     }
 
     await page.setViewportSize(PHONE)
@@ -116,7 +117,7 @@ test.describe('the quiz', () => {
     await expect(page.getByRole('button', { name: 'Start quiz' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'New quiz set' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'New questions' })).toHaveCount(0)
-    await expect(page.getByText('Guess your score to compare it with your result (optional)')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Guess your score (optional)' })).toBeVisible()
     await expect(page.getByRole('group', { name: 'Tools' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Start quiz' }).click()
@@ -160,7 +161,7 @@ test.describe('the quiz', () => {
     const retake = page.getByRole('button', { name: 'Retake tomorrow' })
     await expect(retake).toBeDisabled()
     await expect(retake).toHaveAccessibleDescription(/same questions open tomorrow/)
-    await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
+    await expect(await newQuestionsButton(page)).toBeVisible()
     await expect(page.getByRole('button', { name: 'New quiz set' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Start quiz' })).toHaveCount(0)
     await screenshotIfAsked(page, 'r2-quiz-lobby-retake-1440x900')

@@ -160,10 +160,12 @@ export default async function TopicPage({ params, searchParams }: { params: Para
       // Opening a pointer (the reader at a concept) is an instruction event (spec 18.5); once per concept per day.
       if (focusConceptId) await recordInstruction(prisma, { userId: user.id, topicId, kind: 'pointer', conceptIds: [focusConceptId], ref: focusConceptId }).catch((error) => console.error('Recording a pointer failed:', error))
       if (reader && reader.files.length > 0) {
+        // Whether the student closed the "About this reading" row before, on any device.
+        const noteDismissed = (await prisma.user.findUnique({ where: { id: user.id }, select: { seenReaderNoteAt: true } }))?.seenReaderNoteAt != null
         return (
           <>
             <RecallAbandonOnOpen topicId={topicId} />
-            <ReaderView topicId={topicId} reader={reader} completed={topic.progress.notes || data.pathDone.read} nextHref={afterNotes.href} nextLabel={afterNotes.label} focusConceptId={focusConceptId} />
+            <ReaderView topicId={topicId} reader={reader} completed={topic.progress.notes || data.pathDone.read} nextHref={afterNotes.href} nextLabel={afterNotes.label} focusConceptId={focusConceptId} noteDismissed={noteDismissed} />
           </>
         )
       }

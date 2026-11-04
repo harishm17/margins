@@ -144,9 +144,10 @@ test('a recall answer is graded against the claims, with the student quoted firs
   await page.goto(`${topicUrl('Hash tables')}?view=recall`)
 
   await expect(page.getByRole('heading', { name: 'Close the book and say what you remember' })).toBeVisible()
-  // Nothing is graded yet: the instructions are in full, and no card repeats the next step above the work.
-  await expect(page.getByText('Write what you can remember of each idea, without looking back.')).toBeVisible()
-  await expect(page.getByRole('button', { name: /instructions/ })).toHaveCount(0)
+  // Nothing is graded yet: one sentence of instruction, the scoring text behind a button, and no card repeating the next step above the work.
+  await expect(page.getByText('Write what you can remember of each idea. Gaps are fine')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'How this is scored' })).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByRole('link', { name: 'Skip recall for now' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
   // One prompt is open (the first); each of the others is one labelled row, not another box and another Check button.
   await expect(card(page)).toBeVisible()
@@ -175,14 +176,14 @@ test('a recall answer is graded against the claims, with the student quoted firs
   // What was missed is a pointer, never the claim itself.
   await expect(feedback.getByText(/Look again at p\. 5/).locator('visible=true')).toBeVisible()
   await expect(page.getByText('A collision is two keys that land in one bucket.')).toHaveCount(0)
-  // Results first: the instructions fold into one line, and open again on a tap.
-  const instructions = page.getByRole('button', { name: 'Show instructions' })
-  await expect(instructions).toHaveAttribute('aria-expanded', 'false')
-  await expect(page.getByText('Write what you can remember of each idea, without looking back.')).toBeHidden()
-  await instructions.click()
-  await expect(page.getByText('Write what you can remember of each idea, without looking back.')).toBeVisible()
-  await page.getByRole('button', { name: 'Hide instructions' }).click()
-  await expect(page.getByText('Write what you can remember of each idea, without looking back.')).toBeHidden()
+  // The scoring text is behind one button, closed, and opens again on a tap.
+  const scored = page.getByRole('button', { name: 'How this is scored' })
+  await expect(scored).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByText('The reading stays closed while you answer.')).toBeHidden()
+  await scored.click()
+  await expect(page.getByText('The reading stays closed while you answer.')).toBeVisible()
+  await scored.click()
+  await expect(page.getByText('The reading stays closed while you answer.')).toBeHidden()
   // One clear next step: the topic's next activity is the primary button, and "Show me what I missed" is the quiet choice.
   // The answer held a wrong idea and failed the concept, so the topic's next activity is to read about it first (spec 18.5); the
   // drill that pairs it with its confusable comes after the instruction.
@@ -190,7 +191,7 @@ test('a recall answer is graded against the claims, with the student quoted firs
   // the other prompts as the thing to do, with moving on as the quiet choice (not the primary button).
   await expect(page.getByTestId('recall-progress').locator('visible=true')).toHaveText(/^1 of \d+ prompts answered\. Answer the rest, or move on\.$/)
   await expect(page.getByRole('link', { name: 'Go to Practice' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Start learning' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Read that part again' })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
   // The feedback ends in one primary step, the next prompt; answering this one again is the quiet link beside it, and the
   // way on to Practice is the secondary button until every prompt has an answer.
@@ -239,7 +240,7 @@ test('recall is shown finished only when every prompt has an answer', async ({ p
   // The last prompt answered: the count says so, the step ticks, and the way on is the primary button.
   await expect(page.getByTestId('recall-progress')).toHaveText(`${prompts.length} of ${prompts.length} prompts answered`)
   await expect(path.getByRole('img', { name: 'Completed' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Read this explanation' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Read the explanation of your gaps' })).toBeVisible()
 })
 
 test('show me what I missed records level 3', async ({ page }) => {

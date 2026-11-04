@@ -219,7 +219,7 @@ test('answers come in order, once, and a stranger cannot answer', { skip: !proce
   assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id, source: 'warmup' } }), (await prisma.evidenceEvent.findMany({ where: { userId: w.user.id } })).length)
 })
 
-test('an answer needs its one-tap confidence', { skip: !process.env.DATABASE_URL }, async (t) => {
+test('an answer without a confidence rating is taken, and carries none', { skip: !process.env.DATABASE_URL }, async (t) => {
   if (!available) return t.skip('no database')
   const w = await world('wu-confidence')
   const state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
@@ -227,9 +227,10 @@ test('an answer needs its one-tap confidence', { skip: !process.env.DATABASE_URL
   if (state.status !== 'asking') return
   const base = { userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, timeZone: ZONE }
   const bare = await warmup.answerWarmup({ ...base, answer: { answer: 'true' } })
-  assert.deepEqual(bare, { status: 'invalid', message: 'Say how sure you are first.' })
-  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id } }), 0)
-  assert.equal((await warmup.answerWarmup({ ...base, answer: { answer: 'true', ...sure } })).status, 'ok')
+  assert.equal(bare.status, 'ok')
+  const events = await prisma.evidenceEvent.findMany({ where: { userId: w.user.id, source: 'warmup' } })
+  assert.ok(events.length > 0)
+  assert.ok(events.every((event) => event.confidence === null))
 })
 
 test('a topic without a bank has no warm-up, and the state follows what was taken', { skip: !process.env.DATABASE_URL }, async (t) => {

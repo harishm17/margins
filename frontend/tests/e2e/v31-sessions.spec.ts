@@ -4,6 +4,8 @@ import { animationsSettled } from './helpers/settle'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import { addQuizSet, createCourse, dayIn, reviewItem, seedDueConcept, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
 import { addClaim, answeredChips, applyScreenSize, shot, seedConcepts, setProgress, trueFalse, world } from './helpers/v31-sessions'
+import { chooseConfidence } from './helpers/confidence'
+import { newQuestionsButton } from './helpers/quiz-results'
 
 // v3.1 workstream S: quiz drafts and the retake rule, quiz results with help after misses, AI-down partial
 // grading, review sessions and drills, the ten-minute session and quick-pass triage.
@@ -142,7 +144,7 @@ test.describe('S1: quiz drafts, save and finish later, retake rule, I do not kno
 
     // The results offer new questions, not the identical set.
     await expect(page.getByRole('button', { name: 'Retake' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
+    await expect(await newQuestionsButton(page)).toBeVisible()
     await page.getByRole('button', { name: 'Back to quiz' }).click()
     // The lobby says why the same questions wait, and Start quiz is not offered for this set.
     await expect(page.getByText('Available tomorrow. Re-answering the same question right away mostly tests short-term memory.')).toBeVisible()
@@ -168,7 +170,7 @@ test.describe('S1: quiz drafts, save and finish later, retake rule, I do not kno
     await page.getByRole('button', { name: 'Start quiz' }).click()
     // Question 1: right and certain. Question 2: I don't know. Question 3: right.
     await page.getByRole('radio', { name: 'True' }).click()
-    await page.getByRole('radio', { name: 'Certain' }).click()
+    await chooseConfidence(page, 'Certain')
     await page.getByRole('button', { name: 'Next', exact: true }).click()
     await page.getByRole('button', { name: "I don't know" }).click()
     await expect(page.getByTestId('idk-marked')).toBeVisible()
@@ -273,6 +275,8 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
 
     await expect(page.getByText('A low first score is common, and useful: the misses show where to spend your time.')).toBeVisible()
     // Each missed question has its pointer: the page of the first claim of its concept, as a link to the reader.
+    // The review opens on the first missed question; the whole list is one tap away.
+    await page.getByTestId('all-questions').click()
     const pointers = page.getByTestId('where-to-look')
     await expect(pointers).toHaveCount(6)
     const first = pointers.first().getByRole('link')
@@ -281,7 +285,7 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     // After a miss the one primary step is going back to the first missed idea; new questions and voice practice are secondary.
     await expect(page.getByTestId('review-first-missed')).toHaveText('Review the first missed idea')
     await expect(page.getByTestId('review-first-missed')).toHaveAttribute('href', /view=read&focus=/)
-    await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
+    await expect(await newQuestionsButton(page)).toBeVisible()
     await expectNoAxeViolations(page, 'quiz results with pointers')
     await shot(page, 'quiz-results-pointers')
     await first.click()
@@ -295,7 +299,7 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     await page.getByRole('button', { name: 'Start quiz' }).click()
     for (let i = 0; i < 9; i += 1) {
       await page.getByRole('radio', { name: 'True' }).click()
-      await page.getByRole('radio', { name: 'Certain' }).click()
+      await chooseConfidence(page, 'Certain')
       if (i < 8) await page.getByRole('button', { name: 'Next', exact: true }).click()
     }
     await page.getByRole('button', { name: 'Submit quiz' }).click()

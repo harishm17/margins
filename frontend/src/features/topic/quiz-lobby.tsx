@@ -137,6 +137,8 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
   const takenToday = refused === true || (hydratedToday !== null && setAttempts.some((attempt) => dayOf(new Date(attempt.takenAt), browserTimeZone()) === hydratedToday))
   const [predicted, setPredicted] = React.useState(SKIP)
   const predictedId = React.useId()
+  const predictedPanelId = React.useId()
+  const [guessOpen, setGuessOpen] = React.useState(false)
   const retryNoteId = React.useId()
   const showNewSet = !(takenToday && onNewQuestions)
   // A prediction was for the set it was made on.
@@ -241,26 +243,6 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
             Answers are checked when you submit. Short answers are graded with feedback.
           </p>
 
-          <div className="mt-5">
-            <label htmlFor={predictedId} className="text-small text-fg-2">
-              Guess your score to compare it with your result (optional)
-            </label>
-            <Select
-              id={predictedId}
-              value={predictedHere}
-              onValueChange={setPredicted}
-              className="mt-1.5 w-56"
-              placeholder="Skip this"
-              options={[
-                { value: SKIP, label: 'Skip this' },
-                ...Array.from({ length: set.questions.length + 1 }, (_unused, count) => ({
-                  value: String(count),
-                  label: `${count} of ${set.questions.length}`,
-                })),
-              ]}
-            />
-          </div>
-
           {savedNote ? (
             <InlineAlert className="mt-5" tone="accent">
               Your answers are saved. Pick up where you left off from this quiz&apos;s page.
@@ -296,9 +278,42 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
               </div>
             </div>
           ) : (
-            <Button className="mt-6" size="lg" variant="primary" onClick={() => onStart(predictedHere === SKIP ? undefined : Number(predictedHere))}>
-              Start quiz
-            </Button>
+            <div className="mt-6 flex flex-col items-start gap-3">
+              <Button size="lg" variant="primary" onClick={() => onStart(predictedHere === SKIP ? undefined : Number(predictedHere))}>
+                Start quiz
+              </Button>
+              {/* The guess is a small extra after the way in, only where a quiz can be started: not on a set that opens tomorrow. */}
+              <button
+                type="button"
+                aria-expanded={guessOpen}
+                aria-controls={predictedPanelId}
+                onClick={() => setGuessOpen((current) => !current)}
+                className="inline-flex min-h-8 items-center gap-1 rounded-chip text-small text-fg-2 hover:text-fg max-sm:min-h-11"
+              >
+                Guess your score (optional)
+                <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', guessOpen && 'rotate-180')} />
+              </button>
+              <div id={predictedPanelId} hidden={!guessOpen}>
+                <label htmlFor={predictedId} className="text-small text-fg-2">
+                  Expected questions correct (optional)
+                </label>
+                <Select
+                  id={predictedId}
+                  value={predictedHere}
+                  onValueChange={setPredicted}
+                  className="mt-1.5 w-56"
+                  placeholder="No prediction"
+                  options={[
+                    { value: SKIP, label: 'No prediction' },
+                    ...Array.from({ length: set.questions.length + 1 }, (_unused, count) => ({
+                      value: String(count),
+                      label: `${count} of ${set.questions.length}`,
+                    })),
+                  ]}
+                />
+                <p className="mt-1.5 text-caption text-fg-3">It is compared with your result at the end.</p>
+              </div>
+            </div>
           )}
         </>
       )}

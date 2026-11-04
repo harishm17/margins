@@ -62,6 +62,8 @@ type JobStatusProps = {
   onRetry?: () => void
   retrying?: boolean
   showProgress?: boolean
+  /** `quiz`: the stage words of a quiz set being written ("Preparing your questions"). */
+  variant?: 'quiz'
   className?: string
 }
 
@@ -90,6 +92,7 @@ export function JobStatus({
   onRetry,
   retrying,
   showProgress = true,
+  variant,
   className,
 }: JobStatusProps) {
   const running = !job || job.status === 'queued' || job.status === 'processing'
@@ -125,6 +128,11 @@ export function JobStatus({
       job?.status === 'queued' && (job.attemptCount || job.stage === 'waiting_for_ai')
         ? stageLabel(job.stage, job.status, job.attemptCount)
         : (label ?? stageLabel(job?.stage, job?.status ?? 'queued'))
+    // A new quiz set is "Preparing your questions", not "Waiting to start": the student asked for questions, not for a job.
+    if (variant === 'quiz' && typeof text === 'string') {
+      if (text === STAGE_LABELS.pending) text = 'Preparing your questions'
+      else if (text === STAGE_LABELS.generating) text = 'Writing your questions'
+    }
     if (elapsed !== null) {
       meta = (
         <span aria-hidden="true" className="tabular text-caption font-normal text-fg-3">

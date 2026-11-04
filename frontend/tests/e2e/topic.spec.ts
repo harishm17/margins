@@ -4,6 +4,8 @@ import { signIn } from './helpers/auth'
 import { withPrisma } from './helpers/db'
 import { FIXTURE_PDF } from './helpers/seed-demo'
 import { choice, world } from './helpers/v31-sessions'
+import { chooseConfidence } from './helpers/confidence'
+import { newQuestionsButton } from './helpers/quiz-results'
 
 // One account per run. The AI service behind the dev stack is a mock, so generating content is
 // free and fast; the spec writes every kind of content through the page itself.
@@ -181,9 +183,11 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
 
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
-  await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
+  await expect(await newQuestionsButton(page)).toBeVisible()
+  // With misses the review opens on the first missed question; the filter belongs to the whole list.
+  await page.getByTestId('all-questions').click()
   await page.getByRole('radio', { name: /Missed/ }).click()
-  await page.getByRole('radio', { name: 'Fairly sure' }).click()
+  await chooseConfidence(page, 'Fairly sure')
   await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
 
   // The attempt is in the lobby's history, with a review.
@@ -210,14 +214,15 @@ test('quiz records confidence per question', async ({ page }) => {
   await page.goto(`/courses/${own.courseId}/topics/${own.topics['Graph search']}?view=quiz`)
   await expect(page.getByRole('button', { name: 'Start quiz' })).toBeVisible({ timeout: 30_000 })
   // The prediction is optional and stays in the session with the answers.
-  await page.getByRole('combobox', { name: /Guess your score/ }).click()
+  await page.getByRole('button', { name: /Guess your score/ }).click()
+  await page.getByRole('combobox', { name: /Expected questions correct/ }).click()
   await page.getByRole('option', { name: /^1 of/ }).click()
   await page.getByRole('button', { name: 'Start quiz' }).click()
   await expect(page.getByText('Question 1 of')).toBeVisible()
 
   // Question 1: an answer, a confidence and some thinking. The chosen level is marked in text, not only by style.
   await page.keyboard.press('b')
-  await page.getByRole('radio', { name: 'Fairly sure' }).click()
+  await chooseConfidence(page, 'Fairly sure')
   await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
   await page.getByRole('button', { name: 'Show your thinking' }).click()
   await page.getByLabel('Your thinking').fill('B looked like the queue one.')
@@ -247,6 +252,9 @@ test('quiz records confidence per question', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
   // The prediction sits beside the score, and the answers are grouped: question 1 was marked sure.
   await expect(page.getByText(/You expected to get 1 question right and got \d+\./)).toBeVisible()
+  // With misses the review opens on the first missed question; the groups are in the whole list.
+  const allQuestions = page.getByTestId('all-questions')
+  if (await allQuestions.isVisible()) await allQuestions.click()
   await expect(page.getByRole('heading', { level: 3, name: /^(You were sure about these|Solid answers|Other wrong answers|Wrong answers)/ }).first()).toBeVisible()
 })
 

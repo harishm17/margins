@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, CaretDown, Plus } from '@phosphor-icons/react/dist/ssr'
 import { SourceLine } from '@/components/learning/source-link'
@@ -101,24 +102,6 @@ export function PracticeView({ topicId, practice }: { topicId: string; practice:
 
   return (
     <div className="flex max-w-[720px] flex-col">
-      {/* On a phone the count and "More practice" come after the problem: the problem is the first thing on the screen. */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 max-sm:order-last max-sm:mb-0 max-sm:mt-8">
-        <p className="text-small text-fg-2">
-          {pluralize(problems.length, 'problem')}, {pluralize(allKeys.length, 'step')}
-        </p>
-        <GenerateOptions
-          kind="practice"
-          mode="more"
-          submitLabel="Generate"
-          focusPlaceholder="e.g. weighted graphs"
-          align="end"
-        >
-          <Button size="sm" variant="secondary" icon={<Plus />}>
-            More practice
-          </Button>
-        </GenerateOptions>
-      </div>
-
       {rejected ? (
         <InlineAlert
           className="mb-4"
@@ -290,6 +273,18 @@ export function PracticeView({ topicId, practice }: { topicId: string; practice:
           onSave={(answer) => setTrippedUp(problemKey(problemIndex, problem.title), answer)}
         />
       ) : null}
+      {/* "More practice" is here once, after the problem and everything it ends in: the problem is the first thing on the screen,
+          and the action to write more is not offered above it while the student is still working. */}
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+        <p className="text-small text-fg-2">
+          {pluralize(problems.length, 'problem')}, {pluralize(allKeys.length, 'step')}
+        </p>
+        <GenerateOptions kind="practice" mode="more" submitLabel="Generate" focusPlaceholder="e.g. weighted graphs" align="end">
+          <Button size="sm" variant="secondary" icon={<Plus />}>
+            More practice
+          </Button>
+        </GenerateOptions>
+      </div>
     </div>
   )
 }
@@ -333,18 +328,31 @@ function ProblemComplete({
   const easier = target !== null && !next.offerExample && (last.anyRung3 || last.idk || last.surrendered)
   const focus = problem.conceptIds[0] ?? problem.steps.flatMap((step) => step.conceptIds)[0] ?? null
   const exampleHref = courseId ? `/courses/${courseId}/topics/${topicId}?view=examples&fade=full${focus ? `&focus=${encodeURIComponent(focus)}` : ''}` : null
+  // Nothing is left to practise: the topic goes on to its quiz. It is the one primary then, and "Start over" is the quiet choice beside it.
+  // When a worked example is recommended first, that is said and offered, and the quiz stays as the plain way on.
+  const finishedAll = next.index === null
+  const quizHref = courseId ? `/courses/${courseId}/topics/${topicId}?view=quiz` : null
   return (
     <>
       <InlineAlert className="mt-6" tone="accent" title="Problem complete">
         <p>
           You solved {solved} of {problem.steps.length} steps.
           {easier ? ' The next problem is an easier one.' : ''}
+          {finishedAll && next.offerExample && exampleHref ? ' A worked example first will help, then the quiz.' : ''}
+          {finishedAll && !next.offerExample ? ' That is all the practice for this topic.' : ''}
         </p>
         {solved === 0 ? <NoneSolved topicId={topicId} problemIndex={problemIndex} problem={problem} helps={helps} /> : null}
         <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
           {next.index !== null ? (
             <Button size="sm" variant="primary" icon={<ArrowRight />} onClick={() => onGo(next.index as number)}>
               {harder ? 'A harder one' : 'Next problem'}
+            </Button>
+          ) : null}
+          {finishedAll && quizHref && !next.offerExample ? (
+            <Button asChild size="sm" variant="primary" icon={<ArrowRight />}>
+              <Link href={quizHref} scroll={false} data-testid="practice-to-quiz">
+                Continue to Quiz
+              </Link>
             </Button>
           ) : null}
           {next.offerExample && exampleHref ? (
@@ -354,6 +362,13 @@ function ProblemComplete({
             >
               See one worked through first
             </a>
+          ) : null}
+          {finishedAll && quizHref && next.offerExample ? (
+            <Button asChild size="sm" variant="ghost" className="text-current">
+              <Link href={quizHref} scroll={false} data-testid="practice-to-quiz">
+                Continue to Quiz
+              </Link>
+            </Button>
           ) : null}
           <Button size="sm" variant="ghost" className="text-current" onClick={onStartOver}>
             Start over

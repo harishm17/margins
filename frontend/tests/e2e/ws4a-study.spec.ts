@@ -51,7 +51,7 @@ test.describe('the first entry of a topic', () => {
     try {
       await page.goto(base)
       await expect(page).toHaveURL(/\?view=read&entry=1$/)
-      await expect(page.getByRole('heading', { name: 'Getting this topic ready' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Writing your warm-up questions, about a minute' })).toBeVisible()
       // The reader is not shown, and the path keeps its five steps: Warm-up and Recall say they are being prepared, none is tagged Next.
       await expect(page.locator('[data-passage]')).toHaveCount(0)
       for (const label of ['Warm-up', 'Read', 'Recall', 'Practice', 'Quiz']) await expect(path(page).getByRole('link', { name: new RegExp(label) })).toBeVisible()
@@ -77,7 +77,7 @@ test.describe('the first entry of a topic', () => {
       // so the Read step shows its notes being written).
       await reading.click()
       await expect(page).toHaveURL(/\?view=read$/)
-      await expect(page.getByRole('heading', { name: 'Getting this topic ready' })).toHaveCount(0)
+      await expect(page.getByRole('heading', { name: 'Writing your warm-up questions, about a minute' })).toHaveCount(0)
       await page.goto(base)
       await expect(page).toHaveURL(/\?view=read&entry=1$/)
     } finally {

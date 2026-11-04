@@ -29,16 +29,16 @@ export const ACTIVITY_KINDS: ActivityKind[] = [
 
 const VERBS: Record<ActivityKind, string> = {
   start: 'Start warm-up',
-  instruct: 'Start learning',
+  instruct: 'Read that part again',
   examples: 'See an example',
   done_for_now: 'Try a harder set',
-  fix_misconception: 'Start the drill',
+  fix_misconception: 'Practise the gap',
   warmup: 'Start warm-up',
   read: 'Start reading',
   recall: 'Start recall',
   explainer: 'Open the explainer',
   review: 'Review',
-  prerequisite_drill: 'Start the drill',
+  prerequisite_drill: 'Practise the basics',
   quiz: 'Take quiz',
   practice: 'Practice',
   teach_back: 'Explain it',
@@ -49,14 +49,46 @@ const VERBS: Record<ActivityKind, string> = {
 /** The button label for an activity. */
 export const activityVerb = (kind: ActivityKind): string => VERBS[kind]
 
+/** Whether a read-again pointer opens the explanation of the student's gaps rather than the reading. */
+export const opensExplainer = (activity: { kind: ActivityKind; href: string }): boolean =>
+  activity.kind === 'instruct' && parseView(new URL(activity.href, 'http://margins.local').searchParams.get('view')) === 'explainer'
+
 /**
- * The button label for an activity with its address: "Start learning" is the general word for a read-again pointer, but one
- * that opens the explanation says so ("Read this explanation"), so a student who is already on the explainer is not told to
- * start something they are in.
+ * The button label for an activity with its address: "Read that part again" is the general word for a read-again pointer,
+ * but one that opens the explanation says so ("Read the explanation of your gaps"). The student who is already on the explainer is not
+ * shown it: `nextLineShows` leaves the line off the page it points to.
  */
 export function activityLabel(activity: { kind: ActivityKind; href: string }): string {
-  if (activity.kind === 'instruct' && parseView(new URL(activity.href, 'http://margins.local').searchParams.get('view')) === 'explainer') return 'Read this explanation'
-  return VERBS[activity.kind]
+  return opensExplainer(activity) ? 'Read the explanation of your gaps' : VERBS[activity.kind]
+}
+
+const TITLES: Record<ActivityKind, string> = {
+  start: 'Warm-up',
+  instruct: 'Read that part again',
+  examples: 'Worked example',
+  done_for_now: 'A harder set',
+  fix_misconception: 'Practise the gap',
+  warmup: 'Warm-up',
+  read: 'Read',
+  recall: 'Recall',
+  explainer: 'Explanation of your gaps',
+  review: 'Review',
+  prerequisite_drill: 'Practise the basics',
+  quiz: 'Quiz',
+  practice: 'Practice',
+  teach_back: 'Explain it back',
+  transfer_quiz: 'Harder quiz',
+  mock_exam: 'Mock exam',
+}
+
+/**
+ * The short name of an activity as a title or a tag ("Recall", "Practise the gap", "Explanation of your gaps"), the noun
+ * beside `activityLabel`'s verb. Home, the course overview, the Topics list and the topic page all name one activity with
+ * this and `activityLabel`, so the same task never has two names.
+ */
+export function activityTitle(activity: { kind: ActivityKind; href?: string }): string {
+  if (activity.href && opensExplainer({ kind: activity.kind, href: activity.href })) return 'Explanation of your gaps'
+  return TITLES[activity.kind]
 }
 
 /**
@@ -137,7 +169,10 @@ function tagStepFor(next: { kind: ActivityKind; href: string }): PathView | null
 /**
  * The step of the path tagged "Next": the step the next activity belongs to while that step is not done, else the first
  * step that is not done, else none (every step done). It is the one place the path bar, the Topics list and the topic page
- * ask, so they never name different steps for one topic.
+ * ask, so they never name different steps for one topic. The explainer of the student's gaps is a detour, not a step: while it
+ * is the next activity the tag is on the first step not done (Practice after Recall), the step the detour leads back to, and
+ * the button beside it says "Read the explanation of your gaps" with that step as the way on, so the tag and the button
+ * never name two different next steps.
  */
 export function nextPathStep(next: { kind: ActivityKind; href: string }, steps: readonly PathView[], done: Record<PathView, boolean>): PathView | null {
   const own = tagStepFor(next)
@@ -148,13 +183,18 @@ export function nextPathStep(next: { kind: ActivityKind; href: string }, steps: 
 /**
  * Whether the "Next" line shows above the view that is open. There is one next signal on a topic: the tag in the path. The
  * line says more (the reason, the way in) only where the open view has no action of its own that leads on: on a tool
- * (Examples, Explainer), which is not a step. A step of the path always has its own (Check, "I've read it", Start quiz...),
+ * (Examples, Voice), which is not a step. The Explainer is a tool too, but it ends in its own way on and has none. A step of the path always has its own (Check, "I've read it", Start quiz...),
  * so the line stays off it, and a read-again pointer therefore never repeats on every step. The exception is a next activity
  * that is no step at all (a drill, a review, a mock exam, "solid for now"): a bare topic address lands on Practice for it, so
  * that is the one step where the line says it, because nothing else on the page would.
  */
-export function nextLineShows(next: { kind: ActivityKind; href: string }, view: string, steps: readonly PathView[]): boolean {
+export function nextLineShows(next: { kind: ActivityKind; href: string }, view: string, steps: readonly PathView[], pointsHere = false): boolean {
   if (next.kind === 'start') return false
+  // The line that points at the page the student is already on says "go where you are" (the explainer's own "Read the explanation").
+  if (pointsHere) return false
+  // The explainer ends in its own way on ("Next: Practice", once the gap questions are tried), and its gap questions are the task:
+  // a "Next" line above them would be a second way forward over the work.
+  if (view === 'explainer') return false
   const onStep = (steps as readonly string[]).includes(view)
   if (!onStep) return true
   return tagStepFor(next) === null && defaultViewFor(next.kind) === view

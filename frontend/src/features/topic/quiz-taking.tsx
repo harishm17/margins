@@ -174,6 +174,13 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
           <Button variant="ghost" icon={<SignOut />} className="text-fg-2 max-sm:hidden" onClick={() => setConfirmExit(true)}>
             Exit
           </Button>
+          {/* Submitting is not only for the last question: a student who is done at question 7 of 10 can say so from any of them (on a
+              phone it is in the Questions sheet). Unanswered questions are named in the dialog before anything is sent. */}
+          {isLast ? null : (
+            <Button variant="ghost" icon={<Check />} className="text-fg-2 max-sm:hidden" onClick={requestSubmit} data-testid="finish-and-submit">
+              Finish and submit
+            </Button>
+          )}
         </div>
         {isLast ? (
           <Button variant="primary" icon={<Check />} onClick={requestSubmit}>
@@ -204,6 +211,17 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
                 setPickerOpen(false)
               }}
             />
+            <Button
+              variant="secondary"
+              className="mt-5 w-full"
+              icon={<Check />}
+              onClick={() => {
+                setPickerOpen(false)
+                requestSubmit()
+              }}
+            >
+              Finish and submit
+            </Button>
           </div>
         </SheetContent>
       </Sheet>
@@ -211,11 +229,10 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
       <ConfirmDialog
         open={confirmSubmit}
         onOpenChange={setConfirmSubmit}
-        title="Submit with unanswered questions?"
-        description={`${unanswered} ${unanswered === 1 ? 'question is' : 'questions are'} unanswered. ${
-          unanswered === 1 ? "It'll" : "They'll"
-        } be marked wrong.`}
+        title="Submit your quiz?"
+        description={`${unanswered} unanswered. ${unanswered === 1 ? "It'll" : "They'll"} be marked wrong.`}
         confirmLabel="Submit quiz"
+        cancelLabel="Keep working"
         onConfirm={onSubmit}
       />
       <Dialog open={confirmExit} onOpenChange={(open) => (leaving ? undefined : setConfirmExit(open))}>
