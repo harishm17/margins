@@ -352,7 +352,7 @@ export function ActiveStep({
 
       {!feedback ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" variant="primary" icon={<Check />} disabled={!answer.trim()}>
+          <Button type="submit" variant="primary" icon={<Check />} disabled={!answer.trim()} disabledReason="Type an answer first.">
             Check
           </Button>
           {!attempted ? (

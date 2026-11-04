@@ -8,7 +8,6 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
-import { PROGRESS_TRACK } from '@/lib/progress-track'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { isAnswered as hasAnswer, type QuizAnswer } from '@/lib/learning/quiz-answers'
@@ -125,7 +124,7 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
         </div>
       </div>
 
-      <Progress aria-label="Questions answered" className={cn('mt-4', PROGRESS_TRACK)} value={(answeredCount / total) * 100} />
+      <Progress aria-label="Questions answered" className="mt-4" value={(answeredCount / total) * 100} />
 
       <div key={current} data-question="" className={cn('mt-5 sm:mt-8', motion)}>
         <QuestionRenderer
@@ -167,7 +166,7 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
 
       <div className="mt-6 flex items-center justify-between gap-3 border-t border-border pt-4">
         <div className="flex items-center gap-2">
-          <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} onClick={() => go(current - 1)}>
+          <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} disabledReason="This is the first question." onClick={() => go(current - 1)}>
             Previous
           </Button>
           <Button variant="ghost" icon={<SignOut />} className="text-fg-2" onClick={() => setConfirmExit(true)}>

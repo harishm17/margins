@@ -32,7 +32,7 @@ test('every kind has a button verb', () => {
   for (const kind of ACTIVITY_KINDS) assert.ok(activityVerb(kind).length > 0, kind)
   assert.equal(activityVerb('quiz'), 'Take quiz')
   assert.equal(activityVerb('review'), 'Review')
-  assert.equal(activityVerb('instruct'), 'Read about it')
+  assert.equal(activityVerb('instruct'), 'Start learning')
   assert.equal(activityVerb('examples'), 'See an example')
   assert.equal(activityVerb('done_for_now'), 'Try a harder set')
 })

@@ -137,7 +137,7 @@ test('starting the first topic writes its notes, then topics list and materials'
   // A topic nobody has opened lands on the step the path names (the preparation screen, then the warm-up when it is written), not on Read.
   await expect(page).toHaveURL(/\/topics\/[0-9a-f-]{36}\?view=(warmup|read&entry=1|read)$/)
   await expect(
-    page.getByText(/couldn't be written/).or(page.getByRole('heading', { name: 'Overview' }).first()).or(page.getByRole('button', { name: "I've read it" })).first()
+    page.getByText(/couldn't be written/).or(page.getByRole('button', { name: 'Start warm-up' })).or(page.getByRole('heading', { name: 'Getting this topic ready' })).or(page.getByRole('heading', { name: 'Overview' }).first()).or(page.getByRole('button', { name: "I've read it" })).first()
   ).toBeVisible({ timeout: 60_000 })
 
   // The topics list: confirmed topics, and no bulk build button.

@@ -127,7 +127,7 @@ test.describe('the quiz', () => {
     await expect(page).toHaveURL(url)
     // The track of the questions answered has an edge you can see before the first answer.
     const track = page.getByRole('progressbar', { name: 'Questions answered' })
-    expect(await track.evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe('none')
+    expect(await track.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('1px')
     await screenshotIfAsked(page, 'r2-quiz-taking-1440x900')
     // The controls are in the first screenful at 1440x900.
     const next = await page.getByRole('button', { name: 'Next', exact: true }).boundingBox()
@@ -154,7 +154,7 @@ test.describe('the quiz', () => {
     await page.getByRole('button', { name: 'Back to quiz' }).click()
     const retake = page.getByRole('button', { name: 'Retake tomorrow' })
     await expect(retake).toBeDisabled()
-    await expect(retake).toHaveAccessibleDescription(/Available tomorrow/)
+    await expect(retake).toHaveAccessibleDescription(/same questions open tomorrow/)
     await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'New quiz set' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Start quiz' })).toHaveCount(0)

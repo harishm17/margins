@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
-import { PROGRESS_TRACK } from '@/lib/progress-track'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toaster'
@@ -344,7 +343,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
               Questions
             </Button>
           </div>
-          <Progress aria-label="Questions answered" className={cn('mt-3', PROGRESS_TRACK)} value={total ? (answeredSet.size / total) * 100 : 0} />
+          <Progress aria-label="Questions answered" className="mt-3" value={total ? (answeredSet.size / total) * 100 : 0} />
 
           <div key={current} data-question="" className={cn('mt-8', motion)}>
             <QuestionRenderer
@@ -366,7 +365,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
           </div>
 
           <div className="mt-10 flex items-center gap-2">
-            <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} onClick={() => goTo(current - 1)}>
+            <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} disabledReason="This is the first question." onClick={() => goTo(current - 1)}>
               Previous
             </Button>
             <Button

@@ -29,7 +29,7 @@ export const ACTIVITY_KINDS: ActivityKind[] = [
 
 const VERBS: Record<ActivityKind, string> = {
   start: 'Open the topic',
-  instruct: 'Read about it',
+  instruct: 'Start learning',
   examples: 'See an example',
   done_for_now: 'Try a harder set',
   fix_misconception: 'Start the drill',

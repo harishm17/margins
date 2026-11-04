@@ -97,7 +97,7 @@ test('the next-step line is quiet: absent on an unfinished step the student chos
   await page.goto(url('warmup'))
   await expect(page.getByRole('button', { name: 'Start warm-up' })).toBeVisible()
   await expect(line(page)).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Read about it' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Start learning' })).toHaveCount(0)
   await page.goto(url('quiz'))
   await expect(line(page)).toHaveCount(0)
   // The path itself tags the one step, and a tool (Examples) carries the same advice as one quiet line.

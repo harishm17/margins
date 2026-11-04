@@ -63,7 +63,7 @@ export default async function TopicLayout({
     >
       <TopicActions courseId={courseId} topicId={topicId} name={topic.name} />
       <PracticeProgressSync topicId={topicId} server={data.practiceProgress} />
-      <Page className="pt-3 sm:pt-6">
+      <Page width="wide" className="pt-3 sm:pt-6">
         <TopicHeader
           courseId={courseId}
           topicId={topicId}

@@ -68,6 +68,9 @@ function PathStatus({ path }: { path: ListTopic['path'] }) {
   )
 }
 
+/** A step is done, or the quiz taken, but no mastery is earned yet: the topic header says "In progress" then, and so does the list. */
+const started = (topic: ListTopic) => topic.path.glyphs.some((glyph) => glyph.state === 'done')
+
 function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic }) {
   const level = masteryLevel(topic.mastery)
   const percent = masteryPercent(topic.mastery)
@@ -93,7 +96,7 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
         <PathStatus path={path} />
         <div className="flex w-full shrink-0 flex-col sm:w-40 sm:items-end">
           <span className="text-small text-fg">
-            {masteryLabel(topic.mastery)}
+            {level === 'none' && started(topic) ? 'In progress' : masteryLabel(topic.mastery)}
             {percent !== null ? <span className="tabular">{`, ${percent}%`}</span> : null}
           </span>
           {topic.timing ? (
@@ -125,7 +128,7 @@ function UnitGroup({ courseId, group }: { courseId: string; group: Group }) {
         </h2>
         {unit?.weekLabel ? <Badge>{unit.weekLabel}</Badge> : null}
         <span className="text-small tabular text-fg-3">{pluralize(topics.length, 'topic')}</span>
-        {unit ? <MasteryIndicator mastery={mastery} showPercent className="ml-auto text-small" /> : null}
+        {unit ? <MasteryIndicator mastery={mastery} showPercent emptyLabel={topics.some(started) ? 'In progress' : undefined} className="ml-auto text-small" /> : null}
       </div>
       {unit?.summary ? <p className="-mt-1 mb-2 max-w-[68ch] px-2 text-small text-fg-2">
           <MathText>{unit.summary}</MathText>

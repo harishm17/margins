@@ -11,7 +11,6 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { LazyMarkdown } from '@/components/ui/lazy-markdown'
 import { MathText } from '@/components/ui/math-text'
 import { Progress } from '@/components/ui/progress'
-import { PROGRESS_TRACK } from '@/lib/progress-track'
 import { pluralize } from '@/lib/format'
 import type { HelpAfterMiss } from '@/lib/learning/instruction-server'
 import { difficultyRank, nextPracticeProblem } from '@/lib/learning/practice-next'
@@ -148,7 +147,7 @@ export function PracticeView({ topicId, practice }: { topicId: string; practice:
       <div className="mt-3 flex items-center gap-3">
         <Progress
           aria-label="Steps solved"
-          className={cn('flex-1', PROGRESS_TRACK)}
+          className="flex-1"
           value={allKeys.length ? (solvedTotal / allKeys.length) * 100 : 0}
         />
         <span className="tabular whitespace-nowrap text-caption text-fg-3">

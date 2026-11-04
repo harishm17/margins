@@ -92,7 +92,8 @@ test.describe('the practice tutor', () => {
     // After a miss the helps are open, not behind "Get help" (spec 18.4).
     await expect(getHelp).toHaveCount(0)
     await tryAgain(page)
-    await expect(page.getByRole('group', { name: 'Hints' })).toBeVisible()
+    // The next hint stays beside Check for a step that has been missed.
+    await expect(page.getByRole('button', { name: /Next hint: Connect/ }).locator('visible=true')).toBeVisible()
     await page.getByRole('button', { name: /Next hint: Connect/ }).click()
     // The newest hint is open, the one before it is a line that opens on a tap.
     await expect(hint('Connect')).toHaveAttribute('aria-expanded', 'true')

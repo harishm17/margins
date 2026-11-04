@@ -379,7 +379,7 @@ export function Card({
           )}
           {text.trim() && statusLabel(draft.status) ? <p className="mt-3 text-caption text-fg-3">{statusLabel(draft.status)}</p> : null}
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button variant="primary" onClick={() => void submit()} loading={busy} disabled={!text.trim() || !!blocked} aria-describedby={text.trim() ? undefined : checkHintId}>
+            <Button variant="primary" onClick={() => void submit()} loading={busy} disabled={!text.trim() || !!blocked} disabledReason={blocked ? 'AI is unavailable right now, so answers cannot be checked.' : 'Write a few words first.'}>
               Check my answer
             </Button>
             {clarify ? null : (

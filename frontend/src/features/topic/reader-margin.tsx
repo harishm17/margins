@@ -269,7 +269,7 @@ export function MarginPanel({ topicId, chunkId, passageName, notes, onAdd, onRem
         >
           <Textarea ref={fieldRef} rows={3} maxRows={8} value={text} onChange={(event) => setText(event.target.value)} aria-label={`Your note on ${passageName}`} placeholder="Write in the margin" maxLength={4000} />
           <div className="flex gap-2">
-            <Button type="submit" size="sm" variant="primary" loading={busy === 'note'} disabled={!text.trim()}>
+            <Button type="submit" size="sm" variant="primary" loading={busy === 'note'} disabled={!text.trim()} disabledReason="Write the note first.">
               Save note
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => cancel('add')}>
@@ -296,7 +296,7 @@ export function MarginPanel({ topicId, chunkId, passageName, notes, onAdd, onRem
           </p>
           <AiBlockedNote />
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" size="sm" variant="primary" loading={busy === 'explain'} disabled={!isAttempt(text) || !!blocked}>
+            <Button type="submit" size="sm" variant="primary" loading={busy === 'explain'} disabled={!isAttempt(text) || !!blocked} disabledReason={blocked ? undefined : `Write at least ${MIN_TAKE_CHARS} characters first.`}>
               Ask the tutor
             </Button>
             <Button type="button" size="sm" variant="secondary" disabled={busy === 'explain' || !!blocked} onClick={() => void explain(true)}>

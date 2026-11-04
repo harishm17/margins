@@ -285,7 +285,7 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 {/* The attempted set has a visible state of its own: it is not lost, it opens tomorrow. */}
-                <Button size="lg" variant="secondary" disabled aria-describedby={retryNoteId}>
+                <Button size="lg" variant="secondary" disabled disabledReason="The same questions open tomorrow.">
                   Retake tomorrow
                 </Button>
                 {onNewQuestions ? (

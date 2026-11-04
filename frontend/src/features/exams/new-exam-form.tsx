@@ -338,7 +338,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
 
       <div className="flex flex-col gap-3 border-t border-border pt-6">
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={selected.size === 0 || !!blocked}>
+          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={selected.size === 0 || !!blocked} disabledReason={selected.size === 0 ? 'Pick at least one topic first.' : 'AI is unavailable right now.'}>
             Create exam
           </Button>
           <Button asChild variant="ghost" size="lg">

@@ -8,7 +8,6 @@ import { SourceLink } from '@/components/learning/source-link'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
-import { PROGRESS_TRACK } from '@/lib/progress-track'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { QuestionText } from '@/components/ui/question-text'
 import { ExpectedMiss } from '@/features/learning/expected-miss'
@@ -192,7 +191,7 @@ function Question({
         </h2>
         <p className="text-small text-fg-2">No hints</p>
       </div>
-      <Progress aria-label="Warm-up questions answered" className={cn('mt-4', PROGRESS_TRACK)} value={((state.position - 1) / state.total) * 100} />
+      <Progress aria-label="Warm-up questions answered" className="mt-4" value={((state.position - 1) / state.total) * 100} />
       <div className={cn('mt-8', motion)} data-question="">
         <QuestionRenderer question={state.question} value={draft.answer} onChange={(answer) => setDraft((d) => ({ ...d, answer }))} showPoints={false} shortcuts />
         <ConfidenceRow
@@ -216,7 +215,7 @@ function Question({
           <Button variant="ghost" onClick={() => void submit(true)} disabled={submitting} data-testid="warmup-idk">
             I don&apos;t know
           </Button>
-          <Button variant="primary" onClick={() => void submit()} loading={submitting} disabled={!draft.answer.trim() || draft.confidence === undefined}>
+          <Button variant="primary" onClick={() => void submit()} loading={submitting} disabled={!draft.answer.trim() || draft.confidence === undefined} disabledReason={!draft.answer.trim() ? 'Pick an answer first.' : 'Tap how sure you are first.'}>
             <span className="inline-flex items-center gap-1.5">
               {last ? 'See answers' : 'Next question'}
               <ArrowRight className="size-4" />
