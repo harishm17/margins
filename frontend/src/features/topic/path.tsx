@@ -6,13 +6,14 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, CaretDown, CaretLeft, CaretRight, Check, CheckCircle, ChatCircleText, Wrench } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useTabPin } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import type { ActivityKind } from '@/lib/learning/next-activity'
 import { activityLabel, opensHere } from './activity-copy'
 import { useTopic } from './topic-provider'
 import { useTopicView } from './use-topic-view'
-import { SHORT_LABELS, TOOL_VIEWS, VIEW_LABELS, type ToolView } from './types'
+import { SHORT_LABELS, TOOL_VIEWS, VIEW_LABELS, type PathView, type ToolView } from './types'
 
 /** A quiz score under this is "taken, not passed yet": the step is finished, but its mark does not say well done. */
 export const QUIZ_LOW_SCORE = 70
@@ -175,5 +176,73 @@ export function NextActivityCard({ next }: { next: { kind: ActivityKind; reason:
         </Link>
       </Button>
     </section>
+  )
+}
+
+export type PhoneStep = {
+  id: PathView
+  href: string
+  done: boolean
+  next: boolean
+  /** A short status after the name: "3/8", "82%", "Being written"; null when there is none. */
+  status: string | null
+  /** A quiz taken under QUIZ_LOW_SCORE: the marker says its score. */
+  lowScore: number | null
+}
+
+/**
+ * The path on a phone: one line, "Step 2 of 5: Read", that opens the five steps in a sheet, instead of a five-tab strip
+ * that takes a row of the screen on every step. On a tool (Examples, Explainer, Voice) it names the tool and still opens the
+ * steps. The list has the same links, markers and "Next up" signal as the wide screen's path, and is named "Topic path".
+ */
+export function PhonePath({ steps, view, className }: { steps: PhoneStep[]; view: string; className?: string }) {
+  const [open, setOpen] = React.useState(false)
+  const at = steps.findIndex((step) => step.id === view)
+  const label = at >= 0 ? `Step ${at + 1} of ${steps.length}: ${VIEW_LABELS[steps[at].id]}` : VIEW_LABELS[view as keyof typeof VIEW_LABELS] ?? 'Topic'
+  return (
+    <div className={cn('border-b border-border', className)}>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        data-testid="phone-path"
+        className="flex min-h-11 w-full items-center justify-between gap-3 rounded-control text-left text-body-strong text-fg"
+      >
+        <span className="min-w-0 truncate">{label}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 text-small font-normal text-fg-2">
+          Steps
+          <CaretDown aria-hidden="true" className="size-3.5" />
+        </span>
+      </button>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Steps in this topic</SheetTitle>
+            <SheetDescription>Go in order, or jump to any step.</SheetDescription>
+          </SheetHeader>
+          <nav aria-label="Topic path" className="overflow-y-auto px-3 py-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <ol className="flex flex-col">
+              {steps.map((step, index) => (
+                <li key={step.id}>
+                  <SheetClose asChild>
+                    <Link
+                      href={step.href}
+                      scroll={false}
+                      aria-current={step.id === view ? 'page' : undefined}
+                      className="flex min-h-12 items-center gap-3 rounded-control px-2 text-body text-fg hover:bg-surface-2 aria-[current=page]:bg-surface-2 aria-[current=page]:font-medium"
+                    >
+                      <StepMarker number={index + 1} done={step.done} next={step.next} lowScore={step.lowScore} />
+                      <span className="min-w-0 flex-1 truncate">{VIEW_LABELS[step.id]}</span>
+                      {step.status ? <span className="shrink-0 text-small text-fg-2 tabular">{step.status}</span> : null}
+                      {step.next ? <NextTag /> : null}
+                    </Link>
+                  </SheetClose>
+                </li>
+              ))}
+            </ol>
+          </nav>
+        </SheetContent>
+      </Sheet>
+    </div>
   )
 }

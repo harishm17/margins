@@ -48,8 +48,8 @@ const OUTSIDE_PATH_WORDS: Partial<Record<ActivityKind, string>> = {
   examples: 'Worked example',
   explainer: 'Explainer',
   review: 'Review',
-  fix_misconception: 'Drill',
-  prerequisite_drill: 'Drill',
+  fix_misconception: 'Practise the gap',
+  prerequisite_drill: 'Practise the basics',
   mock_exam: 'Mock exam',
 }
 

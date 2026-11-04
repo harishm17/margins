@@ -157,10 +157,10 @@ test('a new topic shows the whole path with its first step marked', async ({ pag
   await expect(nav.getByRole('link', { name: /Warm-up/ })).toContainText('Next')
   // On the step the next activity points to, no card repeats it.
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
-  // Concepts show as chips behind "About this topic" on every width: an icon is decoration, the state is words.
+  // Concepts show as chips behind "Details" on every width: an icon is decoration, the state is words.
   const chips = page.getByRole('list', { name: 'Ideas in this topic' })
   await expect(chips).toBeHidden()
-  await page.getByRole('button', { name: /About this topic/ }).click()
+  await page.getByRole('button', { name: /Details/ }).click()
   await expect(chips.getByRole('listitem')).toHaveCount(2)
   await expect(chips.getByRole('listitem').first()).toContainText('Hash function')
   await expect(chips.getByRole('listitem').first()).toContainText('Not started')
@@ -178,7 +178,7 @@ test('concept chips say a wrong idea in words, and a drill is offered', async ({
   // A drill is its own page: the topic opens on Practice and the card offers the drill.
   await expect(page).toHaveURL(/\?view=practice$/)
   const chips = page.getByRole('list', { name: 'Ideas in this topic' })
-  await page.getByRole('button', { name: /About this topic/ }).click()
+  await page.getByRole('button', { name: /Details/ }).click()
   await expect(chips).toContainText('Pointers')
   // The chip says the word the map says for the same idea (Shaky), and that a wrong idea is on record.
   await expect(chips.getByRole('listitem').filter({ hasText: 'Pointers' })).toContainText('Shaky, wrong idea')
@@ -186,7 +186,7 @@ test('concept chips say a wrong idea in words, and a drill is offered', async ({
   await screenshotIfAsked(page, 'final-concept-chips-1440x900')
   const card = page.getByRole('region', { name: 'Next on this topic' })
   await expect(card).toContainText('A wrong idea showed up in your answers.')
-  await expect(card.getByRole('link', { name: /Start the drill/ })).toHaveAttribute('href', /\/review\/session\?concept=/)
+  await expect(card.getByRole('link', { name: /Practise the gap/ })).toHaveAttribute('href', /\/review\/session\?concept=/)
 })
 
 test('phone shows stepper and tools menu at 390px', async ({ page }) => {
@@ -212,8 +212,8 @@ test('phone shows stepper and tools menu at 390px', async ({ page }) => {
   await expect(page.getByRole('group', { name: 'Tools' })).toBeHidden()
   // The concept chips fold into one line on a phone and open on a tap; the state stays in words.
   const chipList = page.getByRole('list', { name: 'Ideas in this topic' })
-  const fold = page.getByRole('button', { name: /About this topic/ })
-  await expect(fold).toHaveAccessibleName(/^About this topic ?: 3 ideas, 0 solid$/)
+  const fold = page.getByRole('button', { name: /Details/ })
+  await expect(fold).toHaveAccessibleName(/^Details ?: 3 ideas, 0 solid$/)
   expect((await fold.boundingBox())!.height, 'a 44px target on a phone').toBeGreaterThanOrEqual(44)
   await expect(chipList).toBeHidden()
   await fold.click()
@@ -251,7 +251,7 @@ test('the status says In progress once a step is done, and Not started before', 
   await expect(pathNav(page).getByRole('link', { name: /Read/ }).getByRole('img', { name: 'Completed' })).toBeVisible()
   await expect(header.getByText('In progress', { exact: true })).toBeVisible()
   // Only the three concepts' own chips still say "Not started" (nothing has been answered on them yet).
-  await header.getByRole('button', { name: /About this topic/ }).click()
+  await header.getByRole('button', { name: /Details/ }).click()
   await expect(header.getByText('Not started', { exact: true })).toHaveCount(3)
   await expect(header.getByRole('list', { name: 'Ideas in this topic' }).getByText('Not started')).toHaveCount(3)
   await screenshotIfAsked(page, 'topic-path-status-1440x900')
@@ -265,7 +265,7 @@ test('on a phone the topic header is compact: the content starts near the top, a
   const header = page.locator('main header')
   // Status, the ideas summary and the Tools menu share the line under the title.
   await expect(header.getByText('In progress', { exact: true })).toBeVisible()
-  await expect(header.getByRole('button', { name: /About this topic/ })).toBeVisible()
+  await expect(header.getByRole('button', { name: /Details/ })).toBeVisible()
   await expect(header.getByRole('button', { name: 'Tools' })).toBeVisible()
   const top = async (selector: string) => (await page.locator(selector).first().boundingBox())!.y
   // On a tool the next-step line is one tidy block: the tag and the reason (two lines at most), the way on under it. No "Why" fold.

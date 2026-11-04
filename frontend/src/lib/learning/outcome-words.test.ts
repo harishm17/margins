@@ -1,18 +1,19 @@
-import { describe, expect, it } from 'vitest'
-import { outcomeLabel, outcomeTone } from './outcome-words'
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { outcomeLabel, outcomeTone, type Outcome } from './outcome-words'
 
-describe('outcome words', () => {
-  const table: Array<[Parameters<typeof outcomeLabel>[0], string, string, string]> = [
+test('the same result reads the same everywhere', () => {
+  const table: Array<[Outcome, string, string, string]> = [
     [{ correct: true }, 'Correct', 'Right', 'accent'],
     [{ partly: true }, 'Partly', 'Partly', 'warning'],
     [{}, 'Not quite', 'Not quite', 'danger'],
     [{ idk: true }, "Here's what to learn", 'To learn', 'neutral'],
-    // An I-don't-know wins over everything else, and is never red.
+    // An "I don't know" wins over everything else, and is never red.
     [{ idk: true, correct: false, partly: false }, "Here's what to learn", 'To learn', 'neutral'],
   ]
-  it.each(table)('%j', (outcome, full, short, tone) => {
-    expect(outcomeLabel(outcome)).toBe(full)
-    expect(outcomeLabel(outcome, 'short')).toBe(short)
-    expect(outcomeTone(outcome)).toBe(tone)
-  })
+  for (const [outcome, full, short, tone] of table) {
+    assert.equal(outcomeLabel(outcome), full, JSON.stringify(outcome))
+    assert.equal(outcomeLabel(outcome, 'short'), short, JSON.stringify(outcome))
+    assert.equal(outcomeTone(outcome), tone, JSON.stringify(outcome))
+  }
 })

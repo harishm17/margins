@@ -2,6 +2,7 @@ import * as React from 'react'
 import { CaretDown } from '@phosphor-icons/react/dist/ssr'
 import { LEARNING_BELOW, MASTERY_LABELS, STRONG_FROM } from '@/lib/mastery'
 import { LABEL_TEXT } from '@/lib/map/copy'
+import { IDEA_RECALL_NAME, QUIZ_SCORE_NAME, TOPIC_PROGRESS_NAME } from '@/lib/learning/progress-words'
 import { cn } from '@/lib/utils'
 
 /** The four things a student sees side by side that mean different things. */
@@ -36,7 +37,7 @@ export function StatusGuide({ parts = ALL_PARTS, id = 'status-guide', className 
       <dl className="mt-2 flex max-w-[68ch] flex-col gap-3">
         {has('topic') ? (
           <div>
-            <dt className="font-medium text-fg">Topic status</dt>
+            <dt className="font-medium text-fg">{TOPIC_PROGRESS_NAME}</dt>
             <dd className="mt-0.5">
               How well you know a whole topic, from your recent answers and how long ago they were: {MASTERY_LABELS.none} (nothing answered yet),{' '}
               {MASTERY_LABELS.learning} (under {percent(LEARNING_BELOW)}), {MASTERY_LABELS.getting} ({percent(LEARNING_BELOW)} to {percent(STRONG_FROM - 0.01)}) and{' '}
@@ -46,7 +47,7 @@ export function StatusGuide({ parts = ALL_PARTS, id = 'status-guide', className 
         ) : null}
         {has('idea') ? (
           <div>
-            <dt className="font-medium text-fg">Idea status</dt>
+            <dt className="font-medium text-fg">{IDEA_RECALL_NAME}</dt>
             <dd className="mt-0.5">
               The same scale for one idea inside a topic, with a few more words: {LABEL_TEXT.shaky} (missed or helped lately), {LABEL_TEXT.getting_there},{' '}
               {LABEL_TEXT.solid}, {LABEL_TEXT.fading} (was solid, not seen for a while) and {LABEL_TEXT.inferred} (credited through a related idea, not yet tested on its own).
@@ -63,7 +64,7 @@ export function StatusGuide({ parts = ALL_PARTS, id = 'status-guide', className 
         ) : null}
         {has('quiz') ? (
           <div>
-            <dt className="font-medium text-fg">A quiz score</dt>
+            <dt className="font-medium text-fg">{QUIZ_SCORE_NAME}</dt>
             <dd className="mt-0.5">
               How you did on one quiz. It counts toward the topic&apos;s status along with your later reviews, but it is not the status itself.
             </dd>

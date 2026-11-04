@@ -226,11 +226,11 @@ test('next card offers reading after a failed drill, and the reading ends the wa
   const sentence = 'You missed Collision last time. Read p. 5 again before trying again.'
   await page.goto('/home')
   const home = page.getByRole('region', { name: /Up next/ })
-  await expect(home.getByRole('link', { name: 'Start learning' })).toHaveAttribute('href', instruct)
+  await expect(home.getByRole('link', { name: 'Read that part again' })).toHaveAttribute('href', instruct)
   await expect(home).toContainText(sentence)
   await page.goto(`/courses/${course.courseId}`)
   const upNext = page.getByRole('region', { name: 'Up next' })
-  await expect(upNext.getByRole('link', { name: 'Start learning' })).toHaveAttribute('href', instruct)
+  await expect(upNext.getByRole('link', { name: 'Read that part again' })).toHaveAttribute('href', instruct)
   await expect(upNext).toContainText(sentence)
   await page.goto(`/courses/${course.courseId}/plan`)
   const planRow = page.getByRole('listitem').filter({ has: page.locator(`a[href="${instruct}"]`) }).first()
@@ -248,7 +248,7 @@ test('next card offers reading after a failed drill, and the reading ends the wa
   // ... a tool says it once, at the concept; not back to the drill or the review.
   await page.goto(`/courses/${course.courseId}/topics/${topic}?view=examples`)
   await expect(card(page)).toContainText('You missed Collision last time. Read p. 5 again before trying again.')
-  await expect(card(page).getByRole('link', { name: 'Start learning' })).toHaveAttribute('href', `/courses/${course.courseId}/topics/${topic}?view=read&focus=${conceptId}#chunk-chunk-5`)
+  await expect(card(page).getByRole('link', { name: 'Read that part again' })).toHaveAttribute('href', `/courses/${course.courseId}/topics/${topic}?view=read&focus=${conceptId}#chunk-chunk-5`)
   await screenshotIfAsked(page, 'v31-next-card-instruct-1440x900')
   await page.goto(`/courses/${course.courseId}/topics/${topic}`)
   await expect(page).toHaveURL(new RegExp(`view=read&focus=${conceptId}`))

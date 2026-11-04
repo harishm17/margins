@@ -186,8 +186,8 @@ test.describe('knowledge map', () => {
     const w = await world(page, 'map-topic')
     await withPrisma((prisma) => prisma.topic.update({ where: { id: w.topics['Probing'] }, data: { evidenceBackfilledAt: new Date() } }))
     await open(page, `/courses/${w.courseId}/topics/${w.topics.Probing}`)
-    // What the topic covers, the map link among it, is behind "About this topic".
-    await page.getByRole('button', { name: /About this topic/ }).click()
+    // What the topic covers, the map link among it, is behind "Details".
+    await page.getByRole('button', { name: /Details/ }).click()
     await page.getByRole('link', { name: 'Show on the map' }).locator('visible=true').click()
     await expect(page).toHaveURL(new RegExp(`/map\\?unit=${w.units.Hashing}&topic=${w.topics.Probing}`))
     // The topic's first idea is open in the panel.
