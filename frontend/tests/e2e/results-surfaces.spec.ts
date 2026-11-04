@@ -135,6 +135,8 @@ test('the exam question screen with its confidence row: no axe violations, deskt
     // A question with no confidence yet asks for one; a short answer has the row too.
     await page.getByRole('button', { name: 'Next', exact: true }).click()
     await expect(page.getByRole('heading', { name: /Question 2 of/ })).toBeVisible()
+    // Optional: on a phone the row sits behind one chip until it is tapped.
+    if (size.width < 640) await page.getByRole('button', { name: 'Confidence (optional)' }).click()
     await expect(page.getByText('How sure are you?')).toBeVisible()
     // The question slides in; colours are read once it has settled.
     await animationsSettled(page)

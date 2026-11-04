@@ -22,3 +22,12 @@ test('a draft written with the old marker text is stored as an idk answer', () =
     assert.deepEqual((checked.payload as { answers: unknown }).answers, { '0': { answer: '', idk: true } })
   }
 })
+
+test('an Ask draft keeps the id of a send in flight, and refuses one that is not an id', () => {
+  const id = '7efa1ba6-0dce-48b7-a37a-7df217dc94b8'
+  const kept = validateDraftPayload('ask', { text: 'Why?', sending: id, sentAt: 1_700_000_000_000 })
+  assert.ok(kept.ok)
+  assert.deepEqual(kept.payload, { text: 'Why?', sending: id, sentAt: 1_700_000_000_000 })
+  assert.equal(validateDraftPayload('ask', { text: 'Why?', sending: 'not an id' }).ok, false)
+  assert.ok(validateDraftPayload('ask', { text: 'Why?' }).ok)
+})

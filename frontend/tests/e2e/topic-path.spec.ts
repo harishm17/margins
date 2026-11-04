@@ -922,8 +922,9 @@ test.describe('a question starts high on the screen', () => {
     const last = await page.getByRole('radio').last().boundingBox()
     expect(last!.y + last!.height, 'the last answer ends above the tab bar (56px)').toBeLessThan(PHONE.height - 56)
     // The confidence row, I don't know and Next are above the tab bar too.
-    for (const name of ['Certain', "I don't know", 'Next']) {
-      const box = await page.getByRole(name === 'Certain' ? 'radio' : 'button', { name, exact: true }).boundingBox()
+    // (On a phone the optional confidence row is one chip until it is tapped.)
+    for (const name of ['Confidence (optional)', "I don't know", 'Next']) {
+      const box = await page.getByRole('button', { name, exact: true }).boundingBox()
       expect(box!.y + box!.height, `${name} ends above the tab bar (56px)`).toBeLessThan(PHONE.height - 56)
     }
   })

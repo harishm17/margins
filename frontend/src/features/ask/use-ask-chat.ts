@@ -76,6 +76,31 @@ export function useAskChat({
   }, [])
   // Listeners told that a send failed for good before the server kept the question: the text is unsent, not in flight.
   const rejectedRef = React.useRef(new Set<(question: string) => void>())
+  // A page being reloaded or closed fails its open request too; that is not a refusal, so it is not reported as one.
+  const leavingRef = React.useRef(false)
+  React.useEffect(() => {
+    let reset: ReturnType<typeof setTimeout> | undefined
+    const leaving = () => {
+      leavingRef.current = true
+      // The leave can be cancelled (a prompt answered "stay"): trust failures again after a moment.
+      if (reset) clearTimeout(reset)
+      reset = setTimeout(() => {
+        leavingRef.current = false
+      }, 3000)
+    }
+    const back = () => {
+      leavingRef.current = false
+    }
+    window.addEventListener('beforeunload', leaving)
+    window.addEventListener('pagehide', leaving)
+    window.addEventListener('pageshow', back)
+    return () => {
+      if (reset) clearTimeout(reset)
+      window.removeEventListener('beforeunload', leaving)
+      window.removeEventListener('pagehide', leaving)
+      window.removeEventListener('pageshow', back)
+    }
+  }, [])
   const subscribeRejected = React.useCallback((listener: (question: string) => void) => {
     rejectedRef.current.add(listener)
     return () => void rejectedRef.current.delete(listener)
@@ -174,7 +199,7 @@ export function useAskChat({
       }
       const failure = (message: string, retryable: boolean): FailureMessage => {
         // A failure before the thread event (the server never kept the question) makes the saved text a plain unsent draft again.
-        if (!acceptedByServer) rejectedRef.current.forEach((listener) => listener(question))
+        if (!acceptedByServer && !leavingRef.current) rejectedRef.current.forEach((listener) => listener(question))
         return {
           kind: 'failure',
           id: nextId(),
