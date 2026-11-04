@@ -40,12 +40,12 @@ test('while AI is unavailable: a banner on every page, and AI actions are off wi
 
   await page.goto(`${course}/exams/new`)
   await expect(page.getByRole('button', { name: 'Create exam' })).toBeDisabled()
-  await expect(page.getByText(PAUSED)).toBeVisible()
+  await expect(page.locator('main').getByText(PAUSED)).toBeVisible()
 
   await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
   await page.getByLabel('Ask about your materials').fill('What is hashing?')
   await expect(page.getByRole('button', { name: 'Send question' })).toBeDisabled()
-  await expect(page.getByText(PAUSED)).toBeVisible()
+  await expect(page.locator('main').getByText(PAUSED)).toBeVisible()
 
   // The API refuses too, before anything is created, with a typed code and no operator wording.
   const refused = await page.request.post(`/api/projects/${demoIds().course}/generate-exam`, {
