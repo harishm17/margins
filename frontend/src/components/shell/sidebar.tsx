@@ -78,7 +78,7 @@ function NavLink({ item, rail, reasonId }: { item: NavItem; rail: boolean; reaso
         'group flex h-[34px] max-lg:h-11 items-center gap-2.5 rounded-control px-2.5 text-body-strong text-fg-2',
         'transition-colors duration-120 hover:bg-surface-2 hover:text-fg',
         'rail:justify-center rail:px-0',
-        item.active && 'bg-surface-2 text-fg'
+        item.active && 'relative bg-surface-2 text-fg before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-accent'
       )}
     >
       <Icon
@@ -108,7 +108,7 @@ function TopicLink({ courseId, topic, active }: { courseId: string; topic: NavTo
         className={cn(
           'flex h-8 max-lg:h-11 items-center gap-2.5 rounded-control px-2.5 text-[13.5px] text-fg-2',
           'transition-colors duration-120 hover:bg-surface-2 hover:text-fg',
-          active && 'bg-surface-2 text-fg'
+          active && 'relative bg-surface-2 text-fg before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-accent'
         )}
       >
         <MasteryIndicator mastery={topic.mastery} variant="ring" />

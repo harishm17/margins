@@ -45,7 +45,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(fun
         onInput?.(event)
       }}
       className={cn(
-        'block w-full resize-none rounded-control border border-control bg-surface px-3 py-2 text-body text-fg outline-none',
+        'block w-full resize-none rounded-control border border-control bg-surface px-3 py-2 text-body max-sm:text-[16px] text-fg outline-none',
         'transition-[border-color,box-shadow] duration-120 placeholder:text-fg-3',
         'focus:border-accent focus:ring-2 focus:ring-accent/25',
         'aria-invalid:border-danger aria-invalid:focus:ring-danger/25',

@@ -1,5 +1,6 @@
 'use client'
 
+import { materialsSummary, type MaterialsCounts } from './materials-summary'
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -662,7 +663,16 @@ export function MaterialsManager({
     return rows
   }, [uploads, materials])
   const empty = materials.length === 0 && visibleUploads.length === 0
-  const working = visibleUploads.some((item) => item.phase !== 'error') || materials.some((row) => row.status === 'processing')
+  // Every row the list shows is counted once: a row the server has taken over is a server row, so the
+  // browser's copy of it is not counted twice.
+  const counts: MaterialsCounts = {
+    ready: materials.filter((row) => row.status === 'ready').length,
+    working:
+      visibleUploads.filter((item) => item.phase !== 'error').length + materials.filter((row) => row.status === 'processing').length,
+    needsAttention:
+      visibleUploads.filter((item) => item.phase === 'error').length +
+      materials.filter((row) => row.status !== 'ready' && row.status !== 'processing').length,
+  }
   const inline = variant === 'inline'
 
   return (
@@ -781,9 +791,7 @@ export function MaterialsManager({
             </tbody>
           </table>
           <p className="mt-3 min-h-5 text-small text-fg-2" aria-live="polite">
-            {working
-              ? "You can leave this page. Files keep being read."
-              : 'Every file here has been read.'}
+            {materialsSummary(counts)}
           </p>
         </div>
       )}

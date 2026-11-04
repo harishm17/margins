@@ -20,7 +20,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="grid min-h-dvh lg:grid-cols-[minmax(440px,480px)_1fr]">
         <div className="flex flex-col px-6 py-5 sm:px-12">
           <header className="flex items-center justify-between">
-            <Link href="/" className="rounded-chip" aria-label={`${BRAND_NAME} home`}>
+            <Link href="/" className="inline-flex rounded-chip max-sm:min-h-11 max-sm:items-center" aria-label={`${BRAND_NAME} home`}>
               <Brand />
             </Link>
             <ThemeSwitch />

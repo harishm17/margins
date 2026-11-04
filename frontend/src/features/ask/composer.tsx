@@ -156,7 +156,7 @@ export function Composer({
             onStop()
           }
         }}
-        className="block max-h-48 w-full resize-none bg-transparent px-2 py-1 text-[15px] leading-6 text-fg outline-none placeholder:text-fg-3 disabled:cursor-not-allowed"
+        className="block max-h-48 w-full resize-none max-sm:min-h-11 bg-transparent px-2 py-1 text-[15px] max-sm:text-[16px] leading-6 text-fg outline-none placeholder:text-fg-3 disabled:cursor-not-allowed"
         style={{ height: LINE + 8 }}
       />
       <div className="mt-1 flex items-center gap-2">
@@ -170,7 +170,7 @@ export function Composer({
             value={scope}
             onValueChange={onScopeChange}
             options={scopeOptions}
-            className="h-7 w-auto max-w-[220px] border-transparent bg-surface-2 px-2.5 text-small max-sm:h-9"
+            className="h-7 w-auto max-w-[220px] border-transparent bg-surface-2 px-2.5 text-small"
           />
         ) : null}
         <span className="flex-1" />

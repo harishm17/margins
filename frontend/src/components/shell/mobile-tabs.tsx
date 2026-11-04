@@ -50,7 +50,7 @@ function TabLink({ tab }: { tab: Tab }) {
       aria-current={tab.active ? 'page' : undefined}
       className={cn(
         'relative flex h-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-control text-caption transition-colors duration-120',
-        tab.active ? 'text-fg' : 'text-fg-2 active:bg-surface-2'
+        tab.active ? 'text-fg after:absolute after:inset-x-3 after:top-0 after:h-0.5 after:rounded-full after:bg-accent' : 'text-fg-2 active:bg-surface-2'
       )}
     >
       <span className="relative">
