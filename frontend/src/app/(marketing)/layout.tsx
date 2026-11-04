@@ -45,8 +45,8 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
           {children}
         </main>
         <footer className="border-t border-border">
-          <div className="mx-auto grid w-full max-w-[1280px] gap-10 px-4 py-12 md:px-8 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
-            <div>
+          <div className="mx-auto grid w-full max-w-[1280px] grid-cols-2 gap-x-6 gap-y-8 px-4 py-12 sm:gap-10 md:px-8 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+            <div className="col-span-2 lg:col-span-1">
               <Brand />
               <p className="mt-3 max-w-[32ch] text-small text-fg-2">Study from your own course files, with a plan to your exam date.</p>
             </div>

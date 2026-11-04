@@ -47,9 +47,9 @@ export function groupWeeks(days: PlanDay[]): Week[] {
 
 const toContext = (unitTitles: Record<string, string>, dailyMinutes: number): DescribeContext => ({ unitTitles, dailyMinutes })
 
-function ItemRow({ item, today }: { item: DescribedPlanItem; today: boolean }) {
+function ItemRow({ item, next }: { item: DescribedPlanItem; /** The first task still to do today: the one with a button. Every other row is opened by its whole row, marked with a chevron. */ next: boolean }) {
   const meta = [item.partLabel, item.done ? null : item.etaLabel.replace('About ', '')].filter(Boolean).join(', ')
-  const showButton = today && !item.done
+  const showButton = next && !item.done
   return (
     <li className="relative flex min-h-11 items-start gap-3 py-2">
       <span className="mt-0.5 inline-flex shrink-0" role="img" aria-label={item.done ? 'Done' : 'To do'}>
@@ -66,7 +66,7 @@ function ItemRow({ item, today }: { item: DescribedPlanItem; today: boolean }) {
         <Link
           href={item.href}
           className={cn(
-            'inline-flex min-h-6 items-center rounded-chip text-body-strong after:absolute after:inset-0 hover:underline max-sm:min-h-7',
+            'inline-flex min-h-6 items-center rounded-chip text-body-strong after:absolute after:inset-0 hover:underline max-sm:min-h-11',
             item.done ? 'text-fg-3' : 'text-fg'
           )}
         >
@@ -81,7 +81,7 @@ function ItemRow({ item, today }: { item: DescribedPlanItem; today: boolean }) {
         ) : null}
       </div>
       {showButton ? (
-        <Button asChild size="sm" variant="secondary" className="relative z-10 shrink-0">
+        <Button asChild size="sm" variant="primary" className="relative z-10 shrink-0">
           <Link href={item.href} aria-label={`${item.verb}: ${item.title}`}>
             {item.verb}
           </Link>
@@ -114,14 +114,14 @@ function ItemList({ items, today }: { items: DescribedPlanItem[]; today: boolean
   return (
     <ul className="min-w-0 divide-y divide-border">
       {items.map((item) => (
-        <ItemRow key={item.id} item={item} today={today} />
+        <ItemRow key={item.id} item={item} next={today && item.id === items.find((candidate) => !candidate.done)?.id} />
       ))}
     </ul>
   )
 }
 
 /** A day with its items showing: today, and the next two days. */
-function DayCard({ day, items }: { day: PlanDay; items: DescribedPlanItem[] }) {
+function DayCard({ day, items, rest }: { day: PlanDay; items: DescribedPlanItem[]; rest: string }) {
   const headingId = `day-${day.date}`
   const minutes = dayMinutesLine(day)
   return (
@@ -145,14 +145,14 @@ function DayCard({ day, items }: { day: PlanDay; items: DescribedPlanItem[] }) {
       {items.length > 0 ? (
         <ItemList items={items} today={day.isToday} />
       ) : (
-        <p className="py-2 text-small text-fg-3">Nothing planned. A good day to rest.</p>
+        <p className="py-2 text-small text-fg-2">{rest}</p>
       )}
     </li>
   )
 }
 
 /** A later day: one line (the date, what is on it, the time) that opens to its items. */
-function DayLine({ day, items }: { day: PlanDay; items: DescribedPlanItem[] }) {
+function DayLine({ day, items, rest }: { day: PlanDay; items: DescribedPlanItem[]; rest: string }) {
   const headingId = `day-${day.date}`
   if (items.length === 0) {
     return (
@@ -160,7 +160,7 @@ function DayLine({ day, items }: { day: PlanDay; items: DescribedPlanItem[] }) {
         <h3 id={headingId} className="w-[116px] shrink-0 text-body-strong text-fg-2">
           {dayLabel(day.date)}
         </h3>
-        <span className="text-small text-fg-3">Nothing planned. A good day to rest.</span>
+        <span className="text-small text-fg-2">{rest}</span>
       </li>
     )
   }
@@ -189,21 +189,29 @@ function DayLine({ day, items }: { day: PlanDay; items: DescribedPlanItem[] }) {
   )
 }
 
-type WeekProps = { describe: (day: PlanDay) => DescribedPlanItem[]; open: ReadonlySet<string> }
+/** What an empty day says. With an exam date it is a real rest day; without one the plan only reaches as far as the topics do. */
+const restText = (plan: Pick<Plan, 'mode'>) =>
+  plan.mode === 'exam' ? 'Nothing planned. A good day to rest.' : 'No tasks yet. Set an exam date to fill these days.'
 
-function WeekDays({ week, describe, open }: WeekProps & { week: Week }) {
+type WeekProps = { describe: (day: PlanDay) => DescribedPlanItem[]; open: ReadonlySet<string>; rest: string }
+
+function WeekDays({ week, describe, open, rest }: WeekProps & { week: Week }) {
   // Today and the next two days show their items; every other day is a line.
   return (
     <ol className="flex flex-col gap-3">
       {week.days.map((day) => {
         const items = describe(day)
-        return open.has(day.date) ? <DayCard key={day.date} day={day} items={items} /> : <DayLine key={day.date} day={day} items={items} />
+        return open.has(day.date) ? (
+          <DayCard key={day.date} day={day} items={items} rest={rest} />
+        ) : (
+          <DayLine key={day.date} day={day} items={items} rest={rest} />
+        )
       })}
     </ol>
   )
 }
 
-function WeekSection({ week, current, describe, open }: WeekProps & { week: Week; current: boolean }) {
+function WeekSection({ week, current, describe, open, rest }: WeekProps & { week: Week; current: boolean }) {
   const headingId = `week-${week.start}`
   return (
     <section aria-labelledby={headingId}>
@@ -212,18 +220,18 @@ function WeekSection({ week, current, describe, open }: WeekProps & { week: Week
         {current ? <span className="ml-2 text-small font-normal text-fg-3">{weekLabel(week.start)}</span> : null}
       </h2>
       {week.days.every((day) => day.items.length === 0 && !day.isToday) ? (
-        <p className="rounded-card border border-border bg-surface p-4 text-small text-fg-3">
-          Nothing planned this week. A good time to rest or catch up.
+        <p className="rounded-card border border-border bg-surface p-4 text-small text-fg-2">
+          {rest === restText({ mode: 'exam' }) ? 'Nothing planned this week. A good time to rest or catch up.' : rest}
         </p>
       ) : (
-        <WeekDays week={week} describe={describe} open={open} />
+        <WeekDays week={week} describe={describe} open={open} rest={rest} />
       )}
     </section>
   )
 }
 
 /** A week in the middle of a long plan: one line with what it holds, opening to its days. */
-function FoldedWeek({ week, describe, open }: WeekProps & { week: Week }) {
+function FoldedWeek({ week, describe, open, rest }: WeekProps & { week: Week }) {
   const items = week.days.flatMap((day) => day.items)
   const count = items.length
   const minutes = week.days.reduce((sum, day) => sum + day.minutes + day.doneMinutes, 0)
@@ -233,12 +241,12 @@ function FoldedWeek({ week, describe, open }: WeekProps & { week: Week }) {
         <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-0.5 rounded-card px-4 py-2 hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
           <h2 className="min-w-0 flex-1 text-body-strong text-fg">{weekLabel(week.start)}</h2>
           <span className="flex shrink-0 items-center gap-2 text-small text-fg-2">
-            {count === 0 ? 'Nothing planned' : `${pluralize(count, 'item')}, about ${minutesLabel(minutes)}`}
+            {count === 0 ? (rest === restText({ mode: 'exam' }) ? 'Nothing planned' : 'No tasks yet') : `${pluralize(count, 'item')}, about ${minutesLabel(minutes)}`}
             <CaretDown aria-hidden="true" className="size-4 text-fg-3 transition-transform duration-180 group-open:rotate-180" />
           </span>
         </summary>
         <div className="border-t border-border p-3">
-          <WeekDays week={week} describe={describe} open={open} />
+          <WeekDays week={week} describe={describe} open={open} rest={rest} />
         </div>
       </details>
     </li>
@@ -294,7 +302,7 @@ export function PlanView({
 
   if (plan.status === 'no_topics') {
     return (
-      <Page>
+      <Page width="wide">
         <PageIntro title="Plan" description="What to study each day." />
         <EmptyState
           icon={<CalendarCheck />}
@@ -313,7 +321,7 @@ export function PlanView({
 
   if (plan.status === 'exam_passed') {
     return (
-      <Page>
+      <Page width="wide">
         <PageIntro title="Plan" description="What to study each day." actions={settings} />
         <InlineAlert
           tone="neutral"
@@ -330,6 +338,7 @@ export function PlanView({
     )
   }
 
+  const rest = restText(plan)
   const weeks = groupWeeks(plan.days)
   const thisWeek = weekStart(plan.today)
   const lastShown = plan.mode === 'exam' ? LAST_WEEKS_SHOWN : 0
@@ -358,7 +367,7 @@ export function PlanView({
   )
 
   return (
-    <Page>
+    <Page width="wide">
       <PageIntro title="Plan" description={summaryLine(plan)} actions={settings} />
 
       <div className="flex flex-col gap-4">
@@ -422,7 +431,7 @@ export function PlanView({
       ) : (
         <div className="mt-6 flex flex-col gap-10">
           {head.map((week) => (
-            <WeekSection key={week.start} week={week} current={week.start === thisWeek} describe={describe} open={open} />
+            <WeekSection key={week.start} week={week} current={week.start === thisWeek} describe={describe} open={open} rest={rest} />
           ))}
           {middle.length > 0 ? (
             <section aria-labelledby="later-weeks-heading">
@@ -431,13 +440,13 @@ export function PlanView({
               </h2>
               <ul className="flex flex-col gap-3">
                 {middle.map((week) => (
-                  <FoldedWeek key={week.start} week={week} describe={describe} open={open} />
+                  <FoldedWeek key={week.start} week={week} describe={describe} open={open} rest={rest} />
                 ))}
               </ul>
             </section>
           ) : null}
           {tail.map((week) => (
-            <WeekSection key={week.start} week={week} current={false} describe={describe} open={open} />
+            <WeekSection key={week.start} week={week} current={false} describe={describe} open={open} rest={rest} />
           ))}
         </div>
       )}

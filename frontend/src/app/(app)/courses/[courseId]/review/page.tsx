@@ -44,7 +44,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
   ])
 
   return (
-    <Page>
+    <Page width="wide">
       <PageIntro title="Review" description="Go over the topics that are due, most overdue first." />
       {!data.hasTopics ? (
         <EmptyState

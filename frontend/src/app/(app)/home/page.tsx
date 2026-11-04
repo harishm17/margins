@@ -41,7 +41,7 @@ export default async function HomePage() {
   if (courses.length === 0) return <Welcome />
 
   return (
-    <Page>
+    <Page width="wide">
       <PageIntro
         title={<Greeting name={user.name} firstVisit={firstVisit} />}
         description={homeIntro(firstVisit)}

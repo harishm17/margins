@@ -2,8 +2,10 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { getSession } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
+import { NotFoundPanel } from '@/components/shell/not-found-panel'
 import { BRAND_NAME } from '@/config/brand'
 import { SectionLink } from './section-link'
 
@@ -39,6 +41,10 @@ export function useSignedIn(): boolean | null {
 /** The nav buttons: Sign in and Get started, or Open Margins when signed in. Below 640px Sign in moves into the menu (MarketingMenu). */
 export function NavActions() {
   const signedIn = useSignedIn()
+  const pathname = usePathname()
+  // The page that says the account is gone keeps its one way on, in the page; a "Get started" above the
+  // confirmation would pull the eye off it.
+  if (!signedIn && pathname === '/account-deleted') return null
   return signedIn ? (
     <Button asChild variant="primary">
       <Link href="/home">Open {BRAND_NAME}</Link>
@@ -85,5 +91,18 @@ export function FinalCta() {
     <Button asChild variant="primary" size="lg">
       <Link href={signedIn ? '/home' : '/login'}>{signedIn ? `Open ${BRAND_NAME}` : 'Get started'}</Link>
     </Button>
+  )
+}
+
+/**
+ * The way back on the public not-found page. A signed-in student goes to their home; a visitor goes to the
+ * landing page, not to a sign-in page they did not ask for.
+ */
+export function NotFoundBack() {
+  const signedIn = useSignedIn()
+  return (
+    <NotFoundPanel
+      action={signedIn ? { href: '/home', label: 'Go to home' } : { href: '/', label: `Go to ${BRAND_NAME}` }}
+    />
   )
 }

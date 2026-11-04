@@ -21,6 +21,12 @@ export function ExamPromptCard({ courseId, className }: { courseId: string; clas
   const [pending, setPending] = React.useState<'save' | 'dismiss' | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [hidden, setHidden] = React.useState(false)
+  // Below lg the strip is the sentence and one button; the date field and its two buttons open from it.
+  const [open, setOpen] = React.useState(false)
+  const dateRef = React.useRef<HTMLInputElement>(null)
+  React.useEffect(() => {
+    if (open) dateRef.current?.focus()
+  }, [open])
 
   async function patch(body: Record<string, unknown>, which: 'save' | 'dismiss') {
     setPending(which)
@@ -54,11 +60,16 @@ export function ExamPromptCard({ courseId, className }: { courseId: string; clas
       <p className="min-w-0 flex-1 text-small text-fg-2">
         <span className="font-medium text-fg">No exam date yet.</span> Add one and Margins plans your days up to it, and tells you if time is short.
       </p>
-      <form onSubmit={onSubmit} noValidate className="flex flex-wrap items-center gap-2">
+      {open ? null : (
+        <Button type="button" variant="secondary" className="self-start lg:hidden" onClick={() => setOpen(true)}>
+          Set exam date
+        </Button>
+      )}
+      <form onSubmit={onSubmit} noValidate className={cn('flex-wrap items-center gap-2', open ? 'flex' : 'hidden lg:flex')}>
         <label htmlFor={inputId} className="sr-only">
           Exam date
         </label>
-        <Input id={inputId} type="date" value={date} onChange={(event) => setDate(event.target.value)} containerClassName="w-44 max-sm:flex-1" />
+        <Input ref={dateRef} id={inputId} type="date" value={date} onChange={(event) => setDate(event.target.value)} containerClassName="w-44 max-sm:flex-1" />
         <Button type="submit" variant="secondary" loading={pending === 'save'} disabled={pending === 'dismiss'}>
           Save date
         </Button>

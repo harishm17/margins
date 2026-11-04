@@ -54,7 +54,7 @@ export function SegmentedControl<T extends string>({
           className={cn(
             'h-[30px] max-sm:h-11 whitespace-nowrap rounded-chip border border-transparent px-3 text-small font-medium text-fg-2',
             'transition-[background-color,color,border-color] duration-120',
-            'hover:text-fg disabled:opacity-50',
+            'hover:text-fg disabled:text-fg-3 disabled:hover:text-fg-3',
             'data-[state=checked]:border-accent data-[state=checked]:bg-surface data-[state=checked]:text-fg data-[state=checked]:shadow-tiny',
             fullWidth && 'flex-1'
           )}

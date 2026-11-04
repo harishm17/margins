@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { STORED_FAILURE_TEXT, retryPlan, toChatMessages, type ChatMessage } from './chat-messages'
+import { STORED_FAILURE_TEXT, retryPlan, toChatMessages, withoutRepeatedFailure, type ChatMessage } from './chat-messages'
 
 test('a stored failure at the end of a conversation offers a retry of the question before it', () => {
   const messages = toChatMessages([
@@ -54,4 +54,16 @@ test('retrying never removes the turns after the failure', () => {
 test('an unknown or question-less failure has no retry', () => {
   assert.equal(retryPlan([user('u1', 'A?')], 'nope'), null)
   assert.equal(retryPlan([{ kind: 'failure', id: 'f', message: 'x', retryable: true, question: null }], 'f'), null)
+})
+
+test('asking the same question again after it failed replaces the failed try', () => {
+  const messages = [user('u0', 'A?'), answer('a0'), user('u1', 'B?'), failure('f1', 'B?')]
+  assert.deepEqual(withoutRepeatedFailure(messages, 'B?'), [user('u0', 'A?'), answer('a0')])
+})
+
+test('a different question, or a failure that is not last, keeps everything', () => {
+  const messages = [user('u1', 'B?'), failure('f1', 'B?')]
+  assert.deepEqual(withoutRepeatedFailure(messages, 'C?'), messages)
+  const later = [user('u1', 'B?'), failure('f1', 'B?'), user('u2', 'C?'), answer('a2')]
+  assert.deepEqual(withoutRepeatedFailure(later, 'B?'), later)
 })

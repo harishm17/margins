@@ -1,7 +1,7 @@
 import { phoneInlineHit } from '@/components/ui/styles'
 import type { Metadata } from 'next'
 import { CONTACT_EMAIL } from '@/config/site'
-import { LegalPage, LegalSection } from '@/features/marketing/legal-page'
+import { LegalList, LegalPage, LegalSection } from '@/features/marketing/legal-page'
 
 export const metadata: Metadata = {
   title: 'Privacy',
@@ -33,15 +33,15 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
       <LegalSection heading="Services we use">
-        <p>
-          Anthropic processes the text of your files and your questions to create study material and answers
-          (Anthropic does not use this data to train its models by default). Railway hosts the app, the database
-          and file storage in the United States. Google provides sign-in. Voice practice sends your voice to Deepgram, a speech
-          service, to turn it into text. Deepgram does not keep the audio after turning it into text or use it to train
-          models, and Margins stores only the text. If Deepgram is unavailable, or you turn off Better speech
-          recognition before a session, your browser&apos;s built-in speech recognition is used instead, which may send
-          audio to your browser vendor (Google for Chrome, Apple for Safari).
-        </p>
+        <LegalList
+          items={[
+            { name: 'Anthropic', text: 'processes the text of your files and your questions to create study material and answers. It does not use this data to train its models by default.' },
+            { name: 'Railway', text: 'hosts the app, the database and the file storage, in the United States.' },
+            { name: 'Google', text: 'provides sign-in.' },
+            { name: 'Deepgram', text: 'turns your voice into text in voice practice. It does not keep the audio or use it to train models, and Margins stores only the text.' },
+            { name: 'Your browser', text: "does the speech recognition instead if Deepgram is unavailable or you turn off Better speech recognition before a session. It may send audio to your browser vendor (Google for Chrome, Apple for Safari)." },
+          ]}
+        />
       </LegalSection>
       <LegalSection heading="Your choices">
         <p>

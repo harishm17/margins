@@ -41,8 +41,8 @@ export function Field({ label, hint, error, optional, children, className, id }:
       </label>
       {control}
       {error ? (
-        <p id={errorId} role="alert" className="flex items-start gap-1.5 text-caption font-normal text-danger-soft-fg">
-          <WarningCircle aria-hidden="true" className="mt-px size-3.5 shrink-0" />
+        <p id={errorId} role="alert" className="flex items-start gap-1.5 text-small font-normal text-danger-soft-fg">
+          <WarningCircle aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
           {error}
         </p>
       ) : hint ? (

@@ -509,9 +509,18 @@ export function TopicEditor({
               variant="secondary"
               icon={<ArrowsClockwise />}
               disabled={running || filesReady === 0 || !!extraction.blocked}
+              disabledReason={
+                running
+                  ? 'Topics are being found now.'
+                  : filesReady === 0
+                    ? 'Add and read a file first.'
+                    : extraction.blocked
+                      ? 'AI features are paused right now.'
+                      : undefined
+              }
               onClick={() => setFindAgainOpen(true)}
             >
-              Find again
+              Find topics again
             </Button>
             <Button variant="secondary" icon={<FolderSimplePlus />} onClick={() => setUnitDialog({ unit: null })}>
               Add unit
@@ -757,7 +766,21 @@ export function TopicEditor({
               <Link href={`/courses/${courseId}/topics`}>Done</Link>
             </Button>
           ) : (
-            <Button variant="primary" onClick={confirmTopics} loading={confirming} disabled={(items.length === 0 && addingCount === 0) || running || failedAdds.length > 0}>
+            <Button
+              variant="primary"
+              onClick={confirmTopics}
+              loading={confirming}
+              disabled={(items.length === 0 && addingCount === 0) || running || failedAdds.length > 0}
+              disabledReason={
+                running
+                  ? 'Wait until the topics are found.'
+                  : failedAdds.length > 0
+                    ? 'Retry or remove the topics that were not added.'
+                    : items.length === 0 && addingCount === 0
+                      ? 'Add at least one topic first.'
+                      : undefined
+              }
+            >
               Confirm topics
             </Button>
           )}
@@ -781,7 +804,7 @@ export function TopicEditor({
         onOpenChange={setFindAgainOpen}
         title="Find topics again?"
         description="Topics you already confirmed stay."
-        confirmLabel="Find again"
+        confirmLabel="Find topics again"
         onConfirm={() => extraction.start()}
       />
       <ConfirmDialog

@@ -8,7 +8,7 @@ import { NotFoundPanel } from '@/components/shell/not-found-panel'
 export default function CourseNotFound() {
   const { courseId } = useParams<{ courseId: string }>()
   return (
-    <Page>
+    <Page width="focus">
       <NotFoundPanel
         className="py-24"
         body="The topic or exam may have been deleted, or the address is not quite right."

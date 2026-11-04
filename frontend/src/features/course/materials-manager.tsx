@@ -8,6 +8,7 @@ import {
   CheckCircle,
   Tag,
   DotsThree,
+  File as FileGeneric,
   FileDoc,
   FilePdf,
   FilePpt,
@@ -37,6 +38,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
 import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Spinner } from '@/components/ui/spinner'
@@ -93,7 +95,14 @@ type LocalUpload = {
 
 function FileIcon({ filename }: { filename: string }) {
   const lower = filename.toLowerCase()
-  const Icon = lower.endsWith('.pdf') ? FilePdf : lower.endsWith('.pptx') ? FilePpt : FileDoc
+  // A neutral page for anything the app does not read (a refused .txt or .exe), not the Word glyph.
+  const Icon = lower.endsWith('.pdf')
+    ? FilePdf
+    : lower.endsWith('.pptx')
+      ? FilePpt
+      : lower.endsWith('.docx') || lower.endsWith('.doc')
+        ? FileDoc
+        : FileGeneric
   return <Icon aria-hidden="true" className="size-5 shrink-0 text-fg-3" />
 }
 
@@ -110,12 +119,14 @@ function StatusText({ children, tone = 'neutral', icon, announce }: StatusProps)
     <span
       role={announce ? 'alert' : undefined}
       className={cn(
-        'flex min-w-0 items-center gap-1.5 text-small',
-        tone === 'danger' ? 'text-danger-soft-fg' : tone === 'accent' ? 'text-fg' : 'text-fg-2'
+        'flex min-w-0 gap-1.5 text-small',
+        // A problem is told in full, over as many lines as it needs: "Use a PDF, DOCX, PPTX or DOC file." was cut at "DO...".
+        tone === 'danger' ? 'items-start text-danger-soft-fg' : 'items-center',
+        tone === 'accent' ? 'text-fg' : tone === 'neutral' ? 'text-fg-2' : null
       )}
     >
-      {icon}
-      <span className="min-w-0 truncate">{children}</span>
+      <span className={cn('inline-flex shrink-0', tone === 'danger' && 'mt-0.5')}>{icon}</span>
+      <span className={cn('min-w-0', tone === 'danger' ? 'break-words' : 'truncate')}>{children}</span>
     </span>
   )
 }
@@ -174,8 +185,13 @@ function PipelineStatus({
             <span
               key={item.stage}
               className={cn(
-                'h-1 flex-1 rounded-full',
-                position < index ? 'bg-accent' : position === index ? 'animate-pulse bg-accent/60' : 'bg-surface-3'
+                // Each segment has an edge in the control-border colour, so the ones still to come show against the page.
+                'h-[6px] flex-1 rounded-full border',
+                position < index
+                  ? 'border-accent bg-accent'
+                  : position === index
+                    ? 'animate-pulse border-accent bg-accent/60'
+                    : 'border-control bg-surface-3'
               )}
             />
           ))}
@@ -209,6 +225,7 @@ function RowShell({
   size,
   status,
   menu,
+  unused,
 }: {
   filename: string
   role: MaterialRole
@@ -216,6 +233,8 @@ function RowShell({
   size: number
   status: React.ReactNode
   menu: React.ReactNode
+  /** The file will not be used (refused, unreadable, failed): what it would be used as, and its size, mean nothing. */
+  unused?: boolean
 }) {
   return (
     <tr className="min-h-12 max-md:grid max-md:grid-cols-[minmax(0,1fr)_auto] max-md:items-center max-md:gap-x-2 max-md:gap-y-1 max-md:py-3">
@@ -224,17 +243,22 @@ function RowShell({
           <FileIcon filename={filename} />
           <div className="min-w-0">
             <p className="truncate text-body-strong text-fg">{filename}</p>
-            <p className="flex min-w-0 items-center gap-2 text-caption font-normal text-fg-3 md:hidden">
-              <span className="truncate">{formatBytes(size)}</span>
-              <RoleBadge role={role} category={category} />
-            </p>
+            {unused ? null : (
+              <p className="flex min-w-0 items-center gap-2 text-caption font-normal text-fg-3 md:hidden">
+                <span className="truncate">{formatBytes(size)}</span>
+                <RoleBadge role={role} category={category} />
+              </p>
+            )}
           </div>
         </div>
       </td>
       <td className="whitespace-nowrap px-3 py-2.5 max-md:hidden">
-        <RoleBadge role={role} category={category} />
+        {unused ? <span aria-hidden="true" className="text-fg-3">&ndash;</span> : <RoleBadge role={role} category={category} />}
+        {unused ? <span className="sr-only">Not used</span> : null}
       </td>
-      <td className="whitespace-nowrap px-3 py-2.5 text-small tabular text-fg-2 max-md:hidden">{formatBytes(size)}</td>
+      <td className="whitespace-nowrap px-3 py-2.5 text-small tabular text-fg-2 max-md:hidden">
+        {unused ? <span aria-hidden="true" className="text-fg-3">&ndash;</span> : formatBytes(size)}
+      </td>
       <td className="min-w-0 px-3 py-2.5 max-md:col-span-2 max-md:row-start-2 max-md:p-0 max-md:pl-8"><div className="md:w-52">{status}</div></td>
       <td className="py-1.5 pl-3 text-right max-md:col-start-2 max-md:row-start-1 max-md:p-0">{menu}</td>
     </tr>
@@ -404,6 +428,7 @@ function ServerRow({
         category={row.category}
         size={row.sizeBytes}
         status={status}
+        unused={row.status === 'failed' || row.status === 'unusable'}
         menu={
           <RowMenu filename={row.filename}>
             <DropdownMenuItem
@@ -435,7 +460,7 @@ function ServerRow({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete ${row.filename}?`}
-        description="Topics built from it keep their content."
+        description="Topics built from it keep their content. Links to this file from Ask answers and notes stop opening."
         confirmLabel="Delete file"
         destructive
         onConfirm={onDelete}
@@ -472,6 +497,7 @@ function LocalRow({ upload, onDismiss, typicalSeconds }: { upload: LocalUpload; 
       category={upload.category}
       size={upload.size}
       status={status}
+      unused={upload.phase === 'error'}
       menu={
         upload.phase === 'sent' ? null : (
           <IconButton
@@ -543,6 +569,7 @@ export function MaterialsManager({
 
   // Files that match one already in the course wait here for the student's choice (cancel, replace, keep both).
   const [duplicates, setDuplicates] = React.useState<{ file: File; matches: KnownFile[] }[] | null>(null)
+  const [removeFailedOpen, setRemoveFailedOpen] = React.useState(false)
 
   /** Starts one file; the promise says whether it reached the server (for the count of files uploaded). */
   function startUpload(file: File): Promise<boolean> {
@@ -674,6 +701,19 @@ export function MaterialsManager({
       materials.filter((row) => row.status !== 'ready' && row.status !== 'processing').length,
   }
   const inline = variant === 'inline'
+  const failedRows = materials.filter((row) => row.status !== 'ready' && row.status !== 'processing')
+  const failedUploads = visibleUploads.filter((item) => item.phase === 'error')
+
+  async function removeFailed() {
+    for (const item of failedUploads) removeUpload(item.key)
+    const results = await Promise.allSettled(failedRows.map((row) => apiFetch(`/api/materials/${row.id}`, { method: 'DELETE' })))
+    router.refresh()
+    if (results.some((result) => result.status === 'rejected')) {
+      toast.error("Couldn't remove every file. Try again, or delete them from their menus.")
+      throw new Error('remove failed')
+    }
+    toast.success('Failed files removed')
+  }
 
   return (
     <div className={cn(!inline && 'flex flex-col gap-6')}>
@@ -713,13 +753,17 @@ export function MaterialsManager({
           inline && 'mt-4'
         )}
       >
-        <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-body-strong text-fg">
+        {/* Nothing can be dropped on a phone: there it is one button, "Choose files". */}
+        <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-body-strong text-fg max-sm:hidden">
           <UploadSimple aria-hidden="true" className="size-5 text-fg-3" />
           Drop files here or
           <Button variant="link" className="h-auto px-0 text-body-strong" onClick={() => inputRef.current?.click()}>
             browse
           </Button>
         </p>
+        <Button variant="secondary" icon={<UploadSimple />} className="sm:hidden" onClick={() => inputRef.current?.click()}>
+          Choose files
+        </Button>
         <p className="text-small text-fg-2">
           PDF, DOCX, PPTX or DOC, up to {maxUploadMb} MB each. PDFs need selectable text. Scans can&apos;t be read.
         </p>
@@ -790,11 +834,36 @@ export function MaterialsManager({
               )}
             </tbody>
           </table>
-          <p className="mt-3 min-h-5 text-small text-fg-2" aria-live="polite">
-            {materialsSummary(counts)}
-          </p>
+          {counts.needsAttention > 0 ? (
+            // A file that cannot be used is a problem to fix, so the line is an alert with the way to fix it, not grey small print.
+            <InlineAlert
+              tone="danger"
+              className="mt-3"
+              action={
+                <Button size="sm" onClick={() => setRemoveFailedOpen(true)}>
+                  Remove failed files
+                </Button>
+              }
+            >
+              <span aria-live="polite">{materialsSummary(counts)}</span>
+            </InlineAlert>
+          ) : (
+            <p className="mt-3 min-h-5 text-small text-fg-2" aria-live="polite">
+              {materialsSummary(counts)}
+            </p>
+          )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={removeFailedOpen}
+        onOpenChange={setRemoveFailedOpen}
+        title="Remove the files that failed?"
+        description="They are not used for your topics. The files that were read are not touched."
+        confirmLabel="Remove failed files"
+        destructive
+        onConfirm={removeFailed}
+      />
 
       <Dialog open={duplicates !== null} onOpenChange={(open) => (open ? undefined : resolveDuplicates('cancel'))}>
         <DialogContent size="sm" hideClose>

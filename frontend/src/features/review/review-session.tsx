@@ -423,7 +423,10 @@ function Step({ courseId, sessionId, position, motion, item, result, isLast, can
           {result.correct ? 'Correct' : result.idk ? "You said you don't know" : 'Not quite'}. Feedback for question {position + 1}.
         </h2>
         <ResultList entries={resultEntries} courseId={courseId} topicId={item.topicId} />
-        {!result.correct ? <Pointers pointers={result.pointers ?? []} /> : null}
+        {/* The card already ends with "From file, p. N" when the question has a source. One pointer to the same page would say it twice. */}
+        {!result.correct && !((result.review.sources?.length ?? 0) > 0 && (result.pointers?.length ?? 0) <= 1) ? (
+          <Pointers pointers={result.pointers ?? []} />
+        ) : null}
         {!result.correct && firstMiss && closingRetests ? (
           <p className="mt-3 text-small text-fg-2" data-testid="length-notice">
             Misses come back once at the end in a new form.

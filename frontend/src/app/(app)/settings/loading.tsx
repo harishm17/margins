@@ -3,7 +3,7 @@ import { Skeleton, SkeletonIntro, SkeletonPage } from '@/components/ui/page-skel
 /** Settings: the intro, then four sections (account, AI allowance, theme, delete). */
 export default function SettingsLoading() {
   return (
-    <SkeletonPage width="narrow" className="pt-8">
+    <SkeletonPage width="form">
       <SkeletonIntro />
       <div aria-hidden="true" className="flex flex-col gap-8">
         {[0, 1, 2, 3].map((index) => (

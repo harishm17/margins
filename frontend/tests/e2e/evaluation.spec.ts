@@ -39,7 +39,7 @@ test('the evaluation page shows its method, key numbers, failed checks and cavea
   await expect(page.getByRole('table', { name: /Model choice/ }).getByRole('row', { name: /Sonnet, medium/ })).toContainText('$0.24')
 
   // Raw results link to the files on GitHub.
-  await expect(page.getByRole('link', { name: /Generation quality, with every error/ })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: /Quality of notes, examples, practice and quizzes, with every error/ })).toHaveAttribute(
     'href',
     'https://github.com/harishm17/margins/blob/main/evals/results/2026-10-21-structure.md'
   )

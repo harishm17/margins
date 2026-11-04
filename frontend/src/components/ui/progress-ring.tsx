@@ -9,7 +9,7 @@ type ProgressRingProps = {
   value?: number | null
   size?: RingSize
   tone?: 'accent' | 'warning'
-  /** Centre label (tabular). Shown from size 28 up. */
+  /** Centre label (tabular). Shown from size 44 up: a smaller ring has no room for text of 12px or more, so the number goes beside it. */
   label?: React.ReactNode
   /** Names the ring for screen readers. Without it the ring is decorative. */
   'aria-label'?: string
@@ -24,7 +24,7 @@ export const scoreRingSize = (score: number): RingSize => (score > 0 ? 96 : 44)
 
 const LABEL_CLASS: Record<RingSize, string> = {
   16: 'hidden',
-  28: 'text-[9px] font-medium',
+  28: 'hidden',
   44: 'text-caption',
   96: 'text-heading',
 }
