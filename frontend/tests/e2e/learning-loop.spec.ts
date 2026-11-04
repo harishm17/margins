@@ -141,11 +141,12 @@ test.describe('plan', () => {
 
     await page.goto(`/courses/${course.courseId}`)
     const upNext = page.getByRole('region', { name: 'Up next' })
-    await expect(upNext).toContainText('Learn Sorting')
+    await expect(upNext).toContainText('Sorting')
     await expect(upNext.getByRole('link', { name: 'See the plan' })).toHaveAttribute('href', `/courses/${course.courseId}/plan`)
     const card = page.getByRole('region', { name: 'When is your exam?' })
     await expect(card).toBeVisible()
 
+    await card.getByRole('button', { name: 'Set exam date' }).click()
     await card.getByLabel('Exam date').locator('visible=true').fill(dayIn(ZONE, 30))
     await card.getByRole('button', { name: 'Save date' }).click()
     await expect(page.getByRole('region', { name: 'When is your exam?' })).toHaveCount(0)
@@ -158,6 +159,7 @@ test.describe('plan', () => {
     const other = await createCourse(page, 'No date wanted', [{ name: 'One', minutes: 30 }], { existingCourseId: emptyOther })
     await addContent(other.topics.One, { section_notes: '# One' })
     await page.goto(`/courses/${other.courseId}`)
+    await page.getByRole('region', { name: 'When is your exam?' }).getByRole('button', { name: 'Set exam date' }).click()
     await page.getByRole('region', { name: 'When is your exam?' }).getByRole('button', { name: 'Not now' }).click()
     await expect(page.getByRole('region', { name: 'When is your exam?' })).toHaveCount(0)
     await page.reload()
@@ -196,7 +198,9 @@ test.describe('plan', () => {
     await page.goto('/courses/new')
     await page.getByLabel('Course name').locator('visible=true').fill('Dated course')
     await page.getByLabel('Exam date').locator('visible=true').fill(dayIn(ZONE, 40))
-    await page.getByRole('combobox', { name: 'Time to study each day' }).click()
+    // The daily time waits behind "More details".
+    await page.getByText('More details').click()
+    await page.getByRole('combobox', { name: 'Typical daily study time' }).click()
     await page.getByRole('option', { name: '1 hour 30 minutes' }).click()
     await page.getByRole('button', { name: 'Create course' }).click()
     await expect(page).toHaveURL(/\/courses\/[0-9a-f-]{36}$/)
@@ -207,7 +211,7 @@ test.describe('plan', () => {
 
     await page.goto(`/courses/${courseId}/settings`)
     await expect(page.getByLabel('Exam date').locator('visible=true')).toHaveValue(dayIn(ZONE, 40))
-    await expect(page.getByRole('combobox', { name: 'Time to study each day' })).toContainText('1 hour 30 minutes')
+    await expect(page.getByRole('combobox', { name: 'Typical daily study time' })).toContainText('1 hour 30 minutes')
   })
 })
 

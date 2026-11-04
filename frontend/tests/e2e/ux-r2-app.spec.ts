@@ -148,7 +148,9 @@ test.describe('desktop', () => {
 
   test('a plan day without an exam date says what is missing, and one open task has the button', async ({ page }) => {
     await page.goto(`/courses/${course}/plan`)
-    await expect(page.getByText('No tasks yet. Set an exam date to fill these days.').first()).toBeVisible()
+    // Empty days are said once, with the way to fill them (a stretch of them is one row).
+    await expect(page.getByText(/nothing planned yet/i).locator('visible=true').first()).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Set an exam date' }).first()).toBeVisible()
     await expect(page.getByText('A good day to rest.')).toHaveCount(0)
     const today = page.locator('li[aria-current="date"]')
     await expect(today.getByRole('link', { name: /^(Start|Continue|Read|Practice|Take quiz|Review)/ })).toHaveCount(1)
@@ -208,8 +210,8 @@ test.describe('refused files in materials', () => {
     await expect(row.getByText(/\bB$/)).toHaveCount(0)
     // The problem is an alert with a way to fix it.
     await expect(page.getByText('1 file ready; 2 files need attention.').or(page.getByText(/files need attention/))).toBeVisible()
-    await page.getByRole('button', { name: 'Remove files with problems' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Remove files with problems' }).click()
+    await page.getByRole('button', { name: 'Dismiss failed uploads' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Dismiss failed uploads' }).click()
     await expect(page.getByRole('row', { name: /notes\.txt/ })).toHaveCount(0)
     await expect(page.getByRole('row', { name: /bad\.exe/ })).toHaveCount(0)
     // The file that was fine is still there.

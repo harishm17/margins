@@ -123,7 +123,7 @@ test('topic editor: rename, add, reorder, merge, delete, confirm', async ({ page
   await page.getByRole('button', { name: 'Confirm topics' }).click()
   await expect(page).toHaveURL(courseUrl)
   await expect(page.getByRole('heading', { level: 2, name: 'Start studying' })).toBeVisible()
-  await expect(page.getByRole('link', { name: /^Start / })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Save and start warm-up' })).toBeVisible()
   await expect(page.getByRole('button', { name: /Build study content|Build missing content/ })).toHaveCount(0)
   await expect(page.getByText(`${initial} topics confirmed.`)).toBeVisible()
 })
@@ -135,7 +135,7 @@ test('starting the first topic writes its notes, then topics list and materials'
   // these files, so the job can fail with a reason and a way to try again (it is not started a
   // second time by itself). With text mapped, the notes appear.
   await page.goto(courseUrl)
-  await page.getByRole('link', { name: /^Start / }).click()
+  await page.getByRole('button', { name: 'Save and start warm-up' }).click()
   // A topic nobody has opened lands on the step the path names (the preparation screen, then the warm-up when it is written), not on Read.
   await expect(page).toHaveURL(/\/topics\/[0-9a-f-]{36}\?view=(warmup|read&entry=1|read)$/)
   await expect(
@@ -157,9 +157,10 @@ test('starting the first topic writes its notes, then topics list and materials'
   await page.getByRole('button', { name: 'Actions for hashing.docx' }).click()
   await page.getByRole('menuitem', { name: 'Delete' }).click()
   await expect(page.getByRole('dialog')).toContainText('Delete hashing.docx?')
-  await expect(page.getByRole('dialog')).toContainText('Topics built from it keep their content.')
+  await expect(page.getByRole('dialog')).toContainText('Existing topic content stays.')
   await page.getByRole('button', { name: 'Delete file' }).click()
-  await expect(page.getByText('hashing.docx')).toHaveCount(0)
+  await expect(page.getByRole('row', { name: /hashing\.docx/ })).toHaveCount(0)
+  await expect(page.getByTestId('materials-notice')).toContainText('Deleted hashing.docx')
 })
 
 test('Home has no dashed new course tile and never says 0 strong; the demo course shows Today', async ({ page }) => {

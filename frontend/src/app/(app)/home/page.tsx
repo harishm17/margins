@@ -32,6 +32,8 @@ export default async function HomePage() {
   ])
   // An account that has not studied yet is a new student, not one coming back.
   const firstVisit = !studied
+  // eslint-disable-next-line react-hooks/purity -- a server component: one timestamp per request
+  const now = Date.now()
 
   // Quick practice for the course in "Up next" (spec 18.8). An extra: if it cannot be worked out Home still shows.
   // Not before the student has a first quiz or recall: there is nothing to go over yet, so Home says what opens it.
@@ -46,7 +48,7 @@ export default async function HomePage() {
         title={<Greeting name={user.name} firstVisit={firstVisit} />}
         description={homeIntro(firstVisit)}
         actions={
-          <Button asChild variant="primary" icon={<Plus />}>
+          <Button asChild variant="secondary" icon={<Plus />}>
             <Link href="/courses/new">New course</Link>
           </Button>
         }
@@ -60,7 +62,7 @@ export default async function HomePage() {
           </p>
         ) : null}
         <DueReviews items={due.items} total={due.total} />
-        <CourseGrid courses={courses} />
+        <CourseGrid courses={courses} now={now} timeZone={timeZone} />
       </div>
     </Page>
   )

@@ -1,7 +1,8 @@
 import { areRecordIds } from '@/lib/ids'
 import { cache } from 'react'
 import { prisma } from '@/lib/db/prisma'
-import { deriveSetup, needsTopicReview, readyToStudy, type CourseSetup, type ExtractionOutcome } from '@/lib/course-setup'
+import { deriveSetup, deriveSetupStep, filesStepDone, needsTopicReview, readyToStudy, type CourseSetup, type ExtractionOutcome } from '@/lib/course-setup'
+import { materialCounts } from '@/server/queries/material-status'
 import { ACTIVE_JOB_STATUSES } from '@/lib/jobs/active-jobs'
 import { applyPendingExamResults } from '@/lib/learning/exam-mastery'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
@@ -69,6 +70,8 @@ export type CourseListItem = {
   description: string | null
   status: string
   updatedAt: string
+  /** When the earliest review among the course's topics falls due, or null when none is scheduled. */
+  nextDueAt: string | null
   topicCount: number
   strongCount: number
   /** One level per topic in course order, for the mastery strip. */
@@ -108,12 +111,18 @@ export async function listCourses(userId: string): Promise<CourseListItem[]> {
     // New topics waiting for review do not count as part of a confirmed course.
     const shown = project.topics.filter((topic) => !setup.topics.listConfirmed || topic.userConfirmed)
     const levels = shown.map((topic) => masteryLevel(standings.get(topic.id)?.mastery))
+    // The earliest review among the topics shown: Home says when the next one falls due.
+    const dueTimes = shown.flatMap((topic) => {
+      const dueAt = standings.get(topic.id)?.dueAt
+      return dueAt ? [dueAt.getTime()] : []
+    })
     return {
       id: project.id,
       name: project.name,
       description: project.description,
       status: project.status,
       updatedAt: project.updatedAt.toISOString(),
+      nextDueAt: dueTimes.length > 0 ? new Date(Math.min(...dueTimes)).toISOString() : null,
       topicCount: shown.length,
       strongCount: levels.filter((level) => level === 'strong').length,
       levels,
@@ -335,8 +344,33 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
     latestExtractions(userId, projects.map((project) => project.id)),
     topicStandings(userId, projects.flatMap((project) => project.topics.map((topic) => topic.id)), now),
   ])
+  // The page keeps step 1 open while files are read; the sidebar's "Step n of 3" asks the same two functions
+  // (lib/course-setup.ts), so it cannot be a step ahead of the page. Only a course that says step 2 with files needs the counts.
+  const reading = await Promise.all(
+    projects.map(async (project) => {
+      const setup = setupOf(project, extractions.get(project.id) ?? 'none')
+      if (setup.mode !== 'setup' || setup.step !== 2 || project._count.materials === 0) return null
+      return [project.id, await materialCounts(userId, project.id)] as const
+    })
+  )
+  const counts = new Map(reading.flatMap((entry) => (entry ? [entry] : [])))
   return projects.map((project) => {
     const setup = setupOf(project, extractions.get(project.id) ?? 'none')
+    const fileCounts = counts.get(project.id)
+    const setupStep =
+      setup.mode !== 'setup'
+        ? null
+        : deriveSetupStep({
+            step: setup.step,
+            materialCount: project._count.materials,
+            filesDone: fileCounts
+              ? filesStepDone({
+                  ...fileCounts,
+                  extractionRunning: setup.topics.extraction === 'running',
+                  topicCount: project.topics.length,
+                })
+              : true,
+          })
     return {
       id: project.id,
       name: project.name,
@@ -347,7 +381,7 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
       needsTopicReview: needsTopicReview(setup),
       active: setup.mode === 'active',
       ready: readyToStudy(setup),
-      setupStep: setup.mode === 'setup' ? setup.step : null,
+      setupStep,
       units: project.units,
       files: project.materials,
       // New topics found after the student confirmed wait for review: the sidebar, the command palette and

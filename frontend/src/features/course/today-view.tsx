@@ -12,6 +12,7 @@ import { ProgressRing } from '@/components/ui/progress-ring'
 import { pluralize } from '@/lib/format'
 import { DueLabel, RelativeTime } from '@/components/ui/relative-time'
 import {
+  MASTERY_LABELS,
   masteryLabel,
   masteryLevel,
   masteryPercent,
@@ -24,7 +25,7 @@ import type { TodayData, TodayTopic } from '@/server/queries/course'
 import type { CourseShell } from '@/server/queries/courses'
 import { BuildingContent } from './building-content'
 import { CourseMenu } from './course-menu'
-import { ExamPromptCard } from './exam-prompt-card'
+import { ExamDateLine } from './exam-date-line'
 import { RefreshOnFocus } from './refresh-on-focus'
 import { newTopicsLabel } from '@/lib/course-setup'
 import { courseSummary } from './summary'
@@ -142,10 +143,10 @@ function UpNext({ courseId, next }: { courseId: string; next: TodayData['next'] 
 }
 
 const BUCKETS: { level: MasteryLevel; label: string; swatch: string }[] = [
-  { level: 'strong', label: 'Strong', swatch: 'bg-accent' },
-  { level: 'getting', label: 'Getting there', swatch: 'bg-accent/50' },
-  { level: 'learning', label: 'Learning', swatch: 'bg-learning' },
-  { level: 'none', label: 'Not started', swatch: 'bg-surface-3' },
+  { level: 'strong', label: MASTERY_LABELS.strong, swatch: 'bg-accent' },
+  { level: 'getting', label: MASTERY_LABELS.getting, swatch: 'bg-accent/50' },
+  { level: 'learning', label: MASTERY_LABELS.learning, swatch: 'bg-learning' },
+  { level: 'none', label: MASTERY_LABELS.none, swatch: 'bg-surface-3' },
 ]
 
 function ProgressCard({ average, counts, topicCount, className }: { average: number | null; counts: MasteryCounts; topicCount: number; className?: string }) {
@@ -283,6 +284,9 @@ export function TodayView({ course, today }: { course: CourseShell; today: Today
         }
       />
 
+      {/* The date is the course's, so it is edited from the header: one line, not a card between the next step and the topics. */}
+      {today.examPrompt ? <ExamDateLine courseId={course.id} /> : null}
+
       <div className="flex flex-col gap-10">
         <div className="flex flex-col gap-4">
           {newTopics ? (
@@ -298,12 +302,9 @@ export function TodayView({ course, today }: { course: CourseShell; today: Today
               They join your plan once you confirm them.
             </InlineAlert>
           ) : null}
-          {/* The planning context: what to do next, and the exam-date line that the plan depends on, directly under it. The
+          {/* What to do next, directly above the topics it is about. The exam-date line is part of the header (above), and the
               detail (course mastery, mock-exam history) comes after the topics, so the first screen is the next move. */}
-          <div className="flex flex-col gap-4">
-            <UpNext courseId={course.id} next={today.next} />
-            {today.examPrompt ? <ExamPromptCard courseId={course.id} /> : null}
-          </div>
+          <UpNext courseId={course.id} next={today.next} />
         </div>
 
         <section aria-labelledby="topics-heading">

@@ -4,7 +4,6 @@ import * as React from 'react'
 import {
   ArrowDown,
   ArrowUp,
-  ArrowsDownUp,
   ArrowsLeftRight,
   DotsSixVertical,
   DotsThree,
@@ -30,6 +29,7 @@ import {
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Tooltip } from '@/components/ui/tooltip'
+import { originalHref } from '@/lib/materials/original-href'
 import { sourceText } from '@/lib/topics/sources'
 import { cn } from '@/lib/utils'
 import type { TopicRow } from '@/server/queries/course'
@@ -63,17 +63,43 @@ function Keywords({ keywords }: { keywords: string[] }) {
   )
 }
 
-/** Where the topic is taught from, read-only: "algorithms.pdf, pp. 1-4". */
+/**
+ * Where the topic is taught from: "Taught from algorithms.pdf, pp. 1-4". Each reference opens the original file at the first page
+ * of its range in a new tab, so a student checking the topic can see the pages it was built from. (The ranges are found from the
+ * files and cannot be edited: no route writes a topic's sources.)
+ */
 function SourcesNote({ topic }: { topic: EditorTopic }) {
   if (topic.sources.length === 0) return null
   const text = topic.sources.map(sourceText).join('; ')
   return (
-    <p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-caption font-normal text-fg-3" title={`Taught from ${text}`}>
-      <span aria-hidden="true" className="inline-flex shrink-0 [&>svg]:size-3.5">
+    <p className="mt-1.5 flex min-w-0 items-start gap-1.5 text-caption font-normal text-fg-3" title={`Taught from ${text}`}>
+      <span aria-hidden="true" className="mt-0.5 inline-flex shrink-0 [&>svg]:size-3.5">
         <SourceIcon filename={topic.sources[0].filename} />
       </span>
-      <span className="sr-only">Taught from </span>
-      <span className="min-w-0 truncate">{text}</span>
+      <span className="min-w-0 wrap-anywhere">
+        Taught from{' '}
+        {topic.sources.map((source, index) => {
+          const href = originalHref(source)
+          return (
+            <React.Fragment key={`${source.materialId ?? source.filename}|${source.pageStart ?? ''}|${source.pageEnd ?? ''}`}>
+              {index > 0 ? '; ' : null}
+              {href ? (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-chip text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg max-sm:inline-block max-sm:py-3"
+                >
+                  {sourceText(source)}
+                  <span className="sr-only"> (opens the file in a new tab)</span>
+                </a>
+              ) : (
+                sourceText(source)
+              )}
+            </React.Fragment>
+          )
+        })}
+      </span>
     </p>
   )
 }
@@ -211,6 +237,8 @@ export function TopicEditorRow({
   onToggleSelect,
 }: RowProps) {
   const hasOthers = mergeGroups.some((group) => group.topics.length > 0)
+  const hasDetails = !!topic.description || topic.keywords.length > 0
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
 
   function onHandleKey(event: React.KeyboardEvent) {
     if (event.key === 'ArrowUp' && index > 0) {
@@ -277,43 +305,44 @@ export function TopicEditorRow({
             ) : (
               <p className="max-w-full wrap-anywhere text-body-strong text-fg">{topic.name}</p>
             )}
-            {topic.description ? (
-              <p className="mt-0.5 line-clamp-3 text-small text-fg-2 sm:line-clamp-1" title={topic.description}>
-                {topic.description}
-              </p>
-            ) : null}
-            {topic.keywords.length > 0 ? (
-              <div className="mt-1.5">
-                <Keywords keywords={topic.keywords} />
-              </div>
+            {/* On a phone the description and keywords wait behind "Details": a row is the name, where it is taught from and Rename,
+                so three topics fit a screen and a half. From sm up they are shown as before. */}
+            {hasDetails ? (
+              <>
+                <div className={cn(!detailsOpen && 'max-sm:hidden')} id={`details-${topic.id}`}>
+                  {topic.description ? (
+                    <p className="mt-0.5 text-small text-fg-2 sm:line-clamp-1" title={topic.description}>
+                      {topic.description}
+                    </p>
+                  ) : null}
+                  {topic.keywords.length > 0 ? (
+                    <div className="mt-1.5">
+                      <Keywords keywords={topic.keywords} />
+                    </div>
+                  ) : null}
+                </div>
+              </>
             ) : null}
             <SourcesNote topic={topic} />
             {selectMode ? null : (
-              // Rename and Move are on the row, not behind a menu: they are what checking the topics is for.
+              // Rename stays on the row (it is what checking the topics is for); Move, Merge and Delete are in the row's one menu.
               <div className="-ml-2.5 mt-1 flex flex-wrap items-center gap-1">
                 <Button variant="ghost" size="sm" icon={<PencilSimple />} aria-label={`Rename ${topic.name}`} onClick={onStartEdit}>
                   Rename
                 </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" icon={<ArrowsDownUp />} aria-label={`Move ${topic.name}`}>
-                      Move
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="min-w-[200px]">
-                    <DropdownMenuItem icon={<ArrowUp />} disabled={index === 0} onSelect={() => onMove(index - 1)}>
-                      Move up
-                    </DropdownMenuItem>
-                    <DropdownMenuItem icon={<ArrowDown />} disabled={index === total - 1} onSelect={() => onMove(index + 1)}>
-                      Move down
-                    </DropdownMenuItem>
-                    {hasUnits ? (
-                      <DropdownMenuItem icon={<ArrowsLeftRight />} onSelect={onMoveToUnit}>
-                        Move to unit...
-                      </DropdownMenuItem>
-                    ) : null}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {hasDetails ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="sm:hidden"
+                    aria-expanded={detailsOpen}
+                    aria-controls={`details-${topic.id}`}
+                    aria-label={`${detailsOpen ? 'Hide' : 'Show'} details of ${topic.name}`}
+                    onClick={() => setDetailsOpen((open) => !open)}
+                  >
+                    Details
+                  </Button>
+                ) : null}
               </div>
             )}
           </>
@@ -326,6 +355,18 @@ export function TopicEditorRow({
             <IconButton label={`Actions for ${topic.name}`} icon={<DotsThree weight="bold" />} size="sm" noTooltip />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[200px]">
+            <DropdownMenuItem icon={<ArrowUp />} disabled={index === 0} onSelect={() => onMove(index - 1)}>
+              Move up
+            </DropdownMenuItem>
+            <DropdownMenuItem icon={<ArrowDown />} disabled={index === total - 1} onSelect={() => onMove(index + 1)}>
+              Move down
+            </DropdownMenuItem>
+            {hasUnits ? (
+              <DropdownMenuItem icon={<ArrowsLeftRight />} onSelect={onMoveToUnit}>
+                Move to unit...
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSeparator />
             <DropdownMenuSub>
               <DropdownMenuSubTrigger icon={<GitMerge />} disabled={!hasOthers}>
                 Merge into...

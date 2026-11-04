@@ -10,7 +10,6 @@ import { cn } from '@/lib/utils'
 import type { SetupData } from '@/server/queries/course'
 import { COURSE_STAGES, COURSE_STAGES_SUMMARY, TOPIC_STEPS_TEXT } from './course-stages'
 import { MaterialsManager } from './materials-manager'
-import { SetupPlanFields } from './setup-plan'
 import { CheckTopicsStep, StartStudyingStep } from './setup-steps'
 
 type StepState = 'done' | 'current' | 'upcoming'
@@ -77,8 +76,8 @@ function Disclosure({ summary, open, children, className }: { summary: React.Rea
 function introLine(setup: SetupData): string {
   const { step, materials, plan } = setup
   if (step === 1) return materials.materials.length === 0 ? "You haven't added any files yet." : 'Margins is reading your files. Three steps and you’re ready to study.'
-  if (step === 2) return 'Your files are in. Check the topics Margins found, then start studying.'
-  return plan.askForExamDate ? 'Your topics are confirmed. Set an exam date, then start your first topic.' : 'Your course is ready. Start with your first topic.'
+  if (step === 2) return 'Your files are ready.'
+  return plan.askForExamDate ? 'Your topics are confirmed. Add your exam date if you know it, then start your first topic.' : 'Your course is ready. Start with your first topic.'
 }
 
 /**
@@ -162,6 +161,7 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
               extractJob={materials.extractJob}
               extractFailure={materials.extractFailure}
               topics={setup.topics}
+              topicPreview={setup.topicPreview}
               label={setup.label}
               filesProcessing={filesProcessing}
               filesRead={materials.readyCount}
@@ -180,16 +180,13 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
         </Step>
 
         <Step number={3} state={step === 3 ? 'current' : 'upcoming'} title={COURSE_STAGES[2].title} last>
-          {step === 3 && setup.plan.askForExamDate ? (
-            <SetupPlanFields courseId={courseId} dailyMinutes={setup.plan.dailyMinutes} />
-          ) : null}
           {step === 3 ? (
-            <StartStudyingStep courseId={courseId} firstTopic={setup.firstTopic} generation={setup.generation} />
+            <StartStudyingStep courseId={courseId} firstTopic={setup.firstTopic} generation={setup.generation} plan={setup.plan} />
           ) : null}
         </Step>
       </ol>
 
-      {/* The longer text of the stages is help, not the page: it opens from here. Home's "How a course goes" says the same three. */}
+      {/* The longer text of the stages is help, not the page: it opens from here. Home's "Set up your first course" says the same three. */}
       <Disclosure summary={step === 1 ? 'What the next steps involve' : 'What each step involves'} className="mt-6 max-w-[720px]">
         <p className="text-small text-fg-2">{COURSE_STAGES_SUMMARY}</p>
         <ol className="mt-3 flex flex-col gap-3 text-small text-fg-2">

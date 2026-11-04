@@ -9,6 +9,7 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { JobStatus } from '@/components/ui/job-status'
 import { FailureList, GenerationProgress, useGenerationProgress } from './building-content'
 import { useExtraction } from './extraction'
+import { SetupStartForm } from './setup-plan'
 import { AiBlockedNote } from '@/features/ai/ai-status'
 import { topicOriginSentence, type TopicListState } from '@/lib/course-setup'
 import type { GenerationState, JobRef } from '@/server/queries/course'
@@ -19,6 +20,7 @@ export function CheckTopicsStep({
   extractJob,
   extractFailure,
   topics,
+  topicPreview,
   label,
   filesProcessing,
   filesRead,
@@ -29,6 +31,8 @@ export function CheckTopicsStep({
   extractFailure: string | null
   /** The topic list and where it came from (lib/course-setup.ts). */
   topics: TopicListState
+  /** The first topic names, shown under the count (names only; "+N more" for the rest). */
+  topicPreview: string[]
   /** The step's action: "Review topics" or "Confirm topics". */
   label: string
   filesProcessing: boolean
@@ -107,6 +111,18 @@ export function CheckTopicsStep({
           <p className="text-small text-fg-2">
             {topicOriginSentence(topics)} {next}
           </p>
+          {topicPreview.length > 0 ? (
+            // The first names, so the list can be judged before opening the editor.
+            <ul aria-label="Topics found" className="mt-2 flex flex-col gap-0.5 text-small text-fg">
+              {topicPreview.map((name) => (
+                <li key={name} className="flex min-w-0 gap-2">
+                  <span aria-hidden="true" className="text-fg-3">&bull;</span>
+                  <span className="min-w-0 wrap-anywhere">{name}</span>
+                </li>
+              ))}
+              {topicCount > topicPreview.length ? <li className="pl-4 text-fg-2">+{topicCount - topicPreview.length} more</li> : null}
+            </ul>
+          ) : null}
           <Button asChild variant="primary" className="mt-3">
             <Link href={editHref}>{label}</Link>
           </Button>
@@ -159,29 +175,34 @@ export function StartStudyingStep({
   courseId,
   firstTopic,
   generation,
+  plan,
 }: {
   courseId: string
   firstTopic: { id: string; name: string } | null
   generation: GenerationState
+  /** The date question and the daily time. While the date is still to be asked the step is one form; otherwise one link. */
+  plan: { askForExamDate: boolean; dailyMinutes: number }
 }) {
   const { active, readyNow, total, refresh } = useGenerationProgress(courseId, generation)
+  const startHref = firstTopic ? `/courses/${courseId}/topics/${firstTopic.id}` : `/courses/${courseId}/topics`
 
   return (
     <div className="mt-3 flex flex-col gap-3">
       {active > 0 ? <GenerationProgress readyNow={readyNow} total={total} /> : null}
       <FailureList failures={generation.failures} onRetried={refresh} />
-      <div>
-        <Button asChild variant="primary">
-          <Link href={firstTopic ? `/courses/${courseId}/topics/${firstTopic.id}` : `/courses/${courseId}/topics`}>
-            {firstTopic ? `Start warm-up: ${firstTopic.name}` : 'Open topics'}
-          </Link>
+      {plan.askForExamDate ? (
+        // One form with one primary action: the date (optional), the time, and the first topic.
+        <SetupStartForm courseId={courseId} dailyMinutes={plan.dailyMinutes} startHref={startHref} firstTopicName={firstTopic?.name ?? null} />
+      ) : (
+        <Button asChild variant="primary" className="self-start">
+          <Link href={startHref}>{firstTopic ? `Start warm-up: ${firstTopic.name}` : 'Open topics'}</Link>
         </Button>
-        <p className="mt-2 text-caption font-normal text-fg-3">
-          {firstTopic
-            ? 'A warm-up is a few questions you try before reading. A topic is prepared when you open it, which takes about a minute.'
-            : 'A topic is prepared when you open it, which takes about a minute.'}
-        </p>
-      </div>
+      )}
+      <p className="text-caption font-normal text-fg-3">
+        {firstTopic
+          ? 'A warm-up is a few questions you try before reading. A topic is prepared when you open it, which takes about a minute.'
+          : 'A topic is prepared when you open it, which takes about a minute.'}
+      </p>
     </div>
   )
 }

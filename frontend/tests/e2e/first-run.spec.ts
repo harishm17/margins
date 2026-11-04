@@ -17,7 +17,7 @@ test('a new account lands on a welcome page that explains the stages and has one
   await signUpAndIn(page, 'first-run-welcome', { own: true })
 
   await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Margins' })).toBeVisible()
-  const stages = page.getByRole('region', { name: 'How a course goes' })
+  const stages = page.getByRole('region', { name: 'Set up your first course' })
   // The same three steps as the course's own setup page (features/course/course-stages.ts).
   await expect(stages.getByRole('listitem')).toHaveCount(3)
   await expect(stages.getByRole('heading', { level: 3 })).toHaveText([/^Add your materials/, /^Check the topics/, /^Start studying/])
@@ -62,45 +62,85 @@ test('while a course is in setup, the navigation is the setup one: no dead study
   await expect(tabs.getByRole('button', { name: 'More' })).toHaveCount(0)
 })
 
-test('after the topics are confirmed, setup asks for the exam date, then everything opens', async ({ page, context }) => {
+test('setup ends in one form: the date is optional, the time is kept, and one button starts the first topic', async ({ page, context }) => {
   await setZoneCookie(context)
   await signUpAndIn(page, 'first-run-exam', { own: true })
   const { courseId } = await createCourse(page, 'Exam date course', [{ name: 'Bayes rule' }, { name: 'Priors' }])
   await page.goto(`/courses/${courseId}`)
 
-  // Step 3 says what happens inside a topic, and asks for the date the plan depends on.
+  // Step 3 is one form: the exam date (optional), the daily time and the way into the first topic.
   await expect(page.getByRole('heading', { level: 2, name: 'Start studying' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Start warm-up: Bayes rule' })).toBeVisible()
   const form = page.getByRole('form', { name: 'Exam date and daily time' })
   await expect(form).toBeVisible()
-  await expect(form.getByRole('button', { name: 'Skip for now' })).toBeVisible()
+  await expect(form.getByLabel('Exam date')).toBeVisible()
+  await expect(form.getByRole('button', { name: 'Save and start warm-up' })).toBeVisible()
+  await expect(form.getByRole('button', { name: 'Start without a date' })).toBeVisible()
+  await expect(form.getByRole('button', { name: 'Skip for now' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Start warm-up: Bayes rule' })).toHaveCount(0)
 
   // The course is ready, so nothing in the menu is held back any more.
   await expect(courseNav(page).getByRole('link', { name: 'Plan', exact: true })).not.toHaveAttribute('aria-disabled', 'true')
   await expect(page.getByTestId('setup-progress')).toHaveCount(0)
 
-  // Saving without a date says so; with one, the question goes and the plan has an end.
-  await form.getByRole('button', { name: 'Save date and time' }).click()
-  await expect(form.getByText('Pick the day of your exam, or skip for now.')).toBeVisible()
-  await form.getByLabel('Exam date').fill(dayIn(ZONE, 30))
-  await form.getByRole('button', { name: 'Save date and time' }).click()
+  // A changed time with no date saves without an error and opens the first topic.
+  await form.getByRole('combobox', { name: 'Typical daily study time' }).click()
+  await page.getByRole('option', { name: '20 minutes' }).click()
+  await form.getByRole('button', { name: 'Save and start warm-up' }).click()
+  await expect(page).toHaveURL(new RegExp(`/courses/${courseId}/topics/`))
+  const saved = (await (await page.request.get(`/api/projects/${courseId}`)).json()).project
+  expect(saved.dailyMinutes).toBe(20)
+  expect(saved.examDate).toBeNull()
+  expect(saved.examPromptDismissed).toBe(true)
+
+  // Back on the setup page the question is closed: one link remains.
+  await page.goto(`/courses/${courseId}`)
   await expect(page.getByRole('form', { name: 'Exam date and daily time' })).toHaveCount(0)
-  const course = await (await page.request.get(`/api/projects/${courseId}`)).json()
-  expect(JSON.stringify(course)).toContain(dayIn(ZONE, 30))
   await expect(page.getByRole('link', { name: 'Start warm-up: Bayes rule' })).toBeVisible()
 })
 
-test('"Skip for now" closes the exam date question for good', async ({ page, context }) => {
+test('the exam date entered in the setup form is saved with the time', async ({ page, context }) => {
+  await setZoneCookie(context)
+  await signUpAndIn(page, 'first-run-dated', { own: true })
+  const { courseId } = await createCourse(page, 'Dated setup course', [{ name: 'Graphs' }])
+  await page.goto(`/courses/${courseId}`)
+  const form = page.getByRole('form', { name: 'Exam date and daily time' })
+  await form.getByLabel('Exam date').fill(dayIn(ZONE, 30))
+  await form.getByRole('button', { name: 'Save and start warm-up' }).click()
+  await expect(page).toHaveURL(new RegExp(`/courses/${courseId}/topics/`))
+  const saved = (await (await page.request.get(`/api/projects/${courseId}`)).json()).project
+  expect(JSON.stringify(saved)).toContain(dayIn(ZONE, 30))
+})
+
+test('"Start without a date" keeps the chosen time and closes the date question for good', async ({ page, context }) => {
   await setZoneCookie(context)
   await signUpAndIn(page, 'first-run-skip', { own: true })
   const { courseId } = await createCourse(page, 'Skip course', [{ name: 'Graphs' }])
   await page.goto(`/courses/${courseId}`)
   const form = page.getByRole('form', { name: 'Exam date and daily time' })
-  await form.getByRole('button', { name: 'Skip for now' }).click()
-  await expect(form).toHaveCount(0)
-  await page.reload()
+  await form.getByRole('combobox', { name: 'Typical daily study time' }).click()
+  await page.getByRole('option', { name: '1 hour', exact: true }).click()
+  await form.getByRole('button', { name: 'Start without a date' }).click()
+  await expect(page).toHaveURL(new RegExp(`/courses/${courseId}/topics/`))
+  const saved = (await (await page.request.get(`/api/projects/${courseId}`)).json()).project
+  expect(saved.dailyMinutes).toBe(60)
+  expect(saved.examDate).toBeNull()
+  await page.goto(`/courses/${courseId}`)
   await expect(page.getByRole('heading', { level: 2, name: 'Start studying' })).toBeVisible()
   await expect(page.getByRole('form', { name: 'Exam date and daily time' })).toHaveCount(0)
+})
+
+test('on a phone the start button is in the first screen of the last setup step', async ({ page, context }) => {
+  await setZoneCookie(context)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await signUpAndIn(page, 'first-run-phone', { own: true })
+  const { courseId } = await createCourse(page, 'Phone setup course', [{ name: 'Graphs' }])
+  await page.goto(`/courses/${courseId}`)
+  const start = page.getByRole('button', { name: 'Save and start warm-up' })
+  await expect(start).toBeVisible()
+  const box = await start.boundingBox()
+  expect(box).not.toBeNull()
+  const bar = await page.getByRole('navigation', { name: 'Course tabs' }).boundingBox()
+  expect(box!.y + box!.height).toBeLessThanOrEqual(bar ? bar.y : 844)
 })
 
 test('Home greets an account that has not studied as new, with no colour legend yet, and Ask suggests trying first', async ({ page, context }) => {

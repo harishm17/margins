@@ -86,6 +86,22 @@ export function deriveSetup(input: CourseSetupInput): CourseSetup {
   return { mode: 'active', step: null, label: null, topics }
 }
 
+/**
+ * Whether the files step has done its job: some file is usable and the others are not still being read, unless topic finding
+ * has already started or topics exist (then it does not wait). A course with no usable file yet is still in step 1.
+ */
+export function filesStepDone(input: { readyCount: number; processingCount: number; extractionRunning: boolean; topicCount: number }): boolean {
+  return input.readyCount > 0 && (input.processingCount === 0 || input.extractionRunning || input.topicCount > 0)
+}
+
+/**
+ * The step to show as current. `deriveSetup` says step 2 as soon as a file is uploaded, but the page keeps step 1 open while
+ * the files are read; the setup page and the sidebar both ask here, so they never name different steps for one course.
+ */
+export function deriveSetupStep(input: { step: 1 | 2 | 3; materialCount: number; filesDone: boolean }): 1 | 2 | 3 {
+  return input.step === 2 && input.materialCount > 0 && !input.filesDone ? 1 : input.step
+}
+
 function stepTwoLabel(topics: TopicListState): string {
   if (topics.total > 0) return topics.unconfirmed > 0 ? 'Review topics' : 'Confirm topics'
   if (topics.extraction === 'failed') return 'Add topics'
