@@ -68,6 +68,8 @@ type Category = 'lecture_notes' | 'sample_exams' | 'book_chapters' | 'syllabus'
 /** Marks the id of a file this browser is still sending (no server id yet) among the files a new one may repeat. */
 const LOCAL_PREFIX = 'local:'
 
+const newUploadKey = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
 const CATEGORY_OPTIONS = (Object.keys(CATEGORY_LABELS) as Category[]).map((value) => ({
   value,
   label: CATEGORY_LABELS[value],
@@ -543,7 +545,7 @@ export function MaterialsManager({
 
   /** Starts one file; the promise says whether it reached the server (for the count of files uploaded). */
   function startUpload(file: File): Promise<boolean> {
-    const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const key = newUploadKey()
     const problem = fileProblem(file, maxUploadMb)
     if (problem) {
       setUploads((current) => [
