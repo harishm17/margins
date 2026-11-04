@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { duplicateNames, edgeQuestionText, eventLine, frontierKeyText, rowStatus, frontierTexts, LABEL_ORDER, LABEL_TEXT, linkText, stateLine } from './copy'
+import { duplicateNames, edgeQuestionText, eventLine, frontierKeyText, frontierTexts, LABEL_ORDER, LABEL_TEXT, linkText, stateLine } from './copy'
 import { mapHref, NO_UNIT, parseView } from './params'
 
 const NOW = new Date('2026-11-10T20:00:00Z')
@@ -65,12 +65,6 @@ test('the key says what the ring tests: prerequisites remembered at R >= 0.8, no
   assert.equal(frontierKeyText(1), 'Next up: ready to study. You answered what it builds on well recently. The ring marks it.')
   assert.equal(frontierKeyText(2), 'Next up: ready to study. You answered what it builds on well recently. The ring marks Start here, the first of them.')
   assert.doesNotMatch(frontierKeyText(1), /solid/i)
-})
-
-test('a row says one thing: where to start, else next up, else its state', () => {
-  assert.equal(rowStatus('shaky', 'Next up'), 'Next up')
-  assert.equal(rowStatus('shaky', 'Start here'), 'Start here')
-  assert.equal(rowStatus('shaky', undefined), 'Shaky')
 })
 
 test('names that occur twice in a unit are found without regard to case', () => {

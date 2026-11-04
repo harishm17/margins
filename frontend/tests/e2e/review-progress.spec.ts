@@ -1,3 +1,4 @@
+import { openKeepStudying } from './helpers/review'
 import { streamedPartsArrived } from './helpers/settle'
 import { expect, test, type Page } from '@playwright/test'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
@@ -62,6 +63,8 @@ async function look(page: Page, name: string) {
 async function openReview(page: Page, courseId: string) {
   await page.goto(`/courses/${courseId}/review`)
   await streamedPartsArrived(page)
+  // With nothing due the extras (focus, progress) are behind "Keep studying".
+  await openKeepStudying(page)
 }
 
 test.describe('review focus and progress', () => {

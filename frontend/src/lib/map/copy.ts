@@ -33,14 +33,6 @@ export function frontierKeyText(count: number): string {
 export const KEY_TWO_MEASURES =
   'Two different things: Solid, Shaky and the other states say how well you know the idea overall. Next up and Start here say whether you are ready for it now.'
 
-/**
- * What a row or a node says about the idea, one thing only: where to start, else that it is next up, else its state.
- * (A "Shaky" idea marked "Next up" used to carry both, which read as two verdicts.)
- */
-export function rowStatus(label: ConceptLabel, frontierText: string | undefined): string {
-  return frontierText ?? LABEL_TEXT[label]
-}
-
 /** The names that occur more than once in the unit (compared without case), which need their topic named beside them. */
 export function duplicateNames(nodes: readonly { name: string }[]): Set<string> {
   const seen = new Map<string, number>()

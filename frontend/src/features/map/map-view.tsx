@@ -2,7 +2,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { KeyDetails } from './key-details'
 import { StateIcon, STATE_TONE } from './state-icon'
-import { duplicateNames, frontierKeyText, frontierTexts, KEY_TWO_MEASURES, LABEL_ORDER, LABEL_TEXT, rowStatus, START_HERE_TEXT } from '@/lib/map/copy'
+import { duplicateNames, frontierKeyText, frontierTexts, KEY_TWO_MEASURES, LABEL_ORDER, LABEL_TEXT, START_HERE_TEXT } from '@/lib/map/copy'
 import { BADGE_RADIUS, NODE_HEIGHT, NODE_WIDTH, type MapLayout } from '@/lib/map/layout'
 import { wrapName } from '@/lib/map/wrap'
 import { relationsOf, relationsSentence } from '@/lib/map/relations'
@@ -153,8 +153,7 @@ export function MapView({
             const showTopic = repeated.has(node.name.trim().toLowerCase())
             const lines = wrapName(node.name, NAME_WIDTH, showTopic ? 1 : NAME_LINES)
             const topicLine = showTopic ? wrapName(node.topicName, NAME_WIDTH, 1)[0] : null
-            // One verdict per node: where to start, else next up, else its state (the icon still shows the state).
-            const status = rowStatus(node.label, frontier[node.id])
+            const state = LABEL_TEXT[node.label]
             // One ring, on the one idea to start with. When several are ready, the others say "Next up" in words and have no ring.
             const ringed = node.frontier && (frontierCount === 1 || frontier[node.id] === START_HERE_TEXT)
             return (
@@ -163,7 +162,6 @@ export function MapView({
                 href={hrefFor(node.id)}
                 scroll={false}
                 aria-current={selected ? 'true' : undefined}
-                aria-label={`${node.name} ${LABEL_TEXT[node.label]}${frontier[node.id] ? ` ${frontier[node.id]}` : ''}`}
                 aria-describedby={`${relationsOf(node.id, nodes, edges).length > 0 ? `map-relations-${node.id} ` : ''}map-topic-${node.id}`}
                 data-node-link=""
                 className="group outline-none"
@@ -215,9 +213,14 @@ export function MapView({
                   </text>
                 ) : null}
                 <StateIcon label={node.label} size={14} x={left + 12} y={top + NODE_HEIGHT - 24} />
-                <text x={left + 31} y={top + NODE_HEIGHT - 12} className={cn('text-caption', frontier[node.id] ? 'fill-fg font-medium' : 'fill-fg-2')}>
-                  {status}
+                <text x={left + 31} y={top + NODE_HEIGHT - 12} className={cn('fill-fg-2 text-caption')}>
+                  {state}
                 </text>
+                {frontier[node.id] ? (
+                  <text x={left + NODE_WIDTH - 12} y={top + NODE_HEIGHT - 12} textAnchor="end" className="fill-fg text-caption font-medium">
+                    {frontier[node.id]}
+                  </text>
+                ) : null}
               </Link>
             )
           })}

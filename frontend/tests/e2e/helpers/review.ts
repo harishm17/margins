@@ -5,6 +5,8 @@ import type { Page } from '@playwright/test'
  * studying (optional)" disclosure. Opens it when the page has one; a page with work due has none and is left as it is.
  */
 export async function openKeepStudying(page: Page) {
+  // Until the streamed page has arrived the disclosure on screen is replaced by its closed twin.
+  await page.waitForFunction(() => document.querySelector('[id^="S:"]') === null)
   // While the page streams in, a hidden copy of it waits in the document: only the one on screen counts.
   const box = page.locator('[data-testid="keep-studying"]:visible')
   if ((await box.count()) === 0) return

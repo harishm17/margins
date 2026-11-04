@@ -739,8 +739,9 @@ test.describe('round 4: edges, repeated names, one status per row', () => {
     )
     await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=map`))
     const unit = page.getByRole('group', { name: /^Hashing: 5 ideas$/ })
-    await expect(unit.locator('text', { hasText: 'Hash tables' })).toHaveCount(2)
-    await expect(unit.locator('text', { hasText: 'Probing' })).toHaveCount(2)
+    // Only the repeated name names its topic (once in each topic); the other ideas stay as they were.
+    await expect(unit.locator('text', { hasText: 'Hash tables' })).toHaveCount(1)
+    await expect(unit.locator('text', { hasText: 'Probing' })).toHaveCount(1)
   })
 
   test('the panel says why an idea is ready, and a list row carries one status', async ({ page }) => {
