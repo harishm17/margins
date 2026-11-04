@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { deriveSetup, needsTopicReview, newTopicsLabel, reviewTopicsLabel, topicOriginSentence, readyToStudy, type CourseSetupInput } from './course-setup'
+import { deriveSetup, deriveSetupStep, filesStepDone, needsTopicReview, newTopicsLabel, reviewTopicsLabel, topicOriginSentence, readyToStudy, type CourseSetupInput } from './course-setup'
 
 // An active course with five topics found in the files, all confirmed, and some content.
 const base: CourseSetupInput = {
@@ -177,4 +177,26 @@ test('topics whose file was deleted are said to have lost it, not "found"', () =
   assert.equal(topicOriginSentence(some.topics), 'We found 1 new topic in your files. One came from a file you deleted.')
   // Nothing removed: unchanged.
   assert.equal(topicOriginSentence(deriveSetup({ ...base, topicCount: 8, extractedTopicCount: 8 }).topics), 'We found 3 new topics in your files.')
+})
+
+test('the sidebar and the setup page share one step: files still being read keep step 1', () => {
+  const step = (over: Partial<Parameters<typeof deriveSetupStep>[0]>) => deriveSetupStep({ step: 2, materialCount: 1, filesDone: true, ...over })
+  // Uploaded but not all read: the page and the sidebar both stay on step 1.
+  assert.equal(step({ filesDone: false }), 1)
+  // Read: step 2 stands.
+  assert.equal(step({}), 2)
+  // No files at all (a course with content only) keeps its step; other steps are never moved.
+  assert.equal(step({ materialCount: 0, filesDone: false }), 2)
+  assert.equal(deriveSetupStep({ step: 3, materialCount: 2, filesDone: false }), 3)
+  assert.equal(deriveSetupStep({ step: 1, materialCount: 2, filesDone: true }), 1)
+})
+
+test('files step is done once a file is usable and the rest are read or topics are on their way', () => {
+  const done = (over: Partial<Parameters<typeof filesStepDone>[0]>) =>
+    filesStepDone({ readyCount: 1, processingCount: 0, extractionRunning: false, topicCount: 0, ...over })
+  assert.equal(done({}), true)
+  assert.equal(done({ readyCount: 0 }), false)
+  assert.equal(done({ processingCount: 1 }), false)
+  assert.equal(done({ processingCount: 1, extractionRunning: true }), true)
+  assert.equal(done({ processingCount: 1, topicCount: 3 }), true)
 })

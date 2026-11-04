@@ -15,6 +15,13 @@ export const examDateSchema = z
 
 export const dailyMinutesSchema = z.number().int().min(MIN_DAILY_MINUTES).max(MAX_DAILY_MINUTES)
 
+/** Why a daily time cannot be saved, in words for the field, or null when it can. NaN is an empty box. */
+export function dailyMinutesProblem(minutes: number): string | null {
+  if (!Number.isInteger(minutes)) return 'Enter a whole number of minutes.'
+  if (minutes < MIN_DAILY_MINUTES || minutes > MAX_DAILY_MINUTES) return `Use ${MIN_DAILY_MINUTES} to ${MAX_DAILY_MINUTES} minutes.`
+  return null
+}
+
 /** The database column for a calendar date: midnight UTC of that date. Null clears it. */
 export const examDateColumn = (day: string | null | undefined): Date | null | undefined =>
   day === undefined ? undefined : day === null ? null : new Date(`${day}T00:00:00.000Z`)
