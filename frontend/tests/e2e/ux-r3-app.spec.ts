@@ -91,21 +91,54 @@ test.describe('Home and quick practice', () => {
 test.describe('course forms', () => {
   test.use({ viewport: { width: 390, height: 844 } })
 
-  test('new course: the name is marked required, the plan comes next and the description is put away', async ({ page }) => {
+  test('new course: a name and an optional date first, the daily time and description behind "More details"', async ({ page }) => {
     await signUpAndIn(page, 'r3-forms', { own: true })
     await page.goto('/courses/new')
     await expect(page.getByLabel(/Course name/)).toBeVisible()
     await expect(page.getByText('(required)')).toBeVisible()
-    await expect(page.getByRole('group', { name: 'Study plan' })).toBeVisible()
+    await expect(page.getByLabel(/Exam date/)).toBeVisible()
+    // The defaults are said on the closed line; the time field and the description are not in view yet.
+    const more = page.getByText('More details')
+    await expect(more).toBeVisible()
+    await expect(page.getByText('45 min a day')).toBeVisible()
+    await expect(page.getByRole('combobox', { name: 'Typical daily study time' })).toBeHidden()
     await expect(page.getByLabel('Description')).toHaveCount(0)
-    const order = await page.locator('form label, form legend, form button').allTextContents()
-    expect(order.findIndex((text) => /Study plan/.test(text))).toBeLessThan(order.findIndex((text) => /Add a description/.test(text)))
+    await expect(page.getByText('You add your files next. Everything here can be changed later.')).toBeVisible()
+    const order = await page.locator('form label, form summary, form button').allTextContents()
+    expect(order.findIndex((text) => /Exam date/.test(text))).toBeLessThan(order.findIndex((text) => /More details/.test(text)))
+    await more.click()
+    await expect(page.getByRole('combobox', { name: 'Typical daily study time' })).toBeVisible()
     await page.getByRole('button', { name: 'Add a description' }).click()
     await expect(page.getByLabel(/Description/)).toBeFocused()
-    // The validation message still names the field and focuses it.
+    // The validation message still names the field and focuses it, and goes as soon as there is a name.
     await page.getByRole('button', { name: 'Create course' }).click()
     await expect(page.getByText('Give the course a name.')).toBeVisible()
     await expect(page.getByLabel(/Course name/)).toBeFocused()
+    await page.getByLabel(/Course name/).fill('A')
+    await expect(page.getByText('Give the course a name.')).toHaveCount(0)
+  })
+
+  test('a custom daily time is saved as typed and a number out of range is refused in words', async ({ page }) => {
+    await signUpAndIn(page, 'r3-custom-minutes', { own: true })
+    await page.goto('/courses/new')
+    await page.getByLabel(/Course name/).fill('Custom time course')
+    await page.getByText('More details').click()
+    await page.getByRole('combobox', { name: 'Typical daily study time' }).click()
+    await page.getByRole('option', { name: 'Custom...' }).click()
+    const minutes = page.getByLabel('Minutes a day')
+    await minutes.fill('5')
+    await expect(page.getByText('Use 10 to 600 minutes.')).toBeVisible()
+    await page.getByRole('button', { name: 'Create course' }).click()
+    await expect(page.getByText('Check the daily study time under More details.')).toBeVisible()
+    await minutes.fill('50')
+    await expect(page.getByText('Use 10 to 600 minutes.')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Create course' }).click()
+    await expect(page).toHaveURL(/\/courses\/[0-9a-f-]{36}$/)
+    const created = await (await page.request.get(`/api/projects/${page.url().split('/').pop()}`)).json()
+    expect(created.project.dailyMinutes).toBe(50)
+    // Settings shows the saved 50 as a custom value, not a preset.
+    await page.goto(`/courses/${page.url().split('/').pop()}/settings`)
+    await expect(page.getByLabel('Minutes a day')).toHaveValue('50')
   })
 
   test('course settings: study plan first, description behind a button unless the course has one; the delete dialog names the course in full', async ({ page }) => {
@@ -162,8 +195,10 @@ test.describe('setup', () => {
     await signUpAndIn(page, 'r3-ready', { own: true })
     const { courseId } = await createCourse(page, 'Ready course', [{ name: 'Bayes rule' }])
     await page.goto(`/courses/${courseId}`)
-    await expect(page.getByText('Set an exam date, then start your first topic.')).toBeVisible()
-    await page.getByRole('button', { name: 'Skip for now' }).click()
+    await expect(page.getByText('Your topics are confirmed. Add your exam date if you know it, then start your first topic.')).toBeVisible()
+    await page.getByRole('button', { name: 'Start without a date' }).click()
+    await expect(page).toHaveURL(/\/topics\//)
+    await page.goto(`/courses/${courseId}`)
     await expect(page.getByText('Your course is ready. Start with your first topic.')).toBeVisible()
     const start = page.getByRole('link', { name: 'Start warm-up: Bayes rule' })
     await expect(start).toHaveAttribute('href', /\/topics\//)

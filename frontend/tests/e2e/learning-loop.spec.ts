@@ -198,7 +198,9 @@ test.describe('plan', () => {
     await page.goto('/courses/new')
     await page.getByLabel('Course name').locator('visible=true').fill('Dated course')
     await page.getByLabel('Exam date').locator('visible=true').fill(dayIn(ZONE, 40))
-    await page.getByRole('combobox', { name: 'Time to study each day' }).click()
+    // The daily time waits behind "More details".
+    await page.getByText('More details').click()
+    await page.getByRole('combobox', { name: 'Typical daily study time' }).click()
     await page.getByRole('option', { name: '1 hour 30 minutes' }).click()
     await page.getByRole('button', { name: 'Create course' }).click()
     await expect(page).toHaveURL(/\/courses\/[0-9a-f-]{36}$/)
@@ -209,7 +211,7 @@ test.describe('plan', () => {
 
     await page.goto(`/courses/${courseId}/settings`)
     await expect(page.getByLabel('Exam date').locator('visible=true')).toHaveValue(dayIn(ZONE, 40))
-    await expect(page.getByRole('combobox', { name: 'Time to study each day' })).toContainText('1 hour 30 minutes')
+    await expect(page.getByRole('combobox', { name: 'Typical daily study time' })).toContainText('1 hour 30 minutes')
   })
 })
 

@@ -10,10 +10,10 @@ import { activeStatusLine } from './status-line'
  * One course: its name, one line of where it stands ("1 of 5 topics strong", or the setup step it is on) and when the next
  * review falls due. How the topics are spread across the levels is the course overview's job, not a strip on every card.
  */
-export function CourseCard({ course, timeZone = 'UTC' }: { course: CourseListItem; timeZone?: string }) {
+export function CourseCard({ course, now, timeZone = 'UTC' }: { course: CourseListItem; now: number; timeZone?: string }) {
   const status = course.setup.mode === 'setup' ? course.setup.label : activeStatusLine(course.levels)
   const newTopics = newTopicsLabel(course.setup.topics)
-  const timing = course.setup.mode === 'active' ? reviewTiming(course.nextDueAt, Date.now(), timeZone) : null
+  const timing = course.setup.mode === 'active' ? reviewTiming(course.nextDueAt, now, timeZone) : null
   return (
     <Card interactive asChild className="flex h-full flex-col gap-2">
       <Link href={`/courses/${course.id}`}>
@@ -37,7 +37,7 @@ export function orderCourses<T extends { setup: { mode: string } }>(courses: rea
   return [...courses.filter((course) => course.setup.mode !== 'setup'), ...courses.filter((course) => course.setup.mode === 'setup')]
 }
 
-export function CourseGrid({ courses, timeZone }: { courses: CourseListItem[]; timeZone?: string }) {
+export function CourseGrid({ courses, now, timeZone }: { courses: CourseListItem[]; now: number; timeZone?: string }) {
   return (
     <section aria-labelledby="courses-heading">
       <h2 id="courses-heading" className="text-heading text-fg">
@@ -46,7 +46,7 @@ export function CourseGrid({ courses, timeZone }: { courses: CourseListItem[]; t
       <ul className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {orderCourses(courses).map((course) => (
           <li key={course.id}>
-            <CourseCard course={course} timeZone={timeZone} />
+            <CourseCard course={course} now={now} timeZone={timeZone} />
           </li>
         ))}
       </ul>
