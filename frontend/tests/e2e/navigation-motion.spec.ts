@@ -192,8 +192,12 @@ test('search keeps two files with the same name apart', async ({ page }) => {
   // The course page's setup uploader and this page's both exist while the navigation settles: wait for the old one to go.
   const upload = page.getByLabel('Choose files to upload')
   await expect(upload).toHaveCount(1)
-  await upload.setInputFiles([pdf, pdf])
-  await expect(page.getByText('Every file here has been read.')).toBeVisible({ timeout: 60_000 })
+  // The second copy is the same name and size, so the page asks first: keep both.
+  await upload.setInputFiles([pdf])
+  await expect(page.getByText('Ready', { exact: true })).toHaveCount(1, { timeout: 60_000 })
+  await upload.setInputFiles([pdf])
+  await page.getByRole('dialog', { name: 'This file is already here' }).getByRole('button', { name: 'Keep both' }).click()
+  await expect(page.getByText('Ready', { exact: true })).toHaveCount(2, { timeout: 60_000 })
   await page.reload()
   await expect(page.getByText('week-1.pdf', { exact: true })).toHaveCount(2)
 
