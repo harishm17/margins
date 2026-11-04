@@ -70,6 +70,8 @@ export type CourseListItem = {
   description: string | null
   status: string
   updatedAt: string
+  /** When the earliest review among the course's topics falls due, or null when none is scheduled. */
+  nextDueAt: string | null
   topicCount: number
   strongCount: number
   /** One level per topic in course order, for the mastery strip. */
@@ -109,12 +111,18 @@ export async function listCourses(userId: string): Promise<CourseListItem[]> {
     // New topics waiting for review do not count as part of a confirmed course.
     const shown = project.topics.filter((topic) => !setup.topics.listConfirmed || topic.userConfirmed)
     const levels = shown.map((topic) => masteryLevel(standings.get(topic.id)?.mastery))
+    // The earliest review among the topics shown: Home says when the next one falls due.
+    const dueTimes = shown.flatMap((topic) => {
+      const dueAt = standings.get(topic.id)?.dueAt
+      return dueAt ? [dueAt.getTime()] : []
+    })
     return {
       id: project.id,
       name: project.name,
       description: project.description,
       status: project.status,
       updatedAt: project.updatedAt.toISOString(),
+      nextDueAt: dueTimes.length > 0 ? new Date(Math.min(...dueTimes)).toISOString() : null,
       topicCount: shown.length,
       strongCount: levels.filter((level) => level === 'strong').length,
       levels,

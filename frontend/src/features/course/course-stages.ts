@@ -1,12 +1,12 @@
 /**
- * The three steps of a course, in one place: Home's "How a course goes" (welcome.tsx) and the course's own
+ * The three steps of a course, in one place: Home's "Set up your first course" (welcome.tsx) and the course's own
  * stepper (setup-guide.tsx) read the same titles and the same count, so the two never disagree. The exam date
  * and daily time are asked inside the last step, so they are part of it, not a step of their own.
  */
 export const COURSE_STAGES = [
   {
     title: 'Add your materials',
-    time: 'A couple of minutes',
+    time: 'A couple of minutes, longer for long files',
     text: 'Lecture notes or slides, book chapters and past exams (mark those as past exams, so Margins can match their style). Margins reads them to find your topics.',
   },
   {

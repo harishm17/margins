@@ -1,78 +1,31 @@
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { RelativeTime } from '@/components/ui/relative-time'
-import { countMasteryLevels, MASTERY_LABELS, type MasteryLevel } from '@/lib/mastery'
-import { cn } from '@/lib/utils'
 import type { CourseListItem } from '@/server/queries/courses'
 import { newTopicsLabel } from '@/lib/course-setup'
-import { activeStatusLine, hasMasteryColours } from './status-line'
+import { reviewTiming } from '@/features/course/summary'
+import { activeStatusLine } from './status-line'
 
-const MAX_SQUARES = 40
-
-const SQUARE: Record<MasteryLevel, string> = {
-  none: 'bg-surface-3',
-  learning: 'bg-learning',
-  getting: 'bg-accent/50',
-  strong: 'bg-accent',
-}
-
-/** One 8px square per topic, coloured by mastery. After 40, "+N". */
-export function MasteryStrip({ levels }: { levels: MasteryLevel[] }) {
-  if (levels.length === 0) return <div className="h-2" />
-  const shown = levels.slice(0, MAX_SQUARES)
-  const rest = levels.length - shown.length
-  const counts = countMasteryLevels(levels)
-  const summary = (['strong', 'getting', 'learning', 'none'] as const)
-    .filter((level) => counts[level] > 0)
-    .map((level) => `${counts[level]} ${MASTERY_LABELS[level].toLowerCase()}`)
-    .join(', ')
-
-  return (
-    <div role="img" aria-label={`Topic mastery: ${summary}`} className="flex flex-wrap items-center gap-[3px]">
-      {shown.map((level, index) => (
-        <span key={index} className={cn('size-2 rounded-[2px]', SQUARE[level])} />
-      ))}
-      {rest > 0 ? <span className="ml-1 text-caption text-fg-3 tabular">+{rest}</span> : null}
-    </div>
-  )
-}
-
-export function CourseCard({ course }: { course: CourseListItem }) {
+/**
+ * One course: its name, one line of where it stands ("1 of 5 topics strong", or the setup step it is on) and when the next
+ * review falls due. How the topics are spread across the levels is the course overview's job, not a strip on every card.
+ */
+export function CourseCard({ course, timeZone = 'UTC' }: { course: CourseListItem; timeZone?: string }) {
   const status = course.setup.mode === 'setup' ? course.setup.label : activeStatusLine(course.levels)
   const newTopics = newTopicsLabel(course.setup.topics)
+  const timing = course.setup.mode === 'active' ? reviewTiming(course.nextDueAt, Date.now(), timeZone) : null
   return (
-    <Card interactive asChild className="flex h-full flex-col gap-3">
+    <Card interactive asChild className="flex h-full flex-col gap-2">
       <Link href={`/courses/${course.id}`}>
         <h3 className="truncate text-subheading text-fg">{course.name}</h3>
         <p className="text-small text-fg-2">{status}</p>
         {newTopics ? <p className="text-small text-accent-soft-fg">{newTopics}</p> : null}
-        <MasteryStrip levels={course.levels} />
+        {timing ? <p className={timing.due ? 'text-small text-warning-soft-fg' : 'text-small text-fg-2'}>{timing.text}</p> : null}
         <p className="mt-auto pt-1 text-caption font-normal text-fg-3">
           Updated <RelativeTime date={course.updatedAt} />
         </p>
       </Link>
     </Card>
-  )
-}
-
-const LEGEND_ORDER = ['strong', 'getting', 'learning', 'none'] as const
-
-/**
- * What the squares mean, once above the grid rather than on every card. Visible words, so it works
- * with touch and a keyboard (a tooltip on a square inside a card link would not). Shown only when a
- * card has squares.
- */
-export function MasteryLegend({ className }: { className?: string }) {
-  return (
-    <p className={cn('flex flex-wrap items-center gap-x-3 gap-y-1 text-caption font-normal text-fg-3', className)}>
-      <span>One square per topic:</span>
-      {LEGEND_ORDER.map((level) => (
-        <span key={level} className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className={cn('size-2 rounded-[2px]', SQUARE[level])} />
-          {MASTERY_LABELS[level]}
-        </span>
-      ))}
-    </p>
   )
 }
 
@@ -84,19 +37,16 @@ export function orderCourses<T extends { setup: { mode: string } }>(courses: rea
   return [...courses.filter((course) => course.setup.mode !== 'setup'), ...courses.filter((course) => course.setup.mode === 'setup')]
 }
 
-export function CourseGrid({ courses }: { courses: CourseListItem[] }) {
-  const anySquares = hasMasteryColours(courses.map((course) => course.levels))
+export function CourseGrid({ courses, timeZone }: { courses: CourseListItem[]; timeZone?: string }) {
   return (
     <section aria-labelledby="courses-heading">
       <h2 id="courses-heading" className="text-heading text-fg">
         Courses
       </h2>
-      {/* Right under the heading, one line above the squares it explains. */}
-      {anySquares ? <MasteryLegend className="mt-1" /> : null}
       <ul className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {orderCourses(courses).map((course) => (
           <li key={course.id}>
-            <CourseCard course={course} />
+            <CourseCard course={course} timeZone={timeZone} />
           </li>
         ))}
       </ul>

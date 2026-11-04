@@ -9,6 +9,9 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { SHORT_SESSION_NAME, shortSessionLabel, type ShortSessionPlan } from '@/lib/learning/short-session'
 
+/** The card's action, named so it makes sense outside the card (Home and the Review page both use it). */
+export const QUICK_PRACTICE_START = 'Start quick practice'
+
 /** Makes the quick practice session and opens it; `error` is what to show when it cannot. Shared by the card and the "nothing is due" screen. */
 export function useStartShortSession(courseId: string) {
   const router = useRouter()
@@ -60,14 +63,14 @@ export function ShortSessionCard({ courseId, plan, className }: { courseId: stri
       {plan.kind === 'recall' && plan.href ? (
         <Button asChild variant="secondary" className="shrink-0 self-start sm:self-center">
           <Link href={plan.href}>
-            Start
+            {QUICK_PRACTICE_START}
             <ArrowRight aria-hidden="true" className="size-4" />
           </Link>
         </Button>
       ) : (
         <Button variant="secondary" className="shrink-0 self-start sm:self-center" onClick={() => void start()} loading={starting}>
           <span className="inline-flex items-center gap-1.5">
-            Start
+            {QUICK_PRACTICE_START}
             <ArrowRight aria-hidden="true" className="size-4" />
           </span>
         </Button>

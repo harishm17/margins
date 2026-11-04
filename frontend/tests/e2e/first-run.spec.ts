@@ -17,7 +17,7 @@ test('a new account lands on a welcome page that explains the stages and has one
   await signUpAndIn(page, 'first-run-welcome', { own: true })
 
   await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Margins' })).toBeVisible()
-  const stages = page.getByRole('region', { name: 'How a course goes' })
+  const stages = page.getByRole('region', { name: 'Set up your first course' })
   // The same three steps as the course's own setup page (features/course/course-stages.ts).
   await expect(stages.getByRole('listitem')).toHaveCount(3)
   await expect(stages.getByRole('heading', { level: 3 })).toHaveText([/^Add your materials/, /^Check the topics/, /^Start studying/])

@@ -78,8 +78,9 @@ test.describe('the course overview', () => {
     const exam = page.getByRole('region', { name: 'When is your exam?' })
     await expect(exam).toBeVisible()
     const [upBox, examBox] = [await upNext.boundingBox(), await exam.boundingBox()]
-    expect(upBox!.y).toBeLessThan(examBox!.y)
-    expect(examBox!.height).toBeLessThan(120)
+    // The date is a line in the header: above the next step, not a card between it and the topics.
+    expect(examBox!.y).toBeLessThan(upBox!.y)
+    expect(examBox!.height).toBeLessThan(80)
   })
 })
 

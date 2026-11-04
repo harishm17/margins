@@ -186,7 +186,7 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
         </Step>
       </ol>
 
-      {/* The longer text of the stages is help, not the page: it opens from here. Home's "How a course goes" says the same three. */}
+      {/* The longer text of the stages is help, not the page: it opens from here. Home's "Set up your first course" says the same three. */}
       <Disclosure summary={step === 1 ? 'What the next steps involve' : 'What each step involves'} className="mt-6 max-w-[720px]">
         <p className="text-small text-fg-2">{COURSE_STAGES_SUMMARY}</p>
         <ol className="mt-3 flex flex-col gap-3 text-small text-fg-2">

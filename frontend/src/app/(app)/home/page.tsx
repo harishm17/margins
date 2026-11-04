@@ -46,7 +46,7 @@ export default async function HomePage() {
         title={<Greeting name={user.name} firstVisit={firstVisit} />}
         description={homeIntro(firstVisit)}
         actions={
-          <Button asChild variant="primary" icon={<Plus />}>
+          <Button asChild variant="secondary" icon={<Plus />}>
             <Link href="/courses/new">New course</Link>
           </Button>
         }
@@ -60,7 +60,7 @@ export default async function HomePage() {
           </p>
         ) : null}
         <DueReviews items={due.items} total={due.total} />
-        <CourseGrid courses={courses} />
+        <CourseGrid courses={courses} timeZone={timeZone} />
       </div>
     </Page>
   )
