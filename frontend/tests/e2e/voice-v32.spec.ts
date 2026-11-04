@@ -163,14 +163,15 @@ test('settings: Speak replies off means no speech and the turn still works; the 
   await page.evaluate(() => localStorage.removeItem('margins.voice.prefs.v1'))
 })
 
-test('privacy: the lobby says where the voice goes, and Start by typing starts without the microphone', async ({ page }) => {
+test('privacy: the lobby says where the voice goes, and choosing to type starts without the microphone', async ({ page }) => {
   await installVoiceStubs(page)
   await page.goto(voiceUrl())
   await waitForLobby(page)
   const line = page.getByTestId('voice-privacy')
   await expect(line).toContainText(/turn it into text|turned into text/)
   await expect(line).toContainText('Typing avoids it.')
-  await page.getByRole('button', { name: 'Start by typing' }).click()
+  await page.getByRole('radio', { name: 'Type answers instead' }).click()
+  await startButton(page).click()
   await expect(page.getByTestId('voice-question')).toBeVisible({ timeout: 30_000 })
   await expect(page.getByLabel('Your answer')).toBeVisible()
   expect(await page.evaluate(() => (window as any).__voice.starts as number)).toBe(0)
