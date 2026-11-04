@@ -23,6 +23,7 @@ export function ConfidenceRow({
   level,
   optionCount,
   required,
+  optional = true,
   onChange,
 }: {
   value: number | undefined
@@ -32,31 +33,49 @@ export function ConfidenceRow({
   optionCount?: number
   /** The screen cannot go on without a choice (the warm-up): the hint says so instead of offering to skip. */
   required?: boolean
+  /** Shown as optional (the default): the label says so, and on a phone the row sits behind one "Confidence (optional)" chip until it is tapped or already answered. */
+  optional?: boolean
   onChange: (level: ConfidenceId, confidence: number) => void
 }) {
   const labelId = React.useId()
   const selected = selectedConfidenceLevel(level, value, optionCount)
+  const [expanded, setExpanded] = React.useState(false)
+  // A phone shows the chip first; once a level is chosen (or the row is required) the row itself stays visible.
+  const collapsed = optional && !required && selected === '' && !expanded
   return (
-    <div className="mt-8" data-confidence-row="">
-      <p id={labelId} className="text-small text-fg-2">
-        How sure are you?
-        {selected === '' ? <span className="text-fg-3">{required ? ' Tap one to go on.' : ' Tap one, or skip it.'}</span> : null}
-      </p>
-      <SegmentedControl
-        aria-labelledby={labelId}
-        className="mt-2"
-        value={selected}
-        onValueChange={(id) => id && onChange(id, confidenceValue(id, optionCount))}
-        options={CONFIDENCE_LEVELS.map((level) => ({
-          value: level.id,
-          label: (
-            <span className="inline-flex items-center gap-1">
-              {selected === level.id ? <Check weight="bold" className="size-3.5" aria-hidden /> : null}
-              {LABELS[level.id]}
-            </span>
-          ),
-        }))}
-      />
+    <div className="mt-8 max-sm:mt-5" data-confidence-row="">
+      {collapsed ? (
+        <button
+          type="button"
+          aria-expanded={false}
+          onClick={() => setExpanded(true)}
+          className="hidden min-h-11 items-center gap-1 rounded-chip text-small text-fg-2 underline decoration-border-strong decoration-1 underline-offset-[3px] hover:text-fg max-sm:inline-flex"
+        >
+          Confidence (optional)
+          <CaretDown className="size-3.5" aria-hidden />
+        </button>
+      ) : null}
+      <div className={cn(collapsed && 'max-sm:hidden')}>
+        <p id={labelId} className="text-small text-fg-2">
+          How sure are you?{optional ? ' (optional)' : ''}
+          {selected === '' && required ? <span className="text-fg-3"> Tap one to go on.</span> : null}
+        </p>
+        <SegmentedControl
+          aria-labelledby={labelId}
+          className="mt-2"
+          value={selected}
+          onValueChange={(id) => id && onChange(id, confidenceValue(id, optionCount))}
+          options={CONFIDENCE_LEVELS.map((level) => ({
+            value: level.id,
+            label: (
+              <span className="inline-flex items-center gap-1">
+                {selected === level.id ? <Check weight="bold" className="size-3.5" aria-hidden /> : null}
+                {LABELS[level.id]}
+              </span>
+            ),
+          }))}
+        />
+      </div>
     </div>
   )
 }
