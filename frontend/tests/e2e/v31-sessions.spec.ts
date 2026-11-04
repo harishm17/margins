@@ -562,7 +562,8 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
     // With the AI down the recall card is not offered: a short check on rule-graded items stands in.
     await markAiUnavailable()
     await page.goto('/home')
-    await expect(page.getByTestId('short-session').locator('visible=true')).toContainText('A 4-question check, about 4 minutes')
+    // The card says the number the session really has (the world holds two questions), not the format's ceiling of four.
+    await expect(page.getByTestId('short-session').locator('visible=true')).toContainText('A 2-question check, about 2 minutes')
     await page.getByTestId('short-session').locator('visible=true').getByRole('button', { name: 'Start' }).click()
     await expect(page.getByRole('heading', { name: /^Question 1 of 2/ })).toBeVisible({ timeout: 60_000 })
   })

@@ -55,6 +55,7 @@ export function ReviewList({ entries, courseId, topicId }: { entries: ReviewEntr
             pointsEarned={review.pointsEarned}
             studentAnswer={given || null}
             studentAnswerIsOption={!typed}
+            dontKnow={review.dontKnow}
             correctAnswer={review.correctAnswer ? formatKey(question, review.correctAnswer) : null}
             correctLabel={shortAnswer ? 'Model answer' : 'Correct answer'}
             pickedMisconception={review.pickedMisconception}

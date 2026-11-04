@@ -8,6 +8,7 @@ import { VoiceFocus } from '@/features/voice/voice-focus'
 import { getCourseShell } from '@/server/queries/courses'
 import { describeSprintTopics, getSprintTopics } from '@/server/queries/voice'
 import { requireUser } from '@/server/session'
+import { voiceQuizStatus } from '@/lib/voice/drill-pack'
 
 export const metadata: Metadata = { title: 'Voice practice' }
 
@@ -40,5 +41,6 @@ export default async function VoicePracticePage({ params }: { params: Promise<{ 
     )
   }
 
-  return <VoiceFocus courseId={courseId} courseName={course.name} description={describeSprintTopics(sprint.topics, sprint.studied)} />
+  const quiz = await voiceQuizStatus(sprint.topics.map((topic) => topic.id), user.id)
+  return <VoiceFocus courseId={courseId} courseName={course.name} description={describeSprintTopics(sprint.topics, sprint.studied)} quiz={quiz} />
 }

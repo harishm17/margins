@@ -28,7 +28,7 @@ import { buildReview, toStoredResults, type QuizReviewItem } from './quiz-review
 import { mergeRuleResults, partialSummary, type PartialQuiz, type PartialSummary } from './quiz-partial'
 import { gradeAnswers as defaultGrade, GradingUnavailableError, ruleGradableIndexes } from '@/lib/ai-service/grading'
 import { applyQuizAttempt, isStrongStart, quizHelp, quizOutcome, type QuizHelp, type QuizOutcome } from './record-quiz-attempt'
-import { answersForGrader, answersForStorage, confidences, normalizeAnswers, plainAnswers, type QuizAnswer, type RawQuizAnswer } from './quiz-answers'
+import { answersForGrader, answersForStorage, confidences, dontKnowIndexes, normalizeAnswers, plainAnswers, type QuizAnswer, type RawQuizAnswer } from './quiz-answers'
 import { pendingQuizEvidence, recordAttemptEvidence, recordQuizEvidence, retryPendingQuizEvidence, takenEarlierToday } from './quiz-evidence'
 import { studentTimeZone } from './student-time-zone'
 import type { GradedQuestion } from '@/lib/ai-service/grading'
@@ -244,9 +244,10 @@ export function waitingState(job: { status: string; stage?: string | null } | un
 
 /** What the partial view shows for the rule-graded questions: counts, their results with answer keys, and the student's answers. */
 export function partialQuizOf(questions: RawQuestion[], rule: GradedQuestion[], rawAnswers: unknown): PartialQuiz {
-  const answers = plainAnswers(normalizeAnswers(rawAnswers))
+  const given = normalizeAnswers(rawAnswers)
+  const answers = plainAnswers(given)
   const covered = new Set(rule.map((q) => q.question_index))
-  const review = buildReview(questions, toStoredResults(rule), answers).filter((item) => covered.has(item.questionIndex))
+  const review = buildReview(questions, toStoredResults(rule, dontKnowIndexes(given)), answers).filter((item) => covered.has(item.questionIndex))
   return { summary: partialSummary(rule, questions.length - rule.length), review, answers }
 }
 
@@ -359,8 +360,8 @@ export async function applyQuizSubmission(userId: string, submissionId: string):
       const grading = early ? { ...finalGrading, graded: mergeRuleResults(finalGrading.graded, early) } : finalGrading
 
       const questions = submission.questions as RawQuestion[]
-      const results = toStoredResults(grading.graded)
       const given = normalizeAnswers(submission.answers)
+      const results = toStoredResults(grading.graded, dontKnowIndexes(given))
       const answers = plainAnswers(given)
       const base = {
         attemptId: submission.id,

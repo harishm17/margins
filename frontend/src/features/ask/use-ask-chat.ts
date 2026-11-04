@@ -67,6 +67,13 @@ export function useAskChat({
   // The thread has had a genuine attempt, so "Show me a worked example" may be offered.
   const [workedAllowed, setWorkedAllowed] = React.useState(initialWorkedAllowed)
 
+  // Listeners told, as it happens, that the server accepted a question (the composer clears its saved draft then).
+  const acceptedRef = React.useRef(new Set<(question: string) => void>())
+  const subscribeAccepted = React.useCallback((listener: (question: string) => void) => {
+    acceptedRef.current.add(listener)
+    return () => void acceptedRef.current.delete(listener)
+  }, [])
+
   const controllerRef = React.useRef<AbortController | null>(null)
   const threadRef = React.useRef(threadId)
   const loadTokenRef = React.useRef(0)
@@ -171,6 +178,8 @@ export function useAskChat({
           signal: controller.signal,
           onEvent: (event) => {
             if (event.type === 'thread') {
+              // The server has the question: from here a failure is shown as a failed answer, not as an unsent question.
+              acceptedRef.current.forEach((listener) => listener(question))
               threadRef.current = event.threadId
               setThreadId(event.threadId)
               if (event.isNew) {
@@ -325,7 +334,7 @@ export function useAskChat({
     [courseId, abortCurrent]
   )
 
-  return { threadId, messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry, reset, loadThread }
+  return { threadId, messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry, reset, loadThread, subscribeAccepted }
 }
 
 export type AskChat = ReturnType<typeof useAskChat>

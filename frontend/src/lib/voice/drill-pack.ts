@@ -8,6 +8,7 @@ import {
   VoiceQuestion,
 } from '@/lib/voice/concept'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import type { VoiceQuizStatus } from '@/features/voice/quiz-status'
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 const MAX_NOTES_CHARS = 24000
@@ -55,6 +56,49 @@ const buildConceptQuestionsFromNotes = async (
   ))
 }
 
+type TopicWithContent = { id: string; name: string; content: { contentType: string; contentData: unknown }[] }
+
+/**
+ * The topic's quiz questions as the voice coach can use them: the quiz stored with the topic, else the newest quiz set (a topic
+ * whose quiz was written as a set has no copy in its content). `total` counts them all, `usable` those the coach can ask aloud.
+ */
+async function topicQuizQuestions(topic: TopicWithContent): Promise<{ total: number; usable: VoiceQuestion[] }> {
+  const quizContent = topic.content.find((c) => c.contentType === 'topic_quiz')
+  let raw = extractQuestionsFromContent(quizContent?.contentData)
+  if (raw.length === 0) {
+    const newest = await prisma.topicQuiz.findFirst({ where: { topicId: topic.id, kind: 'standard' }, orderBy: { createdAt: 'desc' }, select: { questions: true } })
+    raw = extractQuestionsFromContent(newest?.questions)
+  }
+  const usable = dedupeQuestions(filterConceptQuestions(
+    raw
+      .map((q) => normalizeVoiceQuestion(q))
+      .filter((q): q is VoiceQuestion => q !== null)
+      .map((q) => ({ ...q, source: 'topic_quiz', topic_id: topic.id }))
+  ))
+  return { total: raw.length, usable }
+}
+
+/**
+ * Whether Quiz me can begin on these topics, worked out without a model call, so the lobby can say so before Start. It can when
+ * a topic has a quiz question the coach can ask aloud, or has notes the coach can write questions from. Otherwise it says which
+ * is missing: no quiz at all, or a quiz whose questions are all working that cannot be asked out loud.
+ */
+export async function voiceQuizStatus(topicIds: string[], userId: string): Promise<VoiceQuizStatus> {
+  if (topicIds.length === 0) return { state: 'missing', reason: 'no_quiz', total: 0 }
+  const topics = await prisma.topic.findMany({
+    where: { id: { in: topicIds }, project: { userId } },
+    include: { content: { select: { contentType: true, contentData: true } } },
+  })
+  let total = 0
+  for (const topic of topics) {
+    const quiz = await topicQuizQuestions(topic)
+    if (quiz.usable.length > 0) return { state: 'ready' }
+    if (extractTextFromNotes(topic.content.find((c) => c.contentType === 'section_notes')?.contentData)) return { state: 'ready' }
+    total += quiz.total
+  }
+  return { state: 'missing', reason: total > 0 ? 'not_speakable' : 'no_quiz', total }
+}
+
 export const buildTopicQuestionSet = async (
   topicId: string,
   userId: string
@@ -73,14 +117,7 @@ export const buildTopicQuestionSet = async (
     return []
   }
 
-  const quizContent = topic.content.find(c => c.contentType === 'topic_quiz')
-  const rawQuiz = extractQuestionsFromContent(quizContent?.contentData)
-  let questions = dedupeQuestions(filterConceptQuestions(
-    rawQuiz
-      .map((q) => normalizeVoiceQuestion(q))
-      .filter((q): q is VoiceQuestion => q !== null)
-      .map(q => ({ ...q, source: 'topic_quiz', topic_id: topic.id }))
-  ))
+  const questions = (await topicQuizQuestions(topic)).usable
 
   if (questions.length > 0) {
     return questions
@@ -142,14 +179,7 @@ export const buildSprintQuestionSet = async (
 
   for (const entry of selected) {
     const topic = entry.topic
-    const quizContent = topic.content.find(c => c.contentType === 'topic_quiz')
-    const rawQuiz = extractQuestionsFromContent(quizContent?.contentData)
-    let questions = dedupeQuestions(filterConceptQuestions(
-      rawQuiz
-        .map((q) => normalizeVoiceQuestion(q))
-        .filter((q): q is VoiceQuestion => q !== null)
-        .map(q => ({ ...q, source: 'topic_quiz', topic_id: topic.id }))
-    ))
+    let questions = (await topicQuizQuestions(topic)).usable
 
     if (questions.length === 0) {
       const notesContent = topic.content.find(c => c.contentType === 'section_notes')

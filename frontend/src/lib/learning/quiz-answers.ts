@@ -92,3 +92,13 @@ export function answersForStorage(answers: Record<string, QuizAnswer>): Record<s
     ])
   )
 }
+
+/** The question indexes the student answered with "I don't know" (so a stored result can tell them from blanks). */
+export function dontKnowIndexes(answers: Record<string, QuizAnswer>): Set<number> {
+  return new Set(
+    Object.entries(answers)
+      .filter(([, value]) => value.idk === true)
+      .map(([key]) => Number(key))
+      .filter(Number.isInteger)
+  )
+}

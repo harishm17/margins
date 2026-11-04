@@ -39,7 +39,7 @@ import {
   type MissingItems,
   type Mode,
 } from './review-select'
-import { normalizeAnswers, answersForGrader, isAnswered, type QuizAnswer } from './quiz-answers'
+import { normalizeAnswers, answersForGrader, dontKnowIndexes, isAnswered, type QuizAnswer } from './quiz-answers'
 import { buildGradedEvidence } from './quiz-evidence'
 import { dontKnowEvidence } from './dont-know'
 import { helpAfterMiss, type HelpAfterMiss } from './instruction-server'
@@ -91,7 +91,15 @@ type GradedItem = {
 type Pending = { jobId: string; topicId: string; for: 'main' | 'retest'; startedAt: string }
 
 type SessionMeta = {
-  scope: { topicId?: string; conceptId?: string; topicIds?: string[] }
+  scope: {
+    topicId?: string
+    conceptId?: string
+    topicIds?: string[]
+    /** Practice on what a mock exam's missed questions were about (needs `includeNotDue` for the topic form): the concepts to draw on. */
+    conceptIds?: string[]
+    /** Where the session came from, for its title. */
+    from?: 'exam'
+  }
   /** How many items a review holds (default 12), and whether the topic's concepts that are not due may join (spec 7.4, 18.8). */
   limit?: number
   includeNotDue?: boolean
@@ -181,6 +189,12 @@ function scopedDue(due: DueConcept[], topicId: string | undefined, timeZone: str
  * concept of its topic(s), due or not, weakest first (spec 18.8): the mini quiz of a topic nothing is due in.
  */
 function sessionConcepts(context: ReviewContext, meta: SessionMeta, now: Date, timeZone: string): DueConcept[] {
+  // Practice on what an exam's misses were about: exactly those concepts, due or not, weakest first.
+  if (meta.scope.conceptIds) {
+    return meta.scope.conceptIds
+      .flatMap((id) => asDrillConcept(context, id, now) ?? [])
+      .sort((a, b) => a.mastery - b.mastery || a.conceptId.localeCompare(b.conceptId))
+  }
   const topics = meta.scope.topicIds ?? (meta.scope.topicId ? [meta.scope.topicId] : undefined)
   if (!meta.includeNotDue || !topics) return scopedDue(context.due, meta.scope.topicId, timeZone)
   const wanted = new Set(topics)
@@ -349,7 +363,8 @@ export async function activeSession(userId: string, projectId: string, timeZone:
     take: 5,
     select: { id: true, createdAt: true, items: true, results: true },
   })
-  const row = open.find((candidate) => localDayKey(candidate.createdAt, timeZone) === today)
+  // A practice session started from an exam's results is not "today's review": it is found again by its own address.
+  const row = open.find((candidate) => localDayKey(candidate.createdAt, timeZone) === today && readMeta(candidate.results).scope.from !== 'exam')
   if (!row) return null
   const meta = readMeta(row.results)
   const items = readItems(row.items)
@@ -365,6 +380,33 @@ const lockSession = (tx: Prisma.TransactionClient, sessionId: string) =>
 async function legacyReviewDue(userId: string, topicId: string, timeZone: string, now: Date): Promise<boolean> {
   const schedule = await prisma.reviewSchedule.findUnique({ where: { userId_topicId: { userId, topicId } }, select: { dueAt: true } })
   return !!schedule && schedule.dueAt.getTime() < dueBoundary(now, timeZone).getTime()
+}
+
+/**
+ * How many questions a review session started now with these settings would have: `ready` are in the bank and go in at once, `toWrite`
+ * are concepts that need a question written first (the session waits for the job, and a failed job leaves it shorter). Nothing is
+ * stored and no job is started. The 10-minute card says this number, so it never promises more than the session serves.
+ */
+export async function previewReviewSize(input: {
+  userId: string
+  projectId: string
+  timeZone: string
+  now?: Date
+  limit?: number
+  includeNotDue?: boolean
+  topicIds?: string[]
+}): Promise<{ ready: number; toWrite: number }> {
+  const { userId, projectId, timeZone } = input
+  const now = input.now ?? new Date()
+  const meta = emptyMeta(input.topicIds?.length ? { topicId: input.topicIds[0], topicIds: input.topicIds } : {})
+  if (input.limit !== undefined) meta.limit = Math.max(1, Math.min(MAX_REVIEW_ITEMS, Math.floor(input.limit)))
+  if (input.includeNotDue) meta.includeNotDue = true
+  const context = restrictToRuleGraded(await loadReviewContext({ userId, projectId, now, timeZone }), blockedCode(await getAiStatus(userId)))
+  const plan = planReview(context, meta, [], now, timeZone)
+  const served = new Set(plan.add.flatMap((item) => item.conceptIds))
+  const written = new Set(plan.missing.flatMap((group) => group.conceptIds).filter((id) => !served.has(id)))
+  const room = meta.limit ?? MAX_REVIEW_ITEMS
+  return { ready: plan.add.length, toWrite: Math.max(0, Math.min(written.size, room - plan.add.length)) }
 }
 
 /**
@@ -390,11 +432,20 @@ export async function startSession(input: {
   topicIds?: string[]
   /** The 10-minute session (spec 18.8). */
   short?: boolean
+  /** Practice from a mock exam's results: the concepts (or the topics, with `topicIds`) its missed questions were about. */
+  fromExam?: { conceptIds?: string[] }
 }): Promise<StartResult> {
   const { userId, projectId, kind, timeZone } = input
   const now = input.now ?? new Date()
-  const scope: SessionMeta['scope'] =
-    kind === 'drill' ? { conceptId: input.conceptId } : input.topicIds?.length ? { topicId: input.topicIds[0], topicIds: input.topicIds } : input.topicId ? { topicId: input.topicId } : {}
+  const scope: SessionMeta['scope'] = input.fromExam
+    ? { ...(input.fromExam.conceptIds ? { conceptIds: input.fromExam.conceptIds } : input.topicIds?.length ? { topicIds: input.topicIds } : {}), from: 'exam' }
+    : kind === 'drill'
+      ? { conceptId: input.conceptId }
+      : input.topicIds?.length
+        ? { topicId: input.topicIds[0], topicIds: input.topicIds }
+        : input.topicId
+          ? { topicId: input.topicId }
+          : {}
   // A session left unfinished on an earlier day is over (spec 18.7).
   await closeStaleSessions({ userId, projectId, now, timeZone })
   const context = await loadReviewContext({ userId, projectId, now, timeZone })
@@ -598,6 +649,8 @@ function summaryOf(items: SessionItem[], meta: SessionMeta, names: Map<string, s
   const retestRight = new Set(retests.filter((entry) => entry.result.score >= SUCCESS).flatMap((entry) => entry.item.conceptIds))
   const retested = new Set(retests.flatMap((entry) => entry.item.conceptIds))
   const named = (ids: Iterable<string>) => [...ids].flatMap((id) => names.get(id) ?? [])
+  const unretested = [...missed].filter((id) => !retested.has(id))
+  const leftOnPurpose = meta.retestCap !== undefined && retests.length >= meta.retestCap
   return {
     total: firstPass.length,
     correct: firstPass.filter((entry) => entry.result.score >= SUCCESS).length,
@@ -605,7 +658,10 @@ function summaryOf(items: SessionItem[], meta: SessionMeta, names: Map<string, s
     recovered: named([...missed].filter((id) => retestRight.has(id))),
     stillShaky: named([...missed].filter((id) => retested.has(id) && !retestRight.has(id))),
     // A drill has no closing retest, so it never says one was missing (spec 7.4).
-    notRetested: kind === 'drill' ? [] : named([...missed].filter((id) => !retested.has(id))),
+    notRetested: kind === 'drill' || leftOnPurpose ? [] : named(unretested),
+    // A short session's cap reached (or no retests at all): the rest were left out by design, not for want of a question.
+    leftOut: kind === 'drill' || !leftOnPurpose ? [] : named(unretested),
+    retestLimit: kind === 'review' && meta.retestCap !== undefined ? meta.retestCap : null,
     helpAfterMiss: null,
   }
 }
@@ -661,6 +717,7 @@ function retestsToCome(kind: SessionKind, items: SessionItem[], meta: SessionMet
 }
 
 function titleOf(kind: SessionKind, meta: SessionMeta, topicNames: Map<string, string>, names: Map<string, string>): string {
+  if (meta.scope.from === 'exam') return 'What you missed on the exam'
   if (kind === 'drill') return meta.scope.conceptId ? (names.get(meta.scope.conceptId) ?? 'Drill') : 'Drill'
   return meta.scope.topicId ? (topicNames.get(meta.scope.topicId) ?? "Today's review") : "Today's review"
 }
@@ -796,7 +853,7 @@ export async function answerItem(input: {
   )
 
   const score = result.points_possible > 0 ? Math.min(1, Math.max(0, result.points_earned / result.points_possible)) : result.is_correct ? 1 : 0
-  const review = buildReview([item.question], toStoredResults([{ ...result, question_index: 0 }]), { '0': given.answer })[0]
+  const review = buildReview([item.question], toStoredResults([{ ...result, question_index: 0 }], dontKnowIndexes({ '0': given as QuizAnswer })), { '0': given.answer })[0]
   const storeResult = async (tx: Prisma.TransactionClient) => {
     await lockSession(tx, sessionId)
     const fresh = await tx.itemSession.findFirst({ where: { id: sessionId, userId } })

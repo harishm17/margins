@@ -54,6 +54,8 @@ export type ReviewItemProps = {
   studentAnswer: string | null
   /** The answer is an option the model wrote ("B. text"), so it may hold math. Typed answers are plain. */
   studentAnswerIsOption?: boolean
+  /** The student pressed "I don't know": no answer on purpose, which reads differently from a blank. */
+  dontKnow?: boolean
   /** Shown for wrong, partial and ungraded answers. */
   correctAnswer?: string | null
   /** "Correct answer" (the default) or "Model answer" for a written one. */
@@ -151,6 +153,7 @@ export function ReviewItem({
   pointsEarned,
   studentAnswer,
   studentAnswerIsOption,
+  dontKnow,
   correctAnswer,
   correctLabel = 'Correct answer',
   feedback,
@@ -192,6 +195,9 @@ export function ReviewItem({
               <span className="whitespace-pre-wrap break-words">
                 {studentAnswerIsOption ? <MathText>{studentAnswer}</MathText> : studentAnswer}
               </span>
+            ) : dontKnow ? (
+              // The student chose this: it is their answer, said in their words.
+              <span>I don&apos;t know</span>
             ) : (
               // A blank is not an answer: it reads differently from one.
               <span className="inline-flex items-center rounded-chip border border-dashed border-control px-1.5 text-caption text-fg-2">

@@ -4,6 +4,8 @@
  *   {}                      today's review: up to 12 items from the due concepts of the course
  *   { topicId }             the same, filtered to that topic's due concepts plus up to two others
  *   { conceptId }           a drill on one concept (and its weakest prerequisite)
+ *   { examSubmissionId }    new questions on the concepts the missed questions of that graded mock-exam attempt were about
+ *                           (their topics' concepts when the questions name none), one per concept, no closing retests
  * -> { status: 'created', sessionId } | { status: 'empty' }. Concepts with no fresh item are written
  * by a job the session follows; poll GET /api/review-sessions/[sessionId].
  *
@@ -16,6 +18,8 @@ import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
 import { activeSession, startSession } from '@/lib/learning/review-session'
+import { examPractice } from '@/lib/learning/exam-practice'
+import { ATTEMPT_SUBMITTED } from '@/lib/exams/attempts'
 import { aiRefusal } from '@/lib/api/ai-preflight'
 import { createRateLimiter } from '@/lib/api/rate-limit'
 import { ApiErrorCode, apiError, apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
@@ -30,8 +34,10 @@ const bodySchema = z
   .object({
     topicId: z.string().min(1).max(64).optional(),
     conceptId: z.string().min(1).max(64).optional(),
+    // Practice on what this graded mock-exam attempt's missed questions were about.
+    examSubmissionId: z.string().min(1).max(64).optional(),
   })
-  .refine((body) => !(body.topicId && body.conceptId), { message: 'Give a topic or a concept, not both' })
+  .refine((body) => [body.topicId, body.conceptId, body.examSubmissionId].filter(Boolean).length <= 1, { message: 'Give a topic, a concept or an exam, not several' })
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
   try {
@@ -50,6 +56,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return response
     }
 
+    let fromExam: Partial<Parameters<typeof startSession>[0]> = {}
+    if (parsed.data.examSubmissionId) {
+      // The student's own graded attempt in this course: what its missed questions were about, as new questions.
+      const submission = await prisma.examSubmission.findFirst({
+        where: { id: parsed.data.examSubmissionId, userId: auth.user.id, status: ATTEMPT_SUBMITTED, sampleExam: { projectId } },
+        select: { aiGrading: true, sampleExam: { select: { questions: true } } },
+      })
+      if (!submission) return apiNotFound('Exam attempt not found')
+      const practice = await examPractice(projectId, submission.sampleExam.questions, submission.aiGrading)
+      if (!practice) return NextResponse.json({ status: 'empty', legacyReview: false })
+      fromExam = {
+        fromExam: practice.kind === 'concepts' ? { conceptIds: practice.conceptIds } : {},
+        topicIds: practice.kind === 'topics' ? practice.topicIds : undefined,
+        includeNotDue: true,
+        limit: practice.count,
+        // The exam was the test; the session asks each idea once, so its question count is the one on the button.
+        retestCap: 0,
+      }
+    }
+
     const result = await startSession({
       userId: auth.user.id,
       projectId,
@@ -57,6 +83,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       topicId: parsed.data.topicId,
       conceptId: parsed.data.conceptId,
       timeZone: await getTimeZone(),
+      ...fromExam,
     })
     if (result.status === 'not_found') return apiNotFound('Topic or concept not found')
     if (result.status === 'blocked') return aiRefusal(result.code)

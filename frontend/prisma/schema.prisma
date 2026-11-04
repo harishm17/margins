@@ -1198,7 +1198,7 @@ model StudyDraft {
   userId    String   @map("user_id")
   projectId String   @map("project_id")
   topicId   String?  @map("topic_id")
-  surface   String // quiz|recall|reader_check|explainer_check|review|practice
+  surface   String // quiz|recall|reader_check|explainer_check|review|practice|ask|worked_example
   scopeKey  String   @map("scope_key")
   payload   Json
   version   Int      @default(1)

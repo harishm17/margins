@@ -238,7 +238,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
             </Button>
           </div>
         </div>
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {topics.map((topic) => {
             const checked = selected.has(topic.id)
             return (

@@ -1,3 +1,4 @@
+import type { VoiceQuizStatus } from '@/features/voice/quiz-status'
 import { VoiceReview } from '@/features/voice/voice-review'
 
 /**
@@ -11,6 +12,7 @@ export function VoiceView({
   conceptId,
   hasClaims,
   claimsOfIdea,
+  quiz,
 }: {
   courseId: string
   topic: { id: string; name: string; keywords?: string[] }
@@ -18,6 +20,7 @@ export function VoiceView({
   conceptId?: string
   hasClaims?: boolean
   claimsOfIdea?: boolean
+  quiz?: VoiceQuizStatus
 }) {
-  return <VoiceReview courseId={courseId} mode="topic" topic={topic} initialStyle={initialStyle} conceptId={conceptId} hasClaims={hasClaims} claimsOfIdea={claimsOfIdea} />
+  return <VoiceReview courseId={courseId} mode="topic" topic={topic} initialStyle={initialStyle} conceptId={conceptId} hasClaims={hasClaims} claimsOfIdea={claimsOfIdea} quiz={quiz} />
 }

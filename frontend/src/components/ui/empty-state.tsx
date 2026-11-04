@@ -26,7 +26,7 @@ export function EmptyState({ icon, title, children, action, secondary, as: Headi
         {icon}
       </div>
       <Heading className="mt-4 text-subheading text-fg">{title}</Heading>
-      {children ? <div className="mt-1.5 max-w-[52ch] text-small text-fg-2">{children}</div> : null}
+      {children ? <div className="mt-1.5 max-w-[52ch] wrap-anywhere text-small text-fg-2">{children}</div> : null}
       {action ? <div className="mt-5">{action}</div> : null}
       {secondary ? <div className="mt-3 text-small">{secondary}</div> : null}
     </div>

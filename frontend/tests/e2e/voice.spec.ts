@@ -666,10 +666,10 @@ test('lobby: the daily limit disables Start, the 422 offers to create content', 
   await waitForLobby(page)
   await expect(page.getByText('18 min left today')).toBeVisible()
   await startButton(page).click()
-  await expect(page.getByText('Create notes and a quiz first')).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Create them' })).toHaveAttribute(
+  await expect(page.getByText('Quiz me needs a quiz first')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Write the quiz' })).toHaveAttribute(
     'href',
-    `/courses/${ids.courseId}/topics/${ids.topicId}?view=read`
+    `/courses/${ids.courseId}/topics/${ids.topicId}?view=quiz`
   )
 })
 

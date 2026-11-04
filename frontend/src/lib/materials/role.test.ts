@@ -1,26 +1,23 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { canBeTopicSource, isMaterialRole, readRole, roleForCategory, ROLE_LABELS } from './role'
+import { roleBadgeLabel } from './role'
 
-test('the upload category sets the first role', () => {
-  assert.equal(roleForCategory('syllabus'), 'syllabus')
-  assert.equal(roleForCategory('sample_exams'), 'exam')
-  assert.equal(roleForCategory('lecture_notes'), 'content')
-  assert.equal(roleForCategory('book_chapters'), 'content')
+test('a content file shows the category the student chose', () => {
+  assert.equal(roleBadgeLabel('content', 'lecture_notes'), 'Lecture notes')
+  assert.equal(roleBadgeLabel('content', 'book_chapters'), 'Book chapters')
 })
 
-test('only content and other files can be topic sources', () => {
-  assert.deepEqual(
-    (['content', 'syllabus', 'exam', 'other'] as const).map(canBeTopicSource),
-    [true, false, false, true]
-  )
+test('past exam and syllabus keep their own words, whatever the category says', () => {
+  assert.equal(roleBadgeLabel('exam', 'sample_exams'), 'Past exam')
+  assert.equal(roleBadgeLabel('syllabus', 'syllabus'), 'Syllabus')
+  assert.equal(roleBadgeLabel('exam', 'lecture_notes'), 'Past exam')
 })
 
-test('roles have labels and unknown values read as content', () => {
-  assert.equal(ROLE_LABELS.exam, 'Past exam')
-  assert.equal(isMaterialRole('syllabus'), true)
-  assert.equal(isMaterialRole('homework'), false)
-  assert.equal(readRole('homework'), 'content')
-  assert.equal(readRole(null), 'content')
-  assert.equal(readRole('exam'), 'exam')
+test('a role the validator or the student changed shows that role', () => {
+  assert.equal(roleBadgeLabel('other', 'lecture_notes'), 'Other')
+})
+
+test('content with no category to name falls back to Content', () => {
+  assert.equal(roleBadgeLabel('content', 'sample_exams'), 'Content')
+  assert.equal(roleBadgeLabel('content', ''), 'Content')
 })
