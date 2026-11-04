@@ -232,7 +232,7 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     test.setTimeout(120_000)
     const w = await nineQuestionWorld(page, `s2-strong-${stamp}`)
     const card = page.getByRole('region', { name: 'Next on this topic' })
-    await page.goto(quizUrl(w.courseId, w.topics.Graphs))
+    await page.goto(`/courses/${w.courseId}/topics/${w.topics.Graphs}?view=examples`)
     await expect(card).toContainText('Read the topic next.')
 
     // Eight of nine right and not guessed (one queue statement wrong: its concept still grades Good).
@@ -242,7 +242,7 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     expect((await response.json()).score).toBeGreaterThan(80)
 
     await expect.poll(() => withPrisma((prisma) => prisma.topicProgress.findFirst({ where: { topicId: w.topics.Graphs }, select: { testedOutAt: true } }))).toMatchObject({ testedOutAt: expect.any(Date) })
-    await page.goto(quizUrl(w.courseId, w.topics.Graphs))
+    await page.goto(`/courses/${w.courseId}/topics/${w.topics.Graphs}?view=examples`)
     await expect(card).not.toContainText('Read the topic next.')
     await page.goto(`/courses/${w.courseId}/topics/${w.topics.Graphs}`)
     await expect(page).not.toHaveURL(/view=read/)
@@ -481,6 +481,8 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
         reviewItem(conceptId, `Concept ${n} statement four holds.`, 'easy'),
       ])
     }
+    // The 10-minute check opens after a first quiz: give the first topic a score.
+    await setProgress(email, topicIds[0], { quizScore: 70 })
     // Seeded memories have no evidence behind them: mark the topics converted, or opening one would rebuild its concepts from nothing.
     await withPrisma((prisma) => prisma.topic.updateMany({ where: { projectId: course.courseId }, data: { evidenceBackfilledAt: new Date() } }))
     return { email, course }
@@ -552,7 +554,8 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
     const topicId = course.topics['Hash tables']
     const concepts = await seedConcepts(topicId, ['Hashing', 'Collisions'])
     await addQuizSet(topicId, Object.values(concepts).map((id, n) => reviewItem(id, `Statement ${n} holds.`, 'easy')))
-    await setProgress(email, topicId, { readAt: new Date(Date.now() - 3_600_000) })
+    // A first quiz (a score on the topic) opens the 10-minute check; before it Home says what opens it.
+    await setProgress(email, topicId, { readAt: new Date(Date.now() - 3_600_000), quizScore: 70 })
 
     await page.goto('/home')
     const card = page.getByTestId('short-session').locator('visible=true')
@@ -607,7 +610,7 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
 
     // A quick topic skips read and recall: its next activity is the warm-up or the quiz.
     const quickTopicId = quick[0].topicId
-    await page.goto(`/courses/${course.courseId}/topics/${quickTopicId}?view=practice`)
+    await page.goto(`/courses/${course.courseId}/topics/${quickTopicId}?view=examples`)
     const next = page.getByRole('region', { name: 'Next on this topic' }).locator('visible=true')
     await expect(next).toContainText('Take the quiz to see what you know.')
     await expect(next).not.toContainText(/Read the topic next|Close the book/)

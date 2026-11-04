@@ -86,7 +86,7 @@ export async function seedConcepts(topicId: string, names: string[], options: { 
 export async function setProgress(
   email: string,
   topicId: string,
-  data: { warmupAt?: Date; readAt?: Date; recallAt?: Date; testedOutAt?: Date; triage?: string }
+  data: { warmupAt?: Date; readAt?: Date; recallAt?: Date; testedOutAt?: Date; triage?: string; quizScore?: number }
 ) {
   await withPrisma(async (prisma) => {
     const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
