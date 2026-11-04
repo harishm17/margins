@@ -361,9 +361,10 @@ function workedCostNote(failedFirstTry: boolean): string {
 }
 
 /**
- * The three tutor actions under the working box. They are hidden while AI is unavailable (the hints
- * and checks still work), and a failed request leaves a visible message and changes nothing else.
- * Asking about the working waits for one checked answer: effort first (spec 5.6).
+ * The tutor actions in the step's help. They are hidden while AI is unavailable (the hints and checks still work), and a
+ * failed request leaves a visible message and changes nothing else. "What is this asking?" is free and always there; asking
+ * about the working and the worked example wait for one checked answer (effort first, spec 5.6), and are not drawn as a
+ * wall of disabled buttons before it: one sentence says what opens, and when.
  */
 export function TutorActions({
   tutor,
@@ -377,53 +378,51 @@ export function TutorActions({
   /** The step is already a failed first try (an I don't know, Connect, a second check): more help costs nothing more. */
   failedFirstTry: boolean
 }) {
-  const noteId = React.useId()
   const askNoteId = React.useId()
   const busy = tutor.pending !== null
   if (tutor.blocked) return <AiBlockedNote />
   return (
     <div className="flex flex-col gap-2">
       <div role="group" aria-label="Ask the tutor" className="flex flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={<ChatCircleText />}
-          aria-describedby={askNoteId}
-          disabled={!tutor.checked || !working.trim() || busy}
-          onClick={() => void tutor.ask(working).then((ok) => ok && onSent())}
-        >
-          Ask about my working
-        </Button>
-        <Button variant="secondary" size="sm" icon={<Question />} disabled={busy} onClick={() => void tutor.clarify(working)}>
+        {tutor.checked ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<ChatCircleText />}
+            aria-describedby={askNoteId}
+            disabled={!working.trim() || busy}
+            className="max-sm:min-h-11"
+            onClick={() => void tutor.ask(working).then((ok) => ok && onSent())}
+          >
+            Ask about my working
+          </Button>
+        ) : null}
+        <Button variant="secondary" size="sm" icon={<Question />} disabled={busy} className="max-sm:min-h-11" onClick={() => void tutor.clarify(working)}>
           What is this asking?
         </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={<BookOpenText />}
-          aria-describedby={tutor.workedAllowed ? undefined : noteId}
-          disabled={!tutor.workedAllowed || busy}
-          className="h-auto max-w-full shrink items-start py-1.5 text-left max-sm:h-auto max-sm:min-h-11"
-          onClick={() => void tutor.showWorked(working)}
-        >
-          <span className="flex flex-col whitespace-normal">
-            <span>Show me a worked example</span>
-            <span className="text-caption font-normal text-fg-2">{workedCostNote(failedFirstTry)}</span>
-          </span>
-        </Button>
+        {tutor.workedAllowed ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<BookOpenText />}
+            disabled={busy}
+            className="h-auto max-w-full shrink items-start py-1.5 text-left max-sm:h-auto max-sm:min-h-11"
+            onClick={() => void tutor.showWorked(working)}
+          >
+            <span className="flex flex-col whitespace-normal">
+              <span>Show me a worked example</span>
+              <span className="text-caption font-normal text-fg-2">{workedCostNote(failedFirstTry)}</span>
+            </span>
+          </Button>
+        ) : null}
       </div>
       <p id={askNoteId} className="text-caption text-fg-3">
         {tutor.checked
           ? failedFirstTry
             ? 'Asking what a step means is free. More help costs nothing extra: this step already counts as a miss.'
             : `Asking what a step means is free. If the tutor names the idea, ${HINT_COST_COPY.counts_as_miss}.`
-          : 'Check an answer first, then you can ask about your working.'}
+          : "Asking what a step means is free. Check an answer first, or say you don't know, to open the later hints, a worked example and questions about your working."}
       </p>
-      {!tutor.workedAllowed ? (
-        <p id={noteId} className="text-caption text-fg-3">
-          Check an answer first, or say you don&apos;t know, then a worked example is available.
-        </p>
-      ) : null}
       <FailureNote tutor={tutor} />
     </div>
   )

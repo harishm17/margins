@@ -59,7 +59,7 @@ export function AttemptFirst({ title, inputLabel, placeholder, revealLabel, stat
 
   if (!state) {
     return (
-      <div role="group" aria-labelledby={`${id}-title`} className="rounded-card border border-border bg-surface p-4">
+      <div role="group" aria-labelledby={`${id}-title`}>
         <p id={`${id}-title`} className="text-body-strong text-fg">
           {title}
         </p>

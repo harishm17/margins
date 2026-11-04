@@ -14,10 +14,12 @@ export function pathSteps(input: {
   /** The topic is read: a pretest after reading measures nothing new (spec §5.1). Left out, it counts as not read. */
   readDone?: boolean
   preparingConcepts: boolean
+  /** A topic nobody has started is being prepared: the path keeps its five steps in place (Warm-up and Recall marked as preparing) instead of growing as the jobs finish. */
+  preparingEntry?: boolean
 }): PathView[] {
   return PATH_VIEWS.filter((step) => {
-    if (step === 'warmup') return (input.warmupReady && !input.readDone) || input.warmupDone
-    if (step === 'recall') return input.hasConcepts || input.preparingConcepts
+    if (step === 'warmup') return (input.warmupReady && !input.readDone) || input.warmupDone || !!input.preparingEntry
+    if (step === 'recall') return input.hasConcepts || input.preparingConcepts || !!input.preparingEntry
     return true
   })
 }

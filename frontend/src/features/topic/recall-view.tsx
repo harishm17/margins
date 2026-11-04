@@ -86,6 +86,23 @@ export function RecallView({ topicId, state, nextHref, nextLabel, next, voiceHre
   const complete = answeredKeys.size >= total
   const [instructionsOpen, setInstructionsOpen] = React.useState(false)
   const instructionsId = React.useId()
+  // One prompt is open at a time: the first without an answer, or the one the student picked. The other unanswered prompts
+  // are one labelled row each, so four boxes and four Check buttons are not all asking at once. Answered prompts stay open
+  // with their feedback, which is what the student came back to read.
+  const [picked, setPicked] = React.useState<string | null>(null)
+  const firstUnanswered = state.cards.find((card) => !answeredKeys.has(card.key))?.key ?? null
+  const activeKey = picked !== null && !answeredKeys.has(picked) ? picked : firstUnanswered
+  const nextAfter = (key: string): string | null => {
+    const at = state.cards.findIndex((card) => card.key === key)
+    return state.cards.slice(at + 1).find((card) => !answeredKeys.has(card.key))?.key ?? state.cards.find((card) => card.key !== key && !answeredKeys.has(card.key))?.key ?? null
+  }
+  const openPrompt = (key: string) => {
+    setPicked(key)
+    requestAnimationFrame(() => {
+      const box = document.querySelector<HTMLElement>(`textarea[aria-labelledby="recall-${key}"]`)
+      box?.focus()
+    })
+  }
   // This view ends in its own next step, so the topic's next-activity card does not repeat it above.
   useActivityInProgress(true)
   // Once something is graded the way on is the topic's next activity, as the primary button; with nothing
@@ -124,11 +141,32 @@ export function RecallView({ topicId, state, nextHref, nextLabel, next, voiceHre
         </p>
       ) : null}
       <ol className="mt-8 divide-y divide-border">
-        {state.cards.map((card) => (
-          <li key={card.key} className="py-8 first:pt-0">
-            <Card topicId={topicId} card={card} onGraded={() => setAnsweredKeys((current) => new Set(current).add(card.key))} />
-          </li>
-        ))}
+        {state.cards.map((card) => {
+          const collapsed = total > 1 && !answeredKeys.has(card.key) && card.key !== activeKey
+          const following = nextAfter(card.key)
+          return (
+            <li key={card.key} className={collapsed ? 'py-3 first:pt-0' : 'py-8 first:pt-0'}>
+              {collapsed ? (
+                <button
+                  type="button"
+                  onClick={() => openPrompt(card.key)}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-control border border-border px-3.5 py-2 text-left hover:border-border-strong"
+                >
+                  <span className="min-w-0 flex-1 text-body-strong text-fg">{card.prompt}</span>
+                  <span className="shrink-0 text-caption text-fg-3">Not answered yet</span>
+                  <CaretDown aria-hidden="true" className="size-3.5 shrink-0 text-fg-3" />
+                </button>
+              ) : (
+                <Card
+                  topicId={topicId}
+                  card={card}
+                  onGraded={() => setAnsweredKeys((current) => new Set(current).add(card.key))}
+                  onNextPrompt={following ? () => openPrompt(following) : undefined}
+                />
+              )}
+            </li>
+          )
+        })}
       </ol>
       <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
         <Button asChild variant={graded && complete ? 'primary' : 'secondary'}>
@@ -154,7 +192,21 @@ export function RecallView({ topicId, state, nextHref, nextLabel, next, voiceHre
   )
 }
 
-export function Card({ topicId, projectId: course, card, onGraded }: { topicId: string; /** The course, outside the topic page (the map's teach-back); on it, the topic's own. */ projectId?: string | null; card: RecallCard; onGraded: () => void }) {
+export function Card({
+  topicId,
+  projectId: course,
+  card,
+  onGraded,
+  onNextPrompt,
+}: {
+  topicId: string
+  /** The course, outside the topic page (the map's teach-back); on it, the topic's own. */
+  projectId?: string | null
+  card: RecallCard
+  onGraded: () => void
+  /** Opens the next prompt without an answer, when there is one: the feedback ends in it as its one primary step. */
+  onNextPrompt?: () => void
+}) {
   const router = useRouter()
   const headingId = `recall-${card.key}`
   const stored = useStoredDraft(topicId, card.key)
@@ -353,6 +405,7 @@ export function Card({ topicId, projectId: course, card, onGraded }: { topicId: 
           feedback={feedback}
           onFeedback={setFeedback}
           regionRef={focus.register('feedback')}
+          onNextPrompt={onNextPrompt}
           onAgain={() => {
             setClarify(null)
             setError(null)
@@ -370,12 +423,14 @@ function FeedbackView({
   feedback,
   onFeedback,
   onAgain,
+  onNextPrompt,
   regionRef,
 }: {
   topicId: string
   feedback: RecallFeedback
   onFeedback: (feedback: RecallFeedback) => void
   onAgain: () => void
+  onNextPrompt?: () => void
   regionRef: (element: HTMLElement | null) => void
 }) {
   const [revealing, setRevealing] = React.useState(false)
@@ -518,8 +573,14 @@ function FeedbackView({
           <p className="mt-3 text-caption text-fg-3">Seeing these is recorded as help, so it doesn&apos;t add to your score.</p>
         </div>
       ) : null}
-      <div>
-        <Button variant="link" onClick={onAgain}>
+      {/* One primary step ends the feedback: the next prompt when there is one. Answering this one again is the quiet choice beside it. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {onNextPrompt ? (
+          <Button variant="primary" icon={<ArrowRight />} onClick={onNextPrompt}>
+            Answer the next prompt
+          </Button>
+        ) : null}
+        <Button variant="link" className="max-sm:min-h-11" onClick={onAgain}>
           Answer again
         </Button>
       </div>

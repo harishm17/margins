@@ -81,6 +81,9 @@ test.describe('the demo course', () => {
 
   test('the topic header shows objectives, prerequisites, sources and time', async ({ page }) => {
     await page.goto(`/courses/${course}/topics/${topics[1]}?view=read`)
+    // The title and one status line stay; what the topic covers opens from "About this topic".
+    await expect(page.getByRole('region', { name: 'About this topic' })).toHaveCount(0)
+    await page.getByRole('button', { name: /About this topic/ }).click()
     const about = page.getByRole('region', { name: 'About this topic' })
     await expect(about.getByRole('heading', { level: 2, name: 'By the end you can' })).toBeVisible()
     await expect(about.getByRole('listitem').filter({ hasText: 'run breadth-first and depth-first search by hand' })).toBeVisible()
@@ -90,6 +93,7 @@ test.describe('the demo course', () => {
     // Prerequisites link to the topic.
     await about.getByRole('link', { name: 'Sorting algorithms' }).click()
     await expect(page).toHaveURL(new RegExp(`/topics/${topics[0]}`))
+    await page.getByRole('button', { name: /About this topic/ }).click()
 
     // Sources link to the file viewer at the page; math in an objective is typeset.
     const source = page.getByRole('region', { name: 'About this topic' }).getByRole('link', { name: 'algorithms.pdf, pp. 1-2' })

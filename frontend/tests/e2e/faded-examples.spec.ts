@@ -55,6 +55,28 @@ const openExample = async (page: Page, title: string) => {
   if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click()
 }
 
+test('the final answer waits for the guesses the example asks for, and "I don\'t know" counts as one', async ({ page }) => {
+  await page.setViewportSize(DESKTOP)
+  const { url } = await world(page, 'fade-answer')
+  await page.goto(url('Novice topic'))
+  await streamedPartsArrived(page)
+  const answerPanel = page.getByRole('region', { name: 'Answer: Alpha' })
+  const whys = page.getByRole('group', { name: 'Why this step? Write your guess' })
+  await expect(whys).toHaveCount(3)
+  // Every step is shown, but the whys are owed: the answer is not, and a line says when it opens.
+  await expect(answerPanel).toHaveCount(0)
+  await expect(page.getByText('The answer opens once you have written your guesses.')).toBeVisible()
+  await whys.first().getByLabel('Your guess').fill('Because the key landed in a used bucket.')
+  await whys.first().getByRole('button', { name: 'Show why' }).click()
+  await expect(whys).toHaveCount(2)
+  await expect(answerPanel).toHaveCount(0)
+  await whys.first().getByRole('button', { name: "I don't know" }).click()
+  await expect(answerPanel).toHaveCount(0)
+  await whys.first().getByRole('button', { name: "I don't know" }).click()
+  await expect(answerPanel).toBeVisible()
+  await expect(page.getByText('The answer opens once you have written your guesses.')).toHaveCount(0)
+})
+
 test('a novice sees the first example worked with the whys waiting for a guess', async ({ page }) => {
   await page.setViewportSize(DESKTOP)
   const { email, url, conceptId } = await world(page, 'fade-novice')

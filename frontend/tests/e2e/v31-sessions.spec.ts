@@ -278,6 +278,10 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     const first = pointers.first().getByRole('link')
     await expect(first).toHaveText(/^p\. \d+$/)
     await expect(first).toHaveAttribute('href', /view=read&focus=.*#chunk-/)
+    // After a miss the one primary step is going back to the first missed idea; new questions and voice practice are secondary.
+    await expect(page.getByTestId('review-first-missed')).toHaveText('Review the first missed idea')
+    await expect(page.getByTestId('review-first-missed')).toHaveAttribute('href', /view=read&focus=/)
+    await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
     await expectNoAxeViolations(page, 'quiz results with pointers')
     await shot(page, 'quiz-results-pointers')
     await first.click()

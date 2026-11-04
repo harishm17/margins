@@ -78,9 +78,10 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   const { courseId, ids } = (course = await createCourse(page))
   const base = `/courses/${courseId}/topics/${ids[0]}`
 
-  // No view in the address: it goes to the first unfinished one.
+  // No view in the address: it goes to the first unfinished one. A topic nobody has started is prepared first (a preparation screen),
+  // then it opens on its warm-up, not on the reader.
   await page.goto(base)
-  await expect(page).toHaveURL(/\?view=read$/)
+  await expect(page).toHaveURL(/\?view=warmup$/, { timeout: 90_000 })
   await expect(page.getByRole('heading', { level: 1, name: TOPICS[0] })).toBeVisible()
   // "Ask about this" opens the Ask sheet scoped to the topic, with a link to the full page.
   await page.getByRole('button', { name: 'Ask about this' }).click()
@@ -92,6 +93,10 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   )
   await page.keyboard.press('Escape')
   await expect(sheet).toBeHidden()
+
+  // Reading is a choice, one tap on the path away.
+  await page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Read/ }).click()
+  await expect(page).toHaveURL(/\?view=read$/)
 
   // The reader shows the student's own pages, and the topic's notes are written without a click in the meantime.
   await expect(page.locator('[data-passage]').first()).toBeVisible({ timeout: 90_000 })

@@ -175,6 +175,16 @@ export function QuizResults({
     const ids = result.missedConcepts?.[String(index)]
     return ids && help ? pointerLine(help.pointers.filter((pointer) => ids.includes(pointer.conceptId))) : []
   }
+  // After a miss the one primary step is going back to what was missed: its first idea, in the student's own pages (or its explanation).
+  // New questions and voice practice are the quieter choices beside it. A quiz with nothing missed has no repair to lead with.
+  const repair =
+    missed.length > 0 && !(allRightAndSure && onHarderSet)
+      ? help?.pointers[0]
+        ? { href: help.pointers[0].href, label: 'Review the first missed idea' }
+        : help?.explainer
+          ? { href: help.explainer.href, label: 'Review the first missed idea' }
+          : null
+      : null
   const score = formatScore(result.score)
   // What this quiz changed, in the student's own days (the browser's zone).
   // The review date is the topic's, and a confidence rating below moves it: both lines read the same value.
@@ -212,10 +222,17 @@ export function QuizResults({
             <ExpectedMiss surface="quiz_results" summaryMissedShare={1 - result.score / 100} />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {allRightAndSure && onHarderSet ? (
             <Button variant="primary" icon={<Lightning />} onClick={onHarderSet}>
               Harder set
+            </Button>
+          ) : null}
+          {repair ? (
+            <Button asChild variant="primary" icon={<BookOpen />}>
+              <Link href={repair.href} scroll={false} data-testid="review-first-missed">
+                {repair.label}
+              </Link>
             </Button>
           ) : null}
           <Button variant="secondary" icon={<Sparkle />} onClick={onNewQuestions}>

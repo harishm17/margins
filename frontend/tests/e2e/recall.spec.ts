@@ -148,9 +148,15 @@ test('a recall answer is graded against the claims, with the student quoted firs
   await expect(page.getByText('Write what you can remember of each idea, without looking back.')).toBeVisible()
   await expect(page.getByRole('button', { name: /instructions/ })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
+  // One prompt is open (the first); each of the others is one labelled row, not another box and another Check button.
   await expect(card(page)).toBeVisible()
-  await expect(card(page, 'Explain what the load factor tells you.')).toBeVisible()
-  await expect(card(page, 'Explain this topic in your own words: its main ideas and how they fit together.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Check my answer' })).toHaveCount(1)
+  for (const prompt of ['Explain what the load factor tells you.', 'Explain this topic in your own words: its main ideas and how they fit together.']) {
+    await expect(card(page, prompt)).toHaveCount(0)
+    const row = page.getByRole('button', { name: new RegExp(prompt.slice(0, 30)) })
+    await expect(row).toContainText('Not answered yet')
+    expect((await row.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+  }
   // The pages are closed: no reader on the step.
   await expect(page.getByRole('region', { name: 'Reading' })).toHaveCount(0)
   await screenshotIfAsked(page, 'e4-recall-prompt-1440x900')
@@ -186,6 +192,12 @@ test('a recall answer is graded against the claims, with the student quoted firs
   await expect(page.getByRole('link', { name: 'Go to Practice' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Read about it' })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
+  // The feedback ends in one primary step, the next prompt; answering this one again is the quiet link beside it, and the
+  // way on to Practice is the secondary button until every prompt has an answer.
+  await expect(feedback.getByRole('button', { name: 'Answer the next prompt' })).toBeVisible()
+  await expect(feedback.getByRole('button', { name: 'Answer again' })).toBeVisible()
+  await feedback.getByRole('button', { name: 'Answer the next prompt' }).click()
+  await expect(box(page, 'Explain what the load factor tells you.')).toBeFocused()
   await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ }).getByRole('img', { name: 'Completed' })).toHaveCount(0)
   await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ })).toContainText(/1\/\d+/)
   await screenshotIfAsked(page, 'e4-recall-graded-1440x900')

@@ -12,6 +12,7 @@ import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toaster'
 import type { ConfidenceId } from '@/lib/learning/calibration'
+import { QuestionNavigator } from '@/components/learning/question-navigator'
 import { ConfidenceRow, optionCountOf } from '@/features/topic/quiz-confidence'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import type { AttemptView } from '@/lib/exams/attempts'
@@ -20,7 +21,6 @@ import type { PublicQuizQuestion } from '@/lib/learning/quiz-questions'
 import { useQuestionMotion } from '@/lib/question-motion'
 import { cn } from '@/lib/utils'
 import { joinAnswers, splitAnswers, submitSummary } from './exam-answers'
-import { ExamNavigator } from './exam-navigator'
 import { parseFlagState, timeNotice, timerTone, type FlagState } from './exam-timer'
 import { useExamAutosave, type SaveStatus } from './use-exam-autosave'
 import { useSessionValue } from './use-session-value'
@@ -151,7 +151,12 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
   const leaveTo = React.useCallback(
     (href: string) => {
       leavingRef.current = true
-      router.push(href)
+      // The course layout is kept while the student moves between its pages, and it is what says "Mock exam in progress":
+      // it is read again with the move, so a submitted exam does not still show as open on its own results.
+      React.startTransition(() => {
+        router.push(href)
+        router.refresh()
+      })
     },
     [router]
   )
@@ -389,7 +394,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         <aside aria-label="Question navigator" className="hidden lg:block">
           <div className="sticky top-[88px]">
             <h2 className="mb-3 text-small font-medium text-fg">Questions</h2>
-            <ExamNavigator total={total} current={current} answered={answeredSet} flagged={flagged} onSelect={goTo} />
+            <QuestionNavigator total={total} current={current} answered={answeredSet} flagged={flagged} onSelect={goTo} />
           </div>
         </aside>
       </div>
@@ -400,7 +405,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
             <SheetTitle>Questions</SheetTitle>
           </SheetHeader>
           <div className="overflow-y-auto p-5">
-            <ExamNavigator
+            <QuestionNavigator
               total={total}
               current={current}
               answered={answeredSet}

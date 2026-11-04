@@ -64,7 +64,7 @@ export function defaultViewFor(kind: ActivityKind): ViewId {
     case 'practice':
       return kind
     case 'start':
-      // A topic nobody has opened has no warm-up yet: it opens on the reader, which shows it being prepared.
+      // A topic nobody has opened has no warm-up yet: bareTopicRedirect sends it to the preparation screen, and this is where it falls back to.
       return 'read'
     case 'instruct':
       // The explainer or the reader, at the concept: the address says which (`activityHref`); the bare view is the reader.
@@ -119,7 +119,10 @@ export function viewInPath(path: string | null): string | null {
  * that is a view of the topic is taken as its own address; the others leave the topic on Practice. "Solid for now"
  * is a card on the topic whose button opens the harder set: the topic itself stays on Practice.
  */
-export function bareTopicRedirect(base: string, requestedView: unknown, next: { kind: ActivityKind; href: string }): string | null {
+export function bareTopicRedirect(base: string, requestedView: unknown, next: { kind: ActivityKind; href: string }, preparingEntry = false): string | null {
   if (parseView(requestedView)) return null
+  // A topic nobody has started is still being prepared: it opens on the preparation screen, not on the reader. `entry=1`
+  // marks that address; the screen moves on by itself (to the warm-up) once the topic is ready.
+  if (preparingEntry) return `${base}?view=read&entry=1`
   return next.kind !== 'done_for_now' && next.href.startsWith(`${base}?`) ? next.href : `${base}?view=${defaultViewFor(next.kind)}`
 }

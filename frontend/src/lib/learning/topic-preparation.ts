@@ -64,6 +64,26 @@ export async function findActiveConceptsJob(topicId: string): Promise<{ id: stri
   })
 }
 
+/** How long after a preparation job finishes the next one of the chain is still expected (the AI service queues it a moment later). */
+const CHAIN_GAP_MS = 20_000
+
+/**
+ * Whether the topic's preparation (concepts, warm-up, notes) is under way: a job of it is pending or running, or one finished
+ * a moment ago and the next of the chain has not been queued yet. Any generate_content job for the topic counts, whichever
+ * chain started it, so the gap between two jobs does not read as "finished".
+ */
+export async function preparationInFlight(topicId: string, now: Date = new Date()): Promise<boolean> {
+  const job = await prisma.processingJob.findFirst({
+    where: {
+      jobType: 'generate_content',
+      inputData: { path: ['topicId'], equals: topicId },
+      OR: [{ status: { in: ACTIVE_JOB_STATUSES } }, { status: 'completed', completedAt: { gte: new Date(now.getTime() - CHAIN_GAP_MS) } }],
+    },
+    select: { id: true },
+  })
+  return job !== null
+}
+
 export type RequestedContent =
   | { kind: 'active'; jobId: string; status: string }
   | { kind: 'exists' }

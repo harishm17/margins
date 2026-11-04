@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { workingBox } from './helpers/practice'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { withPrisma } from './helpers/db'
 import { addContent, createCourse, practiceProblem, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
@@ -61,19 +62,32 @@ const contentIdOf = (topicId: string) =>
   withPrisma(async (prisma) => (await prisma.topicContent.findUniqueOrThrow({ where: { topicId_contentType: { topicId, contentType: 'interactive_examples' } }, select: { id: true } })).id)
 
 test.describe('practice: help after an attempt', () => {
-  test('connect disabled before an attempt, and the labels say what each help costs', async ({ page }) => {
+  test('Check comes straight after the answer, and the help is one folded button with one hint ladder', async ({ page }) => {
     test.setTimeout(120_000)
     const { topicId } = await open(page, 'q-gate')
     await page.setViewportSize(DESKTOP)
-    await expect(button(page, /Connect/)).toBeDisabled()
-    await expect(button(page, /Structure/)).toBeDisabled()
-    await expect(button(page, 'Show answer')).toBeDisabled()
-    await expect(visible(page, "Check an answer first, or say you don't know.")).toBeVisible()
-    // Locate is open from the start, and says it still counts, as a harder try.
-    await expect(button(page, /Locate/)).toBeEnabled()
+    // Nothing gated is drawn as a disabled button: Show answer and the worked example are not there before a first try.
+    await expect(button(page, 'Show answer')).toHaveCount(0)
+    await expect(button(page, /Show me a worked example/)).toHaveCount(0)
+    await expect(button(page, /Next hint/)).toHaveCount(0)
+    // The answer, then Check, then the help: no help sits between them, on a phone too.
+    for (const size of [DESKTOP, PHONE]) {
+      await page.setViewportSize(size)
+      const answer = (await answerBox(page).boundingBox())!
+      const checkButton = (await button(page, 'Check').boundingBox())!
+      expect(checkButton.y - (answer.y + answer.height), `Check is under the answer at ${size.width}px`).toBeLessThan(110)
+    }
+    await page.setViewportSize(DESKTOP)
+    // The help opens from one button. Locate is open from the start and says it still counts, as a harder try.
+    await button(page, 'Get help').click()
+    await expect(button(page, /Next hint: Locate/)).toBeEnabled()
     await expect(visible(page, /Where to look \(still counts, as a harder try\)/)).toBeVisible()
-    await expect(visible(page, /Name the idea \(this step will count as a miss\)/)).toBeVisible()
+    await expect(visible(page, "Check an answer first, or say you don't know, to open the later hints, a worked example and questions about your working.")).toBeVisible()
     await screenshotIfAsked(page, 'q-practice-gate-1440x900')
+    // Once Locate is open the ladder offers the next hint, which waits for an attempt and says so.
+    await button(page, /Next hint: Locate/).click()
+    await expect(button(page, /Next hint: Connect/)).toBeDisabled()
+    await expect(button(page, /Next hint: Connect/)).toContainText('Opens after your first try')
 
     // The server holds the same line: Connect before any attempt is refused.
     const refused = await page.request.post(`/api/topics/${topicId}/practice-tutor`, { data: { problemIndex: 0, problemTitle: 'Squares', stepIndex: 0, event: 'hint', hintIndex: 1 } })
@@ -93,7 +107,8 @@ test.describe('practice: help after an attempt', () => {
     await page.setViewportSize(DESKTOP)
     await check(page, '5')
     await expect(visible(page, 'Not quite')).toBeVisible()
-    // No extra click: the next hint is there and open to use, with what it costs; Try again is still the primary action.
+    // No extra click: the next hint is there and open to use, with what it costs; Try again is still the primary action,
+    // straight under what just happened.
     const next = button(page, /Next hint: Locate/)
     await expect(next).toBeEnabled()
     await expect(next).toContainText('still counts, as a harder try')
@@ -192,7 +207,7 @@ test.describe('practice: help after an attempt', () => {
     test.setTimeout(120_000)
     const { topicId, url } = await open(page, 'q-draft')
     await answerBox(page).fill('4.0 maybe')
-    await page.getByLabel('Your working (optional)').locator('visible=true').fill('Two times two, so I think four.')
+    await (await workingBox(page)).fill('Two times two, so I think four.')
     const contentId = await contentIdOf(topicId)
     await expect
       .poll(async () => (await (await page.request.get(`/api/drafts?surface=practice&key=${contentId}:0:0`)).json()).draft?.payload ?? null, { timeout: 20_000 })

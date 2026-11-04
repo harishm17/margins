@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { ChatsCircle, Hourglass } from '@phosphor-icons/react/dist/ssr'
 import { bareTopicRedirect } from '@/features/topic/activity-copy'
+import { EntryPreparing } from '@/features/topic/entry-preparing'
 import { ExamplesView } from '@/features/topic/examples-view'
 import { ContentGate } from '@/features/topic/generation-ui'
 import { ExplainerGate } from '@/features/topic/explainer-gate'
@@ -40,6 +41,8 @@ type SearchParams = Promise<{
   focus?: string | string[]
   /** The examples' starting level when the next activity asks for it (`full` after two fails). */
   fade?: string | string[]
+  /** `1` on the address a topic nobody has started opens on: the preparation screen, which moves on to the warm-up when it is written. */
+  entry?: string | string[]
 }>
 
 export async function generateMetadata({ params }: { params: Params }) {
@@ -63,7 +66,7 @@ const FADE_LEVELS: FadeLevel[] = ['full', 'partial', 'problem_first']
 export default async function TopicPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const user = await requireUser()
   const { courseId, topicId } = await params
-  const { view: requested, set: requestedSet, start, difficulty, mode, concept, style, focus, fade } = await searchParams
+  const { view: requested, set: requestedSet, start, difficulty, mode, concept, style, focus, fade, entry } = await searchParams
   const focusConceptId = first(focus) ?? null
   const data = await getTopicPage(user.id, courseId, topicId)
   if (!data) notFound()
@@ -97,8 +100,16 @@ export default async function TopicPage({ params, searchParams }: { params: Para
     </>
   )
 
+  // The address a topic nobody has started opens on. While its warm-up is being written it is the preparation screen; once
+  // the topic is ready the screen replaces itself with the bare address, which names the first step (the warm-up).
+  if (first(entry) === '1' && (wanted === 'read' || wanted === 'warmup')) {
+    return <EntryPreparing ready={!data.preparingEntry} target={bareTopicRedirect(base, null, data.nextActivity) ?? base} readHref={`${base}?view=read`} />
+  }
+
   switch (wanted) {
     case 'warmup':
+      // Being prepared: the step is in the path, and says so until the questions are written.
+      if (data.preparingEntry) return <EntryPreparing ready={false} target={base} readHref={`${base}?view=read`} />
       // No bank and none taken: the step is not offered, and its address goes on to reading.
       if (!data.pathSteps.includes('warmup')) redirect(`${base}?view=read`)
       return <WarmupView topicId={topicId} courseId={courseId} readHref={`${base}?view=read`} quizHref={`${base}?view=quiz`} initial={await withFocusCount(user.id, topicId, await loadWarmupState(user.id, topicId))} />
