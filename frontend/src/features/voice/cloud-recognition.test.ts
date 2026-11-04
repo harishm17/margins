@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   applyDeepgram,
+  createRecoveryBudget,
   applyTurn,
   cloudRecognitionClass,
   createActivityTracker,
@@ -145,6 +146,7 @@ function fakeCapture(): MicCapture & { emit: (frame: Int16Array) => void } {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
+    onFailed: () => () => undefined,
     get active() {
       return true
     },
@@ -414,6 +416,22 @@ describe('cloudRecognitionClass with Deepgram', () => {
     assert.equal(ended, false)
     socket.message({ type: 'Metadata', request_id: 'r' })
     assert.equal(ended, true)
+  })
+})
+
+describe('createRecoveryBudget', () => {
+  it('allows three reopenings in 30 s, then none until the oldest is 30 s old', () => {
+    let now = 0
+    const budget = createRecoveryBudget({ now: () => now })
+    assert.equal(budget.allow(), true)
+    now = 1000
+    assert.equal(budget.allow(), true)
+    now = 2000
+    assert.equal(budget.allow(), true)
+    now = 3000
+    assert.equal(budget.allow(), false)
+    now = 30_001
+    assert.equal(budget.allow(), true)
   })
 })
 
