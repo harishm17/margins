@@ -174,15 +174,15 @@ test.describe('setup', () => {
 test.describe('topic editor', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
-  test('Rename and Move are on each row, merging is a mode, and Find topics again is a course action', async ({ page, context }) => {
+  test('Rename is on each row, the rest is one row menu, merging is a mode, and Find topics again is a course action', async ({ page, context }) => {
     await setZoneCookie(context)
     await signUpAndIn(page, 'r3-editor', { own: true })
     const { courseId } = await createCourse(page, 'Editor course', [{ name: 'Alpha', unit: 'Unit one' }, { name: 'Beta', unit: 'Unit one' }, { name: 'Gamma', unit: 'Unit two' }])
     await page.goto(`/courses/${courseId}/topics?edit=1`)
     const alpha = page.getByRole('listitem').filter({ hasText: 'Alpha' }).first()
     await expect(alpha.getByRole('button', { name: 'Rename Alpha' })).toBeVisible()
-    await expect(alpha.getByRole('button', { name: 'Move Alpha' })).toBeVisible()
-    await alpha.getByRole('button', { name: 'Move Alpha' }).click()
+    await expect(alpha.getByRole('button', { name: 'Move Alpha' })).toHaveCount(0)
+    await alpha.getByRole('button', { name: 'Actions for Alpha' }).click()
     await expect(page.getByRole('menuitem', { name: 'Move to unit...' })).toBeVisible()
     await expect(page.getByRole('menuitem', { name: 'Move up' })).toBeDisabled()
     await page.keyboard.press('Escape')

@@ -240,7 +240,7 @@ test.describe('a course built to be edited', () => {
     await expect(body(page).getByText('5 topics in 3 units')).toBeVisible()
 
     // Move "Slicing" from Arrays to Trees.
-    await page.getByRole('button', { name: 'Move Slicing' }).click()
+    await page.getByRole('button', { name: 'Actions for Slicing' }).click()
     await page.getByRole('menuitem', { name: 'Move to unit...' }).click()
     const dialog = page.getByRole('dialog', { name: 'Move topic' })
     await expect(dialog).toBeVisible()

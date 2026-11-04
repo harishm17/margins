@@ -53,6 +53,9 @@ import { TopicEditorRow, type EditorTopic, type MergeGroup } from './topic-edito
 const NO_UNIT = 'none'
 const LAST = Number.MAX_SAFE_INTEGER
 
+/** A change the server refused: what it was about, and how to send it again (the editor has already put the change back). */
+type SaveFailure = { label: string; retry: () => void }
+
 /** A name typed into "Add a topic" that the server does not have yet. */
 type PendingAdd = { key: number; name: string; unitId: string | null; state: 'adding' | 'failed'; reason?: string }
 
@@ -93,6 +96,30 @@ function SkeletonRows() {
   )
 }
 
+
+/**
+ * Where the apply-at-once changes stand, beside Done: "Saving...", "All changes saved", or what failed with Retry. It is a live
+ * region, so a screen reader hears the failure without moving focus. Nothing is said before the first change.
+ */
+function SaveStatus({ state }: { state: { pending: number; saved: boolean; failed: SaveFailure | null } }) {
+  let content: React.ReactNode = null
+  if (state.pending > 0) content = <span className="text-fg-2">Saving...</span>
+  else if (state.failed) {
+    content = (
+      <span className="flex flex-wrap items-center gap-x-2 text-danger-soft-fg">
+        {state.failed.label}.
+        <Button type="button" size="sm" variant="link" className="h-auto p-0 text-small max-sm:min-h-11" onClick={state.failed.retry}>
+          Retry
+        </Button>
+      </span>
+    )
+  } else if (state.saved) content = <span className="text-fg-2">All changes saved</span>
+  return (
+    <div role="status" aria-live="polite" data-testid="save-status" className="min-h-5 text-caption font-normal">
+      {content}
+    </div>
+  )
+}
 
 /** The unit's title row: title, week, size, and its menu (edit, move, delete). */
 function UnitHeader({
@@ -152,7 +179,9 @@ function UnitHeader({
  * The topic editor: units with their topics (a flat course is one plain list). Rename, reorder
  * (drag or keyboard, inside a unit), move to another unit, merge, delete and add topics; add, edit,
  * move and delete units; find again; and confirm. Changes are applied at once and put back if the
- * server refuses them. Each topic shows the files it is taught from, read-only.
+ * server refuses them; a status beside Done / Confirm says "Saving...", "All changes saved" or what failed, with Retry.
+ * Each topic shows the files it is taught from, as links that open the original at the cited page (the ranges themselves
+ * cannot be edited: no route writes a topic's sources).
  */
 export function TopicEditor({
   courseId,
@@ -214,6 +243,29 @@ export function TopicEditor({
   const failedAdds = adds.filter((item) => item.state === 'failed')
   const addingCount = adds.length - failedAdds.length
 
+  // Changes are applied at once, so the editor says where they stand: saving, all saved, or what failed with a way to send it again.
+  const [saveState, setSaveState] = React.useState<{ pending: number; saved: boolean; failed: SaveFailure | null }>({
+    pending: 0,
+    saved: false,
+    failed: null,
+  })
+  /**
+   * Runs one request and keeps the save status. A failure is passed on to the caller (which puts the change back); with
+   * `failure` given it is also shown beside Done, with `retry` sending the same change again. Failures that already have
+   * their own place on screen (a topic that was not added) pass none.
+   */
+  async function saving<T>(run: () => Promise<T>, failure?: SaveFailure): Promise<T> {
+    setSaveState((current) => ({ ...current, pending: current.pending + 1, failed: null }))
+    try {
+      const result = await run()
+      setSaveState((current) => ({ ...current, pending: current.pending - 1, saved: true }))
+      return result
+    } catch (error) {
+      setSaveState((current) => ({ ...current, pending: current.pending - 1, failed: failure ?? current.failed }))
+      throw error
+    }
+  }
+
   const groups = React.useMemo(() => groupTopicsByUnit(items, unitItems, { includeEmpty: true }), [items, unitItems])
   const hasUnits = unitItems.length > 0
   const numbers = React.useMemo(
@@ -260,7 +312,10 @@ export function TopicEditor({
     enqueue(async () => {
       try {
         // The route takes the place in the whole course order (units and topics listed in order).
-        await apiFetch(`/api/topics/${id}`, { method: 'PATCH', json: { orderIndex: position } })
+        await saving(() => apiFetch(`/api/topics/${id}`, { method: 'PATCH', json: { orderIndex: position } }), {
+          label: `Couldn't move "${moved.name}"`,
+          retry: () => move(id, to),
+        })
         // A refresh that was already on its way (after adding a topic, say) can land after the
         // optimistic move and put the old order back; this one brings the saved order.
         router.refresh()
@@ -275,7 +330,10 @@ export function TopicEditor({
     const before = items
     setItems(renumber(items.map((item) => (item.id === topic.id ? { ...item, unitId, orderIndex: LAST } : item)), unitItems))
     try {
-      await apiFetch(`/api/topics/${topic.id}`, { method: 'PATCH', json: { unitId } })
+      await saving(() => apiFetch(`/api/topics/${topic.id}`, { method: 'PATCH', json: { unitId } }), {
+        label: `Couldn't move "${topic.name}"`,
+        retry: () => void moveToUnit(topic, unitId).catch(() => undefined),
+      })
     } catch {
       setItems(before)
       toast.error("Couldn't move the topic. Try again.")
@@ -295,7 +353,10 @@ export function TopicEditor({
     const before = items
     setItems((current) => current.map((item) => (item.id === topic.id ? { ...item, name, description: description || null } : item)))
     try {
-      await apiFetch(`/api/topics/${topic.id}`, { method: 'PATCH', json: { name, description } })
+      await saving(() => apiFetch(`/api/topics/${topic.id}`, { method: 'PATCH', json: { name, description } }), {
+        label: `Couldn't save "${name}"`,
+        retry: () => void save(topic, nameInput, descriptionInput),
+      })
       router.refresh()
     } catch (error) {
       setItems(before)
@@ -364,7 +425,7 @@ export function TopicEditor({
   async function deleteTopic() {
     if (!deleting) return
     try {
-      await apiFetch(`/api/topics/${deleting.id}`, { method: 'DELETE' })
+      await saving(() => apiFetch(`/api/topics/${deleting.id}`, { method: 'DELETE' }))
     } catch {
       toast.error("Couldn't delete the topic. Try again.")
       throw new Error('delete failed')
@@ -408,9 +469,11 @@ export function TopicEditor({
   function sendAdd({ key, name, unitId }: PendingAdd) {
     enqueue(async () => {
       try {
-        const result = await apiFetch<{ topic: { id: string; name: string; description: string | null; keywords: string[]; orderIndex: number; userConfirmed: boolean; unitId?: string | null } }>(
-          `/api/projects/${courseId}/topics`,
-          { method: 'POST', json: unitId ? { name, unitId } : { name } }
+        const result = await saving(() =>
+          apiFetch<{ topic: { id: string; name: string; description: string | null; keywords: string[]; orderIndex: number; userConfirmed: boolean; unitId?: string | null } }>(
+            `/api/projects/${courseId}/topics`,
+            { method: 'POST', json: unitId ? { name, unitId } : { name } }
+          )
         )
         const topic = result.topic
         setItems((current) =>
@@ -473,7 +536,10 @@ export function TopicEditor({
     setAnnouncement(`Moved ${unit.title} to position ${nextIds.indexOf(unit.id) + 1} of ${nextIds.length}`)
     enqueue(async () => {
       try {
-        await apiFetch(`/api/units/${unit.id}`, { method: 'PATCH', json: { orderIndex: nextIds.indexOf(unit.id) } })
+        await saving(() => apiFetch(`/api/units/${unit.id}`, { method: 'PATCH', json: { orderIndex: nextIds.indexOf(unit.id) } }), {
+          label: `Couldn't move "${unit.title}"`,
+          retry: () => moveUnit(unit, to),
+        })
         router.refresh()
       } catch {
         setUnitItems(before.unitItems)
@@ -607,6 +673,12 @@ export function TopicEditor({
       <div aria-live="assertive" className="sr-only">
         {announcement}
       </div>
+
+      {merging ? (
+        <InlineAlert tone="neutral" className="mb-4" title="Selecting topics to merge">
+          Tick two or more topics, choose the one that stays, then merge. The content and quiz history of the others move into it.
+        </InlineAlert>
+      ) : null}
 
       {running || extraction.failed ? (
         <div className="flex flex-col gap-5">
@@ -808,6 +880,10 @@ export function TopicEditor({
             onChange={(event) => setNewName(event.target.value)}
             containerClassName="min-w-0 flex-1 basis-56 border-dashed"
           />
+          {/* A phone keyboard does not show that Enter adds the topic: the button says it. */}
+          <Button type="submit" variant="secondary" disabled={!newName.trim()} disabledReason="Type a topic name first.">
+            Add
+          </Button>
           {hasUnits ? (
             <div className="w-full sm:w-56">
               <Select
@@ -854,9 +930,12 @@ export function TopicEditor({
           </div>
         ) : (
         <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-4">
-          <p className="text-small tabular text-fg-2">
-            {running ? 'Finding topics' : hasUnits ? `${pluralize(items.length, 'topic')} in ${pluralize(unitItems.length, 'unit')}` : pluralize(items.length, 'topic')}
-          </p>
+          <div className="min-w-0">
+            <p className="text-small tabular text-fg-2">
+              {running ? 'Finding topics' : hasUnits ? `${pluralize(items.length, 'topic')} in ${pluralize(unitItems.length, 'unit')}` : pluralize(items.length, 'topic')}
+            </p>
+            <SaveStatus state={saveState} />
+          </div>
           {listConfirmed ? (
             <Button asChild variant="primary">
               <Link href={`/courses/${courseId}/topics`}>Done</Link>
