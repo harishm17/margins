@@ -219,6 +219,7 @@ export function Card({
   const [feedback, setFeedback] = React.useState<RecallFeedback | null>(card.latest)
   const [answering, setAnswering] = React.useState(card.latest === null)
   // A prompt being answered is an attempt: on a phone the topic's header and path give way to a small bar with Exit.
+  // Exit leaves for the topics list, not the reading (opening the reading while an answer is open would void it); what was typed is a server draft, so it is still there on return.
   useAttemptFocus(answering)
   // What the student has typed since the page showed; until then the text is the stored draft.
   const [typed, setTyped] = React.useState<string | null>(null)

@@ -17,6 +17,7 @@ import { CONTENT_KINDS, CONTENT_TYPE_BY_KIND, KIND_BY_CONTENT_TYPE, PREPARATION_
 import type { GenerateMode } from './generate-preferences'
 import { noticeForCode, type GenerationNotice } from './notice'
 import { useTopicView } from './use-topic-view'
+import { useShellAttempt } from '@/components/shell/shell-provider'
 
 export type { GenerationNotice } from './notice'
 
@@ -224,6 +225,8 @@ export function TopicProvider({
     setAttempts((current) => [...current, { id, info }])
     return () => setAttempts((current) => current.filter((item) => item.id !== id))
   }, [])
+  // The app's own top bar and course tabs give way while an attempt is open, so the attempt bar is the only chrome on a phone.
+  useShellAttempt(attempt !== null)
   const tracked = React.useRef(new Set<string>())
   // Opening a topic with no notes (and no failed attempt to retry by hand) starts its preparation once:
   // concepts, then the rest of the chain, notes among it.
