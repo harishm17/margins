@@ -88,7 +88,7 @@ export function ThemeMenuRadios({ className }: { className?: string }) {
           onSelect={(event) => event.preventDefault()}
           className={cn(
             menuItem,
-            'min-h-14 flex-col justify-center gap-1 px-1 text-small',
+            'min-h-14 max-sm:min-h-14 flex-col justify-center gap-1 px-1 text-small',
             'data-[state=checked]:bg-accent-soft data-[state=checked]:text-accent-soft-fg'
           )}
         >

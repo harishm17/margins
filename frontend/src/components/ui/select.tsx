@@ -57,7 +57,7 @@ export function Select({
         aria-describedby={ariaDescribedby}
         aria-invalid={invalid || undefined}
         className={cn(
-          'flex h-[34px] max-sm:h-11 w-full items-center justify-between gap-2 rounded-control border border-control bg-surface px-3 text-left text-body text-fg outline-none',
+          'flex h-[34px] max-sm:h-11 w-full items-center justify-between gap-2 rounded-control border border-control bg-surface px-3 text-left text-body max-sm:text-[16px] text-fg outline-none',
           'transition-[border-color,box-shadow] duration-120',
           'focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25',
           'aria-invalid:border-danger aria-invalid:focus-visible:ring-danger/25',

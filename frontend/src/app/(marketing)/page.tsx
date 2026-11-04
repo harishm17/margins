@@ -1,3 +1,4 @@
+import { phoneInlineHit } from '@/components/ui/styles'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowUpRight } from '@phosphor-icons/react/dist/ssr'
@@ -92,7 +93,7 @@ const jsonLd = {
 
 const container = 'mx-auto w-full max-w-[1280px] px-4 md:px-8'
 const h2 = 'text-[30px] font-semibold leading-9 tracking-[-0.02em] text-fg md:text-display'
-const link = 'inline-flex items-center gap-1 rounded-chip text-small font-medium text-accent hover:underline'
+const link = `${phoneInlineHit} inline-flex items-center gap-1 rounded-chip text-small font-medium text-accent hover:underline`
 
 function Hero() {
   return (

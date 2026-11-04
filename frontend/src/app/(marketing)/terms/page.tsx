@@ -1,3 +1,4 @@
+import { phoneInlineHit } from '@/components/ui/styles'
 import type { Metadata } from 'next'
 import { CONTACT_EMAIL } from '@/config/site'
 import { LegalPage } from '@/features/marketing/legal-page'
@@ -30,7 +31,7 @@ export default function TermsPage() {
       </p>
       <p>
         These terms may be updated; the date at the top shows the latest version. Questions:{' '}
-        <a className="text-accent underline underline-offset-4 hover:text-accent-hover" href={`mailto:${CONTACT_EMAIL}`}>
+        <a className={`${phoneInlineHit} text-accent underline underline-offset-4 hover:text-accent-hover`} href={`mailto:${CONTACT_EMAIL}`}>
           {CONTACT_EMAIL}
         </a>
         .

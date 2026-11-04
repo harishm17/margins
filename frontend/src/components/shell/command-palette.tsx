@@ -58,9 +58,19 @@ const readRecent = (): string[] => {
 }
 
 const itemClass = cn(
-  'flex h-10 cursor-default select-none items-center gap-3 rounded-control px-3 text-[13.5px] text-fg outline-none',
+  'flex min-h-10 max-sm:min-h-11 cursor-default select-none items-center gap-3 rounded-control px-3 text-[13.5px] text-fg outline-none',
   'data-[selected=true]:bg-surface-2 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-fg-3'
 )
+
+/** The label, and after it the course or unit; on a phone the hint goes on a second line so a truncated name can still be told apart. */
+function EntryText({ entry }: { entry: Entry }) {
+  return (
+    <span className="flex min-w-0 flex-col max-sm:py-1 sm:flex-row sm:items-center sm:gap-3">
+      <span className="min-w-0 truncate">{entry.label}</span>
+      {entry.hint ? <span className="min-w-0 truncate text-small text-fg-3">{entry.hint}</span> : null}
+    </span>
+  )
+}
 
 const headingClass =
   '[&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:text-caption [&_[cmdk-group-heading]]:text-fg-3'
@@ -174,8 +184,7 @@ function PaletteBody() {
         className={itemClass}
       >
         <Icon aria-hidden="true" />
-        <span className="min-w-0 truncate">{entry.label}</span>
-        {entry.hint ? <span className="min-w-0 truncate text-small text-fg-3">{entry.hint}</span> : null}
+        <EntryText entry={entry} />
         <CaretRight aria-hidden="true" className="ml-auto !size-3 opacity-0 [[data-selected=true]_&]:opacity-100" />
       </Command.Item>
     )
@@ -189,7 +198,7 @@ function PaletteBody() {
                 value={search}
                 onValueChange={setSearch}
                 placeholder="Search topics, files, courses and actions"
-                className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-3"
+                className="h-full min-w-0 flex-1 bg-transparent text-[15px] max-sm:text-[16px] text-fg outline-none placeholder:text-fg-3"
               />
               <Kbd>Esc</Kbd>
             </div>
@@ -207,8 +216,7 @@ function PaletteBody() {
                       className={itemClass}
                     >
                       <Clock aria-hidden="true" />
-                      <span className="min-w-0 truncate">{entry.label}</span>
-                      {entry.hint ? <span className="min-w-0 truncate text-small text-fg-3">{entry.hint}</span> : null}
+                      <EntryText entry={entry} />
                     </Command.Item>
                   ))}
                 </Command.Group>

@@ -39,7 +39,7 @@ export function LoginForm({ googleEnabled, testLoginEnabled, next, initialError 
           there.
         </p>
 
-        <p className="text-caption font-normal text-fg-3">
+        <p className="text-caption font-normal text-fg-3 max-sm:hidden">
           By continuing you agree to the{' '}
           <Link href="/terms" className="underline underline-offset-2 hover:text-fg">
             Terms
@@ -50,6 +50,18 @@ export function LoginForm({ googleEnabled, testLoginEnabled, next, initialError 
           </Link>
           .
         </p>
+        {/* On a phone the two links get their own 44px rows, below the sentence they belong to. */}
+        <div className="hidden text-caption font-normal text-fg-3 max-sm:block">
+          <p>By continuing you agree to:</p>
+          <div className="mt-1 flex flex-col">
+            <Link href="/terms" className="flex min-h-11 items-center text-small underline underline-offset-2 hover:text-fg">
+              Terms
+            </Link>
+            <Link href="/privacy" className="flex min-h-11 items-center text-small underline underline-offset-2 hover:text-fg">
+              Privacy Policy
+            </Link>
+          </div>
+        </div>
 
         {testLoginEnabled ? <TestLoginForm next={next} /> : null}
       </div>

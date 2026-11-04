@@ -1,3 +1,4 @@
+import { phoneInlineHit } from '@/components/ui/styles'
 import type { Metadata } from 'next'
 import { CONTACT_EMAIL } from '@/config/site'
 import { LegalPage, LegalSection } from '@/features/marketing/legal-page'
@@ -52,7 +53,7 @@ export default function PrivacyPage() {
       </LegalSection>
       <LegalSection heading="Contact">
         <p>
-          <a className="text-accent underline underline-offset-4 hover:text-accent-hover" href={`mailto:${CONTACT_EMAIL}`}>
+          <a className={`${phoneInlineHit} text-accent underline underline-offset-4 hover:text-accent-hover`} href={`mailto:${CONTACT_EMAIL}`}>
             {CONTACT_EMAIL}
           </a>
         </p>
