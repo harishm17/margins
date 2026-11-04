@@ -19,7 +19,7 @@ export const optionCountOf = (question: PublicQuizQuestion) =>
  * quiz, a review, a mock exam, an Ask check): it never blocks Next or Submit, and the label says so. Only answers that have a
  * rating count toward calibration. The chosen level shows a check mark as well as the raised style.
  *
- * On a phone the row is folded to one line, "How sure are you? (optional)" (or the level chosen), that opens the choices, so the
+ * On a phone the row is folded to one line, "Confidence (optional)" (or "Confidence: Fairly sure" once chosen), that opens the choices, so the
  * question and its action stay on the first screen. A wide screen shows the choices.
  */
 export function ConfidenceRow({
@@ -51,7 +51,7 @@ export function ConfidenceRow({
         onClick={() => setOpen((current) => !current)}
         className="inline-flex min-h-11 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg sm:hidden"
       >
-        {selected === '' ? `How sure are you?${optional ? ' (optional)' : ''}` : `How sure: ${LABELS[selected]}`}
+        {selected === '' ? `Confidence${optional ? ' (optional)' : ''}` : `Confidence: ${LABELS[selected]}`}
         <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', open && 'rotate-180')} />
       </button>
       <p id={labelId} className="text-small text-fg-2 max-sm:sr-only">

@@ -119,10 +119,12 @@ test.describe('practice: help after an attempt', () => {
       probe.remove()
       return color
     }))
-    // Two buttons first: Try again (primary, focused) and the next hint with what it costs.
+    // Two buttons first: Try again (primary, focused) and the next hint, with what it costs one tap away.
     const next = button(page, /Show where to look/)
     await expect(next).toBeEnabled()
-    await expect(next).toContainText('your next try still counts')
+    await expect(next).not.toContainText('harder one')
+    await button(page, 'How hints count').click()
+    await expect(visible(page, 'Opening this hint: your next try still counts, as a harder one.')).toBeVisible()
     await expect(button(page, 'Try again')).toBeFocused()
     // Show answer, the worked example and the tutor are behind one "More help", closed until it is asked for.
     const more = page.getByRole('button', { name: 'More help' })
@@ -168,7 +170,7 @@ test.describe('practice: help after an attempt', () => {
     const { email, topicId } = await open(page, 'q-idk', [problem('Squares', 'medium')], true)
     await page.setViewportSize(DESKTOP)
     await button(page, "I don't know").click()
-    await expect(visible(page, "That's okay")).toBeVisible()
+    await expect(visible(page, "Here's what to learn")).toBeVisible()
     await expect(visible(page, 'Missing a step is part of practice. The next try, or a hint, is where it sticks.')).toBeVisible()
     await expect(button(page, /Show where to look/)).toBeEnabled()
     await openMoreHelp(page)
@@ -314,6 +316,11 @@ test.describe('practice: help after an attempt', () => {
 })
 
 test.describe('worked examples: a full example viewed with a focus concept is instruction', () => {
+  // These look at the whole example at once: the "See the steps" view (the default is "Try each step", one step at a time).
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('margins.examplesStepMode', 'all'))
+  })
+
   const example = (title: string) => ({
     title,
     difficulty: 'medium',

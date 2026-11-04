@@ -75,6 +75,13 @@ async function world(page: Page, label: string, options: { ownAccount?: boolean;
 
 const pathNav = (page: Page) => page.getByRole('navigation', { name: 'Topic path' })
 
+/** A step of the path: a tab on a wide screen, and on a phone a link in the sheet that "Step 2 of 5" opens. */
+async function pathStep(page: Page, name: RegExp) {
+  const phone = page.getByTestId('phone-path')
+  if (await phone.isVisible()) await phone.click()
+  return pathNav(page).getByRole('link', { name })
+}
+
 test('new topic opens on warm-up when ready else read', async ({ page }) => {
   const { topicUrl } = await world(page, 'tp-open')
 
@@ -814,9 +821,9 @@ test.describe('the warm-up', () => {
     await page.reload()
     await oneWayOn()
     // Away to the reading and back through the path (a soft move).
-    await pathNav(page).getByRole('link', { name: /Read/ }).click()
+    await (await pathStep(page, /Read/)).click()
     await expect(page).toHaveURL(/view=read/)
-    await pathNav(page).getByRole('link', { name: /Warm-up/ }).click()
+    await (await pathStep(page, /Warm-up/)).click()
     await oneWayOn()
   })
 
@@ -929,9 +936,9 @@ test.describe('a question starts high on the screen', () => {
     await expect(page.getByRole('button', { name: 'Questions', exact: true })).toBeVisible()
     const last = await page.getByRole('radio').last().boundingBox()
     expect(last!.y + last!.height, 'the last answer ends above the tab bar (56px)').toBeLessThan(PHONE.height - 56)
-    // The confidence row, I don't know and Next are above the tab bar too.
-    for (const name of ['Certain', "I don't know", 'Next']) {
-      const box = await page.getByRole(name === 'Certain' ? 'radio' : 'button', { name, exact: true }).boundingBox()
+    // The confidence row (one folded line on a phone), I don't know and Next are above the tab bar too.
+    for (const name of ['Confidence (optional)', "I don't know", 'Next']) {
+      const box = await page.getByRole('button', { name, exact: true }).boundingBox()
       expect(box!.y + box!.height, `${name} ends above the tab bar (56px)`).toBeLessThan(PHONE.height - 56)
     }
   })

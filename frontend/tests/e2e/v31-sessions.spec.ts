@@ -5,6 +5,7 @@ import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import { addQuizSet, createCourse, dayIn, reviewItem, seedDueConcept, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
 import { addClaim, answeredChips, applyScreenSize, shot, seedConcepts, setProgress, trueFalse, world } from './helpers/v31-sessions'
 import { chooseConfidence } from './helpers/confidence'
+import { newQuestionsButton } from './helpers/quiz-results'
 
 // v3.1 workstream S: quiz drafts and the retake rule, quiz results with help after misses, AI-down partial
 // grading, review sessions and drills, the ten-minute session and quick-pass triage.
@@ -143,7 +144,7 @@ test.describe('S1: quiz drafts, save and finish later, retake rule, I do not kno
 
     // The results offer new questions, not the identical set.
     await expect(page.getByRole('button', { name: 'Retake' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
+    await expect(await newQuestionsButton(page)).toBeVisible()
     await page.getByRole('button', { name: 'Back to quiz' }).click()
     // The lobby says why the same questions wait, and Start quiz is not offered for this set.
     await expect(page.getByText('Available tomorrow. Re-answering the same question right away mostly tests short-term memory.')).toBeVisible()
@@ -282,7 +283,7 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     // After a miss the one primary step is going back to the first missed idea; new questions and voice practice are secondary.
     await expect(page.getByTestId('review-first-missed')).toHaveText('Review the first missed idea')
     await expect(page.getByTestId('review-first-missed')).toHaveAttribute('href', /view=read&focus=/)
-    await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
+    await expect(await newQuestionsButton(page)).toBeVisible()
     await expectNoAxeViolations(page, 'quiz results with pointers')
     await shot(page, 'quiz-results-pointers')
     await first.click()

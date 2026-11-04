@@ -4,6 +4,7 @@ import { withPrisma } from './helpers/db'
 import { addContent, addQuizSet, createCourse, quizQuestions, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
 import { streamedPartsArrived } from './helpers/settle'
 import { seedTutorReading } from './helpers/v31-tutors'
+import { newQuestionsButton } from './helpers/quiz-results'
 
 // The study screens after the second design review (round 2, workstream S): the Topics list in words, the margin that offers
 // help on request, the quiz as a focus view with one way to a new set, the tracks that can be seen.
@@ -160,7 +161,7 @@ test.describe('the quiz', () => {
     const retake = page.getByRole('button', { name: 'Retake tomorrow' })
     await expect(retake).toBeDisabled()
     await expect(retake).toHaveAccessibleDescription(/same questions open tomorrow/)
-    await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
+    await expect(await newQuestionsButton(page)).toBeVisible()
     await expect(page.getByRole('button', { name: 'New quiz set' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Start quiz' })).toHaveCount(0)
     await screenshotIfAsked(page, 'r2-quiz-lobby-retake-1440x900')

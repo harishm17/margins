@@ -176,14 +176,14 @@ test('a recall answer is graded against the claims, with the student quoted firs
   // What was missed is a pointer, never the claim itself.
   await expect(feedback.getByText(/Look again at p\. 5/).locator('visible=true')).toBeVisible()
   await expect(page.getByText('A collision is two keys that land in one bucket.')).toHaveCount(0)
-  // Results first: the instructions fold into one line, and open again on a tap.
-  const instructions = page.getByRole('button', { name: 'Show instructions' })
-  await expect(instructions).toHaveAttribute('aria-expanded', 'false')
-  await expect(page.getByText('Write what you can remember of each idea, without looking back.')).toBeHidden()
-  await instructions.click()
-  await expect(page.getByText('Write what you can remember of each idea, without looking back.')).toBeVisible()
-  await page.getByRole('button', { name: 'Hide instructions' }).click()
-  await expect(page.getByText('Write what you can remember of each idea, without looking back.')).toBeHidden()
+  // The scoring text is behind one button, closed, and opens again on a tap.
+  const scored = page.getByRole('button', { name: 'How this is scored' })
+  await expect(scored).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByText('The reading stays closed while you answer.')).toBeHidden()
+  await scored.click()
+  await expect(page.getByText('The reading stays closed while you answer.')).toBeVisible()
+  await scored.click()
+  await expect(page.getByText('The reading stays closed while you answer.')).toBeHidden()
   // One clear next step: the topic's next activity is the primary button, and "Show me what I missed" is the quiet choice.
   // The answer held a wrong idea and failed the concept, so the topic's next activity is to read about it first (spec 18.5); the
   // drill that pairs it with its confusable comes after the instruction.

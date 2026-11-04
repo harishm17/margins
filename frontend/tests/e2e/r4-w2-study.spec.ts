@@ -78,7 +78,7 @@ test.describe('the warm-up', () => {
       // The confidence is one folded line, optional, and never in the way: an answer alone goes on.
       if (n === 1) {
         const row = page.locator('[data-confidence-row]')
-        await expect(row.getByRole('button', { name: 'How sure are you? (optional)' })).toBeVisible()
+        await expect(row.getByRole('button', { name: 'Confidence (optional)' })).toBeVisible()
         await expect(page.getByText('Tap one to go on')).toHaveCount(0)
       }
       await page.getByRole('radio').nth(n === 1 ? 0 : 1).click()
@@ -165,7 +165,7 @@ test.describe('recall', () => {
     await expect(page.getByTestId('recall-result-line').first()).toHaveText(/You covered \d+ of \d+ ideas?\.|You covered every idea/)
     // One way on: the explanation of the gaps, with the next step as the plain choice beside it, and the skip link gone.
     await expect(page.getByRole('link', { name: 'Read the explanation of your gaps' })).toBeVisible()
-    await expect(page.getByTestId('recall-skip-explainer')).toHaveText('Continue to Practice')
+    await expect(page.getByTestId('recall-skip-explainer').locator('visible=true')).toHaveText('Continue to Practice')
     await screenshotIfAsked(page, 'r4w2-recall-graded-390x844')
     await expect(page.getByRole('link', { name: 'Skip recall for now' })).toHaveCount(0)
 
@@ -260,6 +260,44 @@ test.describe('practice and the quiz', () => {
     // A wide screen has it in the toolbar on every question but the last.
     await page.setViewportSize(DESKTOP)
     await expect(page.getByTestId('finish-and-submit')).toBeVisible()
+  })
+})
+
+test.describe('examples', () => {
+  test('open guess-first on the first visit, with the two modes named for what the student does, and remember the choice', async ({ page }) => {
+    test.setTimeout(120_000)
+    await page.setViewportSize(DESKTOP)
+    await setZoneCookie(page.context())
+    const { email } = await signUpAndIn(page, 'r4w2-examples', { own: true })
+    await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
+    const course = await createCourse(page, `R4 W2 examples ${Date.now()}`, [{ name: 'Squares' }])
+    const topicId = course.topics.Squares
+    const example = {
+      title: 'Alpha',
+      difficulty: 'medium',
+      problem_statement: 'Square the numbers.',
+      solution_steps: [1, 2, 3].map((n) => ({ step_number: n, description: `Alpha step ${n}: multiply`, work: `Work ${n}.`, explanation: `Reason ${n}.` })),
+      final_answer: 'Final answer for Alpha.',
+      key_concepts: ['Squares'],
+    }
+    await addContent(topicId, { solved_examples: [example] })
+    await page.goto(`/courses/${course.courseId}/topics/${topicId}?view=examples`)
+    await streamedPartsArrived(page)
+
+    const modes = page.getByRole('radiogroup', { name: 'How to work an example' })
+    await expect(modes.getByRole('radio', { name: 'Try each step' })).toBeChecked()
+    await expect(modes.getByRole('radio', { name: 'See the steps' })).not.toBeChecked()
+    await expect(page.getByTestId('examples-mode-note')).toHaveText('Guess each step before it opens.')
+    // One step at a time: the later steps wait.
+    await expect(page.getByText('Alpha step 1: multiply').first()).toBeVisible()
+    await expect(page.getByText('Alpha step 3: multiply')).toHaveCount(0)
+
+    // The other choice is remembered in this browser.
+    await modes.getByRole('radio', { name: 'See the steps' }).click()
+    await expect(page.getByText('Alpha step 3: multiply').first()).toBeVisible()
+    await page.reload()
+    await streamedPartsArrived(page)
+    await expect(page.getByRole('radiogroup', { name: 'How to work an example' }).getByRole('radio', { name: 'See the steps' })).toBeChecked()
   })
 })
 

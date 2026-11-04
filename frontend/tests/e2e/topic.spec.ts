@@ -5,6 +5,7 @@ import { withPrisma } from './helpers/db'
 import { FIXTURE_PDF } from './helpers/seed-demo'
 import { choice, world } from './helpers/v31-sessions'
 import { chooseConfidence } from './helpers/confidence'
+import { newQuestionsButton } from './helpers/quiz-results'
 
 // One account per run. The AI service behind the dev stack is a mock, so generating content is
 // free and fast; the spec writes every kind of content through the page itself.
@@ -182,7 +183,7 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
 
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
-  await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
+  await expect(await newQuestionsButton(page)).toBeVisible()
   await page.getByRole('radio', { name: /Missed/ }).click()
   await chooseConfidence(page, 'Fairly sure')
   await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()

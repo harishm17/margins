@@ -13,6 +13,12 @@ import { expectNoSidewaysScroll } from './helpers/overflow'
 
 test.use({ timezoneId: ZONE })
 
+// These specs are about how much of an example is hidden at each level, with every step on screen: the "See the steps" view
+// (the default is "Try each step", one step at a time).
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('margins.examplesStepMode', 'all'))
+})
+
 const DESKTOP = { width: 1440, height: 900 }
 const PHONE = { width: 390, height: 844 }
 

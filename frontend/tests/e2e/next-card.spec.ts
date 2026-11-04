@@ -94,7 +94,7 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await expect(results.getByText(/Mastery is/)).toHaveCount(0)
   await expect(header.getByText(/Learning \d+%|Getting there \d+%|Strong \d+%/)).toHaveCount(1)
   // The header shows the best score; the results do not repeat it when it is this attempt's own.
-  await expect(header.getByText(/Best quiz \d+%/)).toBeVisible()
+  await expect(header.getByText(/Quiz score \(best\) \d+%/)).toBeVisible()
   await expect(results.getByText(/Your best is/)).toHaveCount(0)
 
   // Rating how sure they felt moves the review date: the line and the header move together.
