@@ -100,7 +100,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
     case 'warmup':
       // No bank and none taken: the step is not offered, and its address goes on to reading.
       if (!data.pathSteps.includes('warmup')) redirect(`${base}?view=read`)
-      return <WarmupView topicId={topicId} readHref={`${base}?view=read`} quizHref={`${base}?view=quiz`} initial={await withFocusCount(user.id, topicId, await loadWarmupState(user.id, topicId))} />
+      return <WarmupView topicId={topicId} courseId={courseId} readHref={`${base}?view=read`} quizHref={`${base}?view=quiz`} initial={await withFocusCount(user.id, topicId, await loadWarmupState(user.id, topicId))} />
     case 'recall':
       // A topic without concepts (from before v3, or extraction failed) has no recall; its path is Read, Practice, Quiz.
       if (!data.pathSteps.includes('recall')) redirect(`${base}?view=practice`)
@@ -192,6 +192,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
           {content.examples ? (
             <ExamplesView
               topicId={topicId}
+              courseId={courseId}
               examples={content.examples}
               completed={topic.progress.examples}
               nextHref={`${base}?view=practice`}

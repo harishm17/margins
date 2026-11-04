@@ -15,7 +15,8 @@ import { useAiStatus } from '@/features/ai/ai-status'
 import { ExpectedMiss } from '@/features/learning/expected-miss'
 import { statusLabel, useServerDraft } from '@/features/learning/use-server-draft'
 import { apiFetch, isApiError } from '@/lib/api/client'
-import { normalizeAnswers, type QuizAnswer } from '@/lib/learning/quiz-answers'
+import { type QuizAnswer } from '@/lib/learning/quiz-answers'
+import { parseReviewDraft, type ReviewDraft } from '@/lib/drafts/review-draft'
 import { reviewSessionHref } from '@/lib/learning/review-links'
 import type { PublicSessionItem, SessionSummary, SessionView } from '@/lib/learning/review-session-types'
 import { useQuestionMotion } from '@/lib/question-motion'
@@ -264,22 +265,6 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
   )
 }
 
-/** What is being written on one question: the draft payload of the review surface (spec 18.7). */
-type ReviewDraft = { answer: string; thinking?: string; confidence?: number; confidenceLevel?: string }
-
-function parseDraft(raw: unknown): ReviewDraft | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const value = raw as Record<string, unknown>
-  if (typeof value.answer !== 'string') return null
-  const answer = normalizeAnswers({ '0': value })['0']
-  return {
-    answer: value.answer,
-    ...(answer?.thinking ? { thinking: answer.thinking } : {}),
-    ...(answer?.confidence !== undefined ? { confidence: answer.confidence } : {}),
-    ...(answer?.confidenceLevel ? { confidenceLevel: answer.confidenceLevel } : {}),
-  }
-}
-
 function Status({ title, detail, busy }: { title: string; detail?: string; busy?: boolean }) {
   return (
     <div role="status" className="flex flex-col items-center px-4 py-16 text-center">
@@ -365,7 +350,7 @@ type StepProps = {
 
 /** One question: the answer form, then (after a miss) the feedback with Next. A right answer goes straight on. Remounts for each question. */
 function Step({ courseId, sessionId, position, motion, item, result, isLast, canSkip, complete, firstMiss, closingRetests, onGraded, onNext, onRight }: StepProps) {
-  const draftHook = useServerDraft<ReviewDraft>('review', `${sessionId}:${position}`, { projectId: courseId, parse: parseDraft })
+  const draftHook = useServerDraft<ReviewDraft>('review', `${sessionId}:${position}`, { projectId: courseId, parse: parseReviewDraft })
   // The text is kept here as it is typed; the draft hook saves it (a closed tab, a reload or another device loses nothing).
   const [typed, setTyped] = React.useState<ReviewDraft | null>(null)
   const draft: ReviewDraft = typed ?? draftHook.value ?? { answer: '' }

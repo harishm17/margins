@@ -18,6 +18,7 @@ import {
 } from '@/lib/exams/results'
 import { toPublicQuestions, type PublicQuizQuestion } from '@/lib/learning/quiz-questions'
 import { examTitle } from '@/lib/exams/display'
+import { examPractice } from '@/lib/learning/exam-practice'
 import { getExamTitles } from '@/server/queries/exams'
 import {
   deriveExamStyleState,
@@ -254,6 +255,8 @@ export type ExamResult =
       regradeJobId: string | null
       /** That second grading is waiting for the AI. */
       regradeWaitingForAi: boolean
+      /** New questions on what the missed ones were about (the session is made when the student asks), or null when there is nothing to practise. */
+      practice: { count: number } | null
     })
 
 /**
@@ -346,6 +349,7 @@ export async function getExamResult(
     status: 'graded',
     regradeJobId: regrading?.id ?? null,
     regradeWaitingForAi: isWaitingForAi(regrading),
+    practice: await examPractice(submission.sampleExam.projectId, submission.sampleExam.questions, submission.aiGrading).then((plan) => (plan ? { count: plan.count } : null)),
     score: overall.score,
     earnedPoints: overall.earned,
     totalPoints: overall.total,

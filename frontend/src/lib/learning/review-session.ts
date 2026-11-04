@@ -91,7 +91,15 @@ type GradedItem = {
 type Pending = { jobId: string; topicId: string; for: 'main' | 'retest'; startedAt: string }
 
 type SessionMeta = {
-  scope: { topicId?: string; conceptId?: string; topicIds?: string[] }
+  scope: {
+    topicId?: string
+    conceptId?: string
+    topicIds?: string[]
+    /** Practice on what a mock exam's missed questions were about (needs `includeNotDue` for the topic form): the concepts to draw on. */
+    conceptIds?: string[]
+    /** Where the session came from, for its title. */
+    from?: 'exam'
+  }
   /** How many items a review holds (default 12), and whether the topic's concepts that are not due may join (spec 7.4, 18.8). */
   limit?: number
   includeNotDue?: boolean
@@ -181,6 +189,12 @@ function scopedDue(due: DueConcept[], topicId: string | undefined, timeZone: str
  * concept of its topic(s), due or not, weakest first (spec 18.8): the mini quiz of a topic nothing is due in.
  */
 function sessionConcepts(context: ReviewContext, meta: SessionMeta, now: Date, timeZone: string): DueConcept[] {
+  // Practice on what an exam's misses were about: exactly those concepts, due or not, weakest first.
+  if (meta.scope.conceptIds) {
+    return meta.scope.conceptIds
+      .flatMap((id) => asDrillConcept(context, id, now) ?? [])
+      .sort((a, b) => a.mastery - b.mastery || a.conceptId.localeCompare(b.conceptId))
+  }
   const topics = meta.scope.topicIds ?? (meta.scope.topicId ? [meta.scope.topicId] : undefined)
   if (!meta.includeNotDue || !topics) return scopedDue(context.due, meta.scope.topicId, timeZone)
   const wanted = new Set(topics)
@@ -349,7 +363,8 @@ export async function activeSession(userId: string, projectId: string, timeZone:
     take: 5,
     select: { id: true, createdAt: true, items: true, results: true },
   })
-  const row = open.find((candidate) => localDayKey(candidate.createdAt, timeZone) === today)
+  // A practice session started from an exam's results is not "today's review": it is found again by its own address.
+  const row = open.find((candidate) => localDayKey(candidate.createdAt, timeZone) === today && readMeta(candidate.results).scope.from !== 'exam')
   if (!row) return null
   const meta = readMeta(row.results)
   const items = readItems(row.items)
@@ -390,11 +405,20 @@ export async function startSession(input: {
   topicIds?: string[]
   /** The 10-minute session (spec 18.8). */
   short?: boolean
+  /** Practice from a mock exam's results: the concepts (or the topics, with `topicIds`) its missed questions were about. */
+  fromExam?: { conceptIds?: string[] }
 }): Promise<StartResult> {
   const { userId, projectId, kind, timeZone } = input
   const now = input.now ?? new Date()
-  const scope: SessionMeta['scope'] =
-    kind === 'drill' ? { conceptId: input.conceptId } : input.topicIds?.length ? { topicId: input.topicIds[0], topicIds: input.topicIds } : input.topicId ? { topicId: input.topicId } : {}
+  const scope: SessionMeta['scope'] = input.fromExam
+    ? { ...(input.fromExam.conceptIds ? { conceptIds: input.fromExam.conceptIds } : input.topicIds?.length ? { topicIds: input.topicIds } : {}), from: 'exam' }
+    : kind === 'drill'
+      ? { conceptId: input.conceptId }
+      : input.topicIds?.length
+        ? { topicId: input.topicIds[0], topicIds: input.topicIds }
+        : input.topicId
+          ? { topicId: input.topicId }
+          : {}
   // A session left unfinished on an earlier day is over (spec 18.7).
   await closeStaleSessions({ userId, projectId, now, timeZone })
   const context = await loadReviewContext({ userId, projectId, now, timeZone })
@@ -661,6 +685,7 @@ function retestsToCome(kind: SessionKind, items: SessionItem[], meta: SessionMet
 }
 
 function titleOf(kind: SessionKind, meta: SessionMeta, topicNames: Map<string, string>, names: Map<string, string>): string {
+  if (meta.scope.from === 'exam') return 'What you missed on the exam'
   if (kind === 'drill') return meta.scope.conceptId ? (names.get(meta.scope.conceptId) ?? 'Drill') : 'Drill'
   return meta.scope.topicId ? (topicNames.get(meta.scope.topicId) ?? "Today's review") : "Today's review"
 }

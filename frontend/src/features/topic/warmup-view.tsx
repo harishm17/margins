@@ -18,6 +18,8 @@ import { WARMUP_IDK_ANSWER } from '@/lib/learning/warmup-idk'
 import type { WarmupDoneItem, WarmupState } from '@/lib/learning/warmup-session'
 import { useQuestionMotion } from '@/lib/question-motion'
 import { cn } from '@/lib/utils'
+import { statusLabel, useServerDraft } from '@/features/learning/use-server-draft'
+import { parseReviewDraft, type ReviewDraft } from '@/lib/drafts/review-draft'
 import { ConfidenceRow, optionCountOf } from './quiz-confidence'
 import { formatAnswer, formatKey } from './quiz-format'
 import { useActivityInProgress } from './topic-provider'
@@ -28,6 +30,8 @@ export type WarmupDisplay = WarmupState | (Extract<WarmupState, { status: 'done'
 
 type Props = {
   topicId: string
+  /** The course, which the unsent answer is kept under. */
+  courseId: string
   /** Where "Start reading" goes. */
   readHref: string
   /** Where the test-out offer goes. */
@@ -42,7 +46,7 @@ const LEVEL_WORDS = CONFIDENCE_WORDS
  * hints. Nothing is marked while the student is answering; the answers, and where in their files to find each,
  * come at the end. Skipping ("Start reading") sets nothing.
  */
-export function WarmupView({ topicId, readHref, quizHref, initial }: Props) {
+export function WarmupView({ topicId, courseId, readHref, quizHref, initial }: Props) {
   const router = useRouter()
   const [state, setState] = React.useState<WarmupDisplay>(initial)
   const [starting, setStarting] = React.useState(false)
@@ -77,7 +81,7 @@ export function WarmupView({ topicId, readHref, quizHref, initial }: Props) {
   }, [router])
 
   if (state.status === 'asking') {
-    return <Question key={`${state.sessionId}:${state.index}`} topicId={topicId} state={state} moved={moved} onState={advance} onFinished={finished} />
+    return <Question key={`${state.sessionId}:${state.index}`} topicId={topicId} courseId={courseId} state={state} moved={moved} onState={advance} onFinished={finished} />
   }
   if (state.status === 'done') return <Results state={state} readHref={readHref} quizHref={quizHref} focusHeading={moved} />
 
@@ -112,18 +116,31 @@ export function WarmupView({ topicId, readHref, quizHref, initial }: Props) {
 
 function Question({
   topicId,
+  courseId,
   state,
   moved,
   onState,
   onFinished,
 }: {
   topicId: string
+  courseId: string
   state: Extract<WarmupState, { status: 'asking' }>
   moved: boolean
   onState: (state: WarmupDisplay) => void
   onFinished: () => void
 }) {
-  const [draft, setDraft] = React.useState<QuizAnswer>({ answer: '' })
+  // The unsent answer and its confidence live on the server (spec 18.7): a reload, a closed tab or another device keeps them.
+  // Warm-up sessions are item sessions like a review's, so they share its draft shape.
+  const draftHook = useServerDraft<ReviewDraft>('review', `${state.sessionId}:${state.index}`, { projectId: courseId, parse: parseReviewDraft })
+  const [typed, setTyped] = React.useState<QuizAnswer | null>(null)
+  const draft: QuizAnswer = typed ?? (draftHook.value as QuizAnswer | null) ?? { answer: '' }
+  const setDraft = (update: (current: QuizAnswer) => QuizAnswer) => {
+    const next = update(draft)
+    setTyped(next)
+    if (next.answer || next.confidence !== undefined) draftHook.set(next as ReviewDraft)
+    else void draftHook.clear()
+  }
+  const saved = draft.answer || draft.confidence !== undefined ? statusLabel(draftHook.status) : null
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const headingRef = React.useRef<HTMLHeadingElement>(null)
@@ -155,6 +172,8 @@ function Question({
               },
         },
       })
+      // The answer is in: the draft has done its work. Cleared only now, so a failed save keeps what was typed.
+      await draftHook.clear()
       onState(next)
       if (next.status === 'done') onFinished()
     } catch (caught) {
@@ -188,6 +207,11 @@ function Question({
           </InlineAlert>
         ) : null}
         <div className="mt-10 flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
+          {saved ? (
+            <span role="status" className="mr-auto text-caption text-fg-3" data-testid="warmup-draft-status">
+              {saved}
+            </span>
+          ) : null}
           <Button variant="ghost" onClick={() => void submit(true)} disabled={submitting} data-testid="warmup-idk">
             I don&apos;t know
           </Button>

@@ -8,6 +8,17 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { LazyMarkdown } from '@/components/ui/lazy-markdown'
 import { MathText } from '@/components/ui/math-text'
+import { statusLabel, useServerDraft } from '@/features/learning/use-server-draft'
+import {
+  exampleSig,
+  itemHasWork,
+  parseWorkedExampleDraft,
+  savedItem,
+  toWorkedExampleDraft,
+  workedExampleKey,
+  type WorkedExampleDraft,
+  type WorkedExampleItem,
+} from '@/lib/drafts/worked-example-draft'
 import { fadeFor, hiddenSteps, hidesWhy, type FadeLevel } from '@/lib/learning/fade'
 import { pluralize } from '@/lib/format'
 import type { CheckGrade } from '@/lib/reader/checks'
@@ -144,6 +155,8 @@ function ExampleCard({
   onGrades,
   onEngage,
   onGrade,
+  saved,
+  onWork,
 }: {
   topicId: string
   example: SolvedExample
@@ -162,10 +175,23 @@ function ExampleCard({
   /** The student began this example: its level stays as it is, whatever they grade on the others. */
   onEngage: (index: number, level: FadeLevel) => void
   onGrade: (input: { question: string; grade: CheckGrade; idk: boolean; conceptIds: string[] }) => Promise<boolean>
+  /** What the student had done here before the page was loaded again (spec 18.7). */
+  saved?: WorkedExampleItem
+  /** The predictions and the opened or graded parts changed: keep them. */
+  onWork: (index: number, work: { drafts: Record<string, string>; done: Record<string, FadedState> }) => void
 }) {
   const panelId = React.useId()
-  const [done, setDone] = React.useState<Record<string, FadedState>>({})
-  const [drafts, setDrafts] = React.useState<Record<string, string>>({})
+  const [done, setDone] = React.useState<Record<string, FadedState>>(saved?.done ?? {})
+  const [drafts, setDrafts] = React.useState<Record<string, string>>(saved?.drafts ?? {})
+  // Told after the first render only: opening the page with saved work is not a change to keep.
+  const reported = React.useRef(false)
+  React.useEffect(() => {
+    if (!reported.current) {
+      reported.current = true
+      return
+    }
+    onWork(index, { drafts, done })
+  }, [index, drafts, done, onWork])
   const grades = gradesOf(done)
   const gradeList = grades.join(',')
   const begun = Object.keys(done).length > 0 || Object.values(drafts).some((text) => text.trim() !== '')
@@ -289,6 +315,8 @@ function ExampleCard({
 
 type ExamplesViewProps = {
   topicId: string
+  /** The course, which the unsent predictions are kept under. */
+  courseId: string
   examples: ExamplesContent
   completed: boolean
   nextHref: string
@@ -298,8 +326,82 @@ type ExamplesViewProps = {
   focusConceptId?: string | null
 }
 
-/** Worked examples as disclosure cards, with an optional step-by-step reveal. */
-export function ExamplesView({ topicId, examples, completed, nextHref, level, focusConceptId }: ExamplesViewProps) {
+type ExamplesBodyProps = Omit<ExamplesViewProps, 'courseId'> & {
+  /** The work saved from before the page was loaded again, or null. */
+  saved: WorkedExampleDraft | null
+  onWork: (index: number, work: { drafts: Record<string, string>; done: Record<string, FadedState> }) => void
+  onLevel: (index: number, level: FadeLevel) => void
+}
+
+/**
+ * Worked examples as disclosure cards, with an optional step-by-step reveal. What the student predicts and does with each
+ * hidden part is kept on the server (spec 18.7), so a reload, a closed tab or another device brings it back.
+ */
+export function ExamplesView({ courseId, ...props }: ExamplesViewProps) {
+  const { topicId, examples } = props
+  const draft = useServerDraft<WorkedExampleDraft>('worked_example', workedExampleKey(topicId), { projectId: courseId, topicId, parse: parseWorkedExampleDraft })
+  // The work of each example, as the cards report it. The cards start empty and are shown again from the saved work once it has loaded.
+  const latest = React.useRef<Record<number, WorkedExampleItem>>({})
+  const titlesRef = React.useRef(examples.items.map((example) => example.title))
+  React.useEffect(() => {
+    titlesRef.current = examples.items.map((example) => example.title)
+  })
+  const [restored, setRestored] = React.useState<{ generation: number; draft: WorkedExampleDraft | null }>({ generation: 0, draft: null })
+  const settled = React.useRef(false)
+  React.useEffect(() => {
+    if (settled.current || draft.status === 'loading') return
+    settled.current = true
+    // A student who began before the saved work arrived keeps what they have.
+    if (!draft.value || Object.values(latest.current).some(itemHasWork)) return
+    const kept = Object.fromEntries(
+      titlesRef.current.flatMap((title, index) => {
+        const item = savedItem(draft.value, index, title)
+        return item ? [[index, item] as const] : []
+      })
+    )
+    if (Object.keys(kept).length === 0) return
+    latest.current = kept
+    setRestored((current) => ({ generation: current.generation + 1, draft: draft.value }))
+  }, [draft.status, draft.value])
+
+  const { set, clear } = draft
+  const keep = React.useCallback(
+    (index: number, patch: Partial<WorkedExampleItem>) => {
+      const title = titlesRef.current[index]
+      if (title === undefined) return
+      const current = latest.current[index] ?? { sig: exampleSig(title), drafts: {}, done: {} }
+      latest.current = { ...latest.current, [index]: { ...current, ...patch } }
+      const next = toWorkedExampleDraft(latest.current)
+      if (next) set(next)
+      else void clear()
+    },
+    [set, clear]
+  )
+  const onWork = React.useCallback(
+    (index: number, work: { drafts: Record<string, string>; done: Record<string, FadedState> }) => keep(index, work),
+    [keep]
+  )
+  const onLevel = React.useCallback(
+    (index: number, level: FadeLevel) => {
+      if (latest.current[index]?.level !== level) keep(index, { level })
+    },
+    [keep]
+  )
+  const status = statusLabel(draft.status)
+
+  return (
+    <>
+      <ExamplesBody key={restored.generation} {...props} saved={restored.draft} onWork={onWork} onLevel={onLevel} />
+      {status && draft.value ? (
+        <p role="status" className="mt-3 max-w-[720px] text-caption text-fg-3" data-testid="examples-draft-status">
+          {status}
+        </p>
+      ) : null}
+    </>
+  )
+}
+
+function ExamplesBody({ topicId, examples, completed, nextHref, level, focusConceptId, saved, onWork, onLevel }: ExamplesBodyProps) {
   const items = examples.items
   const [openIds, setOpenIds] = React.useState<number[]>([0])
   const [stepMode, setStepMode] = React.useState(false)
@@ -308,13 +410,25 @@ export function ExamplesView({ topicId, examples, completed, nextHref, level, fo
   // moves it towards more support, all Got it on each of the two before moves it towards less. It is recomputed as the student
   // grades, and fixed for an example once they have begun it.
   const [gradesBy, setGradesBy] = React.useState<Record<number, CheckGrade[]>>({})
-  const [fixed, setFixed] = React.useState<Record<number, FadeLevel>>({})
+  const [fixed, setFixed] = React.useState<Record<number, FadeLevel>>(() =>
+    Object.fromEntries(items.flatMap((example, index) => {
+      const at = savedItem(saved, index, example.title)?.level
+      return at ? [[index, at] as const] : []
+    }))
+  )
   const setGrades = React.useCallback(
     (index: number, grades: CheckGrade[]) =>
       setGradesBy((current) => (current[index]?.join(',') === grades.join(',') || (!current[index] && grades.length === 0) ? current : { ...current, [index]: grades })),
     []
   )
   const fix = React.useCallback((index: number, at: FadeLevel) => setFixed((current) => (current[index] ? current : { ...current, [index]: at })), [])
+  const engage = React.useCallback(
+    (index: number, at: FadeLevel) => {
+      fix(index, at)
+      onLevel(index, at)
+    },
+    [fix, onLevel]
+  )
   const levelOf = (index: number): FadeLevel => fixed[index] ?? fadeFor(level, Array.from({ length: index }, (_, earlier) => gradesBy[earlier] ?? []))
   const { completed: isCompleted, saving, mark } = useMarkComplete(topicId, 'examplesCompleted', completed)
   const gradeCheck = useCheckGrader(topicId)
@@ -365,7 +479,9 @@ export function ExamplesView({ topicId, examples, completed, nextHref, level, fo
             level={levelOf(index)}
             focusConceptId={focusConceptId}
             onGrades={setGrades}
-            onEngage={fix}
+            onEngage={engage}
+            saved={savedItem(saved, index, example.title)}
+            onWork={onWork}
             onGrade={async (input) => (await gradeCheck({ ...input, conceptId: null }))?.recorded === true}
           />
         ))}
