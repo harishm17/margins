@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import { phoneRow } from '@/components/ui/styles'
 import { usePathname } from 'next/navigation'
 import { Timer } from '@phosphor-icons/react/dist/ssr'
 
@@ -45,7 +46,7 @@ function Cue({ courseId, examId }: { courseId: string; examId: string }) {
       </span>
       <Link
         href={`/courses/${courseId}/exams/${examId}/take`}
-        className="rounded-chip font-medium underline decoration-1 underline-offset-[3px] hover:no-underline"
+        className={`rounded-chip font-medium underline decoration-1 underline-offset-[3px] hover:no-underline ${phoneRow}`}
       >
         Back to your mock exam
       </Link>

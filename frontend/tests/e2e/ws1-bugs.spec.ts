@@ -386,6 +386,15 @@ test('"Have 10 minutes?" says how many questions the session has: exact when the
   await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
   const course = await createCourse(page, `Short ${Date.now()}`, [{ name: 'Hash tables' }])
   const topicId = course.topics['Hash tables']
+  // Due ideas come after a first quiz: keep its score, so the card (which waits for a first quiz or recall) is offered.
+  await withPrisma(async (prisma) => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
+    await prisma.topicProgress.upsert({
+      where: { topicId_userId: { topicId, userId: user.id } },
+      create: { topicId, userId: user.id, quizScore: 60 },
+      update: { quizScore: 60 },
+    })
+  })
   const ids = [
     await seedDueConcept(email, topicId, 'Hashing', { orderIndex: 0 }),
     await seedDueConcept(email, topicId, 'Collisions', { orderIndex: 1 }),
