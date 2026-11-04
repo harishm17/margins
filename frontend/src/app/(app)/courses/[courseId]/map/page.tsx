@@ -16,6 +16,7 @@ import { NodePanelFrame } from '@/features/map/node-panel-frame'
 import { prisma } from '@/lib/db/prisma'
 import { conceptTeachBackPrompt } from '@/lib/learning/recall-server'
 import { eventLine, frontierTexts, stateLine } from '@/lib/map/copy'
+import { frontierReason } from '@/lib/map/frontier'
 import { defaultUnit } from '@/lib/map/default-unit'
 import { layoutMap } from '@/lib/map/layout'
 import { isNarrow, NARROW_COOKIE, narrowKnown } from '@/lib/map/narrow'
@@ -26,7 +27,7 @@ import { getPlanData } from '@/server/queries/plan'
 import { requireUser } from '@/server/session'
 import { getTimeZone } from '@/server/timezone'
 
-export const metadata: Metadata = { title: 'Map' }
+export const metadata: Metadata = { title: 'Idea map' }
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value)
 
@@ -56,7 +57,7 @@ export default async function MapPage({
   const widthUnknown = !explicitView && !narrowKnown(narrowCookie)
   const intro = (
     <PageIntro
-      title="Map"
+      title="Idea map"
       description="One unit at a time: what builds on what, and where you stand on each idea. The topic pages are the main way through; this is for seeing how ideas connect."
     />
   )
@@ -121,6 +122,12 @@ export default async function MapPage({
     words = {
       stateLine: stateLine(panel.label, panel.dueAt, now, timeZone),
       frontier: frontierTexts(nodes)[panel.id] ?? null,
+      reason: frontierReason(
+        edges
+          .filter((edge) => edge.type === 'prerequisite' && edge.targetId === panel.id)
+          .map((edge) => ({ name: byId.get(edge.sourceId)?.name ?? '', suggested: edge.status === 'proposed' }))
+          .filter((item) => item.name !== '')
+      ),
       events: panel.events.map((event) => ({ id: event.id, text: eventLine(event), when: date.format(new Date(event.createdAt)) })),
       teachBackPrompt: conceptTeachBackPrompt(panel.name),
     }

@@ -57,15 +57,17 @@ export function ListView({
                       <span className="text-body-strong text-fg">
                         <MathText>{node.name}</MathText>
                       </span>
+                      {/* One verdict per row: where to start, else next up, else the state (the icon and a hidden word still carry the state). */}
                       <span className="inline-flex items-center gap-1.5 text-small text-fg-2">
                         <StateIcon label={node.label} size={14} />
-                        {LABEL_TEXT[node.label]}
+                        {frontier[node.id] ? <span className="sr-only">{LABEL_TEXT[node.label]}. </span> : LABEL_TEXT[node.label]}
                       </span>
                       {frontier[node.id] ? <FrontierBadge text={frontier[node.id]} /> : null}
                     </span>
                     {relations.map((relation) => (
-                      <span key={relation.label} className="text-small text-fg-3">
-                        {relation.label}: {relation.names.join(', ')}
+                      <span key={relation.label} className="text-small text-fg-2">
+                        {/* A suggested link is detailed once the idea is chosen; the row only names the ideas. */}
+                        {relation.label}: {relation.names.map((name) => name.replace(' (suggested)', '')).join(', ')}
                       </span>
                     ))}
                   </Link>
