@@ -20,7 +20,7 @@ import type { GapExplainerState } from '@/lib/learning/explainer-server'
 import { GapExplainer } from './gap-explainer'
 import { RecallAbandonOnOpen } from './recall-abandon'
 import { scrollToElement, useSeenInView } from './use-seen-in-view'
-import { useOptionalTopic } from './topic-provider'
+import { useActivityInProgress, useOptionalTopic } from './topic-provider'
 import { useCheckGrader } from './use-check-grader'
 import { useMarkComplete } from './use-mark-complete'
 import type { NotesContent, TopicCitation } from './types'
@@ -322,6 +322,8 @@ type Form = 'gaps' | 'full'
  */
 export function ExplainerView({ topicId, gaps, full, nextHref, nextLabel, focusConceptId = null }: ExplainerViewProps) {
   const hasGaps = gaps.status !== 'none'
+  // The explainer ends in its own way on (Next: Practice, after the gap questions), so the topic's "next" line does not repeat it above.
+  useActivityInProgress(true)
   const [form, setForm] = React.useState<Form>(hasGaps ? 'gaps' : 'full')
   const showingGaps = form === 'gaps' && hasGaps
   // The full explainer opens at the section that names the idea; the page passes only its id, so the name is fetched.
