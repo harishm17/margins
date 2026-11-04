@@ -264,7 +264,7 @@ test.describe('practice progress', () => {
     await phone.getByRole('button', { name: 'Check', exact: true }).click()
     await expect(phone.getByText('Not quite').locator('visible=true')).toBeVisible()
     await phone.getByRole('button', { name: 'Try again' }).click()
-    await phone.getByRole('button', { name: /Connect/ }).click()
+    await phone.getByRole('button', { name: /Show the first step/ }).click()
     await answer(phone).fill('9')
     await phone.getByRole('button', { name: 'Check', exact: true }).click()
     await expect(phone.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
@@ -320,9 +320,9 @@ test.describe('practice progress', () => {
     await expect(reveal).toHaveCount(0)
     await page.getByRole('button', { name: 'Get help' }).click()
     await expect(page.getByRole('button', { name: /Where to look · your next try still counts, as a harder one/ })).toBeEnabled()
-    await page.getByRole('button', { name: /Next hint: Locate/ }).click()
+    await page.getByRole('button', { name: /Show where to look/ }).click()
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
-    await expect(page.getByRole('button', { name: /Next hint: Connect/ })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Show the first step/ })).toBeDisabled()
     await expect(reveal).toHaveCount(0)
     // A reload keeps the opened hint and the gate.
     await expect
@@ -332,15 +332,15 @@ test.describe('practice progress', () => {
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
     await expect(reveal).toHaveCount(0)
     await page.getByRole('button', { name: 'Get help' }).click()
-    await expect(page.getByRole('button', { name: /Next hint: Connect/ })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Show the first step/ })).toBeDisabled()
 
     // One wrong check is the attempt: now Connect and Structure open, and Show answer.
     await answer(page).fill('5')
     await page.getByRole('button', { name: 'Check', exact: true }).click()
     await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
     await page.getByRole('button', { name: 'Try again' }).click()
-    await page.getByRole('button', { name: /Next hint: Connect/ }).click()
-    await page.getByRole('button', { name: /Next hint: Structure/ }).click()
+    await page.getByRole('button', { name: /Show the first step/ }).click()
+    await page.getByRole('button', { name: /Show the method/ }).click()
     await expect(reveal).toBeEnabled()
     // Opened hints count after a reload too.
     await expect
@@ -487,14 +487,14 @@ test.describe('practice progress', () => {
       await expect(page.getByRole('button', { name: 'Get help' })).toBeVisible()
       if (shots) await page.screenshot({ path: `${shots}/practice-${name}-start.png` })
       await page.getByRole('button', { name: 'Get help' }).click()
-      await page.getByRole('button', { name: /Next hint: Locate/ }).click()
+      await page.getByRole('button', { name: /Show where to look/ }).click()
       // Connect and Structure wait for an attempt: a wrong check opens them.
       await answer(page).fill('5')
       await page.getByRole('button', { name: 'Check', exact: true }).click()
       await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
       await page.getByRole('button', { name: 'Try again' }).click()
       // After a miss the helps stay open.
-      await page.getByRole('button', { name: /Next hint: Connect/ }).click()
+      await page.getByRole('button', { name: /Show the first step/ }).click()
       await checkAxe(`${name}, hints open`)
       await answer(page).fill('5')
       await page.getByRole('button', { name: 'Check', exact: true }).click()

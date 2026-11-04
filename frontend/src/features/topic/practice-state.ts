@@ -28,7 +28,7 @@ export function problemSolved(progress: PracticeProgress, problem: PracticeProbl
 export const HINT_COST_COPY: Record<HintCost, string> = {
   still_counts_harder: 'your next try still counts, as a harder one',
   counts_as_miss: 'this step will count as a miss',
-  no_extra_cost: 'no extra cost: this step already counts as a miss',
+  no_extra_cost: 'no extra cost, as this step already counts as a miss',
 }
 
 export const hintCostCopy = (index: 0 | 1 | 2, state: { attempted: boolean; failedFirstTry: boolean }): string => HINT_COST_COPY[hintCostLabel(index, state)]
