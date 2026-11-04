@@ -14,9 +14,8 @@ import {
 import { maxUploadMb } from '@/lib/storage/upload-limits'
 import { courseMastery, masteryLevel, countMasteryLevels, type MasteryCounts } from '@/lib/mastery'
 import { readRole, type MaterialRole } from '@/lib/materials/role'
-import { parsePracticeProblems } from '@/features/topic/content'
+import { practiceDoneTopics } from '@/lib/learning/practice-done'
 import { mergeSources, type SourceRef } from '@/lib/topics/sources'
-import { PRACTICE_DONE_SHARE } from '@/features/topic/practice-keys'
 import type { CourseSetup, TopicListState } from '@/lib/course-setup'
 import { getCourseShell, type CourseShell, type ShellTopic, type ShellUnit } from '@/server/queries/courses'
 import { getPlanData } from '@/server/queries/plan'
@@ -593,15 +592,7 @@ export async function getTopicsData(userId: string, courseId: string): Promise<T
     }),
   ])
   // Practice is done when 80% of the steps of the current problems are solved.
-  const practiceDone = new Set<string>()
-  for (const content of practiceContent) {
-    const problems = parsePracticeProblems(content.contentData, content.updatedAt.toISOString())?.items ?? []
-    const total = problems.reduce((sum, problem) => sum + problem.steps.length, 0)
-    const solved = practiceRows
-      .filter((row) => row.contentId === content.id && problems[row.problemIndex]?.title === row.problemTitle)
-      .reduce((sum, row) => sum + row.stepsSolved, 0)
-    if (total > 0 && solved / total >= PRACTICE_DONE_SHARE) practiceDone.add(content.topicId)
-  }
+  const practiceDone = practiceDoneTopics(practiceContent, practiceRows)
   const extraById = new Map(extra.map((row) => [row.id, row]))
   const sourcesByTopic = new Map<string, SourceRef[]>()
   for (const row of sourceRows) {

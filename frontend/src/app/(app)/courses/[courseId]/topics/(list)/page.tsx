@@ -1,13 +1,14 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { Page } from '@/components/shell/page'
-import { courseSummary, reviewTiming, studyPath } from '@/features/course/summary'
+import { courseSummary, reviewTiming } from '@/features/course/summary'
 import { TopicEditor } from '@/features/course/topic-editor'
 import { TopicsList } from '@/features/course/topics-list'
 import { newTopicsLabel } from '@/lib/course-setup'
 import { countMasteryLevels, masteryLevel } from '@/lib/mastery'
 import { getTopicsData } from '@/server/queries/course'
 import { getCourseShell } from '@/server/queries/courses'
+import { topicPaths } from '@/server/queries/topic-activity'
 import { requireUser } from '@/server/session'
 import { getTimeZone } from '@/server/timezone'
 
@@ -65,6 +66,8 @@ export default async function TopicsPage({
   const listed = data.topics.filter((topic) => topic.confirmed)
   const counts = countMasteryLevels(listed.map((topic) => masteryLevel(topic.mastery)))
   const timeZone = await getTimeZone()
+  // The path of each row and what is next on it come from the cascade the topic page uses, so the list and the topic agree.
+  const paths = await topicPaths(user.id, courseId, listed, course.topics, course.setup.topics.listConfirmed)
   const due = listed.filter((topic) => reviewTiming(topic.dueAt, now, timeZone)?.due).length
 
   return (
@@ -86,7 +89,7 @@ export default async function TopicsPage({
           mastery: topic.mastery,
           dueAt: topic.dueAt,
           timing: reviewTiming(topic.dueAt, now, timeZone),
-          path: studyPath({ content: topic.content, progress: topic.progress, practiceDone: topic.practiceDone }),
+          path: { ...paths[topic.id], quizScore: topic.progress.quizScore },
         }))}
       />
     </Page>

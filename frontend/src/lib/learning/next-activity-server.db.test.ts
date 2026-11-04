@@ -77,11 +77,22 @@ dbTest('legacy topic without concepts gets the old path', async () => {
   const w = await world()
   const state = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
   assert.deepEqual(state.concepts, [])
-  assert.equal(activity.nextActivity(state, UP).kind, 'read')
+  // Nothing has been made for the topic yet: it is sent to the topic, which names the first step once it is prepared.
+  assert.equal(state.prepared, false)
+  assert.equal(activity.nextActivity(state, UP).kind, 'start')
 
+  // A topic from before concepts has its written notes: that is the reading.
+  await prisma.topicContent.create({ data: { topicId: w.topic.id, contentType: 'section_notes', contentData: { text: 'Some notes.' } } })
+  const prepared = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
+  assert.equal(prepared.prepared, true)
+  assert.equal(activity.nextActivity(prepared, UP).kind, 'read')
+
+  // Read, practice not done yet: practice comes before the first quiz (the order the path shows).
   await prisma.topicProgress.create({ data: { userId: w.user.id, topicId: w.topic.id, notesCompleted: true } })
   const read = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(activity.nextActivity(read, UP).kind, 'quiz')
+  assert.equal(read.practiceDone, false)
+  assert.equal(activity.nextActivity(read, UP).kind, 'practice')
+  assert.equal(activity.nextActivity({ ...read, practiceDone: true }, UP).kind, 'quiz')
 
   await prisma.quizAttempt.create({ data: { userId: w.user.id, topicId: w.topic.id, answers: {}, results: {}, score: 70 } })
   const quizzed = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })

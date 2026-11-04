@@ -42,6 +42,9 @@ const failed = (id: string, overrides: Partial<TopicConceptState> = {}) =>
 function solid(overrides: Partial<TopicLearningState> = {}): TopicLearningState {
   return {
     concepts: [concept('a'), concept('b')],
+    prepared: true,
+    practiceDone: true,
+    practiceWritten: true,
     warmupReady: true,
     warmupAt: d('2026-09-30T00:00:00Z'),
     readAt: READ,

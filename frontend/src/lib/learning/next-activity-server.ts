@@ -12,6 +12,7 @@ import { localDateParts } from './study-plan-time'
 import { studentTimeZone } from './student-time-zone'
 import { UNKNOWN_BAND_INPUTS, bandInputsFromState, conceptBand } from './level'
 import { activityWithHref, type NextActivity, type TopicConceptState, type TopicLearningState } from './next-activity'
+import { loadPracticeState } from './practice-done'
 import { warmupPriorByConcept } from './warmup-bracket'
 import { latestWarmupResults } from './warmup-session'
 
@@ -285,7 +286,7 @@ export async function loadTopicLearningState(input: {
   const timeZone = input.timeZone ?? (await studentTimeZone())
 
   const newest = { orderBy: { createdAt: 'desc' as const }, select: { createdAt: true } }
-  const [topic, progress, warmupBank, recalls, teachBackAttempt, hardQuiz, examEvent, teachBackEvent, anyEvidence, quizAttempts, nextReview] =
+  const [topic, progress, warmupBank, recalls, teachBackAttempt, hardQuiz, examEvent, teachBackEvent, anyEvidence, quizAttempts, nextReview, practice, writtenContent, conceptCount] =
     await Promise.all([
       prisma.topic.findUnique({ where: { id: topicId }, select: { evidenceBackfilledAt: true } }),
       prisma.topicProgress.findUnique({ where: { topicId_userId: { topicId, userId } } }),
@@ -300,6 +301,9 @@ export async function loadTopicLearningState(input: {
       prisma.evidenceEvent.count({ where: { userId, topicId, source: { notIn: ['implicit', 'warmup', 'reader', 'instruction'] } } }),
       prisma.quizAttempt.count({ where: { userId, topicId } }),
       prisma.conceptMemory.findFirst({ where: { userId, topicId, dueAt: { not: null }, concept: { status: 'active' } }, orderBy: { dueAt: 'asc' }, select: { dueAt: true } }),
+      loadPracticeState(userId, topicId),
+      prisma.topicContent.count({ where: { topicId } }),
+      prisma.concept.count({ where: { topicId, status: 'active' } }),
     ])
 
   // A topic uses concepts only after its history is converted (the switch mastery uses too).
@@ -320,6 +324,10 @@ export async function loadTopicLearningState(input: {
 
   return {
     concepts,
+    // Opening a topic makes its concepts, warm-up and notes; one with none of them has not been opened yet.
+    prepared: conceptCount > 0 || warmupBank > 0 || writtenContent > 0,
+    practiceDone: practice.done,
+    practiceWritten: practice.written,
     warmupReady: warmupBank > 0,
     warmupAt: progress?.warmupAt ?? null,
     readAt,

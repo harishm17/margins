@@ -1,4 +1,6 @@
-import { PATH_VIEWS, type PathView } from './types'
+import type { ActivityKind } from '@/lib/learning/next-activity'
+import { pathStepFor } from './activity-copy'
+import { PATH_VIEWS, VIEW_LABELS, type PathView } from './types'
 
 /**
  * The steps of the path this topic can offer (Review Focus 2: no step that cannot work). Warm-up needs a
@@ -18,4 +20,42 @@ export function pathSteps(input: {
     if (step === 'recall') return input.hasConcepts || input.preparingConcepts
     return true
   })
+}
+
+export type PathGlyphState = 'done' | 'next' | 'later'
+
+/** One step of the path for a row of the Topics list: done, the one to do next, or still ahead. */
+export type PathGlyph = { step: PathView; label: string; state: PathGlyphState }
+
+/**
+ * The path as the Topics list draws it: the steps this topic offers, each done, the next one (the step the topic's
+ * next activity belongs to, the one the topic's own path tags), or later. It is built from the same inputs the
+ * topic page uses, so a row and the topic it opens do not disagree.
+ */
+export function pathGlyphs(input: { steps: PathView[]; done: Record<PathView, boolean>; nextStep: PathView | null }): PathGlyph[] {
+  return input.steps.map((step) => ({
+    step,
+    label: VIEW_LABELS[step],
+    state: input.done[step] ? 'done' : input.nextStep === step ? 'next' : 'later',
+  }))
+}
+
+const OUTSIDE_PATH_WORDS: Partial<Record<ActivityKind, string>> = {
+  start: 'Open the topic',
+  instruct: 'Read that part again',
+  examples: 'Worked example',
+  explainer: 'Explainer',
+  review: 'Review',
+  fix_misconception: 'Drill',
+  prerequisite_drill: 'Drill',
+  mock_exam: 'Mock exam',
+}
+
+/** What is next on a topic, in words (a screen reader hears it on the Topics list): "Next: Warm-up", "Solid for now". */
+export function nextStepWords(kind: ActivityKind): string {
+  if (kind === 'done_for_now') return 'Solid for now'
+  if (kind === 'teach_back') return 'Next: Explain it back'
+  if (kind === 'transfer_quiz') return 'Next: Harder quiz'
+  const step = pathStepFor(kind)
+  return `Next: ${step ? VIEW_LABELS[step] : (OUTSIDE_PATH_WORDS[kind] ?? 'Continue')}`
 }

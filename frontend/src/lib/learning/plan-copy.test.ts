@@ -206,9 +206,9 @@ test('rows that used to repeat the same sentence say something specific', () => 
   assert.match(first, /review/)
 
   const unit = describePlanItem(item({}), 'c1', { unitTitles: { u1: 'Sorting and graphs' } })
-  assert.equal(unit.reason, 'Read the notes, then work through the examples.')
+  assert.equal(unit.reason, 'Read it, recall it, then practise.')
   const inUnit = describePlanItem(item({ unitId: 'u1' }), 'c1', { unitTitles: { u1: 'Sorting and graphs' } })
-  assert.equal(inUnit.reason, 'Sorting and graphs: read the notes, then work through the examples.')
+  assert.equal(inUnit.reason, 'Sorting and graphs: read it, recall it, then practise.')
   assert.equal(describePlanItem(item({ part: { number: 2, of: 2 } }), 'c1').reason, 'Pick up where you stopped.')
   assert.match(describePlanItem(item({ note: 'You have started this one' }), 'c1').reason, /started/)
 })
