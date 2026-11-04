@@ -11,24 +11,24 @@ export function LegalPage({ title, children }: { title: string; children: React.
   )
 }
 
-/** One line per item, each starting with the bold name of what it is about. */
+/** One line per item, each starting with the bold name of what it is about and a colon ("Your account: ..."). */
 export function LegalList({ items }: { items: { name: string; text: React.ReactNode }[] }) {
   return (
     <ul className="flex flex-col gap-3">
       {items.map((item) => (
         <li key={item.name}>
-          <span className="font-medium text-fg">{item.name}.</span> {item.text}
+          <span className="font-medium text-fg">{item.name}:</span> {item.text}
         </li>
       ))}
     </ul>
   )
 }
 
-/** Jump links to the page's sections, above the first one: a long policy on a phone is found by its labels. */
+/** Jump links to the page's sections, above the first one: a long policy on a phone is found by its labels. One link per row on a phone (44px each), side by side from 640px. */
 export function LegalContents({ sections }: { sections: { id: string; heading: string }[] }) {
   return (
     <nav aria-label="On this page">
-      <ul className="flex flex-wrap gap-x-5 gap-y-0 text-small">
+      <ul className="flex flex-col sm:flex-row sm:flex-wrap sm:gap-x-5 text-small">
         {sections.map((section) => (
           <li key={section.id}>
             <a

@@ -11,7 +11,11 @@ test('the sign-in page offers Google for new and returning students, and no pass
   await page.goto('/login')
   await expect(page.getByRole('heading', { level: 1, name: 'Welcome to Margins' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible()
-  await expect(page.getByText('Made your account with a password?')).toBeVisible()
+  // The old-password note sits behind a disclosure below the one action, and says what to do when opened.
+  await expect(page.getByText('Used a password before?')).toBeVisible()
+  await expect(page.getByText('Continue with Google using the same email')).toBeHidden()
+  await page.getByText('Used a password before?').click()
+  await expect(page.getByText('Continue with Google using the same email')).toBeVisible()
   await expect(page.locator('input[type="password"]')).toHaveCount(0)
   await expect(page.getByLabel('Password')).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms')

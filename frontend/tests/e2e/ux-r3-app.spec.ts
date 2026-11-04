@@ -39,6 +39,7 @@ test.describe('public pages', () => {
 
   test('the evaluation page says in a line what each retrieval measure is', async ({ page }) => {
     await page.goto('/evaluation')
+    await page.getByText('Retrieval: method, results and limits').click()
     const definitions = page.locator('#retrieval ~ dl, dl:has(dt:text("MRR"))').first()
     await expect(definitions.getByText('How high the first right chunk ranks. 1 means it is first.')).toBeVisible()
     await expect(definitions.getByText('Whether at least one right chunk is in the first five.')).toBeVisible()

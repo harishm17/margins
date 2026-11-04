@@ -56,6 +56,10 @@ export function NavActions() {
   )
 }
 
+/** The page's own sign-up actions say where they lead: sign-in is Google only (the navigation keeps the short "Get started"). */
+const START_LABEL = 'Start with Google'
+const START_NOTE = 'Free · Google account required'
+
 /** The hero buttons (large). */
 export function HeroActions() {
   const signedIn = useSignedIn()
@@ -68,11 +72,13 @@ export function HeroActions() {
       ) : (
         <>
           <Button asChild variant="primary" size="lg">
-            <Link href="/login">Get started</Link>
+            <Link href="/login">{START_LABEL}</Link>
           </Button>
           <Button asChild variant="secondary" size="lg">
             <SectionLink section="how-it-works">See how it works</SectionLink>
           </Button>
+          {/* Said under the buttons, before the click: the next step is a Google sign-in, and it costs nothing. */}
+          <p className="basis-full text-small text-fg-2">{START_NOTE}</p>
         </>
       )}
     </div>
@@ -84,7 +90,7 @@ export function FinalCta() {
   const signedIn = useSignedIn()
   return (
     <Button asChild variant="primary" size="lg">
-      <Link href={signedIn ? '/home' : '/login'}>{signedIn ? `Open ${BRAND_NAME}` : 'Get started'}</Link>
+      <Link href={signedIn ? '/home' : '/login'}>{signedIn ? `Open ${BRAND_NAME}` : START_LABEL}</Link>
     </Button>
   )
 }

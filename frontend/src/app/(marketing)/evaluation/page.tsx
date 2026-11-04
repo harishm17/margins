@@ -1,5 +1,6 @@
+import * as React from 'react'
 import type { Metadata } from 'next'
-import { ArrowUpRight } from '@phosphor-icons/react/dist/ssr'
+import { ArrowUpRight, CaretDown } from '@phosphor-icons/react/dist/ssr'
 import { phoneInlineHit } from '@/components/ui/styles'
 import { BRAND_NAME } from '@/config/brand'
 import { AUTHOR, SITE_URL } from '@/config/site'
@@ -74,64 +75,95 @@ function External({ href, children }: { href: string; children: React.ReactNode 
   )
 }
 
-/** A scrollable region keeps a wide table inside the page on a phone and reachable from the keyboard. */
-function TableBox({ label, children }: { label: string; children: React.ReactNode }) {
+type Cell = string | { text: string; strong?: boolean }
+const cellText = (cell: Cell) => (typeof cell === 'string' ? cell : cell.text)
+const cellStrong = (cell: Cell) => typeof cell !== 'string' && !!cell.strong
+
+/**
+ * One table, drawn two ways: a real table from 640px (in a scrollable region, so it stays inside the page and reachable from the
+ * keyboard), and on a phone one block per row with its label and value pairs, so nothing needs a sideways swipe. Only one of the
+ * two is displayed at a time, so a screen reader meets the numbers once.
+ */
+function DataTable({
+  caption,
+  rowHeader,
+  columns,
+  rows,
+  minWidth = 520,
+}: {
+  caption: string
+  rowHeader: string
+  columns: string[]
+  rows: { label: string; values: Cell[] }[]
+  minWidth?: number
+}) {
   return (
     <>
-      {/* The tables are wider than a phone: say so before the table, so the cut-off column is not a surprise. */}
-      <p aria-hidden="true" className="mt-5 text-caption font-normal text-fg-3 sm:hidden">
-        Swipe the table sideways for more columns.
-      </p>
-      <div role="region" aria-label={label} tabIndex={0} className="mt-2 overflow-x-auto rounded-control border border-border sm:mt-5">
-        {children}
+      <div role="region" aria-label={caption} tabIndex={0} className="mt-5 hidden overflow-x-auto rounded-control border border-border sm:block">
+        <table className="w-full border-collapse" style={{ minWidth }}>
+          <caption className="px-3 pb-1 pt-3 text-left text-small text-fg-2">{caption}</caption>
+          <thead>
+            <tr className="border-b border-border">
+              <th scope="col" className={th}>
+                {rowHeader}
+              </th>
+              {columns.map((column) => (
+                <th key={column} scope="col" className={th}>
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((row) => (
+              <tr key={row.label}>
+                <th scope="row" className={`${th} font-normal`}>
+                  {row.label}
+                </th>
+                {row.values.map((value, i) => (
+                  <td key={columns[i]} className={`${td} ${cellStrong(value) ? 'font-medium text-fg' : ''}`}>
+                    {cellText(value)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-5 sm:hidden">
+        <p className="text-small text-fg-2">{caption}</p>
+        <ul className="mt-2 divide-y divide-border rounded-control border border-border">
+          {rows.map((row) => (
+            <li key={row.label} className="px-3 py-3">
+              <p className="text-small font-medium text-fg">{row.label}</p>
+              <dl className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
+                {columns.map((column, i) => (
+                  <React.Fragment key={column}>
+                    <dt className="text-small text-fg-2">{column}</dt>
+                    <dd className={`text-right text-small tabular ${cellStrong(row.values[i]) ? 'font-medium text-fg' : 'text-fg-2'}`}>
+                      {cellText(row.values[i])}
+                    </dd>
+                  </React.Fragment>
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ul>
       </div>
     </>
   )
 }
 
-function ComparisonTable({
-  caption,
-  rowHeader,
-  columns,
-  rows,
-}: {
-  caption: string
-  rowHeader: string
-  columns: string[]
-  rows: { label: string; values: string[] }[]
-}) {
+/** Method, tables and limits sit behind one closed disclosure per section: the page reads as a summary first. */
+function Disclosure({ summary, children }: { summary: string; children: React.ReactNode }) {
   return (
-    <TableBox label={caption}>
-      <table className="w-full min-w-[520px] border-collapse">
-        <caption className="px-3 pb-1 pt-3 text-left text-small text-fg-2">{caption}</caption>
-        <thead>
-          <tr className="border-b border-border">
-            <th scope="col" className={th}>
-              {rowHeader}
-            </th>
-            {columns.map((column) => (
-              <th key={column} scope="col" className={th}>
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map((row) => (
-            <tr key={row.label}>
-              <th scope="row" className={`${th} font-normal`}>
-                {row.label}
-              </th>
-              {row.values.map((value, i) => (
-                <td key={columns[i]} className={td}>
-                  {value}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </TableBox>
+    <details className="group mt-5 rounded-card border border-border">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-card px-4 py-2 text-small font-medium text-fg hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
+        {summary}
+        <CaretDown aria-hidden="true" className="size-4 shrink-0 text-fg-3 transition-transform duration-180 group-open:rotate-180" />
+      </summary>
+      <div className="px-4 pb-5">{children}</div>
+    </details>
   )
 }
 
@@ -151,35 +183,12 @@ function DraftSection({
           {paragraph}
         </p>
       ))}
-      <TableBox label={section.heading}>
-        <table className="w-full min-w-[520px] border-collapse">
-          <caption className="px-3 pb-1 pt-3 text-left text-small text-fg-2">{section.heading}: gate and result.</caption>
-          <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className={th}>
-                Check
-              </th>
-              <th scope="col" className={th}>
-                Gate
-              </th>
-              <th scope="col" className={th}>
-                Result
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {section.checks.map((check) => (
-              <tr key={check.label}>
-                <th scope="row" className={`${th} font-normal`}>
-                  {check.label}
-                </th>
-                <td className={td}>{check.gate}</td>
-                <td className={td}>{check.result}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableBox>
+      <DataTable
+        caption={`${section.heading}: gate and result.`}
+        rowHeader="Check"
+        columns={['Gate', 'Result']}
+        rows={section.checks.map((check) => ({ label: check.label, values: [check.gate, check.result] }))}
+      />
       <p className={p}>{section.limits}</p>
     </>
   )
@@ -236,6 +245,13 @@ export default function EvaluationPage() {
 
       <h2 id="retrieval" className={h2}>Retrieval</h2>
       <p className={p}>
+        Finding the right pages for a topic. Hybrid search with fusion, the search the app uses now, put the first right
+        page near the top for {RETRIEVAL.topics} topics (MRR {RETRIEVAL.rows[0].values[1]} out of 1, where 1 means first),
+        against {RETRIEVAL.rows[2].values[1]} for the old search. Limits: a small, tidy textbook corpus, and topics
+        written by one person.
+      </p>
+      <Disclosure summary="Retrieval: method, results and limits">
+      <p className={p}>
         When the extract-topics job finds a topic, it looks up that topic&apos;s source chunks, keeps the top{' '}
         {RETRIEVAL.k} and stores them. Every notes, quiz and exam generator later reads only those chunks. If the right
         chunks are not in the stored {RETRIEVAL.k}, the generated material cannot be grounded in them.
@@ -269,11 +285,13 @@ export default function EvaluationPage() {
         <dt className="font-medium text-fg">MRR</dt>
         <dd className="mb-2 sm:mb-0">How high the first right chunk ranks. 1 means it is first.</dd>
         <dt className="font-medium text-fg">nDCG@{RETRIEVAL.k}</dt>
-        <dd className="mb-2 sm:mb-0">How well all the right chunks are ordered, with the highest ones counting most.</dd>
+        <dd className="mb-2 sm:mb-0">
+          Normalised discounted cumulative gain: how well all the right chunks are ordered, with the highest ones counting most.
+        </dd>
         <dt className="font-medium text-fg">hit@5</dt>
         <dd>Whether at least one right chunk is in the first five.</dd>
       </dl>
-      <ComparisonTable
+      <DataTable
         caption={`Retrieval, run of October 20, 2026. Hybrid search with fusion, the search the app uses now, finds and ranks the right pages best. Averages over ${RETRIEVAL.topics} topics, top ${RETRIEVAL.k}.`}
         rowHeader="System"
         columns={RETRIEVAL.columns}
@@ -315,7 +333,16 @@ export default function EvaluationPage() {
         </li>
       </ul>
 
+      </Disclosure>
+
       <h2 id="generation" className={h2}>Generation quality</h2>
+      <p className={p}>
+        Whether the notes, examples, practice and quizzes are right. In the latest run the judge scored correctness{' '}
+        {EVAL_FACTS.correctness} out of 5 and listed {GENERATION.errors} errors, and two automatic checks failed (the
+        notes were missing expected sections and fell outside the word band). Limits: one sample per topic, two
+        courses, and the judge is the model that wrote the content.
+      </p>
+      <Disclosure summary="Generation quality: method, results and limits">
       <p className={p}>
         The latest run is from October 21, 2026. It generated {GENERATION.topics} topics ({GENERATION.topicsPerCourse}{' '}
         from MIT 18.05, probability and statistics, and {GENERATION.topicsPerCourse} from MIT 6.006, algorithms) with
@@ -328,37 +355,15 @@ export default function EvaluationPage() {
         These involve no model. They are lexical heuristics: they find things worth reading, they do not show content is
         right. The ones below include every check the output failed; the report has the rest.
       </p>
-      <TableBox label="Automatic checks on the latest generation run">
-        <table className="w-full min-w-[520px] border-collapse">
-          <caption className="px-3 pb-1 pt-3 text-left text-small text-fg-2">
-            Automatic checks, run of October 21, 2026, over {GENERATION.topics} topics.
-          </caption>
-          <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className={th}>
-                Check
-              </th>
-              <th scope="col" className={th}>
-                Result
-              </th>
-              <th scope="col" className={th}>
-                Status
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {GENERATION.checks.map((check) => (
-              <tr key={check.label}>
-                <th scope="row" className={`${th} font-normal`}>
-                  {check.label}
-                </th>
-                <td className={td}>{check.value}</td>
-                <td className={`${td} ${check.status === 'failed' ? 'font-medium text-fg' : ''}`}>{STATUS[check.status]}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableBox>
+      <DataTable
+        caption={`Automatic checks, run of October 21, 2026, over ${GENERATION.topics} topics.`}
+        rowHeader="Check"
+        columns={['Result', 'Status']}
+        rows={GENERATION.checks.map((check) => ({
+          label: check.label,
+          values: [check.value, { text: STATUS[check.status], strong: check.status === 'failed' }],
+        }))}
+      />
       <p className={p}>
         The recall-copy check was tightened after the run. On the stored outputs it now finds 4 of 32 numeric quiz
         questions (12%) that restate a worked example. The report&apos;s own table still shows the earlier 50%.
@@ -370,33 +375,13 @@ export default function EvaluationPage() {
         and is not told which model wrote what, but a model grading its own output is not an independent reviewer, so
         read the judge scores as limited evidence.
       </p>
-      <TableBox label="Judge scores on the latest generation run">
-        <table className="w-full border-collapse">
-          <caption className="px-3 pb-1 pt-3 text-left text-small text-fg-2">
-            Judge scores out of 5, mean over {GENERATION.judgedItems} judged items (topic and content type pairs).
-          </caption>
-          <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className={th}>
-                Measure
-              </th>
-              <th scope="col" className={th}>
-                Score
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {GENERATION.judgeScores.map((score) => (
-              <tr key={score.label}>
-                <th scope="row" className={`${th} font-normal`}>
-                  {score.label}
-                </th>
-                <td className={td}>{score.value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableBox>
+      <DataTable
+        caption={`Judge scores out of 5, mean over ${GENERATION.judgedItems} judged items (topic and content type pairs).`}
+        rowHeader="Measure"
+        columns={['Score']}
+        rows={GENERATION.judgeScores.map((score) => ({ label: score.label, values: [score.value] }))}
+        minWidth={0}
+      />
       <p className={p}>
         The judge listed {GENERATION.errors} errors, {GENERATION.mathErrors} of them mathematical: a heap-building
         explanation that gave about 1.44n swaps where the exact total is at most n - 1, and an index range that was off
@@ -428,14 +413,21 @@ export default function EvaluationPage() {
         </li>
       </ul>
 
+      </Disclosure>
+
       <h2 id="model-choice" className={h2}>Model choice</h2>
+      <p className={p}>
+        Only Claude Opus passes the quality rule for every kind of content, so notes, examples, practice, quizzes and
+        exams stay on Opus at medium effort.
+      </p>
+      <Disclosure summary="Model choice: the rule and the comparison">
       <p className={p}>
         Before the run, a rule was set: per purpose, the cheapest model whose judge correctness mean is at least 4.5 with
         no mathematical error, and whose teaching and question-quality mean is within 0.3 of Opus. The runs used the
         same two courses ({GENERATION.topicsPerCourse} topics each) and the same Opus judge, which is also one of the
         three models.
       </p>
-      <ComparisonTable
+      <DataTable
         caption={`Model choice, runs of ${MODEL_CHOICE.runs}. Only Opus passes the rule for every content type. Cost per topic covers the four content types.`}
         rowHeader="Model"
         columns={MODEL_CHOICE.columns}
@@ -450,6 +442,7 @@ export default function EvaluationPage() {
         Notes, worked examples, practice, quizzes and exams stay on Claude Opus at medium effort. Cost is controlled by
         generating on demand, when a student opens a topic, rather than by a weaker model.
       </p>
+      </Disclosure>
 
       {SHOW_LEARNING_V3_DRAFT ? (
         <>
@@ -462,7 +455,8 @@ export default function EvaluationPage() {
       ) : null}
 
       <h2 id="raw-results" className={h2}>Raw results</h2>
-      <p className={p}>Every table above comes from one of these files in the public repository.</p>
+      <p className={p}>Every table on this page comes from one of the result files in the public repository.</p>
+      <Disclosure summary="The result files">
       <ul className={ul}>
         <li>
           <External href={EVAL_FILES.retrieval}>Finding the right pages: the search the app uses now (2026-10-20)</External>
@@ -493,6 +487,7 @@ export default function EvaluationPage() {
         The courses are MIT OpenCourseWare materials and the textbooks are from OpenStax, both under CC BY-NC-SA 4.0, so
         the source text is not committed to the repository.
       </p>
+      </Disclosure>
       <p className={p}>
         Margins was built by{' '}
         <a href={AUTHOR.url} className={link}>
