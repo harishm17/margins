@@ -152,8 +152,8 @@ export function Lobby({
 
   // Quiz me with nothing to ask from cannot begin: said here, before Start, with what is missing.
   const quizBlocked = quizIsMissing(quiz) && styleNeedsQuiz(mode, effectiveStyle)
-  const alert: LobbyAlert | null =
-    lobbyAlert ?? (quizBlocked ? null : hasClaims || mode === 'sprint' ? null : { kind: 'needs-claims', ofIdea: claimsOfIdea })
+  // Why Teach it back is not on offer stays said even when Quiz me cannot begin either: the quiz line follows it.
+  const alert: LobbyAlert | null = lobbyAlert ?? (hasClaims || mode === 'sprint' ? null : { kind: 'needs-claims', ofIdea: claimsOfIdea })
 
   const begin = (typed: boolean) => {
     if (outOfTime || starting || blocked || quizBlocked) return
@@ -199,8 +199,8 @@ export function Lobby({
         )}
       </div>
 
-      {alert ? <LobbyAlertView alert={alert} createContentHref={createContentHref} mode={mode} /> : null}
-      {quizBlocked && quizCopy && !alert ? (
+      {alert ? <LobbyAlertView alert={alert} createContentHref={createContentHref} mode={mode} quizWorks={!quizBlocked} /> : null}
+      {quizBlocked && quizCopy && (!alert || alert.kind === 'needs-claims') ? (
         <InlineAlert
           tone="warning"
           title={quizCopy.title}
@@ -336,10 +336,13 @@ function LobbyAlertView({
   alert,
   createContentHref,
   mode,
+  quizWorks,
 }: {
   alert: LobbyAlert
   createContentHref: string
   mode: 'topic' | 'sprint'
+  /** Whether Quiz me can begin: the claims alert says so only when it is true. */
+  quizWorks: boolean
 }) {
   if (alert.kind === 'needs-generation') {
     // The page did not know (or the quiz changed since): the same words the lobby shows up front.
@@ -362,8 +365,8 @@ function LobbyAlertView({
     return (
       <InlineAlert tone="warning" title={alert.ofIdea ? "This idea isn't read from your pages yet" : "Your pages aren't read into ideas yet"}>
         {alert.ofIdea
-          ? "Teach it back uses what your own pages say about an idea, and this idea doesn't have anything yet. Quiz me still works."
-          : "Teach it back and Read it with me use the ideas from your own pages, and this topic doesn't have any yet. Quiz me still works."}
+          ? `Teach it back uses what your own pages say about an idea, and this idea doesn't have anything yet.${quizWorks ? ' Quiz me still works.' : ''}`
+          : `Teach it back and Read it with me use the ideas from your own pages, and this topic doesn't have any yet.${quizWorks ? ' Quiz me still works.' : ''}`}
       </InlineAlert>
     )
   }

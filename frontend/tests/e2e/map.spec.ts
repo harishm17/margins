@@ -358,6 +358,9 @@ test.describe('knowledge map', () => {
     await expect(page.getByRole('radio', { name: /Quiz me/ })).toHaveAttribute('aria-checked', 'true')
     await expect(page.getByText("This idea isn't read from your pages yet")).toBeVisible()
     await expect(page.getByText("Your pages aren't read into ideas yet")).toHaveCount(0)
+    // This topic has no quiz either, so Quiz me cannot begin: that is said too, and the claims line does not promise it works.
+    await expect(page.getByTestId('voice-quiz-missing')).toBeVisible()
+    await expect(page.getByText('Quiz me still works.')).toHaveCount(0)
   })
 
   test('on a phone the teach-back card opened from the panel ends above the tab bar', async ({ page }) => {
