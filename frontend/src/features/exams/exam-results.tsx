@@ -108,7 +108,7 @@ function FocusRow({ topic, courseId, showScore, weakest }: { topic: Graded['topi
       <span className="min-w-0 flex-1 truncate text-body text-fg">
         {/* The whole row opens the topic; only the weakest one also has a button, so four rows do not say "Study" four times. */}
         {href ? (
-          <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-chip">
+          <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-chip max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
             {topic.topicName}
           </Link>
         ) : (
@@ -226,7 +226,8 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
           {calibration ? <p className="mt-1 text-small text-fg-2">{calibrationLine(calibration)}</p> : null}
           <div className="mt-4 flex flex-wrap gap-2">
             {result.practice ? <PracticeMissedButton courseId={result.courseId} submissionId={result.id} count={result.practice.count} /> : null}
-            <StartExamButton courseId={result.courseId} examId={result.examId} variant="secondary" size="md" label="Retake exam" />
+            {/* After a practice set is on offer, the same questions again are the quiet choice: the repair comes first. */}
+            <StartExamButton courseId={result.courseId} examId={result.examId} variant={result.practice ? 'ghost' : 'secondary'} size="md" label="Retake exam" />
             <Button asChild variant="ghost">
               <Link href={`/courses/${result.courseId}/exams`}>Back to exams</Link>
             </Button>

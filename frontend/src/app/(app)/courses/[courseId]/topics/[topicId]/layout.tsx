@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { Page } from '@/components/shell/page'
 import { practiceKeys } from '@/features/topic/practice-keys'
 import { bareTopicRedirect, viewInPath } from '@/features/topic/activity-copy'
+import { AttemptBar } from '@/features/topic/attempt-bar'
 import { OnboardingCard } from '@/features/topic/onboarding-card'
 import { PracticeProgressSync } from '@/features/topic/practice-progress'
 import { StudyTabs } from '@/features/topic/study-tabs'
@@ -64,6 +65,7 @@ export default async function TopicLayout({
       <TopicActions courseId={courseId} topicId={topicId} name={topic.name} />
       <PracticeProgressSync topicId={topicId} server={data.practiceProgress} />
       <Page width="wide" className="pt-3 sm:pt-6">
+        <AttemptBar courseId={courseId} name={topic.name} />
         <TopicHeader
           courseId={courseId}
           topicId={topicId}
@@ -96,7 +98,7 @@ export default async function TopicLayout({
           nextActivity={data.nextActivity}
           preparingEntry={data.preparingEntry}
         />
-        <div data-tab-panel="" className="pt-5 sm:pt-8">
+        <div data-tab-panel="" className="pt-5 group-data-[attempt]/topic:max-sm:pt-3 sm:pt-8">
           {children}
         </div>
       </Page>

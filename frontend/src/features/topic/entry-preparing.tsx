@@ -7,6 +7,7 @@ import { ArrowRight, Hourglass } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { useAiStatus } from '@/features/ai/ai-status'
+import { useActivityInProgress, useAttemptFocus } from './topic-provider'
 
 /** How often the page asks the server whether the topic is ready, and how long before the wait is called long. */
 const POLL_MS = 2500
@@ -19,9 +20,14 @@ const LONG_WAIT_MS = 90_000
  * always one tap away: the reader works from the student's own pages and needs no preparation.
  *
  * `ready` is the server's answer (the topic is no longer being prepared); `target` is where the topic goes on from here.
+ * `intro` is the one-time "try before it helps" message of a student's first topics: it is said here, in the panel that
+ * is already explaining the wait, and the card that says the same above the page steps aside (an activity in progress closes it).
  */
-export function EntryPreparing({ ready, target, readHref }: { ready: boolean; target: string; readHref: string }) {
+export function EntryPreparing({ ready, target, readHref, intro = false }: { ready: boolean; target: string; readHref: string; intro?: boolean }) {
   const router = useRouter()
+  useActivityInProgress(true)
+  // On a phone the path of five steps, all marked as preparing, gives way to the small bar: the panel is the page.
+  useAttemptFocus(true)
   const { blocked } = useAiStatus()
   const [long, setLong] = React.useState(false)
 
@@ -45,6 +51,11 @@ export function EntryPreparing({ ready, target, readHref }: { ready: boolean; ta
         <Hourglass />
       </div>
       <h2 className="mt-4 text-subheading text-fg">{ready ? 'Ready' : 'Getting this topic ready'}</h2>
+      {intro && !ready ? (
+        <p className="mt-1.5 text-small text-fg" data-testid="entry-intro">
+          Margins asks you to try before it helps. It will feel slower than reading a summary, and it sticks better.
+        </p>
+      ) : null}
       <p className="mt-1.5 text-small text-fg-2">
         {blocked
           ? `${blocked.text} You can read the topic now and come back for the warm-up.`
@@ -52,12 +63,12 @@ export function EntryPreparing({ ready, target, readHref }: { ready: boolean; ta
             ? 'Opening the warm-up.'
             : long
               ? 'This is taking longer than usual. You can read the topic now; the warm-up will be waiting when it is written.'
-              : 'Margins is writing a few warm-up questions from your pages. They come before the reading, and this opens them by itself in about a minute.'}
+              : 'Margins is writing a few warm-up questions from your pages. They come before the reading, and the warm-up opens by itself in about a minute.'}
       </p>
       {ready ? null : (
         <p className="mt-4 inline-flex items-center gap-2 text-small text-fg-3">
           {blocked ? null : <Spinner />}
-          {blocked ? 'Preparation is paused.' : 'Preparing the warm-up'}
+          {blocked ? 'Preparation is paused.' : 'Writing the warm-up'}
         </p>
       )}
       {ready ? null : (

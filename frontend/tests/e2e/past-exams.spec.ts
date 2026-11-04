@@ -77,6 +77,9 @@ test('a past exam gets a style profile and the new-exam form offers to match it'
 test('the form shows "Match my past exams" on, and the choice reaches the exam job', async ({ page }) => {
   await signIn(page, email)
   await page.goto(`/courses/${courseId}/exams/new`)
+  // The size, time, difficulty, mix and style are behind Change settings; the preset line says the style is on.
+  await expect(page.getByTestId('exam-preset')).toContainText('in the style of your past exams')
+  await page.getByRole('button', { name: 'Change settings' }).click()
   const toggle = page.getByRole('checkbox', { name: /Match my past exams/ })
   await expect(toggle).toBeChecked()
 
@@ -87,6 +90,7 @@ test('the form shows "Match my past exams" on, and the choice reaches the exam j
 
   // Off: the second exam is not matched. (The first one was.)
   await page.goto(`/courses/${courseId}/exams/new`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('checkbox', { name: /Match my past exams/ }).click()
   await expect(page.getByRole('checkbox', { name: /Match my past exams/ })).not.toBeChecked()
   await page.getByRole('radio', { name: '20', exact: true }).click()
@@ -119,11 +123,13 @@ test('when the file stops being an exam the profile and the toggle go; making it
     .toBeNull()
   await expect.poll(() => completedJobs('exam_relevance'), { timeout: 60_000, intervals: [1000] }).toBeGreaterThan(relevanceJobs)
   await page.goto(`/courses/${courseId}/exams/new`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await expect(page.getByRole('radio', { name: '10', exact: true })).toBeVisible()
   await expect(page.getByText('Match my past exams')).toHaveCount(0)
 
   await page.request.patch(`/api/materials/${examId}`, { data: { role: 'exam' } })
   await expect.poll(styleProfile, { timeout: 120_000, intervals: [1000] }).not.toBeNull()
   await page.goto(`/courses/${courseId}/exams/new`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await expect(page.getByRole('checkbox', { name: /Match my past exams/ })).toBeChecked()
 })

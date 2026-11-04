@@ -1,5 +1,5 @@
 /**
- * A "Before you go on" check in the reader, graded by the student (spec §5.2).
+ * A "Quick check" check in the reader, graded by the student (spec §5.2).
  * POST /api/topics/[topicId]/reader-checks { claimId, grade: 'got_it' | 'partly' | 'missed' }
  * Level-2 evidence with the student's own grade, for display: it never moves the memory. Recorded once per claim:
  * the answer says `recorded: false` when the check was graded before.

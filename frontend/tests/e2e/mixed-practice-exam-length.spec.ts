@@ -38,6 +38,9 @@ test('a 20-minute mixed block opens the exam form with 20 minutes and 5 question
   await mixed.dispatchEvent('click')
   await expect(page).toHaveURL(/\/exams\/new\?/)
   await expect(page.getByRole('heading', { level: 1, name: 'New mock exam' })).toBeVisible()
+  // The preset line says what was asked for; the choices are behind Change settings.
+  await expect(page.getByTestId('exam-preset')).toContainText('5 questions, 20 min')
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await expect(page.getByRole('radio', { name: '20 min', checked: true })).toBeVisible()
   await expect(page.getByRole('radio', { name: '5', exact: true, checked: true })).toBeVisible()
 
@@ -56,22 +59,27 @@ test('the form reads minutes and questions from the link, clamps them and ignore
   const count = (label: string) => page.getByRole('radio', { name: label, exact: true, checked: true })
 
   await page.goto(`${form}?minutes=15`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await expect(time('15 min')).toBeVisible()
   await expect(count('5')).toBeVisible()
 
   await page.goto(`${form}?minutes=25&questions=10`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await expect(time('20 min')).toBeVisible()
   await expect(count('10')).toBeVisible()
 
   await page.goto(`${form}?minutes=100000&questions=-3`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await expect(time('60 min')).toBeVisible()
   await expect(count('20')).toBeVisible()
 
   await page.goto(`${form}?minutes=abc`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await expect(time('60 min')).toBeVisible()
   await expect(count('20')).toBeVisible()
 
   await page.goto(form)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await expect(time('60 min')).toBeVisible()
   await expect(count('20')).toBeVisible()
 })
@@ -81,7 +89,7 @@ test('a 15-minute exam is written, shown with its limit and starts with a 15-min
   await signIn(page, DEMO_EMAIL)
   const course = `/courses/${demoIds().course}`
   await page.goto(`${course}/exams/new?minutes=15`)
-  await expect(page.getByRole('radio', { name: '15 min', checked: true })).toBeVisible()
+  await expect(page.getByTestId('exam-preset')).toContainText('15 min')
   await page.getByRole('button', { name: 'Create exam' }).click()
   await expect(page).toHaveURL(/\/exams\/[0-9a-f-]{36}$/, { timeout: 180_000 })
   await expect(page.getByRole('heading', { name: 'Before you start' })).toBeVisible()

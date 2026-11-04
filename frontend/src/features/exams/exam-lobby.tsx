@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Check } from '@phosphor-icons/react/dist/ssr'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { InlineAlert } from '@/components/ui/inline-alert'
 import { Spinner } from '@/components/ui/spinner'
 import { formatDateTime } from '@/lib/format'
 import type { AttemptRow, ExamLobby } from '@/server/queries/mock-exams'
@@ -80,6 +81,12 @@ export function ExamLobbyView({ lobby }: { lobby: ExamLobby }) {
           </div>
         ) : null}
       </section>
+
+      {lobby.leftOut.length > 0 ? (
+        <InlineAlert tone="warning" title={`Left out of this exam: ${lobby.leftOut.join(', ')}`}>
+          There are no pages to write questions from {lobby.leftOut.length === 1 ? 'for it' : 'for them'}. Add the material, then make a new exam to cover {lobby.leftOut.length === 1 ? 'it' : 'them'}.
+        </InlineAlert>
+      ) : null}
 
       <section aria-labelledby="before-you-start">
         <h2 id="before-you-start" className="text-heading text-fg">

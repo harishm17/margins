@@ -43,7 +43,7 @@ export function pathGlyphs(input: { steps: PathView[]; done: Record<PathView, bo
 }
 
 const OUTSIDE_PATH_WORDS: Partial<Record<ActivityKind, string>> = {
-  start: 'Open the topic',
+  start: 'Warm-up',
   instruct: 'Read that part again',
   examples: 'Worked example',
   explainer: 'Explainer',

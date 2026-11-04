@@ -216,7 +216,7 @@ function Passage({ topicId, file, passage, focused, number, notes, check, onAdd,
 
 /**
  * The source reader (spec §5.2, D10): the student's own pages as text, in order, with a margin for notes and
- * "Explain this passage" beside each passage, "Before you go on" checks after the sections that hold a claim,
+ * "Explain this passage" beside each passage, "Quick check" checks after the sections that hold a claim,
  * and "Focus here" on the passages the warm-up says to look at. Nothing is hidden: the student reads it all.
  * Text taken from a PDF can lose layout and maths, so each page links to the original.
  */

@@ -4,10 +4,12 @@ import { usePolling } from '@/lib/hooks/use-polling'
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { CaretDown } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toaster'
 import { Checkbox } from '@/components/ui/checkbox'
 import { InlineAlert } from '@/components/ui/inline-alert'
+import { Input } from '@/components/ui/input'
 import { JobStatus } from '@/components/ui/job-status'
 import { MasteryIndicator } from '@/components/ui/mastery-indicator'
 import { SegmentedControl } from '@/components/ui/segmented-control'
@@ -29,11 +31,12 @@ import {
   QUESTION_MIXES,
   TIME_LIMITS,
   difficultyLabel,
+  examSummary,
   type Difficulty,
   type QuestionMix,
 } from './exam-options'
 
-export type ExamTopicChoice = { id: string; name: string; mastery: number | null }
+export type ExamTopicChoice = { id: string; name: string; mastery: number | null; /** Pages are linked to it, so questions can be written from it. */ hasPages: boolean }
 
 type Props = {
   courseId: string
@@ -99,6 +102,10 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
   const [difficulty, setDifficulty] = React.useState<Difficulty>(DEFAULT_EXAM_CONFIG.difficultyLevel)
   const [mix, setMix] = React.useState<QuestionMix>(DEFAULT_EXAM_CONFIG.mix)
   const [matchPastExams, setMatchPastExams] = React.useState(true)
+  const [name, setName] = React.useState('')
+  // One recommended exam is the default: pick topics and create. The size, time, difficulty, mix and name are behind one button.
+  const [settingsOpen, setSettingsOpen] = React.useState(false)
+  const settingsId = React.useId()
   const [phase, setPhase] = React.useState<Phase>(() =>
     activeJob ? { kind: 'writing', jobId: activeJob.id, startedAt: activeJob.startedAt } : { kind: 'idle' }
   )
@@ -155,6 +162,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
           difficultyLevel: difficulty,
           questionTypeDistribution: QUESTION_MIXES[mix].distribution,
           ...(matchStyle ? { matchPastExams: true } : {}),
+          ...(name.trim() ? { name: name.trim() } : {}),
         },
       })
       setPhase({ kind: 'writing', jobId: result.jobId, startedAt: new Date().toISOString() })
@@ -251,7 +259,12 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
                   )}
                 >
                   <Checkbox checked={checked} onCheckedChange={(value) => toggle(topic.id, value === true)} className="mt-0" />
-                  <span className="min-w-0 flex-1 truncate">{topic.name}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{topic.name}</span>
+                    {topic.hasPages ? null : (
+                      <span className="block text-caption font-normal text-warning-soft-fg">No pages linked yet, so it may be left out</span>
+                    )}
+                  </span>
                   <MasteryIndicator mastery={topic.mastery} className="shrink-0" />
                 </label>
               </li>
@@ -260,6 +273,31 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
         </ul>
       </section>
 
+      <section aria-labelledby="exam-preset" className="flex flex-col gap-2">
+        <SectionLabel id="exam-preset">Your exam</SectionLabel>
+        <p className="text-body text-fg" data-testid="exam-preset">
+          {examSummary({ questionCount: totalQuestions, durationMinutes, difficulty })}, {QUESTION_MIXES[mix].label.toLowerCase()} mix
+          {matchStyle ? ', in the style of your past exams' : ''}
+        </p>
+        <div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="-ml-2.5"
+            aria-expanded={settingsOpen}
+            aria-controls={settingsId}
+            onClick={() => setSettingsOpen((current) => !current)}
+          >
+            <span className="inline-flex items-center gap-1">
+              Change settings
+              <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', settingsOpen && 'rotate-180')} />
+            </span>
+          </Button>
+        </div>
+      </section>
+
+      <div id={settingsId} hidden={!settingsOpen} className="flex flex-col gap-8">
       <section aria-labelledby="exam-questions" className="flex flex-col gap-2">
         <SectionLabel id="exam-questions">Questions</SectionLabel>
         <SegmentedControl
@@ -335,6 +373,21 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
       ) : examStyle.kind !== 'none' ? (
         <ExamStyleStatus courseId={courseId} state={examStyle} />
       ) : null}
+
+        <section aria-labelledby="exam-name" className="flex flex-col gap-2">
+          <SectionLabel id="exam-name" hint="Optional. Without one, the exam is named by its date and topics.">
+            Name
+          </SectionLabel>
+          <Input
+            aria-labelledby="exam-name"
+            value={name}
+            maxLength={80}
+            placeholder="e.g. Midterm practice"
+            onChange={(event) => setName(event.target.value)}
+            containerClassName="max-w-sm"
+          />
+        </section>
+      </div>
 
       <div className="flex flex-col gap-3 border-t border-border pt-6">
         <div className="flex flex-wrap items-center gap-3">

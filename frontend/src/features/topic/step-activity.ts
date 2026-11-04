@@ -1,6 +1,6 @@
 import type { ActivityKind } from '@/lib/learning/next-activity'
 import type { NextStep } from '@/lib/learning/next-step'
-import { activityVerb } from './activity-copy'
+import { activityLabel } from './activity-copy'
 
 /**
  * Where a topic is the next step (spec §8.1, last paragraph): the course overview's Up next and the home
@@ -23,7 +23,7 @@ export function overlayActivity(step: NextStep, activity: ActivityOverlay): Next
   return {
     ...step,
     reason: activity.reason,
-    action: { ...step.action, verb: activityVerb(activity.kind), href: activity.href },
+    action: { ...step.action, verb: activityLabel(activity), href: activity.href },
   }
 }
 
@@ -34,5 +34,5 @@ export function overlayActivity(step: NextStep, activity: ActivityOverlay): Next
  */
 export function overlayPlanItem<T extends { kind: string; done: boolean; reason: string; verb: string; href: string }>(item: T, activity: ActivityOverlay | undefined): T {
   if (!activity || item.done || (item.kind !== 'learn' && item.kind !== 'quiz')) return item
-  return { ...item, reason: activity.reason, verb: activityVerb(activity.kind), href: activity.href }
+  return { ...item, reason: activity.reason, verb: activityLabel(activity), href: activity.href }
 }

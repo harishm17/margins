@@ -71,7 +71,7 @@ test('a topic nobody has opened is sent to the topic, not to a step it may not s
   // Not "notes", not "reading": the topic names its first step once it is prepared.
   assert.doesNotMatch(next.reason, /notes/i)
   assert.equal(pathStepFor(next.kind), null)
-  assert.equal(nextStepWords(next.kind), 'Next: Open the topic')
+  assert.equal(nextStepWords(next.kind), 'Next: Warm-up')
 })
 
 test('a topic with a warm-up bank starts with the warm-up, the same step the path tags', () => {

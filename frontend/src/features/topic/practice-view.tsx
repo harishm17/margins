@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Plus } from '@phosphor-icons/react/dist/ssr'
+import { ArrowRight, CaretDown, Plus } from '@phosphor-icons/react/dist/ssr'
 import { SourceLine } from '@/components/learning/source-link'
 import { ExpectedMiss } from '@/features/learning/expected-miss'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +20,7 @@ import { GenerateOptions } from './generation-ui'
 import { checkPracticeAnswer } from './practice-check'
 import { problemKey } from './practice-keys'
 import { usePracticeProgress } from './practice-progress'
-import { useActivityInProgress, useOptionalTopic } from './topic-provider'
+import { useActivityInProgress, useAttemptFocus, useOptionalTopic } from './topic-provider'
 import type { PracticeContent, PracticeProblem, PracticeStep } from './types'
 import { ActiveStep, ProblemSwitcher, StepMarker, TrippedUp } from './practice-step'
 import { lastProblemOf, problemDone, stepKeys, stepStatus, type Feedback } from './practice-state'
@@ -70,6 +70,11 @@ export function PracticeView({ topicId, practice }: { topicId: string; practice:
   if (underWay && !begun) setBegun(true)
   const allDone = problems.every((item, index) => problemDone(progress, item, index))
   useActivityInProgress(begun && !allDone)
+  // A problem with a step still to do is an attempt: on a phone the topic's header and path give way to a small bar with Exit.
+  // The closing line of a problem (Problem complete) is a result, and keeps the whole path.
+  useAttemptFocus(!complete)
+  const [aboutOpen, setAboutOpen] = React.useState(false)
+  const aboutId = React.useId()
 
   // Once the student works on a problem it stays on screen when its last step is done, so its closing line and the choice of
   // the next problem are seen; without this the view would move on to the next open problem at once.
@@ -95,8 +100,9 @@ export function PracticeView({ topicId, practice }: { topicId: string; practice:
   }
 
   return (
-    <div className="max-w-[720px]">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+    <div className="flex max-w-[720px] flex-col">
+      {/* On a phone the count and "More practice" come after the problem: the problem is the first thing on the screen. */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 max-sm:order-last max-sm:mb-0 max-sm:mt-8">
         <p className="text-small text-fg-2">
           {pluralize(problems.length, 'problem')}, {pluralize(allKeys.length, 'step')}
         </p>
@@ -161,20 +167,35 @@ export function PracticeView({ topicId, practice }: { topicId: string; practice:
             {problem.problem}
           </LazyMarkdown>
         ) : null}
-        {(problem.difficulty || problem.keyConcepts.length > 0 || problem.minutes) && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {problem.difficulty ? (
-              <Badge tone={problem.difficulty === 'hard' ? 'warning' : 'neutral'}>
-                {problem.difficulty[0].toUpperCase() + problem.difficulty.slice(1)}
-              </Badge>
-            ) : null}
-            {problem.keyConcepts.map((concept) => (
-              <ConceptChip key={concept}>{concept}</ConceptChip>
-            ))}
-            {problem.minutes ? <span className="ml-1 text-caption text-fg-3">About {problem.minutes} min</span> : null}
+        {(problem.difficulty || problem.keyConcepts.length > 0 || problem.minutes || problem.sources.length > 0) && (
+          <div>
+            {/* The problem's kind, time and source are one folded row: the problem and its steps come first. */}
+            <button
+              type="button"
+              aria-expanded={aboutOpen}
+              aria-controls={aboutId}
+              onClick={() => setAboutOpen((current) => !current)}
+              className="-ml-1 inline-flex min-h-8 items-center gap-1.5 rounded-chip px-1 text-small text-fg-2 hover:text-fg max-sm:min-h-11"
+            >
+              About this problem
+              <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', aboutOpen && 'rotate-180')} />
+            </button>
+            <div id={aboutId} hidden={!aboutOpen} className="mt-1 flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {problem.difficulty ? (
+                  <Badge tone={problem.difficulty === 'hard' ? 'warning' : 'neutral'}>
+                    {problem.difficulty[0].toUpperCase() + problem.difficulty.slice(1)}
+                  </Badge>
+                ) : null}
+                {problem.keyConcepts.map((concept) => (
+                  <ConceptChip key={concept}>{concept}</ConceptChip>
+                ))}
+                {problem.minutes ? <span className="ml-1 text-caption text-fg-3">About {problem.minutes} min</span> : null}
+              </div>
+              <SourceLine sources={problem.sources} />
+            </div>
           </div>
         )}
-        <SourceLine sources={problem.sources} />
       </div>
 
       <ol className="mt-8 flex flex-col">

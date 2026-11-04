@@ -81,7 +81,7 @@ test.describe('practice: help after an attempt', () => {
     // The help opens from one button. Locate is open from the start and says it still counts, as a harder try.
     await button(page, 'Get help').click()
     await expect(button(page, /Next hint: Locate/)).toBeEnabled()
-    await expect(visible(page, /Where to look \(still counts, as a harder try\)/)).toBeVisible()
+    await expect(visible(page, /Where to look · your next try still counts, as a harder one/)).toBeVisible()
     await expect(visible(page, "Check an answer first, or say you don't know, to open the later hints, a worked example and questions about your working.")).toBeVisible()
     await screenshotIfAsked(page, 'q-practice-gate-1440x900')
     // Once Locate is open the ladder offers the next hint, which waits for an attempt and says so.
@@ -121,7 +121,7 @@ test.describe('practice: help after an attempt', () => {
     // Two buttons first: Try again (primary, focused) and the next hint with what it costs.
     const next = button(page, /Next hint: Locate/)
     await expect(next).toBeEnabled()
-    await expect(next).toContainText('still counts, as a harder try')
+    await expect(next).toContainText('your next try still counts')
     await expect(button(page, 'Try again')).toBeFocused()
     // Show answer, the worked example and the tutor are behind one "More help", closed until it is asked for.
     const more = page.getByRole('button', { name: 'More help' })
@@ -372,7 +372,7 @@ test.describe('worked examples: a full example viewed with a focus concept is in
     const { url } = await exampleCourse(page, 'q-captions')
     await page.setViewportSize(DESKTOP)
     for (const [fade, caption] of [
-      ['full', 'Fully worked'],
+      ['full', 'Steps shown, guess each reason first'],
       ['partial', 'One step left for you'],
       ['problem_first', 'Your turn first'],
     ] as const) {

@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useTabPin } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import type { ActivityKind } from '@/lib/learning/next-activity'
-import { activityVerb, opensHere } from './activity-copy'
+import { activityLabel, opensHere } from './activity-copy'
 import { useTopic } from './topic-provider'
 import { useTopicView } from './use-topic-view'
 import { SHORT_LABELS, TOOL_VIEWS, VIEW_LABELS, type ToolView } from './types'
@@ -170,7 +170,7 @@ export function NextActivityCard({ next }: { next: { kind: ActivityKind; reason:
       </p>
       <Button asChild variant="link" size="sm" className="shrink-0">
         <Link href={next.href}>
-          {activityVerb(next.kind)}
+          {activityLabel(next)}
           <ArrowRight aria-hidden="true" className="size-4" />
         </Link>
       </Button>

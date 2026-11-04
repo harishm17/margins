@@ -2,10 +2,11 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { PencilSimple } from '@phosphor-icons/react/dist/ssr'
+import { CaretDown, PencilSimple } from '@phosphor-icons/react/dist/ssr'
 import { PageIntro } from '@/components/shell/page'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { ProgressRing } from '@/components/ui/progress-ring'
 import { SegmentedControl } from '@/components/ui/segmented-control'
@@ -44,71 +45,85 @@ const SEGMENT: Record<PathGlyphState, string> = {
 }
 
 /**
- * Where the topic stands on its path, in words and a bar: what is next ("Next: Read", "Solid for now") and how many of its
- * steps are done, with one segment per step. The segments are for the eye (each has an edge, so an empty one is still a shape);
- * the words carry the meaning, so nothing is left to hover over or guess from an icon.
+ * How far the topic has come, for the row's detail: one segment per step of its path and the count in words, with the quiz score
+ * and mastery. The segments are for the eye (each has an edge, so an empty one is still a shape); the words carry the meaning.
  */
-function PathStatus({ path }: { path: ListTopic['path'] }) {
+function PathStatus({ path, percent }: { path: ListTopic['path']; percent: number | null }) {
   const done = path.glyphs.filter((glyph) => glyph.state === 'done').length
   return (
-    <div className="flex w-full shrink-0 flex-col gap-1 sm:w-56">
-      <span className="text-small text-fg">{path.nextWords}</span>
-      <span className="flex items-center gap-2 whitespace-nowrap text-caption font-normal text-fg-2">
-        <span aria-hidden="true" className="flex items-center gap-0.5">
-          {path.glyphs.map((glyph) => (
-            <span key={glyph.step} className={cn('h-1.5 w-4 rounded-full', SEGMENT[glyph.state])} />
-          ))}
-        </span>
-        <span className="tabular">
-          {done} of {path.glyphs.length} steps done
-          {path.quizScore !== null ? `, quiz ${Math.round(path.quizScore)}%` : ''}
-        </span>
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1 whitespace-nowrap text-caption font-normal text-fg-2">
+      <span aria-hidden="true" className="flex items-center gap-0.5">
+        {path.glyphs.map((glyph) => (
+          <span key={glyph.step} className={cn('h-1.5 w-4 rounded-full', SEGMENT[glyph.state])} />
+        ))}
       </span>
-    </div>
+      <span className="tabular">
+        {done} of {path.glyphs.length} steps done
+        {path.quizScore !== null ? `, quiz ${Math.round(path.quizScore)}%` : ''}
+        {percent !== null ? `, mastery ${percent}%` : ''}
+      </span>
+    </span>
   )
 }
 
 /** A step is done, or the quiz taken, but no mastery is earned yet: the topic header says "In progress" then, and so does the list. */
 const started = (topic: ListTopic) => topic.path.glyphs.some((glyph) => glyph.state === 'done')
 
+/**
+ * A topic is one recommended move ("Next: Read") and one status ("Learning", and when its review is due). Completion and mastery
+ * in numbers, and what the topic covers, are one tap away in the row's detail, so the list can be read down in a glance.
+ */
 function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic }) {
   const level = masteryLevel(topic.mastery)
   const percent = masteryPercent(topic.mastery)
   const { path } = topic
+  const [open, setOpen] = React.useState(false)
+  const detailId = React.useId()
   return (
     <li>
-      <Link
-        href={`/courses/${courseId}/topics/${topic.id}`}
-        className="group flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 rounded-control px-2 py-2.5 transition-colors duration-120 hover:bg-surface-2 sm:flex-nowrap"
-      >
-        <ProgressRing
-          size={28}
-          value={level === 'none' ? null : topic.mastery}
-          tone={masteryTone(level) === 'warning' ? 'warning' : 'accent'}
+      <div className="flex items-center gap-1">
+        <Link
+          href={`/courses/${courseId}/topics/${topic.id}`}
+          className="group flex min-h-14 min-w-0 flex-1 items-center gap-x-4 rounded-control px-2 py-2.5 transition-colors duration-120 hover:bg-surface-2"
+        >
+          <ProgressRing
+            size={28}
+            value={level === 'none' ? null : topic.mastery}
+            tone={masteryTone(level) === 'warning' ? 'warning' : 'accent'}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-2 text-body-strong text-fg">
+              <span className="min-w-0 truncate">{topic.name}</span>
+              {topic.examRelevant ? <Badge tone="accent" className="max-sm:hidden">On past exams</Badge> : null}
+            </p>
+            <p className="truncate text-small text-fg-2">{path.nextWords}</p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end text-right">
+            <span className="text-small text-fg">{level === 'none' && started(topic) ? 'In progress' : masteryLabel(topic.mastery)}</span>
+            {topic.timing ? (
+              <span
+                suppressHydrationWarning
+                className={cn('text-caption font-normal', topic.timing.due ? 'text-warning-soft-fg' : 'text-fg-3')}
+              >
+                {topic.timing.text}
+              </span>
+            ) : null}
+          </div>
+        </Link>
+        <IconButton
+          label={open ? `Hide details: ${topic.name}` : `Show details: ${topic.name}`}
+          icon={<CaretDown className={cn('transition-transform duration-180', open && 'rotate-180')} />}
+          size="sm"
+          aria-expanded={open}
+          aria-controls={detailId}
+          onClick={() => setOpen((current) => !current)}
         />
-        <div className="min-w-0 flex-1 basis-40">
-          <p className="flex items-center gap-2 text-body-strong text-fg">
-            <span className="min-w-0 truncate">{topic.name}</span>
-            {topic.examRelevant ? <Badge tone="accent">On past exams</Badge> : null}
-          </p>
-          {topic.description ? <p className="truncate text-small text-fg-2">{topic.description}</p> : null}
-        </div>
-        <PathStatus path={path} />
-        <div className="flex w-full shrink-0 flex-col sm:w-40 sm:items-end">
-          <span className="text-small text-fg">
-            {level === 'none' && started(topic) ? 'In progress' : masteryLabel(topic.mastery)}
-            {percent !== null ? <span className="tabular">{`, ${percent}%`}</span> : null}
-          </span>
-          {topic.timing ? (
-            <span
-              suppressHydrationWarning
-              className={cn('text-caption font-normal', topic.timing.due ? 'text-warning-soft-fg' : 'text-fg-3')}
-            >
-              {topic.timing.text}
-            </span>
-          ) : null}
-        </div>
-      </Link>
+      </div>
+      <div id={detailId} hidden={!open} className="flex flex-col gap-1.5 px-2 pb-3 pl-[52px]">
+        {topic.examRelevant ? <Badge tone="accent" className="self-start sm:hidden">On past exams</Badge> : null}
+        {topic.description ? <p className="max-w-[68ch] text-small text-fg-2">{topic.description}</p> : null}
+        <PathStatus path={path} percent={percent} />
+      </div>
     </li>
   )
 }

@@ -14,7 +14,7 @@
  *   when it is not right, one more question. The answer is stored as a margin note of kind answer, linked to the
  *   note it answers, and recorded at level 2 for display: it was given right after an explanation, so it never
  *   moves the memory.
- * - A "Before you go on" check is self-graded (Got it, Partly, Missed): level 2, for display, never memory.
+ * - A "Quick check" check is self-graded (Got it, Partly, Missed): level 2, for display, never memory.
  */
 
 import { prisma } from '@/lib/db/prisma'
@@ -286,7 +286,7 @@ export async function revealCheckSource(input: { userId: string; topicId: string
   return claim ? { quote: claim.quote, pageStart: claim.pageStart } : null
 }
 
-/** A "Before you go on" self-grade: level 2, graded by the student, for display. Recorded once per claim. */
+/** A "Quick check" self-grade: level 2, graded by the student, for display. Recorded once per claim. */
 export async function recordReaderCheck(input: { userId: string; topicId: string; claimId: string; grade: CheckGrade; timeZone: string }): Promise<CheckResult> {
   const { userId, topicId, claimId } = input
   const claim = await prisma.conceptClaim.findFirst({

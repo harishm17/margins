@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ActivityKind } from '@/lib/learning/next-activity'
-import { ACTIVITY_KINDS, activityHref, activityVerb, bareTopicRedirect, defaultViewFor, opensHere, pathStepFor, viewInPath } from './activity-copy'
+import { ACTIVITY_KINDS, activityHref, activityLabel, activityVerb, bareTopicRedirect, defaultViewFor, opensHere, pathStepFor, viewInPath } from './activity-copy'
 
 const ctx = { courseId: 'c1', topicId: 't1', conceptIds: ['k1', 'k2'], unitTopicIds: ['t0', 't1'], target: { conceptId: 'k1', via: 'reread' as const, chunkId: 'ch1' } }
 
@@ -107,4 +107,12 @@ test('the view of a request path', () => {
   assert.equal(viewInPath('/courses/c1/topics/t1?view=read&concept=k'), 'read')
   assert.equal(viewInPath('/courses/c1/topics/t1?concept=k&view=quiz'), 'quiz')
   assert.equal(viewInPath(null), null)
+})
+
+test('a read-again pointer that opens the explanation says so; a topic nobody has opened starts on the warm-up', () => {
+  const base = '/courses/c1/topics/t1'
+  assert.equal(activityLabel({ kind: 'instruct', href: `${base}?view=explainer&focus=k` }), 'Read this explanation')
+  assert.equal(activityLabel({ kind: 'instruct', href: `${base}?view=read&focus=k` }), 'Start learning')
+  assert.equal(activityLabel({ kind: 'quiz', href: `${base}?view=quiz` }), 'Take quiz')
+  assert.equal(activityLabel({ kind: 'start', href: base }), 'Start warm-up')
 })
