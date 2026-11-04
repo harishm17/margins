@@ -180,9 +180,14 @@ test('a recall answer is graded against the claims, with the student quoted firs
   // One clear next step: the topic's next activity is the primary button, and "Show me what I missed" is the quiet choice.
   // The answer held a wrong idea and failed the concept, so the topic's next activity is to read about it first (spec 18.5); the
   // drill that pairs it with its confusable comes after the instruction.
-  await expect(page.getByRole('link', { name: 'Read about it' })).toHaveAttribute('href', /view=(read|explainer)&focus=/)
-  await expect(page.getByRole('link', { name: 'Go to Practice' })).toHaveCount(0)
+  // The first answer counts the topic as recalled, but the step is not finished: the page says how far it is and keeps
+  // the other prompts as the thing to do, with moving on as the quiet choice (not the primary button).
+  await expect(page.getByTestId('recall-progress').locator('visible=true')).toHaveText(/^1 of \d+ prompts answered\. Answer the rest, or move on\.$/)
+  await expect(page.getByRole('link', { name: 'Go to Practice' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Read about it' })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
+  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ }).getByRole('img', { name: 'Completed' })).toHaveCount(0)
+  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ })).toContainText(/1\/\d+/)
   await screenshotIfAsked(page, 'e4-recall-graded-1440x900')
   await expectNoAxeViolations(page, 'recall graded, 1440')
 
@@ -199,7 +204,30 @@ test('a recall answer is graded against the claims, with the student quoted firs
   // It is still there after a reload.
   await page.reload()
   await expect(card(page).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible()
-  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ }).getByRole('img', { name: 'Completed' })).toBeVisible()
+  await expect(page.getByTestId('recall-progress').locator('visible=true')).toHaveText(/^1 of \d+ prompts answered/)
+  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ })).toContainText(/1\/\d+/)
+})
+
+test('recall is shown finished only when every prompt has an answer', async ({ page }) => {
+  test.setTimeout(120_000)
+  await page.setViewportSize(DESKTOP)
+  const { email, topicUrl, topicId } = await world(page, 'rc-all')
+  await seedConcepts(email, topicId('Hash tables'))
+  await page.goto(`${topicUrl('Hash tables')}?view=recall`)
+  const prompts = ['Explain how a hash table handles keys that share a bucket.', 'Explain what the load factor tells you.', 'Explain this topic in your own words: its main ideas and how they fit together.']
+  const path = page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ })
+  for (const [index, prompt] of prompts.entries()) {
+    await answer(page, ANSWER, prompt)
+    await expect(card(page, prompt).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible()
+    if (index < prompts.length - 1) {
+      await expect(page.getByTestId('recall-progress')).toHaveText(new RegExp(`^${index + 1} of ${prompts.length} prompts answered`))
+      await expect(path.getByRole('img', { name: 'Completed' })).toHaveCount(0)
+    }
+  }
+  // The last prompt answered: the count says so, the step ticks, and the way on is the primary button.
+  await expect(page.getByTestId('recall-progress')).toHaveText(`${prompts.length} of ${prompts.length} prompts answered`)
+  await expect(path.getByRole('img', { name: 'Completed' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Read about it' })).toBeVisible()
 })
 
 test('show me what I missed records level 3', async ({ page }) => {

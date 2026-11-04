@@ -11,7 +11,7 @@ import { PRACTICE_DONE_SHARE, solvedCount } from './practice-keys'
 import { usePracticeProgress } from './practice-progress'
 import { useTopic } from './topic-provider'
 import { useTopicView } from './use-topic-view'
-import { SHORT_LABELS, VIEW_LABELS, type ContentKind, type PathView } from './types'
+import { PATH_VIEWS, SHORT_LABELS, VIEW_LABELS, type ContentKind, type PathView } from './types'
 
 type StudyTabsProps = {
   courseId: string
@@ -24,6 +24,8 @@ type StudyTabsProps = {
   nextId: string | null
   /** Which steps of the path are done. */
   pathDone: { warmup: boolean; read: boolean; recall: boolean }
+  /** Recall prompts answered, of all. Recall counts as done from the first, but is shown finished at the last. */
+  recallProgress: { answered: number; total: number }
   /** The steps this topic offers, in order (a topic without concepts has no Recall). */
   steps: PathView[]
   /** What to do next on this topic: the path tags its step, and a card offers it. */
@@ -101,6 +103,7 @@ export function StudyTabs({
   previousId,
   nextId,
   pathDone,
+  recallProgress,
   steps,
   nextActivity,
 }: StudyTabsProps) {
@@ -122,10 +125,17 @@ export function StudyTabs({
   const done: Record<PathView, boolean> = {
     warmup: pathDone.warmup,
     read: pathDone.read || progress.notes,
-    recall: pathDone.recall,
+    // The first graded answer counts the topic as recalled, but the step is finished when every prompt has one.
+    recall: pathDone.recall && recallProgress.answered >= recallProgress.total,
     practice: practiceDone,
     quiz: progress.quizScore !== null,
   }
+  // The next-activity line shows on a step that is finished or not offered, or on a tool (not on a step the student
+  // chose and has not finished: there the step's own action is the one to take). A next activity that is no step of
+  // the path (a drill, a review, a mock exam, the reader at a missed idea) is the exception: a bare topic address
+  // lands on Practice for it, so the student did not choose that step, and without the line would never hear of it.
+  const onPathStep = (PATH_VIEWS as readonly string[]).includes(view)
+  const settled = !onPathStep || !steps.includes(view as PathView) || done[view as PathView] || nextStep === null
 
   /** A status after the label: content being written or missing, solved steps, the best quiz score. */
   function glyphFor(id: PathView): React.ReactNode {
@@ -142,6 +152,9 @@ export function StudyTabs({
         if (running.quiz && !running.quiz.done) return <Writing />
         if (!present.quiz) return <Missing />
         return progress.quizScore !== null ? <StepStatus>{`${Math.round(progress.quizScore)}%`}</StepStatus> : null
+      case 'recall':
+        // Recalled by the first answer, finished by the last: say how far it is.
+        return pathDone.recall && recallProgress.answered < recallProgress.total ? <StepStatus>{`${recallProgress.answered}/${recallProgress.total}`}</StepStatus> : null
       default:
         return null
     }
@@ -175,7 +188,7 @@ export function StudyTabs({
         className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 max-sm:[&_a::after]:inset-x-1 max-sm:[&_[data-tab-indicator]]:inset-x-1 max-sm:[&_a]:gap-1 max-sm:[&_a]:px-1 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
       />
       {/* On the voice view the student is choosing what to do out loud; the way on can wait. */}
-      {view === 'voice' ? null : <NextActivityCard next={nextActivity} />}
+      {view === 'voice' ? null : <NextActivityCard next={nextActivity} settled={settled} />}
     </>
   )
 }

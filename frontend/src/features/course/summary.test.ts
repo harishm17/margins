@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { courseSummary, fileProblem, needsWorkOrder, nextStepWords, problemMessage, reviewTiming, studyPath } from './summary'
+import { courseSummary, fileProblem, needsWorkOrder, problemMessage, reviewTiming } from './summary'
 
 const counts = (strong: number) => ({ none: 0, learning: 0, getting: 0, strong })
 
@@ -29,22 +29,6 @@ test('review timing says due today or when the next review is', () => {
   assert.equal(reviewTiming(null, now), null)
 })
 
-test('the study path shows missing, ready and done blocks', () => {
-  const path = studyPath({
-    content: ['section_notes', 'interactive_examples', 'topic_quiz'],
-    progress: { notes: true, examples: false, quiz: false, quizScore: 70 },
-  })
-  assert.deepEqual(path, { notes: 'done', examples: 'missing', practice: 'ready', quiz: 'ready', quizScore: 70 })
-})
-
-test('practice shows as done once most of its steps are solved on the server', () => {
-  const base = { content: ['interactive_examples'], progress: { notes: false, examples: false, quiz: false, quizScore: null } }
-  assert.equal(studyPath(base).practice, 'ready')
-  assert.equal(studyPath({ ...base, practiceDone: false }).practice, 'ready')
-  assert.equal(studyPath({ ...base, practiceDone: true }).practice, 'done')
-  assert.equal(studyPath({ content: [], progress: base.progress, practiceDone: false }).practice, 'missing')
-})
-
 test('"Needs work" puts due topics first, then the lowest mastery, not started included', () => {
   const now = Date.parse('2026-10-20T12:00:00Z')
   const topics = [
@@ -59,8 +43,3 @@ test('"Needs work" puts due topics first, then the lowest mastery, not started i
   )
 })
 
-test('a topic row says what is next on its path, in words', () => {
-  assert.equal(nextStepWords({ notes: 'ready', examples: 'missing', practice: 'missing', quiz: 'missing' }), 'Next: Notes')
-  assert.equal(nextStepWords({ notes: 'done', examples: 'ready', practice: 'missing', quiz: 'missing' }), 'Next: Worked examples')
-  assert.equal(nextStepWords({ notes: 'done', examples: 'done', practice: 'done', quiz: 'done' }), 'Study path done')
-})

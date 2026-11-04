@@ -39,10 +39,10 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await markRead(email, read)
   const url = (id: string) => `/courses/${course.courseId}/topics/${id}?view=quiz`
 
-  // A topic not read yet: reading is next, so the card is on the quiz lobby (it points somewhere else) ...
+  // A topic not read yet: reading is next, but the student chose the quiz and has not taken it, so the quiz lobby has no card ...
   await page.setViewportSize(SIZES[0][1])
   await page.goto(url(unread))
-  await expect(card(page)).toContainText('Start with the notes for this topic.')
+  await expect(card(page)).toHaveCount(0)
   // ... steps aside as soon as the quiz is being taken ...
   await page.getByRole('button', { name: 'Start quiz' }).click()
   await expect(page.getByText('Question 1 of')).toBeVisible()
@@ -55,12 +55,12 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await page.getByRole('button', { name: 'Question 3', exact: false }).first().click()
   await page.getByRole('button', { name: 'Submit quiz' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
-  // ... and is back once the results are in, still saying to read (nothing about the quiz changes that).
+  // ... and is back once the results are in (the quiz is finished), still saying to read (nothing about the quiz changes that).
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
-  await expect(card(page)).toContainText('Start with the notes for this topic.')
+  await expect(card(page)).toContainText('Read the topic next.')
   await expect(card(page).getByRole('link', { name: 'Start reading' })).toBeVisible()
 
-  // A topic that is read: the quiz is the next activity, so there is no card on it, and after the quiz the
+  // A topic that is read: the student chose the quiz and has not taken it, so there is no card on it, and after the quiz the
   // card names the new next activity (practice), read again from the server.
   await page.goto(url(read))
   await expect(page.getByRole('button', { name: 'Start quiz' })).toBeVisible()
@@ -155,8 +155,8 @@ test('in practice the next card stays away from the first check until every prob
   await page.goto(`/courses/${course.courseId}/topics/${topic}?view=practice`)
   const answerBox = page.getByLabel('Your answer').locator('visible=true')
   const check = page.getByRole('button', { name: 'Check', exact: true })
-  // Nothing begun: the card offers the way on (the quiz is next).
-  await expect(card(page)).toBeVisible()
+  // Nothing begun: practice is the next step and is where the student is, so there is no card.
+  await expect(card(page)).toHaveCount(0)
   await answerBox.fill('4')
   await check.click()
   await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
@@ -272,7 +272,8 @@ test('with the AI down the next card skips recall and says so; reading still wor
   await seedConceptTopic(email, topic, { recalled: false })
   await page.setViewportSize(SIZES[0][1])
   try {
-    await page.goto(`/courses/${course.courseId}/topics/${topic}?view=practice`)
+    // On a tool: the practice step, unfinished, would say nothing (the student chose it).
+    await page.goto(`/courses/${course.courseId}/topics/${topic}?view=examples`)
     await expect(card(page)).toContainText('Close the book and say what you remember.')
     await expect(card(page).getByRole('link', { name: 'Start recall' })).toBeVisible()
 

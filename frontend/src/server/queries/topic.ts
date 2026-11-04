@@ -25,6 +25,7 @@ import {
 import { topicBand, type Band } from '@/lib/learning/level'
 import type { NextActivity } from '@/lib/learning/next-activity'
 import { loadTopicLearningState, resolveTopicActivity } from '@/lib/learning/next-activity-server'
+import { loadRecallProgress } from '@/lib/learning/recall-server'
 import { findActiveConceptsJob } from '@/lib/learning/topic-preparation'
 import { pathSteps } from '@/features/topic/path-steps'
 import type { PathView } from '@/features/topic/types'
@@ -133,6 +134,8 @@ export type TopicPageData = {
   topicBand: Band
   /** Which path steps are done (the warm-up taken, the topic read, recall done). */
   pathDone: { warmup: boolean; read: boolean; recall: boolean }
+  /** Recall prompts with an answer, of all of them. The first graded answer counts the topic as recalled; the step is finished at all. */
+  recallProgress: { answered: number; total: number }
   /** The steps of the path this topic can offer (no warm-up without a bank, no recall without concepts). */
   pathSteps: PathView[]
   /** Concept extraction is queued or running: Recall shows a preparing state. */
@@ -362,6 +365,7 @@ export const getTopicPage = cache(async function getTopicPage(
     concepts: learningState.concepts.map((concept) => ({ id: concept.id, name: concept.name ?? '', label: concept.label, wrongIdea: concept.misconception !== null, band: concept.band })),
     topicBand: topicBand(learningState.concepts.map((concept) => ({ band: concept.band, solid: concept.label === 'solid' }))),
     pathDone: { warmup: learningState.warmupAt !== null, read: learningState.readAt !== null, recall: learningState.recallAt !== null },
+    recallProgress: hasConcepts && learningState.recallAt !== null ? await loadRecallProgress(userId, topicId) : { answered: 0, total: 0 },
     showEffortIntro: effortIntro?.seenEffortIntroAt == null,
   }
 })

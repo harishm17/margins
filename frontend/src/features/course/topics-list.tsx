@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Check, Exam, Lightbulb, Notebook, PencilSimple, PencilSimpleLine } from '@phosphor-icons/react/dist/ssr'
+import { BookOpenText, ChatsCircle, Check, Exam, Lightning, PencilSimple, PencilSimpleLine } from '@phosphor-icons/react/dist/ssr'
 import { PageIntro } from '@/components/shell/page'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,9 @@ import { groupTopicsByUnit, unitMastery, type UnitGroup as UnitGroupOf } from '@
 import { cn } from '@/lib/utils'
 import type { GenerationState, TopicsData } from '@/server/queries/course'
 import { BuildingContent } from './building-content'
-import { needsWorkOrder, nextStepWords, type GlyphState } from './summary'
+import type { PathGlyph, PathGlyphState } from '@/features/topic/path-steps'
+import type { PathView } from '@/features/topic/types'
+import { needsWorkOrder } from './summary'
 
 export type ListTopic = {
   id: string
@@ -33,23 +35,32 @@ export type ListTopic = {
   dueAt: string | null
   /** "Due today" or "Next review in 4 days", worked out on the server. */
   timing: { due: boolean; text: string } | null
-  path: { notes: GlyphState; examples: GlyphState; practice: GlyphState; quiz: GlyphState; quizScore: number | null }
+  /** The steps this topic offers (the topic page's own list), each done, next or later, and what is next in words. */
+  path: { glyphs: PathGlyph[]; nextWords: string; quizScore: number | null }
 }
 
 type GlyphProps = {
   label: string
-  state: GlyphState
+  state: PathGlyphState
   icon: React.ReactNode
   score?: number | null
 }
 
-const STATE_WORDS: Record<GlyphState, string> = {
+const STATE_WORDS: Record<PathGlyphState, string> = {
   done: 'done',
-  ready: 'ready',
-  missing: 'not written yet',
+  next: 'next',
+  later: 'not yet',
 }
 
-/** One of the four study path circles: filled with a check when done, ringed when it exists, dashed when missing. */
+const STEP_ICONS: Record<PathView, React.ReactNode> = {
+  warmup: <Lightning />,
+  read: <BookOpenText />,
+  recall: <ChatsCircle />,
+  practice: <PencilSimpleLine />,
+  quiz: <Exam />,
+}
+
+/** One step of the path as a circle: filled with a check when done, ringed when it is the next one, dashed when still ahead. */
 function Glyph({ label, state, icon, score }: GlyphProps) {
   const hasScore = score !== null && score !== undefined
   const words = hasScore ? `${label}: best score ${Math.round(score)}%` : `${label}: ${STATE_WORDS[state]}`
@@ -57,7 +68,7 @@ function Glyph({ label, state, icon, score }: GlyphProps) {
   const look =
     state === 'done'
       ? 'bg-accent text-accent-fg'
-      : state === 'ready'
+      : state === 'next'
         ? 'border-2 border-accent text-accent'
         : 'border border-dashed border-border-strong text-fg-3'
   return (
@@ -93,12 +104,15 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
         </div>
         {/* The path circles are for the eye; the row says what is next in words (below), so its name is what it shows. */}
         <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
-          <Glyph label="Notes" state={path.notes} icon={<Notebook />} />
-          <Glyph label="Worked examples" state={path.examples} icon={<Lightbulb />} />
-          <Glyph label="Practice" state={path.practice} icon={<PencilSimpleLine />} />
-          <span className="inline-flex w-10 justify-center">
-            <Glyph label="Quiz" state={path.quiz} icon={<Exam />} score={path.quizScore} />
-          </span>
+          {path.glyphs.map((glyph) =>
+            glyph.step === 'quiz' ? (
+              <span key={glyph.step} className="inline-flex w-10 justify-center">
+                <Glyph label={glyph.label} state={glyph.state} icon={STEP_ICONS.quiz} score={path.quizScore} />
+              </span>
+            ) : (
+              <Glyph key={glyph.step} label={glyph.label} state={glyph.state} icon={STEP_ICONS[glyph.step]} />
+            )
+          )}
         </div>
         <div className="flex w-full shrink-0 flex-col sm:w-40 sm:items-end">
           <span className="text-small text-fg">
@@ -113,7 +127,7 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
               {topic.timing.text}
             </span>
           ) : null}
-          <span className="sr-only">{nextStepWords(topic.path)}</span>
+          <span className="sr-only">{path.nextWords}</span>
         </div>
       </Link>
     </li>

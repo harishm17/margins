@@ -139,27 +139,28 @@ export function ToolsMenu(props: ToolsProps) {
 }
 
 /**
- * What to do next on this topic, in the words of the next-activity selector (spec §8.1): its reason and a
- * button. It shows on a view the student is not working in, and not on the one it points to, since there
- * the activity is already on screen. While they are in the middle of something (a quiz being taken, a
- * practice problem under way, a warm-up or recall being written) it waits: the activity they are doing is
- * the next one for now, and a card above it only pulls them away. Once it is finished the card is back with
- * the refreshed next activity (the layout reads it again after every submit), when that is somewhere else.
+ * What to do next on this topic, in the words of the next-activity selector (spec §8.1): its reason and a link.
+ * It is one quiet line, never a button above the step's own primary action, and there is one per topic with one
+ * piece of advice, the same on every step for the same state (it comes from the state, not from the view).
+ *
+ * `settled` is whether the student is on a step that is finished or not offered, or on a tool: only then does the
+ * line show, because a student who chose a step on purpose is doing it, and a line that sends them elsewhere pulls
+ * them off it. It is also left out on the step it points to (the activity is already on screen), while something is
+ * in progress (a quiz being taken, a practice problem under way, a warm-up or recall being written), and for a topic
+ * nobody has opened (the page is the way in). Once the activity is finished the line is back with the refreshed
+ * next activity (the layout reads it again after every submit), when that is somewhere else.
  */
-export function NextActivityCard({ next }: { next: { kind: ActivityKind; reason: string; href: string } }) {
+export function NextActivityCard({ next, settled }: { next: { kind: ActivityKind; reason: string; href: string }; settled: boolean }) {
   const pathname = usePathname()
   const search = useSearchParams()
   const { inProgress } = useTopic()
-  // On a phone the reason is behind "Why" so the card is one line: the tag, the way on, and the question.
+  // On a phone the reason is behind "Why" so the line is short: the tag, the way on, and the question.
   const [whyOpen, setWhyOpen] = React.useState(false)
   const reasonId = React.useId()
-  if (inProgress || opensHere(next.href, pathname, search)) return null
+  if (!settled || inProgress || next.kind === 'start' || opensHere(next.href, pathname, search)) return null
   return (
-    <section
-      aria-label="Next on this topic"
-      className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-card border border-border border-l-[3px] border-l-accent-soft bg-surface px-3 py-0.5 sm:mt-4 sm:flex-nowrap sm:gap-x-6 sm:px-4 sm:py-3"
-    >
-      <p className="flex min-w-0 items-baseline gap-2 text-small text-fg-2 max-sm:order-1">
+    <section aria-label="Next on this topic" className="mt-2 flex items-center justify-between gap-x-3 gap-y-0.5 text-small text-fg-2 sm:mt-3 sm:flex-wrap sm:justify-start sm:items-baseline">
+      <p className="flex min-w-0 flex-1 items-baseline gap-2 sm:flex-none">
         <span className="shrink-0 rounded-chip bg-accent-soft px-1.5 text-caption text-accent-soft-fg">{next.kind === 'done_for_now' ? 'For now' : 'Next'}</span>
         <span id={reasonId} className={cn('min-w-0', !whyOpen && 'max-sm:hidden')}>
           {next.reason}
@@ -175,7 +176,7 @@ export function NextActivityCard({ next }: { next: { kind: ActivityKind; reason:
           <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', whyOpen && 'rotate-180')} />
         </button>
       </p>
-      <Button asChild variant="primary" size="sm" className="shrink-0 max-sm:order-2">
+      <Button asChild variant="link" size="sm" className="shrink-0">
         <Link href={next.href}>
           {activityVerb(next.kind)}
           <ArrowRight aria-hidden="true" className="size-4" />

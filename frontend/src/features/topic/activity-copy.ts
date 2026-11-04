@@ -9,6 +9,7 @@ import { parseView, type PathView, type ViewId } from './types'
 export { activityHref }
 
 export const ACTIVITY_KINDS: ActivityKind[] = [
+  'start',
   'instruct',
   'fix_misconception',
   'warmup',
@@ -27,6 +28,7 @@ export const ACTIVITY_KINDS: ActivityKind[] = [
 ]
 
 const VERBS: Record<ActivityKind, string> = {
+  start: 'Open the topic',
   instruct: 'Read about it',
   examples: 'See an example',
   done_for_now: 'Try a harder set',
@@ -61,6 +63,9 @@ export function defaultViewFor(kind: ActivityKind): ViewId {
     case 'quiz':
     case 'practice':
       return kind
+    case 'start':
+      // A topic nobody has opened has no warm-up yet: it opens on the reader, which shows it being prepared.
+      return 'read'
     case 'instruct':
       // The explainer or the reader, at the concept: the address says which (`activityHref`); the bare view is the reader.
       return 'read'

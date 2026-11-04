@@ -125,7 +125,9 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
         </Step>
 
         <Step number={3} state={step === 3 ? 'current' : 'upcoming'} title="Start studying" last>
-          <p className={description}>Notes, worked examples, practice and a quiz for each topic, written as you go.</p>
+          {step !== 3 ? (
+            <p className={description}>A warm-up, reading, recall, practice and a quiz for each topic, written as you go.</p>
+          ) : null}
           {step === 3 && setup.plan.askForExamDate ? (
             <SetupPlanFields courseId={courseId} dailyMinutes={setup.plan.dailyMinutes} />
           ) : null}

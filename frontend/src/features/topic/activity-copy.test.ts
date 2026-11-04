@@ -7,6 +7,7 @@ const ctx = { courseId: 'c1', topicId: 't1', conceptIds: ['k1', 'k2'], unitTopic
 
 test('each kind maps to its destination', () => {
   const expected: Record<ActivityKind, string> = {
+    start: '/courses/c1/topics/t1',
     instruct: '/courses/c1/topics/t1?view=read&focus=k1#chunk-ch1',
     examples: '/courses/c1/topics/t1?view=examples&focus=k1&fade=full',
     done_for_now: '/courses/c1/topics/t1?view=quiz&difficulty=hard',

@@ -177,7 +177,7 @@ export function StartStudyingStep({
           </Link>
         </Button>
         <p className="mt-2 text-caption font-normal text-fg-3">
-          The notes are written when you open a topic, which takes about a minute.
+          A topic is prepared when you open it, which takes about a minute.
         </p>
       </div>
     </div>

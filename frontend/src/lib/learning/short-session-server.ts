@@ -42,6 +42,26 @@ export async function loadShortSessionState(userId: string, courseId: string, ti
   return { courseId, due, currentTopic, ai: blockedCode(status) ? 'down' : 'up' }
 }
 
+/**
+ * Whether the student has a first quiz or a first graded recall on any topic of this course. The short session and the
+ * voice practice are for a student who has something to go over; before that Home and Review say what opens them.
+ */
+export async function hasFirstQuizOrRecall(userId: string, courseId: string): Promise<boolean> {
+  const [events, attempts, scored, scheduled] = await Promise.all([
+    prisma.evidenceEvent.count({ where: { userId, projectId: courseId, source: { in: ['quiz', 'recall'] } } }),
+    prisma.quizAttempt.count({ where: { userId, topic: { projectId: courseId } } }),
+    // A quiz score kept on the topic's progress (from before attempts were stored one by one).
+    prisma.topicProgress.count({ where: { userId, quizScore: { not: null }, topic: { projectId: courseId } } }),
+    // A review is scheduled only after a quiz.
+    prisma.reviewSchedule.count({ where: { userId, projectId: courseId } }),
+  ])
+  return events > 0 || attempts > 0 || scored > 0 || scheduled > 0
+}
+
+/** Said in place of the extras before the first quiz or recall: what opens them. */
+export const SHORT_SESSION_LOCKED_TEXT = 'A 10-minute check opens after your first quiz or recall.'
+export const REVIEW_EXTRAS_LOCKED_TEXT = 'The 10-minute check and voice practice open after your first quiz or recall.'
+
 /** The short session on offer for a course, or null when there is nothing to offer. */
 export async function shortSessionOffer(userId: string, courseId: string, timeZone: string): Promise<{ plan: ShortSessionPlan; currentTopicId: string | null } | null> {
   const state = await loadShortSessionState(userId, courseId, timeZone)
