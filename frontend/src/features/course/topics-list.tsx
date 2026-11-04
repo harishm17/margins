@@ -14,6 +14,7 @@ import { SegmentedControl } from '@/components/ui/segmented-control'
 import { MathText } from '@/components/ui/math-text'
 import { MasteryIndicator } from '@/components/ui/mastery-indicator'
 import { pluralize } from '@/lib/format'
+import { PROGRESS_MEASURE } from '@/lib/learning/progress-words'
 import { masteryLabel, masteryLevel, masteryPercent, masteryTone } from '@/lib/mastery'
 import { groupTopicsByUnit, unitMastery, type UnitGroup as UnitGroupOf } from '@/lib/topics/units'
 import { cn } from '@/lib/utils'
@@ -60,8 +61,8 @@ function PathStatus({ path, percent }: { path: ListTopic['path']; percent: numbe
       </span>
       <span className="tabular">
         {done} of {path.glyphs.length} steps done
-        {path.quizScore !== null ? `, quiz ${Math.round(path.quizScore)}%` : ''}
-        {percent !== null ? `, mastery ${percent}%` : ''}
+        {path.quizScore !== null ? `, ${PROGRESS_MEASURE.quiz.toLowerCase()} ${Math.round(path.quizScore)}%` : ''}
+        {percent !== null ? `, ${PROGRESS_MEASURE.topic.toLowerCase()} ${percent}%` : ''}
       </span>
     </span>
   )
@@ -85,7 +86,9 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
       <div className="flex items-center gap-1">
         <Link
           href={`/courses/${courseId}/topics/${topic.id}`}
-          className="group flex min-h-14 min-w-0 flex-1 items-center gap-x-4 rounded-control px-2 py-2.5 transition-colors duration-120 hover:bg-surface-2"
+          // On a phone the name and the next step wrap (a clipped "Sorting algor..." and "Next: Read the pa..." hid what the row
+          // says) and the status moves to a line under them; from sm up it is one line with the status on the right.
+          className="group flex min-h-14 min-w-0 flex-1 items-center gap-x-4 rounded-control px-2 py-2.5 transition-colors duration-120 hover:bg-surface-2 max-sm:grid max-sm:grid-cols-[28px_minmax(0,1fr)] max-sm:items-start max-sm:gap-y-1"
         >
           <ProgressRing
             size={28}
@@ -94,12 +97,13 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
           />
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 text-body-strong text-fg">
-              <span className="min-w-0 truncate">{topic.name}</span>
+              <span className="min-w-0 max-sm:line-clamp-2 sm:truncate">{topic.name}</span>
               {topic.examRelevant ? <Badge tone="accent" className="max-sm:hidden">On past exams</Badge> : null}
             </p>
-            <p className="truncate text-small text-fg-2">{path.nextWords}</p>
+            <p className="text-small text-fg-2 sm:truncate">{path.nextWords}</p>
           </div>
-          <div className="flex shrink-0 flex-col items-end text-right">
+          <div className="flex shrink-0 flex-col items-end text-right max-sm:col-start-2 max-sm:flex-row max-sm:flex-wrap max-sm:items-baseline max-sm:gap-x-3 max-sm:text-left">
+            <span className="sr-only">{PROGRESS_MEASURE.topic}: </span>
             <span className="text-small text-fg">{level === 'none' && started(topic) ? 'In progress' : masteryLabel(topic.mastery)}</span>
             {topic.timing ? (
               <span
