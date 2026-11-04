@@ -41,6 +41,9 @@ export type VoiceSnapshot = {
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 const keyOf = (courseId: string, scope: string) => `margins-voice:${courseId}:${scope}`
+// The typed-but-unsent words live under a key of their own: they change on every keystroke and must survive even when the snapshot
+// of the transcript has not been written yet.
+const draftKeyOf = (courseId: string, scope: string) => `margins-voice-draft:${courseId}:${scope}`
 
 function storage(): StorageLike | null {
   try {
@@ -86,6 +89,26 @@ export function parseSnapshot(raw: string | null, courseId: string, scope: strin
   }
 }
 
+/** The words typed and not sent, when they are recent enough to matter. */
+export function readVoiceDraft(courseId: string, scope: string, store: StorageLike | null = storage(), now = Date.now()): string {
+  if (!store) return ''
+  try {
+    const held = JSON.parse(store.getItem(draftKeyOf(courseId, scope)) ?? 'null') as { text?: unknown; at?: unknown } | null
+    return held && typeof held.text === 'string' && typeof held.at === 'number' && now - held.at <= SNAPSHOT_MAX_AGE_MS ? held.text : ''
+  } catch {
+    return ''
+  }
+}
+
+export function writeVoiceDraft(courseId: string, scope: string, text: string, store: StorageLike | null = storage(), now = Date.now()) {
+  try {
+    if (text) store?.setItem(draftKeyOf(courseId, scope), JSON.stringify({ text, at: now }))
+    else store?.removeItem(draftKeyOf(courseId, scope))
+  } catch {
+    // Storage can be full or blocked; the words are still in the box.
+  }
+}
+
 export function readVoiceSnapshot(courseId: string, scope: string, store: StorageLike | null = storage(), now = Date.now()): VoiceSnapshot | null {
   if (!store) return null
   let raw: string | null = null
@@ -95,21 +118,30 @@ export function readVoiceSnapshot(courseId: string, scope: string, store: Storag
     return null
   }
   const snapshot = parseSnapshot(raw, courseId, scope, now)
-  if (raw && !snapshot) clearVoiceSnapshot(courseId, scope, store)
-  return snapshot
+  if (raw && !snapshot) {
+    try {
+      store.removeItem(keyOf(courseId, scope))
+    } catch {
+      // Nothing to clear if storage is blocked.
+    }
+  }
+  return snapshot ? { ...snapshot, draft: readVoiceDraft(courseId, scope, store, now) } : null
 }
 
 export function writeVoiceSnapshot(snapshot: VoiceSnapshot, store: StorageLike | null = storage()) {
   try {
-    store?.setItem(keyOf(snapshot.courseId, snapshot.scope), JSON.stringify(snapshot))
+    // The draft is kept under its own key (see draftKeyOf).
+    store?.setItem(keyOf(snapshot.courseId, snapshot.scope), JSON.stringify({ ...snapshot, draft: '' }))
   } catch {
     // Storage can be full or blocked; the practice itself is not affected.
   }
 }
 
+/** Forget the snapshot and the typed words: the practice ended on purpose, or the student chose to start fresh. */
 export function clearVoiceSnapshot(courseId: string, scope: string, store: StorageLike | null = storage()) {
   try {
     store?.removeItem(keyOf(courseId, scope))
+    store?.removeItem(draftKeyOf(courseId, scope))
   } catch {
     // Nothing to clear if storage is blocked.
   }
@@ -174,7 +206,7 @@ export function persistLiveSession(
       entries: snapshotEntries(live.entries),
       restored: held?.restored ?? [],
       question: live.question,
-      draft: held?.draft ?? '',
+      draft: '',
     },
     store
   )
@@ -197,15 +229,14 @@ export function toTranscript(entries: readonly SnapshotEntry[]): TranscriptEntry
 export function useVoiceDraft(courseId: string, scope?: string) {
   const key = scope ?? activeScope
   const [restoredTranscript] = React.useState<TranscriptEntry[]>(() => toTranscript(readVoiceSnapshot(courseId, key)?.restored ?? []))
-  const [draft, setDraftState] = React.useState(() => readVoiceSnapshot(courseId, key)?.draft ?? '')
+  const [draft, setDraftState] = React.useState(() => readVoiceDraft(courseId, key))
   const draftRef = React.useRef(draft)
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const flush = React.useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
     timer.current = null
-    const held = readVoiceSnapshot(courseId, key)
-    if (held) writeVoiceSnapshot({ ...held, draft: draftRef.current, savedAt: Date.now() })
+    writeVoiceDraft(courseId, key, draftRef.current)
   }, [courseId, key])
 
   const setDraft = React.useCallback(

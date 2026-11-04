@@ -149,8 +149,9 @@ export function Composer({
       }
       if (cancelled) return
       if (found) {
-        await draftRef.current.clear()
+        // Open the conversation first; dropping the draft may have to wait for a save that is still out.
         recoveredRef.current?.(found.id, found.title)
+        void draftRef.current.clear()
         return
       }
       const age = Date.now() - sentAt

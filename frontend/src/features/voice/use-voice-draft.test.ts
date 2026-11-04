@@ -6,10 +6,12 @@ import {
   clearVoiceSnapshot,
   describeSnapshot,
   persistLiveSession,
+  readVoiceDraft,
   readVoiceSnapshot,
   resumeOpening,
   snapshotEntries,
   startResume,
+  writeVoiceDraft,
   toTranscript,
 } from './use-voice-draft'
 
@@ -60,7 +62,7 @@ describe('voice snapshot', () => {
     persistLiveSession(base, { entries, question: 'And a queue?' }, store, Date.now())
     const held = readVoiceSnapshot('c1', 't1', store)
     assert.ok(held)
-    store.setItem('margins-voice:c1:t1', JSON.stringify({ ...held, draft: 'FIFO, I think' }))
+    writeVoiceDraft('c1', 't1', 'FIFO, I think', store)
     startResume(readVoiceSnapshot('c1', 't1', store)!, store)
     persistLiveSession(base, { entries: [], question: null }, store)
     const next = readVoiceSnapshot('c1', 't1', store)!
@@ -75,6 +77,17 @@ describe('voice snapshot', () => {
     persistLiveSession(base, { entries, question: 'And a queue?' }, store, Date.now())
     assert.match(resumeOpening(readVoiceSnapshot('c1', 't1', store)!) ?? '', /ask me this question again.*And a queue\?/)
     assert.equal(resumeOpening({ ...readVoiceSnapshot('c1', 't1', store)!, question: null, entries: [], restored: [] }), null)
+  })
+
+  it('keeps typed words even before the first snapshot exists, drops them when stale, and clears with the snapshot', () => {
+    const store = memoryStore()
+    writeVoiceDraft('c1', 't1', 'half an answer', store, 1000)
+    assert.equal(readVoiceDraft('c1', 't1', store, 2000), 'half an answer')
+    assert.equal(readVoiceDraft('c1', 't1', store, 1000 + SNAPSHOT_MAX_AGE_MS + 1), '')
+    persistLiveSession(base, { entries, question: null }, store, 1500)
+    assert.equal(readVoiceSnapshot('c1', 't1', store, 2000)?.draft, 'half an answer')
+    clearVoiceSnapshot('c1', 't1', store)
+    assert.equal(readVoiceDraft('c1', 't1', store, 2000), '')
   })
 
   it('clears', () => {

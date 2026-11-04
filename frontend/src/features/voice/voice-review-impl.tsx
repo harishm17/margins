@@ -10,6 +10,7 @@ import { SessionView } from './session-view'
 import { canCaptureAudio } from './cloud-recognition'
 import { getRecognitionConstructor } from './speech'
 import { Summary } from './summary'
+import { clearVoiceSnapshot } from './use-voice-draft'
 import { useVoiceSession } from './use-voice-session'
 import { getVoiceUsage, type VoiceUsage } from './voice-api'
 import type { VoiceReviewProps } from './voice-review'
@@ -122,7 +123,11 @@ export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId
         hasClaims={hasClaims}
         claimsOfIdea={claimsOfIdea}
         quiz={quiz}
-        onStart={(config) => void controller.start(config)}
+        onStart={(config) => {
+          // A fresh start forgets whatever an interrupted practice left behind.
+          clearVoiceSnapshot(courseId, mode === 'topic' ? (topic?.id ?? 'topic') : 'sprint')
+          void controller.start(config)
+        }}
       />
     </div>
   )

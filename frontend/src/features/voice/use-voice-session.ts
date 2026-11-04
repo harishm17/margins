@@ -47,6 +47,7 @@ export function useVoiceSession(options: VoiceControllerOptions): VoiceSession {
   React.useEffect(() => {
     latest.current = { state, courseId: options.courseId, mode: options.mode, scope }
   })
+  const lastWrite = React.useRef(0)
   const writeNow = React.useCallback(() => {
     const { state: current, courseId, mode, scope: key } = latest.current
     const config = controller.getConfig()
@@ -63,7 +64,11 @@ export function useVoiceSession(options: VoiceControllerOptions): VoiceSession {
       return
     }
     if (state.phase !== 'live') return
-    const timer = setTimeout(writeNow, 300)
+    // Written soon after a change, and at least about once a second while the coach's words keep streaming in.
+    const timer = setTimeout(() => {
+      lastWrite.current = Date.now()
+      writeNow()
+    }, Math.min(300, Math.max(0, 1000 - (Date.now() - lastWrite.current))))
     return () => clearTimeout(timer)
   }, [state.phase, state.entries, state.question, options.courseId, scope, writeNow])
 
