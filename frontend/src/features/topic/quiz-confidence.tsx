@@ -24,6 +24,7 @@ export function ConfidenceRow({
   optionCount,
   required,
   optional = true,
+  defaultOpen = false,
   onChange,
 }: {
   value: number | undefined
@@ -35,11 +36,13 @@ export function ConfidenceRow({
   required?: boolean
   /** Shown as optional (the default): the label says so, and on a phone the row sits behind one "Confidence (optional)" chip until it is tapped or already answered. */
   optional?: boolean
+  /** Skip the phone chip: the row sits inside a disclosure the screen already offers. */
+  defaultOpen?: boolean
   onChange: (level: ConfidenceId, confidence: number) => void
 }) {
   const labelId = React.useId()
   const selected = selectedConfidenceLevel(level, value, optionCount)
-  const [expanded, setExpanded] = React.useState(false)
+  const [expanded, setExpanded] = React.useState(defaultOpen)
   // A phone shows the chip first; once a level is chosen (or the row is required) the row itself stays visible.
   const collapsed = optional && !required && selected === '' && !expanded
   return (

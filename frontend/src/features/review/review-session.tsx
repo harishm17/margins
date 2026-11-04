@@ -2,14 +2,14 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { ArrowRight, ArrowsClockwise, BookOpen, CheckCircle } from '@phosphor-icons/react/dist/ssr'
+import { ArrowLeft, ArrowRight, ArrowsClockwise, BookOpen, CaretDown, CheckCircle } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { Spinner } from '@/components/ui/spinner'
-import { SHORT_SESSION_NAME } from '@/lib/learning/short-session'
+import { itemMinutes, SHORT_SESSION_NAME } from '@/lib/learning/short-session'
 import { useStartShortSession } from '@/features/home/short-session-card'
 import { ConfidenceRow, optionCountOf, ThinkingBox } from '@/features/topic/quiz-confidence'
 import { ReviewList as ResultList, type ReviewEntry } from '@/features/topic/quiz-review-list'
@@ -35,6 +35,31 @@ type Props = {
 }
 
 const POLL_MS = 2000
+
+/**
+ * Where the student was reading, kept in this tab so a reload comes back to the same screen. The server only knows the first
+ * unanswered question, so without this a reload after a miss skips the feedback the student was reading.
+ */
+const readingKey = (sessionId: string) => `margins-review:${sessionId}`
+
+function readReading(sessionId: string): { index: number } | null {
+  try {
+    const parsed: unknown = JSON.parse(window.sessionStorage.getItem(readingKey(sessionId)) ?? 'null')
+    const index = (parsed as { index?: unknown } | null)?.index
+    return typeof index === 'number' && Number.isInteger(index) && index >= 0 ? { index } : null
+  } catch {
+    return null
+  }
+}
+
+function writeReading(sessionId: string, index: number | null, phase: 'feedback' | 'question') {
+  try {
+    if (index === null) window.sessionStorage.removeItem(readingKey(sessionId))
+    else window.sessionStorage.setItem(readingKey(sessionId), JSON.stringify({ sessionId, index, phase }))
+  } catch {
+    // Storage can be blocked; a reload then goes to the next unanswered question, as before.
+  }
+}
 
 // The easy questions a review opens with carry no label: "Warm-up" is the topic's own step (questions before reading), not this.
 const PHASE_LABEL: Partial<Record<PublicSessionItem['phase'], string>> = {
@@ -62,7 +87,13 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
 
   const adopt = React.useCallback((view: SessionView) => {
     setLoading({ state: 'ready', view })
-    setCursor((current) => current ?? view.next ?? view.items.length)
+    setCursor((current) => {
+      if (current !== null) return current
+      // A reload: go back to the answer the student was reading when it is stored and still there, else to the next unanswered question.
+      const reading = view.status === 'complete' ? null : readReading(view.id)
+      if (reading && reading.index < view.items.length && view.answered[String(reading.index)]) return reading.index
+      return view.next ?? view.items.length
+    })
   }, [])
 
   const start = React.useCallback(async () => {
@@ -137,6 +168,16 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [adopt, preparing, viewId, tick])
+
+  // Remember the screen the student is on, so a reload returns to it (a miss's feedback, or the question after a right answer).
+  const readingId = view?.id
+  const readingAnswered = view && cursor !== null ? !!view.answered[String(cursor)] : false
+  const readingDone = !!view && view.status === 'complete' && cursor !== null && cursor >= view.items.length
+  React.useEffect(() => {
+    if (!readingId || cursor === null) return
+    if (readingDone) writeReading(readingId, null, 'question')
+    else writeReading(readingId, cursor, readingAnswered ? 'feedback' : 'question')
+  }, [readingId, cursor, readingAnswered, readingDone])
 
   if (loading.state === 'starting') return <Status title="Getting your questions ready" busy />
   if (loading.state === 'empty') {
@@ -227,10 +268,15 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
         </p>
       </div>
       {/* Why the student is here, said until the first answer: a quick practice names its size, a drill says what it is for. */}
-      {answeredCount === 0 && (session.short || session.kind === 'drill') ? (
-        <p className="mt-1 text-small text-fg-2" data-testid="session-entry-note">
-          {session.short ? `${SHORT_SESSION_NAME} · ${plural(total, 'question')}` : 'Practising one idea that needs another look.'}
-        </p>
+      {answeredCount === 0 ? (
+        <div className="mt-1 text-small text-fg-2" data-testid="session-entry-note">
+          {/* The size of the commitment first; a drill also says what it is for. */}
+          <p>
+            {session.short ? `${SHORT_SESSION_NAME} · ` : session.kind === 'drill' ? 'One idea that needs another look · ' : ''}
+            {`About ${itemMinutes(total, 'up')} minutes · ${plural(total, 'question')}`}
+          </p>
+          {session.closingRetests ? <p>Anything you miss comes back once at the end.</p> : null}
+        </div>
       ) : null}
       <Progress aria-label="Questions answered" className="mt-4" value={(answeredCount / total) * 100} />
       <RightNote courseId={courseId} session={session} position={rightNote} />
@@ -247,6 +293,14 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
         complete={session.status === 'complete'}
         firstMiss={Object.values(session.answered).filter((entry) => !entry.correct).length === 1}
         closingRetests={session.closingRetests}
+        onPrevious={
+          position > 0 && session.answered[String(position - 1)]
+            ? () => {
+                setRightNote(null)
+                setCursor(position - 1)
+              }
+            : undefined
+        }
         onGraded={(view) => {
           // A new result replaces the note about the last right answer.
           setRightNote(null)
@@ -377,6 +431,8 @@ type StepProps = {
   /** This is the first miss of the session: say that misses come back (when the session retests them). */
   firstMiss: boolean
   closingRetests: boolean
+  /** Opens the answer before this one, read-only (its result is already held). Absent on the first question. */
+  onPrevious?: () => void
   onGraded: (view: SessionView) => void
   onNext: () => void
   /** The answer was right: go straight on to the next question. */
@@ -384,7 +440,7 @@ type StepProps = {
 }
 
 /** One question: the answer form, then (after a miss) the feedback with Next. A right answer goes straight on. Remounts for each question. */
-function Step({ courseId, sessionId, position, motion, item, result, isLast, canSkip, complete, firstMiss, closingRetests, onGraded, onNext, onRight }: StepProps) {
+function Step({ courseId, sessionId, position, motion, item, result, isLast, canSkip, complete, firstMiss, closingRetests, onPrevious, onGraded, onNext, onRight }: StepProps) {
   const draftHook = useServerDraft<ReviewDraft>('review', `${sessionId}:${position}`, { projectId: courseId, parse: parseReviewDraft })
   // The text is kept here as it is typed; the draft hook saves it (a closed tab, a reload or another device loses nothing).
   const [typed, setTyped] = React.useState<ReviewDraft | null>(null)
@@ -395,6 +451,8 @@ function Step({ courseId, sessionId, position, motion, item, result, isLast, can
     if (next.answer || next.thinking || next.confidence !== undefined) draftHook.set(next)
     else void draftHook.clear()
   }
+  // Phone only: confidence and working sit behind one line under Check answer, open from the start when the student already added some.
+  const [extrasOpen, setExtrasOpen] = React.useState(() => draft.confidence !== undefined || !!draft.thinking)
   const [gradingDown, setGradingDown] = React.useState(false)
   const { report } = useAiStatus()
   const [submitting, setSubmitting] = React.useState<'check' | 'idk' | null>(null)
@@ -468,6 +526,11 @@ function Step({ courseId, sessionId, position, motion, item, result, isLast, can
           </p>
         ) : null}
         <div className="mt-6 flex items-center justify-end gap-3 border-t border-border pt-5">
+          {onPrevious ? (
+            <Button variant="ghost" className="mr-auto text-fg-2" icon={<ArrowLeft />} onClick={onPrevious}>
+              Previous answer
+            </Button>
+          ) : null}
           <Button variant="primary" onClick={onNext}>
             <span className="inline-flex items-center gap-1.5">
               {isLast && !complete ? 'Continue' : isLast ? 'See session summary' : 'Next question'}
@@ -486,31 +549,55 @@ function Step({ courseId, sessionId, position, motion, item, result, isLast, can
         Question {position + 1}
       </h2>
       <QuestionRenderer question={item.question} value={draft.answer} onChange={(answer) => setDraft((d) => ({ ...d, answer }))} showPoints={false} shortcuts />
-      <ConfidenceRow
-        value={draft.confidence}
-        level={draft.confidenceLevel as QuizAnswer['confidenceLevel']}
-        optionCount={optionCountOf(item.question)}
-        onChange={(confidenceLevel, confidence) => setDraft((d) => ({ ...d, confidence, confidenceLevel }))}
-      />
-      <ThinkingBox value={draft.thinking ?? ''} onChange={(thinking) => setDraft((d) => ({ ...d, thinking }))} />
-      {error ? (
-        <InlineAlert className="mt-6" tone="danger">
-          {error}
-        </InlineAlert>
-      ) : null}
-      <div className="mt-10 flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
-        {saved && draft.answer ? <p className="mr-auto text-caption text-fg-3">{saved}</p> : null}
-        {gradingDown && canSkip ? (
-          <Button variant="secondary" onClick={() => void skip()} disabled={!!submitting}>
-            Skip for now
-          </Button>
-        ) : null}
-        <Button variant="ghost" className="text-fg-2" onClick={() => void send('idk')} loading={submitting === 'idk'} disabled={!!submitting}>
-          I don&apos;t know
-        </Button>
-        <Button variant="primary" onClick={() => void send('check')} loading={submitting === 'check'} disabled={!draft.answer.trim() || !!submitting}>
-          Check answer
-        </Button>
+      {/* On a phone Check answer sits right under the choices and confidence and working wait behind one "optional" line; wider screens keep them inline above it. */}
+      <div className="flex flex-col">
+        <div className="order-1 max-sm:order-3">
+          <button
+            type="button"
+            aria-expanded={extrasOpen}
+            onClick={() => setExtrasOpen((open) => !open)}
+            className="mt-5 hidden min-h-11 items-center gap-1 rounded-chip text-small text-fg-2 underline decoration-border-strong decoration-1 underline-offset-[3px] hover:text-fg max-sm:inline-flex"
+          >
+            Add confidence or working (optional)
+            <CaretDown className={cn('size-3.5 transition-transform duration-180', extrasOpen && 'rotate-180')} aria-hidden />
+          </button>
+          <div className={cn(!extrasOpen && 'max-sm:hidden')}>
+            <ConfidenceRow
+              value={draft.confidence}
+              level={draft.confidenceLevel as QuizAnswer['confidenceLevel']}
+              optionCount={optionCountOf(item.question)}
+              defaultOpen
+              onChange={(confidenceLevel, confidence) => setDraft((d) => ({ ...d, confidence, confidenceLevel }))}
+            />
+            <ThinkingBox value={draft.thinking ?? ''} onChange={(thinking) => setDraft((d) => ({ ...d, thinking }))} />
+          </div>
+        </div>
+        <div className="order-2">
+          {error ? (
+            <InlineAlert className="mt-6" tone="danger">
+              {error}
+            </InlineAlert>
+          ) : null}
+          <div className="mt-10 flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5 max-sm:mt-6 max-sm:pt-4">
+            {onPrevious ? (
+              <Button variant="ghost" className="text-fg-2" icon={<ArrowLeft />} onClick={onPrevious} disabled={!!submitting}>
+                Previous answer
+              </Button>
+            ) : null}
+            {saved && draft.answer ? <p className="mr-auto text-caption text-fg-3">{saved}</p> : null}
+            {gradingDown && canSkip ? (
+              <Button variant="secondary" onClick={() => void skip()} disabled={!!submitting}>
+                Skip for now
+              </Button>
+            ) : null}
+            <Button variant="ghost" className="text-fg-2" onClick={() => void send('idk')} loading={submitting === 'idk'} disabled={!!submitting}>
+              I don&apos;t know
+            </Button>
+            <Button variant="primary" onClick={() => void send('check')} loading={submitting === 'check'} disabled={!draft.answer.trim() || !!submitting}>
+              Check answer
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   )
