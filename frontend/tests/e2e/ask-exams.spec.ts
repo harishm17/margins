@@ -564,7 +564,7 @@ test.describe('attempt-first Ask', () => {
       const box = await target.boundingBox()
       return box !== null && box.y + box.height <= (await composerTop())
     }
-    const confidence = card.getByText('How sure are you?')
+    const confidence = card.locator('[data-confidence-row]')
     await expect.poll(() => clearOfComposer(confidence), { timeout: 5_000, message: 'the confidence row ends above the composer' }).toBe(true)
     await expect.poll(() => clearOfComposer(card.getByRole('button', { name: "I don't know" })), { timeout: 5_000, message: 'the card buttons end above the composer' }).toBe(true)
     await animationsSettled(page)

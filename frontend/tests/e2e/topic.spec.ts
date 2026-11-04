@@ -184,6 +184,8 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
 
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
   await expect(await newQuestionsButton(page)).toBeVisible()
+  // With misses the review opens on the first missed question; the filter belongs to the whole list.
+  await page.getByTestId('all-questions').click()
   await page.getByRole('radio', { name: /Missed/ }).click()
   await chooseConfidence(page, 'Fairly sure')
   await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()

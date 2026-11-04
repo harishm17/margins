@@ -275,6 +275,8 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
 
     await expect(page.getByText('A low first score is common, and useful: the misses show where to spend your time.')).toBeVisible()
     // Each missed question has its pointer: the page of the first claim of its concept, as a link to the reader.
+    // The review opens on the first missed question; the whole list is one tap away.
+    await page.getByTestId('all-questions').click()
     const pointers = page.getByTestId('where-to-look')
     await expect(pointers).toHaveCount(6)
     const first = pointers.first().getByRole('link')

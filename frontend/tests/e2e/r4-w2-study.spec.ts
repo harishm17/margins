@@ -68,7 +68,7 @@ test.describe('the warm-up', () => {
     const { topicUrl } = await recallWorld(page, 'r4w2-warmup', { warmup: true, readAt: false })
     await page.goto(`${topicUrl}?view=warmup`)
 
-    await expect(page.getByText("This won't affect your quiz score.")).toBeVisible()
+    await expect(page.getByText("This won't affect your quiz score.").locator('visible=true')).toBeVisible()
     await expect(page.getByText(/no hints/i)).toHaveCount(0)
     await page.getByRole('button', { name: 'Start warm-up' }).click()
     await expect(page.getByRole('heading', { name: 'Warm-up question 1 of 3' })).toBeVisible()

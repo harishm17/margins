@@ -130,7 +130,9 @@ test('the exam question screen with its confidence row: no axe violations, deskt
     await page.reload()
     await expect(page.getByRole('heading', { name: /Question 1 of/ })).toBeVisible()
     await animationsSettled(page)
-    await expect(page.getByRole('radio', { name: 'Certain', checked: true })).toBeVisible()
+    // The answer's rating came back: a chosen level on the row (folded to one line on a phone).
+    if (size.width < 640) await expect(page.getByRole('button', { name: 'Confidence: Certain' })).toBeVisible()
+    else await expect(page.getByRole('radio', { name: 'Certain', checked: true })).toBeVisible()
     await expectNoAxeViolations(page, `exam taker, ${name}`)
     await screenshotIfAsked(page, `exam-taker-${name}`)
     // A question with no confidence yet asks for one; a short answer has the row too.
