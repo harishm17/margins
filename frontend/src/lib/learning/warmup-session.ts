@@ -270,7 +270,7 @@ export async function answerWarmup(input: { userId: string; topicId: string; ses
   if (events.length > 0) await recordEvidence(events, { timeZone, userId, skipIfPresent: true })
 
   const score = result.points_possible > 0 ? Math.min(1, Math.max(0, result.points_earned / result.points_possible)) : result.is_correct ? 1 : 0
-  const review = buildReview([item.question], toStoredResults([{ ...result, question_index: 0 }]), { '0': idk ? '' : given.answer })[0]
+  const review = buildReview([item.question], toStoredResults([{ ...result, question_index: 0 }], idk ? new Set([0]) : undefined), { '0': idk ? '' : given.answer })[0]
   // A warm-up explains nothing: the reading supplies it.
   const shown: QuizReviewItem = { ...review, questionIndex: index, explanation: '', feedback: null }
 

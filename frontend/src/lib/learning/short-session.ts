@@ -35,6 +35,11 @@ export type ShortSessionPlan = {
   /** Closing retests at most; none for a recall card. */
   retestCap?: number
   minutes: number
+  /**
+   * How many questions the session will have, once it is known (`sizeShortSession`): `exact` when they are all ready, else
+   * `count` is the most it can have, because some are still to be written. Absent: only `limit` is known, which is a ceiling.
+   */
+  size?: { count: number; exact: boolean }
   /** Where a recall card opens; a review or mini quiz is started by the route (it makes the session), so it has none. */
   href: string | null
 }
@@ -55,9 +60,22 @@ export function shortSessionPlan(state: ShortSessionState): ShortSessionPlan | n
   return { kind: 'mini_quiz', limit: SHORT_QUIZ_ITEMS, retestCap: 0, minutes: itemMinutes(SHORT_QUIZ_ITEMS, state.ai), href: null }
 }
 
+/**
+ * The plan with the size the session really has: `ready` questions are in the bank, `toWrite` still have to be written (and a
+ * failed write leaves the session shorter, so the card says "up to"). The estimate follows the size, not the ceiling.
+ */
+export function sizeShortSession(plan: ShortSessionPlan, size: { ready: number; toWrite: number }, ai: 'up' | 'down'): ShortSessionPlan {
+  if (plan.kind === 'recall') return plan
+  const count = Math.min(plan.limit ?? size.ready + size.toWrite, size.ready + size.toWrite)
+  return { ...plan, size: { count, exact: size.toWrite === 0 }, minutes: itemMinutes(count, ai) }
+}
+
 /** The line under "Have 10 minutes?" (copy drafts, spec 18.8). */
 export function shortSessionLabel(plan: ShortSessionPlan): string {
-  if (plan.kind === 'review') return `${plan.limit ?? 0} ${plan.limit === 1 ? 'review' : 'reviews'}, about ${plan.minutes} minutes`
   if (plan.kind === 'recall') return `One recall card, about ${plan.minutes} minutes`
-  return `A ${plan.limit ?? SHORT_QUIZ_ITEMS}-question check, about ${plan.minutes} minutes`
+  const count = plan.size?.count ?? plan.limit ?? 0
+  const upTo = plan.size ? !plan.size.exact : false
+  const lead = upTo ? 'Up to ' : ''
+  if (plan.kind === 'review') return `${lead}${count} ${count === 1 ? 'review' : 'reviews'}, about ${plan.minutes} minutes`
+  return upTo ? `Up to ${count} questions, about ${plan.minutes} minutes` : `A ${count}-question check, about ${plan.minutes} minutes`
 }

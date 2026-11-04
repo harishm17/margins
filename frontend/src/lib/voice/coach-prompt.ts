@@ -191,8 +191,8 @@ export function buildCoachSystemPrompt(input: CoachPromptInput): string {
     const names = (input.sprintTopics ?? []).map((name) => name.trim()).filter(Boolean)
     sections.push(
       names.length > 0
-        ? `Session: a voice sprint across these topics, each one a student needs to practise: ${names.join('; ')}. Mix between them as the questions come.`
-        : 'Session: a voice sprint across the topics the student most needs to practise.'
+        ? `Session: a voice sprint across these topics, each one a student needs to practice: ${names.join('; ')}. Mix between them as the questions come.`
+        : 'Session: a voice sprint across the topics the student most needs to practice.'
     )
   } else {
     sections.push(

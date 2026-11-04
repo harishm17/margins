@@ -12,6 +12,8 @@ export type StoredQuestionResult = {
   feedback?: string
   // What the grader said about each key point of a short answer, in rubric order.
   criteria?: StoredCriterion[]
+  // The student pressed "I don't know": the answer is empty on purpose, which a blank is not.
+  idk?: boolean
 }
 
 /** One question as shown after a quiz is graded. This is where the answer key is released. */
@@ -32,11 +34,13 @@ export type QuizReviewItem = {
    * from the option with no model call. Null when the option carries none or nothing was picked.
    */
   pickedMisconception: string | null
+  /** The student pressed "I don't know" on this question, so its empty answer is not a blank one. */
+  dontKnow: boolean
 }
 
 type RawQuestion = Record<string, unknown>
 
-export function toStoredResults(graded: GradedQuestion[]): Record<string, StoredQuestionResult> {
+export function toStoredResults(graded: GradedQuestion[], dontKnow: ReadonlySet<number> = new Set()): Record<string, StoredQuestionResult> {
   const stored: Record<string, StoredQuestionResult> = {}
   for (const question of graded) {
     stored[String(question.question_index)] = {
@@ -47,6 +51,7 @@ export function toStoredResults(graded: GradedQuestion[]): Record<string, Stored
         ? { feedback: question.feedback }
         : {}),
       ...(question.question_type === 'short_answer' && question.criteria?.length ? { criteria: question.criteria } : {}),
+      ...(dontKnow.has(question.question_index) ? { idk: true } : {}),
     }
   }
   return stored
@@ -63,6 +68,7 @@ function readStoredResult(value: unknown): Partial<StoredQuestionResult> {
       pointsPossible: typeof record.pointsPossible === 'number' ? record.pointsPossible : undefined,
       feedback: typeof record.feedback === 'string' ? record.feedback : undefined,
       criteria: readCriteria(record.criteria),
+      idk: record.idk === true,
     }
   }
   return {}
@@ -98,6 +104,7 @@ export function buildReview(questions: RawQuestion[], results: unknown, answers?
       sources: parseSources(question.sources),
       rubric: buildRubric(question, result.criteria),
       pickedMisconception: isCorrect ? null : pickedMisconceptionOf(question, answers?.[String(index)]),
+      dontKnow: result.idk === true,
     }
   })
 }

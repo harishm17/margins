@@ -16,7 +16,7 @@
  *   draft.error            why status is 'error': 'too_large' | 'rejected'; null otherwise
  *
  * Arguments
- *   surface  'quiz' | 'recall' | 'reader_check' | 'explainer_check' | 'review' | 'practice'
+ *   surface  'quiz' | 'recall' | 'reader_check' | 'explainer_check' | 'review' | 'practice' | 'ask' | 'worked_example'
  *   key      the surface's scope key (lib/drafts/draft-contract.ts, spec §18.7 table), or null to switch the
  *            draft off until the id is known. Changing the key switches to that draft (the old one is saved first).
  *   opts.projectId  the project the draft belongs to; required to save. Null switches the draft off.

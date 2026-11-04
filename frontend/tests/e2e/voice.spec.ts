@@ -321,7 +321,7 @@ test('a teach-back ended before the first idea closes has the same summary: what
   await expect(page.getByTestId('voice-ideas-none')).toContainText('No idea was finished before the session ended.')
   await expect(summary.getByRole('heading', { name: 'To revisit' })).toBeVisible()
   await expect(page.getByTestId('voice-ideas-revisit')).toContainText('Load factor: not finished')
-  await expect(page.getByTestId('voice-next-step')).toContainText('Practise what came up short')
+  await expect(page.getByTestId('voice-next-step')).toContainText('Practice what came up short')
   await expect(page.getByRole('link', { name: 'Practice this' })).toHaveAttribute('href', new RegExp(`concept=${concept.id}`))
   await screenshotIfAsked(page, 'final-teach-back-ended-early-1440x900')
   await expectNoAxeViolations(page, 'teach-back summary, ended early')
@@ -510,7 +510,7 @@ test('teach-back summary: what was taught after questions links to the pages, on
   await expect(revisit.getByRole('link', { name: /^pp\. 12.13/ })).toHaveAttribute('href', '/api/materials/m1/file#page=12')
   // One next step, with the way to do it. One idea came up short, so the drill is on that idea.
   const next = page.getByTestId('voice-next-step')
-  await expect(next).toContainText('Practise what came up short')
+  await expect(next).toContainText('Practice what came up short')
   await expect(next.getByRole('link', { name: 'Practice this' })).toHaveAttribute('href', `/courses/${ids.courseId}/review/session?concept=collision-id`)
   await page.setViewportSize({ width: 1440, height: 900 })
   await screenshotIfAsked(page, 'g1-teach-back-summary-taught-1440x900')
@@ -666,10 +666,10 @@ test('lobby: the daily limit disables Start, the 422 offers to create content', 
   await waitForLobby(page)
   await expect(page.getByText('18 min left today')).toBeVisible()
   await startButton(page).click()
-  await expect(page.getByText('Create notes and a quiz first')).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Create them' })).toHaveAttribute(
+  await expect(page.getByText('Quiz me needs a quiz first')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Write the quiz' })).toHaveAttribute(
     'href',
-    `/courses/${ids.courseId}/topics/${ids.topicId}?view=read`
+    `/courses/${ids.courseId}/topics/${ids.topicId}?view=quiz`
   )
 })
 

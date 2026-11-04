@@ -29,7 +29,7 @@ export function PlanFields({ examDate, dailyMinutes, onExamDate, onDailyMinutes,
           onChange={(event) => onExamDate(event.target.value)}
         />
       </Field>
-      <Field label="Time to study each day" hint="Your plan fits this.">
+      <Field label="Time to study each day" hint="Each day's plan is sized to this.">
         <Select
           name="dailyMinutes"
           value={String(dailyMinutes)}

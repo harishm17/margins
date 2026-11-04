@@ -91,7 +91,7 @@ export async function helpAfterMiss(
       easierStep = {
         kind: 'prerequisite',
         href: reviewSessionHref(topic.projectId, { conceptId: prerequisiteId, topicId: input.topicId }),
-        label: `Practise ${prerequisite?.name ?? 'what it builds on'} first`,
+        label: `Practice ${prerequisite?.name ?? 'what it builds on'} first`,
       }
     } else if (input.surface === 'practice') {
       easierStep = { kind: 'easier_problem', href: `${topicBase(topic.projectId, input.topicId)}?view=practice`, label: 'Try an easier problem' }

@@ -20,7 +20,7 @@ import { describeJobFailure } from '@/lib/jobs/failure-message'
 import { isWaitingForAi } from '@/lib/jobs/poll-job'
 import { cn } from '@/lib/utils'
 import type { ExamResult } from '@/server/queries/mock-exams'
-import { DisagreeButton, GradeAgainButton, StartExamButton } from './exam-actions'
+import { DisagreeButton, GradeAgainButton, PracticeMissedButton, StartExamButton } from './exam-actions'
 import { formatScore } from './exam-options'
 
 type Graded = Extract<ExamResult, { status: 'graded' }>
@@ -212,6 +212,7 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
           </p>
           {calibration ? <p className="mt-1 text-small text-fg-2">{calibrationLine(calibration)}</p> : null}
           <div className="mt-4 flex flex-wrap gap-2">
+            {result.practice ? <PracticeMissedButton courseId={result.courseId} submissionId={result.id} count={result.practice.count} /> : null}
             <StartExamButton courseId={result.courseId} examId={result.examId} variant="secondary" size="md" label="Retake exam" />
             <Button asChild variant="ghost">
               <Link href={`/courses/${result.courseId}/exams`}>Back to exams</Link>

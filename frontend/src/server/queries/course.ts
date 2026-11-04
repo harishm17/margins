@@ -376,6 +376,8 @@ export type SetupData = {
   /** The first confirmed topic in course order, where "Start studying" goes. */
   firstTopic: { id: string; name: string } | null
   generation: GenerationState
+  /** The exam date (YYYY-MM-DD) and daily time, so step 3 can ask for the date when the course has none. */
+  plan: { examDate: string | null; dailyMinutes: number; askForExamDate: boolean }
 }
 
 export type CourseOverview =
@@ -438,6 +440,11 @@ export async function getCourseOverview(
         label: course.setup.label,
         firstTopic: course.topics.find((topic) => topic.confirmed) ?? null,
         generation,
+        plan: {
+          examDate: course.examDate,
+          dailyMinutes: course.dailyMinutes,
+          askForExamDate: !course.examDate && !course.examPromptDismissed,
+        },
       },
     }
   }

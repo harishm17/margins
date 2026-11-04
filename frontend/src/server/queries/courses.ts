@@ -1,7 +1,7 @@
 import { areRecordIds } from '@/lib/ids'
 import { cache } from 'react'
 import { prisma } from '@/lib/db/prisma'
-import { deriveSetup, needsTopicReview, type CourseSetup, type ExtractionOutcome } from '@/lib/course-setup'
+import { deriveSetup, needsTopicReview, readyToStudy, type CourseSetup, type ExtractionOutcome } from '@/lib/course-setup'
 import { ACTIVE_JOB_STATUSES } from '@/lib/jobs/active-jobs'
 import { applyPendingExamResults } from '@/lib/learning/exam-mastery'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
@@ -282,6 +282,8 @@ export type NavCourse = {
   needsTopicReview: boolean
   /** The course is past setup, so the sidebar lists its topics. */
   active: boolean
+  /** The topics are confirmed, so Plan, Topics, Ask, Mock exams, Review and Map have something to show (lib/course-setup.ts `readyToStudy`). */
+  ready: boolean
   /** In course order; empty for a flat course. */
   units: NavUnit[]
   topics: NavTopic[]
@@ -341,6 +343,7 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
       dueCount: project.topics.filter((topic) => topic.userConfirmed && isReviewDue(standings.get(topic.id)?.dueAt, boundary)).length,
       needsTopicReview: needsTopicReview(setup),
       active: setup.mode === 'active',
+      ready: readyToStudy(setup),
       units: project.units,
       files: project.materials,
       // New topics found after the student confirmed wait for review: the sidebar, the command palette and

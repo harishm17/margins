@@ -5,7 +5,7 @@ import { countMasteryLevels, MASTERY_LABELS, type MasteryLevel } from '@/lib/mas
 import { cn } from '@/lib/utils'
 import type { CourseListItem } from '@/server/queries/courses'
 import { newTopicsLabel } from '@/lib/course-setup'
-import { activeStatusLine } from './status-line'
+import { activeStatusLine, hasMasteryColours } from './status-line'
 
 const MAX_SQUARES = 40
 
@@ -77,7 +77,7 @@ export function MasteryLegend({ className }: { className?: string }) {
 }
 
 export function CourseGrid({ courses }: { courses: CourseListItem[] }) {
-  const anySquares = courses.some((course) => course.levels.length > 0)
+  const anySquares = hasMasteryColours(courses.map((course) => course.levels))
   return (
     <section aria-labelledby="courses-heading">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">

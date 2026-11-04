@@ -2,21 +2,21 @@
 
 /**
  * The topic name goes in quotes. Names are written as titles ("Conditional probability", "TCP
- * handshake"), so pasted mid-sentence as they are they read like a capitalisation slip, and
+ * handshake"), so pasted mid-sentence as they are they read like a capitalization slip, and
  * lower-casing them would break acronyms and proper names. Quoted, any name reads correctly.
  */
 const quoted = (topic: string) => `“${topic}”`
 
 const TOPIC_TEMPLATES = [
-  (topic: string) => `Explain ${quoted(topic)} in simple terms.`,
-  (topic: string) => `What are the key points about ${quoted(topic)}?`,
-  (topic: string) => `Give me an example that shows ${quoted(topic)}.`,
+  (topic: string) => `Ask me to explain ${quoted(topic)} in my own words, then check what I say.`,
+  (topic: string) => `Give me a question on ${quoted(topic)} to try, then check my answer.`,
+  (topic: string) => `What should I look for before I read about ${quoted(topic)}?`,
 ]
 
 const GENERIC_QUESTIONS = [
-  'Summarize the main ideas in my materials.',
-  'Which concepts are most likely to show up on an exam?',
-  'What definitions should I memorize?',
+  'Give me a question from my materials to try first, then check my answer.',
+  'Ask me to explain an idea from my materials in my own words, then check it.',
+  'What should I look for before I start reading my materials?',
 ]
 
 /** Up to `count` example questions: one per topic (first topics first), then generic ones. */

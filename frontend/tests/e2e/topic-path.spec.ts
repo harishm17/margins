@@ -154,7 +154,7 @@ test('a new topic shows the whole path with its first step marked', async ({ pag
   // On the step the next activity points to, no card repeats it.
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
   // Concepts show as chips: an icon is decoration, the state is words.
-  const chips = page.getByRole('list', { name: 'Concepts in this topic' })
+  const chips = page.getByRole('list', { name: 'Ideas in this topic' })
   await expect(chips.getByRole('listitem')).toHaveCount(2)
   await expect(chips.getByRole('listitem').first()).toContainText('Hash function')
   await expect(chips.getByRole('listitem').first()).toContainText('Not started')
@@ -171,7 +171,7 @@ test('concept chips say a wrong idea in words, and a drill is offered', async ({
   await page.goto(topicUrl('No warm-up topic'))
   // A drill is its own page: the topic opens on Practice and the card offers the drill.
   await expect(page).toHaveURL(/\?view=practice$/)
-  const chips = page.getByRole('list', { name: 'Concepts in this topic' })
+  const chips = page.getByRole('list', { name: 'Ideas in this topic' })
   await expect(chips).toContainText('Pointers')
   // The chip says the word the map says for the same idea (Shaky), and that a wrong idea is on record.
   await expect(chips.getByRole('listitem').filter({ hasText: 'Pointers' })).toContainText('Shaky, wrong idea')
@@ -204,7 +204,7 @@ test('phone shows stepper and tools menu at 390px', async ({ page }) => {
   // The tools are not a row of links here: one menu.
   await expect(page.getByRole('group', { name: 'Tools' })).toBeHidden()
   // The concept chips fold into one line on a phone and open on a tap; the state stays in words.
-  const chipList = page.getByRole('list', { name: 'Concepts in this topic' })
+  const chipList = page.getByRole('list', { name: 'Ideas in this topic' })
   const fold = page.getByRole('button', { name: '3 ideas, 0 solid' })
   await expect(chipList).toBeHidden()
   await fold.click()
@@ -243,7 +243,7 @@ test('the status says In progress once a step is done, and Not started before', 
   await expect(header.getByText('In progress', { exact: true })).toBeVisible()
   // Only the three concepts' own chips still say "Not started" (nothing has been answered on them yet).
   await expect(header.getByText('Not started', { exact: true })).toHaveCount(3)
-  await expect(header.getByRole('list', { name: 'Concepts in this topic' }).getByText('Not started')).toHaveCount(3)
+  await expect(header.getByRole('list', { name: 'Ideas in this topic' }).getByText('Not started')).toHaveCount(3)
   await screenshotIfAsked(page, 'topic-path-status-1440x900')
 })
 
@@ -432,7 +432,7 @@ test('a topic without concepts has no warm-up and no recall: Read, Practice, Qui
   await page.goto(`${topicUrl('Legacy topic')}?view=read`)
   const nav = pathNav(page)
   await expect(nav.getByRole('link')).toHaveText([/Read/, /Practice/, /Quiz/, /Examples/, /Explainer/, /Voice/])
-  await expect(page.getByRole('list', { name: 'Concepts in this topic' })).toHaveCount(0)
+  await expect(page.getByRole('list', { name: 'Ideas in this topic' })).toHaveCount(0)
   // The addresses of the hidden steps still work, and go on to a step that does.
   await page.goto(`${topicUrl('Legacy topic')}?view=recall`)
   await expect(page).toHaveURL(/view=practice/)

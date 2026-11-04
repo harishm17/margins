@@ -33,6 +33,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Progress } from '@/components/ui/progress'
@@ -46,11 +47,12 @@ import { apiFetch, isApiError } from '@/lib/api/client'
 import { track as trackEvent } from '@/lib/analytics/track'
 import { estimateWords } from '@/lib/jobs/estimate'
 import { formatBytes, formatElapsed } from '@/lib/format'
-import { isMaterialRole, MATERIAL_ROLES, ROLE_LABELS, roleForCategory, type MaterialRole } from '@/lib/materials/role'
+import { isMaterialRole, MATERIAL_ROLES, ROLE_LABELS, roleBadgeLabel, roleForCategory, type MaterialRole } from '@/lib/materials/role'
 import { UploadAbortedError, uploadMaterial } from '@/lib/uploads/upload-file'
 import { cn } from '@/lib/utils'
 import type { MaterialRow } from '@/server/queries/course'
 import { useRefreshSoon } from './use-refresh-soon'
+import { splitDuplicates, type KnownFile } from './duplicate-files'
 import {
   ACCEPT_ATTRIBUTE,
   CATEGORY_LABELS,
@@ -62,6 +64,11 @@ import { fillResetTime } from '@/lib/budget/copy'
 import { jobFailureMessage } from '@/lib/jobs/failure-message'
 
 type Category = 'lecture_notes' | 'sample_exams' | 'book_chapters' | 'syllabus'
+
+/** Marks the id of a file this browser is still sending (no server id yet) among the files a new one may repeat. */
+const LOCAL_PREFIX = 'local:'
+
+const newUploadKey = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 const CATEGORY_OPTIONS = (Object.keys(CATEGORY_LABELS) as Category[]).map((value) => ({
   value,
@@ -185,24 +192,26 @@ function PipelineStatus({
 // Rows
 
 /** What the file is for. Syllabus and past exam files are shown in the accent tone; the word carries the meaning. */
-function RoleBadge({ role }: { role: MaterialRole }) {
-  return <Badge tone={role === 'syllabus' || role === 'exam' ? 'accent' : 'neutral'}>{ROLE_LABELS[role]}</Badge>
+function RoleBadge({ role, category }: { role: MaterialRole; category: string }) {
+  return <Badge tone={role === 'syllabus' || role === 'exam' ? 'accent' : 'neutral'}>{roleBadgeLabel(role, category)}</Badge>
 }
 
 /**
- * One file. It shows one label for what the file is for: its role, which decides how the file is
- * used and which the student can change. The upload category is not shown: it only sets the
- * starting role, so after a change the two can disagree.
+ * One file. It shows one label for what the file is for. Its role decides how the file is used and the student can change it; while
+ * the role is still the content the file started as, the label is the category the student uploaded it under (Lecture notes, Book
+ * chapters), so "Content" is only the word for a file that no category names.
  */
 function RowShell({
   filename,
   role,
+  category,
   size,
   status,
   menu,
 }: {
   filename: string
   role: MaterialRole
+  category: string
   size: number
   status: React.ReactNode
   menu: React.ReactNode
@@ -216,13 +225,13 @@ function RowShell({
             <p className="truncate text-body-strong text-fg">{filename}</p>
             <p className="flex min-w-0 items-center gap-2 text-caption font-normal text-fg-3 md:hidden">
               <span className="truncate">{formatBytes(size)}</span>
-              <RoleBadge role={role} />
+              <RoleBadge role={role} category={category} />
             </p>
           </div>
         </div>
       </td>
       <td className="whitespace-nowrap px-3 py-2.5 max-md:hidden">
-        <RoleBadge role={role} />
+        <RoleBadge role={role} category={category} />
       </td>
       <td className="whitespace-nowrap px-3 py-2.5 text-small tabular text-fg-2 max-md:hidden">{formatBytes(size)}</td>
       <td className="min-w-0 px-3 py-2.5 max-md:col-span-2 max-md:row-start-2 max-md:p-0 max-md:pl-8"><div className="md:w-52">{status}</div></td>
@@ -246,7 +255,7 @@ function RowMenu({ filename, children }: { filename: string; children: React.Rea
 
 /**
  * A past exam that was read but whose style could not be analysed: say so on its row, with a way
- * to analyse the course's past exams again.
+ * to analyze the course's past exams again.
  */
 function ExamAnalysisFailed({
   courseId,
@@ -279,13 +288,13 @@ function ExamAnalysisFailed({
       <Tooltip content={text} side="top" align="start">
         <span className="block min-w-0">
           <StatusText icon={FAILED_ICON} tone="danger">
-            {"Read, but its exam style couldn't be analysed"}
+            {"Read, but its exam style couldn't be analyzed"}
           </StatusText>
         </span>
       </Tooltip>
       {blocked ? null : (
         <Button size="sm" variant="link" className="h-auto p-0 text-small" loading={pending} onClick={() => void retry()}>
-          Analyse again
+          Analyze again
         </Button>
       )}
     </div>
@@ -391,6 +400,7 @@ function ServerRow({
       <RowShell
         filename={row.filename}
         role={role}
+        category={row.category}
         size={row.sizeBytes}
         status={status}
         menu={
@@ -458,6 +468,7 @@ function LocalRow({ upload, onDismiss, typicalSeconds }: { upload: LocalUpload; 
     <RowShell
       filename={upload.filename}
       role={roleForCategory(upload.category)}
+      category={upload.category}
       size={upload.size}
       status={status}
       menu={
@@ -523,10 +534,18 @@ export function MaterialsManager({
   const removeUpload = React.useCallback((key: string) => {
     setUploads((current) => current.filter((item) => item.key !== key))
   }, [])
+  // A file deleted on the server leaves no trace here: the row this browser kept for it (while it waited for the server's) would
+  // otherwise show again as a file still being checked.
+  const removeUploadsOf = React.useCallback((materialId: string) => {
+    setUploads((current) => current.filter((item) => item.materialId !== materialId))
+  }, [])
+
+  // Files that match one already in the course wait here for the student's choice (cancel, replace, keep both).
+  const [duplicates, setDuplicates] = React.useState<{ file: File; matches: KnownFile[] }[] | null>(null)
 
   /** Starts one file; the promise says whether it reached the server (for the count of files uploaded). */
   function startUpload(file: File): Promise<boolean> {
-    const key = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const key = newUploadKey()
     const problem = fileProblem(file, maxUploadMb)
     if (problem) {
       setUploads((current) => [
@@ -560,13 +579,68 @@ export function MaterialsManager({
       })
   }
 
-  function addFiles(list: FileList | File[] | null) {
-    if (!list) return
-    // One event per batch: how many of the files arrived (a number only, never a name).
-    void Promise.all(Array.from(list).map(startUpload)).then((results) => {
+  /** Uploads the files and reports how many arrived (a number only, never a name). */
+  function uploadAll(files: File[], afterEach?: (file: File, arrived: boolean) => void) {
+    void Promise.all(
+      files.map((file) =>
+        startUpload(file).then((arrived) => {
+          afterEach?.(file, arrived)
+          return arrived
+        })
+      )
+    ).then((results) => {
       const count = results.filter(Boolean).length
       if (count > 0) trackEvent('files_uploaded', { file_count: count })
     })
+  }
+
+  /** Everything the course has or is about to have, for noticing a file added twice. */
+  function knownFiles(): KnownFile[] {
+    const local = uploads
+      .filter((item) => item.phase !== 'error' && !(item.materialId && serverIds.has(item.materialId)))
+      .map((item) => ({ id: `${LOCAL_PREFIX}${item.key}`, filename: item.filename, sizeBytes: item.size }))
+    return [...materials.map((row) => ({ id: row.id, filename: row.filename, sizeBytes: row.sizeBytes })), ...local]
+  }
+
+  function addFiles(list: FileList | File[] | null) {
+    if (!list) return
+    const { fresh, duplicates: same } = splitDuplicates(Array.from(list), knownFiles())
+    // New files go at once; a file that is already here waits until the student says what to do with it.
+    uploadAll(fresh)
+    if (same.length > 0) setDuplicates(same)
+  }
+
+  /** Cancel drops the repeated files. Keep both uploads them as new files. Replace uploads them, then removes the files they repeat. */
+  function resolveDuplicates(choice: 'cancel' | 'keep' | 'replace') {
+    const waiting = duplicates ?? []
+    setDuplicates(null)
+    if (choice === 'cancel') return
+    uploadAll(
+      waiting.map((item) => item.file),
+      choice === 'replace'
+        ? (file, arrived) => {
+            // Only once the new copy has reached the server, so a failed upload never leaves the course with neither.
+            if (!arrived) return
+            for (const match of waiting.find((item) => item.file === file)?.matches ?? []) void removeKnown(match.id)
+          }
+        : undefined
+    )
+  }
+
+  async function removeKnown(id: string) {
+    if (id.startsWith(LOCAL_PREFIX)) {
+      const key = id.slice(LOCAL_PREFIX.length)
+      uploads.find((item) => item.key === key)?.abort?.abort()
+      removeUpload(key)
+      return
+    }
+    try {
+      await apiFetch(`/api/materials/${id}`, { method: 'DELETE' })
+      removeUploadsOf(id)
+      router.refresh()
+    } catch {
+      toast.error("Couldn't remove the earlier copy. You can delete it from its menu.")
+    }
   }
 
   const serverIds = new Set(materials.map((row) => row.id))
@@ -697,7 +771,11 @@ export function MaterialsManager({
                 item.kind === 'local' ? (
                   <LocalRow key={item.upload.key} upload={item.upload} typicalSeconds={typicalSeconds} onDismiss={() => removeUpload(item.upload.key)} />
                 ) : (
-                  <ServerRow key={item.row.id} courseId={courseId} row={item.row} typicalSeconds={typicalSeconds} onDeleted={() => router.refresh()} />
+                  <ServerRow key={item.row.id} courseId={courseId} row={item.row} typicalSeconds={typicalSeconds} onDeleted={() => {
+                      removeUploadsOf(item.row.id)
+                      router.refresh()
+                    }}
+                  />
                 )
               )}
             </tbody>
@@ -709,6 +787,37 @@ export function MaterialsManager({
           </p>
         </div>
       )}
+
+      <Dialog open={duplicates !== null} onOpenChange={(open) => (open ? undefined : resolveDuplicates('cancel'))}>
+        <DialogContent size="sm" hideClose>
+          <DialogHeader className="mb-0 pr-0">
+            <DialogTitle>{(duplicates?.length ?? 0) === 1 ? 'This file is already here' : 'These files are already here'}</DialogTitle>
+            <DialogDescription>
+              The name and size match a file in this course. Adding it again would read it a second time and ask for another topic review.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="mt-4 flex flex-col gap-1 text-small text-fg" data-testid="duplicate-files">
+            {(duplicates ?? []).map((item, index) => (
+              <li key={`${item.file.name}-${index}`} className="flex min-w-0 items-center gap-2">
+                <FileIcon filename={item.file.name} />
+                <span className="min-w-0 flex-1 truncate">{item.file.name}</span>
+                <span className="shrink-0 tabular text-fg-3">{formatBytes(item.file.size)}</span>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => resolveDuplicates('cancel')}>
+              Cancel
+            </Button>
+            <Button variant="secondary" onClick={() => resolveDuplicates('keep')}>
+              Keep both
+            </Button>
+            <Button variant="primary" onClick={() => resolveDuplicates('replace')}>
+              Replace
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

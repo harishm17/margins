@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { shortSessionLabel, shortSessionPlan, type ShortSessionState } from './short-session'
+import { shortSessionLabel, shortSessionPlan, sizeShortSession, type ShortSessionState } from './short-session'
 
 const read = new Date('2026-10-20T10:00:00Z')
 
@@ -69,4 +69,29 @@ test('the labels read as the copy draft', () => {
   assert.equal(shortSessionLabel(shortSessionPlan(state({ due: 1 }))!), '1 review, about 2 minutes')
   assert.equal(shortSessionLabel(shortSessionPlan(state({ currentTopic: { id: 't1', readAt: read, recallAt: null } }))!), 'One recall card, about 5 minutes')
   assert.equal(shortSessionLabel(shortSessionPlan(state())!), 'A 4-question check, about 6 minutes')
+})
+
+test('the card says the size the session really has, not the ceiling', () => {
+  const review = shortSessionPlan(state({ due: 9 }))!
+  // Six due but only four questions ready and nothing to write: four, exactly.
+  const four = sizeShortSession(review, { ready: 4, toWrite: 0 }, 'up')
+  assert.deepEqual(four.size, { count: 4, exact: true })
+  assert.equal(four.minutes, 6)
+  assert.equal(shortSessionLabel(four), '4 reviews, about 6 minutes')
+  // Some still to be written: up to six.
+  const upTo = sizeShortSession(review, { ready: 3, toWrite: 3 }, 'up')
+  assert.equal(shortSessionLabel(upTo), 'Up to 6 reviews, about 9 minutes')
+  // More available than the ceiling: the ceiling.
+  assert.equal(sizeShortSession(review, { ready: 12, toWrite: 0 }, 'up').size?.count, 6)
+})
+
+test('the mini quiz card says up to when a question is still to be written', () => {
+  const quiz = shortSessionPlan(state())!
+  assert.equal(shortSessionLabel(sizeShortSession(quiz, { ready: 3, toWrite: 0 }, 'up')), 'A 3-question check, about 5 minutes')
+  assert.equal(shortSessionLabel(sizeShortSession(quiz, { ready: 2, toWrite: 2 }, 'up')), 'Up to 4 questions, about 6 minutes')
+})
+
+test('a recall card has no size', () => {
+  const recall = shortSessionPlan(state({ currentTopic: { id: 't1', readAt: read, recallAt: null } }))!
+  assert.equal(sizeShortSession(recall, { ready: 1, toWrite: 0 }, 'up'), recall)
 })

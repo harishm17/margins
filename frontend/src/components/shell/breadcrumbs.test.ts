@@ -29,7 +29,7 @@ test('sections', () => {
   assert.deepEqual(buildCrumbs('/courses/c1/exams', nav).at(-1), { label: 'Mock exams' })
   assert.deepEqual(buildCrumbs('/courses/c1/exams/new', nav).at(-1), { label: 'New mock exam' })
   assert.deepEqual(buildCrumbs('/courses/c1/exams/e1/results/s1', nav).at(-1), { label: 'Results' })
-  assert.deepEqual(buildCrumbs('/courses/c1/settings', nav).at(-1), { label: 'Settings' })
+  assert.deepEqual(buildCrumbs('/courses/c1/settings', nav).at(-1), { label: 'Course settings' })
   assert.deepEqual(buildCrumbs('/courses/c1/plan', nav).at(-1), { label: 'Plan' })
   assert.deepEqual(buildCrumbs('/courses/c1/review', nav).at(-1), { label: 'Review' })
 })

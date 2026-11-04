@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildReview, groupResults } from './quiz-review'
+import { buildReview, groupResults, toStoredResults } from './quiz-review'
 import { buildQuizEvidence } from './quiz-evidence'
 import { replayConcept } from './memory'
 import type { EventRow } from './evidence-types'
@@ -112,4 +112,23 @@ test('a discrimination miss with no misconception text leaves the misconception 
     metadata: { questionType: 'multiple_choice', missKind: 'discrimination', confusableConceptId: 'c2' },
   }
   assert.equal(replayConcept([event], { timeZone: 'UTC', now: at }).misconception, null)
+})
+
+test('an "I don\'t know" is kept apart from a blank in the stored result and the review', () => {
+  const graded = [0, 1].map((question_index) => ({
+    question_index,
+    question_type: 'true_false',
+    points_possible: 1,
+    points_earned: 0,
+    is_correct: false,
+    feedback: '',
+    needs_review: false,
+  })) as GradedQuestion[]
+  const stored = toStoredResults(graded, new Set([1]))
+  assert.equal(stored['0'].idk, undefined)
+  assert.equal(stored['1'].idk, true)
+  const review = buildReview(QUESTIONS.slice(1, 3), stored, { '0': '', '1': '' })
+  assert.deepEqual(review.map((item) => item.dontKnow), [false, true])
+  // Results stored before the flag existed read as blanks.
+  assert.equal(buildReview(QUESTIONS.slice(1, 2), results(false))[0].dontKnow, false)
 })

@@ -15,7 +15,7 @@ import type { VoiceReviewProps } from './voice-review'
 import { useVoicePrefs } from './voice-settings'
 
 /** The real voice practice. Loaded on demand by voice-review.tsx so no other page ships it. */
-export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId, hasClaims, claimsOfIdea }: VoiceReviewProps) {
+export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId, hasClaims, claimsOfIdea, quiz }: VoiceReviewProps) {
   const { state, orb, summary, controller } = useVoiceSession({ courseId, mode, topic })
   const [usage, setUsage] = React.useState<VoiceUsage | 'unavailable' | null>(null)
   const [browserRecognition] = React.useState(() => getRecognitionConstructor() !== null)
@@ -95,6 +95,7 @@ export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId
       conceptId={conceptId}
       hasClaims={hasClaims}
       claimsOfIdea={claimsOfIdea}
+      quiz={quiz}
       onStart={(config) => void controller.start(config)}
     />
   )

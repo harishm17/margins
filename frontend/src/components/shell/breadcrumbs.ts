@@ -67,7 +67,7 @@ export function buildCrumbs(pathname: string, nav: NavLike[]): Crumb[] {
     case 'review':
       return [courseCrumb(false), { label: 'Review' }]
     case 'settings':
-      return [courseCrumb(false), { label: 'Settings' }]
+      return [courseCrumb(false), { label: 'Course settings' }]
     case 'topics': {
       const topicId = parts[3]
       if (!topicId) return [courseCrumb(false), { label: 'Topics' }]

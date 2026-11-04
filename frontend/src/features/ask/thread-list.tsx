@@ -29,14 +29,14 @@ type ThreadListProps = {
 const plainClick = (event: React.MouseEvent) =>
   event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey
 
-/** The conversations pane: New chat, then threads grouped by how recent they are. */
+/** The conversations pane: New conversation, then threads grouped by how recent they are. */
 export function ThreadList({ threads, activeId, now, hrefFor, onSelect, onNew, onDelete }: ThreadListProps) {
   const groups = groupThreads(threads, now)
   return (
     <nav aria-label="Conversations" className="flex h-full min-h-0 flex-col">
       <div className="p-3">
         <Button variant="secondary" fullWidth icon={<Plus />} onClick={onNew}>
-          New chat
+          New conversation
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
@@ -127,7 +127,7 @@ export function ThreadPicker({
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-[min(340px,calc(100vw-32px))]">
           <DropdownMenuItem icon={<Plus />} onSelect={onNew}>
-            New chat
+            New conversation
           </DropdownMenuItem>
           {groups.map((group) => (
             <React.Fragment key={group.label}>

@@ -186,9 +186,9 @@ test.describe('the demo course', () => {
   test('materials show a role badge on each file', async ({ page }) => {
     await page.goto(`/courses/${course}/materials`)
     await expect(page.getByRole('columnheader', { name: 'Used as' })).toBeVisible()
-    // One label per file: the role. The upload category is not a column of its own.
+    // One label per file: the category it was uploaded under while its role is still content. The upload category is not a column of its own.
     await expect(page.getByRole('columnheader', { name: 'Type' })).toHaveCount(0)
-    await expect(page.getByRole('row', { name: /algorithms\.pdf/ }).getByText('Content', { exact: true }).filter({ visible: true })).toBeVisible()
+    await expect(page.getByRole('row', { name: /algorithms\.pdf/ }).getByText('Lecture notes', { exact: true }).filter({ visible: true })).toBeVisible()
     await expect(page.getByRole('radiogroup', { name: 'Use these as:' }).getByRole('radio', { name: 'Syllabus or schedule' })).toBeVisible()
     // One uploader on the page (a second one can only be a view that is still leaving).
     const hint = page.getByText("PDFs need selectable text. Scans can't be read.", { exact: false })
@@ -325,7 +325,7 @@ test.describe('a course built to be edited', () => {
     expect(upload.ok()).toBeTruthy()
     await page.goto(`/courses/${courseId}/materials`)
     const row = page.getByRole('row', { name: /notes\.pdf/ })
-    await expect(row.getByText('Content', { exact: true }).filter({ visible: true })).toBeVisible()
+    await expect(row.getByText('Lecture notes', { exact: true }).filter({ visible: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Actions for notes.pdf' }).click()
     await page.getByRole('menuitem', { name: 'Use as' }).click()

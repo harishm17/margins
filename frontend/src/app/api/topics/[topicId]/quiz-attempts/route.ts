@@ -17,7 +17,7 @@ import { ApiErrorCode, apiError } from '@/lib/api/errors'
 import { loadAllQuizQuestionSets, loadQuizQuestions } from '@/lib/learning/quiz-sets'
 import { buildReview, toStoredResults } from '@/lib/learning/quiz-review'
 import { createRateLimiter } from '@/lib/api/rate-limit'
-import { answersForGrader, answersForStorage, confidences, normalizeAnswers, plainAnswers } from '@/lib/learning/quiz-answers'
+import { answersForGrader, answersForStorage, confidences, dontKnowIndexes, normalizeAnswers, plainAnswers } from '@/lib/learning/quiz-answers'
 import { pendingQuizEvidence, recordAttemptEvidence, takenEarlierToday } from '@/lib/learning/quiz-evidence'
 import { getTimeZone } from '@/server/timezone'
 
@@ -180,7 +180,7 @@ export async function POST(
     }
 
     const score = graded.overall_score
-    const results = toStoredResults(graded.graded_questions)
+    const results = toStoredResults(graded.graded_questions, dontKnowIndexes(given))
     const evidence = {
       userId: session.user.id,
       projectId: topic.projectId,
