@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { useRouter } from 'next/navigation'
+import { Check, Copy } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
@@ -27,6 +28,7 @@ export function CourseSettingsForm({ course }: CourseSettingsFormProps) {
   const [saving, setSaving] = React.useState(false)
   const [deleteOpen, setDeleteOpen] = React.useState(false)
   const [typedName, setTypedName] = React.useState('')
+  const [copied, setCopied] = React.useState(false)
 
   const dirty =
     name.trim() !== course.name ||
@@ -55,6 +57,18 @@ export function CourseSettingsForm({ course }: CourseSettingsFormProps) {
     } finally {
       setSaving(false)
     }
+  }
+
+  // Copy puts the name on the clipboard (when the browser allows it) and fills the confirmation field either way.
+  async function copyName() {
+    setTypedName(course.name)
+    try {
+      await navigator.clipboard.writeText(course.name)
+    } catch {
+      // The field is filled already; a denied clipboard changes nothing the student needs.
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1600)
   }
 
   async function onDelete() {
@@ -118,18 +132,32 @@ export function CourseSettingsForm({ course }: CourseSettingsFormProps) {
         description={
           <>
             Everything in <strong className="font-medium text-fg wrap-anywhere">{course.name}</strong> goes with it, including its topics, study
-            content, quiz and exam history, and the files you uploaded. Type the course name to confirm.
+            content, quiz and exam history, and the files you uploaded.
           </>
         }
         confirmLabel="Delete course"
         destructive
         confirmDisabled={typedName.trim() !== course.name}
-        confirmDisabledReason="Type the course name to turn this on."
+        confirmDisabledReason="Type the name exactly to confirm."
         onConfirm={onDelete}
       >
-        <Field label={<span className="wrap-anywhere">{`Type "${course.name}"`}</span>}>
-          <Input autoComplete="off" value={typedName} onChange={(event) => setTypedName(event.target.value)} />
-        </Field>
+        <div className="flex flex-col gap-4">
+          {/* The name to match, on its own line: selectable, and one tap to copy it into the field. Matching stays exact. */}
+          <div>
+            <p className="text-caption text-fg-3">Course name</p>
+            <div className="mt-1 flex items-start gap-2 rounded-control bg-surface-2 py-1.5 pl-3 pr-1.5">
+              <span className="min-w-0 flex-1 select-all py-1 text-body-strong text-fg wrap-anywhere" data-testid="delete-course-name">
+                {course.name}
+              </span>
+              <Button type="button" size="sm" variant="secondary" icon={copied ? <Check /> : <Copy />} onClick={() => void copyName()}>
+                {copied ? 'Copied' : 'Copy name'}
+              </Button>
+            </div>
+          </div>
+          <Field label="Type the name exactly to confirm">
+            <Input autoComplete="off" value={typedName} onChange={(event) => setTypedName(event.target.value)} />
+          </Field>
+        </div>
       </ConfirmDialog>
     </div>
   )

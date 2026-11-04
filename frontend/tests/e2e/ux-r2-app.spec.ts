@@ -81,7 +81,7 @@ test.describe('desktop', () => {
     await page.getByRole('button', { name: 'Delete course' }).click()
     const confirm = page.getByRole('dialog').getByRole('button', { name: 'Delete course' })
     await expect(confirm).toBeDisabled()
-    await expect(confirm).toHaveAccessibleDescription('Type the course name to turn this on.')
+    await expect(confirm).toHaveAccessibleDescription('Type the name exactly to confirm.')
   })
 
   test('the allowance bar has a 3:1 edge', async ({ page }) => {
