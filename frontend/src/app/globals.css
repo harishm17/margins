@@ -400,6 +400,24 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+  Phone type floor. The scale stays 14 / 13 / 12 (muted text and control outlines keep their contrast), but copy a student has to
+  act on is never set under 14px on a phone: button labels, error and blocker messages, and the one line of instruction above a
+  control use `phone-body` (14px below 640px, whatever size they have above it). The 12px caption is for metadata only. Long
+  explanations use `phone-reading`, the 17/29 reading style of the topic reader.
+*/
+@utility phone-body {
+  @media (max-width: 639px) {
+    font-size: 14px;
+    line-height: 22px;
+  }
+}
+
+@utility phone-reading {
+  font-size: var(--text-reading);
+  line-height: var(--text-reading--line-height);
+}
+
 @layer base {
   /* Tailwind 4 defaults borders to currentColor; the design wants the hairline colour. */
   *,

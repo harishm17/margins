@@ -110,7 +110,7 @@ export function ThemeMenuRadios({ className }: { className?: string }) {
         >
           <Icon aria-hidden="true" className="size-4" />
           {label}
-          {value === 'system' && device ? <span className="text-caption text-fg-3">Now {device}</span> : null}
+          {value === 'system' && device ? <span className="text-small text-fg-2">Now {device}</span> : null}
           <MenuPrimitive.ItemIndicator className="absolute right-1 top-1 inline-flex">
             <Check weight="bold" aria-hidden="true" className="size-3 text-accent-soft-fg" />
           </MenuPrimitive.ItemIndicator>

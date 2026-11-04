@@ -210,7 +210,7 @@ function PhoneTheme() {
         >
           <Icon aria-hidden="true" className="size-4" />
           {label}
-          {value === 'system' && device ? <span className="text-caption text-fg-3">Now {device}</span> : null}
+          {value === 'system' && device ? <span className="text-small text-fg-2">Now {device}</span> : null}
         </button>
       ))}
     </div>
