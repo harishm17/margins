@@ -26,6 +26,8 @@ model User {
   updatedAt         DateTime  @updatedAt @map("updated_at")
   // When the student closed the one-time card that says Margins asks for an attempt before it helps (spec §5).
   seenEffortIntroAt DateTime? @map("seen_effort_intro_at")
+  // When the student closed the "About this reading" row above the reader (the Focus and PDF notes), on any device.
+  seenReaderNoteAt  DateTime? @map("seen_reader_note_at")
 
   // Relations
   projects            Project[]

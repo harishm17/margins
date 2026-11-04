@@ -80,14 +80,14 @@ test.describe('the reader margin', () => {
     await expect.poll(() => opacityOf(add)).toBe(1)
     await screenshotIfAsked(page, 'r2-read-margin-1440x900')
 
-    // The PDF caveat is said once and can be put away for good.
-    const note = page.getByTestId('reader-pdf-note')
+    // The note above the reading (Focus and the PDF caveat) is one row and can be put away for good, on the account.
+    const note = page.getByTestId('reader-note')
     if ((await note.count()) > 0) {
-      await note.getByRole('button', { name: 'Got it' }).click()
+      await note.getByRole('button', { name: 'Close this note' }).click()
       await expect(note).toHaveCount(0)
       await page.reload()
       await streamedPartsArrived(page)
-      await expect(page.getByTestId('reader-pdf-note')).toHaveCount(0)
+      await expect(page.getByTestId('reader-note')).toHaveCount(0)
     }
 
     await page.setViewportSize(PHONE)
