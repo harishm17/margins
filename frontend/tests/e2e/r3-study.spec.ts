@@ -109,7 +109,7 @@ test.describe('an attempt on a phone', () => {
     await page.goto(`${base}?view=quiz`)
     // The lobby keeps the path and offers the optional guess in words.
     await expect(pathTabs(page)).toBeVisible()
-    await expect(page.getByText('Guess your score to compare it with your result (optional)')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Guess your score (optional)' })).toBeVisible()
     await page.getByRole('button', { name: 'Start quiz' }).click()
     await expect(page.getByRole('heading', { name: 'Question 1 of 4' })).toBeVisible()
     await expectCompact(page)

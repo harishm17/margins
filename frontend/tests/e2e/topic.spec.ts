@@ -210,7 +210,8 @@ test('quiz records confidence per question', async ({ page }) => {
   await page.goto(`/courses/${own.courseId}/topics/${own.topics['Graph search']}?view=quiz`)
   await expect(page.getByRole('button', { name: 'Start quiz' })).toBeVisible({ timeout: 30_000 })
   // The prediction is optional and stays in the session with the answers.
-  await page.getByRole('combobox', { name: /Guess your score/ }).click()
+  await page.getByRole('button', { name: /Guess your score/ }).click()
+  await page.getByRole('combobox', { name: /Expected questions correct/ }).click()
   await page.getByRole('option', { name: /^1 of/ }).click()
   await page.getByRole('button', { name: 'Start quiz' }).click()
   await expect(page.getByText('Question 1 of')).toBeVisible()

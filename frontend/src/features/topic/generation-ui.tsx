@@ -138,6 +138,7 @@ export function ContentGate({ kind, topicName, present, children }: ContentGateP
       since={running.since}
       timedOut={running.timedOut}
       showProgress={!running.done}
+      variant={kind === 'quiz' ? 'quiz' : undefined}
     />
   ) : null
 
@@ -162,7 +163,7 @@ export function ContentGate({ kind, topicName, present, children }: ContentGateP
     return (
       <div className="flex flex-col gap-8" aria-busy="true">
         <div className="max-w-[720px]">
-          {status ?? <JobStatus job={{ status: 'queued' }} showProgress />}
+          {status ?? <JobStatus job={{ status: 'queued' }} showProgress variant={kind === 'quiz' ? 'quiz' : undefined} />}
         </div>
         <ViewSkeleton kind={kind} />
       </div>

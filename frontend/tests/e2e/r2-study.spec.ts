@@ -116,7 +116,7 @@ test.describe('the quiz', () => {
     await expect(page.getByRole('button', { name: 'Start quiz' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'New quiz set' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'New questions' })).toHaveCount(0)
-    await expect(page.getByText('Guess your score to compare it with your result (optional)')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Guess your score (optional)' })).toBeVisible()
     await expect(page.getByRole('group', { name: 'Tools' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Start quiz' }).click()
