@@ -144,6 +144,11 @@ export function QuizResults({
   onClose: () => void
 }) {
   const [filter, setFilter] = React.useState<'all' | 'missed'>('all')
+  const [othersOpen, setOthersOpen] = React.useState(false)
+  const othersId = React.useId()
+  // With misses the review opens on the first missed question, with a way to the next; "All questions" shows the whole list.
+  const [oneAtATime, setOneAtATime] = React.useState(true)
+  const [missedAt, setMissedAt] = React.useState(0)
   // The question-by-question review is a section the student opens on a phone, so the score, what to do next and the way
   // out are on the first screen; a wide screen has the room and shows it. (Results are drawn after an answer is graded, in the
   // browser, so the screen's width is known here.)
@@ -159,6 +164,8 @@ export function QuizResults({
     [questions, result.review, result.answers]
   )
   const missed = entries.filter((entry) => !entry.review.isCorrect)
+  // The question you were sure about and got wrong comes first: it is the one worth reading most closely.
+  const missedList = [...missed].sort((a, b) => Number((result.confidence?.[String(b.index)] ?? 0) >= SURE_CONFIDENCE) - Number((result.confidence?.[String(a.index)] ?? 0) >= SURE_CONFIDENCE) || a.index - b.index)
   // The order of spec §5.7: sure and wrong, other wrong, right but unsure, solid.
   const sections = React.useMemo(() => {
     const confidence = Object.fromEntries(Object.entries(result.confidence ?? {}).map(([key, value]) => [key, { confidence: value }]))
@@ -181,6 +188,28 @@ export function QuizResults({
     const ids = result.missedConcepts?.[String(index)]
     return ids && help ? pointerLine(help.pointers.filter((pointer) => ids.includes(pointer.conceptId))) : []
   }
+  /** One missed question with where to look, as the review shows it in the list and one at a time. */
+  const renderMissed = (entry: (typeof entries)[number]) => {
+    const lines = pointersFor(entry.index)
+    return (
+      <div>
+        <ReviewList entries={[entry]} courseId={courseId} topicId={topicId} />
+        {lines.length > 0 ? (
+          <p className="-mt-2 pb-4 text-small text-fg-2" data-testid="where-to-look">
+            Where to look:{' '}
+            {lines.map((line, position) => (
+              <React.Fragment key={line.conceptId}>
+                {position > 0 ? ', ' : null}
+                <Link href={line.href} className="text-fg underline underline-offset-2" scroll={false}>
+                  {line.text}
+                </Link>
+              </React.Fragment>
+            ))}
+          </p>
+        ) : null}
+      </div>
+    )
+  }
   // After a miss the one primary step is going back to what was missed: its first idea, in the student's own pages (or its explanation).
   // New questions and voice practice are the quieter choices beside it. A quiz with nothing missed has no repair to lead with.
   const repair =
@@ -191,6 +220,8 @@ export function QuizResults({
           ? { href: help.explainer.href, label: 'Review the first missed idea' }
           : null
       : null
+  // New questions lead only when nothing else does: no repair link, no harder set.
+  const primaryIsNewQuestions = !repair && !(allRightAndSure && onHarderSet)
   const score = formatScore(result.score)
   // What this quiz changed, in the student's own days (the browser's zone).
   // The review date is the topic's, and a confidence rating below moves it: both lines read the same value.
@@ -213,11 +244,6 @@ export function QuizResults({
           <p className="mt-0.5 text-small text-fg-2" data-testid="quiz-counts">
             <span className="tabular">{correctCount}</span> of <span className="tabular">{entries.length}</span> {entries.length === 1 ? 'question' : 'questions'} right.
           </p>
-          {result.bestScore > result.score ? (
-            <p className="mt-0.5 text-small text-fg-2">
-              Your best is <span className="tabular">{formatScore(result.bestScore)}</span>.
-            </p>
-          ) : null}
           {result.predicted !== undefined ? (
             <p className="mt-0.5 text-small text-fg-2">{predictionLine(result.predicted, correctCount)}</p>
           ) : null}
@@ -231,29 +257,64 @@ export function QuizResults({
             <ExpectedMiss surface="quiz_results" summaryMissedShare={1 - result.score / 100} />
           </div>
         </div>
+        {/* One next step leads and nothing else competes with it: the first missed idea after a miss, a harder set after a clean sweep, else
+            new questions. Every other way to study is behind "Other ways to study". */}
         <div className="flex flex-wrap items-center gap-2">
           {allRightAndSure && onHarderSet ? (
             <Button variant="primary" icon={<Lightning />} onClick={onHarderSet}>
               Harder set
             </Button>
-          ) : null}
-          {repair ? (
+          ) : repair ? (
             <Button asChild variant="primary" icon={<BookOpen />}>
               <Link href={repair.href} scroll={false} data-testid="review-first-missed">
                 {repair.label}
               </Link>
             </Button>
-          ) : null}
-          {/* One next step leads (the primary button above); with none, new questions do. The others are the quiet choices beside it. */}
-          <Button variant={repair || (allRightAndSure && onHarderSet) ? 'ghost' : 'primary'} icon={<Sparkle />} onClick={onNewQuestions}>
-            New questions
-          </Button>
-          <Button asChild variant="ghost" icon={<Microphone />}>
-            <Link href={voiceHref} scroll={false}>
-              Voice practice
-            </Link>
+          ) : (
+            <Button variant="primary" icon={<Sparkle />} onClick={onNewQuestions}>
+              New questions
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            aria-expanded={othersOpen}
+            aria-controls={othersId}
+            onClick={() => setOthersOpen((current) => !current)}
+            data-testid="other-ways"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              Other ways to study
+              <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', othersOpen && 'rotate-180')} />
+            </span>
           </Button>
         </div>
+      </div>
+
+      <div id={othersId} hidden={!othersOpen} className="mt-3 flex flex-wrap items-center gap-2" data-testid="quiz-help">
+        {primaryIsNewQuestions ? null : (
+          <Button variant="secondary" icon={<Sparkle />} onClick={onNewQuestions}>
+            New questions
+          </Button>
+        )}
+        <Button asChild variant="secondary" icon={<Microphone />}>
+          <Link href={voiceHref} scroll={false}>
+            Voice practice
+          </Link>
+        </Button>
+        {help?.explainer ? (
+          <Button asChild variant="secondary" icon={<BookOpen />}>
+            <Link href={help.explainer.href} scroll={false}>
+              Read the explanation of what you missed
+            </Link>
+          </Button>
+        ) : null}
+        {help?.easierStep ? (
+          <Button asChild variant="secondary">
+            <Link href={help.easierStep.href} scroll={false}>
+              {help.easierStep.label}
+            </Link>
+          </Button>
+        ) : null}
       </div>
 
       <div className="mt-6 sm:mt-8">
@@ -272,6 +333,25 @@ export function QuizResults({
       </div>
 
       <div id={reviewId} className={cn('sm:mt-2', !reviewOpen && 'max-sm:hidden')}>
+      {oneAtATime && missed.length > 0 ? (
+        <section aria-label="Missed questions" className="max-sm:mt-2" data-testid="missed-one">
+          <p className="tabular text-small text-fg-2" data-testid="missed-position">
+            Missed question {Math.min(missedAt, missed.length - 1) + 1} of {missed.length}
+          </p>
+          {renderMissed(missedList[Math.min(missedAt, missed.length - 1)])}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {missed.length > 1 ? (
+              <Button variant="secondary" onClick={() => setMissedAt((current) => (current + 1) % missed.length)} data-testid="next-missed">
+                Next missed question
+              </Button>
+            ) : null}
+            <Button variant="ghost" onClick={() => setOneAtATime(false)} data-testid="all-questions">
+              All {entries.length} questions
+            </Button>
+          </div>
+        </section>
+      ) : (
+      <>
       <div className="max-sm:mt-2">
         <SegmentedControl
           aria-label="Filter questions"
@@ -293,27 +373,7 @@ export function QuizResults({
               </h3>
               {section.note ? <p className="mt-0.5 text-small text-fg-2">{section.note}</p> : null}
               {section.missed ? (
-                section.entries.map((entry) => {
-                  const lines = pointersFor(entry.index)
-                  return (
-                    <div key={entry.index}>
-                      <ReviewList entries={[entry]} courseId={courseId} topicId={topicId} />
-                      {lines.length > 0 ? (
-                        <p className="-mt-2 pb-4 text-small text-fg-2" data-testid="where-to-look">
-                          Where to look:{' '}
-                          {lines.map((line, position) => (
-                            <React.Fragment key={line.conceptId}>
-                              {position > 0 ? ', ' : null}
-                              <Link href={line.href} className="text-fg underline underline-offset-2" scroll={false}>
-                                {line.text}
-                              </Link>
-                            </React.Fragment>
-                          ))}
-                        </p>
-                      ) : null}
-                    </div>
-                  )
-                })
+                section.entries.map((entry) => <React.Fragment key={entry.index}>{renderMissed(entry)}</React.Fragment>)
               ) : (
                 <ReviewList entries={section.entries} courseId={courseId} topicId={topicId} />
               )}
@@ -323,25 +383,15 @@ export function QuizResults({
           <p className="py-8 text-small text-fg-2">You got every question right. Nothing to review here.</p>
         )}
       </div>
+      </>
+      )}
       </div>
 
-      {help && (help.explainer || help.easierStep) ? (
-        <div className="mt-6 flex flex-wrap items-center gap-2" data-testid="quiz-help">
-          {help.explainer ? (
-            <Button asChild variant="secondary" icon={<BookOpen />}>
-              <Link href={help.explainer.href} scroll={false}>
-                Read the explanation of what you missed
-              </Link>
-            </Button>
-          ) : null}
-          {help.easierStep ? (
-            <Button asChild variant="secondary">
-              <Link href={help.easierStep.href} scroll={false}>
-                {help.easierStep.label}
-              </Link>
-            </Button>
-          ) : null}
-        </div>
+      {/* The best score and the overall rating come after the feedback on the answers. */}
+      {result.bestScore > result.score ? (
+        <p className="mt-6 text-small text-fg-2" data-testid="quiz-best">
+          Your best is <span className="tabular">{formatScore(result.bestScore)}</span>.
+        </p>
       ) : null}
 
       <ConfidencePrompt topicId={topicId} onSaved={setNextReviewAt} />
