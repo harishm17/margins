@@ -15,10 +15,10 @@ import {
 const env = (values: Record<string, string>) => values as unknown as NodeJS.ProcessEnv
 
 describe('cloudSpeechProviders', () => {
-  it('offers the providers with a key, Deepgram first', () => {
+  it('offers only Deepgram by default, when it has a key (AssemblyAI trains on audio unless a paid account opts out)', () => {
     assert.deepEqual(cloudSpeechProviders(env({})), [])
-    assert.deepEqual(cloudSpeechProviders(env({ ASSEMBLYAI_API_KEY: 'a' })), ['assemblyai'])
-    assert.deepEqual(cloudSpeechProviders(env({ ASSEMBLYAI_API_KEY: 'a', DEEPGRAM_API_KEY: 'd' })), ['deepgram', 'assemblyai'])
+    assert.deepEqual(cloudSpeechProviders(env({ ASSEMBLYAI_API_KEY: 'a' })), [])
+    assert.deepEqual(cloudSpeechProviders(env({ ASSEMBLYAI_API_KEY: 'a', DEEPGRAM_API_KEY: 'd' })), ['deepgram'])
     assert.deepEqual(cloudSpeechProviders(env({ DEEPGRAM_API_KEY: '  ' })), [])
     assert.equal(cloudSpeechConfigured(env({ DEEPGRAM_API_KEY: 'd' })), true)
   })
@@ -27,7 +27,8 @@ describe('cloudSpeechProviders', () => {
     const keys = { ASSEMBLYAI_API_KEY: 'a', DEEPGRAM_API_KEY: 'd' }
     assert.deepEqual(cloudSpeechProviders(env({ ...keys, CLOUD_SPEECH_PROVIDERS: 'assemblyai, deepgram' })), ['assemblyai', 'deepgram'])
     assert.deepEqual(cloudSpeechProviders(env({ ...keys, CLOUD_SPEECH_PROVIDERS: 'assemblyai' })), ['assemblyai'])
-    assert.deepEqual(cloudSpeechProviders(env({ ...keys, CLOUD_SPEECH_PROVIDERS: 'nonsense' })), ['deepgram', 'assemblyai'])
+    assert.deepEqual(cloudSpeechProviders(env({ ...keys, CLOUD_SPEECH_PROVIDERS: 'deepgram,assemblyai' })), ['deepgram', 'assemblyai'])
+    assert.deepEqual(cloudSpeechProviders(env({ ...keys, CLOUD_SPEECH_PROVIDERS: 'nonsense' })), ['deepgram'])
   })
 })
 
@@ -47,7 +48,7 @@ describe('keytermsFor', () => {
 })
 
 describe('deepgramUrl', () => {
-  it('names the model, the audio, the endpointing, the language and each term', () => {
+  it('names the model, the audio, the endpointing, the language, the training opt-out and each term', () => {
     const url = new URL(deepgramUrl({ language: 'es', terms: ['teorema de Bayes', 'prior'] }))
     assert.equal(url.origin + url.pathname, 'wss://api.deepgram.com/v1/listen')
     assert.equal(url.searchParams.get('model'), 'nova-3')
@@ -56,6 +57,7 @@ describe('deepgramUrl', () => {
     assert.equal(url.searchParams.get('interim_results'), 'true')
     assert.equal(url.searchParams.get('endpointing'), '300')
     assert.equal(url.searchParams.get('language'), 'es')
+    assert.equal(url.searchParams.get('mip_opt_out'), 'true')
     assert.deepEqual(url.searchParams.getAll('keyterm'), ['teorema de Bayes', 'prior'])
   })
 
@@ -131,12 +133,21 @@ describe('mintProviderToken', () => {
 })
 
 describe('mintCloudSpeechGrant', () => {
-  const keys = env({ DEEPGRAM_API_KEY: 'dk', ASSEMBLYAI_API_KEY: 'ak' })
+  // Both providers named, as a deployment that adds AssemblyAI would.
+  const keys = env({ DEEPGRAM_API_KEY: 'dk', ASSEMBLYAI_API_KEY: 'ak', CLOUD_SPEECH_PROVIDERS: 'deepgram,assemblyai' })
   const both = fakeFetch({
     'https://api.deepgram.com': ok({ access_token: 'jwt' }),
     'https://token.assemblyai.com': ok({ token: 'tok' }),
   })
   const quiet = () => undefined
+
+  it('never reaches AssemblyAI by default, even with its key', async () => {
+    const defaults = env({ DEEPGRAM_API_KEY: 'dk', ASSEMBLYAI_API_KEY: 'ak' })
+    await assert.rejects(
+      mintCloudSpeechGrant({ maxSessionSeconds: 60, language: 'en', terms: [], exclude: ['deepgram'], fetchImpl: both, env: defaults, log: quiet }),
+      (error: unknown) => error instanceof CloudSpeechError && error.status === 503
+    )
+  })
 
   it('gives Deepgram first, with its URL', async () => {
     const grant = await mintCloudSpeechGrant({ maxSessionSeconds: 600, language: 'en', terms: ['hash'], fetchImpl: both, env: keys, log: quiet })

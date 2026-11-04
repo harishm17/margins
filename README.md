@@ -46,13 +46,13 @@ Margins asks you to try before it helps. Each topic starts with a few questions 
 
 *The course plan Margins proposes. Each topic lists the file and pages it is taught from, and you can rename, move, merge or remove topics before anything is written.*
 
-<img src="frontend/public/screens/notes-detail-light-1920.webp" alt="Topic notes with code, an outline and the source files and pages" width="860">
+<img src="frontend/public/screens/notes-detail-light-1920.webp" alt="A topic's Read step: the student's own pages, with links to the original" width="860">
 
-*Notes for one topic, with an outline and the source pages they were written from.*
+*Read: your own pages for one topic, each linked to the original, with margin notes and an explanation of any passage beside them.*
 
-<img src="frontend/public/screens/practice-light-1920.webp" alt="A practice problem solved one step at a time, with a hint open" width="860">
+<img src="frontend/public/screens/practice-light-1920.webp" alt="A practice problem solved one step at a time, with a hint that opens after a first try" width="860">
 
-*Practice: a problem broken into steps, each checked as you go, with a hint.*
+*Practice: a problem broken into steps, each checked as you go, with hints that open after a first try.*
 
 <img src="frontend/public/screens/ask-light-1920.webp" alt="Ask your materials, with a citation open on the page it quotes" width="860">
 
@@ -78,7 +78,7 @@ Browser ──▶ Next.js 16 (web) ──────────────▶
 - **Local embeddings.** Chunks are embedded in-process with `BAAI/bge-small-en-v1.5` (384 dimensions, no API cost) and stored in pgvector with an HNSW index.
 - **Topic-scoped retrieval.** Each topic is mapped to at most 24 chunks by hybrid search: vector similarity and Postgres full-text search, merged with Reciprocal Rank Fusion, with a similarity floor so a barely covered topic gets a short list instead of loose matches. Generators only ever see those chunks, so prompt size stays flat as a course grows, and the shared excerpt block is prompt-cached across notes, examples, quizzes and exams.
 - **Models.** Claude Opus writes notes, examples, quizzes and exams, plans each course in one low-effort call and answers Ask questions; Claude Haiku handles file validation, short-answer grading and the voice coach. <!-- draft for Harish --> The learning features add three more purposes: Sonnet at low effort writes the practice tutor's replies and grades recall answers, and Haiku at low effort routes Ask messages and judges tutor replies for leaks. Each purpose has its own setting (`MODEL_TUTOR`, `MODEL_RECALL_GRADING`, `MODEL_ROUTER`).
-- **Voice without a speech API.** The browser does speech-to-text and text-to-speech (Web Speech API). The server runs Claude with drill tools (next question, record answer, hint) and streams each turn back as NDJSON.
+- **Streaming speech-to-text from the browser.** The page streams the microphone (16 kHz PCM from an AudioWorklet) straight to Deepgram Nova-3, opted out of Deepgram's model training, with the browser's Web Speech API as the fallback. AssemblyAI is built in as an optional second provider (`CLOUD_SPEECH_PROVIDERS`), off by default because it trains on audio unless a paid account opts out. The server only mints a short-lived token per session, so no API key reaches the page, and passes the course's key terms so technical words come out right. Text-to-speech stays in the browser. The server runs Claude with drill tools (next question, record answer, hint) and streams each turn back as NDJSON.
 - **Jobs.** Long tasks run as jobs that are claimed with one atomic update and hold a lease; a reaper re-dispatches jobs whose worker died. Each job records its tokens and cost; a per-user daily allowance and a site-wide daily cap bound spend.
 - **AI outages and the daily allowance.** One shared status record (`ai_status`, read at `GET /status/ai`) says whether the AI is available. Out-of-credit, key and configuration errors mark it unavailable at once; rate limits and overloads do so after three in a row. While it is down, the app shows a site-wide notice and turns the AI buttons off with the reason. The daily allowance is checked before a job is created, not after. A failure that can be retried puts the job back to `pending`; `failed` is final. Mock exam answers are always saved, and grading waits for the AI to come back, for up to 7 days. If `OPS_ALERT_WEBHOOK_URL` is set, the owner gets a message when the AI goes down and when it comes back.
 - **Account deletion.** Settings has a Delete account button. It stops the account's jobs, deletes its files, then deletes the account and everything made from it. Spend rows are kept without any link to the person, so the site-wide daily cap still holds.

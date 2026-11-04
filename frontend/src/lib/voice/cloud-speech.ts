@@ -2,8 +2,11 @@
  * Cloud speech recognition for voice practice (spec 19.12): a streaming recognizer reached straight from the browser
  * with a short-lived token this server mints. The API keys never leave the server.
  *
- * Two providers, tried in order: Deepgram (Nova-3) first, then AssemblyAI (Universal-3.6 Pro). Only those with a key
- * are offered; CLOUD_SPEECH_PROVIDERS ("assemblyai,deepgram") changes the order or leaves one out. A provider whose
+ * Two providers are built in: Deepgram (Nova-3) and AssemblyAI (Universal-3.6 Pro). By default only Deepgram is used:
+ * every stream opts out of its model training (`mip_opt_out`), while AssemblyAI trains on audio unless a paid account
+ * opts out in its dashboard, and the privacy page promises a student's material is not used for training. Set
+ * CLOUD_SPEECH_PROVIDERS ("deepgram,assemblyai") to add AssemblyAI or change the order. Only providers with a key
+ * are offered. A provider whose
  * token cannot be minted is skipped, and the browser can ask again leaving out one that refused its stream (spent
  * credit, an outage), so a session moves to the next provider before it falls back to the browser's own recognizer.
  *
@@ -12,6 +15,8 @@
 
 export type CloudSpeechProvider = 'deepgram' | 'assemblyai'
 export const CLOUD_SPEECH_PROVIDERS: readonly CloudSpeechProvider[] = ['deepgram', 'assemblyai']
+/** The providers used when CLOUD_SPEECH_PROVIDERS is not set (see above for why AssemblyAI is not one of them). */
+export const DEFAULT_CLOUD_SPEECH_PROVIDERS: readonly CloudSpeechProvider[] = ['deepgram']
 
 /** What the browser needs to open a stream: where, and the token (as a query parameter or a WebSocket subprotocol). */
 export type CloudSpeechGrant = { provider: CloudSpeechProvider; url: string; token: string }
@@ -32,7 +37,7 @@ export function cloudSpeechProviders(env: NodeJS.ProcessEnv = process.env): Clou
     .split(',')
     .map((name) => name.trim().toLowerCase())
     .filter((name): name is CloudSpeechProvider => (CLOUD_SPEECH_PROVIDERS as readonly string[]).includes(name))
-  const order = named.length > 0 ? [...new Set(named)] : [...CLOUD_SPEECH_PROVIDERS]
+  const order = named.length > 0 ? [...new Set(named)] : [...DEFAULT_CLOUD_SPEECH_PROVIDERS]
   return order.filter((provider) => keyOf(provider, env).length > 0)
 }
 
@@ -89,6 +94,9 @@ export function deepgramUrl(input: { language: string; terms: string[]; model?: 
     interim_results: 'true',
     smart_format: 'true',
     endpointing: String(DEEPGRAM_ENDPOINTING_MS),
+    // Out of Deepgram's Model Improvement Program: the audio is kept only while the request runs and never used for
+    // training (the privacy page promises a student's material is not used to train models). No price change.
+    mip_opt_out: 'true',
   })
   const language = input.language.toLowerCase()
   params.set('language', VOICE_LANGUAGES.has(language) ? language : 'en')
