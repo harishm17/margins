@@ -39,7 +39,7 @@ import {
   type MissingItems,
   type Mode,
 } from './review-select'
-import { normalizeAnswers, answersForGrader, isAnswered, type QuizAnswer } from './quiz-answers'
+import { normalizeAnswers, answersForGrader, dontKnowIndexes, isAnswered, type QuizAnswer } from './quiz-answers'
 import { buildGradedEvidence } from './quiz-evidence'
 import { dontKnowEvidence } from './dont-know'
 import { helpAfterMiss, type HelpAfterMiss } from './instruction-server'
@@ -383,6 +383,33 @@ async function legacyReviewDue(userId: string, topicId: string, timeZone: string
 }
 
 /**
+ * How many questions a review session started now with these settings would have: `ready` are in the bank and go in at once, `toWrite`
+ * are concepts that need a question written first (the session waits for the job, and a failed job leaves it shorter). Nothing is
+ * stored and no job is started. The 10-minute card says this number, so it never promises more than the session serves.
+ */
+export async function previewReviewSize(input: {
+  userId: string
+  projectId: string
+  timeZone: string
+  now?: Date
+  limit?: number
+  includeNotDue?: boolean
+  topicIds?: string[]
+}): Promise<{ ready: number; toWrite: number }> {
+  const { userId, projectId, timeZone } = input
+  const now = input.now ?? new Date()
+  const meta = emptyMeta(input.topicIds?.length ? { topicId: input.topicIds[0], topicIds: input.topicIds } : {})
+  if (input.limit !== undefined) meta.limit = Math.max(1, Math.min(MAX_REVIEW_ITEMS, Math.floor(input.limit)))
+  if (input.includeNotDue) meta.includeNotDue = true
+  const context = restrictToRuleGraded(await loadReviewContext({ userId, projectId, now, timeZone }), blockedCode(await getAiStatus(userId)))
+  const plan = planReview(context, meta, [], now, timeZone)
+  const served = new Set(plan.add.flatMap((item) => item.conceptIds))
+  const written = new Set(plan.missing.flatMap((group) => group.conceptIds).filter((id) => !served.has(id)))
+  const room = meta.limit ?? MAX_REVIEW_ITEMS
+  return { ready: plan.add.length, toWrite: Math.max(0, Math.min(written.size, room - plan.add.length)) }
+}
+
+/**
  * Builds a review session (all due concepts, or one topic's plus two others) or a drill on one concept.
  * Nothing is stored when there is nothing to serve; a session whose items must all be written first
  * is refused with the AI's reason when the AI is unavailable.
@@ -622,6 +649,8 @@ function summaryOf(items: SessionItem[], meta: SessionMeta, names: Map<string, s
   const retestRight = new Set(retests.filter((entry) => entry.result.score >= SUCCESS).flatMap((entry) => entry.item.conceptIds))
   const retested = new Set(retests.flatMap((entry) => entry.item.conceptIds))
   const named = (ids: Iterable<string>) => [...ids].flatMap((id) => names.get(id) ?? [])
+  const unretested = [...missed].filter((id) => !retested.has(id))
+  const leftOnPurpose = meta.retestCap !== undefined && retests.length >= meta.retestCap
   return {
     total: firstPass.length,
     correct: firstPass.filter((entry) => entry.result.score >= SUCCESS).length,
@@ -629,7 +658,10 @@ function summaryOf(items: SessionItem[], meta: SessionMeta, names: Map<string, s
     recovered: named([...missed].filter((id) => retestRight.has(id))),
     stillShaky: named([...missed].filter((id) => retested.has(id) && !retestRight.has(id))),
     // A drill has no closing retest, so it never says one was missing (spec 7.4).
-    notRetested: kind === 'drill' ? [] : named([...missed].filter((id) => !retested.has(id))),
+    notRetested: kind === 'drill' || leftOnPurpose ? [] : named(unretested),
+    // A short session's cap reached (or no retests at all): the rest were left out by design, not for want of a question.
+    leftOut: kind === 'drill' || !leftOnPurpose ? [] : named(unretested),
+    retestLimit: kind === 'review' && meta.retestCap !== undefined ? meta.retestCap : null,
     helpAfterMiss: null,
   }
 }
@@ -821,7 +853,7 @@ export async function answerItem(input: {
   )
 
   const score = result.points_possible > 0 ? Math.min(1, Math.max(0, result.points_earned / result.points_possible)) : result.is_correct ? 1 : 0
-  const review = buildReview([item.question], toStoredResults([{ ...result, question_index: 0 }]), { '0': given.answer })[0]
+  const review = buildReview([item.question], toStoredResults([{ ...result, question_index: 0 }], dontKnowIndexes({ '0': given as QuizAnswer })), { '0': given.answer })[0]
   const storeResult = async (tx: Prisma.TransactionClient) => {
     await lockSession(tx, sessionId)
     const fresh = await tx.itemSession.findFirst({ where: { id: sessionId, userId } })

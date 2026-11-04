@@ -188,7 +188,7 @@ test('session ends with retests of misses in a fresh form', async (t) => {
   assert.equal(view.status, 'complete')
   assert.equal(view.next, null)
   const { helpAfterMiss: help, ...counts } = view.summary!
-  assert.deepEqual(counts, { total: 1, correct: 0, retests: { total: 1, correct: 1 }, recovered: ['Hashing'], stillShaky: [], notRetested: [] })
+  assert.deepEqual(counts, { total: 1, correct: 0, retests: { total: 1, correct: 1 }, recovered: ['Hashing'], stillShaky: [], notRetested: [], leftOut: [], retestLimit: null })
   // What was missed still shows where to look, even when the retest went right.
   assert.deepEqual(help?.pointers.map((pointer) => pointer.conceptName), ['Hashing'])
   const row = await prisma.itemSession.findUniqueOrThrow({ where: { id } })

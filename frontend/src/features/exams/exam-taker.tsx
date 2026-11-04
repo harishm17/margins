@@ -45,7 +45,29 @@ const SAVE_TEXT: Record<SaveStatus, string> = {
   idle: '',
   saving: 'Saving...',
   saved: 'Saved',
-  error: 'Offline, will retry',
+  error: 'Not saved',
+}
+
+/**
+ * Whether the answers are safe, in the header on every screen size: a compact Saving or Saved, and when a save fails a
+ * "Not saved" that says so and a Retry (the autosave also tries again by itself). A failure is never left out for want of room.
+ */
+function SaveState({ status, text, onRetry }: { status: SaveStatus; text: string; onRetry: () => void }) {
+  if (status === 'error') {
+    return (
+      <span role="alert" className="flex shrink-0 items-center gap-1.5 text-caption text-warning-soft-fg sm:text-small" data-testid="exam-save-status">
+        {text}
+        <button type="button" onClick={onRetry} className="rounded-chip px-1.5 font-medium underline underline-offset-2 max-sm:min-h-11 max-sm:px-2">
+          Retry
+        </button>
+      </span>
+    )
+  }
+  return (
+    <span aria-live="polite" className="shrink-0 text-right text-caption text-fg-3 sm:min-w-[6.5rem] sm:text-small" data-testid="exam-save-status">
+      {text}
+    </span>
+  )
 }
 
 function Timer({ secondsLeft }: { secondsLeft: number }) {
@@ -275,9 +297,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
         title={title}
         status={
           <>
-            <span className={cn('hidden min-w-[6.5rem] text-right text-small sm:inline', autosave.status === 'error' ? 'text-warning-soft-fg' : 'text-fg-3')}>
-              {saveText}
-            </span>
+            <SaveState status={autosave.status} text={saveText} onRetry={() => void autosave.saveNow()} />
             <Timer secondsLeft={secondsLeft} />
           </>
         }

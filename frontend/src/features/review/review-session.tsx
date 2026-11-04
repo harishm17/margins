@@ -34,8 +34,8 @@ type Props = {
 
 const POLL_MS = 2000
 
+// The easy questions a review opens with carry no label: "Warm-up" is the topic's own step (questions before reading), not this.
 const PHASE_LABEL: Partial<Record<PublicSessionItem['phase'], string>> = {
-  opening: 'Warm-up',
   retest: 'Fresh retest',
   prerequisite: 'Before this',
 }
@@ -416,7 +416,7 @@ function Step({ courseId, sessionId, position, motion, item, result, isLast, can
   }
 
   if (result) {
-    const resultEntries: ReviewEntry[] = [{ index: position, question: item.question, review: { ...result.review, questionIndex: position }, answer: result.answer }]
+    const resultEntries: ReviewEntry[] = [{ index: position, question: item.question, review: { ...result.review, questionIndex: position, dontKnow: result.idk === true || result.review.dontKnow === true }, answer: result.answer }]
     return (
       <div className={cn('mt-8', motion)} data-question="">
         <h2 ref={headingRef} tabIndex={-1} className="sr-only outline-none">
@@ -536,7 +536,18 @@ function Summary({ courseId, session, summary, conceptId }: { courseId: string; 
             </dd>
           </div>
         ) : null}
-        {summary.recovered.length === 0 && summary.stillShaky.length === 0 && summary.notRetested.length === 0 && !trouble ? (
+        {summary.leftOut.length > 0 ? (
+          <div>
+            <dt className="text-body-strong text-fg">Left for next time</dt>
+            <dd className="mt-0.5 text-small text-fg-2" data-testid="left-out">
+              {list(summary.leftOut)}.{' '}
+              {summary.retestLimit
+                ? `This session retests ${summary.retestLimit === 1 ? 'one miss' : `only ${summary.retestLimit} misses`}, so ${summary.leftOut.length === 1 ? 'this one comes' : 'these come'} back in your next review.`
+                : `This session doesn't retest misses, so ${summary.leftOut.length === 1 ? 'this one comes' : 'these come'} back in your next review.`}
+            </dd>
+          </div>
+        ) : null}
+        {summary.recovered.length === 0 && summary.stillShaky.length === 0 && summary.notRetested.length === 0 && summary.leftOut.length === 0 && !trouble ? (
           <div>
             <dt className="text-body-strong text-fg">Nothing missed</dt>
             <dd className="mt-0.5 text-small text-fg-2">Every question was right, so nothing needed a retest.</dd>
