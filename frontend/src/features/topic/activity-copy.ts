@@ -50,7 +50,7 @@ const VERBS: Record<ActivityKind, string> = {
 export const activityVerb = (kind: ActivityKind): string => VERBS[kind]
 
 /** Whether a read-again pointer opens the explanation of the student's gaps rather than the reading. */
-const opensExplainer = (activity: { kind: ActivityKind; href: string }): boolean =>
+export const opensExplainer = (activity: { kind: ActivityKind; href: string }): boolean =>
   activity.kind === 'instruct' && parseView(new URL(activity.href, 'http://margins.local').searchParams.get('view')) === 'explainer'
 
 /**

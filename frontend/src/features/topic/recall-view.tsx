@@ -14,7 +14,7 @@ import { MAX_RECALL_ANSWER_CHARS, type RecallCard, type RecallFeedback, type Rec
 import { defaultLanguageCode, getRecognitionConstructor, languageTag, newFinalWords, resultsFromEvent, type RecognitionLike } from '@/features/voice/speech'
 import type { ActivityKind } from '@/lib/learning/next-activity'
 import { cn } from '@/lib/utils'
-import { activityLabel, opensHere } from './activity-copy'
+import { activityLabel, opensExplainer, opensHere } from './activity-copy'
 import { clearDraft, draftKey, openDraft, parseDraft, parseRecallPayload, type RecallDraftPayload } from './recall-draft'
 import { useActivityInProgress, useAttemptFocus, useOptionalTopic } from './topic-provider'
 import { ExpectedMiss } from '@/features/learning/expected-miss'
@@ -107,33 +107,41 @@ export function RecallView({ topicId, state, nextHref, nextLabel, next, voiceHre
   useActivityInProgress(true)
   // Once something is graded the way on is the topic's next activity, as the primary button; with nothing
   // graded yet (or the next activity being recall itself) the step offers to skip on to the one after it.
-  const onward = graded && complete && !opensHere(next.href, pathname, search) ? { href: next.href, label: activityLabel(next) } : { href: nextHref, label: nextLabel }
-  // With results on the page they come first: the instructions fold into one line.
-  const folded = graded && !instructionsOpen
+  // The explanation of the student's gaps is a detour on the way to the next step: it is the one primary button, and the next step
+  // stays beside it as the plain choice, so the button, the path's tag and the explainer's own ending all name the same thing.
+  const detour = graded && complete && opensExplainer(next) && !opensHere(next.href, pathname, search)
+  const onward =
+    graded && complete && !opensHere(next.href, pathname, search)
+      ? { href: next.href, label: activityLabel(next) }
+      : { href: nextHref, label: graded || teachBack ? nextLabel : 'Skip recall for now' }
+  // Once every prompt has feedback the page is the feedback; before, it is the question. The policy text is behind one button either way.
+  const heading = complete ? (teachBack ? 'Teach-back feedback' : 'Recall feedback') : teachBack ? 'Explain it in your own words' : 'Close the book and say what you remember'
   return (
     <section aria-labelledby="recall-heading" className="max-w-[640px]">
       <h2 id="recall-heading" className="text-title text-fg">
-        {teachBack ? 'Explain it in your own words' : 'Close the book and say what you remember'}
+        {heading}
       </h2>
-      {graded ? (
-        <button
-          type="button"
-          aria-expanded={instructionsOpen}
-          aria-controls={instructionsId}
-          onClick={() => setInstructionsOpen((current) => !current)}
-          className="mt-2 inline-flex min-h-8 items-center gap-1 rounded-chip text-small text-fg-2 hover:text-fg max-sm:min-h-11"
-        >
-          {instructionsOpen ? 'Hide instructions' : 'Show instructions'}
-          <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', instructionsOpen && 'rotate-180')} />
-        </button>
-      ) : null}
-      <div id={instructionsId} hidden={folded}>
+      {complete ? null : (
         <p className="mt-3 text-body text-fg-2">
           {teachBack
             ? 'Teach it as if the other person had not read it. What you leave out shows what to look at again.'
-            : 'Write what you can remember of each idea, without looking back. Gaps are fine: they show what to look at next.'}
+            : 'Write what you can remember of each idea. Gaps are fine: they show what to look at next.'}
         </p>
-        <p className="mt-2 text-body text-fg-2">The reading stays closed while you answer. If you open it, the answer won&apos;t count toward your score.</p>
+      )}
+      <button
+        type="button"
+        aria-expanded={instructionsOpen}
+        aria-controls={instructionsId}
+        onClick={() => setInstructionsOpen((current) => !current)}
+        className="mt-2 inline-flex min-h-8 items-center gap-1 rounded-chip text-small text-fg-2 hover:text-fg max-sm:min-h-11"
+      >
+        How this is scored
+        <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', instructionsOpen && 'rotate-180')} />
+      </button>
+      <div id={instructionsId} hidden={!instructionsOpen}>
+        <p className="mt-1 text-small text-fg-2">
+          The reading stays closed while you answer. If you open it, the answer won&apos;t count toward your score. Seeing what you missed, or trying again the same day, counts as help, not as a fresh recall.
+        </p>
       </div>
       {total > 1 ? (
         <p className="mt-4 text-small text-fg-2" data-testid="recall-progress">
@@ -177,6 +185,13 @@ export function RecallView({ topicId, state, nextHref, nextLabel, next, voiceHre
             </span>
           </Link>
         </Button>
+        {detour ? (
+          <Button asChild variant="link" className="max-sm:min-h-11">
+            <Link href={nextHref} scroll={false} data-testid="recall-skip-explainer">
+              {teachBack ? nextLabel : 'Continue to Practice'}
+            </Link>
+          </Button>
+        ) : null}
         {voiceHref ? (
           <Button asChild variant="ghost">
             <Link href={voiceHref} data-testid="do-it-out-loud">
@@ -454,6 +469,17 @@ function FeedbackView({
   const complete = !feedback.idk && feedback.wrong.length === 0 && feedback.missed.length === 0
   const first = firstCorrection(feedback)
   const detailCount = feedback.got.length + feedback.wrong.length + feedback.missed.length
+  // The one-line result, and how many corrections the phone's first card leaves behind the button.
+  const covered = new Set(feedback.got.filter((item) => !item.partial).map((item) => item.conceptName))
+  for (const item of [...feedback.wrong, ...feedback.missed]) covered.delete(item.conceptName)
+  const ideas = new Set([...feedback.got, ...feedback.wrong, ...feedback.missed].map((item) => item.conceptName))
+  const summary = complete
+    ? 'You covered every idea this question asks about.'
+    : feedback.idk
+      ? "You said you don't remember. Here is where to look."
+      : `You covered ${covered.size} of ${ideas.size} ${ideas.size === 1 ? 'idea' : 'ideas'}.`
+  const corrections = feedback.idk ? (feedback.help?.pointers.length ?? 0) : feedback.wrong.length + feedback.missed.length
+  const moreCorrections = Math.max(0, corrections - (first ? 1 : 0))
   // Help on request: the explanation, an easier step and "Show me what I missed" wait behind "More help" until it is asked for.
   const hasHelpLinks = !!feedback.help && (!!feedback.help.explainer || !!feedback.help.easierStep)
   const showMoreHelp = !complete && (hasHelpLinks || feedback.revealed === null)
@@ -492,7 +518,10 @@ function FeedbackView({
           <div className="mt-1 text-small text-fg-2">{first.line}</div>
         </div>
       ) : null}
-      {complete ? <InlineAlert tone="accent">You covered every idea this question asks about.</InlineAlert> : null}
+      {feedback.answer && !feedback.idk ? <SubmittedAnswer text={feedback.answer} /> : null}
+      <p className="text-body-strong text-fg" data-testid="recall-result-line">
+        {summary}
+      </p>
       {/* One primary step ends the feedback: the next prompt when there is one (or, on the last, the way on below the prompts). Answering this one again is the quiet choice beside it; the extra help is behind one disclosure. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {onNextPrompt ? (
@@ -514,7 +543,7 @@ function FeedbackView({
           onClick={() => setDetailsPicked((current) => !current)}
         >
           <span className="inline-flex items-center gap-1">
-            {detailsOpen ? 'Hide the full feedback' : 'See the feedback on each idea'}
+            {detailsOpen ? 'Hide the full feedback' : moreCorrections > 0 ? `${moreCorrections} more ${moreCorrections === 1 ? 'correction' : 'corrections'}` : 'See the feedback on each idea'}
             <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', detailsOpen && 'rotate-180')} />
           </span>
         </Button>
@@ -643,6 +672,28 @@ function FeedbackView({
             ) : null}
           </div>
         </div>
+      ) : null}
+    </div>
+  )
+}
+
+/** What the student wrote, as the feedback's first line: two lines of it, and the rest on "Show all". */
+function SubmittedAnswer({ text }: { text: string }) {
+  const [all, setAll] = React.useState(false)
+  const long = text.length > 110 || text.includes('\n')
+  return (
+    <div data-testid="recall-submitted" className="rounded-control border border-border bg-surface-2 px-3 py-2">
+      <p className="text-caption text-fg-3">Your answer</p>
+      <p className={cn('mt-0.5 whitespace-pre-wrap break-words text-small text-fg', !all && 'line-clamp-2')}>{text}</p>
+      {long ? (
+        <button
+          type="button"
+          aria-expanded={all}
+          onClick={() => setAll((current) => !current)}
+          className="mt-1 inline-flex min-h-8 items-center rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg max-sm:min-h-11"
+        >
+          {all ? 'Show less' : 'Show all'}
+        </button>
       ) : null}
     </div>
   )

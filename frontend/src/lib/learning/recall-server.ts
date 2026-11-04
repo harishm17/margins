@@ -176,10 +176,11 @@ function revealedClaims(stored: StoredClaim[], lookup: ClaimLookup): RevealedCla
   })
 }
 
-export function buildFeedback(attemptId: string, result: unknown, lookup: ClaimLookup): RecallFeedback {
+export function buildFeedback(attemptId: string, result: unknown, lookup: ClaimLookup, answer = ''): RecallFeedback {
   const stored = readStoredClaims(result)
   const feedback: RecallFeedback = {
     attemptId,
+    answer,
     abandoned: isRecord(result) && result.abandoned === true,
     repeat: isRecord(result) && (result.repeat === 'seen' || result.repeat === 'revealed') ? result.repeat : null,
     idk: isRecord(result) && result.idk === true,
@@ -266,7 +267,7 @@ export async function loadRecallState(userId: string, topicId: string, options: 
     // A teach-back's concept is in its result, so its newest 200 are searched.
     distinct: mode === 'recall' ? ['objectiveIndex'] : [],
     take: mode === 'recall' ? undefined : 200,
-    select: { id: true, objectiveIndex: true, result: true },
+    select: { id: true, objectiveIndex: true, result: true, answerText: true },
   })
   const lookup = claimLookup(concepts)
   const cards: RecallCard[] = await Promise.all(targets.map(async (target) => {
@@ -280,7 +281,7 @@ export async function loadRecallState(userId: string, topicId: string, options: 
       objectiveIndex: target.objectiveIndex,
       conceptId: target.conceptId,
       prompt: target.prompt,
-      latest: attempt ? await withHelp(userId, topicId, buildFeedback(attempt.id, attempt.result, lookup), attempt.result) : null,
+      latest: attempt ? await withHelp(userId, topicId, buildFeedback(attempt.id, attempt.result, lookup, attempt.answerText), attempt.result) : null,
     }
   }))
   return { mode, cards }
@@ -453,7 +454,7 @@ export async function submitRecall(input: SubmitInput, grade: (request: RecallGr
     // Set once, whoever gets here first.
     await prisma.topicProgress.updateMany({ where: { topicId, userId, recallAt: null }, data: { recallAt: new Date() } })
   }
-  return { status: 'graded', feedback: await withHelp(userId, topicId, buildFeedback(attempt.id, result, claimLookup(target.concepts)), result), claims: stored, repeat }
+  return { status: 'graded', feedback: await withHelp(userId, topicId, buildFeedback(attempt.id, result, claimLookup(target.concepts), answer), result), claims: stored, repeat }
 }
 
 /**
@@ -493,7 +494,7 @@ async function submitDontRemember(input: SubmitInput, projectId: string, target:
     await prisma.topicProgress.upsert({ where: { topicId_userId: { topicId, userId } }, create: { topicId, userId, recallAt: new Date() }, update: {} })
     await prisma.topicProgress.updateMany({ where: { topicId, userId, recallAt: null }, data: { recallAt: new Date() } })
   }
-  const feedback = await withHelp(userId, topicId, buildFeedback(attempt.id, result, claimLookup(target.concepts)), result)
+  const feedback = await withHelp(userId, topicId, buildFeedback(attempt.id, result, claimLookup(target.concepts), typed), result)
   return { status: 'graded', feedback, claims: stored, repeat: null }
 }
 

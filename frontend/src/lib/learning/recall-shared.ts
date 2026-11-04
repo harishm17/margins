@@ -9,6 +9,8 @@ export type RevealedClaim = { claimId: string; conceptName: string; text: string
 /** What the student reads after a graded answer: their own words first, the source's words only for what is wrong. */
 export type RecallFeedback = {
   attemptId: string
+  /** What the student wrote (empty for "I don't remember" before it was stored), so the feedback can show their own words first. */
+  answer: string
   /** The reader or explainer was opened while the card was open: the answer does not count toward the score. */
   abandoned: boolean
   /** A second try the same day after seeing feedback (`seen`) or after the missed claims were shown (`revealed`): assisted too. */
