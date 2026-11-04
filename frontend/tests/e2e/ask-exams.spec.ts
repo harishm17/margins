@@ -59,13 +59,21 @@ test('mock exam: a topic with no pages is left out and said so, and the exam is 
   test.setTimeout(240_000)
   await signIn(page, DEMO_EMAIL)
   await page.goto(`${course}/exams/new`)
-  // The demo's "Discrete random variables" has no file behind it; every topic is chosen by default.
+  // The demo's "Discrete random variables" has no file behind it; every topic is chosen by default, and the form says it may be left out.
+  await expect(page.getByText('No pages linked yet, so it may be left out').first()).toBeVisible()
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '5', exact: true }).click()
   await page.getByRole('radio', { name: '30 min' }).click()
   await page.getByRole('button', { name: 'Create exam' }).click()
   await expect(page).toHaveURL(/\/exams\/[0-9a-f-]{36}$/, { timeout: 180_000 })
   // Said before the exam opens, and kept up for a while.
   await expect(page.getByText('Left out of the exam: Discrete random variables.')).toBeVisible()
+  // And it stays in the lobby, above Start, once the note is gone.
+  const leftOut = page.getByText('Left out of this exam: Discrete random variables')
+  await expect(leftOut).toBeVisible()
+  const leftOutBox = (await leftOut.boundingBox())!
+  const startBox = (await page.getByRole('button', { name: /^(Start exam|Resume)/ }).boundingBox())!
+  expect(leftOutBox.y, 'the exclusion is above Start exam').toBeLessThan(startBox.y)
   const facts = page.getByText('Questions', { exact: true }).locator('..')
   await expect(facts).toContainText('5')
   await expect(page.getByText('Covers').locator('..')).not.toContainText('Discrete random variables')
@@ -88,6 +96,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   test.setTimeout(240_000)
   await signIn(page, DEMO_EMAIL)
   await page.goto(`${course}/exams/new`)
+  await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '10', exact: true }).click()
   await page.getByRole('radio', { name: '30 min' }).click()
   await page.getByRole('button', { name: 'Create exam' }).click()

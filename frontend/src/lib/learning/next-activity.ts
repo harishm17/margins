@@ -193,7 +193,7 @@ export function nextActivity(s: TopicLearningState, ctx: NextActivityContext): N
   // opened, and which of them comes first depends on what that makes. It goes to the topic itself, which names the step
   // once it is ready (the page and the path do), instead of to a step it may not start with.
   if (!s.prepared && !s.hasAnyEvidence && !s.readAt && !skipsReadAndRecall) {
-    return { kind: 'start', conceptIds: [], reason: 'Margins gets this topic ready when you open it, then starts you on its first step.' }
+    return { kind: 'start', conceptIds: [], reason: 'Margins gets this topic ready when you open it, then starts you on a short warm-up.' }
   }
 
   // A topic without concepts keeps the old path, in the order the path shows it: Read, Practice, Quiz. Recall,

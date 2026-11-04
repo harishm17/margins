@@ -15,6 +15,7 @@ import type { PublicQuizQuestion } from '@/lib/learning/quiz-questions'
 import { useQuestionMotion } from '@/lib/question-motion'
 import { cn } from '@/lib/utils'
 import { ConfidenceRow, optionCountOf, ThinkingBox } from './quiz-confidence'
+import { useAttemptFocus } from './topic-provider'
 
 type QuizTakingProps = {
   questions: PublicQuizQuestion[]
@@ -51,6 +52,8 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
   const [confirmSubmit, setConfirmSubmit] = React.useState(false)
   const [confirmExit, setConfirmExit] = React.useState(false)
   const [leaving, setLeaving] = React.useState(false)
+  // A quiz being taken is an attempt: on a phone the topic's header and path give way to a small bar whose Exit asks the same question as the one below.
+  useAttemptFocus(true, { onExit: () => setConfirmExit(true) })
   const total = questions.length
   const current = Math.min(index, total - 1)
   const motion = useQuestionMotion(current)
@@ -110,23 +113,21 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
 
   return (
     <div className="max-w-[720px]">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+      <div className="flex items-center justify-between gap-x-4 gap-y-3">
         <h2 className="tabular text-body-strong text-fg">
           Question {current + 1} of {total}
         </h2>
-        {/* The numbers are one row (it scrolls sideways on a phone, two rows of them pushed the question down the screen), and the same
-            numbers are in a sheet from the Questions button: the one navigator the mock exam uses. */}
-        <div className="flex items-center gap-2 max-sm:w-full max-sm:flex-col max-sm:items-stretch">
-          <QuestionNavigator total={total} current={current} answered={answeredSet} onSelect={go} layout="row" />
-          <Button variant="secondary" size="sm" icon={<ListNumbers />} className="shrink-0 sm:hidden max-sm:min-h-11" onClick={() => setPickerOpen(true)}>
-            All questions
-          </Button>
-        </div>
+        {/* One navigator on every width, as in the mock exam: the row of numbers on a wide screen, the Questions button (a sheet with
+            the same numbers) on a phone, where a second row of chips beside it only pushed the question down. */}
+        <QuestionNavigator total={total} current={current} answered={answeredSet} onSelect={go} layout="row" className="max-sm:hidden" />
+        <Button variant="secondary" size="sm" icon={<ListNumbers />} className="shrink-0 sm:hidden" onClick={() => setPickerOpen(true)}>
+          Questions
+        </Button>
       </div>
 
-      <Progress aria-label="Questions answered" className="mt-4" value={(answeredCount / total) * 100} />
+      <Progress aria-label="Questions answered" className="mt-3 sm:mt-4" value={(answeredCount / total) * 100} />
 
-      <div key={current} data-question="" className={cn('mt-5 sm:mt-8', motion)}>
+      <div key={current} data-question="" className={cn('mt-4 sm:mt-8', motion)}>
         <QuestionRenderer
           question={question}
           value={answers[String(current)]?.answer}
@@ -164,12 +165,13 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
         </InlineAlert>
       ) : null}
 
-      <div className="mt-6 flex items-center justify-between gap-3 border-t border-border pt-4">
+      <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4 sm:mt-6">
         <div className="flex items-center gap-2">
           <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} disabledReason="This is the first question." onClick={() => go(current - 1)}>
             Previous
           </Button>
-          <Button variant="ghost" icon={<SignOut />} className="text-fg-2" onClick={() => setConfirmExit(true)}>
+          {/* On a phone Exit is in the attempt bar above. */}
+          <Button variant="ghost" icon={<SignOut />} className="text-fg-2 max-sm:hidden" onClick={() => setConfirmExit(true)}>
             Exit
           </Button>
         </div>

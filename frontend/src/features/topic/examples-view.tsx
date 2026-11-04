@@ -132,7 +132,7 @@ function StepTimeline({ example, visible, fade }: { example: SolvedExample; visi
 
 /** What the example asks of the student, in a few words (draft copy, spec 18.6): how much of it is worked for them. */
 function levelCaption(level: FadeLevel, hidden: number): string {
-  if (level === 'full') return 'Fully worked'
+  if (level === 'full') return 'Steps shown, guess each reason first'
   if (level === 'problem_first') return 'Your turn first'
   return hidden === 1 ? 'One step left for you' : `${hidden} steps left for you`
 }
@@ -277,7 +277,7 @@ function ExampleCard({
               ) : fade.hidden.length > 0 ? (
                 <p className="mb-3 text-small text-fg-2">Write a guess for the hidden step, then check it.</p>
               ) : fade.hideWhy ? (
-                <p className="mb-3 text-small text-fg-2">Every step is shown. Write your guess for why before you read it.</p>
+                <p className="mb-3 text-small text-fg-2">The steps are shown. Write a guess for why before each explanation opens.</p>
               ) : null}
               <StepTimeline example={example} visible={visible} fade={fade} />
               {stepMode && visible < example.steps.length && !pending ? (

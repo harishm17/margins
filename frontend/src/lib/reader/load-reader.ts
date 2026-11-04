@@ -1,6 +1,6 @@
 /**
  * What the source reader shows for a topic (spec §5.2, D10): the topic's primary chunks as text, in document
- * order, with the claims that give them "Focus here" marks and "Before you go on" checks, the focus
+ * order, with the claims that give them "Focus here" marks and "Quick check" checks, the focus
  * questions, and the student's own margin notes. Server only.
  *
  * - Chunks are the topic's primary sources (`topic_sources`); a topic planned before sources existed reads
@@ -38,7 +38,7 @@ export type ReaderFile = { materialId: string; filename: string; pdf: boolean; p
 
 export type ReaderFocusQuestionView = { objectiveIndex: number; question: string; chunkId: string | null }
 
-/** A "Before you go on" check as the browser gets it. The claim, its quote and its page stay on the server until the student reveals them. */
+/** A "Quick check" check as the browser gets it. The claim, its quote and its page stay on the server until the student reveals them. */
 export type ReaderCheckView = {
   afterChunkId: string
   kind: 'focus' | 'claim'

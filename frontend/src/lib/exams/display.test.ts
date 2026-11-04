@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { examTitle, examTitles, topicsLabel } from './display'
+import { examTitle, examTitles, shortExamTitle, topicsLabel } from './display'
 
 describe('examTitle', () => {
   it('names generated exams "Mock exam" by date and keeps custom names', () => {
@@ -54,5 +54,18 @@ describe('titles by topics covered', () => {
     assert.equal(titles.get('a'), 'Mock exam, Nov 2: Sorting')
     assert.equal(titles.get('b'), 'Mock exam, Nov 2: Hash tables, Graphs')
     assert.equal(titles.get('c'), 'Mock exam, Nov 2: Sorting (2)')
+  })
+})
+
+describe('shortExamTitle', () => {
+  it('keeps a name the student gave', () => {
+    assert.equal(shortExamTitle('Midterm practice'), 'Midterm practice')
+  })
+
+  it('shortens a generated title to its first topic and says Mock, with the number that tells two of a day apart', () => {
+    assert.equal(shortExamTitle('Mock exam, Nov 4: Sorting algorithms and 3 more'), 'Sorting algorithms · Mock')
+    assert.equal(shortExamTitle('Mock exam, Nov 4: Sorting, Hash tables'), 'Sorting · Mock')
+    assert.equal(shortExamTitle('Mock exam, Nov 4: Sorting algorithms and 3 more (2)'), 'Sorting algorithms · Mock 2')
+    assert.equal(shortExamTitle('Mock exam, Nov 4'), 'Mock exam, Nov 4')
   })
 })

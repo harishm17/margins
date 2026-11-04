@@ -104,13 +104,13 @@ export default async function TopicPage({ params, searchParams }: { params: Para
   // The address a topic nobody has started opens on. While its warm-up is being written it is the preparation screen; once
   // the topic is ready the screen replaces itself with the bare address, which names the first step (the warm-up).
   if (first(entry) === '1' && (wanted === 'read' || wanted === 'warmup')) {
-    return <EntryPreparing ready={!data.preparingEntry} target={bareTopicRedirect(base, null, data.nextActivity) ?? base} readHref={`${base}?view=read`} />
+    return <EntryPreparing ready={!data.preparingEntry} intro={data.showEffortIntro} target={bareTopicRedirect(base, null, data.nextActivity) ?? base} readHref={`${base}?view=read`} />
   }
 
   switch (wanted) {
     case 'warmup':
       // Being prepared: the step is in the path, and says so until the questions are written.
-      if (data.preparingEntry) return <EntryPreparing ready={false} target={base} readHref={`${base}?view=read`} />
+      if (data.preparingEntry) return <EntryPreparing ready={false} intro={data.showEffortIntro} target={base} readHref={`${base}?view=read`} />
       // No bank and none taken: the step is not offered, and its address goes on to reading.
       if (!data.pathSteps.includes('warmup')) redirect(`${base}?view=read`)
       return <WarmupView topicId={topicId} courseId={courseId} readHref={`${base}?view=read`} quizHref={`${base}?view=quiz`} initial={await withFocusCount(user.id, topicId, await loadWarmupState(user.id, topicId))} />

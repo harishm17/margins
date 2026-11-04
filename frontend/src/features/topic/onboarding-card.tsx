@@ -64,7 +64,7 @@ export function OnboardingCard({ userId }: { userId: string }) {
     <section
       aria-labelledby="effort-intro-heading"
       className={cn(
-        'mb-2 flex items-center justify-between gap-3 rounded-card border border-border bg-surface-2 px-3 py-2 sm:mb-4 sm:gap-6 sm:px-4 sm:py-3',
+        'mb-2 flex items-center group-data-[attempt]/topic:max-sm:hidden justify-between gap-3 rounded-card border border-border bg-surface-2 px-3 py-2 sm:mb-4 sm:gap-6 sm:px-4 sm:py-3',
         folded && 'py-0.5 sm:py-1'
       )}
     >

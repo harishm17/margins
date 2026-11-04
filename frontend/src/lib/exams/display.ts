@@ -20,6 +20,17 @@ export function examTitle(name: string, createdAt: string | Date, topics: readon
   return covered ? `Mock exam, ${formatDate(createdAt)}: ${covered}` : `Mock exam, ${formatDate(createdAt)}`
 }
 
+/**
+ * The exam's name for a header with little room (a phone's focus bar): a custom name as it is; a generated one as its first topic,
+ * "Sorting algorithms · Mock", with the number that told two of a day apart ("· Mock 2"). The full title stays in the Questions list.
+ */
+export function shortExamTitle(title: string): string {
+  const match = /^Mock exam, [^:]+: (.+?)(?: \((\d+)\))?$/.exec(title)
+  if (!match) return title
+  const first = match[1].replace(/ and \d+ more$/, '').split(', ')[0]
+  return `${first} · Mock${match[2] ? ` ${match[2]}` : ''}`
+}
+
 type TitledExam = { id: string; name: string; createdAt: string | Date; topicsCovered?: readonly string[] }
 
 /**

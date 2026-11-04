@@ -14,9 +14,9 @@ import { MAX_RECALL_ANSWER_CHARS, type RecallCard, type RecallFeedback, type Rec
 import { defaultLanguageCode, getRecognitionConstructor, languageTag, newFinalWords, resultsFromEvent, type RecognitionLike } from '@/features/voice/speech'
 import type { ActivityKind } from '@/lib/learning/next-activity'
 import { cn } from '@/lib/utils'
-import { activityVerb, opensHere } from './activity-copy'
+import { activityLabel, opensHere } from './activity-copy'
 import { clearDraft, draftKey, openDraft, parseDraft, parseRecallPayload, type RecallDraftPayload } from './recall-draft'
-import { useActivityInProgress, useOptionalTopic } from './topic-provider'
+import { useActivityInProgress, useAttemptFocus, useOptionalTopic } from './topic-provider'
 import { ExpectedMiss } from '@/features/learning/expected-miss'
 import { statusLabel, useServerDraft } from '@/features/learning/use-server-draft'
 import type { HelpAfterMiss } from '@/lib/learning/instruction-server'
@@ -107,7 +107,7 @@ export function RecallView({ topicId, state, nextHref, nextLabel, next, voiceHre
   useActivityInProgress(true)
   // Once something is graded the way on is the topic's next activity, as the primary button; with nothing
   // graded yet (or the next activity being recall itself) the step offers to skip on to the one after it.
-  const onward = graded && complete && !opensHere(next.href, pathname, search) ? { href: next.href, label: activityVerb(next.kind) } : { href: nextHref, label: nextLabel }
+  const onward = graded && complete && !opensHere(next.href, pathname, search) ? { href: next.href, label: activityLabel(next) } : { href: nextHref, label: nextLabel }
   // With results on the page they come first: the instructions fold into one line.
   const folded = graded && !instructionsOpen
   return (
@@ -218,6 +218,8 @@ export function Card({
   const canDictate = useCanDictate()
   const [feedback, setFeedback] = React.useState<RecallFeedback | null>(card.latest)
   const [answering, setAnswering] = React.useState(card.latest === null)
+  // A prompt being answered is an attempt: on a phone the topic's header and path give way to a small bar with Exit.
+  useAttemptFocus(answering)
   // What the student has typed since the page showed; until then the text is the stored draft.
   const [typed, setTyped] = React.useState<string | null>(null)
   const [voice, setVoice] = React.useState(false)
@@ -443,7 +445,14 @@ function FeedbackView({
   const [error, setError] = React.useState<string | null>(null)
   const [moreOpen, setMoreOpen] = React.useState(false)
   const moreId = React.useId()
+  // On a phone the evidence for each idea is behind one button, under the first correction and the way on.
+  const [detailsPicked, setDetailsPicked] = React.useState(false)
+  const detailsId = React.useId()
+  // What the student asked to see (the pages' own words) is shown, not left behind the button.
+  const detailsOpen = detailsPicked || feedback.revealed !== null
   const complete = !feedback.idk && feedback.wrong.length === 0 && feedback.missed.length === 0
+  const first = firstCorrection(feedback)
+  const detailCount = feedback.got.length + feedback.wrong.length + feedback.missed.length
   // Help on request: the explanation, an easier step and "Show me what I missed" wait behind "More help" until it is asked for.
   const hasHelpLinks = !!feedback.help && (!!feedback.help.explainer || !!feedback.help.easierStep)
   const showMoreHelp = !complete && (hasHelpLinks || feedback.revealed === null)
@@ -474,6 +483,42 @@ function FeedbackView({
             : "This was a second try after seeing feedback, so it counts as practice, not a fresh recall. Try again tomorrow."}
         </InlineAlert>
       ) : null}
+      {/* What to do first, then the way on: the full account of each idea follows (on a phone it opens from a button, and this block is the phone's first correction: a wide screen shows the account whole). */}
+      {first ? (
+        <div data-testid="recall-first-correction" className="rounded-card border border-border bg-surface-2 px-4 py-3 sm:hidden">
+          <p className="text-caption text-fg-3">Start with this</p>
+          <p className="mt-0.5 text-body-strong text-fg">{first.concept}</p>
+          <div className="mt-1 text-small text-fg-2">{first.line}</div>
+        </div>
+      ) : null}
+      {complete ? <InlineAlert tone="accent">You covered every idea this question asks about.</InlineAlert> : null}
+      {/* One primary step ends the feedback: the next prompt when there is one (or, on the last, the way on below the prompts). Answering this one again is the quiet choice beside it; the extra help is behind one disclosure. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {onNextPrompt ? (
+          <Button variant="primary" icon={<ArrowRight />} onClick={onNextPrompt}>
+            Answer the next prompt
+          </Button>
+        ) : null}
+        <Button variant="link" className="max-sm:min-h-11" onClick={onAgain}>
+          Answer again
+        </Button>
+      </div>
+      {detailCount > 0 ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2.5 self-start sm:hidden"
+          aria-expanded={detailsOpen}
+          aria-controls={detailsId}
+          onClick={() => setDetailsPicked((current) => !current)}
+        >
+          <span className="inline-flex items-center gap-1">
+            {detailsOpen ? 'Hide the full feedback' : 'See the feedback on each idea'}
+            <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', detailsOpen && 'rotate-180')} />
+          </span>
+        </Button>
+      ) : null}
+      <div id={detailsId} className={cn('flex flex-col gap-6', !detailsOpen && 'max-sm:hidden')}>
       {feedback.got.length > 0 ? (
         <div>
           <h4 className="flex items-center gap-2 text-body-strong text-fg">
@@ -553,8 +598,6 @@ function FeedbackView({
           </ul>
         </div>
       ) : null}
-      {complete ? <InlineAlert tone="accent">You covered every idea this question asks about.</InlineAlert> : null}
-      {error ? <InlineAlert tone="danger">{error}</InlineAlert> : null}
       {feedback.revealed ? (
         <div>
           <h4 className="text-body-strong text-fg">What your pages say</h4>
@@ -572,17 +615,8 @@ function FeedbackView({
           <p className="mt-3 text-caption text-fg-3">Seeing these is recorded as help, so it doesn&apos;t add to your score.</p>
         </div>
       ) : null}
-      {/* One primary step ends the feedback: the next prompt when there is one (or, on the last, the way on below the prompts). Answering this one again is the quiet choice beside it; the extra help is behind one disclosure. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        {onNextPrompt ? (
-          <Button variant="primary" icon={<ArrowRight />} onClick={onNextPrompt}>
-            Answer the next prompt
-          </Button>
-        ) : null}
-        <Button variant="link" className="max-sm:min-h-11" onClick={onAgain}>
-          Answer again
-        </Button>
       </div>
+      {error ? <InlineAlert tone="danger">{error}</InlineAlert> : null}
       {showMoreHelp ? (
         <div className="-mt-3">
           <Button
@@ -613,16 +647,41 @@ function FeedbackView({
   )
 }
 
+/** The one correction to start with: what is wrong first, else the first idea left out (as a link to its passage), else where to look. */
+function firstCorrection(feedback: RecallFeedback): { concept: string; line: React.ReactNode } | null {
+  const wrong = feedback.wrong[0]
+  if (wrong) {
+    return {
+      concept: wrong.conceptName,
+      line: (
+        <p>
+          Your pages say{' '}
+          <span className="text-fg">
+            “<LazyMarkdownInline>{quoteOnOneLine(wrong.sourceQuote)}</LazyMarkdownInline>”
+          </span>
+          {wrong.page !== null ? <span className="text-fg-3"> (p. {wrong.page})</span> : null}
+        </p>
+      ),
+    }
+  }
+  const pointers = feedback.help?.pointers ?? []
+  const missed = feedback.idk ? null : feedback.missed[0]
+  const pointer = missed ? pointers.find((candidate) => candidate.conceptName === missed.conceptName) : pointers[0]
+  if (missed) return { concept: missed.conceptName, line: pointer ? <PointerLink pointer={pointer} label={missed.pointer} testId="recall-first-pointer" /> : <p>{missed.pointer}</p> }
+  if (feedback.idk && pointer) return { concept: pointer.conceptName, line: <PointerLink pointer={pointer} testId="recall-first-pointer" /> }
+  return null
+}
+
 type Pointer = HelpAfterMiss['pointers'][number]
 
 const HELP_LINK = 'inline-flex min-h-8 items-center rounded-chip text-small text-accent underline underline-offset-2 hover:text-accent-hover max-sm:min-h-11'
 
 /** "Look again at p. 5": a real link to the reader at the idea's first passage; opening it records the instruction (spec 18.5). */
-function PointerLink({ pointer, label }: { pointer: Pointer; label?: string }) {
+function PointerLink({ pointer, label, testId = 'recall-pointer' }: { pointer: Pointer; label?: string; testId?: string }) {
   return (
     <Link
       href={pointer.href}
-      data-testid="recall-pointer"
+      data-testid={testId}
       className={cn('mt-1 gap-1', HELP_LINK)}
     >
       {label ?? (pointer.page !== null ? `Look again at p. ${pointer.page}` : `Look again at ${pointer.conceptName}`)}

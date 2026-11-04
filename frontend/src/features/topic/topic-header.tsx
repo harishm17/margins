@@ -167,12 +167,14 @@ export function TopicHeader({
   const hasAbout = concepts.length > 0 || structure.objectives.length > 0 || structure.prerequisites.length > 0 || structure.sources.length > 0 || !!description
 
   return (
-    <header className="pb-4 sm:pb-6">
+    // While an attempt is open on a phone the small attempt bar stands in for this header (see AttemptBar).
+    <header className="pb-4 group-data-[attempt]/topic:max-sm:hidden sm:pb-6">
       {structure.unit ? (
-        <p className="mb-1 text-small text-fg-3">
+        <p className="mb-1 text-small text-fg-3 max-sm:-my-3">
+          {/* A standalone link: 44px high on a phone, pulled back by the margin so the header does not grow by that much. */}
           <Link
             href={`/courses/${courseId}/topics`}
-            className="rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] hover:text-fg"
+            className="rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] hover:text-fg max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
           >
             {unitLabel(structure.unit)}
           </Link>

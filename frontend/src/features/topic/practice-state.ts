@@ -26,7 +26,7 @@ export function problemSolved(progress: PracticeProgress, problem: PracticeProbl
 
 /** What opening a hint costs, in words beside its button (draft copy, spec 18.4). The kinds come from the one help policy. */
 export const HINT_COST_COPY: Record<HintCost, string> = {
-  still_counts_harder: 'still counts, as a harder try',
+  still_counts_harder: 'your next try still counts, as a harder one',
   counts_as_miss: 'this step will count as a miss',
   no_extra_cost: 'no extra cost: this step already counts as a miss',
 }

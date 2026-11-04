@@ -156,6 +156,8 @@ test.describe('the demo course', () => {
     await expect(body(page).getByText('From lecture-notes.pdf, p. 7')).toBeVisible()
 
     await page.goto(`/courses/${course}/topics/${mathTopic}?view=practice`)
+    // A problem's kind, time and sources are one folded row, "About this problem".
+    await page.getByRole('button', { name: 'About this problem' }).click()
     await expect(page.getByRole('link', { name: 'algorithms.pdf, pp. 3-4' })).toBeVisible()
 
     // Content written by the mock service carries sources too.

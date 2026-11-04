@@ -909,18 +909,23 @@ test.describe('a question starts high on the screen', () => {
     await expect(page.getByRole('link', { name: 'Show on the map' })).toBeVisible()
   })
 
-  test('phone: the quiz numbers are one row and the answers are above the tab bar', async ({ page }) => {
+  test('phone: the quiz has one question picker and the answers are above the tab bar', async ({ page }) => {
     await page.setViewportSize(PHONE)
     const { topicId, topicUrl } = await readerWorld(page, 'high-quiz')
     await addQuizSet(topicId, quizQuestions(10))
     await page.goto(`${topicUrl}?view=quiz`)
     await page.getByRole('button', { name: 'Start quiz' }).click()
     await expect(page.getByRole('heading', { name: 'Question 1 of 10' })).toBeVisible()
-    const nav = page.getByRole('navigation', { name: 'Questions' })
-    const [one, ten] = await Promise.all([nav.getByRole('button', { name: /^Question 1,/ }).boundingBox(), nav.getByRole('button', { name: /^Question 10,/ }).boundingBox()])
-    expect(ten!.y, 'tile 10 is in the same row as tile 1').toBe(one!.y)
+    // One navigator, not two: the Questions button opens the sheet of numbers; the row of numbers is for wide screens.
+    await expect(page.getByRole('navigation', { name: 'Questions' })).toBeHidden()
+    await expect(page.getByRole('button', { name: 'Questions', exact: true })).toBeVisible()
     const last = await page.getByRole('radio').last().boundingBox()
     expect(last!.y + last!.height, 'the last answer ends above the tab bar (56px)').toBeLessThan(PHONE.height - 56)
+    // The confidence row, I don't know and Next are above the tab bar too.
+    for (const name of ['Certain', "I don't know", 'Next']) {
+      const box = await page.getByRole(name === 'Certain' ? 'radio' : 'button', { name, exact: true }).boundingBox()
+      expect(box!.y + box!.height, `${name} ends above the tab bar (56px)`).toBeLessThan(PHONE.height - 56)
+    }
   })
 })
 
@@ -1032,7 +1037,7 @@ test.describe('the reader', () => {
     await expect(second).toContainText("I don't know")
     await second.getByRole('button', { name: 'Missed' }).click()
     await expect(second.getByText('Saved: Missed')).toBeVisible()
-    await checks.nth(2).getByRole('button', { name: 'Skip' }).click()
+    await checks.nth(2).getByRole('button', { name: 'Continue reading' }).click()
     await expect(checks).toHaveCount(2)
     // The check left the page: focus did not fall back to it.
     await expect(page.locator('body')).not.toBeFocused()
