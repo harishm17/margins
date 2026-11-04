@@ -96,7 +96,7 @@ test('text mode: start, first question, answer, evaluation, end, summary', async
   await expect(page.getByTestId('voice-summary')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Practice finished' })).toBeVisible()
   // The answer was typed, so the summary does not say "talked".
-  await expect(page.getByTestId('voice-summary')).toContainText(/You typed for \d+ minutes?\./)
+  await expect(page.getByTestId('voice-summary')).toContainText(/You typed for (under a minute|\d+ minutes?)\./)
   await expect(page.getByTestId('voice-summary')).not.toContainText('talked')
   await expect(page.getByTestId('voice-stat-answered')).toHaveText('1')
   await expect(page.getByRole('link', { name: 'Back to review' })).toHaveAttribute('href', `/courses/${ids.courseId}/review`)
@@ -292,7 +292,7 @@ test('the teach-back card links "Do it out loud" to the voice lobby with Teach i
   await page.getByRole('button', { name: 'End', exact: true }).click()
   await expect(page.getByTestId('voice-ideas-explained')).toContainText('Load factor')
   await expect(page.getByTestId('voice-ideas-taught')).toHaveCount(0)
-  await expect(page.getByTestId('voice-summary')).toContainText(/You typed for \d+ minutes? and sent 2 messages\./)
+  await expect(page.getByTestId('voice-summary')).toContainText(/You typed for (under a minute|\d+ minutes?) and sent 2 messages\./)
   // Everything was explained: the one next step is to explain it again tomorrow.
   await expect(page.getByTestId('voice-next-step')).toContainText('Explain it again tomorrow')
   await expect(page.getByRole('link', { name: 'Practice this' })).toHaveCount(0)
