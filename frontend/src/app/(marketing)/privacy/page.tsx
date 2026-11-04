@@ -36,10 +36,10 @@ export default function PrivacyPage() {
           Anthropic processes the text of your files and your questions to create study material and answers
           (Anthropic does not use this data to train its models by default). Railway hosts the app, the database
           and file storage in the United States. Google provides sign-in. Voice practice sends your voice to Deepgram, a speech
-          service, to turn it into text, or to AssemblyAI if Deepgram is unavailable. Neither keeps the audio after
-          turning it into text or uses it to train models, and Margins stores only the text. If you turn off Better
-          speech recognition before a session, your browser&apos;s built-in speech recognition is used instead, which
-          may send audio to your browser vendor (Google for Chrome, Apple for Safari).
+          service, to turn it into text. Deepgram does not keep the audio after turning it into text or use it to train
+          models, and Margins stores only the text. If Deepgram is unavailable, or you turn off Better speech
+          recognition before a session, your browser&apos;s built-in speech recognition is used instead, which may send
+          audio to your browser vendor (Google for Chrome, Apple for Safari).
         </p>
       </LegalSection>
       <LegalSection heading="Your choices">
