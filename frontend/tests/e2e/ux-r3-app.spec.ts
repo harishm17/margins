@@ -1,3 +1,4 @@
+import { openKeepStudying } from './helpers/review'
 import { expect, test } from '@playwright/test'
 import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
 import { createCourse, createEmptyCourse, setZoneCookie, signIn, signUpAndIn } from './helpers/loop'
@@ -68,6 +69,7 @@ test.describe('Home and quick practice', () => {
     await setZoneCookie(context)
     await signIn(page, DEMO_EMAIL)
     await page.goto(`${base}/review`)
+    await openKeepStudying(page)
     const card = page.getByTestId('short-session').locator('visible=true')
     await expect(card.getByRole('heading', { name: 'Quick practice' })).toBeVisible()
     await expect(card).toContainText(/About \d+ minutes · (up to )?\d+ (questions|reviews)/)

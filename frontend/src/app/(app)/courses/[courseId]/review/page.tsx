@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ShortSessionCard } from '@/features/home/short-session-card'
 import { ProgressPanel, WeeklyFocus } from '@/features/review/progress-panel'
-import { ReviewList } from '@/features/review/review-list'
+import { KeepStudying } from '@/features/review/keep-studying'
+import { ReviewList, UpcomingReviews } from '@/features/review/review-list'
 import { activeSession } from '@/lib/learning/review-session'
 import { REVIEW_EXTRAS_LOCKED_TEXT, hasFirstQuizOrRecall, shortSessionOffer } from '@/lib/learning/short-session-server'
 import { getProgress } from '@/server/queries/progress'
@@ -44,6 +45,30 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
   ])
 
   const nothingDue = data.dueConceptCount === 0 && data.due.length === 0 && active === null
+  const voiceCard =
+    sprint.topics.length > 0 ? (
+      // The session itself has its own screen: it runs full height and does not scroll under this list.
+      <section
+        aria-labelledby="voice-heading"
+        className="flex flex-col gap-4 rounded-card border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="min-w-0">
+          <h2 id="voice-heading" className="text-heading text-fg">
+            Voice practice
+          </h2>
+          <p className="mt-1 text-small text-fg-2">{describeSprintTopics(sprint.topics, sprint.studied)}</p>
+        </div>
+        <Button asChild variant="secondary" icon={<Microphone />} className="shrink-0 self-start sm:self-center">
+          <Link href={`/courses/${courseId}/review/voice`}>Start voice practice</Link>
+        </Button>
+      </section>
+    ) : null
+  const lockedNote = !unlocked ? (
+    <p className="text-small text-fg-2" data-testid="review-extras-locked">
+      {REVIEW_EXTRAS_LOCKED_TEXT}
+    </p>
+  ) : null
+  const hasExtras = !!short || (!!progress && progress.focus.length > 0) || !!voiceCard || data.upcoming.length > 0 || !!progress
   return (
     <Page width="wide">
       <PageIntro title="Review" description="Go over the topics that are due, most overdue first." />
@@ -61,34 +86,31 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-10">
-          {/* When nothing is due the focus ideas are extras: they come after "Nothing is due", not before it, so due work and optional practice are not mixed up. */}
-          {progress && !nothingDue ? <WeeklyFocus courseId={courseId} focus={progress.focus} /> : null}
-          <ReviewList data={data} active={active} />
-          {short ? <ShortSessionCard courseId={courseId} plan={short.plan} /> : null}
-          {progress && nothingDue ? <WeeklyFocus courseId={courseId} focus={progress.focus} optional /> : null}
-          {!unlocked ? (
-            <p className="text-small text-fg-2" data-testid="review-extras-locked">
-              {REVIEW_EXTRAS_LOCKED_TEXT}
-            </p>
-          ) : null}
-          {sprint.topics.length > 0 ? (
-            // The session itself has its own screen: it runs full height and does not scroll under this list.
-            <section
-              aria-labelledby="voice-heading"
-              className="flex flex-col gap-4 rounded-card border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0">
-                <h2 id="voice-heading" className="text-heading text-fg">
-                  Voice practice
-                </h2>
-                <p className="mt-1 text-small text-fg-2">{describeSprintTopics(sprint.topics, sprint.studied)}</p>
-              </div>
-              <Button asChild variant="secondary" icon={<Microphone />} className="shrink-0 self-start sm:self-center">
-                <Link href={`/courses/${courseId}/review/voice`}>Start voice practice</Link>
-              </Button>
-            </section>
-          ) : null}
-          {progress ? <ProgressPanel progress={progress} /> : null}
+          {nothingDue ? (
+            <>
+              {/* Nothing is due: the page says so, gives the next date, and keeps everything else behind one closed "Keep studying" so due work and optional practice are not mixed up. */}
+              <ReviewList data={data} active={active} omitUpcoming />
+              {lockedNote}
+              {hasExtras ? (
+                <KeepStudying>
+                  {short ? <ShortSessionCard courseId={courseId} plan={short.plan} /> : null}
+                  {progress ? <WeeklyFocus courseId={courseId} focus={progress.focus} optional /> : null}
+                  {voiceCard}
+                  <UpcomingReviews courseId={courseId} upcoming={data.upcoming} />
+                  {progress ? <ProgressPanel progress={progress} /> : null}
+                </KeepStudying>
+              ) : null}
+            </>
+          ) : (
+            <>
+              {progress ? <WeeklyFocus courseId={courseId} focus={progress.focus} /> : null}
+              <ReviewList data={data} active={active} />
+              {short ? <ShortSessionCard courseId={courseId} plan={short.plan} /> : null}
+              {lockedNote}
+              {voiceCard}
+              {progress ? <ProgressPanel progress={progress} /> : null}
+            </>
+          )}
         </div>
       )}
     </Page>

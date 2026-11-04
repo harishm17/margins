@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { CaretRight } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { ExpectedMiss } from '@/features/learning/expected-miss'
 import { CALIBRATION_DAYS, MIN_WEEK_EVENTS, type Progress } from '@/server/queries/progress'
@@ -72,10 +73,7 @@ function WeeklyScore({ weekly }: { weekly: Progress['weekly'] }) {
   return (
     <div>
       <h3 className="text-body-strong text-fg">Average score by week</h3>
-      <p className="mt-0.5 text-small text-fg-2">
-        Average score on your own first tries, without hints or worked examples. A miss that then needed a hint or the answer counts as 0.
-        Weeks with fewer than {MIN_WEEK_EVENTS} such tries are left out.
-      </p>
+      <p className="mt-0.5 text-small text-fg-2">Your average score on first tries, week by week.</p>
       <svg
         viewBox={`0 0 ${CHART.width} ${CHART.height}`}
         role="img"
@@ -90,7 +88,6 @@ function WeeklyScore({ weekly }: { weekly: Progress['weekly'] }) {
           <circle key={weekly[index].week} cx={point.x} cy={point.y} r={index === points.length - 1 ? 4 : 3} fill="currentColor" />
         ))}
       </svg>
-      <p className="mt-1 text-caption font-normal text-fg-3">Top line 100%, bottom line 0%. A gap is a week with too few tries.</p>
       <table className="mt-3 w-full max-w-[320px] text-small">
         <caption className="sr-only">Average score on first tries by week, with the number of tries behind each</caption>
         <thead>
@@ -128,10 +125,7 @@ function Calibration({ calibration }: { calibration: Progress['calibration'] }) 
   return (
     <div>
       <h3 className="text-body-strong text-fg">How sure you were, and what you scored</h3>
-      {sentence ? <p className="mt-0.5 text-small text-fg-2">{sentence}</p> : null}
-      <p className="mt-0.5 text-small text-fg-2">
-        From your answers without help in the last {CALIBRATION_DAYS} days that had a confidence tap.
-      </p>
+      <p className="mt-0.5 text-small text-fg-2">{sentence ?? 'Your score at each level of confidence you chose.'}</p>
       <table className="mt-3 w-full text-small">
         <caption className="sr-only">
           Average score at each level of confidence, from {calibration.n} answers given without help in the last {CALIBRATION_DAYS} days
@@ -218,11 +212,29 @@ export function ProgressPanel({ progress }: { progress: Progress }) {
                   ? `No help used on ${pluralize(weekAnswers, 'answer')} this week.`
                   : `Help used on ${percent(assistedShare)} of answers this week.`}
             </p>
-            <p className="mt-0.5 text-caption font-normal text-fg-3">A hint, a tutor turn, a revealed answer or a worked example all count as help.</p>
           </div>
           {calibration.ready ? <Calibration calibration={calibration} /> : null}
         </div>
       </div>
+      {/* The rules behind the figures, for the student who wants them: the page itself stays a name and a sentence per figure. */}
+      <details className="group mt-3 text-small text-fg-2">
+        <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-chip hover:text-fg max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
+          <CaretRight aria-hidden="true" className="size-3.5 transition-transform duration-180 group-open:rotate-90" />
+          How this is calculated
+        </summary>
+        <ul className="mt-2 flex flex-col gap-1.5">
+          <li>
+            Average score: your own first tries, without hints or worked examples. A miss that then needed a hint or the answer counts as 0.
+            Weeks with fewer than {MIN_WEEK_EVENTS} such tries are left out.
+          </li>
+          <li>Chart: the top line is 100% and the bottom line is 0%. A gap is a week with too few tries.</li>
+          <li>Help: a hint, a tutor turn, a revealed answer or a worked example all count as help.</li>
+          <li>
+            Confidence: answers without help in the last {CALIBRATION_DAYS} days that had a confidence tap. Answers where you chose not to rate
+            are not counted.
+          </li>
+        </ul>
+      </details>
     </section>
   )
 }
