@@ -126,12 +126,19 @@ test('the loop does not advance with reduced motion or on a phone', async ({ pag
   await expect(page.getByRole('button', { name: /the steps$/ })).toHaveCount(0)
 })
 
+/** Course settings keep the description behind "Add a description" until the course has one. */
+async function fillDescription(page: Page, text: string) {
+  const open = page.getByRole('button', { name: 'Add a description' })
+  if (await open.isVisible().catch(() => false)) await open.click()
+  await page.getByLabel('Description').fill(text)
+}
+
 test('on a phone a toast sits above the tab bar, so the tabs stay usable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await signUpAndIn(page, 'toast-place')
   const { courseId } = await createCourse(page, 'Toast course', [{ name: 'Sets' }])
   await page.goto(`/courses/${courseId}/settings`)
-  await page.getByLabel('Description').fill('Midterm practice')
+  await fillDescription(page, 'Midterm practice')
   await page.getByRole('button', { name: 'Save changes' }).click()
 
   const toast = page.locator('[data-sonner-toast]').filter({ hasText: 'Course saved' })
@@ -154,7 +161,7 @@ test('the toast moves to the top at the same width Sonner switches to its phone 
   for (const [width, where] of [[600, 'top'], [601, 'bottom']] as const) {
     await page.setViewportSize({ width, height: 844 })
     await page.goto(`/courses/${courseId}/settings`)
-    await page.getByLabel('Description').fill(`Midterm practice at ${width}`)
+    await fillDescription(page, `Midterm practice at ${width}`)
     await page.getByRole('button', { name: 'Save changes' }).click()
     const toast = page.locator('[data-sonner-toast]').filter({ hasText: 'Course saved' })
     await expect(toast).toBeVisible()
