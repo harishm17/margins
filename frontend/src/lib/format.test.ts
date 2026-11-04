@@ -11,6 +11,8 @@ import {
   formatRelative,
   formatTime,
   greetingForHour,
+  homeGreeting,
+  homeIntro,
   initials,
   pluralize,
 } from './format'
@@ -84,4 +86,14 @@ test('names', () => {
   assert.equal(initials('harish'), 'HA')
   assert.equal(initials(null, 'demo@margins.dev'), 'DE')
   assert.equal(initials(null, null), '?')
+})
+
+test('Home never welcomes back an account that has not studied yet', () => {
+  assert.equal(homeGreeting({ name: 'Harish Mahadevan', hour: 20, firstVisit: true }), 'Welcome, Harish')
+  assert.equal(homeGreeting({ name: null, hour: null, firstVisit: true }), 'Welcome')
+  assert.equal(homeGreeting({ name: 'Harish', hour: 8, firstVisit: false }), 'Good morning, Harish')
+  assert.equal(homeGreeting({ name: 'Harish', hour: null, firstVisit: false }), 'Welcome back, Harish')
+  assert.equal(homeGreeting({ name: null, hour: null, firstVisit: false }), 'Welcome back')
+  assert.equal(homeIntro(true), 'Start with the step below.')
+  assert.equal(homeIntro(false), "Here's where you left off.")
 })

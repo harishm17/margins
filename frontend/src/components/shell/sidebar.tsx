@@ -23,6 +23,7 @@ import { useIsMac } from '@/lib/hooks/use-is-mac'
 import { cn } from '@/lib/utils'
 import { AccountMenu } from './account-menu'
 import { Brand } from './brand'
+import { isSectionNotReady, NOT_READY_REASON } from './course-nav'
 import { CourseSwitcher } from './course-switcher'
 import { useShell } from './shell-provider'
 import { useSidebarCollapsed } from './sidebar-state'
@@ -36,10 +37,38 @@ type NavItem = {
   icon: React.ElementType
   active: boolean
   badge?: React.ReactNode
+  /** The course is still in setup and this page has nothing to show yet (components/shell/course-nav.ts). */
+  notReady?: boolean
 }
 
-function NavLink({ item, rail }: { item: NavItem; rail: boolean }) {
+function NavLink({ item, rail, reasonId }: { item: NavItem; rail: boolean; reasonId?: string }) {
   const Icon = item.icon
+  if (item.notReady) {
+    // Not a link: there is nothing behind it yet. It stays in the list, dimmed, and a screen reader hears why.
+    const row = (
+      <span
+        role="link"
+        aria-disabled="true"
+        aria-label={rail ? item.label : undefined}
+        aria-describedby={reasonId}
+        tabIndex={0}
+        className={cn(
+          'flex h-[34px] max-lg:h-11 cursor-not-allowed items-center gap-2.5 rounded-control px-2.5 text-body-strong text-fg-3 opacity-60',
+          'rail:justify-center rail:px-0'
+        )}
+      >
+        <Icon aria-hidden="true" className="size-[18px] shrink-0 text-fg-3/70" />
+        <span className="min-w-0 flex-1 truncate rail:hidden">{item.label}</span>
+      </span>
+    )
+    return rail ? (
+      <Tooltip content={`${item.label}. ${NOT_READY_REASON}`} side="right">
+        {row}
+      </Tooltip>
+    ) : (
+      row
+    )
+  }
   const link = (
     <Link
       href={item.href}
@@ -199,7 +228,7 @@ export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
   const course = nav.find((item) => item.id === params.courseId)
   const base = course ? `/courses/${course.id}` : null
 
-  const items: NavItem[] = base
+  const allItems: NavItem[] = base
     ? [
         {
           key: 'overview',
@@ -239,6 +268,9 @@ export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
         { key: 'map', label: 'Map', href: `${base}/map`, icon: TreeStructure, active: pathname.startsWith(`${base}/map`) },
       ]
     : []
+  const items = allItems.map((item) => ({ ...item, notReady: course ? isSectionNotReady(item.key, course) : false }))
+  const anyNotReady = items.some((item) => item.notReady)
+  const reasonId = `${topicsLabelId}-not-ready`
 
   const search = (
     <button
@@ -275,8 +307,13 @@ export function SidebarContent({ allowRail = false }: { allowRail?: boolean }) {
       {items.length > 0 ? (
         <nav aria-label="Course" className="mt-3 flex flex-col gap-0.5 px-3">
           {items.map((item) => (
-            <NavLink key={item.key} item={item} rail={rail} />
+            <NavLink key={item.key} item={item} rail={rail} reasonId={item.notReady ? reasonId : undefined} />
           ))}
+          {anyNotReady ? (
+            <p id={reasonId} className="px-2.5 pt-1.5 text-caption font-normal text-fg-3 rail:sr-only">
+              {NOT_READY_REASON}
+            </p>
+          ) : null}
         </nav>
       ) : (
         <nav aria-label="Courses" className="mt-3 flex flex-col gap-0.5 px-3">
