@@ -35,9 +35,9 @@ function TabLink({ tab }: { tab: Tab }) {
         role="link"
         aria-disabled="true"
         aria-label={`${tab.label}. ${NOT_READY_REASON}`}
-        className="flex h-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-control text-caption text-fg-3 opacity-60"
+        className="flex h-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-control text-caption text-fg-3"
       >
-        <Icon aria-hidden="true" className="size-[22px] text-fg-3/60" />
+        <Icon aria-hidden="true" className="size-[22px] text-fg-3" />
         <span className="max-w-full truncate" aria-hidden="true">
           {tab.label}
         </span>
@@ -56,7 +56,7 @@ function TabLink({ tab }: { tab: Tab }) {
       <span className="relative">
         <Icon aria-hidden="true" weight={tab.active ? 'fill' : 'regular'} className={cn('size-[22px]', tab.active ? 'text-accent' : 'text-fg-3')} />
         {tab.badge ? (
-          <span className="absolute -right-3 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-chip bg-warning-soft px-1 text-[11px] leading-none text-warning-soft-fg tabular">
+          <span className="absolute -right-3 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-chip bg-warning-soft px-1 text-caption leading-none text-warning-soft-fg tabular">
             <span className="sr-only">{tab.badge} due for review</span>
             <span aria-hidden="true">{tab.badge}</span>
           </span>
@@ -82,8 +82,8 @@ function MoreRow({
 }) {
   if (notReady) {
     return (
-      <span role="link" aria-disabled="true" className="flex min-h-12 items-center gap-3 rounded-control px-3 text-body-strong text-fg-3 opacity-70">
-        <Icon aria-hidden="true" className="size-5 text-fg-3/70" />
+      <span role="link" aria-disabled="true" className="flex min-h-12 items-center gap-3 rounded-control px-3 text-body-strong text-fg-3">
+        <Icon aria-hidden="true" className="size-5 text-fg-3" />
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <span className="shrink-0 text-caption font-normal">{NOT_READY_REASON}</span>
       </span>

@@ -180,10 +180,13 @@ test.describe('plan', () => {
     const box = await card.boundingBox()
     expect(bar).not.toBeNull()
     expect(box).not.toBeNull()
-    // On the first paint, with nothing scrolled, the whole line (its date field and both buttons) is above the fixed bar.
+    // On the first paint, with nothing scrolled, the whole line (the sentence and its one button) is above the fixed bar.
     expect(await page.evaluate(() => window.scrollY)).toBe(0)
     expect(box!.y + box!.height, `the exam-date line ends at ${Math.round(box!.y + box!.height)}px, the tab bar starts at ${Math.round(bar!.y)}px`).toBeLessThanOrEqual(bar!.y)
     await screenshotIfAsked(page, 'final-exam-prompt-390x844')
+    // The date field and its two buttons open from the one button, and stay clear of the bar.
+    await expectClearOfTabBar(page, card.getByRole('button', { name: 'Set exam date' }), 'Set exam date')
+    await card.getByRole('button', { name: 'Set exam date' }).click()
     await expectClearOfTabBar(page, card.getByRole('button', { name: 'Save date' }), 'Save date')
   })
 

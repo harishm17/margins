@@ -4,21 +4,22 @@ import * as React from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 import { Spinner } from './spinner'
+import { DISABLED_FILL, DISABLED_TEXT } from './styles'
 import { Tooltip } from './tooltip'
 
 const iconButtonVariants = cva(
   [
     'inline-flex shrink-0 items-center justify-center rounded-control',
     'transition-[background-color,border-color,color,transform] duration-120 ease-enter',
-    'active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100',
+    'active:scale-[0.98] disabled:active:scale-100',
     '[&>svg]:shrink-0',
   ],
   {
     variants: {
       variant: {
-        ghost: 'text-fg-2 hover:bg-surface-2 hover:text-fg',
-        secondary: 'border border-border-strong bg-surface text-fg hover:bg-surface-2',
-        primary: 'bg-accent text-accent-fg hover:bg-accent-hover',
+        ghost: `text-fg-2 hover:bg-surface-2 hover:text-fg ${DISABLED_TEXT}`,
+        secondary: `border border-border-strong bg-surface text-fg hover:bg-surface-2 ${DISABLED_FILL}`,
+        primary: `bg-accent text-accent-fg hover:bg-accent-hover ${DISABLED_FILL}`,
       },
       size: {
         sm: 'size-7 max-sm:size-11 [&>svg]:size-4',
@@ -40,6 +41,8 @@ type IconButtonProps = Omit<React.ComponentProps<'button'>, 'aria-label'> &
     tooltipSide?: 'top' | 'right' | 'bottom' | 'left'
     /** Hide the tooltip, for example when the button sits in a menu that names it. */
     noTooltip?: boolean
+    /** Why the button is off, exposed through aria-describedby while it is disabled (see Button). */
+    disabledReason?: string
   }
 
 export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
@@ -54,11 +57,14 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
     size,
     className,
     disabled,
+    disabledReason,
     type = 'button',
     ...props
   },
   ref
 ) {
+  const reasonId = React.useId()
+  const reasonShown = !!disabledReason && !!disabled && !loading
   const button = (
     <button
       ref={ref}
@@ -68,15 +74,25 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
       aria-busy={loading || undefined}
       className={cn(iconButtonVariants({ variant, size }), className)}
       {...props}
+      aria-describedby={[reasonShown ? reasonId : null, props['aria-describedby']].filter(Boolean).join(' ') || undefined}
     >
       {loading ? <Spinner /> : icon}
     </button>
   )
-  return noTooltip ? (
+  const named = noTooltip ? (
     button
   ) : (
     <Tooltip content={label} shortcut={shortcut} side={tooltipSide}>
       {button}
     </Tooltip>
+  )
+  if (!reasonShown) return named
+  return (
+    <>
+      {named}
+      <span id={reasonId} className="sr-only">
+        {disabledReason}
+      </span>
+    </>
   )
 })

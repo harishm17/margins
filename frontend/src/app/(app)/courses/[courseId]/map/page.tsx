@@ -60,7 +60,7 @@ export default async function MapPage({
   )
   if (units.length === 0) {
     return (
-      <Page>
+      <Page width="wide">
         {intro}
         <EmptyState
           icon={<TreeStructure />}
@@ -125,7 +125,7 @@ export default async function MapPage({
   }
 
   return (
-    <Page>
+    <Page width="wide">
       {intro}
       <MapToolbar
         courseId={courseId}

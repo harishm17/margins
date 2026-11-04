@@ -124,3 +124,16 @@ export function retryPlan(
   const kept = last?.kind === 'user' && last.text === target.question ? before.slice(0, -1) : before
   return { question: target.question, messages: kept }
 }
+
+/**
+ * The conversation to show when the student sends `question` again right after it failed (typed again instead of pressing
+ * "Try again"): the failed try and its question make way for the new one, so the same banner never stacks twice.
+ * Only a failure that is the last thing on screen is dropped; anything earlier stays.
+ */
+export function withoutRepeatedFailure(messages: readonly ChatMessage[], question: string): ChatMessage[] {
+  const last = messages[messages.length - 1]
+  if (!last || last.kind !== 'failure' || last.question !== question) return [...messages]
+  const before = messages.slice(0, -1)
+  const asked = before[before.length - 1]
+  return asked?.kind === 'user' && asked.text === question ? before.slice(0, -1) : before
+}

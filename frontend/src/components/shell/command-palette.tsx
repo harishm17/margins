@@ -24,8 +24,10 @@ import {
   Plus,
   SignOut,
   UploadSimple,
+  X,
 } from '@phosphor-icons/react/dist/ssr'
 import { DialogOverlay } from '@/components/ui/dialog'
+import { IconButton } from '@/components/ui/icon-button'
 import { Kbd, KeyHint } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
 import { paletteFilter, paletteItem } from './palette-search'
@@ -201,6 +203,10 @@ function PaletteBody() {
                 className="h-full min-w-0 flex-1 bg-transparent text-[15px] max-sm:text-[16px] text-fg outline-none placeholder:text-fg-3"
               />
               <Kbd>Esc</Kbd>
+              {/* No Esc key on a phone: a button closes the search there. */}
+              <DialogPrimitive.Close asChild>
+                <IconButton label="Close search" icon={<X />} noTooltip className="-mr-2 sm:hidden" />
+              </DialogPrimitive.Close>
             </div>
             <Command.List className="max-h-[min(380px,50vh)] overflow-y-auto p-2">
               <Command.Empty className="px-3 py-8 text-center text-small text-fg-2">
@@ -233,8 +239,8 @@ function PaletteBody() {
             </Command.List>
             <KeyHint className="flex items-center gap-4 border-t border-border px-4 py-2 text-caption font-normal text-fg-3">
               <span className="flex items-center gap-1.5">
-                <Kbd>Up</Kbd>
-                <Kbd>Down</Kbd>
+                <Kbd aria-label="Up arrow">&uarr;</Kbd>
+                <Kbd aria-label="Down arrow">&darr;</Kbd>
                 Navigate
               </span>
               <span className="flex items-center gap-1.5">

@@ -1,8 +1,8 @@
 import * as React from 'react'
 import Link from 'next/link'
-import { CaretRight } from '@phosphor-icons/react/dist/ssr'
+import { KeyDetails } from './key-details'
 import { StateIcon, STATE_TONE } from './state-icon'
-import { frontierKeyText, frontierTexts, LABEL_ORDER, LABEL_TEXT } from '@/lib/map/copy'
+import { frontierKeyText, frontierTexts, LABEL_ORDER, LABEL_TEXT, START_HERE_TEXT } from '@/lib/map/copy'
 import { BADGE_RADIUS, NODE_HEIGHT, NODE_WIDTH, type MapLayout } from '@/lib/map/layout'
 import { wrapName } from '@/lib/map/wrap'
 import { relationsOf, relationsSentence } from '@/lib/map/relations'
@@ -67,6 +67,7 @@ export function MapView({
 }) {
   const nameOf = new Map(nodes.map((node) => [node.id, node.name]))
   const frontier = frontierTexts(nodes)
+  const frontierCount = nodes.filter((node) => node.frontier).length
   return (
     <div>
       <p className="mb-2 text-small text-fg-3 sm:hidden">Scroll sideways, or use List view.</p>
@@ -88,6 +89,10 @@ export function MapView({
             <marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" className="fill-fg-3" />
             </marker>
+            {/* The same idea name can occur in two topics of a unit, so each idea also says which topic it is in. */}
+            {nodes.map((node) => (
+              <desc key={node.id} id={`map-topic-${node.id}`}>{`In ${node.topicName}.`}</desc>
+            ))}
             {/* How each idea connects, in words: the lines are drawn for the eye only, so a screen reader reads this with the idea. */}
             {nodes.map((node) => {
               const sentence = relationsSentence(relationsOf(node.id, nodes, edges))
@@ -143,17 +148,19 @@ export function MapView({
             const selected = node.id === selectedId
             const lines = wrapName(node.name, NAME_WIDTH, NAME_LINES)
             const state = LABEL_TEXT[node.label]
+            // One ring, on the one idea to start with. When several are ready, the others say "Next up" in words and have no ring.
+            const ringed = node.frontier && (frontierCount === 1 || frontier[node.id] === START_HERE_TEXT)
             return (
               <Link
                 key={node.id}
                 href={hrefFor(node.id)}
                 scroll={false}
                 aria-current={selected ? 'true' : undefined}
-                aria-describedby={relationsOf(node.id, nodes, edges).length > 0 ? `map-relations-${node.id}` : undefined}
+                aria-describedby={`${relationsOf(node.id, nodes, edges).length > 0 ? `map-relations-${node.id} ` : ''}map-topic-${node.id}`}
                 data-node-link=""
                 className="group outline-none"
               >
-                {node.frontier ? (
+                {ringed ? (
                   <rect x={left - RING} y={top - RING} width={NODE_WIDTH + RING * 2} height={NODE_HEIGHT + RING * 2} rx={14} fill="none" strokeWidth={2} className="stroke-accent" />
                 ) : null}
                 <rect
@@ -162,9 +169,23 @@ export function MapView({
                   width={NODE_WIDTH}
                   height={NODE_HEIGHT}
                   rx={10}
-                  strokeWidth={selected ? 3 : 1.5}
-                  className={cn(NODE_CLASS[node.label], selected && 'stroke-fg', 'transition-[stroke-width] duration-120 group-hover:stroke-fg')}
+                  strokeWidth={1.5}
+                  className={cn(NODE_CLASS[node.label], 'transition-[stroke-width] duration-120 group-hover:stroke-fg')}
                 />
+                {/* Selected: a solid outline in the text colour, outside the ring, so it never merges with a ring or a state colour. */}
+                {selected ? (
+                  <rect
+                    x={left - RING - 6}
+                    y={top - RING - 6}
+                    width={NODE_WIDTH + (RING + 6) * 2}
+                    height={NODE_HEIGHT + (RING + 6) * 2}
+                    rx={19}
+                    fill="none"
+                    strokeWidth={3}
+                    data-selected-outline=""
+                    className="stroke-fg"
+                  />
+                ) : null}
                 <rect
                   x={left - RING - 3}
                   y={top - RING - 3}
@@ -269,11 +290,7 @@ function MapKey({ nodes, edges }: { nodes: MapNode[]; edges: MapEdge[] }) {
       : null,
   ].filter((line) => line !== null)
   return (
-    <details className="group mt-3 text-small text-fg-2">
-      <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-chip text-fg-2 hover:text-fg max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
-        <CaretRight aria-hidden="true" className="size-3.5 transition-transform duration-180 group-open:rotate-90" />
-        Key
-      </summary>
+    <KeyDetails>
       <div className="mt-2 flex flex-col gap-3">
         <ul aria-label="States" className="flex flex-wrap gap-x-4 gap-y-1.5">
           {states.map((label) => (
@@ -294,9 +311,9 @@ function MapKey({ nodes, edges }: { nodes: MapNode[]; edges: MapEdge[] }) {
           </ul>
         ) : null}
         {nodes.some((node) => node.label === 'inferred') ? (
-          <p className="text-caption text-fg-3">Inferred means credited through a related idea and not yet tested on its own.</p>
+          <p className="text-caption text-fg-2">Inferred means credited through a related idea and not yet tested on its own.</p>
         ) : null}
       </div>
-    </details>
+    </KeyDetails>
   )
 }

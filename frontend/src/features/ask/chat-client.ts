@@ -49,7 +49,7 @@ export async function streamChat({ courseId, question, threadId, topicId, concep
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error
-    throw new ChatRequestError('You seem to be offline. Check your connection and try again.', 'NETWORK', true)
+    throw new ChatRequestError("That didn't go through. Check your connection and try again.", 'NETWORK', true)
   }
 
   if (!response.ok || !response.body) {

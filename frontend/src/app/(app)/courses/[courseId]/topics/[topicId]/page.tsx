@@ -49,7 +49,8 @@ export async function generateMetadata({ params }: { params: Params }) {
   const user = await requireUser()
   const { courseId, topicId } = await params
   const data = await getTopicPage(user.id, courseId, topicId)
-  return { title: data?.topic.name ?? 'Topic' }
+  // A topic that does not exist shows the not-found page, so the tab says so.
+  return { title: data?.topic.name ?? 'Page not found' }
 }
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value)

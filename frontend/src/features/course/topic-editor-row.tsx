@@ -46,6 +46,7 @@ function Keywords({ keywords }: { keywords: string[] }) {
   const rest = keywords.slice(3)
   return (
     <span className="flex flex-wrap items-center gap-1.5">
+      <span className="text-caption font-normal text-fg-3">Keywords:</span>
       {shown.map((keyword) => (
         <Badge key={keyword} className="max-w-[160px] truncate">
           {keyword}
@@ -235,7 +236,7 @@ export function TopicEditorRow({
         onKeyDown={onHandleKey}
         onPointerDown={() => onArm(true)}
         onPointerUp={() => onArm(false)}
-        className="mt-0.5 inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-chip text-fg-3 hover:bg-surface-2 hover:text-fg active:cursor-grabbing max-sm:size-11"
+        className="mt-0.5 inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-chip text-fg-3 hover:bg-surface-2 hover:text-fg active:cursor-grabbing max-sm:hidden"
       >
         <DotsSixVertical aria-hidden="true" weight="bold" className="size-4" />
       </button>

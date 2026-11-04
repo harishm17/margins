@@ -155,6 +155,17 @@ export function Lobby({
   // Why Teach it back is not on offer stays said even when Quiz me cannot begin either: the quiz line follows it.
   const alert: LobbyAlert | null = lobbyAlert ?? (hasClaims || mode === 'sprint' ? null : { kind: 'needs-claims', ofIdea: claimsOfIdea })
 
+  // Why the start buttons are off, said to a screen reader with the button and as a tooltip.
+  const startReason = outOfTime
+    ? 'No voice minutes are left today.'
+    : blocked
+      ? 'AI features are paused right now.'
+      : quizBlocked
+        ? 'Quiz me needs a quiz first. The note above says how to make one.'
+        : usage === null
+          ? 'Checking your minutes for today.'
+          : undefined
+
   const begin = (typed: boolean) => {
     if (outOfTime || starting || blocked || quizBlocked) return
     onStart({
@@ -256,6 +267,11 @@ export function Lobby({
                   )}
                 >
                   <span className="flex text-accent max-sm:row-span-2 max-sm:mt-0.5 [&>svg]:size-5">{option.icon}</span>
+                  {/* An empty circle with a 3:1 edge when it is not chosen, so the choice shows without the colour of the card. */}
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-3 top-3 size-4 shrink-0 rounded-full border-[1.5px] border-control group-data-[state=checked]:hidden"
+                  />
                   <CheckCircle
                     weight="fill"
                     aria-hidden
@@ -300,16 +316,6 @@ export function Lobby({
               <span>
                 {privacyLine} {PRIVACY_TYPING}
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-auto min-h-0 px-1 py-0 text-small font-medium text-accent hover:text-accent-hover max-sm:min-h-11"
-                disabled={outOfTime || starting || !!blocked || usage === null || quizBlocked}
-                onClick={() => begin(true)}
-              >
-                Start by typing
-              </Button>
             </p>
           ) : null}
         </div>
@@ -322,9 +328,23 @@ export function Lobby({
             icon={<Microphone />}
             loading={starting}
             disabled={outOfTime || usage === null || !!blocked || quizBlocked}
+            disabledReason={startReason}
           >
             {mode === 'sprint' ? 'Start sprint' : 'Start voice practice'}
           </Button>
+          {recognitionSupported ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              icon={<Keyboard />}
+              disabled={outOfTime || starting || !!blocked || usage === null || quizBlocked}
+              disabledReason={startReason}
+              onClick={() => begin(true)}
+            >
+              Start by typing
+            </Button>
+          ) : null}
           {note ? <p className="max-w-[34ch] text-small text-fg-2">{note}</p> : null}
         </div>
       </form>

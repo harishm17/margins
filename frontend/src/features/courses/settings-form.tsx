@@ -85,10 +85,16 @@ export function CourseSettingsForm({ course }: CourseSettingsFormProps) {
         </Field>
         <PlanFields examDate={examDate} dailyMinutes={dailyMinutes} onExamDate={setExamDate} onDailyMinutes={setDailyMinutes} />
         {error ? <InlineAlert tone="danger">{error}</InlineAlert> : null}
-        <div>
-          <Button type="submit" variant="primary" loading={saving} disabled={!dirty}>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Button type="submit" variant="primary" loading={saving} disabled={!dirty} aria-describedby={dirty ? undefined : 'save-state'}>
             Save changes
           </Button>
+          {/* Said in words, so a pale button is never the only sign that there is nothing to save. */}
+          {dirty ? null : (
+            <span id="save-state" className="text-small text-fg-2">
+              No changes yet
+            </span>
+          )}
         </div>
       </form>
 
@@ -120,6 +126,7 @@ export function CourseSettingsForm({ course }: CourseSettingsFormProps) {
         confirmLabel="Delete course"
         destructive
         confirmDisabled={typedName.trim() !== course.name}
+        confirmDisabledReason="Type the course name to turn this on."
         onConfirm={onDelete}
       >
         <Field label={`Type "${course.name}"`}>

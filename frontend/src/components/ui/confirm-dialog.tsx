@@ -25,6 +25,8 @@ type ConfirmDialogProps = {
   /** May return a promise; the dialog shows progress and closes when it resolves. */
   onConfirm: () => void | Promise<void>
   confirmDisabled?: boolean
+  /** Why the confirm button is off ("Type the course name to turn this on."), read out with the disabled button. */
+  confirmDisabledReason?: string
   /** Extra content under the description, e.g. a field to type the course name. */
   children?: React.ReactNode
 }
@@ -39,6 +41,7 @@ export function ConfirmDialog({
   destructive,
   onConfirm,
   confirmDisabled,
+  confirmDisabledReason,
   children,
 }: ConfirmDialogProps) {
   const [pending, setPending] = React.useState(false)
@@ -73,6 +76,7 @@ export function ConfirmDialog({
             variant={destructive ? 'danger' : 'primary'}
             loading={pending}
             disabled={confirmDisabled}
+            disabledReason={confirmDisabledReason}
             onClick={handleConfirm}
           >
             {confirmLabel}

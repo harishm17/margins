@@ -1,4 +1,4 @@
-import { phoneInlineHit } from '@/components/ui/styles'
+import { phoneStandaloneLink } from '@/components/ui/styles'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowUpRight } from '@phosphor-icons/react/dist/ssr'
@@ -93,7 +93,7 @@ const jsonLd = {
 
 const container = 'mx-auto w-full max-w-[1280px] px-4 md:px-8'
 const h2 = 'text-[30px] font-semibold leading-9 tracking-[-0.02em] text-fg md:text-display'
-const link = `${phoneInlineHit} inline-flex items-center gap-1 rounded-chip text-small font-medium text-accent hover:underline`
+const link = `${phoneStandaloneLink} inline-flex items-center gap-1 rounded-chip text-small font-medium text-accent hover:underline`
 
 function Hero() {
   return (
@@ -144,7 +144,7 @@ function Trust() {
           Sources you can check
         </h2>
         <div className="mt-10 grid gap-6 md:mt-12 lg:grid-cols-12 lg:gap-8">
-          <div className="flex flex-col overflow-hidden rounded-card border border-border bg-surface lg:col-span-7">
+          <div className="flex flex-col self-start overflow-hidden rounded-card border border-border bg-surface lg:col-span-7">
             <div className="p-6 pb-5 md:p-8 md:pb-6">
               <h3 className="text-heading text-fg">Every answer points to your files</h3>
               <p className="mt-2 max-w-[52ch] text-reading text-fg-2">
@@ -152,7 +152,7 @@ function Trust() {
               </p>
             </div>
             {/* The screenshot is drawn whole (4:3 on desktop, the phone page below 768px) at the bottom of the card. */}
-            <div className="mt-auto px-6 md:px-8">
+            <div className="px-6 md:px-8">
               <div className="overflow-hidden rounded-t-control border border-b-0 border-border">
                 <Shot
                   name="ask"
@@ -170,16 +170,16 @@ function Trust() {
             <li className="pb-8">
               <h3 className="text-heading text-fg">Quality is measured</h3>
               <p className="mt-2 text-reading text-fg-2">
-                We run the generators on two MIT OpenCourseWare courses and have a judge model score the output. The judge is {EVAL_FACTS.judge}, the same model that writes the text, so its scores are a limited check. In the latest run on {EVAL_FACTS.topics} topics, it scored correctness {EVAL_FACTS.correctness} out of 5 and grounding in the source pages {EVAL_FACTS.grounding}, and listed {EVAL_FACTS.errors} errors, {EVAL_FACTS.mathErrors} of them mathematical.
+                Every answer cites your page, and we publish how often the generators get things wrong. We test them on two MIT OpenCourseWare courses, with a judge model and with automatic checks that need no model. The judge is {EVAL_FACTS.judge}, the same model that writes the text, so its scores are a limited check.
               </p>
               <p className="mt-3 text-reading text-fg-2">
-                Automatic checks, with no model involved, found failures too: {EVAL_FACTS.notesWithAllSections} notes had all the expected sections, and {EVAL_FACTS.notesInWordBand} stayed within the requested length. We publish all of it.
+                The scores, the errors the judge found and the checks that failed are all on the evaluation page.
               </p>
               <a href={LINKS.eval} target="_blank" rel="noopener noreferrer" className={`${link} mt-3`}>
                 Read the evaluation <ArrowUpRight aria-hidden="true" className="size-3.5" />
               </a>
               <Link href="/evaluation" className={`${link} mt-3 ml-4`}>
-                How it is evaluated
+                See the scores and the failures
               </Link>
             </li>
             <li className="py-8">

@@ -197,6 +197,15 @@ export function Composer({
             variant="primary"
             icon={<ArrowUp weight="bold" />}
             disabled={!canSend}
+            disabledReason={
+              blocked
+                ? 'AI features are paused right now.'
+                : disabled
+                  ? undefined
+                  : trimmed.length === 0
+                    ? 'Type a question first.'
+                    : undefined
+            }
             shortcut="Enter"
           />
         )}

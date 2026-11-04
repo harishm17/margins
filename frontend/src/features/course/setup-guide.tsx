@@ -5,6 +5,7 @@ import { Page, PageIntro } from '@/components/shell/page'
 import { pluralize } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { SetupData } from '@/server/queries/course'
+import { COURSE_STAGES, COURSE_STAGES_SUMMARY } from './course-stages'
 import { MaterialsManager } from './materials-manager'
 import { SetupPlanFields } from './setup-plan'
 import { CheckTopicsStep, StartStudyingStep } from './setup-steps'
@@ -64,10 +65,10 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
   const link = 'rounded-chip text-accent hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center'
 
   return (
-    <Page>
-      <PageIntro title={name} description="Three steps and you're ready to study." />
+    <Page width="focus">
+      <PageIntro title={name} description={COURSE_STAGES_SUMMARY} />
       <ol className="max-w-[720px]" aria-label="Setup steps">
-        <Step number={1} state={step > 1 ? 'done' : 'current'} title="Add your materials">
+        <Step number={1} state={step > 1 ? 'done' : 'current'} title={COURSE_STAGES[0].title}>
           {step <= 2 ? (
             // Stays through step 2: when the last file is read, this step keeps its size and only the
             // next step changes, so nothing jumps under the student's thumb.
@@ -94,7 +95,7 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
           )}
         </Step>
 
-        <Step number={2} state={step > 2 ? 'done' : step === 2 ? 'current' : 'upcoming'} title="Check the topics">
+        <Step number={2} state={step > 2 ? 'done' : step === 2 ? 'current' : 'upcoming'} title={COURSE_STAGES[1].title}>
           {step === 2 ? (
             <CheckTopicsStep
               courseId={courseId}
@@ -115,7 +116,7 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
             </p>
           ) : (
             // The same height as the step when it is current, so it opens without moving what is below.
-            <div className="min-h-[108px]">
+            <div>
               <p className={description}>
                 {filesProcessing && materials.materials.length > 0
                   ? `Waiting for your files: ${materials.readyCount} of ${materials.materials.length} read.`
@@ -125,7 +126,7 @@ export function SetupGuide({ courseId, name, setup }: { courseId: string; name: 
           )}
         </Step>
 
-        <Step number={3} state={step === 3 ? 'current' : 'upcoming'} title="Start studying" last>
+        <Step number={3} state={step === 3 ? 'current' : 'upcoming'} title={COURSE_STAGES[2].title} last>
           {step !== 3 ? (
             <p className={description}>A warm-up, reading, recall, practice and a quiz for each topic, written as you go.</p>
           ) : null}

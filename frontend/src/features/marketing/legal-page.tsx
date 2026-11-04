@@ -10,6 +10,19 @@ export function LegalPage({ title, children }: { title: string; children: React.
   )
 }
 
+/** One line per item, each starting with the bold name of what it is about. */
+export function LegalList({ items }: { items: { name: string; text: React.ReactNode }[] }) {
+  return (
+    <ul className="flex flex-col gap-3">
+      {items.map((item) => (
+        <li key={item.name}>
+          <span className="font-medium text-fg">{item.name}.</span> {item.text}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function LegalSection({ heading, children }: { heading: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-4">

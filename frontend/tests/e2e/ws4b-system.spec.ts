@@ -50,12 +50,11 @@ test.describe('phone', () => {
     expect(await input.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBe(14)
   })
 
-  test('login: Terms and Privacy Policy are their own 44px rows', async ({ page }) => {
+  test('login: Terms and Privacy Policy sit in one sentence and are 44px to press', async ({ page }) => {
     await page.goto('/login')
-    for (const name of ['Terms', 'Privacy Policy']) {
-      const box = await page.getByRole('link', { name, exact: true }).boundingBox()
-      expect(box?.height ?? 0, name).toBeGreaterThanOrEqual(44)
-    }
+    await expect(page.getByText(/^By continuing you agree to the/)).toContainText('Terms and Privacy Policy')
+    // smallTargets counts the 44px hit strip behind an inline link.
+    expect(await smallTargets(page)).toEqual([])
   })
 })
 

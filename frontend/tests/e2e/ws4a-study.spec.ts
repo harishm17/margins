@@ -141,10 +141,9 @@ test.describe('phone targets in the study surfaces', () => {
     await withPrisma((prisma) => prisma.topic.updateMany({ where: { projectId: course.courseId }, data: { description: 'A long description of what this topic covers, which should wrap onto more than one line on a narrow screen instead of being cut off.' } }))
     await page.setViewportSize(PHONE)
     await page.goto(`/courses/${course.courseId}/topics?edit=1`)
-    const handle = page.getByRole('button', { name: /^Reorder Hashing/ })
-    await expect(handle).toBeVisible()
-    expect((await handle.boundingBox())!.height, 'reorder handle').toBeGreaterThanOrEqual(44)
-    expect((await handle.boundingBox())!.width, 'reorder handle').toBeGreaterThanOrEqual(44)
+    // A phone has no drag handle: the row menu's Move up and Move down are the way to reorder.
+    await expect(page.getByRole('button', { name: 'Actions for Hashing' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Reorder Hashing/ })).toBeHidden()
     const rename = page.getByRole('button', { name: 'Rename Hashing' })
     expect((await rename.boundingBox())!.height, 'rename').toBeGreaterThanOrEqual(44)
     // The description wraps, so the student can read what they are confirming.

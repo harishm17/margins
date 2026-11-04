@@ -11,6 +11,10 @@ test('home and new course', () => {
   assert.deepEqual(buildCrumbs('/courses/new', nav), [{ label: 'Home', href: '/home' }, { label: 'New course' }])
 })
 
+test('account settings sits under Home', () => {
+  assert.deepEqual(buildCrumbs('/settings', nav), [{ label: 'Home', href: '/home' }, { label: 'Settings' }])
+})
+
 test('course overview is just the course', () => {
   assert.deepEqual(buildCrumbs('/courses/c1', nav), [{ label: 'CS 161 Algorithms' }])
 })

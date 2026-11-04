@@ -158,7 +158,7 @@ function Calibration({ calibration }: { calibration: Progress['calibration'] }) 
                 <td className="py-1.5">
                   {n > 0 && bin ? (
                     <span className="flex items-center justify-end gap-2">
-                      <span aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-3">
+                      <span aria-hidden="true" className="h-2 w-16 overflow-hidden rounded-full border border-control bg-surface-3">
                         <span className="block h-full rounded-full bg-accent" style={{ width: percent(bin.accuracy) }} />
                       </span>
                       <span className="tabular w-10 text-right text-fg">{percent(bin.accuracy)}</span>
