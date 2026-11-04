@@ -108,7 +108,7 @@ function conceptSummary(concepts: TopicConceptChip[]): string {
 function ConceptChips({ concepts, className }: { concepts: TopicConceptChip[]; className?: string }) {
   if (concepts.length === 0) return null
   return (
-    <ul aria-label="Concepts in this topic" className={cn('flex flex-wrap gap-1.5', className)}>
+    <ul aria-label="Ideas in this topic" className={cn('flex flex-wrap gap-1.5', className)}>
       {concepts.map((concept) => (
         <li
           key={concept.id}

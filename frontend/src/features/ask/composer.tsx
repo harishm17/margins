@@ -121,7 +121,7 @@ export function Composer({
           </span>
         ) : scopeOptions && onScopeChange ? (
           <Select
-            aria-label="Search in"
+            aria-label="Ask about"
             value={scope}
             onValueChange={onScopeChange}
             options={scopeOptions}

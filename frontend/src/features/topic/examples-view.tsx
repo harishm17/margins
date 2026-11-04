@@ -273,7 +273,7 @@ function ExampleCard({
 
           {example.keyConcepts.length > 0 ? (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-small text-fg-2">Key concepts</span>
+              <span className="mr-1 text-small text-fg-2">Key ideas</span>
               {example.keyConcepts.map((concept) => (
                 <ConceptChip key={concept}>{concept}</ConceptChip>
               ))}

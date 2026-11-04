@@ -246,7 +246,7 @@ function RowMenu({ filename, children }: { filename: string; children: React.Rea
 
 /**
  * A past exam that was read but whose style could not be analysed: say so on its row, with a way
- * to analyse the course's past exams again.
+ * to analyze the course's past exams again.
  */
 function ExamAnalysisFailed({
   courseId,
@@ -279,13 +279,13 @@ function ExamAnalysisFailed({
       <Tooltip content={text} side="top" align="start">
         <span className="block min-w-0">
           <StatusText icon={FAILED_ICON} tone="danger">
-            {"Read, but its exam style couldn't be analysed"}
+            {"Read, but its exam style couldn't be analyzed"}
           </StatusText>
         </span>
       </Tooltip>
       {blocked ? null : (
         <Button size="sm" variant="link" className="h-auto p-0 text-small" loading={pending} onClick={() => void retry()}>
-          Analyse again
+          Analyze again
         </Button>
       )}
     </div>

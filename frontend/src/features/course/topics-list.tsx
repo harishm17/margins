@@ -52,7 +52,7 @@ const STATE_WORDS: Record<GlyphState, string> = {
 /** One of the four study path circles: filled with a check when done, ringed when it exists, dashed when missing. */
 function Glyph({ label, state, icon, score }: GlyphProps) {
   const hasScore = score !== null && score !== undefined
-  const words = hasScore ? `${label}: best ${Math.round(score)}%` : `${label}: ${STATE_WORDS[state]}`
+  const words = hasScore ? `${label}: best score ${Math.round(score)}%` : `${label}: ${STATE_WORDS[state]}`
   const base = 'inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium tabular [&>svg]:size-3'
   const look =
     state === 'done'
@@ -62,8 +62,8 @@ function Glyph({ label, state, icon, score }: GlyphProps) {
         : 'border border-dashed border-border-strong text-fg-3'
   return (
     <Tooltip content={words}>
-      <span role="img" aria-label={words} className={cn(base, look, hasScore && 'px-1.5')}>
-        {hasScore ? `${Math.round(score)}%` : state === 'done' ? <Check weight="bold" /> : icon}
+      <span role="img" aria-label={words} className={cn(base, look)}>
+        {state === 'done' ? <Check weight="bold" /> : icon}
       </span>
     </Tooltip>
   )
@@ -103,7 +103,7 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
         <div className="flex w-full shrink-0 flex-col sm:w-40 sm:items-end">
           <span className="text-small text-fg">
             {masteryLabel(topic.mastery)}
-            {percent !== null ? <span className="sr-only">, {percent}%</span> : null}
+            {percent !== null ? <span className="tabular">{`, ${percent}%`}</span> : null}
           </span>
           {topic.timing ? (
             <span

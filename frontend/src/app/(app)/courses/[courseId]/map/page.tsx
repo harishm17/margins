@@ -173,7 +173,7 @@ export default async function MapPage({
             />
           </div>
         ) : nodes.length > 0 ? (
-          <p className="text-small text-fg-3">Choose an idea to see what your pages say about it, how you have done on it, and to practise it.</p>
+          <p className="text-small text-fg-3">Choose an idea to see what your pages say about it, how you have done on it, and to practice it.</p>
         ) : null}
       </div>
     </Page>

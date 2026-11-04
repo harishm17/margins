@@ -150,7 +150,7 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
           }
           secondary={<Link href={`/courses/${courseId}/review`}>Back to Review</Link>}
         >
-          Its review is due, but this topic has no concept questions yet, so it is reviewed with the questions from its quizzes.
+          Its review is due, but this topic has no idea questions yet, so it is reviewed with the questions from its quizzes.
         </EmptyState>
       )
     }
@@ -165,8 +165,8 @@ export function ReviewSession({ courseId, topicId, conceptId, sessionId }: Props
         }
       >
         {conceptId
-          ? 'This idea has no questions to practise with yet. Open its topic and take a quiz first.'
-          : 'No concept needs another look today. Your next reviews appear on the Review page as they come due.'}
+          ? 'This idea has no questions to practice with yet. Open its topic and take a quiz first.'
+          : 'No idea needs another look today. Your next reviews appear on the Review page as they come due.'}
       </EmptyState>
     )
   }

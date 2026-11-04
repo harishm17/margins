@@ -104,7 +104,7 @@ export function AssistantBlock({ message, moves }: { message: AssistantMessage; 
       ) : null}
       {message.noSources ? (
         <InlineAlert className="mt-4" tone="neutral">
-          Nothing in your materials matched closely. Try naming a concept from your notes.
+          Nothing in your materials matched closely. Try naming an idea from your notes.
         </InlineAlert>
       ) : null}
       {message.notSaved ? (
