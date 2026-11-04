@@ -274,6 +274,8 @@ test('the timed exam shows Saving, Saved and a failure with Retry on a phone', a
   await page.getByRole('button', { name: 'Next' }).click()
   await page.getByRole('radio').first().click()
   await expect(status).toContainText('Not saved', { timeout: 20_000 })
+  // First "Not saved yet" while the change waits its turn, then "Not saved" with Retry once the save has failed.
+  await expect(status.getByRole('button', { name: 'Retry' })).toBeVisible({ timeout: 20_000 })
   await page.unroute(`**/api/exams/${examId}/attempt`)
   await status.getByRole('button', { name: 'Retry' }).click()
   await expect(status).toHaveText('Saved', { timeout: 20_000 })

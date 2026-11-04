@@ -27,6 +27,8 @@ export type FailureMessage = {
   retryable: boolean
   /** The question to ask again; null for a failure note that came from the database. */
   question: string | null
+  /** The id of the send that failed: asking again with it never stores the question twice. */
+  requestId?: string
 }
 
 export type ChatMessage = UserMessage | AssistantMessage | FailureMessage

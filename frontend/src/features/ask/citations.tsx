@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { ArrowSquareOut, FileText } from '@phosphor-icons/react/dist/ssr'
+import { ArrowSquareOut, CaretDown, FileText } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -118,44 +118,45 @@ export function CitationPill({ source, marker }: { source: ChatSource | undefine
   )
 }
 
-const COLLAPSED_SOURCES = 3
-
-/** The numbered sources under an answer, collapsed to the first three. */
+/**
+ * The numbered sources under an answer. The citation pills in the text already name them, so the list stays closed behind one
+ * "2 sources" control and opens on demand (a keyboard or screen-reader user reaches it as a button with its state).
+ */
 export function SourcesList({ sources }: { sources: readonly ChatSource[] }) {
-  const [expanded, setExpanded] = React.useState(false)
+  const [open, setOpen] = React.useState(false)
   const [excerpt, setExcerpt] = React.useState<ChatSource | null>(null)
+  const listId = React.useId()
   if (sources.length === 0) return null
 
   const ordered = [...sources].sort((a, b) => a.marker - b.marker)
-  const shown = expanded ? ordered : ordered.slice(0, COLLAPSED_SOURCES)
 
   return (
     <section aria-label="Sources" className="mt-4">
-      <h2 className="text-caption text-fg-3">Sources</h2>
-      <ol className="mt-1.5 flex flex-col">
-        {shown.map((source) => (
-          <li key={source.marker} className="flex min-h-8 items-center gap-2.5 py-1 text-small max-sm:min-h-11">
-            <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-chip bg-accent-soft px-1 font-mono text-[12px] font-medium text-accent-soft-fg">
-              {source.marker}
-            </span>
-            {/* On a phone the file name and place may take two lines, so a long location is not cut after a few words. */}
-            <span className="min-w-0 flex-1 text-fg-2 wrap-anywhere max-sm:line-clamp-2 sm:truncate" title={sourceLabel(source)}>
-              {sourceLabel(source)}
-            </span>
-            <SourceAction source={source} onExcerpt={() => setExcerpt(source)} className="shrink-0 text-small" />
-          </li>
-        ))}
-      </ol>
-      {sources.length > COLLAPSED_SOURCES ? (
-        <Button
-          variant="link"
-          size="sm"
-          className="mt-1 h-auto p-0 text-small"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
-        >
-          {expanded ? 'Show fewer' : `Show all ${sources.length}`}
-        </Button>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex min-h-8 items-center gap-1 rounded-chip text-caption text-fg-3 hover:text-fg max-sm:min-h-11"
+      >
+        {sources.length === 1 ? '1 source' : `${sources.length} sources`}
+        <CaretDown className={cn('size-3.5 transition-transform duration-180', open && 'rotate-180')} aria-hidden="true" />
+      </button>
+      {open ? (
+        <ol id={listId} className="mt-1.5 flex flex-col">
+          {ordered.map((source) => (
+            <li key={source.marker} className="flex min-h-8 items-center gap-2.5 py-1 text-small max-sm:min-h-11">
+              <span className="grid h-[18px] min-w-[18px] shrink-0 place-items-center rounded-chip bg-accent-soft px-1 font-mono text-[12px] font-medium text-accent-soft-fg">
+                {source.marker}
+              </span>
+              {/* On a phone the file name and place may take two lines, so a long location is not cut after a few words. */}
+              <span className="min-w-0 flex-1 text-fg-2 wrap-anywhere max-sm:line-clamp-2 sm:truncate" title={sourceLabel(source)}>
+                {sourceLabel(source)}
+              </span>
+              <SourceAction source={source} onExcerpt={() => setExcerpt(source)} className="shrink-0 text-small" />
+            </li>
+          ))}
+        </ol>
       ) : null}
       {excerpt ? (
         <ExcerptDialog source={excerpt} open onOpenChange={(open) => (open ? undefined : setExcerpt(null))} />

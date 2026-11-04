@@ -19,7 +19,7 @@ import {
   type FailureMessage,
   type StoredMessage,
 } from './chat-messages'
-import { ChatRequestError, streamChat } from './chat-client'
+import { ChatRequestError, INTERRUPTED_MESSAGE, streamChat } from './chat-client'
 
 export type LiveTurn = { question: string; answer: AnswerState }
 
@@ -74,8 +74,41 @@ export function useAskChat({
     acceptedRef.current.add(listener)
     return () => void acceptedRef.current.delete(listener)
   }, [])
+  // Listeners told that a send failed for good before the server kept the question: the text is unsent, not in flight.
+  const rejectedRef = React.useRef(new Set<(question: string) => void>())
+  // A page being reloaded or closed fails its open request too; that is not a refusal, so it is not reported as one.
+  const leavingRef = React.useRef(false)
+  React.useEffect(() => {
+    let reset: ReturnType<typeof setTimeout> | undefined
+    const leaving = () => {
+      leavingRef.current = true
+      // The leave can be cancelled (a prompt answered "stay"): trust failures again after a moment.
+      if (reset) clearTimeout(reset)
+      reset = setTimeout(() => {
+        leavingRef.current = false
+      }, 3000)
+    }
+    const back = () => {
+      leavingRef.current = false
+    }
+    window.addEventListener('beforeunload', leaving)
+    window.addEventListener('pagehide', leaving)
+    window.addEventListener('pageshow', back)
+    return () => {
+      if (reset) clearTimeout(reset)
+      window.removeEventListener('beforeunload', leaving)
+      window.removeEventListener('pagehide', leaving)
+      window.removeEventListener('pageshow', back)
+    }
+  }, [])
+  const subscribeRejected = React.useCallback((listener: (question: string) => void) => {
+    rejectedRef.current.add(listener)
+    return () => void rejectedRef.current.delete(listener)
+  }, [])
 
   const controllerRef = React.useRef<AbortController | null>(null)
+  // Opening a stored conversation is defined further down; `send` reaches it through here.
+  const loadThreadRef = React.useRef<(id: string) => Promise<void>>(async () => {})
   const threadRef = React.useRef(threadId)
   const loadTokenRef = React.useRef(0)
   const idCounter = React.useRef(0)
@@ -94,6 +127,8 @@ export function useAskChat({
   const { report } = useAiStatus()
 
   const sending = live !== null
+  // Text to put back in the question box (a failed question, "Edit question"); the number tells a second edit of the same text apart.
+  const [edit, setEdit] = React.useState<{ text: string; nonce: number } | null>(null)
 
   const abortCurrent = React.useCallback(() => {
     controllerRef.current?.abort()
@@ -139,9 +174,11 @@ export function useAskChat({
   )
 
   const send = React.useCallback(
-    async (rawQuestion: string) => {
+    async (rawQuestion: string, requestId?: string) => {
       const question = rawQuestion.trim()
       if (!question || controllerRef.current) return
+      // One id per send. A retry of a failed question carries the failed send's id, so a question the server did keep is not stored twice.
+      const clientRequestId = requestId ?? crypto.randomUUID()
 
       const controller = new AbortController()
       controllerRef.current = controller
@@ -150,6 +187,7 @@ export function useAskChat({
       let answer: AnswerState = INITIAL_ANSWER
       let doneStopReason = null as string | null
       let notSaved = false
+      let acceptedByServer = false
       // The conversation this question started, if it started one.
       let startedThread: string | null = null
       setLive({ question, answer })
@@ -159,17 +197,23 @@ export function useAskChat({
         setLive(null)
         if (message) setMessages((current) => [...current, message])
       }
-      const failure = (message: string, retryable: boolean): FailureMessage => ({
-        kind: 'failure',
-        id: nextId(),
-        message,
-        retryable,
-        question,
-      })
+      const failure = (message: string, retryable: boolean): FailureMessage => {
+        // A failure before the thread event (the server never kept the question) makes the saved text a plain unsent draft again.
+        if (!acceptedByServer && !leavingRef.current) rejectedRef.current.forEach((listener) => listener(question))
+        return {
+          kind: 'failure',
+          id: nextId(),
+          message,
+          retryable,
+          question,
+          requestId: clientRequestId,
+        }
+      }
 
       try {
-        await streamChat({
+        const result = await streamChat({
           courseId,
+          clientRequestId,
           question,
           threadId: threadRef.current,
           topicId,
@@ -180,6 +224,7 @@ export function useAskChat({
           onEvent: (event) => {
             if (event.type === 'thread') {
               // The server has the question: from here a failure is shown as a failed answer, not as an unsent question.
+              acceptedByServer = true
               acceptedRef.current.forEach((listener) => listener(question))
               threadRef.current = event.threadId
               setThreadId(event.threadId)
@@ -211,6 +256,18 @@ export function useAskChat({
           },
         })
 
+        if (result?.duplicateOf !== undefined) {
+          // The server already holds this question (an earlier send of it got through): show that conversation, not a second one.
+          acceptedRef.current.forEach((listener) => listener(question))
+          finish(null)
+          const found = result.duplicateOf
+          if (found) {
+            if (threadRef.current !== found) callbacks.current.onThreadStarted?.({ id: found, title: question.slice(0, 80) })
+            void loadThreadRef.current(found)
+          }
+          return
+        }
+
         if (answer.status === 'done') {
           const turn = liveTurn(answer.route, answer.check)
           const message: AssistantMessage = {
@@ -230,8 +287,8 @@ export function useAskChat({
           report(answer.error.code)
           finish(failure(answer.error.message, answer.error.retryable))
         } else {
-          const info = chatErrorMessage('CHAT_INTERRUPTED')
-          finish(failure(info.message, info.retryable))
+          // The stream ended without a finished answer; the server keeps writing it, so the question is safe.
+          finish(failure(INTERRUPTED_MESSAGE, true))
         }
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
@@ -277,10 +334,22 @@ export function useAskChat({
     (failureId: string) => {
       const plan = retryPlan(messages, failureId)
       if (!plan) return
+      const failed = messages.find((m) => m.id === failureId)
       setMessages(plan.messages)
-      void send(plan.question)
+      void send(plan.question, failed?.kind === 'failure' ? failed.requestId : undefined)
     },
     [messages, send]
+  )
+
+  /** "Edit question": the failed question goes back into the box to be changed, and the failed try makes way for it. */
+  const editFailed = React.useCallback(
+    (failureId: string) => {
+      const plan = retryPlan(messages, failureId)
+      if (!plan) return
+      setMessages(plan.messages)
+      setEdit((current) => ({ text: plan.question, nonce: (current?.nonce ?? 0) + 1 }))
+    },
+    [messages]
   )
 
   /** Start an empty conversation. */
@@ -309,9 +378,7 @@ export function useAskChat({
       setLoadError(null)
       setLoadingThread(true)
       try {
-        const data = await apiFetch<ThreadPayload>(
-          `/api/projects/${encodeURIComponent(courseId)}/chat/threads/${encodeURIComponent(id)}`
-        )
+        const data = await apiFetch<ThreadPayload>(`/api/projects/${encodeURIComponent(courseId)}/chat/threads/${encodeURIComponent(id)}`)
         if (token !== loadTokenRef.current) return
         setWorkedAllowed(data.thread.workedAllowed === true)
         setMessages(
@@ -335,7 +402,38 @@ export function useAskChat({
     [courseId, abortCurrent]
   )
 
-  return { threadId, messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry, reset, loadThread, subscribeAccepted }
+  React.useEffect(() => {
+    loadThreadRef.current = loadThread
+  })
+
+  /** A question sent just before a reload turned out to have been accepted: open the conversation it started. */
+  const recover = React.useCallback(
+    (id: string, title: string | null) => {
+      if (threadRef.current !== id) callbacks.current.onThreadStarted?.({ id, title })
+      void loadThread(id)
+    },
+    [loadThread]
+  )
+
+  return {
+    threadId,
+    messages,
+    live,
+    sending,
+    loadingThread,
+    loadError,
+    workedAllowed,
+    edit,
+    subscribeRejected,
+    send,
+    stop,
+    retry,
+    editFailed,
+    recover,
+    reset,
+    loadThread,
+    subscribeAccepted,
+  }
 }
 
 export type AskChat = ReturnType<typeof useAskChat>

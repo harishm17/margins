@@ -55,3 +55,24 @@ export function submitSummary({ total, unanswered, flagged }: { total: number; u
   parts.push('You can’t change your answers after you submit.')
   return parts.join(' ')
 }
+
+/**
+ * The submit dialog's words. When nothing is answered the dialog says so once, in the title, and the confirm button names what it
+ * does ("Submit empty exam"); otherwise it summarises what is answered, unanswered and flagged.
+ */
+export function submitDialogCopy({ total, unanswered, flagged }: { total: number; unanswered: number; flagged: number }): {
+  blank: boolean
+  title: string
+  description: string
+  confirmLabel: string
+} {
+  if (total > 0 && unanswered === total) {
+    return {
+      blank: true,
+      title: total === 1 ? 'The question is blank' : `All ${total} questions are blank`,
+      description: 'Submitting now scores zero. You can’t change your answers after you submit.',
+      confirmLabel: 'Submit empty exam',
+    }
+  }
+  return { blank: false, title: 'Submit your exam?', description: submitSummary({ total, unanswered, flagged }), confirmLabel: 'Submit exam' }
+}

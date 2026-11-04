@@ -27,6 +27,7 @@ export function ConfidenceRow({
   level,
   optionCount,
   optional = true,
+  defaultOpen = false,
   onChange,
 }: {
   value: number | undefined
@@ -36,12 +37,14 @@ export function ConfidenceRow({
   optionCount?: number
   /** Says "(optional)" in the label. True everywhere today; the prop lets a caller drop the word, never make the row block. */
   optional?: boolean
+  /** Starts with the phone's folded choices open, for a caller that already put the row behind its own disclosure. */
+  defaultOpen?: boolean
   onChange: (level: ConfidenceId, confidence: number) => void
 }) {
   const labelId = React.useId()
   const panelId = React.useId()
   const selected = selectedConfidenceLevel(level, value, optionCount)
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = React.useState(defaultOpen)
   return (
     <div className="mt-8 max-sm:mt-5" data-confidence-row="">
       <button

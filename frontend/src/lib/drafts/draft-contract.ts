@@ -127,7 +127,8 @@ const PAYLOADS: Record<DraftSurface, z.ZodType<unknown>> = {
     confidenceLevel: confidenceLevel.optional(),
   }),
   practice: z.object({ answer: text(4000), working: text(8000) }),
-  ask: z.object({ text: text(4000) }),
+  // `sending`: the id of a send that was in flight (Ask), so a reload can tell an accepted question from an unsent one.
+  ask: z.object({ text: text(4000), sending: z.string().uuid().optional(), sentAt: z.number().int().optional() }),
   worked_example: WORKED_EXAMPLE,
 }
 
@@ -139,7 +140,7 @@ export type DraftPayloads = {
   explainer_check: { answer: string }
   review: { answer: string; thinking?: string; confidence?: number; confidenceLevel?: string }
   practice: { answer: string; working: string }
-  ask: { text: string }
+  ask: { text: string; sending?: string; sentAt?: number }
   worked_example: z.output<typeof WORKED_EXAMPLE>
 }
 

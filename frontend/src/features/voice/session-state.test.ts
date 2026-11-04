@@ -188,7 +188,7 @@ describe('evaluationBadge', () => {
 })
 
 describe('summarize', () => {
-  it('counts graded answers, lists what to revisit once, and rounds minutes up to one', () => {
+  it('counts graded answers, lists what to revisit once, and reports the length in seconds', () => {
     const state: Pick<SessionState, 'answered' | 'entries' | 'startedAt' | 'endedAt' | 'ideas'> = {
       ideas: [],
       answered: [
@@ -207,7 +207,8 @@ describe('summarize', () => {
     assert.equal(summary.partly, 1)
     assert.equal(summary.score, 1 / 3)
     assert.deepEqual(summary.revisit, [{ text: 'Q2', lookLinks: [{ label: 'pp. 4-6', href: '/api/materials/m1/file#page=4' }] }])
-    assert.equal(summary.minutes, 1)
+    assert.equal(summary.seconds, 20)
+    assert.equal(summary.minutes, 0)
     assert.equal(summary.exchanges, 1)
     assert.equal(summary.typed, 1)
   })

@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { useParams, usePathname } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import {
   Check,
   HandPalm,
@@ -34,6 +34,7 @@ type SessionViewProps = {
   state: SessionState
   orb: OrbState
   controller: VoiceController
+  courseId: string
   /** The topic's name, or the round's name for a quick round. */
   title: string
   /** Quiz style: Hint and Skip make sense. */
@@ -59,11 +60,10 @@ const MIC_NOTICES: Record<MicNotice, { tone: 'neutral' | 'warning'; title?: stri
   unstable: { tone: 'warning', title: 'Voice input keeps stopping', text: 'You can type your answers.', retry: true },
 }
 
-export function SessionView({ state, orb, controller, title, hasQuestions, recognitionSupported }: SessionViewProps) {
+export function SessionView({ state, orb, controller, courseId, title, hasQuestions, recognitionSupported }: SessionViewProps) {
   const { question, board, entries, interim, inputMode, micPaused, speech, turnActive, alert, micNotice } = state
-  // The unsent typed answer survives a reload (the session itself ends when the page is hidden; the lobby offers to continue it).
-  const { courseId } = useParams<{ courseId: string }>()
-  const { draft, setDraft, clear: clearDraft } = useVoiceDraft(courseId)
+  // What is typed and not sent survives a reload (use-voice-draft.ts), and a continued practice shows the earlier lines above the new ones.
+  const { draft, setDraft, clear: clearDraft, restoredTranscript } = useVoiceDraft(courseId)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
   const textMode = inputMode === 'text'
   // No speech recognition here (the lobby said so before the start): the text box is the way in, with no mic to look at.
@@ -154,6 +154,12 @@ export function SessionView({ state, orb, controller, title, hasQuestions, recog
             {alert ? <TurnAlert alert={alert} onRetry={() => controller.retry()} onDismiss={() => controller.dismissAlert()} /> : null}
           </div>
 
+          {restoredTranscript.length > 0 ? (
+            <div data-testid="voice-restored">
+              <p className="text-caption text-fg-3">Earlier, before the page reloaded</p>
+              <Transcript entries={restoredTranscript} interim="" className="min-h-0 opacity-80" />
+            </div>
+          ) : null}
           <Transcript entries={entries} interim={interim} />
 
           <div

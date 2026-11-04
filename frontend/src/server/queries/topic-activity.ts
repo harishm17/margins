@@ -23,9 +23,9 @@ export async function withTopicActivity(
   const activity = await topicActivity(userId, courseId, topicId, topics, listConfirmed)
   const worded = overlayActivity(step, activity)
   // The title is the activity's name too, not the plan's generic "Learn <topic>", so the overview, Home and the topic's own
-  // button call one activity by one name. A title that already names the topic (a read-again pointer) is left as it is.
-  const name = activityTitle(activity, topic.name)
-  return { ...worded, title: topic.name && !name.includes(topic.name) ? `${name}: ${topic.name}` : name }
+  // button call one activity by one name (activity-copy.ts), followed by the topic it is in.
+  const name = activityTitle(activity)
+  return { ...worded, title: topic.name ? `${name}: ${topic.name}` : name }
 }
 
 type TopicRef = { id: string; unitId: string | null; confirmed: boolean }

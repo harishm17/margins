@@ -124,7 +124,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await expect(page.getByRole('radio', { name: 'Certain', checked: true })).toBeVisible()
   // The tapped level, not just its value, is saved: "Guessing" on a true or false question stores 0.5, like "Unsure".
   await chooseConfidence(page, 'Guessing')
-  await expect(page.getByText('Saved')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('exam-save-status')).toHaveText('Saved', { timeout: 15_000 })
   await page.reload()
   await expect(page.getByRole('radio', { name: 'Guessing', checked: true })).toBeVisible()
   await chooseConfidence(page, 'Certain')
@@ -137,7 +137,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await expect(navigator.getByRole('button', { name: 'Question 1, answered' }).locator('svg')).toHaveCount(1)
   await expect(navigator.getByRole('button', { name: 'Question 2, not answered, flagged' })).toHaveAttribute('aria-current', 'step')
   expect(await navigator.getByRole('button', { name: /^Question 2,/ }).evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('2px')
-  await expect(page.getByText('Saved')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('exam-save-status')).toHaveText('Saved', { timeout: 15_000 })
 
   // Exit asks first.
   await page.getByRole('link', { name: 'Exit' }).click()
@@ -146,7 +146,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
 
   // One filled button: Next. Submit is final, so it is the quiet one until the last question (where "Submit exam" is the way on).
   const fill = (name: string) => page.getByRole('button', { name, exact: true }).evaluate((el) => getComputedStyle(el).backgroundColor)
-  expect(await fill('Submit')).not.toBe(await fill('Next'))
+  expect(await fill('Submit exam')).not.toBe(await fill('Next'))
 
   // The course's "in progress" line is on every page but the exam's own lobby, which already says Resume.
   const takeUrl = page.url()
@@ -161,7 +161,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await expect(page.getByRole('heading', { name: /Question \d+ of/ })).toBeVisible()
 
   // Submitting with blanks asks for confirmation, and says how many are unanswered and flagged.
-  await page.getByRole('button', { name: 'Submit', exact: true }).click()
+  await page.getByRole('button', { name: 'Submit exam', exact: true }).first().click()
   const prompt = page.getByRole('dialog', { name: 'Submit your exam?' })
   await expect(prompt).toContainText(/unanswered and will score zero\. 1 is flagged to come back to\./)
   await prompt.getByRole('button', { name: 'Keep working' }).click()
@@ -177,7 +177,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
     await expect(position).not.toHaveText(new RegExp(`Question ${number} of`))
   }
   await expect(page.getByText(/1 flagged/)).toBeVisible()
-  await page.getByRole('button', { name: 'Submit', exact: true }).click()
+  await page.getByRole('button', { name: 'Submit exam', exact: true }).first().click()
   await expect(prompt).toContainText(/You answered all \d+ questions\. 1 is flagged to come back to\. You can.t change your answers after you submit\./)
   await animationsSettled(page)
   await screenshotIfAsked(page, 'exam-submit-prompt')
@@ -570,6 +570,7 @@ test.describe('attempt-first Ask', () => {
       const box = await target.boundingBox()
       return box !== null && box.y + box.height <= (await composerTop())
     }
+    // On a phone the row is a single "Confidence (optional)" chip until it is tapped; either way the row's own box is what must clear the composer.
     const confidence = card.locator('[data-confidence-row]')
     await expect.poll(() => clearOfComposer(confidence), { timeout: 5_000, message: 'the confidence row ends above the composer' }).toBe(true)
     await expect.poll(() => clearOfComposer(card.getByRole('button', { name: "I don't know" })), { timeout: 5_000, message: 'the card buttons end above the composer' }).toBe(true)

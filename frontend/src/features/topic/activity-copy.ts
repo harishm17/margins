@@ -92,26 +92,6 @@ export function activityTitle(activity: { kind: ActivityKind; href?: string }): 
 }
 
 /**
- * One name for an activity wherever it is shown as a title (the course overview's Up next, Home's Continue card), so the
- * same activity reads the same on every screen. A read-again pointer is named by where it opens, never "Start learning".
- */
-export function activityTitle(activity: { kind: ActivityKind; href: string }, topicName?: string): string {
-  switch (activity.kind) {
-    case 'instruct': {
-      const view = parseView(new URL(activity.href, 'http://margins.local').searchParams.get('view'))
-      if (view === 'explainer') return 'Read this explanation'
-      return topicName ? `Reread ${topicName}` : 'Reread the page'
-    }
-    case 'fix_misconception':
-      return 'Practise the gap'
-    case 'prerequisite_drill':
-      return 'Practise the basics'
-    default:
-      return VERBS[activity.kind]
-  }
-}
-
-/**
  * The view of this topic a bare topic address opens on. Most activities are a view of the topic; a drill, a
  * review or a mock exam is its own page, so the topic opens on Practice and the next-activity card offers it.
  */
