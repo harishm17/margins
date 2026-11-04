@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
+import { PROGRESS_TRACK } from '@/lib/progress-track'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { toast } from '@/components/ui/toaster'
@@ -307,7 +308,8 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
           </>
         }
         actions={
-          <Button variant="primary" size="sm" loading={submitting} onClick={requestSubmit}>
+          // Secondary: submitting is final, and the one filled button of the page is the way on (Next, or Submit exam on the last question).
+          <Button variant="secondary" size="sm" loading={submitting} onClick={requestSubmit}>
             Submit
           </Button>
         }
@@ -342,7 +344,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
               Questions
             </Button>
           </div>
-          <Progress aria-label="Questions answered" className="mt-3" value={total ? (answeredSet.size / total) * 100 : 0} />
+          <Progress aria-label="Questions answered" className={cn('mt-3', PROGRESS_TRACK)} value={total ? (answeredSet.size / total) * 100 : 0} />
 
           <div key={current} data-question="" className={cn('mt-8', motion)}>
             <QuestionRenderer

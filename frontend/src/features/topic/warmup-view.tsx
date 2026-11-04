@@ -8,6 +8,7 @@ import { SourceLink } from '@/components/learning/source-link'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
+import { PROGRESS_TRACK } from '@/lib/progress-track'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { QuestionText } from '@/components/ui/question-text'
 import { ExpectedMiss } from '@/features/learning/expected-miss'
@@ -191,7 +192,7 @@ function Question({
         </h2>
         <p className="text-small text-fg-2">No hints</p>
       </div>
-      <Progress aria-label="Warm-up questions answered" className="mt-4" value={((state.position - 1) / state.total) * 100} />
+      <Progress aria-label="Warm-up questions answered" className={cn('mt-4', PROGRESS_TRACK)} value={((state.position - 1) / state.total) * 100} />
       <div className={cn('mt-8', motion)} data-question="">
         <QuestionRenderer question={state.question} value={draft.answer} onChange={(answer) => setDraft((d) => ({ ...d, answer }))} showPoints={false} shortcuts />
         <ConfidenceRow
@@ -244,7 +245,7 @@ function ResultRow({ item }: { item: WarmupDoneItem }) {
           <MinusCircle aria-hidden="true" weight="fill" className="mt-0.5 size-5 shrink-0 text-fg-3" />
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-caption text-fg-3">
+          <p className={cn('text-small font-medium', item.correct ? 'text-accent' : 'text-fg-2')}>
             {item.position}. {item.correct ? 'Right' : 'Not quite'}
           </p>
           <h3 className="mt-0.5 text-body-strong text-fg">
@@ -296,16 +297,27 @@ function Results({ state, readHref, quizHref, focusHeading }: { state: Extract<W
           <ExpectedMiss surface="warmup_results" />
         </div>
       ) : null}
-      <ol className="mt-6 divide-y divide-border">
+      {/* The way on is at the top, with what the reading will mark: the answers below are for looking things up, not a page to get through first. */}
+      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button asChild variant="primary">
+          <Link href={readHref} scroll={false}>
+            <span className="inline-flex items-center gap-1.5">
+              Start reading
+              <ArrowRight className="size-4" />
+            </span>
+          </Link>
+        </Button>
+        {focus > 0 ? (
+          <p className="min-w-0 flex-1 basis-56 text-small text-fg-2">
+            {plural(focus, 'passage')} in the reading {focus === 1 ? 'is' : 'are'} marked Focus here, for the ideas you missed or guessed. Everything is still there to read.
+          </p>
+        ) : null}
+      </div>
+      <ol className="mt-6 divide-y divide-border border-t border-border pt-5">
         {state.items.map((item) => (
           <ResultRow key={item.position} item={item} />
         ))}
       </ol>
-      {focus > 0 ? (
-        <InlineAlert className="mt-6" tone="neutral">
-          {plural(focus, 'passage')} in the reading {focus === 1 ? 'is' : 'are'} marked Focus here, for the ideas you missed or guessed. Everything is still there to read.
-        </InlineAlert>
-      ) : null}
       {state.testOut ? (
         <InlineAlert
           className="mt-4"
@@ -323,16 +335,6 @@ function Results({ state, readHref, quizHref, focusHeading }: { state: Extract<W
           You got every question right and were sure of each one.
         </InlineAlert>
       ) : null}
-      <div className="mt-8 flex items-center gap-3 border-t border-border pt-5">
-        <Button asChild variant="primary">
-          <Link href={readHref} scroll={false}>
-            <span className="inline-flex items-center gap-1.5">
-              Start reading
-              <ArrowRight className="size-4" />
-            </span>
-          </Link>
-        </Button>
-      </div>
     </section>
   )
 }

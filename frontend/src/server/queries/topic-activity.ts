@@ -1,5 +1,5 @@
 import { loadTopicLearningState, resolveTopicActivity } from '@/lib/learning/next-activity-server'
-import { pathStepFor } from '@/features/topic/activity-copy'
+import { nextPathStep } from '@/features/topic/activity-copy'
 import { nextStepWords, pathGlyphs, pathSteps, type PathGlyph } from '@/features/topic/path-steps'
 import type { NextStep } from '@/lib/learning/next-step'
 import { overlayActivity, wantsTopicActivity, type ActivityOverlay } from '@/features/topic/step-activity'
@@ -55,17 +55,15 @@ export async function topicPaths(
         readDone: state.readAt !== null,
         preparingConcepts: false,
       })
-      const glyphs = pathGlyphs({
-        steps,
-        done: {
-          warmup: state.warmupAt !== null,
-          read: state.readAt !== null || row.progress.notes,
-          recall: state.recallAt !== null,
-          practice: state.practiceDone,
-          quiz: row.progress.quizScore !== null,
-        },
-        nextStep: pathStepFor(next.kind),
-      })
+      const done = {
+        warmup: state.warmupAt !== null,
+        read: state.readAt !== null || row.progress.notes,
+        recall: state.recallAt !== null,
+        practice: state.practiceDone,
+        quiz: row.progress.quizScore !== null,
+      }
+      // The step the topic's own path tags Next: the same function the path bar uses.
+      const glyphs = pathGlyphs({ steps, done, nextStep: nextPathStep(next, steps, done) })
       return [row.id, { glyphs, nextWords: nextStepWords(next.kind) }] as const
     })
   )

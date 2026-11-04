@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, CaretDown, CheckCircle, Eye, Microphone, MicrophoneSlash, MinusCircle, Question, XCircle } from '@phosphor-icons/react/dist/ssr'
+import { ArrowRight, CaretDown, CheckCircle, Eye, Microphone, MicrophoneSlash, MinusCircle, Question } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { LazyMarkdownInline } from '@/components/ui/lazy-markdown'
 import { quoteOnOneLine } from '@/lib/chat/citations'
@@ -169,7 +169,7 @@ export function RecallView({ topicId, state, nextHref, nextLabel, next, voiceHre
         })}
       </ol>
       <div className="flex flex-wrap items-center gap-3 border-t border-border pt-5">
-        <Button asChild variant={graded && complete ? 'primary' : 'secondary'}>
+        <Button asChild variant={graded && complete ? 'primary' : 'link'} className={graded && complete ? undefined : 'max-sm:min-h-11'}>
           <Link href={onward.href} scroll={false}>
             <span className="inline-flex items-center gap-1.5">
               {onward.label}
@@ -209,6 +209,7 @@ export function Card({
 }) {
   const router = useRouter()
   const headingId = `recall-${card.key}`
+  const checkHintId = React.useId()
   const stored = useStoredDraft(topicId, card.key)
   const topicCourse = useOptionalTopic()?.courseId ?? null
   const projectId = course ?? topicCourse
@@ -371,9 +372,14 @@ export function Card({
             </InlineAlert>
           ) : null}
           <AiBlockedNote className="mt-4" />
+          {text.trim() ? null : (
+            <p id={checkHintId} className="mt-3 text-small text-fg-2">
+              Write a few words to check your answer, or say you don&apos;t remember.
+            </p>
+          )}
           {text.trim() && statusLabel(draft.status) ? <p className="mt-3 text-caption text-fg-3">{statusLabel(draft.status)}</p> : null}
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button variant="primary" onClick={() => void submit()} loading={busy} disabled={!text.trim() || !!blocked}>
+            <Button variant="primary" onClick={() => void submit()} loading={busy} disabled={!text.trim() || !!blocked} aria-describedby={text.trim() ? undefined : checkHintId}>
               Check my answer
             </Button>
             {clarify ? null : (
@@ -435,7 +441,12 @@ function FeedbackView({
 }) {
   const [revealing, setRevealing] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [moreOpen, setMoreOpen] = React.useState(false)
+  const moreId = React.useId()
   const complete = !feedback.idk && feedback.wrong.length === 0 && feedback.missed.length === 0
+  // Help on request: the explanation, an easier step and "Show me what I missed" wait behind "More help" until it is asked for.
+  const hasHelpLinks = !!feedback.help && (!!feedback.help.explainer || !!feedback.help.easierStep)
+  const showMoreHelp = !complete && (hasHelpLinks || feedback.revealed === null)
 
   async function reveal() {
     if (revealing) return
@@ -472,7 +483,7 @@ function FeedbackView({
           <ul className="mt-2 flex flex-col gap-2.5">
             {feedback.got.map((item, index) => (
               <li key={index} className="text-small text-fg-2">
-                <span className="text-caption text-fg-3">
+                <span className="block text-caption text-fg-3">
                   {item.conceptName}
                   {item.partial ? ' (part of it)' : ''}
                 </span>
@@ -487,13 +498,13 @@ function FeedbackView({
       {feedback.wrong.length > 0 ? (
         <div>
           <h4 className="flex items-center gap-2 text-body-strong text-fg">
-            <XCircle aria-hidden="true" weight="fill" className="size-4 text-danger" />
+            <MinusCircle aria-hidden="true" weight="fill" className="size-4 text-warning" />
             What is not right
           </h4>
           <ul className="mt-2 flex flex-col gap-3">
             {feedback.wrong.map((item, index) => (
               <li key={index} className="text-small text-fg-2">
-                <span className="text-caption text-fg-3">{item.conceptName}</span>
+                <span className="block text-caption text-fg-3">{item.conceptName}</span>
                 {item.studentQuote ? (
                   <p>
                     You wrote <span className="text-fg">“{item.studentQuote}”</span>
@@ -518,12 +529,6 @@ function FeedbackView({
             <ExpectedMiss surface="recall_idk" />
           </div>
           <PointerList help={feedback.help} className="mt-3" />
-          <HelpLinks help={feedback.help} className="mt-3" />
-          {feedback.revealed === null ? (
-            <Button className="mt-3" variant="ghost" icon={<Eye />} loading={revealing} onClick={() => void reveal()}>
-              Show me what I missed
-            </Button>
-          ) : null}
         </div>
       ) : null}
       {!feedback.idk && feedback.missed.length > 0 ? (
@@ -540,18 +545,12 @@ function FeedbackView({
               const pointer = feedback.help?.pointers.find((candidate) => candidate.conceptName === item.conceptName)
               return (
                 <li key={item.claimId} className="text-small text-fg-2">
-                  <span className="text-caption text-fg-3">{item.conceptName}</span>
+                  <span className="block text-caption text-fg-3">{item.conceptName}</span>
                   {pointer ? <PointerLink pointer={pointer} label={item.pointer} /> : <p>{item.pointer}</p>}
                 </li>
               )
             })}
           </ul>
-          <HelpLinks help={feedback.help} className="mt-3" />
-          {feedback.revealed === null ? (
-            <Button className="mt-3" variant="ghost" icon={<Eye />} loading={revealing} onClick={() => void reveal()}>
-              Show me what I missed
-            </Button>
-          ) : null}
         </div>
       ) : null}
       {complete ? <InlineAlert tone="accent">You covered every idea this question asks about.</InlineAlert> : null}
@@ -562,7 +561,7 @@ function FeedbackView({
           <ul className="mt-2 flex flex-col gap-3">
             {feedback.revealed.map((item) => (
               <li key={item.claimId} className="text-small text-fg-2">
-                <span className="text-caption text-fg-3">
+                <span className="block text-caption text-fg-3">
                   {item.conceptName}
                   {item.page !== null ? ` (p. ${item.page})` : ''}
                 </span>
@@ -573,7 +572,7 @@ function FeedbackView({
           <p className="mt-3 text-caption text-fg-3">Seeing these is recorded as help, so it doesn&apos;t add to your score.</p>
         </div>
       ) : null}
-      {/* One primary step ends the feedback: the next prompt when there is one. Answering this one again is the quiet choice beside it. */}
+      {/* One primary step ends the feedback: the next prompt when there is one (or, on the last, the way on below the prompts). Answering this one again is the quiet choice beside it; the extra help is behind one disclosure. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {onNextPrompt ? (
           <Button variant="primary" icon={<ArrowRight />} onClick={onNextPrompt}>
@@ -584,6 +583,32 @@ function FeedbackView({
           Answer again
         </Button>
       </div>
+      {showMoreHelp ? (
+        <div className="-mt-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={moreOpen}
+            aria-controls={moreId}
+            icon={<Question />}
+            className="-ml-2.5 max-sm:min-h-11"
+            onClick={() => setMoreOpen((current) => !current)}
+          >
+            <span className="inline-flex items-center gap-1">
+              More help
+              <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', moreOpen && 'rotate-180')} />
+            </span>
+          </Button>
+          <div id={moreId} hidden={!moreOpen} className="mt-2 flex flex-col items-start gap-2">
+            <HelpLinks help={feedback.help} />
+            {feedback.revealed === null ? (
+              <Button variant="ghost" size="sm" icon={<Eye />} className="-ml-2.5 max-sm:min-h-11" loading={revealing} onClick={() => void reveal()}>
+                Show me what I missed
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -612,7 +637,7 @@ function PointerList({ help, className }: { help: HelpAfterMiss | null; classNam
     <ul className={cn('flex flex-col gap-2.5', className)}>
       {help.pointers.map((pointer) => (
         <li key={pointer.conceptId} className="text-small text-fg-2">
-          <span className="text-caption text-fg-3">{pointer.conceptName}</span>
+          <span className="block text-caption text-fg-3">{pointer.conceptName}</span>
           <div>
             <PointerLink pointer={pointer} />
           </div>

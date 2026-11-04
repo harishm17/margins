@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { workingBox } from './helpers/practice'
+import { openMoreHelp, workingBox } from './helpers/practice'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { withPrisma } from './helpers/db'
 import { addContent, createCourse, practiceProblem, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
@@ -101,21 +101,33 @@ test.describe('practice: help after an attempt', () => {
     expect(locate.status()).toBe(200)
   })
 
-  test('hints stay in view after a wrong check', async ({ page }) => {
+  test('after a wrong check the way on is Try again and the next hint, in amber; the rest is behind More help', async ({ page }) => {
     test.setTimeout(120_000)
     await open(page, 'q-miss')
     await page.setViewportSize(DESKTOP)
     await check(page, '5')
     await expect(visible(page, 'Not quite')).toBeVisible()
-    // No extra click: the next hint is there and open to use, with what it costs; Try again is still the primary action,
-    // straight under what just happened.
+    // A normal wrong answer is not an error: the amber alert, not the red one.
+    const alert = page.getByRole('alert').filter({ hasText: 'Not quite' }).locator('visible=true')
+    await expect(alert).toBeVisible()
+    expect(await alert.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(await page.evaluate(() => {
+      const probe = document.createElement('div')
+      probe.className = 'bg-danger-soft'
+      document.body.append(probe)
+      const color = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      return color
+    }))
+    // Two buttons first: Try again (primary, focused) and the next hint with what it costs.
     const next = button(page, /Next hint: Locate/)
     await expect(next).toBeEnabled()
     await expect(next).toContainText('still counts, as a harder try')
     await expect(button(page, 'Try again')).toBeFocused()
-    await expect(button(page, 'Show answer')).toBeEnabled()
-    // The worked example and the tutor are in view too, not behind "Get help".
-    await expect(button(page, /Show me a worked example/)).toBeEnabled()
+    // Show answer, the worked example and the tutor are behind one "More help", closed until it is asked for.
+    const more = page.getByRole('button', { name: 'More help' })
+    await expect(more).toHaveAttribute('aria-expanded', 'false')
+    await expect(button(page, 'Show answer')).toHaveCount(0)
+    await expect(button(page, /Show me a worked example/)).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Get help' })).toHaveCount(0)
     // Missing is expected, said once under the first miss.
     await expect(visible(page, 'Missing a step is part of practice. The next try, or a hint, is where it sticks.')).toBeVisible()
@@ -125,6 +137,11 @@ test.describe('practice: help after an attempt', () => {
     await screenshotIfAsked(page, 'q-practice-miss-390x844')
     await expectNoAxeViolations(page, 'practice after a miss, 390')
     await page.setViewportSize(DESKTOP)
+    await more.click()
+    await expect(more).toHaveAttribute('aria-expanded', 'true')
+    await expect(button(page, 'Show answer')).toBeEnabled()
+    await expect(button(page, /Show me a worked example/)).toBeEnabled()
+    await more.click()
 
     // Opening it: the hint shows and the button moves on. Connect is the one that makes the step a miss; after it, more help is free.
     await next.click()
@@ -138,10 +155,9 @@ test.describe('practice: help after an attempt', () => {
     await structure.click()
     await expect(button(page, /Next hint/)).toHaveCount(0)
     await expect(button(page, 'Try again')).toBeFocused()
-    // After a reload the missed step still has its help in view (the hints, no folded row), and nothing overflows on a phone.
+    // Nothing overflows on a phone.
     await page.setViewportSize(PHONE)
     await expectNoSidewaysScroll(page, page.url())
-    await expect(page.getByRole('button', { name: 'Get help' })).toHaveCount(0)
   })
 
   test('I don\'t know opens help, counts as the first check, and the missing-is-expected line shows once', async ({ page }) => {
@@ -152,6 +168,7 @@ test.describe('practice: help after an attempt', () => {
     await expect(visible(page, "That's okay")).toBeVisible()
     await expect(visible(page, 'Missing a step is part of practice. The next try, or a hint, is where it sticks.')).toBeVisible()
     await expect(button(page, /Next hint: Locate/)).toBeEnabled()
+    await openMoreHelp(page)
     await expect(button(page, 'Show answer')).toBeEnabled()
     await expect(button(page, "I don't know")).toHaveCount(0)
     await screenshotIfAsked(page, 'q-practice-idk-1440x900')
@@ -190,6 +207,7 @@ test.describe('practice: help after an attempt', () => {
     const { email, topicId } = await open(page, 'q-reveal', [problem('Squares', 'medium')], true)
     await check(page, '5')
     await expect(visible(page, 'Not quite')).toBeVisible()
+    await openMoreHelp(page)
     await button(page, 'Show answer').click()
     await expect(visible(page, "The answer is shown, so this step won't count as solved.")).toBeVisible()
     await expect
@@ -239,6 +257,7 @@ test.describe('practice: help after an attempt', () => {
     // Step one needs the worked example (the mock tutor delivers it), then the student finishes the step.
     await check(page, '5')
     await expect(visible(page, 'Not quite')).toBeVisible()
+    await openMoreHelp(page)
     await button(page, /Show me a worked example/).click()
     await expect(page.getByRole('log', { name: 'Tutor conversation' }).locator('visible=true')).toContainText('Worked example')
     await button(page, 'Try again').click()
@@ -272,6 +291,7 @@ test.describe('practice: help after an attempt', () => {
     // The second problem: nothing solved, both answers shown after a miss.
     for (let step = 0; step < 2; step += 1) {
       await button(page, "I don't know").click()
+      await openMoreHelp(page)
       await button(page, 'Show answer').click()
       await button(page, step === 0 ? 'Next step' : 'Finish').click()
     }

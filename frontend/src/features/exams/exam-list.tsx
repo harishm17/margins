@@ -12,6 +12,7 @@ export function ExamList({ courseId, exams }: { courseId: string; exams: ExamLis
     <ul className="border-t border-border">
       {exams.map((exam) => {
         const href = `/courses/${courseId}/exams/${exam.id}`
+        const action = exam.inProgress ? 'Resume' : exam.attemptCount > 0 ? 'View' : 'Open'
         return (
           <li key={exam.id} className="relative flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border py-4">
             <div className="min-w-0 flex-1 basis-64">
@@ -33,16 +34,17 @@ export function ExamList({ courseId, exams }: { courseId: string; exams: ExamLis
                 <Badge tone="warning">In progress</Badge>
               ) : exam.bestScore !== null ? (
                 <span className="text-small text-fg-2">
-                  Best <span className="tabular text-body-strong text-fg">{formatScore(exam.bestScore)}</span>
+                  Best score <span className="tabular text-body-strong text-fg">{formatScore(exam.bestScore)}</span>
                 </span>
               ) : exam.attemptCount > 0 ? (
                 <span className="text-small text-fg-3">Grading</span>
               ) : (
                 <span className="text-small text-fg-3">Not taken yet</span>
               )}
-              <Button asChild size="sm" variant={exam.inProgress ? 'primary' : 'secondary'} className="relative z-10">
-                <Link href={href} aria-label={`${exam.inProgress ? 'Resume' : 'Open'} ${exam.title}`}>
-                  {exam.inProgress ? 'Resume' : 'Open'}
+              {/* What the button does follows where the exam stands; the page's one filled button is "New mock exam". */}
+              <Button asChild size="sm" variant="secondary" className="relative z-10">
+                <Link href={href} aria-label={`${action} ${exam.title}`}>
+                  {action}
                 </Link>
               </Button>
             </div>

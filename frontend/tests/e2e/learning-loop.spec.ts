@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { workingBox } from './helpers/practice'
+import { openMoreHelp, workingBox } from './helpers/practice'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import {
@@ -344,6 +344,7 @@ test.describe('practice progress', () => {
       .poll(async () => (await (await page.request.get(`/api/topics/${course.topics.Squares}/practice-progress`)).json()).problems[0]?.maxRungs)
       .toEqual({ '0': 4 })
     await page.reload()
+    await openMoreHelp(page)
     await expect(reveal).toBeEnabled()
     await reveal.click()
     await expect(page.getByText("The answer is shown, so this step won't count as solved", { exact: false }).locator('visible=true')).toBeVisible()

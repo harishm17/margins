@@ -74,7 +74,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
   const base = `/courses/${courseId}/topics/${topicId}`
   const wanted = parseView(first(requested))
   // The layout has already sent a bare address on; this is the same decision for a request it did not see the path of.
-  if (!wanted) redirect(bareTopicRedirect(base, null, data.nextActivity) ?? base)
+  if (!wanted) redirect(bareTopicRedirect(base, null, data.nextActivity, data.preparingEntry) ?? base)
 
   const { content, topic } = data
   // After the notes: recall when the path has it, else practice (a topic without concepts is Read, Practice, Quiz).
@@ -171,7 +171,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
     // The explainer (spec §5.4): locked until a recall or the thin-source unlock, and the server refuses its text until then.
     case 'explainer': {
       const access = await explainerAccess(user.id, topicId)
-      if (!access?.open) return <ExplainerGate topicId={topicId} recallHref={`${base}?view=recall`} canUnlock={access?.canUnlock ?? false} />
+      if (!access?.open) return <ExplainerGate topicId={topicId} recallHref={`${base}?view=recall`} readHref={`${base}?view=read`} canUnlock={access?.canUnlock ?? false} />
       const gaps = await loadGapExplainer(user.id, topicId)
       // The explainer opened for a concept (from the next activity, a pointer list or the map) is instruction on it
       // (spec 18.5): the gap explainer when there are gaps, else the full lesson. Once per concept per day.

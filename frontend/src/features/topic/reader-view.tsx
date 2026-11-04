@@ -27,6 +27,47 @@ type Props = {
   focusConceptId?: string | null
 }
 
+const PDF_NOTE_KEY = 'margins.readerPdfNoteClosed'
+const pdfNoteListeners = new Set<() => void>()
+const subscribePdfNote = (listener: () => void) => {
+  pdfNoteListeners.add(listener)
+  return () => void pdfNoteListeners.delete(listener)
+}
+const pdfNoteClosed = () => {
+  try {
+    return window.localStorage.getItem(PDF_NOTE_KEY) !== null
+  } catch {
+    return false
+  }
+}
+
+/** The caveat about text taken from a PDF: said once, then gone. Each page keeps its own link to the original. */
+function PdfNote() {
+  // Closed on the server so the first paint never flashes it for a student who has dismissed it.
+  const closed = React.useSyncExternalStore(subscribePdfNote, pdfNoteClosed, () => true)
+  if (closed) return null
+  return (
+    <div className="mb-8 flex max-w-[680px] flex-wrap items-center gap-x-3 gap-y-1 text-small text-fg-2" data-testid="reader-pdf-note">
+      <p className="min-w-0 flex-1 basis-64">Text taken from a PDF can lose its layout and maths. The original is the better view for figures and equations: each page links to it.</p>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="shrink-0"
+        onClick={() => {
+          try {
+            window.localStorage.setItem(PDF_NOTE_KEY, '1')
+          } catch {
+            // Private mode: it comes back next time, which is harmless.
+          }
+          pdfNoteListeners.forEach((listener) => listener())
+        }}
+      >
+        Got it
+      </Button>
+    </div>
+  )
+}
+
 function jumpTo(id: string) {
   const element = document.getElementById(id)
   if (!element) return
@@ -142,7 +183,7 @@ function Passage({ topicId, file, passage, focused, number, notes, check, onAdd,
   return (
     <>
       {passage.divider !== null ? <PageDivider file={file} page={passage.divider} /> : null}
-      <div id={passageDomId(passage.chunkId)} className="scroll-mt-[140px] lg:grid lg:grid-cols-[minmax(0,680px)_minmax(240px,1fr)] lg:gap-x-10" data-passage="">
+      <div id={passageDomId(passage.chunkId)} className="group/passage scroll-mt-[140px] lg:grid lg:grid-cols-[minmax(0,680px)_minmax(240px,1fr)] lg:gap-x-10" data-passage="">
         <div className={marked ? 'border-l-2 border-accent pl-4' : undefined} data-focus={marked ? '' : undefined}>
           {marked ? (
             <Badge tone="accent" icon={<Crosshair aria-hidden="true" />} className="mb-2">
@@ -232,11 +273,7 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
         </section>
       ) : null}
 
-      {hasPdf ? (
-        <p className="mb-8 max-w-[680px] text-small text-fg-3">
-          Text taken from a PDF can lose its layout and maths. The original is the better view for figures and equations: each page links to it.
-        </p>
-      ) : null}
+      {hasPdf ? <PdfNote /> : null}
 
       {reader.files.map((file) => (
         <section key={file.materialId} aria-labelledby={`file-${file.materialId}`} className="mb-10">

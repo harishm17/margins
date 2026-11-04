@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, CaretDown, CaretLeft, CaretRight, CheckCircle, ChatCircleText, Wrench } from '@phosphor-icons/react/dist/ssr'
+import { ArrowRight, CaretDown, CaretLeft, CaretRight, Check, CheckCircle, ChatCircleText, Wrench } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useTabPin } from '@/components/ui/tabs'
@@ -14,15 +14,27 @@ import { useTopic } from './topic-provider'
 import { useTopicView } from './use-topic-view'
 import { SHORT_LABELS, TOOL_VIEWS, VIEW_LABELS, type ToolView } from './types'
 
+/** A quiz score under this is "taken, not passed yet": the step is finished, but its mark does not say well done. */
+export const QUIZ_LOW_SCORE = 70
+
 /**
  * The marker in front of a step of the path. Colour is never the only signal: a finished step is a check
  * (and says "Completed"), the step to do next is a filled circle (and says "Next up"), the others an outline.
+ * A quiz finished under 70% is a check in an outline circle, not the filled accent check of a step done well, and says its score.
+ * The number is 12px (the caption size) in a 20px circle, 16px on a phone where five steps share 358px.
  */
-export function StepMarker({ number, done, next }: { number: number; done: boolean; next: boolean }) {
+export function StepMarker({ number, done, next, lowScore = null }: { number: number; done: boolean; next: boolean; lowScore?: number | null }) {
+  if (done && lowScore !== null) {
+    return (
+      <span role="img" aria-label={`Taken, ${Math.round(lowScore)}%`} className="inline-flex size-4 items-center justify-center rounded-full border border-warning text-warning sm:size-5">
+        <Check weight="bold" className="size-2.5 sm:size-3" />
+      </span>
+    )
+  }
   if (done) {
     return (
-      <span role="img" aria-label="Completed" className="inline-flex size-4 items-center justify-center">
-        <CheckCircle weight="fill" className="size-4 text-accent" />
+      <span role="img" aria-label="Completed" className="inline-flex size-4 items-center justify-center sm:size-5">
+        <CheckCircle weight="fill" className="size-4 text-accent sm:size-5" />
       </span>
     )
   }
@@ -30,7 +42,7 @@ export function StepMarker({ number, done, next }: { number: number; done: boole
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex size-4 items-center justify-center rounded-full border text-[10px] font-medium leading-none tabular',
+        'inline-flex size-4 items-center justify-center rounded-full border text-caption font-medium leading-none tabular sm:size-5',
         next ? 'border-accent bg-accent text-accent-fg' : 'border-border-strong text-fg-3'
       )}
     >
@@ -71,11 +83,9 @@ export function ToolLinks(props: ToolsProps) {
   const view = useTopicView()
   const pin = useTabPin()
   return (
-    <div role="group" aria-label="Tools" className="flex items-center gap-0.5 max-sm:hidden">
-      <span aria-hidden="true" className="mr-1 flex items-center gap-1 border-r border-border pr-2.5 text-caption font-medium text-fg-3">
-        <Wrench className="size-3.5" />
-        Tools
-      </span>
+    // No "Tools" label beside the links: a word that looks like a menu and does nothing read as a broken control. The group is named for a
+    // screen reader, and the rule before it keeps the tools apart from the five steps.
+    <div role="group" aria-label="Tools" className="flex items-center gap-0.5 border-l border-border pl-2 max-sm:hidden">
       {TOOL_VIEWS.map((id) => (
         <Link
           key={id}
@@ -139,42 +149,24 @@ export function ToolsMenu(props: ToolsProps) {
 }
 
 /**
- * What to do next on this topic, in the words of the next-activity selector (spec §8.1): its reason and a link.
- * It is one quiet line, never a button above the step's own primary action, and there is one per topic with one
- * piece of advice, the same on every step for the same state (it comes from the state, not from the view).
- *
- * `settled` is whether the student is on a step that is finished or not offered, or on a tool: only then does the
- * line show, because a student who chose a step on purpose is doing it, and a line that sends them elsewhere pulls
- * them off it. It is also left out on the step it points to (the activity is already on screen), while something is
- * in progress (a quiz being taken, a practice problem under way, a warm-up or recall being written), and for a topic
- * nobody has opened (the page is the way in). Once the activity is finished the line is back with the refreshed
- * next activity (the layout reads it again after every submit), when that is somewhere else.
+ * What to do next on this topic, in the words of the next-activity selector (spec §8.1): its reason and a link, one quiet line.
+ * The tag in the path bar is the one next signal; this line says more about it, and only where the open view has no action
+ * of its own that leads on (a tool, or the step a next activity that is no step lands on: see `nextLineShows`, which the
+ * path bar asks before it draws this). It is left out on the page it points to, and while something is in progress (a quiz being
+ * taken, a practice problem under way, a recall being written). Once the activity is finished the line is back with the
+ * refreshed next activity (the layout reads it again after every submit), when that is somewhere else.
  */
-export function NextActivityCard({ next, settled }: { next: { kind: ActivityKind; reason: string; href: string }; settled: boolean }) {
+export function NextActivityCard({ next }: { next: { kind: ActivityKind; reason: string; href: string } }) {
   const pathname = usePathname()
   const search = useSearchParams()
   const { inProgress } = useTopic()
-  // On a phone the reason is behind "Why" so the line is short: the tag, the way on, and the question.
-  const [whyOpen, setWhyOpen] = React.useState(false)
-  const reasonId = React.useId()
-  if (!settled || inProgress || next.kind === 'start' || opensHere(next.href, pathname, search)) return null
+  if (inProgress || next.kind === 'start' || opensHere(next.href, pathname, search)) return null
+  // One block on every width: the tag and the reason (two lines at most on a phone), then the way in under it on a phone, beside it on a wide screen.
   return (
-    <section aria-label="Next on this topic" className="mt-2 flex items-center justify-between gap-x-3 gap-y-0.5 text-small text-fg-2 sm:mt-3 sm:flex-wrap sm:justify-start sm:items-baseline">
-      <p className="flex min-w-0 flex-1 items-baseline gap-2 sm:flex-none">
+    <section aria-label="Next on this topic" className="mt-2 flex flex-col items-start gap-y-0.5 text-small text-fg-2 sm:mt-3 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-3">
+      <p className="flex min-w-0 items-baseline gap-2">
         <span className="shrink-0 rounded-chip bg-accent-soft px-1.5 text-caption text-accent-soft-fg">{next.kind === 'done_for_now' ? 'For now' : 'Next'}</span>
-        <span id={reasonId} className={cn('min-w-0', !whyOpen && 'max-sm:hidden')}>
-          {next.reason}
-        </span>
-        <button
-          type="button"
-          aria-expanded={whyOpen}
-          aria-controls={reasonId}
-          onClick={() => setWhyOpen((current) => !current)}
-          className="inline-flex min-h-11 shrink-0 items-center gap-0.5 self-center rounded-chip text-small text-fg-2 hover:text-fg sm:hidden"
-        >
-          Why
-          <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', whyOpen && 'rotate-180')} />
-        </button>
+        <span className="min-w-0 max-sm:line-clamp-2">{next.reason}</span>
       </p>
       <Button asChild variant="link" size="sm" className="shrink-0">
         <Link href={next.href}>

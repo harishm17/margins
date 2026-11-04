@@ -204,6 +204,9 @@ export function QuizResults({
               {points(result.earnedPoints)} of {points(result.totalPoints)} points
             </span>
           </h2>
+          <p className="mt-0.5 text-small text-fg-2" data-testid="quiz-counts">
+            <span className="tabular">{correctCount}</span> of <span className="tabular">{entries.length}</span> {entries.length === 1 ? 'question' : 'questions'} right.
+          </p>
           {result.bestScore > result.score ? (
             <p className="mt-0.5 text-small text-fg-2">
               Your best is <span className="tabular">{formatScore(result.bestScore)}</span>.

@@ -1,5 +1,5 @@
 import { activityHref, type ActivityKind } from '@/lib/learning/next-activity'
-import { parseView, type PathView, type ViewId } from './types'
+import { parseView, PATH_VIEWS, type PathView, type ViewId } from './types'
 
 /**
  * The words and places of the next activity (spec §8.1). The reason sentence comes with the activity
@@ -94,6 +94,40 @@ export function pathStepFor(kind: ActivityKind): PathView | null {
     default:
       return null
   }
+}
+
+/** The step of the path an activity belongs to for the "Next" tag: a read-again pointer belongs to Read; one that opens the explainer belongs to none. */
+function tagStepFor(next: { kind: ActivityKind; href: string }): PathView | null {
+  const own = pathStepFor(next.kind)
+  if (own || next.kind !== 'instruct') return own
+  const view = parseView(new URL(next.href, 'http://margins.local').searchParams.get('view'))
+  return view && (PATH_VIEWS as readonly string[]).includes(view) ? (view as PathView) : null
+}
+
+/**
+ * The step of the path tagged "Next": the step the next activity belongs to while that step is not done, else the first
+ * step that is not done, else none (every step done). It is the one place the path bar, the Topics list and the topic page
+ * ask, so they never name different steps for one topic.
+ */
+export function nextPathStep(next: { kind: ActivityKind; href: string }, steps: readonly PathView[], done: Record<PathView, boolean>): PathView | null {
+  const own = tagStepFor(next)
+  if (own && steps.includes(own) && !done[own]) return own
+  return steps.find((step) => !done[step]) ?? null
+}
+
+/**
+ * Whether the "Next" line shows above the view that is open. There is one next signal on a topic: the tag in the path. The
+ * line says more (the reason, the way in) only where the open view has no action of its own that leads on: on a tool
+ * (Examples, Explainer), which is not a step. A step of the path always has its own (Check, "I've read it", Start quiz...),
+ * so the line stays off it, and a read-again pointer therefore never repeats on every step. The exception is a next activity
+ * that is no step at all (a drill, a review, a mock exam, "solid for now"): a bare topic address lands on Practice for it, so
+ * that is the one step where the line says it, because nothing else on the page would.
+ */
+export function nextLineShows(next: { kind: ActivityKind; href: string }, view: string, steps: readonly PathView[]): boolean {
+  if (next.kind === 'start') return false
+  const onStep = (steps as readonly string[]).includes(view)
+  if (!onStep) return true
+  return tagStepFor(next) === null && defaultViewFor(next.kind) === view
 }
 
 /**

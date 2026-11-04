@@ -4,7 +4,7 @@ import { usePolling } from '@/lib/hooks/use-polling'
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { WarningCircle } from '@phosphor-icons/react/dist/ssr'
+import { CaretRight, WarningCircle } from '@phosphor-icons/react/dist/ssr'
 import { ReviewItem, reviewStatus } from '@/components/learning/review-item'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
@@ -100,29 +100,42 @@ export function GradingFailed({ result }: { result: NotGraded }) {
 }
 
 /** A topic's row under "Where to focus". With one topic only, its score is the whole exam's, shown by the ring above. */
-function FocusRow({ topic, courseId, showScore }: { topic: Graded['topics'][number]; courseId: string; showScore: boolean }) {
+function FocusRow({ topic, courseId, showScore, weakest }: { topic: Graded['topics'][number]; courseId: string; showScore: boolean; weakest: boolean }) {
   const low = topic.percent < 60
+  const href = topic.linkable && topic.topicId ? `/courses/${courseId}/topics/${topic.topicId}` : null
   return (
-    <li className="flex items-center gap-4 border-b border-border py-3">
-      <span className="min-w-0 flex-1 truncate text-body text-fg">{topic.topicName}</span>
+    <li className="relative flex items-center gap-4 border-b border-border py-3">
+      <span className="min-w-0 flex-1 truncate text-body text-fg">
+        {/* The whole row opens the topic; only the weakest one also has a button, so four rows do not say "Study" four times. */}
+        {href ? (
+          <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-chip">
+            {topic.topicName}
+          </Link>
+        ) : (
+          topic.topicName
+        )}
+      </span>
       {showScore ? (
         <>
-          <span aria-hidden="true" className="hidden h-1 w-32 shrink-0 sm:block">
+          {/* The track has an edge, and 0% is an empty track: a dot at 0% looked like a bar that had not drawn. */}
+          <span aria-hidden="true" className="hidden h-1.5 w-32 shrink-0 overflow-hidden rounded-full ring-1 ring-inset ring-control sm:block">
             <span
               className={cn('block h-full rounded-full', low ? 'bg-learning' : 'bg-accent')}
-              style={{ width: `${Math.max(2, Math.min(100, topic.percent))}%` }}
+              style={{ width: `${Math.max(0, Math.min(100, topic.percent))}%` }}
             />
           </span>
           <span className="w-12 shrink-0 text-right tabular text-body-strong text-fg">{formatScore(topic.percent)}</span>
         </>
       ) : null}
-      <span className="w-[68px] shrink-0 text-right">
-        {topic.linkable && topic.topicId ? (
-          <Button asChild size="sm" variant="secondary">
-            <Link href={`/courses/${courseId}/topics/${topic.topicId}`} aria-label={`${topic.percent >= 100 ? 'Open' : 'Study'} ${topic.topicName}`}>
+      <span className="flex w-[68px] shrink-0 justify-end">
+        {href && weakest ? (
+          <Button asChild size="sm" variant="secondary" className="relative z-10">
+            <Link href={href} aria-label={`${topic.percent >= 100 ? 'Open' : 'Study'} ${topic.topicName}`}>
               {topic.percent >= 100 ? 'Open' : 'Study'}
             </Link>
           </Button>
+        ) : href ? (
+          <CaretRight aria-hidden="true" className="size-4 text-fg-3" />
         ) : null}
       </span>
     </li>
@@ -208,7 +221,7 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
             {pointsText(result.earnedPoints)} <span className="text-fg-2">of {pointsText(result.totalPoints)} points</span>
           </p>
           <p className="mt-1 text-small text-fg-2">
-            {result.examTitle}, submitted {submittedLabel}
+            Submitted {submittedLabel}
           </p>
           {calibration ? <p className="mt-1 text-small text-fg-2">{calibrationLine(calibration)}</p> : null}
           <div className="mt-4 flex flex-wrap gap-2">
@@ -230,8 +243,8 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
             {result.topics.length > 1 ? <span className="text-small text-fg-3">Weakest first</span> : null}
           </div>
           <ul className="mt-3 border-t border-border">
-            {result.topics.map((topic) => (
-              <FocusRow key={topic.topicId ?? topic.topicName} topic={topic} courseId={result.courseId} showScore={result.topics.length > 1} />
+            {result.topics.map((topic, index) => (
+              <FocusRow key={topic.topicId ?? topic.topicName} topic={topic} courseId={result.courseId} showScore={result.topics.length > 1} weakest={index === 0} />
             ))}
           </ul>
         </section>

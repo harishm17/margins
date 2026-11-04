@@ -123,9 +123,10 @@ test('the Topics list names the same five steps and the same next step as the to
   const row = page.getByRole('link', { name: /^Hash tables/ })
   await expect(row).toHaveAccessibleName(/Next: Warm-up/)
   await expect(row).not.toHaveAccessibleName(/Notes|Worked examples/)
-  // The circles are for the eye (hidden from screen readers, the row says it in words).
-  for (const step of ['Warm-up', 'Read', 'Recall', 'Practice', 'Quiz']) await expect(row.locator(`[role="img"][aria-label^="${step}:"]`)).toHaveCount(1)
-  await expect(row.locator('[role="img"][aria-label="Warm-up: next"]')).toHaveCount(1)
+  // The row says where the topic stands in words and a bar: what is next, and how many of its steps are done. No strip of icons.
+  await expect(row).toContainText('Next: Warm-up')
+  await expect(row).toContainText(/0 of \d steps done/)
+  await expect(row.locator('[role="img"]')).toHaveCount(0)
   await expectNoAxeViolations(page, 'topics list')
   // The topic opens on the step the row named.
   await page.goto(`/courses/${course.courseId}/topics/${topic}`)

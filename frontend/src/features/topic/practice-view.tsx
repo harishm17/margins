@@ -11,6 +11,7 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { LazyMarkdown } from '@/components/ui/lazy-markdown'
 import { MathText } from '@/components/ui/math-text'
 import { Progress } from '@/components/ui/progress'
+import { PROGRESS_TRACK } from '@/lib/progress-track'
 import { pluralize } from '@/lib/format'
 import type { HelpAfterMiss } from '@/lib/learning/instruction-server'
 import { difficultyRank, nextPracticeProblem } from '@/lib/learning/practice-next'
@@ -130,19 +131,24 @@ export function PracticeView({ topicId, practice }: { topicId: string; practice:
 
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <h2 className="min-w-0 flex-1 text-heading text-fg">
-          <span className="tabular text-fg-3">
-            Problem {problemIndex + 1} of {problems.length}
-          </span>
-          <span className="text-fg-3">: </span>
+          {/* "Problem 1 of 1" says nothing and a pager over one problem goes nowhere: both only show when there is a choice. */}
+          {problems.length > 1 ? (
+            <>
+              <span className="tabular text-fg-3">
+                Problem {problemIndex + 1} of {problems.length}
+              </span>
+              <span className="text-fg-3">: </span>
+            </>
+          ) : null}
           <MathText>{problem.title}</MathText>
         </h2>
-        <ProblemSwitcher problems={problems} progress={progress} current={problemIndex} onSelect={select} />
+        {problems.length > 1 ? <ProblemSwitcher problems={problems} progress={progress} current={problemIndex} onSelect={select} /> : null}
       </div>
 
       <div className="mt-3 flex items-center gap-3">
         <Progress
           aria-label="Steps solved"
-          className="flex-1"
+          className={cn('flex-1', PROGRESS_TRACK)}
           value={allKeys.length ? (solvedTotal / allKeys.length) * 100 : 0}
         />
         <span className="tabular whitespace-nowrap text-caption text-fg-3">

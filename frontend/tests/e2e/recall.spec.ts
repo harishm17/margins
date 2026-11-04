@@ -251,6 +251,8 @@ test('show me what I missed records level 3', async ({ page }) => {
   const feedback = card(page).getByRole('region', { name: 'Feedback on your answer' })
   await expect(feedback).toBeVisible()
 
+  // Help on request: "Show me what I missed" is behind "More help".
+  await feedback.getByRole('button', { name: 'More help' }).click()
   await feedback.getByRole('button', { name: 'Show me what I missed' }).click()
   await expect(feedback.getByRole('heading', { name: 'What your pages say' })).toBeVisible()
   await expect(feedback.getByText('Chaining keeps a list of entries per bucket.', { exact: true })).toBeVisible()
@@ -425,6 +427,7 @@ test('recall on a phone', async ({ page }) => {
 
   await answer(page)
   await expect(card(page).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible()
+  await card(page).getByRole('button', { name: 'More help' }).click()
   await card(page).getByRole('button', { name: 'Show me what I missed' }).click()
   await expect(card(page).getByRole('heading', { name: 'What your pages say' })).toBeVisible()
   await screenshotIfAsked(page, 'e4-recall-graded-390x844')

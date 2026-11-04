@@ -246,7 +246,10 @@ export function MarginPanel({ topicId, chunkId, passageName, notes, onAdd, onRem
       ) : null}
 
       {mode === 'idle' ? (
-        <div className="flex flex-wrap gap-1.5">
+        // Help on request: on a wide screen with a pointer the two buttons show when the passage is hovered or has focus
+        // (they stay in the tab order, and focus shows them); on touch and on a phone the passage's one "Margin notes"
+        // control opens this panel. Reading comes first.
+        <div className="flex flex-wrap gap-1.5 transition-opacity duration-120 lg:[@media(hover:hover)]:opacity-0 lg:[@media(hover:hover)]:group-focus-within/passage:opacity-100 lg:[@media(hover:hover)]:group-hover/passage:opacity-100">
           <Button ref={focus.register('add')} size="sm" variant="secondary" icon={<NotePencil />} onClick={() => open('note')} aria-label={`Add a note on ${passageName}`}>
             Add a note
           </Button>

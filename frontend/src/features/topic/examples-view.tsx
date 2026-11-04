@@ -5,6 +5,7 @@ import { CaretDown, CheckCircle, ListNumbers, Plus } from '@phosphor-icons/react
 import { SourceLine } from '@/components/learning/source-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Card } from '@/components/ui/card'
 import { LazyMarkdown } from '@/components/ui/lazy-markdown'
 import { MathText } from '@/components/ui/math-text'
@@ -447,15 +448,16 @@ function ExamplesBody({ topicId, examples, completed, nextHref, level, focusConc
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-small text-fg-2">{pluralize(items.length, 'example')}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<ListNumbers />}
-            aria-pressed={stepMode}
-            onClick={() => setStepMode((current) => !current)}
-          >
-            {stepMode ? 'Show all steps' : 'Step by step'}
-          </Button>
+          {/* How the steps show is a choice between two views, not an action: a segmented control, as elsewhere. */}
+          <SegmentedControl
+            aria-label="Show the steps"
+            value={stepMode ? 'step' : 'all'}
+            onValueChange={(value) => setStepMode(value === 'step')}
+            options={[
+              { value: 'all', label: 'All steps' },
+              { value: 'step', label: 'Step by step' },
+            ]}
+          />
           <GenerateOptions
             kind="examples"
             mode="more"

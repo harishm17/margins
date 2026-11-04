@@ -38,7 +38,7 @@ describe('titles by topics covered', () => {
   it('names the topics an exam covers, the first two and a count of the rest', () => {
     assert.equal(topicsLabel(['Sorting']), 'Sorting')
     assert.equal(topicsLabel(['Sorting', 'Hash tables']), 'Sorting, Hash tables')
-    assert.equal(topicsLabel(['Sorting', 'Hash tables', 'Graphs', 'DP']), 'Sorting, Hash tables and 2 more')
+    assert.equal(topicsLabel(['Sorting', 'Hash tables', 'Graphs', 'DP']), 'Sorting and 3 more')
     assert.equal(topicsLabel([]), '')
     assert.equal(examTitle('Mock exam - 2026-11-02', '2026-11-02T12:00:00Z', ['Sorting', 'Hash tables']), 'Mock exam, Nov 2: Sorting, Hash tables')
     assert.equal(examTitle('Midterm drill', '2026-11-02T12:00:00Z', ['Sorting']), 'Midterm drill')

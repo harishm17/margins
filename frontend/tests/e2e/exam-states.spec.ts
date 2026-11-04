@@ -124,7 +124,7 @@ test('a 0% exam result is a small calm ring, a blank answer has no "Explain this
   }
 })
 
-test('a topic scored 100% offers "Open", not "Study"', async ({ page }) => {
+test('the weakest topic offers Study; every row links to its topic, and a topic scored 100% does not say Study', async ({ page }) => {
   const seeded = await seed(page, 'exam-full', ['Graph search', 'Hashing'])
   // Both topics' questions in one exam: full marks on the first topic's, none on the second's.
   const exam = await withPrisma((prisma) =>
@@ -169,10 +169,12 @@ test('a topic scored 100% offers "Open", not "Study"', async ({ page }) => {
   )
   await page.goto(`/courses/${seeded.courseId}/exams/${exam.id}/results/${id}`)
   const focus = page.locator('section[aria-labelledby="where-to-focus"]')
-  await expect(focus.getByRole('link', { name: 'Open Graph search' })).toHaveAttribute('href', `/courses/${seeded.courseId}/topics/${seeded.topics['Graph search']}`)
-  await expect(focus.getByRole('link', { name: 'Open Graph search' })).toHaveText('Open')
+  // The row is the link to the topic; only the weakest also has a button, so four rows do not say "Study" four times.
+  await expect(focus.getByRole('link', { name: 'Graph search', exact: true })).toHaveAttribute('href', `/courses/${seeded.courseId}/topics/${seeded.topics['Graph search']}`)
   await expect(focus.getByRole('link', { name: 'Study Hashing' })).toHaveText('Study')
   await expect(focus.getByRole('link', { name: 'Study Graph search' })).toHaveCount(0)
+  await expect(focus.getByRole('link', { name: 'Open Graph search' })).toHaveCount(0)
+  await expect(focus.getByRole('link', { name: 'Study' })).toHaveCount(1)
 })
 
 test('exams made on one day are told apart by the topics they cover', async ({ page }) => {

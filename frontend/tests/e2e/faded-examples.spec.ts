@@ -95,7 +95,9 @@ test('a novice sees the first example worked with the whys waiting for a guess',
 
   // A guess is needed before the reason shows.
   const first = whys.first()
-  await expect(first.getByRole('button', { name: 'Show why' })).toBeDisabled()
+  // The button that shows the reason appears with the guess (a disabled twin beside the hint said the same thing twice).
+  await expect(first.getByRole('button', { name: 'Show why' })).toHaveCount(0)
+  await expect(first.getByText(/Write a guess, or tap/)).toBeVisible()
   await first.getByLabel('Your guess').fill('Because the key landed in a used bucket.')
   await screenshotIfAsked(page, 'e6-faded-novice-1440x900')
   await expectNoAxeViolations(page, 'faded examples novice, 1440')

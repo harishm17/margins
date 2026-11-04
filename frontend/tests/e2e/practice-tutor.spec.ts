@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { workingBox } from './helpers/practice'
+import { openMoreHelp, workingBox } from './helpers/practice'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { withPrisma } from './helpers/db'
 import { addContent, createCourse, practiceProblem, signUpAndIn } from './helpers/loop'
@@ -422,11 +422,13 @@ test.describe('the practice tutor', () => {
     await recorded
     await page.reload()
     // The server's count of two wrong checks is what shows the offer again: the page itself starts from nothing.
+    await openMoreHelp(page)
     await expect(workedButton(page)).toBeEnabled()
     await expect(offer(page)).toBeVisible()
     // Not now is remembered across a reload too.
     await page.getByRole('button', { name: 'Not now' }).locator('visible=true').click()
     await page.reload()
+    await openMoreHelp(page)
     await expect(workedButton(page)).toBeEnabled()
     await expect(offer(page)).toHaveCount(0)
   })

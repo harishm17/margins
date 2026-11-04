@@ -14,8 +14,11 @@ import { Timer } from '@phosphor-icons/react/dist/ssr'
  */
 export function ExamInProgressCue({ courseId, examId }: { courseId: string; examId: string }) {
   // The results of this exam are the end of the attempt: the layout may still be the one read before it was submitted.
-  const ended = usePathname().startsWith(`/courses/${courseId}/exams/${examId}/results/`)
-  if (ended) return null
+  const pathname = usePathname()
+  const ended = pathname.startsWith(`/courses/${courseId}/exams/${examId}/results/`)
+  // On the exam's own lobby the page already says "Resume, 23:16 left": a second line to the same place is noise.
+  const onLobby = pathname === `/courses/${courseId}/exams/${examId}`
+  if (ended || onLobby) return null
   return <Cue courseId={courseId} examId={examId} />
 }
 

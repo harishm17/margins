@@ -3,11 +3,11 @@ import { formatDate } from '@/lib/format'
 /** The AI service names an exam "Sample Exam - 2026-10-20" (older exams) or "Mock exam - 2026-10-20". */
 const GENERATED_NAME = /^(?:Sample|Mock) [Ee]xam - \d{4}-\d{2}-\d{2}$/
 
-/** "Sorting, Hash tables and 2 more": the topics an exam covers, the first two by name. */
+/** "Sorting, Hash tables" for one or two topics; "Sorting and 3 more" for more: a title that stays one line on a phone. */
 export function topicsLabel(topics: readonly string[]): string {
   const names = topics.map((topic) => topic.trim()).filter((topic) => topic.length > 0)
   if (names.length <= 2) return names.join(', ')
-  return `${names[0]}, ${names[1]} and ${names.length - 2} more`
+  return `${names[0]} and ${names.length - 1} more`
 }
 
 /**
