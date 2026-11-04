@@ -226,7 +226,7 @@ test.describe('warm-up', () => {
     await expect(page.getByRole('heading', { name: 'Warm-up question 3 of 3' })).toBeVisible()
     await page.getByTestId('warmup-idk').click()
 
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
     await expect(page.getByText("You haven't read this yet, so misses here are expected. They mark where to look.")).toBeVisible()
     await expect(page.getByText("I don't know", { exact: true })).toHaveCount(2)
     // No red mark on a pretest, and no offer to skip the topic after "I don't know".
@@ -246,7 +246,7 @@ test.describe('warm-up', () => {
     })
     // Said once a day: a reload of the results does not repeat it.
     await page.reload()
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
     await expect(page.getByText("You haven't read this yet")).toHaveCount(0)
   })
 })

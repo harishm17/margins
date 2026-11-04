@@ -92,7 +92,7 @@ async function world(page: Page, label: string, names = ['Hash tables']) {
   return { email, course, topicUrl, topicId: (name: string) => course.topics[name] }
 }
 
-const gate = (page: Page) => page.getByRole('heading', { name: "Try recalling first. It's how this sticks" })
+const gate = (page: Page) => page.getByRole('heading', { name: 'Try Recall to get an explanation of your gaps' })
 const unlockButton = (page: Page) => page.getByRole('button', { name: "I'd rather read an explanation now" })
 
 test('explainer locked before recall', async ({ page }) => {
@@ -105,10 +105,10 @@ test('explainer locked before recall', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Start recall' })).toHaveAttribute('href', /view=recall/)
   // The gate is the task and says what is next: the topic's own "next" line does not name another step above it.
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
-  // The topic has not been read: the sentence names both ways in, and the way round is a link to the reading, not a disabled button.
-  await expect(page.getByText('Try recall now, or finish reading the topic to unlock the explanation.')).toBeVisible()
+  // The topic has not been read: the one instruction is Recall, and the way round is a link to the reading (its requirement said once), not a disabled button.
+  await expect(page.getByText('Writing what you remember first is what makes an explanation stick.')).toBeVisible()
   await expect(unlockButton(page)).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Read the topic' })).toHaveAttribute('href', /view=read/)
+  await expect(page.getByRole('link', { name: 'Read the topic first' })).toHaveAttribute('href', /view=read/)
   // None of the lesson is on the page.
   await expect(page.locator('#main').getByText('Some notes to read.')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Show answer' })).toHaveCount(0)
@@ -153,7 +153,7 @@ test('thin source unlock needs read', async ({ page }) => {
   await expect(gate(page)).toBeVisible()
   // Read: the way round is open, and the lesson is still not on the page.
   await expect(unlockButton(page)).toBeEnabled()
-  await expect(page.getByRole('link', { name: 'Read the topic' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Read the topic first' })).toHaveCount(0)
   await expect(page.locator('#main').getByText('Some notes to read.')).toHaveCount(0)
   await screenshotIfAsked(page, 'e5-explainer-thin-source-1440x900')
   await expectNoAxeViolations(page, 'explainer thin source, 1440')
@@ -321,20 +321,34 @@ test('gap explainer covers what the recall missed, and each gap ends with a chec
   await expect(gate(page)).toHaveCount(0)
   const list = page.getByRole('list', { name: 'Ideas to look at again' })
   await expect(list).toBeVisible({ timeout: 60_000 })
+  // One idea at a time, with a counter: only the ideas the answer missed or got wrong are here (both are about the Collision
+  // concept; the covered Hash function is not).
   const items = list.getByRole('listitem')
-  await expect(items).toHaveCount(2)
-  // Only the ideas the answer missed or got wrong: both are about the Collision concept; the covered Hash function is not here.
-  await expect(list.getByRole('heading', { name: /^Collision, part \d of 2$/ })).toHaveText(['Collision, part 1 of 2', 'Collision, part 2 of 2'])
+  await expect(page.getByTestId('gap-counter')).toHaveText('Idea 1 of 2')
+  await expect(items).toHaveCount(1)
+  await expect(list.getByRole('heading', { name: 'Collision, part 1 of 2' })).toBeVisible()
   await expect(list.getByRole('heading', { name: 'Hash function' })).toHaveCount(0)
+  // The way on waits for the last idea, and the topic's own "next" line is not above it.
+  await expect(page.getByTestId('gap-onward')).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
   // Each gap ends with its check.
   for (const index of [0, 1]) {
-    const item = items.nth(index)
+    if (index === 1) {
+      await page.getByTestId('gap-next').click()
+      await expect(page.getByTestId('gap-counter')).toHaveText('Idea 2 of 2')
+      await expect(list.getByRole('heading', { name: 'Collision, part 2 of 2' })).toBeVisible()
+    }
+    const item = items.first()
     await expect(item.locator('.md-check')).toHaveCount(1)
     await expect(item.locator('.md-check').getByRole('button', { name: 'Show answer' })).toBeDisabled()
     const checkBox = await item.locator('.md-check').boundingBox()
     const linkBox = await item.getByRole('link').first().boundingBox()
     expect(checkBox && linkBox && checkBox.y > linkBox.y).toBeTruthy()
   }
+  // On the last idea the way on is a quiet link until its question has been tried, then the one primary.
+  await expect(page.getByTestId('gap-untried')).toBeVisible()
+  await page.getByRole('button', { name: 'Previous idea' }).click()
+  await expect(page.getByTestId('gap-counter')).toHaveText('Idea 1 of 2')
   await expect(page.getByText('Your pages put it this way:').first()).toBeVisible()
   await expect(items.first().getByRole('link', { name: /notes\.pdf/ })).toBeVisible()
   await expect(page.getByRole('radiogroup', { name: 'Explainer form' }).getByRole('radio', { name: 'What you missed' })).toBeChecked()

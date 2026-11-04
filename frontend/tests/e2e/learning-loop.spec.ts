@@ -302,7 +302,7 @@ test.describe('practice progress', () => {
       .toEqual([])
   })
 
-  test('hints say what they cost, and Connect, Structure and Show answer wait for an attempt', async ({ page }) => {
+  test('hints say what they cost on request, and the first step, the method and Show answer wait for an attempt', async ({ page }) => {
     test.setTimeout(120_000)
     await signUpAndIn(page, 'rungs')
     const course = await createCourse(page, 'Rungs course', [{ name: 'Squares' }])
@@ -319,7 +319,11 @@ test.describe('practice progress', () => {
     // before it is clicked, and Connect and Structure wait for an attempt (spec 18.4).
     await expect(reveal).toHaveCount(0)
     await page.getByRole('button', { name: 'Get help' }).click()
-    await expect(page.getByRole('button', { name: /Where to look · your next try still counts, as a harder one/ })).toBeEnabled()
+    await expect(page.getByRole('button', { name: /Show where to look/ })).toBeEnabled()
+    // The cost is not on the button: it is said on request, under it.
+    await expect(page.getByRole('button', { name: /Show where to look/ })).not.toContainText(/harder one/)
+    await page.getByRole('button', { name: 'How hints count' }).click()
+    await expect(page.getByText('Opening this hint: your next try still counts, as a harder one.')).toBeVisible()
     await page.getByRole('button', { name: /Show where to look/ }).click()
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
     await expect(page.getByRole('button', { name: /Show the first step/ })).toBeDisabled()

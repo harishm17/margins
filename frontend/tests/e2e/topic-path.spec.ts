@@ -677,7 +677,7 @@ async function answerWarmup(page: Page, choice: number, confidence: string | nul
   await page.getByRole('button', { name: /Next question|See answers/ }).click()
   // The next question (or the answers) replaces this one once the server has answered.
   if (number < 3) await expect(page.getByRole('heading', { name: `Warm-up question ${number + 1} of 3` })).toBeVisible()
-  else await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+  else await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
 }
 
 /** Opens the reader and waits for the passages' text (the markdown loads as its own chunk, behind a skeleton). */
@@ -704,7 +704,7 @@ test.describe('the warm-up', () => {
       await expect(page.getByRole('heading', { name: `Warm-up question ${number + 1} of 3` })).toBeVisible()
       await answerWarmup(page, choice, 'Fairly sure')
     }
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
 
     // The quiz page knows nothing of it: no attempts, no past attempts.
     await page.goto(`${topicUrl}?view=quiz`)
@@ -733,17 +733,15 @@ test.describe('the warm-up', () => {
 
     // The first question is medium; there is no hint and no feedback, and the key is not in the page.
     await expect(page.getByText(/\(medium\)/)).toBeVisible()
-    await expect(page.getByText('No hints')).toBeVisible()
+    await expect(page.getByText('Answers come at the end')).toBeVisible()
     await expect(page.getByText('This explanation must not be shown before reading.')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Next question' })).toBeDisabled()
     // Nothing is chosen until the student taps: no option and no confidence level is preselected.
     await expect(page.getByRole('radio', { checked: true })).toHaveCount(0)
-    await expect(page.getByText('Tap one to go on.')).toBeVisible()
     await screenshotIfAsked(page, 'e3-warmup-untouched-1440x900')
-    // An answer alone is not enough: the one-tap confidence goes with it.
+    // The confidence is optional: an answer alone is enough to go on, and rating it still works.
     await page.getByRole('radio').nth(0).click()
-    await expect(page.getByText('Tap one to go on.')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Next question' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Next question' })).toBeEnabled()
     await page.getByRole('radio', { name: 'Certain' }).click()
     await expect(page.getByRole('button', { name: 'Next question' })).toBeEnabled()
     await screenshotIfAsked(page, 'e3-warmup-question-1440x900')
@@ -759,9 +757,9 @@ test.describe('the warm-up', () => {
     await answerWarmup(page, 1, 'Unsure')
 
     // The answers: what was right and wrong, the page to read, no explanation.
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
     // The last question is gone: the student lands on the results.
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeFocused()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeFocused()
     // One way on, not two: the next-activity card does not repeat the button under the results.
     await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Start reading' })).toHaveCount(1)
@@ -783,7 +781,7 @@ test.describe('the warm-up', () => {
     // The path ticks the warm-up; a reload shows the same finished warm-up, and it is not taken twice.
     await expect(pathNav(page).getByRole('link', { name: /Warm-up/ }).getByRole('img', { name: 'Completed' })).toBeVisible()
     await page.reload()
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Start warm-up' })).toHaveCount(0)
   })
 
@@ -793,10 +791,10 @@ test.describe('the warm-up', () => {
     await page.goto(`${topicUrl}?view=warmup`)
     await page.getByRole('button', { name: 'Start warm-up' }).click()
     for (const choice of [1, 1, 1]) await answerWarmup(page, choice, 'Unsure')
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
 
     const oneWayOn = async () => {
-      await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
       await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
       await expect(page.getByRole('link', { name: 'Start reading' })).toHaveCount(1)
     }
@@ -831,7 +829,7 @@ test.describe('the warm-up', () => {
     await page.goto(`${topicUrl}?view=warmup`)
     await page.getByRole('button', { name: 'Start warm-up' }).click()
     for (let i = 0; i < 3; i++) await answerWarmup(page, 1, 'Certain')
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
     const offer = page.getByRole('status').filter({ hasText: 'You may know this already' })
     await expect(offer).toBeVisible()
     await expect(offer.getByRole('link', { name: 'Take the quiz now' })).toHaveAttribute('href', /view=quiz$/)
@@ -845,7 +843,7 @@ test.describe('the warm-up', () => {
     await answerWarmup(page, 1, 'Certain')
     await answerWarmup(page, 1, 'Unsure')
     await answerWarmup(page, 1, 'Certain')
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
     await expect(page.getByText('You may know this already')).toHaveCount(0)
   })
 
@@ -885,7 +883,7 @@ test.describe('the warm-up', () => {
     await expect(page.getByRole('heading', { name: 'Warm-up question 2 of 3' })).toBeVisible()
     await answerWarmup(page, 1, 'Certain')
     await answerWarmup(page, 1, 'Certain')
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
     await screenshotIfAsked(page, 'e3-warmup-result-390x844')
     await expectNoAxeViolations(page, 'warm-up result, 390')
     await expectNoSidewaysScroll(page, page.url())
@@ -941,8 +939,8 @@ test.describe('the reader', () => {
     await answerWarmup(page, 0, 'Certain')
     await answerWarmup(page, 1, 'Certain')
     await answerWarmup(page, 1, 'Certain')
-    await expect(page.getByRole('heading', { name: 'Warm-up done' })).toBeVisible()
-    await page.getByRole('region', { name: 'Warm-up done' }).getByRole('link', { name: 'Start reading' }).click()
+    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
+    await page.getByRole('region', { name: 'Ready to read' }).getByRole('link', { name: 'Start reading' }).click()
     await expect(page).toHaveURL(/view=read$/)
 
     const focus = page.locator('[data-focus]')
@@ -1263,7 +1261,7 @@ test.describe('the reader', () => {
     await answerWarmup(page, 0, 'Certain')
     await answerWarmup(page, 1, 'Certain')
     await answerWarmup(page, 1, 'Certain')
-    await page.getByRole('region', { name: 'Warm-up done' }).getByRole('link', { name: 'Start reading' }).click()
+    await page.getByRole('region', { name: 'Ready to read' }).getByRole('link', { name: 'Start reading' }).click()
     await expect(page.locator('[data-focus]')).toHaveCount(1)
     await expect(page.locator('[data-passage] .md')).toHaveCount(4)
     await screenshotIfAsked(page, 'e3-reader-1440x900')

@@ -499,10 +499,10 @@ export function ActiveStep({
             >
               <span className="inline-flex items-center gap-1">
                 {helpForced ? 'More help' : 'Get help'}
-                {tutor.offerVisible && !helpShown ? <span className="font-normal text-fg-3">(the tutor can talk it through)</span> : null}
                 <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', helpShown && 'rotate-180')} />
               </span>
             </Button>
+            {tutor.offerVisible && !helpShown ? <span className="text-caption text-fg-3">The tutor can talk it through with you.</span> : null}
           </div>
           <div id={helpId} hidden={!helpShown} className="flex flex-col gap-3">
             {/* The tutor's offer to talk it through (after two wrong checks) lives here, with the rest of the help. */}
