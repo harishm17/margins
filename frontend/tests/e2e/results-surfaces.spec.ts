@@ -237,7 +237,9 @@ test('the quiz results with the confidence it was answered with: no axe violatio
     // True or false: "Unsure" stores the same 0.5 as "Guessing", and still comes back as "Unsure" after a reload.
     await page.reload()
     await expect(page.getByText('Question 2 of')).toBeVisible()
-    await expect(page.getByRole('radio', { name: 'Unsure', checked: true })).toBeVisible()
+    // The rating came back (folded to one line on a phone).
+    if (size.width < 640) await expect(page.getByRole('button', { name: 'Confidence: Unsure' })).toBeVisible()
+    else await expect(page.getByRole('radio', { name: 'Unsure', checked: true })).toBeVisible()
     if (size.width < 640) {
       // One navigator on a phone: the Questions button and its sheet.
       await page.getByRole('button', { name: 'Questions', exact: true }).click()
@@ -253,6 +255,8 @@ test('the quiz results with the confidence it was answered with: no axe violatio
     await screenshotIfAsked(page, `quiz-results-${name}`)
     // On a phone the question-by-question review is one button away, so the score and the next step come first.
     if (size.width < 640) await page.getByRole('button', { name: /Review the questions/ }).click()
+    // With misses the review opens on the first missed question; the filter belongs to the whole list.
+    await page.getByTestId('all-questions').click()
     await page.getByRole('radio', { name: /Missed/ }).click()
     await expectNoAxeViolations(page, `quiz results, missed, ${name}`)
     await screenshotIfAsked(page, `quiz-results-missed-${name}`)

@@ -49,6 +49,8 @@ test('after Recall the explainer detour tags Practice, and its own page shows no
   // On the explainer, the line that points at the explainer is left off; on another tool it still shows.
   assert.equal(nextLineShows(explainer, 'explainer', STEPS, true), false)
   assert.equal(nextLineShows(explainer, 'examples', STEPS, false), true)
+  // The explainer has its own way on, so no next activity puts a line over its gap questions.
+  assert.equal(nextLineShows({ kind: 'quiz', href: `${base}?view=quiz` }, 'explainer', STEPS, false), false)
 })
 
 test('a row of the Topics list names the step the path tags', () => {

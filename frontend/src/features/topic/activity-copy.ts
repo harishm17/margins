@@ -163,7 +163,7 @@ export function nextPathStep(next: { kind: ActivityKind; href: string }, steps: 
 /**
  * Whether the "Next" line shows above the view that is open. There is one next signal on a topic: the tag in the path. The
  * line says more (the reason, the way in) only where the open view has no action of its own that leads on: on a tool
- * (Examples, Explainer), which is not a step. A step of the path always has its own (Check, "I've read it", Start quiz...),
+ * (Examples, Voice), which is not a step. The Explainer is a tool too, but it ends in its own way on and has none. A step of the path always has its own (Check, "I've read it", Start quiz...),
  * so the line stays off it, and a read-again pointer therefore never repeats on every step. The exception is a next activity
  * that is no step at all (a drill, a review, a mock exam, "solid for now"): a bare topic address lands on Practice for it, so
  * that is the one step where the line says it, because nothing else on the page would.
@@ -172,6 +172,9 @@ export function nextLineShows(next: { kind: ActivityKind; href: string }, view: 
   if (next.kind === 'start') return false
   // The line that points at the page the student is already on says "go where you are" (the explainer's own "Read the explanation").
   if (pointsHere) return false
+  // The explainer ends in its own way on ("Next: Practice", once the gap questions are tried), and its gap questions are the task:
+  // a "Next" line above them would be a second way forward over the work.
+  if (view === 'explainer') return false
   const onStep = (steps as readonly string[]).includes(view)
   if (!onStep) return true
   return tagStepFor(next) === null && defaultViewFor(next.kind) === view

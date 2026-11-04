@@ -252,6 +252,9 @@ test('quiz records confidence per question', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
   // The prediction sits beside the score, and the answers are grouped: question 1 was marked sure.
   await expect(page.getByText(/You expected to get 1 question right and got \d+\./)).toBeVisible()
+  // With misses the review opens on the first missed question; the groups are in the whole list.
+  const allQuestions = page.getByTestId('all-questions')
+  if (await allQuestions.isVisible()) await allQuestions.click()
   await expect(page.getByRole('heading', { level: 3, name: /^(You were sure about these|Solid answers|Other wrong answers|Wrong answers)/ }).first()).toBeVisible()
 })
 
