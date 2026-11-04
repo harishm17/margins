@@ -105,7 +105,10 @@ export function GapExplainer({
   const { waitedOut, checkAgain } = useRefreshWhile(state.status === 'pending')
   const hasGaps = state.gaps.length > 0
   // One idea at a time. The questions the student has tried (a grade of their own, or "I don't know") unlock the way on at the end.
-  const [index, setIndex] = React.useState(0)
+  const [picked, setPicked] = React.useState<number | null>(null)
+  // Coming for one idea (a pointer, the next activity): the page opens at its explanation until the student moves to another.
+  const focusAt = focusConceptId ? state.gaps.findIndex((gap) => gap.conceptId === focusConceptId) : -1
+  const index = picked ?? Math.max(0, focusAt)
   const [tried, setTried] = React.useState<ReadonlySet<string>>(() => new Set())
   const grade = React.useCallback<typeof saveGrade>(
     async (input) => {
@@ -126,15 +129,6 @@ export function GapExplainer({
     (conceptId) => void apiFetch(`/api/topics/${topicId}/explainer`, { method: 'POST', json: { action: 'section_viewed', kind: 'gap_explainer', conceptIds: [conceptId] } }).catch(() => undefined),
     { watch: listRef, deps: [state.gaps.length, index] }
   )
-  // Coming for one idea: the page opens at its explanation. Once, when the gaps are there.
-  const opened = React.useRef(false)
-  React.useEffect(() => {
-    if (!focusConceptId || opened.current) return
-    const at = state.gaps.findIndex((gap) => gap.conceptId === focusConceptId)
-    if (at < 0) return
-    opened.current = true
-    setIndex(at)
-  }, [focusConceptId, state.gaps])
   // Two gaps under one concept get "part 1 of 2" so their headings differ.
   const parts = new Map<string, number>()
   const partOf = new Map<string, number>()
@@ -148,7 +142,7 @@ export function GapExplainer({
   const allTried = hasGaps && state.gaps.every((gap) => tried.has(gap.check.question))
   const untried = hasGaps ? state.gaps.filter((gap) => !tried.has(gap.check.question)).length : 0
   const go = (to: number) => {
-    setIndex(to)
+    setPicked(to)
     // The next idea starts at its top, not wherever the last one was scrolled to.
     requestAnimationFrame(() => {
       const heading = listRef.current
