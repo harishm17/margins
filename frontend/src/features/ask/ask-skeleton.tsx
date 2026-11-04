@@ -4,7 +4,7 @@ import { Skeleton, SkeletonText } from '@/components/ui/skeleton'
 export function AskPageSkeleton() {
   return (
     <div role="status" aria-busy="true" aria-label="Loading" className="flex h-[calc(100dvh-var(--topbar-height)-var(--tabbar-height,0px)-var(--ai-banner-height,0px)-var(--exam-cue-height,0px))] min-h-0">
-      <h1 className="sr-only">Ask your materials</h1>
+      <h1 className="sr-only">Ask</h1>
       <aside className="hidden w-[248px] shrink-0 border-r border-border bg-surface p-3 lg:block">
         <Skeleton className="h-[34px]" />
         <div className="mt-5 flex flex-col gap-2 px-1">

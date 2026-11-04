@@ -36,6 +36,8 @@ type ConversationProps = {
 }
 
 const NEAR_BOTTOM = 160
+/** Suggested questions a phone shows before "More suggestions". */
+const PHONE_SUGGESTIONS = 2
 
 /** Messages, empty states and the composer. The page and the sheet both render this. */
 export function Conversation({
@@ -53,7 +55,8 @@ export function Conversation({
   topicName,
   draftNewKey = 'new',
 }: ConversationProps) {
-  const { messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry, subscribeAccepted, threadId } = chat
+  const { messages, live, sending, loadingThread, loadError, workedAllowed, send, stop, retry, editFailed, recover, edit, subscribeAccepted, threadId } = chat
+  const [moreSuggestions, setMoreSuggestions] = React.useState(false)
   const { blocked } = useAiStatus()
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const stickRef = React.useRef(true)
@@ -84,9 +87,9 @@ export function Conversation({
     if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM
   }
 
-  const ask = (question: string) => {
+  const ask = (question: string, requestId?: string) => {
     stickRef.current = true
-    void send(question)
+    void send(question, requestId)
   }
   // The follow-up buttons belong to the last reply, and only while nothing is being written.
   const lastMessageId = messages[messages.length - 1]?.id
@@ -133,19 +136,26 @@ export function Conversation({
               <p className="mt-1.5 max-w-[52ch] text-body text-fg-2">
                 {conceptName ? `Your next question is about ${conceptName}. Answers come only from your files, with sources.` : 'Answers come only from your files, with sources.'}
               </p>
-              <ul className="mt-6 flex w-full max-w-[560px] flex-col gap-2">
-                {examples.map((question) => (
-                  <li key={question}>
+              <ul className="mt-6 flex w-full max-w-[560px] flex-col gap-2 max-sm:mt-4" aria-label="Suggested questions">
+                {examples.map((question, index) => (
+                  // A phone shows two one-line suggestions so the box is in reach; the rest sit behind "More suggestions". Wider screens show all.
+                  <li key={question} className={cn(index >= PHONE_SUGGESTIONS && !moreSuggestions && 'max-sm:hidden')}>
                     <button
                       type="button"
+                      title={question}
                       onClick={() => ask(question)}
-                      className="w-full rounded-control border border-border bg-surface px-3.5 py-2.5 text-left text-body text-fg-2 transition-[background-color,border-color,color] duration-120 hover:border-border-strong hover:bg-surface-2 hover:text-fg max-sm:py-3"
+                      className="w-full rounded-control border border-border bg-surface px-3.5 py-2.5 text-left text-body text-fg-2 transition-[background-color,border-color,color] duration-120 hover:border-border-strong hover:bg-surface-2 hover:text-fg max-sm:line-clamp-1 max-sm:min-h-11 max-sm:py-3"
                     >
                       {question}
                     </button>
                   </li>
                 ))}
               </ul>
+              {examples.length > PHONE_SUGGESTIONS && !moreSuggestions ? (
+                <Button variant="link" size="sm" className="mt-2 sm:hidden max-sm:min-h-11" aria-expanded={false} onClick={() => setMoreSuggestions(true)}>
+                  More suggestions
+                </Button>
+              ) : null}
             </div>
           ) : (
             <div className="flex flex-col gap-8">
@@ -160,12 +170,18 @@ export function Conversation({
                       last: message.id === lastMessageId && !live,
                       workedAllowed,
                       disabled: sending || !!blocked,
-                      onAsk: ask,
+                      onAsk: (question) => ask(question),
                       onWorked: () => ask(WORKED_EXAMPLE_REQUEST),
                     }}
                   />
                 ) : (
-                  <FailureBlock key={message.id} message={message} disabled={sending || !!blocked} onRetry={() => retry(message.id)} />
+                  <FailureBlock
+                    key={message.id}
+                    message={message}
+                    disabled={sending || !!blocked}
+                    onRetry={() => retry(message.id)}
+                    onEdit={() => editFailed(message.id)}
+                  />
                 )
               )}
               {live ? <LiveAnswer turn={live} /> : null}
@@ -190,6 +206,9 @@ export function Conversation({
               initialValue={initialDraft}
               draft={{ courseId, key: threadId ?? draftNewKey }}
               subscribeAccepted={subscribeAccepted}
+              hasMessages={messages.some((message) => message.kind === 'assistant')}
+              edit={edit}
+              onRecovered={recover}
             />
           </div>
         </div>

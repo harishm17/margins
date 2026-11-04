@@ -25,16 +25,14 @@ type Props = {
 
 /**
  * A practice that was cut short by a reload: the last question, anything typed and not sent, and two ways on. Continue starts a
- * new session (the old one was closed on the server) and gives the words back; Start fresh forgets them. Read after mount, since
- * the snapshot lives in this tab's storage.
+ * new session (the old one was closed on the server) and gives the words back; Start fresh forgets them. The snapshot lives in this tab's storage.
  */
 export function ResumeCard({ courseId, scope, starting, onContinue }: Props) {
-  const [snapshot, setSnapshot] = React.useState<VoiceSnapshot | null>(null)
-  React.useEffect(() => {
+  // The practice loads in the browser only (no server render), so the snapshot can be read straight away.
+  const [snapshot, setSnapshot] = React.useState<VoiceSnapshot | null>(() => {
     const held = readVoiceSnapshot(courseId, scope)
-    const worth = held && (held.entries.length > 0 || held.restored.length > 0 || held.draft.trim() !== '')
-    setSnapshot(worth ? held : null)
-  }, [courseId, scope])
+    return held && (held.entries.length > 0 || held.restored.length > 0 || held.draft.trim() !== '') ? held : null
+  })
 
   if (!snapshot) return null
   const { lastCoach, draft, answers } = describeSnapshot(snapshot)

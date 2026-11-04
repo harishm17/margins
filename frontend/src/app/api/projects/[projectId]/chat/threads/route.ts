@@ -21,13 +21,24 @@ async function ownedProject(projectId: string) {
 // Kept for API clients; the UI reads this through server queries.
 /** GET: this user's conversations in the project, most recently active first. */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   const { projectId } = await params
   const { userId, project } = await ownedProject(projectId)
   if (!userId) return apiUnauthorized()
   if (!project) return apiNotFound('Project not found')
+
+  // ?requestId=: which conversation took the question sent with this id, if any (a reload while a send was in flight asks this).
+  const requestId = req.nextUrl.searchParams.get('requestId')
+  if (requestId !== null) {
+    if (!z.string().uuid().safeParse(requestId).success) return apiInvalidInput('Invalid request id')
+    const taken = await prisma.chatMessage.findFirst({
+      where: { clientRequestId: requestId, thread: { projectId, userId } },
+      select: { thread: { select: { id: true, title: true } } },
+    })
+    return NextResponse.json({ thread: taken?.thread ?? null })
+  }
 
   const threads = await prisma.chatThread.findMany({
     where: { projectId, userId },
