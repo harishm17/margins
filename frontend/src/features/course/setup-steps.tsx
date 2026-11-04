@@ -173,7 +173,7 @@ export function StartStudyingStep({
       <div>
         <Button asChild variant="primary">
           <Link href={firstTopic ? `/courses/${courseId}/topics/${firstTopic.id}` : `/courses/${courseId}/topics`}>
-            {firstTopic ? `Start the warm-up: ${firstTopic.name}` : 'Open topics'}
+            {firstTopic ? `Start warm-up: ${firstTopic.name}` : 'Open topics'}
           </Link>
         </Button>
         <p className="mt-2 text-caption font-normal text-fg-3">

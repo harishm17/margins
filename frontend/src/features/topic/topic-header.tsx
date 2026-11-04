@@ -39,6 +39,7 @@ import { fadeNote } from '@/lib/learning/consequence'
 import type { TopicStructure } from '@/server/queries/topic'
 import { StateIcon } from '@/features/map/state-icon'
 import { LABEL_TEXT } from '@/lib/map/copy'
+import { StatusGuide } from '@/components/learning/status-guide'
 import type { ConceptLabel } from '@/lib/learning/concept-mastery'
 import { KIND_COPY } from './copy'
 import { RegenerateDialog } from './generation-ui'
@@ -235,7 +236,10 @@ export function TopicHeader({
         ) : null}
       </div>
       {fade ? <p className="mt-1.5 text-caption font-normal text-fg-3">{fade}</p> : null}
+      {/* Beside the numbers on a laptop; on a phone it is in "About this topic", so the header stays short. */}
+      <StatusGuide parts={['topic', 'steps', 'quiz']} id="topic-status-guide" className="mt-1 max-sm:hidden" />
       <div id={aboutId} className={cn(fold)}>
+        <StatusGuide parts={['topic', 'steps', 'quiz']} id="topic-status-guide-phone" className="mt-3 sm:hidden" />
         <ConceptChips concepts={concepts} className="mt-3" />
         {concepts.length > 0 ? (
           <p className="mt-2 text-small">

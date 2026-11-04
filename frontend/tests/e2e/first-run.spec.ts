@@ -70,7 +70,7 @@ test('after the topics are confirmed, setup asks for the exam date, then everyth
 
   // Step 3 says what happens inside a topic, and asks for the date the plan depends on.
   await expect(page.getByRole('heading', { level: 2, name: 'Start studying' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Start the warm-up: Bayes rule' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Start warm-up: Bayes rule' })).toBeVisible()
   const form = page.getByRole('form', { name: 'Exam date and daily time' })
   await expect(form).toBeVisible()
   await expect(form.getByRole('button', { name: 'Skip for now' })).toBeVisible()
@@ -87,7 +87,7 @@ test('after the topics are confirmed, setup asks for the exam date, then everyth
   await expect(page.getByRole('form', { name: 'Exam date and daily time' })).toHaveCount(0)
   const course = await (await page.request.get(`/api/projects/${courseId}`)).json()
   expect(JSON.stringify(course)).toContain(dayIn(ZONE, 30))
-  await expect(page.getByRole('link', { name: 'Start the warm-up: Bayes rule' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Start warm-up: Bayes rule' })).toBeVisible()
 })
 
 test('"Skip for now" closes the exam date question for good', async ({ page, context }) => {

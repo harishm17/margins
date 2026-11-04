@@ -165,7 +165,7 @@ test.describe('setup', () => {
     await expect(page.getByText('Set an exam date, then start your first topic.')).toBeVisible()
     await page.getByRole('button', { name: 'Skip for now' }).click()
     await expect(page.getByText('Your course is ready. Start with your first topic.')).toBeVisible()
-    const start = page.getByRole('link', { name: 'Start the warm-up: Bayes rule' })
+    const start = page.getByRole('link', { name: 'Start warm-up: Bayes rule' })
     await expect(start).toHaveAttribute('href', /\/topics\//)
     await expect(page.getByText('Set your exam date and daily time')).toBeHidden()
   })
