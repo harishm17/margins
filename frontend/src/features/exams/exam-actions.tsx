@@ -90,7 +90,7 @@ export function PracticeMissedButton({ courseId, submissionId, count }: { course
 
   return (
     <Button variant="primary" size="md" loading={busy} onClick={start} className="tabular">
-      {`Practice what you missed (${pluralize(count, 'question')})`}
+      {`Practice ${pluralize(count, 'new question')} on what you missed`}
     </Button>
   )
 }

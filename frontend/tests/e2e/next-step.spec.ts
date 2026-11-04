@@ -97,7 +97,7 @@ test('the next-step line is quiet: absent on an unfinished step the student chos
   await page.goto(url('warmup'))
   await expect(page.getByRole('button', { name: 'Start warm-up' })).toBeVisible()
   await expect(line(page)).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Read about it' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Start learning' })).toHaveCount(0)
   await page.goto(url('quiz'))
   await expect(line(page)).toHaveCount(0)
   // The path itself tags the one step, and a tool (Examples) carries the same advice as one quiet line.
@@ -123,9 +123,10 @@ test('the Topics list names the same five steps and the same next step as the to
   const row = page.getByRole('link', { name: /^Hash tables/ })
   await expect(row).toHaveAccessibleName(/Next: Warm-up/)
   await expect(row).not.toHaveAccessibleName(/Notes|Worked examples/)
-  // The circles are for the eye (hidden from screen readers, the row says it in words).
-  for (const step of ['Warm-up', 'Read', 'Recall', 'Practice', 'Quiz']) await expect(row.locator(`[role="img"][aria-label^="${step}:"]`)).toHaveCount(1)
-  await expect(row.locator('[role="img"][aria-label="Warm-up: next"]')).toHaveCount(1)
+  // The row says where the topic stands in words and a bar: what is next, and how many of its steps are done. No strip of icons.
+  await expect(row).toContainText('Next: Warm-up')
+  await expect(row).toContainText(/0 of \d steps done/)
+  await expect(row.locator('[role="img"]')).toHaveCount(0)
   await expectNoAxeViolations(page, 'topics list')
   // The topic opens on the step the row named.
   await page.goto(`/courses/${course.courseId}/topics/${topic}`)

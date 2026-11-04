@@ -16,7 +16,7 @@ import { useActivityInProgress } from './topic-provider'
  * rather read an explanation now can open the explainer once they have read the topic; that is recorded as `asked`
  * ("I'd rather read an explanation now", spec 18.10). The server refuses the explainer's text until one of the two has happened.
  */
-export function ExplainerGate({ topicId, recallHref, canUnlock }: { topicId: string; recallHref: string; canUnlock: boolean }) {
+export function ExplainerGate({ topicId, recallHref, readHref, canUnlock }: { topicId: string; recallHref: string; readHref: string; canUnlock: boolean }) {
   const router = useRouter()
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -49,13 +49,20 @@ export function ExplainerGate({ topicId, recallHref, canUnlock }: { topicId: str
       }
       secondary={
         <div className="flex flex-col items-center gap-1.5">
-          <Button variant="link" className="text-center text-small [&>span]:overflow-visible [&>span]:whitespace-normal" disabled={!canUnlock} loading={busy} aria-describedby={canUnlock ? undefined : 'explainer-unlock-hint'} onClick={() => void unlock()}>
-            {EXPLAINER_ESCAPE_LABEL}
-          </Button>
-          {canUnlock ? null : (
-            <span id="explainer-unlock-hint" className="text-caption text-fg-3">
-              Available once you have read this topic.
-            </span>
+          {canUnlock ? (
+            <Button variant="link" className="text-center text-small [&>span]:overflow-visible [&>span]:whitespace-normal" loading={busy} onClick={() => void unlock()}>
+              {EXPLAINER_ESCAPE_LABEL}
+            </Button>
+          ) : (
+            // Not a disabled button with a reason under it: until the topic is read there is nothing to press, so the way to the other
+            // unlock is a real link (to the reading), said in a sentence.
+            <p className="text-center text-small text-fg-2">
+              Rather read an explanation first?{' '}
+              <Link href={readHref} scroll={false} className="rounded-chip text-accent underline underline-offset-2 hover:text-accent-hover max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
+                Read the topic
+              </Link>
+              , and the explainer opens.
+            </p>
           )}
           {error ? (
             <InlineAlert tone="danger" className="mt-2 text-left">
@@ -65,7 +72,7 @@ export function ExplainerGate({ topicId, recallHref, canUnlock }: { topicId: str
         </div>
       }
     >
-      Writing what you remember before you read an explanation makes the explanation stick. The explainer opens as soon as you have tried.
+      Writing what you remember before you read an explanation makes the explanation stick. The explainer opens after you try recall, or after you read the topic.
     </EmptyState>
   )
 }

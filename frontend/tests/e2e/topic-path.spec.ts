@@ -114,12 +114,16 @@ test('path marks the current step', async ({ page }) => {
   await expect(recall).toContainText('Next')
   await expect(recall).toContainText('(next up)')
   await expect(nav.getByRole('link', { name: /Practice/ })).not.toContainText('Next')
-  // The same activity is offered as a card with its reason and a button, since the student is on another step.
+  // One next signal: on a step (it has its own action) the tag above is all there is, and there is no line under the path.
   const card = page.getByRole('region', { name: 'Next on this topic' })
-  await expect(card).toContainText('Close the book and say what you remember.')
-  await expect(card.getByRole('link', { name: /Start recall/ })).toHaveAttribute('href', /\?view=recall$/)
+  await expect(card).toHaveCount(0)
   await screenshotIfAsked(page, 'topic-path-midway-1440x900')
   await expectNoAxeViolations(page, 'topic path, mid-path, 1440')
+  // A tool is no step: the same activity is offered there as a line with its reason and a way in.
+  await page.getByRole('group', { name: 'Tools' }).getByRole('link', { name: 'Examples' }).click()
+  await expect(page).toHaveURL(/view=examples/)
+  await expect(card).toContainText('Close the book and say what you remember.')
+  await expect(card.getByRole('link', { name: /Start recall/ })).toHaveAttribute('href', /\?view=recall$/)
 
   // Moving on moves the current step; the next one stays marked. On the next step itself the card steps aside.
   await recall.click()
@@ -256,7 +260,7 @@ test('the status says In progress once a step is done, and Not started before', 
 test('on a phone the topic header is compact: the content starts near the top, and nothing is lost', async ({ page }) => {
   await page.setViewportSize(PHONE)
   const { topicUrl } = await world(page, 'tp-compact')
-  await page.goto(`${topicUrl('Midway topic')}?view=read`)
+  await page.goto(`${topicUrl('Midway topic')}?view=examples`)
   await expect(page.getByRole('heading', { level: 1, name: 'Midway topic' })).toBeVisible()
   const header = page.locator('main header')
   // Status, the ideas summary and the Tools menu share the line under the title.
@@ -264,16 +268,15 @@ test('on a phone the topic header is compact: the content starts near the top, a
   await expect(header.getByRole('button', { name: /About this topic/ })).toBeVisible()
   await expect(header.getByRole('button', { name: 'Tools' })).toBeVisible()
   const top = async (selector: string) => (await page.locator(selector).first().boundingBox())!.y
-  // The next-step card is one short row (reason and button), not a block of its own.
+  // On a tool the next-step line is one tidy block: the tag and the reason (two lines at most), the way on under it. No "Why" fold.
   const next = page.getByRole('region', { name: 'Next on this topic' })
   await expect(next).toBeVisible()
-  expect((await next.boundingBox())!.height).toBeLessThan(60)
-  // The reason is behind "Why"; the way on and its name are on the line.
-  await expect(next.getByRole('link', { name: /Start recall/ })).toBeVisible()
-  await expect(next.getByText('Close the book and say what you remember.')).toBeHidden()
-  await next.getByRole('button', { name: 'Why' }).click()
+  expect((await next.boundingBox())!.height).toBeLessThan(110)
   await expect(next.getByText('Close the book and say what you remember.')).toBeVisible()
-  await next.getByRole('button', { name: 'Why' }).click()
+  await expect(next.getByRole('button', { name: 'Why' })).toHaveCount(0)
+  const reason = (await next.getByText('Close the book and say what you remember.').boundingBox())!
+  const way = (await next.getByRole('link', { name: /Start recall/ }).boundingBox())!
+  expect(way.y, 'the way on is under the reason on a phone').toBeGreaterThanOrEqual(reason.y + reason.height - 2)
   await screenshotIfAsked(page, 'topic-path-compact-midway-390x844')
   await expectNoAxeViolations(page, 'topic header, phone, 390')
 

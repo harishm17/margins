@@ -130,13 +130,18 @@ export function PracticeView({ topicId, practice }: { topicId: string; practice:
 
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <h2 className="min-w-0 flex-1 text-heading text-fg">
-          <span className="tabular text-fg-3">
-            Problem {problemIndex + 1} of {problems.length}
-          </span>
-          <span className="text-fg-3">: </span>
+          {/* "Problem 1 of 1" says nothing and a pager over one problem goes nowhere: both only show when there is a choice. */}
+          {problems.length > 1 ? (
+            <>
+              <span className="tabular text-fg-3">
+                Problem {problemIndex + 1} of {problems.length}
+              </span>
+              <span className="text-fg-3">: </span>
+            </>
+          ) : null}
           <MathText>{problem.title}</MathText>
         </h2>
-        <ProblemSwitcher problems={problems} progress={progress} current={problemIndex} onSelect={select} />
+        {problems.length > 1 ? <ProblemSwitcher problems={problems} progress={progress} current={problemIndex} onSelect={select} /> : null}
       </div>
 
       <div className="mt-3 flex items-center gap-3">

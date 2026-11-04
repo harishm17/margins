@@ -35,8 +35,8 @@ test.describe('the demo course', () => {
     await expect(second.getByText('Week 2', { exact: true })).toBeVisible()
     await expect(second.getByRole('listitem')).toHaveCount(2)
 
-    // The topic that belongs to no unit sits in a plain "Topics" group.
-    const loose = page.getByRole('region', { name: 'Topics', exact: true })
+    // The topic that belongs to no unit sits in a group of its own, named for what it is.
+    const loose = page.getByRole('region', { name: 'Not in a unit', exact: true })
     await expect(loose.getByRole('link', { name: /Discrete random variables/ })).toBeVisible()
 
     // "Needs work" is one list across units.

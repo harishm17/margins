@@ -307,7 +307,8 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
           </>
         }
         actions={
-          <Button variant="primary" size="sm" loading={submitting} onClick={requestSubmit}>
+          // Secondary: submitting is final, and the one filled button of the page is the way on (Next, or Submit exam on the last question).
+          <Button variant="secondary" size="sm" loading={submitting} onClick={requestSubmit}>
             Submit
           </Button>
         }
@@ -364,7 +365,7 @@ export default function ExamTaker({ courseId, examId, title, questions, attempt 
           </div>
 
           <div className="mt-10 flex items-center gap-2">
-            <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} onClick={() => goTo(current - 1)}>
+            <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} disabledReason="This is the first question." onClick={() => goTo(current - 1)}>
               Previous
             </Button>
             <Button

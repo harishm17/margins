@@ -190,7 +190,7 @@ test('a recall answer is graded against the claims, with the student quoted firs
   // the other prompts as the thing to do, with moving on as the quiet choice (not the primary button).
   await expect(page.getByTestId('recall-progress').locator('visible=true')).toHaveText(/^1 of \d+ prompts answered\. Answer the rest, or move on\.$/)
   await expect(page.getByRole('link', { name: 'Go to Practice' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Read about it' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Start learning' })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
   // The feedback ends in one primary step, the next prompt; answering this one again is the quiet link beside it, and the
   // way on to Practice is the secondary button until every prompt has an answer.
@@ -239,7 +239,7 @@ test('recall is shown finished only when every prompt has an answer', async ({ p
   // The last prompt answered: the count says so, the step ticks, and the way on is the primary button.
   await expect(page.getByTestId('recall-progress')).toHaveText(`${prompts.length} of ${prompts.length} prompts answered`)
   await expect(path.getByRole('img', { name: 'Completed' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Read about it' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Start learning' })).toBeVisible()
 })
 
 test('show me what I missed records level 3', async ({ page }) => {
@@ -251,6 +251,8 @@ test('show me what I missed records level 3', async ({ page }) => {
   const feedback = card(page).getByRole('region', { name: 'Feedback on your answer' })
   await expect(feedback).toBeVisible()
 
+  // Help on request: "Show me what I missed" is behind "More help".
+  await feedback.getByRole('button', { name: 'More help' }).click()
   await feedback.getByRole('button', { name: 'Show me what I missed' }).click()
   await expect(feedback.getByRole('heading', { name: 'What your pages say' })).toBeVisible()
   await expect(feedback.getByText('Chaining keeps a list of entries per bucket.', { exact: true })).toBeVisible()
@@ -425,6 +427,7 @@ test('recall on a phone', async ({ page }) => {
 
   await answer(page)
   await expect(card(page).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible()
+  await card(page).getByRole('button', { name: 'More help' }).click()
   await card(page).getByRole('button', { name: 'Show me what I missed' }).click()
   await expect(card(page).getByRole('heading', { name: 'What your pages say' })).toBeVisible()
   await screenshotIfAsked(page, 'e4-recall-graded-390x844')

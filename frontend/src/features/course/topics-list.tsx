@@ -2,14 +2,13 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { BookOpenText, ChatsCircle, Check, Exam, Lightning, PencilSimple, PencilSimpleLine } from '@phosphor-icons/react/dist/ssr'
+import { PencilSimple } from '@phosphor-icons/react/dist/ssr'
 import { PageIntro } from '@/components/shell/page'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { ProgressRing } from '@/components/ui/progress-ring'
 import { SegmentedControl } from '@/components/ui/segmented-control'
-import { Tooltip } from '@/components/ui/tooltip'
 import { MathText } from '@/components/ui/math-text'
 import { MasteryIndicator } from '@/components/ui/mastery-indicator'
 import { pluralize } from '@/lib/format'
@@ -19,7 +18,6 @@ import { cn } from '@/lib/utils'
 import type { GenerationState, TopicsData } from '@/server/queries/course'
 import { BuildingContent } from './building-content'
 import type { PathGlyph, PathGlyphState } from '@/features/topic/path-steps'
-import type { PathView } from '@/features/topic/types'
 import { needsWorkOrder } from './summary'
 
 export type ListTopic = {
@@ -39,46 +37,39 @@ export type ListTopic = {
   path: { glyphs: PathGlyph[]; nextWords: string; quizScore: number | null }
 }
 
-type GlyphProps = {
-  label: string
-  state: PathGlyphState
-  icon: React.ReactNode
-  score?: number | null
+const SEGMENT: Record<PathGlyphState, string> = {
+  done: 'bg-accent',
+  next: 'bg-accent-soft ring-1 ring-inset ring-accent',
+  later: 'bg-surface-3 ring-1 ring-inset ring-control',
 }
 
-const STATE_WORDS: Record<PathGlyphState, string> = {
-  done: 'done',
-  next: 'next',
-  later: 'not yet',
-}
-
-const STEP_ICONS: Record<PathView, React.ReactNode> = {
-  warmup: <Lightning />,
-  read: <BookOpenText />,
-  recall: <ChatsCircle />,
-  practice: <PencilSimpleLine />,
-  quiz: <Exam />,
-}
-
-/** One step of the path as a circle: filled with a check when done, ringed when it is the next one, dashed when still ahead. */
-function Glyph({ label, state, icon, score }: GlyphProps) {
-  const hasScore = score !== null && score !== undefined
-  const words = hasScore ? `${label}: best score ${Math.round(score)}%` : `${label}: ${STATE_WORDS[state]}`
-  const base = 'inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium tabular [&>svg]:size-3'
-  const look =
-    state === 'done'
-      ? 'bg-accent text-accent-fg'
-      : state === 'next'
-        ? 'border-2 border-accent text-accent'
-        : 'border border-dashed border-border-strong text-fg-3'
+/**
+ * Where the topic stands on its path, in words and a bar: what is next ("Next: Read", "Solid for now") and how many of its
+ * steps are done, with one segment per step. The segments are for the eye (each has an edge, so an empty one is still a shape);
+ * the words carry the meaning, so nothing is left to hover over or guess from an icon.
+ */
+function PathStatus({ path }: { path: ListTopic['path'] }) {
+  const done = path.glyphs.filter((glyph) => glyph.state === 'done').length
   return (
-    <Tooltip content={words}>
-      <span role="img" aria-label={words} className={cn(base, look)}>
-        {state === 'done' ? <Check weight="bold" /> : icon}
+    <div className="flex w-full shrink-0 flex-col gap-1 sm:w-56">
+      <span className="text-small text-fg">{path.nextWords}</span>
+      <span className="flex items-center gap-2 whitespace-nowrap text-caption font-normal text-fg-2">
+        <span aria-hidden="true" className="flex items-center gap-0.5">
+          {path.glyphs.map((glyph) => (
+            <span key={glyph.step} className={cn('h-1.5 w-4 rounded-full', SEGMENT[glyph.state])} />
+          ))}
+        </span>
+        <span className="tabular">
+          {done} of {path.glyphs.length} steps done
+          {path.quizScore !== null ? `, quiz ${Math.round(path.quizScore)}%` : ''}
+        </span>
       </span>
-    </Tooltip>
+    </div>
   )
 }
+
+/** A step is done, or the quiz taken, but no mastery is earned yet: the topic header says "In progress" then, and so does the list. */
+const started = (topic: ListTopic) => topic.path.glyphs.some((glyph) => glyph.state === 'done')
 
 function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic }) {
   const level = masteryLevel(topic.mastery)
@@ -102,21 +93,10 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
           </p>
           {topic.description ? <p className="truncate text-small text-fg-2">{topic.description}</p> : null}
         </div>
-        {/* The path circles are for the eye; the row says what is next in words (below), so its name is what it shows. */}
-        <div className="flex shrink-0 items-center gap-1.5" aria-hidden="true">
-          {path.glyphs.map((glyph) =>
-            glyph.step === 'quiz' ? (
-              <span key={glyph.step} className="inline-flex w-10 justify-center">
-                <Glyph label={glyph.label} state={glyph.state} icon={STEP_ICONS.quiz} score={path.quizScore} />
-              </span>
-            ) : (
-              <Glyph key={glyph.step} label={glyph.label} state={glyph.state} icon={STEP_ICONS[glyph.step]} />
-            )
-          )}
-        </div>
+        <PathStatus path={path} />
         <div className="flex w-full shrink-0 flex-col sm:w-40 sm:items-end">
           <span className="text-small text-fg">
-            {masteryLabel(topic.mastery)}
+            {level === 'none' && started(topic) ? 'In progress' : masteryLabel(topic.mastery)}
             {percent !== null ? <span className="tabular">{`, ${percent}%`}</span> : null}
           </span>
           {topic.timing ? (
@@ -127,7 +107,6 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
               {topic.timing.text}
             </span>
           ) : null}
-          <span className="sr-only">{path.nextWords}</span>
         </div>
       </Link>
     </li>
@@ -136,7 +115,7 @@ function TopicRowItem({ courseId, topic }: { courseId: string; topic: ListTopic 
 
 type Group = UnitGroupOf<ListTopic, TopicsData['units'][number]>
 
-/** One unit: its title, week, size and mastery, then its topics. The topics with no unit get a plain "Topics" heading. */
+/** One unit: its title, week, size and mastery, then its topics. Topics with no unit (a topic added by hand) are "Not in a unit": a list only groups when the course has units. */
 function UnitGroup({ courseId, group }: { courseId: string; group: Group }) {
   const headingId = React.useId()
   const { unit, topics } = group
@@ -145,17 +124,17 @@ function UnitGroup({ courseId, group }: { courseId: string; group: Group }) {
     <section aria-labelledby={headingId}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pb-2">
         <h2 id={headingId} className="min-w-0 text-heading text-fg">
-          {unit ? <MathText>{unit.title}</MathText> : 'Topics'}
+          {unit ? <MathText>{unit.title}</MathText> : 'Not in a unit'}
         </h2>
         {unit?.weekLabel ? <Badge>{unit.weekLabel}</Badge> : null}
         <span className="text-small tabular text-fg-3">{pluralize(topics.length, 'topic')}</span>
-        {unit ? <MasteryIndicator mastery={mastery} showPercent className="ml-auto text-small" /> : null}
+        {unit ? <MasteryIndicator mastery={mastery} showPercent emptyLabel={topics.some(started) ? 'In progress' : undefined} className="ml-auto text-small" /> : null}
       </div>
       {unit?.summary ? <p className="-mt-1 mb-2 max-w-[68ch] px-2 text-small text-fg-2">
           <MathText>{unit.summary}</MathText>
         </p> : null}
       <ul
-        aria-label={unit ? `Topics in ${unit.title}` : 'Topics'}
+        aria-label={unit ? `Topics in ${unit.title}` : 'Topics not in a unit'}
         className="divide-y divide-border border-y border-border"
       >
         {topics.map((topic) => (

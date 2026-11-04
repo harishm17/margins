@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, type TabItem } from '@/components/ui/tabs'
 import type { ActivityKind } from '@/lib/learning/next-activity'
-import { pathStepFor } from './activity-copy'
-import { NextActivityCard, NextTag, StepMarker, StepStatus, ToolLinks } from './path'
+import { nextLineShows, nextPathStep } from './activity-copy'
+import { NextActivityCard, NextTag, QUIZ_LOW_SCORE, StepMarker, StepStatus, ToolLinks } from './path'
 import { PRACTICE_DONE_SHARE, solvedCount } from './practice-keys'
 import { usePracticeProgress } from './practice-progress'
 import { useTopic } from './topic-provider'
 import { useTopicView } from './use-topic-view'
-import { PATH_VIEWS, SHORT_LABELS, VIEW_LABELS, type ContentKind, type PathView } from './types'
+import { SHORT_LABELS, VIEW_LABELS, type ContentKind, type PathView } from './types'
 
 type StudyTabsProps = {
   courseId: string
@@ -84,10 +84,10 @@ function useTopicShortcuts(hrefs: { views: string[]; previous: string | null; ne
           event.preventDefault()
           router.push(href, { scroll: false })
         }
-      } else if (event.key === '[' && current.previous) {
+      } else if (event.key === '[' && current.previous && !suspended) {
         event.preventDefault()
         router.push(current.previous)
-      } else if (event.key === ']' && current.next) {
+      } else if (event.key === ']' && current.next && !suspended) {
         event.preventDefault()
         router.push(current.next)
       }
@@ -117,13 +117,11 @@ export function StudyTabs({
   preparingEntry = false,
 }: StudyTabsProps) {
   const view = useTopicView()
-  const { running, preparingNotes } = useTopic()
+  const { running, preparingNotes, keysSuspended: quizTaking } = useTopic()
   const practice = usePracticeProgress(topicId)
   const base = `/courses/${courseId}/topics/${topicId}`
   const solved = solvedCount(practice.progress, practiceKeys)
   const practiceDone = practiceKeys.length > 0 && solved / practiceKeys.length >= PRACTICE_DONE_SHARE
-  // While the topic is being prepared the first step is not known yet, so none is tagged (the tag would move when the warm-up arrives).
-  const nextStep = preparingEntry ? null : pathStepFor(nextActivity.kind)
 
   const hrefs = steps.map((id) => `${base}?view=${id}`)
   useTopicShortcuts({
@@ -140,12 +138,11 @@ export function StudyTabs({
     practice: practiceDone,
     quiz: progress.quizScore !== null,
   }
-  // The next-activity line shows on a step that is finished or not offered, or on a tool (not on a step the student
-  // chose and has not finished: there the step's own action is the one to take). A next activity that is no step of
-  // the path (a drill, a review, a mock exam, the reader at a missed idea) is the exception: a bare topic address
-  // lands on Practice for it, so the student did not choose that step, and without the line would never hear of it.
-  const onPathStep = (PATH_VIEWS as readonly string[]).includes(view)
-  const settled = !onPathStep || !steps.includes(view as PathView) || done[view as PathView] || nextStep === null
+  // While the topic is being prepared the first step is not known yet, so none is tagged (the tag would move when the warm-up arrives).
+  // Otherwise the tag is on the step the next activity belongs to while that is not done, else the first step that is not done.
+  const nextStep = preparingEntry ? null : nextPathStep(nextActivity, steps, done)
+  // One next signal: the tag in the path. The line below it only shows where the open view has no action of its own (see nextLineShows).
+  const showLine = !preparingEntry && nextLineShows(nextActivity, view, steps)
 
   /** A status after the label: content being written or missing, solved steps, the best quiz score. */
   function glyphFor(id: PathView): React.ReactNode {
@@ -176,7 +173,7 @@ export function StudyTabs({
     id,
     label: (
       <>
-        <StepMarker number={index + 1} done={done[id]} next={nextStep === id} />
+        <StepMarker number={index + 1} done={done[id]} next={nextStep === id} lowScore={id === 'quiz' && progress.quizScore !== null && progress.quizScore < QUIZ_LOW_SCORE ? progress.quizScore : null} />
         <span className="sm:hidden">{SHORT_LABELS[id]}</span>
         <span className="max-sm:hidden">{VIEW_LABELS[id]}</span>
         {nextStep === id ? <NextTag /> : null}
@@ -195,11 +192,11 @@ export function StudyTabs({
         items={items}
         activeId={view}
         stickyPanel="[data-tab-panel]"
-        trailing={<ToolLinks courseId={courseId} topicId={topicId} />}
+        trailing={quizTaking ? undefined : <ToolLinks courseId={courseId} topicId={topicId} />}
         className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 max-sm:[&_a::after]:inset-x-1 max-sm:[&_[data-tab-indicator]]:inset-x-1 max-sm:[&_a]:gap-1 max-sm:[&>div]:h-[45px] max-sm:[&_a]:h-11 max-sm:[&_a]:px-1 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
       />
       {/* On the voice view the student is choosing what to do out loud; the way on can wait. */}
-      {view === 'voice' ? null : <NextActivityCard next={nextActivity} settled={settled && !preparingEntry} />}
+      {view === 'voice' || !showLine ? null : <NextActivityCard next={nextActivity} />}
     </>
   )
 }

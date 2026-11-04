@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { workingBox } from './helpers/practice'
+import { openMoreHelp, workingBox } from './helpers/practice'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { withPrisma } from './helpers/db'
 import { addContent, createCourse, practiceProblem, signUpAndIn } from './helpers/loop'
@@ -92,7 +92,8 @@ test.describe('the practice tutor', () => {
     // After a miss the helps are open, not behind "Get help" (spec 18.4).
     await expect(getHelp).toHaveCount(0)
     await tryAgain(page)
-    await expect(page.getByRole('group', { name: 'Hints' })).toBeVisible()
+    // The next hint stays beside Check for a step that has been missed.
+    await expect(page.getByRole('button', { name: /Next hint: Connect/ }).locator('visible=true')).toBeVisible()
     await page.getByRole('button', { name: /Next hint: Connect/ }).click()
     // The newest hint is open, the one before it is a line that opens on a tap.
     await expect(hint('Connect')).toHaveAttribute('aria-expanded', 'true')
@@ -422,11 +423,13 @@ test.describe('the practice tutor', () => {
     await recorded
     await page.reload()
     // The server's count of two wrong checks is what shows the offer again: the page itself starts from nothing.
+    await openMoreHelp(page)
     await expect(workedButton(page)).toBeEnabled()
     await expect(offer(page)).toBeVisible()
     // Not now is remembered across a reload too.
     await page.getByRole('button', { name: 'Not now' }).locator('visible=true').click()
     await page.reload()
+    await openMoreHelp(page)
     await expect(workedButton(page)).toBeEnabled()
     await expect(offer(page)).toHaveCount(0)
   })

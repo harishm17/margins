@@ -105,9 +105,10 @@ test('explainer locked before recall', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Start recall' })).toHaveAttribute('href', /view=recall/)
   // The gate is the task and says what is next: the topic's own "next" line does not name another step above it.
   await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
-  // The topic has not been read: the way round is there, and says why it is shut.
-  await expect(unlockButton(page)).toBeDisabled()
-  await expect(page.getByText('Available once you have read this topic.')).toBeVisible()
+  // The topic has not been read: the sentence names both ways in, and the way round is a link to the reading, not a disabled button.
+  await expect(page.getByText('The explainer opens after you try recall, or after you read the topic.')).toBeVisible()
+  await expect(unlockButton(page)).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Read the topic' })).toHaveAttribute('href', /view=read/)
   // None of the lesson is on the page.
   await expect(page.locator('#main').getByText('Some notes to read.')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Show answer' })).toHaveCount(0)
@@ -152,7 +153,7 @@ test('thin source unlock needs read', async ({ page }) => {
   await expect(gate(page)).toBeVisible()
   // Read: the way round is open, and the lesson is still not on the page.
   await expect(unlockButton(page)).toBeEnabled()
-  await expect(page.getByText('Available once you have read this topic.')).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Read the topic' })).toHaveCount(0)
   await expect(page.locator('#main').getByText('Some notes to read.')).toHaveCount(0)
   await screenshotIfAsked(page, 'e5-explainer-thin-source-1440x900')
   await expectNoAxeViolations(page, 'explainer thin source, 1440')

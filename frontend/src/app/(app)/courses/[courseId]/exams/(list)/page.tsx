@@ -24,7 +24,7 @@ export default async function ExamsPage({ params }: { params: Promise<{ courseId
   // One primary action per state: with no exams the empty state holds "New mock exam" (or the way to
   // topics, with its reason), so the header has no second copy of it.
   return (
-    <Page>
+    <Page width="wide">
       <PageIntro
         title="Mock exams"
         description="Timed practice exams built from your topics."

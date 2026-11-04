@@ -246,7 +246,10 @@ export function MarginPanel({ topicId, chunkId, passageName, notes, onAdd, onRem
       ) : null}
 
       {mode === 'idle' ? (
-        <div className="flex flex-wrap gap-1.5">
+        // Help on request: on a wide screen with a pointer the two buttons show when the passage is hovered or has focus
+        // (they stay in the tab order, and focus shows them); on touch and on a phone the passage's one "Margin notes"
+        // control opens this panel. Reading comes first.
+        <div className="flex flex-wrap gap-1.5 transition-opacity duration-120 lg:[@media(hover:hover)]:opacity-0 lg:[@media(hover:hover)]:group-focus-within/passage:opacity-100 lg:[@media(hover:hover)]:group-hover/passage:opacity-100">
           <Button ref={focus.register('add')} size="sm" variant="secondary" icon={<NotePencil />} onClick={() => open('note')} aria-label={`Add a note on ${passageName}`}>
             Add a note
           </Button>
@@ -266,7 +269,7 @@ export function MarginPanel({ topicId, chunkId, passageName, notes, onAdd, onRem
         >
           <Textarea ref={fieldRef} rows={3} maxRows={8} value={text} onChange={(event) => setText(event.target.value)} aria-label={`Your note on ${passageName}`} placeholder="Write in the margin" maxLength={4000} />
           <div className="flex gap-2">
-            <Button type="submit" size="sm" variant="primary" loading={busy === 'note'} disabled={!text.trim()}>
+            <Button type="submit" size="sm" variant="primary" loading={busy === 'note'} disabled={!text.trim()} disabledReason="Write the note first.">
               Save note
             </Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => cancel('add')}>
@@ -293,7 +296,7 @@ export function MarginPanel({ topicId, chunkId, passageName, notes, onAdd, onRem
           </p>
           <AiBlockedNote />
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" size="sm" variant="primary" loading={busy === 'explain'} disabled={!isAttempt(text) || !!blocked}>
+            <Button type="submit" size="sm" variant="primary" loading={busy === 'explain'} disabled={!isAttempt(text) || !!blocked} disabledReason={blocked ? undefined : `Write at least ${MIN_TAKE_CHARS} characters first.`}>
               Ask the tutor
             </Button>
             <Button type="button" size="sm" variant="secondary" disabled={busy === 'explain' || !!blocked} onClick={() => void explain(true)}>

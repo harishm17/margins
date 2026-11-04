@@ -36,7 +36,7 @@ export default async function TopicsPage({
 
   if (edit === '1') {
     return (
-      <Page>
+      <Page width="wide">
         <TopicEditor
           courseId={courseId}
           topics={data.topics.map((topic) => ({
@@ -71,7 +71,7 @@ export default async function TopicsPage({
   const due = listed.filter((topic) => reviewTiming(topic.dueAt, now, timeZone)?.due).length
 
   return (
-    <Page>
+    <Page width="wide">
       <TopicsList
         courseId={courseId}
         summary={courseSummary(listed.length, counts, due)}

@@ -85,7 +85,7 @@ function SectionLabel({ id, children, hint }: { id: string; children: React.Reac
       <h2 id={id} className="text-small font-medium text-fg">
         {children}
       </h2>
-      {hint ? <p className="mt-0.5 text-caption font-normal text-fg-3">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-small font-normal text-fg-2">{hint}</p> : null}
     </div>
   )
 }
@@ -193,8 +193,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
     )
   }
 
-  const allSelected = selected.size === topics.length
-  const distribution = QUESTION_MIXES[mix].distribution
+    const distribution = QUESTION_MIXES[mix].distribution
   const failure = phase.kind === 'failed' ? phase.message : null
 
   return (
@@ -230,10 +229,11 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
             Topics
           </SectionLabel>
           <div className="flex shrink-0 items-center gap-1">
-            <Button type="button" size="sm" variant="ghost" disabled={allSelected} onClick={() => setSelected(new Set(topics.map((t) => t.id)))}>
+            {/* Neither greys out: a button that disables and re-enables swapped which of the two looked live. */}
+            <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(new Set(topics.map((t) => t.id)))}>
               Select all
             </Button>
-            <Button type="button" size="sm" variant="ghost" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               Clear
             </Button>
           </div>
@@ -252,7 +252,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
                 >
                   <Checkbox checked={checked} onCheckedChange={(value) => toggle(topic.id, value === true)} className="mt-0" />
                   <span className="min-w-0 flex-1 truncate">{topic.name}</span>
-                  <MasteryIndicator mastery={topic.mastery} variant="ring" />
+                  <MasteryIndicator mastery={topic.mastery} className="shrink-0" />
                 </label>
               </li>
             )
@@ -267,7 +267,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
           value={String(totalQuestions)}
           onValueChange={(value) => setTotalQuestions(Number(value))}
           options={QUESTION_COUNTS.map((count) => ({ value: String(count), label: String(count) }))}
-          className="self-start"
+          className="self-start max-sm:flex-wrap"
         />
       </section>
 
@@ -278,7 +278,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
           value={String(durationMinutes)}
           onValueChange={(value) => setDurationMinutes(Number(value))}
           options={TIME_LIMITS.map((minutes) => ({ value: String(minutes), label: `${minutes} min` }))}
-          className="self-start"
+          className="self-start max-sm:flex-wrap"
         />
       </section>
 
@@ -338,7 +338,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
 
       <div className="flex flex-col gap-3 border-t border-border pt-6">
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={selected.size === 0 || !!blocked}>
+          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={selected.size === 0 || !!blocked} disabledReason={selected.size === 0 ? 'Pick at least one topic first.' : 'AI is unavailable right now.'}>
             Create exam
           </Button>
           <Button asChild variant="ghost" size="lg">

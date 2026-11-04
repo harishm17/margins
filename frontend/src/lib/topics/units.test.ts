@@ -53,6 +53,9 @@ test('moving a unit up moves its topics with it', () => {
 test('unit mastery counts topics that are not started as zero', () => {
   assert.ok(Math.abs((unitMastery([0.8, null, undefined, 0.4]) ?? 0) - 0.3) < 1e-9)
   assert.equal(unitMastery([]), null)
+  // No topic of the unit has a signal: it has no mastery to show ("Not started"), not 0% ("Learning").
+  assert.equal(unitMastery([null, undefined]), null)
+  assert.equal(unitMastery([0, null]), 0)
 })
 
 test('prerequisites keep only other topics of the course, once each', () => {

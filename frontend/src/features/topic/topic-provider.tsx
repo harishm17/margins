@@ -53,7 +53,7 @@ type TopicContextValue = {
   dismiss: (kind: ContentKind) => void
   /** Start the next topic's notes in the background (when this topic is marked done). */
   prefetchNext: () => void
-  /** The number keys switch views, except while a quiz is being taken (they pick options). */
+  /** A quiz is being taken: the number keys pick options and [ ] stay still, and Ask, the tools and the topic arrows are put away (the quiz is a focus view, like the mock exam). */
   keysSuspended: boolean
   setKeysSuspended: (suspended: boolean) => void
   /** The student is in the middle of an activity on this view (a quiz being taken, a practice problem under way). */

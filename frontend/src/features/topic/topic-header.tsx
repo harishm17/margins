@@ -43,6 +43,7 @@ import type { ConceptLabel } from '@/lib/learning/concept-mastery'
 import { KIND_COPY } from './copy'
 import { RegenerateDialog } from './generation-ui'
 import { ToolsMenu } from './path'
+import { useTopic } from './topic-provider'
 import { TopicStructureBlock, unitLabel } from './topic-structure'
 import { useTopicView } from './use-topic-view'
 import { CONTENT_KINDS, type ContentKind } from './types'
@@ -146,6 +147,8 @@ export function TopicHeader({
 }: TopicHeaderProps) {
   const router = useRouter()
   const view = useTopicView()
+  // A quiz being taken is a focus view, like the mock exam's: the tools and the topic arrows are put away until it is done.
+  const { keysSuspended: quizTaking } = useTopic()
   // What the topic covers (its description, ideas, objectives, sources and the map link) is behind one button next to the status
   // line, on every width: the title and that line are all that stand between the student and the step's task.
   const [aboutOpen, setAboutOpen] = React.useState(false)
@@ -177,8 +180,8 @@ export function TopicHeader({
       ) : null}
       <div className="flex items-start justify-between gap-4">
         <h1 className="min-w-0 text-title text-fg">{name}</h1>
-        <ToolsMenu courseId={courseId} topicId={topicId} neighbours={{ previous, next }} className="shrink-0" />
-        <div className="flex shrink-0 items-center gap-1 max-sm:hidden">
+        {quizTaking ? null : <ToolsMenu courseId={courseId} topicId={topicId} neighbours={{ previous, next }} className="shrink-0" />}
+        <div className={cn('flex shrink-0 items-center gap-1 max-sm:hidden', quizTaking && 'hidden')}>
           <IconButton
             label={previous ? `Previous: ${previous.name}` : 'No previous topic'}
             shortcut="["
@@ -340,11 +343,14 @@ export function TopicActions({ courseId, topicId, name }: { courseId: string; to
     setAskOpen(true)
   }
   const askHref = `/courses/${courseId}/ask?topic=${topicId}`
+  // Not while a quiz is being taken: Ask is help, and the quiz is the attempt (the mock exam's focus view has none either).
+  const { keysSuspended: quizTaking } = useTopic()
 
   return (
     <>
       <PageHeader
         actions={
+          quizTaking ? null : (
           <>
             <Button
               variant="secondary"
@@ -385,6 +391,7 @@ export function TopicActions({ courseId, topicId, name }: { courseId: string; to
               </DropdownMenuContent>
             </DropdownMenu>
           </>
+          )
         }
       />
       {regenerate ? (

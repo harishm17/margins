@@ -151,8 +151,8 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
             />
           </>
         )}
-        <div className="mt-5">
-          <Button variant="ghost" size="sm" className="text-fg-2" aria-pressed={dontKnow} onClick={() => onDontKnow(current, !dontKnow)}>
+        <div className="mt-4">
+          <Button variant="secondary" size="sm" aria-pressed={dontKnow} onClick={() => onDontKnow(current, !dontKnow)}>
             I don&apos;t know
           </Button>
         </div>
@@ -164,9 +164,9 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
         </InlineAlert>
       ) : null}
 
-      <div className="mt-10 flex items-center justify-between gap-3 border-t border-border pt-5">
+      <div className="mt-6 flex items-center justify-between gap-3 border-t border-border pt-4">
         <div className="flex items-center gap-2">
-          <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} onClick={() => go(current - 1)}>
+          <Button variant="secondary" icon={<ArrowLeft />} disabled={current === 0} disabledReason="This is the first question." onClick={() => go(current - 1)}>
             Previous
           </Button>
           <Button variant="ghost" icon={<SignOut />} className="text-fg-2" onClick={() => setConfirmExit(true)}>

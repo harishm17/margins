@@ -128,6 +128,22 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await expect(page.getByRole('dialog', { name: 'Leave the exam?' })).toBeVisible()
   await page.getByRole('button', { name: 'Stay' }).click()
 
+  // One filled button: Next. Submit is final, so it is the quiet one until the last question (where "Submit exam" is the way on).
+  const fill = (name: string) => page.getByRole('button', { name, exact: true }).evaluate((el) => getComputedStyle(el).backgroundColor)
+  expect(await fill('Submit')).not.toBe(await fill('Next'))
+
+  // The course's "in progress" line is on every page but the exam's own lobby, which already says Resume.
+  const takeUrl = page.url()
+  const examId = /\/exams\/([0-9a-f-]{36})\//.exec(takeUrl)![1]
+  await page.goto(`${course}/exams`)
+  await expect(page.getByRole('complementary', { name: 'Mock exam in progress' })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Resume Mock exam/ })).toBeVisible()
+  await page.goto(`${course}/exams/${examId}`)
+  await expect(page.getByRole('heading', { name: 'Before you start' })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Mock exam in progress' })).toHaveCount(0)
+  await page.goto(takeUrl)
+  await expect(page.getByRole('heading', { name: /Question \d+ of/ })).toBeVisible()
+
   // Submitting with blanks asks for confirmation, and says how many are unanswered and flagged.
   await page.getByRole('button', { name: 'Submit', exact: true }).click()
   const prompt = page.getByRole('dialog', { name: 'Submit your exam?' })

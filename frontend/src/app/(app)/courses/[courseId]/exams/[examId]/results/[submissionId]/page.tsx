@@ -25,7 +25,7 @@ export default async function ExamResultsPage({
   if (!course || !result) notFound()
 
   return (
-    <Page width="medium">
+    <Page width="focus">
       <PageHeader
         crumbs={examCrumbs({ id: course.id, name: course.name }, { id: result.examId, name: result.examTitle }, 'Results')}
       />

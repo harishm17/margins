@@ -63,7 +63,7 @@ export function AttemptFirst({ title, inputLabel, placeholder, revealLabel, stat
         <p id={`${id}-title`} className="text-body-strong text-fg">
           {title}
         </p>
-        <label htmlFor={`${id}-text`} className="mb-1 mt-2 block text-caption text-fg-3">
+        <label htmlFor={`${id}-text`} className="mb-1 mt-2 block text-small text-fg-2">
           {inputLabel}
         </label>
         <Textarea
@@ -77,14 +77,17 @@ export function AttemptFirst({ title, inputLabel, placeholder, revealLabel, stat
           aria-describedby={attempted ? undefined : `${id}-hint`}
         />
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="secondary" icon={<Eye />} disabled={!attempted} onClick={() => onReveal(false)}>
-            {revealLabel}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => onReveal(true)}>
+          {/* The button that shows the part appears with the guess: a disabled twin beside the hint only said the same thing twice. */}
+          {attempted ? (
+            <Button size="sm" variant="secondary" icon={<Eye />} onClick={() => onReveal(false)}>
+              {revealLabel}
+            </Button>
+          ) : null}
+          <Button size="sm" variant="secondary" onClick={() => onReveal(true)}>
             {DONT_KNOW}
           </Button>
           {attempted ? null : (
-            <span id={`${id}-hint`} className="text-caption text-fg-3">
+            <span id={`${id}-hint`} className="text-small text-fg-2">
               Write a guess, or tap &ldquo;{DONT_KNOW}&rdquo;, to see it.
             </span>
           )}

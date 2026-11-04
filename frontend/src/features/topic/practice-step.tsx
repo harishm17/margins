@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { ArrowRight, Check, CaretDown, CaretLeft, CaretRight, Eye, Lightbulb, Question, XCircle } from '@phosphor-icons/react/dist/ssr'
+import { ArrowRight, Check, CaretDown, CaretLeft, CaretRight, Eye, Lightbulb, MinusCircle, Question } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { InlineAlert } from '@/components/ui/inline-alert'
@@ -262,8 +262,31 @@ export function ActiveStep({
   // The working is one line under the answer until it is wanted (or already written). The help is folded behind one button
   // until the step has been missed or the tutor is in use; then it is in view, after the way on.
   const workingShown = workingOpen || working.trim() !== ''
-  const helpForced = missed || missFeedback || tutor.turns.length > 0 || tutor.pending !== null
-  const helpShown = helpForced || helpOpen
+  // After a miss the way on is two buttons: Try again and the next hint. Everything else (where to look, Show answer, the tutor)
+  // is behind one "More help", so a wrong answer does not open a wall of options. It opens by itself once the tutor is in use.
+  const helpForced = missed || missFeedback
+  const helpShown = helpOpen || tutor.turns.length > 0 || tutor.pending !== null
+  const hintButton =
+    ladder === null ? null : (
+      <Button
+        variant="secondary"
+        icon={<Lightbulb />}
+        disabled={!ladderOpen}
+        className="h-auto max-w-full shrink items-start justify-start py-1.5 text-left max-sm:h-auto max-sm:min-h-11"
+        onClick={() => {
+          openHint(ladder)
+          // The last hint has gone and the step was missed: put focus back on the way forward.
+          if (missFeedback && !available.some((index) => index !== ladder && !opened.includes(index))) requestAnimationFrame(() => retryRef.current?.focus())
+        }}
+      >
+        <span className="flex flex-col whitespace-normal">
+          <span>Next hint: {HINT_KINDS[ladder].name}</span>
+          <span className="text-caption font-normal text-fg-2">
+            {ladderOpen ? `${HINT_KINDS[ladder].gives} (${hintCostCopy(ladder as 0 | 1 | 2, { attempted, failedFirstTry })})` : 'Opens after your first try'}
+          </span>
+        </span>
+      </Button>
+    )
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
@@ -329,7 +352,7 @@ export function ActiveStep({
 
       {!feedback ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" variant="primary" icon={<Check />} disabled={!answer.trim()}>
+          <Button type="submit" variant="primary" icon={<Check />} disabled={!answer.trim()} disabledReason="Type an answer first.">
             Check
           </Button>
           {!attempted ? (
@@ -337,11 +360,8 @@ export function ActiveStep({
               I don&apos;t know
             </Button>
           ) : null}
-          {canReveal ? (
-            <Button variant="ghost" icon={<Eye />} onClick={reveal}>
-              Show answer
-            </Button>
-          ) : null}
+          {/* A step that has been missed keeps its next hint beside Check, as it had after the miss: the hint is the way on, the rest is behind More help. */}
+          {missed && ladder !== null ? hintButton : null}
         </div>
       ) : null}
 
@@ -365,7 +385,8 @@ export function ActiveStep({
       {feedback === 'correct' && rung >= 1 ? <ConfirmPanel tutor={tutor} /> : null}
 
       {feedback === 'incorrect' ? (
-        <InlineAlert tone="danger" title="Not quite" icon={<XCircle />}>
+        // A wrong answer is part of practice, not an error: the amber of Recall's gaps and the quiet mark of the warm-up, not the red of a failure.
+        <InlineAlert tone="warning" title="Not quite" icon={<MinusCircle weight="fill" />}>
           {step.feedbackIncorrect ? (
             <LazyMarkdown variant="compact" className="text-current!">
               {step.feedbackIncorrect}
@@ -404,13 +425,11 @@ export function ActiveStep({
 
       {/* The way on comes straight after what just happened; the help (below) is for the next try, not in front of it. */}
       {missFeedback ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           <Button ref={retryRef} variant="primary" onClick={tryAgain}>
             Try again
           </Button>
-          <Button variant="ghost" icon={<Eye />} onClick={reveal}>
-            Show answer
-          </Button>
+          {ladder !== null ? hintButton : null}
         </div>
       ) : null}
       {locked ? (
@@ -435,53 +454,39 @@ export function ActiveStep({
             ))
         : null}
 
-      {!locked && missed && tutor.help ? <HelpAfterMissNote help={tutor.help} /> : null}
-
       {!locked ? <TalkOffer tutor={tutor} working={working} /> : null}
 
       {!locked ? <TutorThread turns={tutor.turns} pending={tutor.pending} /> : null}
 
       {!locked ? (
         <div className="flex flex-col gap-3">
-          {!helpForced ? (
-            <div>
-              <Button
-                variant="ghost"
-                size="sm"
-                aria-expanded={helpOpen}
-                aria-controls={helpId}
-                icon={<Question />}
-                className="-ml-2.5 max-sm:min-h-11"
-                onClick={() => setHelpOpen((current) => !current)}
-              >
-                <span className="inline-flex items-center gap-1">
-                  Get help
-                  <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', helpOpen && 'rotate-180')} />
-                </span>
-              </Button>
-            </div>
-          ) : null}
+          <div>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-expanded={helpShown}
+              aria-controls={helpId}
+              icon={<Question />}
+              className="-ml-2.5 max-sm:min-h-11"
+              onClick={() => setHelpOpen((current) => !current)}
+            >
+              <span className="inline-flex items-center gap-1">
+                {helpForced ? 'More help' : 'Get help'}
+                <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', helpShown && 'rotate-180')} />
+              </span>
+            </Button>
+          </div>
           <div id={helpId} hidden={!helpShown} className="flex flex-col gap-3">
-            {ladder !== null ? (
-              <div role="group" aria-label="Hints">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={<Lightbulb />}
-                  disabled={!ladderOpen}
-                  className="h-auto max-w-full shrink items-start justify-start py-1.5 text-left max-sm:h-auto max-sm:min-h-11"
-                  onClick={() => {
-                    openHint(ladder)
-                    // The last hint has gone and the step was missed: put focus back on the way forward.
-                    if (missFeedback && !available.some((index) => index !== ladder && !opened.includes(index))) requestAnimationFrame(() => retryRef.current?.focus())
-                  }}
-                >
-                  <span className="flex flex-col whitespace-normal">
-                    <span>Next hint: {HINT_KINDS[ladder].name}</span>
-                    <span className="text-caption font-normal text-fg-2">
-                      {ladderOpen ? `${HINT_KINDS[ladder].gives} (${hintCostCopy(ladder as 0 | 1 | 2, { attempted, failedFirstTry })})` : 'Opens after your first try'}
-                    </span>
-                  </span>
+            {missed && tutor.help ? <HelpAfterMissNote help={tutor.help} /> : null}
+            {ladder !== null && !missed && !missFeedback ? (
+              <div role="group" aria-label="Hints" className="flex">
+                {hintButton}
+              </div>
+            ) : null}
+            {canReveal ? (
+              <div>
+                <Button variant="ghost" size="sm" icon={<Eye />} className="-ml-2.5 max-sm:min-h-11" onClick={reveal}>
+                  Show answer
                 </Button>
               </div>
             ) : null}

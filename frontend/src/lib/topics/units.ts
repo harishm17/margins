@@ -48,8 +48,12 @@ export function canonicalTopicOrder(topics: readonly TopicLike[], units: readonl
   return groupTopicsByUnit(topics, units).flatMap((group) => group.topics.map((topic) => topic.id))
 }
 
-/** Mean mastery of a unit's topics with not-started ones counting as 0 (as for the course); null when empty. */
+/**
+ * Mean mastery of a unit's topics with not-started ones counting as 0 (as for the course); null when the unit is empty or none of its
+ * topics has any signal yet. A unit nobody has touched is "Not started", the word its topics use, not "Learning 0%".
+ */
 export function unitMastery(masteries: readonly (number | null | undefined)[]): number | null {
+  if (masteries.every((value) => value === null || value === undefined || Number.isNaN(value))) return null
   return courseMastery([...masteries])
 }
 

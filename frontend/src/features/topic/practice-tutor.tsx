@@ -391,6 +391,7 @@ export function TutorActions({
             icon={<ChatCircleText />}
             aria-describedby={askNoteId}
             disabled={!working.trim() || busy}
+            disabledReason={busy ? undefined : 'Write your working first.'}
             className="max-sm:min-h-11"
             onClick={() => void tutor.ask(working).then((ok) => ok && onSent())}
           >

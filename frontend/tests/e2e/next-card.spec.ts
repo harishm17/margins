@@ -55,8 +55,13 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await page.getByRole('button', { name: 'Question 3', exact: false }).first().click()
   await page.getByRole('button', { name: 'Submit quiz' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
-  // ... and is back once the results are in (the quiz is finished), still saying to read (nothing about the quiz changes that).
+  // ... and the results have their own buttons, so there is still no line above them: the one next signal is the tag in the path,
+  // which stays on Read (nothing about the quiz changes that).
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
+  await expect(card(page)).toHaveCount(0)
+  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Read.*next up/ })).toBeVisible()
+  // A tool carries the line: it says why and offers the way in.
+  await page.goto(`/courses/${course.courseId}/topics/${unread}?view=examples`)
   await expect(card(page)).toContainText('Read the topic next.')
   await expect(card(page).getByRole('link', { name: 'Start reading' })).toBeVisible()
 
@@ -74,8 +79,8 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await page.getByRole('button', { name: 'Submit quiz' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
-  await expect(card(page)).toContainText('Practice to keep it fresh.')
-  await expect(card(page).getByRole('link', { name: 'Practice' })).toHaveAttribute('href', /view=practice/)
+  await expect(card(page)).toHaveCount(0)
+  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Practice.*next up/ })).toHaveAttribute('href', /view=practice/)
   await screenshotIfAsked(page, 'next-card-quiz-results-1440x900')
 
   // The results and the header agree: one review date in the same words, and one mastery figure.
@@ -111,10 +116,9 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
     await page.setViewportSize(size)
     await expectNoAxeViolations(page, `quiz results with the next card, ${name}`)
   }
-  // On a phone, with both cards on the screen (the one-time card is one line after its first view, the next card
-  // one line with its reason behind "Why"), the results start close under the top bar.
+  // On a phone, with the one-time card on the screen (it is one line after its first view), the results start close under the top bar.
   await page.setViewportSize(SIZES[1][1])
-  // The card closed itself when the quiz began (the student was answering); put it back to look at the two cards together.
+  // The card closed itself when the quiz began (the student was answering); put it back to look at it with the results.
   await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: null } }))
   await page.evaluate(() => window.sessionStorage.clear())
   await page.reload()
@@ -128,17 +132,14 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   // The fold button is a 44px target at phone width.
   const caret = (await intro.getByRole('button', { name: 'Show more' }).boundingBox())!
   expect(Math.min(caret.width, caret.height), 'the fold button is at least 44px').toBeGreaterThanOrEqual(44)
-  await expect(card(page)).toBeVisible()
-  await expect(card(page).getByText('Practice to keep it fresh.')).toBeHidden()
+  await expect(card(page)).toHaveCount(0)
   await screenshotIfAsked(page, 'next-card-both-cards-390x844')
   const lobbyTop = (await page.locator('[data-tab-panel]').boundingBox())!.y
   const topbar = (await page.locator('header').first().boundingBox())!
   expect(lobbyTop - (topbar.y + topbar.height), `the content starts ${lobbyTop}px down`).toBeLessThan(CONTENT_START_WITH_CARDS)
-  await card(page).getByRole('button', { name: 'Why' }).click()
-  await expect(card(page).getByText('Practice to keep it fresh.')).toBeVisible()
   await intro.getByRole('button', { name: 'Show more' }).click()
   await expect(intro.getByText('It will feel slower than reading a summary.')).toBeVisible()
-  await expectNoAxeViolations(page, 'both cards open, 390')
+  await expectNoAxeViolations(page, 'one-time card open, 390')
   await screenshotIfAsked(page, 'next-card-both-cards-open-390x844')
 })
 
@@ -225,20 +226,29 @@ test('next card offers reading after a failed drill, and the reading ends the wa
   const sentence = 'You missed Collision last time. Read p. 5 again before trying again.'
   await page.goto('/home')
   const home = page.getByRole('region', { name: /Up next/ })
-  await expect(home.getByRole('link', { name: 'Read about it' })).toHaveAttribute('href', instruct)
+  await expect(home.getByRole('link', { name: 'Start learning' })).toHaveAttribute('href', instruct)
   await expect(home).toContainText(sentence)
   await page.goto(`/courses/${course.courseId}`)
   const upNext = page.getByRole('region', { name: 'Up next' })
-  await expect(upNext.getByRole('link', { name: 'Read about it' })).toHaveAttribute('href', instruct)
+  await expect(upNext.getByRole('link', { name: 'Start learning' })).toHaveAttribute('href', instruct)
   await expect(upNext).toContainText(sentence)
   await page.goto(`/courses/${course.courseId}/plan`)
   const planRow = page.getByRole('listitem').filter({ has: page.locator(`a[href="${instruct}"]`) }).first()
   await expect(planRow).toContainText(sentence)
 
-  // A bare topic address goes to the instruction, at the concept; not back to the drill or the review.
-  await page.goto(`/courses/${course.courseId}/topics/${topic}?view=practice`)
+  // Re-reading a missed idea is one signal, not a line on every step: the tag is on Read, and no step carries the line ...
+  const path = page.getByRole('navigation', { name: 'Topic path' })
+  for (const view of ['warmup', 'read', 'recall', 'practice', 'quiz']) {
+    await page.goto(`/courses/${course.courseId}/topics/${topic}?view=${view}`)
+    await expect(card(page), view).toHaveCount(0)
+  }
+  await expect(path.getByText('(next up)')).toHaveCount(1)
+  // The topic is read already, so the reading is not what the path tags: the first step not done is.
+  await expect(path.getByRole('link', { name: /Recall.*next up/ })).toBeVisible()
+  // ... a tool says it once, at the concept; not back to the drill or the review.
+  await page.goto(`/courses/${course.courseId}/topics/${topic}?view=examples`)
   await expect(card(page)).toContainText('You missed Collision last time. Read p. 5 again before trying again.')
-  await expect(card(page).getByRole('link', { name: 'Read about it' })).toHaveAttribute('href', `/courses/${course.courseId}/topics/${topic}?view=read&focus=${conceptId}#chunk-chunk-5`)
+  await expect(card(page).getByRole('link', { name: 'Start learning' })).toHaveAttribute('href', `/courses/${course.courseId}/topics/${topic}?view=read&focus=${conceptId}#chunk-chunk-5`)
   await screenshotIfAsked(page, 'v31-next-card-instruct-1440x900')
   await page.goto(`/courses/${course.courseId}/topics/${topic}`)
   await expect(page).toHaveURL(new RegExp(`view=read&focus=${conceptId}`))
@@ -253,11 +263,11 @@ test('next card offers reading after a failed drill, and the reading ends the wa
   await withPrisma(async (prisma) => expect(await prisma.evidenceEvent.count({ where: { conceptId, source: 'instruction' } })).toBe(1))
 
   // The fail has been followed by instruction: the card no longer says to read about it.
-  await page.goto(`/courses/${course.courseId}/topics/${topic}?view=practice`)
+  await page.goto(`/courses/${course.courseId}/topics/${topic}?view=examples`)
   await expect(page.getByRole('region', { name: 'Next on this topic' }).getByText(/You missed/)).toHaveCount(0)
   await expectNoAxeViolations(page, 'next card after instruction, 1440')
   await page.setViewportSize(SIZES[1][1])
-  await page.goto(`/courses/${course.courseId}/topics/${topic}?view=practice`)
+  await page.goto(`/courses/${course.courseId}/topics/${topic}?view=examples`)
   await expectNoAxeViolations(page, 'next card after instruction, 390')
 })
 

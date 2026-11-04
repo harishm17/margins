@@ -459,7 +459,8 @@ test.describe('S4: review sessions and drills', () => {
     await expectNoAxeViolations(page, 'drill end screen')
     await shot(page, 'drill-end-screen')
     // After the drill the next activity is the explanation or the pages, not the same drill again (spec 8.1).
-    await page.goto(`/courses/${course.courseId}/topics/${topicId}?view=quiz`)
+    // The topic's one next signal says to read again (the tag is on Read); a tool carries the sentence, the quiz step has its own buttons.
+    await page.goto(`/courses/${course.courseId}/topics/${topicId}?view=examples`)
     const card = page.getByRole('region', { name: 'Next on this topic' })
     await expect(card).toContainText('Read p. 12 again before trying again.')
   })
