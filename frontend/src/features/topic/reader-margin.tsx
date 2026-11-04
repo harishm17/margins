@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { ChatCircleText, CheckCircle, MinusCircle, NotePencil, Trash, XCircle } from '@phosphor-icons/react/dist/ssr'
+import { ArrowCounterClockwise, ChatCircleText, CheckCircle, MinusCircle, NotePencil, Trash } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Textarea } from '@/components/ui/textarea'
@@ -28,14 +28,16 @@ const isTutorItem = (note: MarginNoteView) => note.reply !== null && (note.kind 
 const isAnswer = (note: MarginNoteView) => note.kind === 'answer'
 
 /** The icon says the verdict as well as the word does, so the verdict never rests on colour. */
-const VERDICT_ICONS: Record<CheckVerdict, React.ElementType> = { right: CheckCircle, partly: MinusCircle, not_yet: XCircle }
+const VERDICT_ICONS: Record<CheckVerdict, React.ElementType> = { right: CheckCircle, partly: MinusCircle, not_yet: ArrowCounterClockwise }
+/** The same colours as Practice and Recall: a miss is amber (a place to look again), never the red kept for real errors. */
+const VERDICT_TONES: Record<CheckVerdict, string> = { right: 'text-accent', partly: 'text-warning-soft-fg', not_yet: 'text-warning-soft-fg' }
 
 /** The tutor's verdict on an answer: an icon and the word, with a spoken lead-in for a screen reader. */
 function Verdict({ verdict }: { verdict: CheckVerdict }) {
   const Icon = VERDICT_ICONS[verdict]
   return (
     <p className="flex items-center gap-1.5 text-body-strong" data-verdict={verdict}>
-      <Icon aria-hidden="true" weight="fill" className="size-4 shrink-0" />
+      <Icon aria-hidden="true" weight="fill" className={`size-4 shrink-0 ${VERDICT_TONES[verdict]}`} />
       <span className="sr-only">Tutor&apos;s verdict: </span>
       <span>{VERDICT_LABELS[verdict]}</span>
     </p>

@@ -60,7 +60,7 @@ export function ThreadList({ threads, activeId, now, hrefFor, onSelect, onNew, o
                           onSelect(thread.id)
                         }}
                         className={cn(
-                          'block truncate rounded-control py-1.5 pl-2.5 pr-9 text-[13.5px] leading-5 text-fg-2',
+                          'block line-clamp-2 break-words rounded-control py-1.5 pl-2.5 pr-9 text-[13.5px] leading-5 text-fg-2',
                           'transition-colors duration-120 hover:bg-surface-2 hover:text-fg',
                           active && 'bg-surface-2 text-fg'
                         )}

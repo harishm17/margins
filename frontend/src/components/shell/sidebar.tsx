@@ -30,6 +30,7 @@ import { useShell } from './shell-provider'
 import { useSidebarCollapsed } from './sidebar-state'
 import { readUnitChoices, useUnitState } from './unit-state'
 import type { NavCourse, NavTopic } from '@/server/queries/courses'
+import { unitMastery } from '@/lib/topics/units'
 
 /** The course pages the phone tab bar (mobile-tabs.tsx) already holds. */
 const PHONE_TAB_KEYS: ReadonlySet<string> = new Set(['overview', 'plan', 'topics', 'ask'])
@@ -124,9 +125,8 @@ function TopicLink({ courseId, topic, active }: { courseId: string; topic: NavTo
   )
 }
 
-/** A mastery value for a unit: the mean over its topics, not-started ones counting as 0. */
-const unitMasteryOf = (topics: NavTopic[]): number | null =>
-  topics.length === 0 ? null : topics.reduce((sum, topic) => sum + (topic.mastery ?? 0), 0) / topics.length
+/** A unit's mastery, worked out as on the Topics page: a unit nobody has touched is "Not started", not "Learning 0%". */
+const unitMasteryOf = (topics: NavTopic[]): number | null => unitMastery(topics.map((topic) => topic.mastery))
 
 /**
  * The sidebar's topic list. A flat course is one plain list; with units each unit is a button that

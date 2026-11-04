@@ -134,6 +134,8 @@ export type TopicPageData = {
   topicBand: Band
   /** Which path steps are done (the warm-up taken, the topic read, recall done). */
   pathDone: { warmup: boolean; read: boolean; recall: boolean }
+  /** The student has begun the topic: any answer (a warm-up one included), reading, or a step done. The header says "In progress" then. */
+  begun: boolean
   /** Recall prompts with an answer, of all of them. The first graded answer counts the topic as recalled; the step is finished at all. */
   recallProgress: { answered: number; total: number }
   /** The steps of the path this topic can offer (no warm-up without a bank, no recall without concepts). */
@@ -380,6 +382,13 @@ export const getTopicPage = cache(async function getTopicPage(
     concepts: learningState.concepts.map((concept) => ({ id: concept.id, name: concept.name ?? '', label: concept.label, wrongIdea: concept.misconception !== null, band: concept.band })),
     topicBand: topicBand(learningState.concepts.map((concept) => ({ band: concept.band, solid: concept.label === 'solid' }))),
     pathDone: { warmup: learningState.warmupAt !== null, read: learningState.readAt !== null, recall: learningState.recallAt !== null },
+    // A warm-up answer is not mastery evidence (hasAnyEvidence leaves it out), but it does mean the topic is begun.
+    begun:
+      learningState.hasAnyEvidence ||
+      learningState.readAt !== null ||
+      learningState.warmupAt !== null ||
+      learningState.recallAt !== null ||
+      (await prisma.evidenceEvent.count({ where: { userId, topicId, source: 'warmup' } })) > 0,
     recallProgress: hasConcepts && learningState.recallAt !== null ? await loadRecallProgress(userId, topicId) : { answered: 0, total: 0 },
     showEffortIntro: effortIntro?.seenEffortIntroAt == null,
   }

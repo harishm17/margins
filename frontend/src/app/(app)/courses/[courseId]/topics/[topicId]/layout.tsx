@@ -70,7 +70,7 @@ export default async function TopicLayout({
           name={topic.name}
           description={topic.description}
           mastery={topic.mastery}
-          started={data.pathDone.warmup || data.pathDone.read || data.pathDone.recall || topic.progress.notes || topic.progress.examples || topic.progress.quizScore !== null}
+          started={data.begun || topic.progress.notes || topic.progress.examples || topic.progress.quizScore !== null}
           earnedMastery={topic.earnedMastery}
           dueAt={topic.dueAt}
           daysUntilDue={topic.daysUntilDue}
