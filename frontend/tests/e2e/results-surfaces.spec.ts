@@ -193,13 +193,21 @@ test('the exam results with its calibration line and sure-and-wrong group: no ax
     await expect(focus).toContainText('Graph search')
     await expect(focus).not.toContainText('62.5%')
     await expect(focus).not.toContainText('Weakest first')
-    await expect(focus.getByRole('link', { name: 'Study Graph search' })).toBeVisible()
+    // The one recommended first step is above, once; the focus row only opens the topic.
+    await expect(page.getByRole('link', { name: 'Review Graph search' })).toHaveCount(1)
+    await expect(focus.getByRole('link', { name: 'Graph search' })).toBeVisible()
+    await expect(page.getByText('Other ways to study')).toBeVisible()
     await expectNoAxeViolations(page, `exam results, ${name}`)
     await screenshotIfAsked(page, `exam-results-${name}`)
     await page.getByRole('radio', { name: /^Missed/ }).click()
     await expect(page.getByRole('heading', { name: 'Questions' })).toBeVisible()
-    // "Missed 2" is two questions (one wrong, one only partly right), each with its points spelled out.
+    // "Missed 2" is two questions (one wrong, one only partly right), each a labelled row; Expand all opens their reviews,
+    // each with its points spelled out. The first miss to read starts open and the rest collapsed.
     await expect(page.getByRole('radio', { name: 'Missed 2' })).toBeChecked()
+    const rows = page.locator('section[aria-labelledby="exam-questions-review"]')
+    await expect(rows.locator('button[aria-expanded]')).toHaveCount(2)
+    await expect(rows.locator('button[aria-expanded="true"]')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Expand all' }).click()
     await expect(page.getByText('0 of 2 pts')).toBeVisible()
     await expect(page.getByText('2 of 3 pts')).toBeVisible()
     await expect(page.getByText('2 of 2 pts')).toHaveCount(0)

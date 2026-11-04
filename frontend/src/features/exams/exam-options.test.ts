@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { examSummary, formatMinutes, formatScore, preselectTopics, QUESTION_MIXES } from './exam-options'
+import { coverageNote, examSummary, formatMinutes, formatScore, onlyWithPages, preselectTopics, QUESTION_MIXES } from './exam-options'
 
 const NOW = Date.parse('2026-10-20T12:00:00Z')
 
@@ -46,5 +46,26 @@ describe('labels', () => {
     assert.equal(formatMinutes(45), '45 min')
     assert.equal(formatScore(72), '72%')
     assert.equal(formatScore(71.25), '71.3%')
+  })
+})
+
+describe('onlyWithPages', () => {
+  it('drops topics that have no pages, keeping the order', () => {
+    assert.deepEqual(onlyWithPages(['a', 'b', 'c'], new Set(['c', 'a'])), ['a', 'c'])
+  })
+})
+
+describe('coverageNote', () => {
+  it('says nothing when no topic is ticked', () => {
+    assert.equal(coverageNote(0, 0), null)
+  })
+  it('counts the topics the exam will cover', () => {
+    assert.equal(coverageNote(1, 0), 'Covers 1 topic')
+    assert.equal(coverageNote(4, 0), 'Covers 4 topics')
+  })
+  it('says how many ticked topics are left out for having no pages', () => {
+    assert.equal(coverageNote(4, 1), 'Covers 3 topics (1 without pages is left out)')
+    assert.equal(coverageNote(5, 2), 'Covers 3 topics (2 without pages are left out)')
+    assert.equal(coverageNote(1, 1), 'Covers 0 topics (1 without pages is left out)')
   })
 })

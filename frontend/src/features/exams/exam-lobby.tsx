@@ -105,20 +105,19 @@ export function ExamLobbyView({ lobby }: { lobby: ExamLobby }) {
         </div>
       </section>
 
-      <section aria-labelledby="attempts">
-        <h2 id="attempts" className="text-heading text-fg">
-          Your attempts
-        </h2>
-        {lobby.attempts.length > 0 ? (
+      {/* Nothing to show before a first attempt: the section appears with the first one. */}
+      {lobby.attempts.length > 0 ? (
+        <section aria-labelledby="attempts">
+          <h2 id="attempts" className="text-heading text-fg">
+            Your attempts
+          </h2>
           <ul className="mt-3 border-t border-border">
             {lobby.attempts.map((attempt) => (
               <AttemptItem key={attempt.id} attempt={attempt} courseId={courseId} examId={id} />
             ))}
           </ul>
-        ) : (
-          <p className="mt-2 text-small text-fg-2">You haven&apos;t taken this exam yet.</p>
-        )}
-      </section>
+        </section>
+      ) : null}
     </div>
   )
 }

@@ -4,8 +4,9 @@ import { usePolling } from '@/lib/hooks/use-polling'
 import * as React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { CaretRight, WarningCircle } from '@phosphor-icons/react/dist/ssr'
+import { CaretDown, CaretRight, WarningCircle } from '@phosphor-icons/react/dist/ssr'
 import { ReviewItem, reviewStatus } from '@/components/learning/review-item'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
@@ -100,13 +101,13 @@ export function GradingFailed({ result }: { result: NotGraded }) {
 }
 
 /** A topic's row under "Where to focus". With one topic only, its score is the whole exam's, shown by the ring above. */
-function FocusRow({ topic, courseId, showScore, weakest }: { topic: Graded['topics'][number]; courseId: string; showScore: boolean; weakest: boolean }) {
+function FocusRow({ topic, courseId, showScore }: { topic: Graded['topics'][number]; courseId: string; showScore: boolean }) {
   const low = topic.percent < 60
   const href = topic.linkable && topic.topicId ? `/courses/${courseId}/topics/${topic.topicId}` : null
   return (
     <li className="relative flex items-center gap-4 border-b border-border py-3">
       <span className="min-w-0 flex-1 truncate text-body text-fg">
-        {/* The whole row opens the topic; only the weakest one also has a button, so four rows do not say "Study" four times. */}
+        {/* The whole row opens the topic. The one recommended first step, for the weakest topic, is the button under the score. */}
         {href ? (
           <Link href={href} className="after:absolute after:inset-0 after:content-[''] focus-visible:after:rounded-chip max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
             {topic.topicName}
@@ -127,17 +128,74 @@ function FocusRow({ topic, courseId, showScore, weakest }: { topic: Graded['topi
           <span className="w-12 shrink-0 text-right tabular text-body-strong text-fg">{formatScore(topic.percent)}</span>
         </>
       ) : null}
-      <span className="flex w-[68px] shrink-0 justify-end">
-        {href && weakest ? (
-          <Button asChild size="sm" variant="secondary" className="relative z-10">
-            <Link href={href} aria-label={`${topic.percent >= 100 ? 'Open' : 'Study'} ${topic.topicName}`}>
-              {topic.percent >= 100 ? 'Open' : 'Study'}
-            </Link>
-          </Button>
-        ) : href ? (
-          <CaretRight aria-hidden="true" className="size-4 text-fg-3" />
-        ) : null}
-      </span>
+      <span className="flex w-6 shrink-0 justify-end">{href ? <CaretRight aria-hidden="true" className="size-4 text-fg-3" /> : null}</span>
+    </li>
+  )
+}
+
+const STATUS_WORD: Record<ReturnType<typeof reviewStatus>, { label: string; tone: 'accent' | 'warning' | 'danger' | 'neutral' }> = {
+  correct: { label: 'Correct', tone: 'accent' },
+  partial: { label: 'Partly correct', tone: 'warning' },
+  incorrect: { label: 'Missed', tone: 'danger' },
+  review: { label: 'Needs review', tone: 'neutral' },
+}
+
+/**
+ * One question as a labelled row (number, outcome, the start of the question, points) that opens to the full review: a phone
+ * shows twenty of them on a short page instead of twenty long reviews. Only an open row mounts the review, so the regrade
+ * control and the answer key appear where the student is reading.
+ */
+function QuestionRow({
+  number,
+  questionText,
+  status,
+  points,
+  pointsEarned,
+  open,
+  onToggle,
+  children,
+}: {
+  number: number
+  questionText: string
+  status: ReturnType<typeof reviewStatus>
+  points: number
+  pointsEarned: number
+  open: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}) {
+  const panelId = React.useId()
+  const word = STATUS_WORD[status]
+  const preview = questionText.replace(/\s+/g, ' ').replace(/\$/g, '').trim()
+  return (
+    <li className="border-b border-border last:border-b-0">
+      <div>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={open ? panelId : undefined}
+          onClick={onToggle}
+          className="flex min-h-11 w-full items-center gap-3 py-2.5 text-left focus-visible:rounded-control"
+        >
+          <span className="tabular w-6 shrink-0 text-body-strong text-fg-3">{number}</span>
+          <Badge tone={word.tone} className="shrink-0">
+            {word.label}
+          </Badge>
+          <span className="min-w-0 flex-1 truncate text-small text-fg-2">{preview}</span>
+          {/* The open review says the points itself. */}
+          {open ? null : (
+            <span className="shrink-0 tabular text-small text-fg-2 max-sm:sr-only">
+              {pointsText(pointsEarned)} of {pointsText(points)} {points === 1 ? 'pt' : 'pts'}
+            </span>
+          )}
+          <CaretDown aria-hidden="true" className={cn('size-4 shrink-0 text-fg-3 transition-transform duration-180', open && 'rotate-180')} />
+        </button>
+      </div>
+      {open ? (
+        <ul id={panelId} className="pb-1 pl-9">
+          {children}
+        </ul>
+      ) : null}
     </li>
   )
 }
@@ -170,8 +228,37 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
   const sureWrong = shown.filter(isSureAndWrong)
   const others = shown.filter((question) => !isSureAndWrong(question))
   const calibration = examCalibration(result.questions)
+  // The weakest topic that has a page to open and something left to learn (topics come weakest first).
+  const reviewTopic = result.topics.find((topic) => topic.linkable && topic.topicId && topic.percent < 100) ?? null
+  // The first miss to read: one the student was sure about if there is one, otherwise the first missed. The rest start collapsed.
+  const firstMiss = result.questions.find(isSureAndWrong) ?? result.questions.find((q) => !q.isCorrect && !q.needsReview) ?? null
+  const [open, setOpen] = React.useState<Set<number>>(() => new Set(firstMiss ? [firstMiss.questionIndex] : []))
+  const allOpen = shown.length > 0 && shown.every((q) => open.has(q.questionIndex))
+  const toggleQuestion = (index: number) =>
+    setOpen((current) => {
+      const next = new Set(current)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  const setAll = (expand: boolean) => setOpen(new Set(expand ? shown.map((q) => q.questionIndex) : []))
 
   const renderQuestion = (question: Graded['questions'][number]) => (
+    <QuestionRow
+      key={question.questionIndex}
+      number={question.questionIndex + 1}
+      questionText={question.questionText}
+      status={reviewStatus(question)}
+      points={question.points}
+      pointsEarned={question.pointsEarned}
+      open={open.has(question.questionIndex)}
+      onToggle={() => toggleQuestion(question.questionIndex)}
+    >
+      {renderItem(question)}
+    </QuestionRow>
+  )
+
+  const renderItem = (question: Graded['questions'][number]) => (
     <ReviewItem
       key={question.questionIndex}
       number={question.questionIndex + 1}
@@ -224,10 +311,49 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
             Submitted {submittedLabel}
           </p>
           {calibration ? <p className="mt-1 text-small text-fg-2">{calibrationLine(calibration)}</p> : null}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {result.practice ? <PracticeMissedButton courseId={result.courseId} submissionId={result.id} count={result.practice.count} /> : null}
-            {/* After a practice set is on offer, the same questions again are the quiet choice: the repair comes first. */}
-            <StartExamButton courseId={result.courseId} examId={result.examId} variant={result.practice ? 'ghost' : 'secondary'} size="md" label="Retake exam" />
+        </div>
+      </section>
+
+      {/* One recommended order, said once. Retaking the same questions is the quiet choice: the repair comes first. */}
+      <section aria-labelledby="exam-next" className="flex flex-col gap-4">
+        {reviewTopic || result.practice ? (
+          <>
+            <h2 id="exam-next" className="text-heading text-fg">
+              What to do next
+            </h2>
+            <ol className="flex flex-col gap-3">
+              {reviewTopic ? (
+                <li className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <span aria-hidden="true" className="tabular text-body-strong text-fg-3">1.</span>
+                  <Button asChild variant="primary" size="md">
+                    <Link href={`/courses/${result.courseId}/topics/${reviewTopic.topicId}`}>{`Review ${reviewTopic.topicName}`}</Link>
+                  </Button>
+                  <span className="text-small text-fg-2">Your weakest topic in this exam.</span>
+                </li>
+              ) : null}
+              {result.practice ? (
+                <li className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <span aria-hidden="true" className="tabular text-body-strong text-fg-3">{reviewTopic ? '2.' : '1.'}</span>
+                  <PracticeMissedButton
+                    courseId={result.courseId}
+                    submissionId={result.id}
+                    count={result.practice.count}
+                    variant={reviewTopic ? 'secondary' : 'primary'}
+                  />
+                  {reviewTopic ? <span className="text-small text-fg-2">Then, to check it stuck.</span> : null}
+                </li>
+              ) : null}
+            </ol>
+          </>
+        ) : (
+          <h2 id="exam-next" className="sr-only">
+            What to do next
+          </h2>
+        )}
+        <div>
+          <h3 className="text-caption text-fg-3">Other ways to study</h3>
+          <div className="-ml-2.5 mt-1 flex flex-wrap gap-2">
+            <StartExamButton courseId={result.courseId} examId={result.examId} variant="ghost" size="md" label="Retake exam" />
             <Button asChild variant="ghost">
               <Link href={`/courses/${result.courseId}/exams`}>Back to exams</Link>
             </Button>
@@ -244,8 +370,8 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
             {result.topics.length > 1 ? <span className="text-small text-fg-3">Weakest first</span> : null}
           </div>
           <ul className="mt-3 border-t border-border">
-            {result.topics.map((topic, index) => (
-              <FocusRow key={topic.topicId ?? topic.topicName} topic={topic} courseId={result.courseId} showScore={result.topics.length > 1} weakest={index === 0} />
+            {result.topics.map((topic) => (
+              <FocusRow key={topic.topicId ?? topic.topicName} topic={topic} courseId={result.courseId} showScore={result.topics.length > 1} />
             ))}
           </ul>
         </section>
@@ -258,6 +384,13 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
           </h2>
           <SegmentedControl aria-label="Show questions" value={filter} onValueChange={setFilter} options={options} />
         </div>
+        {shown.length > 1 ? (
+          <div className="mt-2 -ml-2.5">
+            <Button type="button" size="sm" variant="ghost" onClick={() => setAll(!allOpen)}>
+              {allOpen ? 'Collapse all' : 'Expand all'}
+            </Button>
+          </div>
+        ) : null}
         {shown.length === 0 ? (
           <p className="mt-6 text-small text-fg-2">
             {filter === 'missed' ? 'You got every question right.' : 'Nothing needs review.'}

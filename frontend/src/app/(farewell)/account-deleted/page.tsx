@@ -14,10 +14,8 @@ export const metadata: Metadata = {
 export default function AccountDeletedPage() {
   return (
     <LegalPage title="Your account is deleted">
-      <p>
-        Your courses, the files you uploaded and everything made from them are gone. You&apos;ve been signed out on
-        this device, and any other device you used is signed out the next time it loads a page.
-      </p>
+      <p>Your account and course files have been deleted.</p>
+      <p>Other devices are signed out when they next load a page.</p>
       <p>
         Questions? Email{' '}
         <a className={`${phoneInlineHit} text-accent underline underline-offset-4 hover:text-accent-hover`} href={`mailto:${CONTACT_EMAIL}`}>

@@ -39,6 +39,7 @@ test.describe('public pages', () => {
 
   test('the evaluation page says in a line what each retrieval measure is', async ({ page }) => {
     await page.goto('/evaluation')
+    await page.getByText('Retrieval: method, results and limits').click()
     const definitions = page.locator('#retrieval ~ dl, dl:has(dt:text("MRR"))').first()
     await expect(definitions.getByText('How high the first right chunk ranks. 1 means it is first.')).toBeVisible()
     await expect(definitions.getByText('Whether at least one right chunk is in the first five.')).toBeVisible()
@@ -129,6 +130,9 @@ test.describe('account', () => {
   test('allowance explanation and a lower-case confirmation word', async ({ page }) => {
     await signUpAndIn(page, 'r3-account', { own: true })
     await page.goto('/settings')
+    // The answer is one line; how it is counted is behind "How the allowance works".
+    await expect(page.getByTestId('allowance-summary')).toContainText('Available')
+    await page.getByText('How the allowance works').click()
     await expect(page.getByTestId('allowance-explainer')).toContainText('not a count of questions left')
     await expect(page.getByRole('link', { name: 'What happens at the limit' })).toHaveAttribute('href', '/#faq')
     await page.getByRole('button', { name: 'Delete account' }).click()
