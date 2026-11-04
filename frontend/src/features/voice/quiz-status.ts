@@ -22,7 +22,7 @@ export function quizMissingCopy(mode: 'topic' | 'sprint', quiz: Extract<VoiceQui
         (mode === 'sprint'
           ? "The quizzes for these topics are made of calculations and working that can't be asked out loud."
           : `This topic's quiz has ${quiz.total === 1 ? '1 question' : `${quiz.total} questions`}, and each one is a calculation or working that can't be asked out loud.`) +
-        ` Practise them in the quiz instead.${others}`,
+        ` Practice them in the quiz instead.${others}`,
       action: 'Open the quiz',
     }
   }

@@ -1,5 +1,5 @@
 /**
- * "Practise what you missed" after a mock exam: which concepts (or, for an exam whose questions name none, which topics)
+ * "Practice what you missed" after a mock exam: which concepts (or, for an exam whose questions name none, which topics)
  * the missed questions were about. The review session then serves new questions on them; the exam's own questions are not
  * served again, because answering the same question again straight away mostly tests short-term memory.
  */

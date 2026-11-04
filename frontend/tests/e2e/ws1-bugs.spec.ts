@@ -152,7 +152,7 @@ test('mock exam results offer new questions on what was missed, and keep Retake 
 
   await page.goto(`/courses/${course.courseId}/exams/${submissionId.examId}/results/${submissionId.id}`)
   // Two missed questions, on two ideas: two new questions. The count is on the button.
-  const practise = page.getByRole('button', { name: 'Practise what you missed (2 questions)' })
+  const practise = page.getByRole('button', { name: 'Practice what you missed (2 questions)' })
   await expect(practise).toBeVisible()
   await expect(page.getByRole('button', { name: 'Retake exam' })).toBeVisible()
   await practise.click()

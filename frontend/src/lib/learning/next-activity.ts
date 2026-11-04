@@ -205,7 +205,7 @@ export function nextActivity(s: TopicLearningState, ctx: NextActivityContext): N
       if (practiceBeforeQuiz) passOver('practice')
       return pick({ kind: 'quiz', conceptIds: [], reason: 'Take the quiz to see what you know.' })
     }
-    return { kind: 'practice', conceptIds: [], reason: 'Practise to keep it fresh.' }
+    return { kind: 'practice', conceptIds: [], reason: 'Practice to keep it fresh.' }
   }
 
   // 1. Instruction: a concept whose latest retrieval failed, with nothing shown since. It goes to the gap explainer when a
@@ -289,7 +289,7 @@ export function nextActivity(s: TopicLearningState, ctx: NextActivityContext): N
     return pick({ kind: 'quiz', conceptIds: unquizzed.map((c) => c.id), reason: 'Take the quiz to see where you stand.' })
   }
   if (open.length > 0) {
-    return pick({ kind: 'practice', conceptIds: open.map((c) => c.id), reason: 'Practise what is not solid yet.' })
+    return pick({ kind: 'practice', conceptIds: open.map((c) => c.id), reason: 'Practice what is not solid yet.' })
   }
 
   // 11. Everything solid: the stretch rotation once each concept has enough unaided evidence. With the AI down it uses the

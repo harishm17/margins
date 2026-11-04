@@ -62,7 +62,7 @@ export function StartExamButton({ courseId, examId, resumeSeconds = null, label,
 }
 
 /**
- * "Practise what you missed": a review session of new questions on the ideas the missed ones were about (not the exam's own
+ * "Practice what you missed": a review session of new questions on the ideas the missed ones were about (not the exam's own
  * questions again). The count is what the session is set up to serve, and it is on the button.
  */
 export function PracticeMissedButton({ courseId, submissionId, count }: { courseId: string; submissionId: string; count: number }) {
@@ -90,7 +90,7 @@ export function PracticeMissedButton({ courseId, submissionId, count }: { course
 
   return (
     <Button variant="primary" size="md" loading={busy} onClick={start} className="tabular">
-      {`Practise what you missed (${pluralize(count, 'question')})`}
+      {`Practice what you missed (${pluralize(count, 'question')})`}
     </Button>
   )
 }

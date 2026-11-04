@@ -74,8 +74,8 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await page.getByRole('button', { name: 'Submit quiz' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
   await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
-  await expect(card(page)).toContainText('Practise to keep it fresh.')
-  await expect(card(page).getByRole('link', { name: 'Practise' })).toHaveAttribute('href', /view=practice/)
+  await expect(card(page)).toContainText('Practice to keep it fresh.')
+  await expect(card(page).getByRole('link', { name: 'Practice' })).toHaveAttribute('href', /view=practice/)
   await screenshotIfAsked(page, 'next-card-quiz-results-1440x900')
 
   // The results and the header agree: one review date in the same words, and one mastery figure.
@@ -129,13 +129,13 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   const caret = (await intro.getByRole('button', { name: 'Show more' }).boundingBox())!
   expect(Math.min(caret.width, caret.height), 'the fold button is at least 44px').toBeGreaterThanOrEqual(44)
   await expect(card(page)).toBeVisible()
-  await expect(card(page).getByText('Practise to keep it fresh.')).toBeHidden()
+  await expect(card(page).getByText('Practice to keep it fresh.')).toBeHidden()
   await screenshotIfAsked(page, 'next-card-both-cards-390x844')
   const lobbyTop = (await page.locator('[data-tab-panel]').boundingBox())!.y
   const topbar = (await page.locator('header').first().boundingBox())!
   expect(lobbyTop - (topbar.y + topbar.height), `the content starts ${lobbyTop}px down`).toBeLessThan(CONTENT_START_WITH_CARDS)
   await card(page).getByRole('button', { name: 'Why' }).click()
-  await expect(card(page).getByText('Practise to keep it fresh.')).toBeVisible()
+  await expect(card(page).getByText('Practice to keep it fresh.')).toBeVisible()
   await intro.getByRole('button', { name: 'Show more' }).click()
   await expect(intro.getByText('It will feel slower than reading a summary.')).toBeVisible()
   await expectNoAxeViolations(page, 'both cards open, 390')
