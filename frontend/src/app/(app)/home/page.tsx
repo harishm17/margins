@@ -9,7 +9,7 @@ import { CourseGrid } from '@/features/home/course-grid'
 import { DueReviews } from '@/features/home/due-reviews'
 import { ShortSessionCard } from '@/features/home/short-session-card'
 import { Greeting } from '@/features/home/greeting'
-import { shortSessionOffer } from '@/lib/learning/short-session-server'
+import { SHORT_SESSION_LOCKED_TEXT, hasFirstQuizOrRecall, shortSessionOffer } from '@/lib/learning/short-session-server'
 import { continueAction } from '@/server/queries/continue'
 import { listCourses } from '@/server/queries/courses'
 import { dueReviews } from '@/server/queries/reviews'
@@ -30,7 +30,9 @@ export default async function HomePage() {
   ])
 
   // "Have 10 minutes?" for the course in "Up next" (spec 18.8). An extra: if it cannot be worked out Home still shows.
-  const short = next ? await shortSessionOffer(user.id, next.course.id, timeZone).catch(() => null) : null
+  // Not before the student has a first quiz or recall: there is nothing to go over yet, so Home says what opens it.
+  const unlocked = next ? await hasFirstQuizOrRecall(user.id, next.course.id).catch(() => false) : false
+  const short = next && unlocked ? await shortSessionOffer(user.id, next.course.id, timeZone).catch(() => null) : null
 
   if (courses.length === 0) {
     return (
@@ -66,6 +68,11 @@ export default async function HomePage() {
       <div className="flex flex-col gap-10">
         {next ? <ContinueCard data={next} /> : null}
         {next && short ? <ShortSessionCard courseId={next.course.id} plan={short.plan} /> : null}
+        {next && !unlocked ? (
+          <p className="-mt-6 text-small text-fg-2" data-testid="short-session-locked">
+            {SHORT_SESSION_LOCKED_TEXT}
+          </p>
+        ) : null}
         <DueReviews items={due.items} total={due.total} />
         <CourseGrid courses={courses} />
       </div>
