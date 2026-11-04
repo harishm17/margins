@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { MathText } from '@/components/ui/math-text'
 import { Card as TeachBackCard } from '@/features/topic/recall-view'
-import { linkText } from '@/lib/map/copy'
+import { edgeQuestionText, linkText } from '@/lib/map/copy'
 import { reviewSessionHref } from '@/lib/learning/review-links'
 import type { ConceptPanel } from '@/server/queries/map'
 import { EdgeQuestion } from './edge-question'
@@ -20,6 +20,8 @@ export type PanelWords = {
   stateLine: string
   /** "Next up" or "Start here" when the idea is next up, else null. */
   frontier: string | null
+  /** Why it is or is not ready: "No prerequisites: start here" or "Builds on X (suggested connection, not confirmed)". */
+  reason: string
   events: { id: string; text: string; when: string }[]
   teachBackPrompt: string
 }
@@ -127,6 +129,7 @@ export function NodePanel({
         <span>{stateLine}</span>
         {words.frontier ? <FrontierBadge text={words.frontier} /> : null}
       </p>
+      <p className="mt-1 text-small text-fg-2">{words.reason}</p>
       {panel.misconception ? (
         <InlineAlert className="mt-3" tone="warning" icon={<WarningCircle />}>
           A wrong idea is on record: {panel.misconception}
@@ -202,25 +205,14 @@ export function NodePanel({
         </div>
       ) : null}
 
-      {suggested.length > 0 || confirmed.length > 0 ? (
+      {confirmed.length > 0 ? (
         <div className="mt-6 border-t border-border pt-5">
           <h3 className="text-body-strong text-fg">How it connects</h3>
-          {suggested.length > 0 ? (
-            <ul aria-label="Suggested links" className="mt-2 flex flex-col gap-2">
-              {suggested.map((link) => (
-                <li key={link.edgeId}>
-                  <EdgeQuestion edgeId={link.edgeId} text={linkText(link.kind, link.otherName, true)} />
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {confirmed.length > 0 ? (
-            <ul aria-label="Confirmed links" className="mt-2 flex flex-col gap-1 text-body text-fg-2">
-              {confirmed.map((link) => (
-                <li key={link.edgeId}>{linkText(link.kind, link.otherName, false)}</li>
-              ))}
-            </ul>
-          ) : null}
+          <ul aria-label="Confirmed links" className="mt-2 flex flex-col gap-1 text-body text-fg-2">
+            {confirmed.map((link) => (
+              <li key={link.edgeId}>{linkText(link.kind, link.otherName, false)}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
@@ -258,6 +250,24 @@ export function NodePanel({
           </ul>
         )}
       </div>
+      {suggested.length > 0 ? (
+        // Checking a suggested link is upkeep, not studying: it sits last, closed, so the actions above stay the learning ones.
+        <details className="group mt-6 border-t border-border pt-4">
+          <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-chip text-body-strong text-fg hover:text-fg-2 max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
+            <CaretDown aria-hidden="true" className="size-3.5 -rotate-90 transition-transform duration-180 group-open:rotate-0" />
+            Edit connections
+            <span className="text-small font-normal text-fg-3">({suggested.length} to check)</span>
+          </summary>
+          <p className="mt-2 text-small text-fg-2">Your answer updates this suggested connection. Compare it with what your pages say, above.</p>
+          <ul aria-label="Suggested links" className="mt-3 flex flex-col gap-4">
+            {suggested.map((link) => (
+              <li key={link.edgeId}>
+                <EdgeQuestion edgeId={link.edgeId} text={edgeQuestionText(link.kind, panel.name, link.otherName)} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       <p className="mt-5">
         <Link href={closeHref} scroll={false} className="rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg">
           Close the details

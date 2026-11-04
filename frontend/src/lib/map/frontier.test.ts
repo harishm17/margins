@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { FRONTIER_RETRIEVABILITY, isFrontier } from './frontier'
+import { FRONTIER_RETRIEVABILITY, frontierReason, isFrontier } from './frontier'
 
 test('frontier means prerequisites at R >= 0.8 and node not solid', () => {
   assert.equal(FRONTIER_RETRIEVABILITY, 0.8)
@@ -21,4 +21,14 @@ test('the ring reads retrievability only: a prerequisite that is Shaky but fresh
   // The caller passes each prerequisite's retrievability; the label of the prerequisite plays no part.
   assert.equal(isFrontier('not_started', [0.85]), true)
   assert.equal(isFrontier('not_started', [0.85, 0.5]), false)
+})
+
+test('the reason says there is nothing to build on, or what it builds on and which links are only suggested', () => {
+  assert.equal(frontierReason([]), 'No prerequisites: start here')
+  assert.equal(frontierReason([{ name: 'Hashing', suggested: false }]), 'Builds on Hashing')
+  assert.equal(frontierReason([{ name: 'Hashing', suggested: true }]), 'Builds on Hashing (suggested connection, not confirmed)')
+  assert.equal(
+    frontierReason([{ name: 'A', suggested: false }, { name: 'B', suggested: true }]),
+    'Builds on A. Builds on B (suggested connection, not confirmed)'
+  )
 })

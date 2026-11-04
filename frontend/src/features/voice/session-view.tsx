@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { useParams, usePathname } from 'next/navigation'
 import {
   Check,
   HandPalm,
@@ -16,6 +16,7 @@ import {
   SpeakerSlash,
 } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { IconButton } from '@/components/ui/icon-button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Textarea } from '@/components/ui/textarea'
@@ -24,6 +25,7 @@ import type { VoiceAlert } from './errors'
 import { isDoneShortcut } from './shortcuts'
 import { ORB_LABEL, orbLabel, type MicNotice, type OrbState, type SessionState } from './session-state'
 import { Transcript } from './transcript'
+import { useVoiceDraft } from './use-voice-draft'
 import type { VoiceController } from './voice-controller'
 import { VoiceOrb } from './voice-orb'
 import { VoiceSettings } from './voice-settings'
@@ -32,7 +34,7 @@ type SessionViewProps = {
   state: SessionState
   orb: OrbState
   controller: VoiceController
-  /** The topic's name, or null for a sprint. */
+  /** The topic's name, or the round's name for a quick round. */
   title: string
   /** Quiz style: Hint and Skip make sense. */
   hasQuestions: boolean
@@ -59,11 +61,16 @@ const MIC_NOTICES: Record<MicNotice, { tone: 'neutral' | 'warning'; title?: stri
 
 export function SessionView({ state, orb, controller, title, hasQuestions, recognitionSupported }: SessionViewProps) {
   const { question, board, entries, interim, inputMode, micPaused, speech, turnActive, alert, micNotice } = state
-  const [draft, setDraft] = React.useState('')
+  // The unsent typed answer survives a reload (the session itself ends when the page is hidden; the lobby offers to continue it).
+  const { courseId } = useParams<{ courseId: string }>()
+  const { draft, setDraft, clear: clearDraft } = useVoiceDraft(courseId)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
   const textMode = inputMode === 'text'
   // No speech recognition here (the lobby said so before the start): the text box is the way in, with no mic to look at.
   const textOnly = textMode && !recognitionSupported
+  // Typing with replies read aloud keeps the orb (it shows the coach speaking); typing without speech has nothing for it to show,
+  // so the field comes straight after the question and a one-line status replaces it.
+  const showOrb = !textOnly && !(textMode && speech !== 'on')
 
   React.useEffect(() => {
     if (textMode) inputRef.current?.focus()
@@ -86,7 +93,7 @@ export function SessionView({ state, orb, controller, title, hasQuestions, recog
     event.preventDefault()
     if (!draft.trim() || turnActive) return
     controller.sendText(draft)
-    setDraft('')
+    clearDraft()
   }
 
   return (
@@ -108,7 +115,7 @@ export function SessionView({ state, orb, controller, title, hasQuestions, recog
         <div className="flex flex-1 flex-col gap-6 pb-6 pt-5">
           <Board board={board} />
 
-          {textOnly ? (
+          {!showOrb ? (
             <p role="status" aria-live="polite" className="h-6 self-center text-body-strong text-fg-2" data-testid="voice-text-status">
               {orb === 'thinking' || orb === 'speaking' ? ORB_LABEL[orb] : ''}
             </p>
@@ -149,33 +156,44 @@ export function SessionView({ state, orb, controller, title, hasQuestions, recog
 
           <Transcript entries={entries} interim={interim} />
 
-          <div className="flex flex-col gap-3 max-md:sticky max-md:bottom-0 max-md:mt-auto max-md:bg-canvas max-md:pb-[max(1rem,env(safe-area-inset-bottom))] max-md:pt-3">
+          <div
+            className={cn(
+              'flex flex-col gap-3 max-md:sticky max-md:bottom-0 max-md:bg-canvas max-md:pb-[max(1rem,env(safe-area-inset-bottom))] max-md:pt-3',
+              // Typing: the field follows the question instead of sitting at the foot of an empty screen.
+              !textMode && 'max-md:mt-auto'
+            )}
+          >
             {textMode ? (
               // A voice answer is an explanation, so the typed one is a multiline field: two lines to start, growing as it fills.
               // With a keyboard, Enter sends and Shift+Enter starts a new line; on a touch screen Enter is a new line and Send sends.
-              <form onSubmit={send} className="flex items-end gap-2">
-                <Textarea
-                  ref={inputRef}
-                  value={draft}
-                  rows={2}
-                  maxRows={8}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
-                    if (!window.matchMedia('(pointer: fine)').matches) return
-                    event.preventDefault()
-                    event.currentTarget.form?.requestSubmit()
-                  }}
-                  placeholder="Type your answer"
-                  aria-label="Your answer"
-                  maxLength={2000}
-                  autoComplete="off"
-                  enterKeyHint="enter"
-                  className="min-w-0 flex-1"
-                />
-                <Button type="submit" variant="primary" icon={<PaperPlaneRight />} disabled={!draft.trim() || turnActive} className="shrink-0">
-                  Send
-                </Button>
+              <form onSubmit={send} className="flex flex-col gap-2">
+                <label htmlFor="voice-answer" className="text-body-strong text-fg">
+                  Type your answer
+                </label>
+                <div className="flex items-end gap-2">
+                  <Textarea
+                    id="voice-answer"
+                    ref={inputRef}
+                    value={draft}
+                    rows={2}
+                    maxRows={8}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+                      if (!window.matchMedia('(pointer: fine)').matches) return
+                      event.preventDefault()
+                      event.currentTarget.form?.requestSubmit()
+                    }}
+                    placeholder="Your answer"
+                    maxLength={2000}
+                    autoComplete="off"
+                    enterKeyHint="enter"
+                    className="min-w-0 flex-1"
+                  />
+                  <Button type="submit" variant="primary" icon={<PaperPlaneRight />} disabled={!draft.trim() || turnActive} className="shrink-0">
+                    Send
+                  </Button>
+                </div>
               </form>
             ) : null}
 

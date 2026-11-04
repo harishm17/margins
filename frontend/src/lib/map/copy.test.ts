@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { eventLine, frontierKeyText, frontierTexts, LABEL_ORDER, LABEL_TEXT, linkText, stateLine } from './copy'
+import { duplicateNames, edgeQuestionText, eventLine, frontierKeyText, frontierTexts, LABEL_ORDER, LABEL_TEXT, linkText, stateLine } from './copy'
 import { mapHref, NO_UNIT, parseView } from './params'
 
 const NOW = new Date('2026-11-10T20:00:00Z')
@@ -62,7 +62,19 @@ test('with several ideas next up, the first in list order says where to start an
 })
 
 test('the key says what the ring tests: prerequisites remembered at R >= 0.8, not prerequisites that are Solid', () => {
-  assert.equal(frontierKeyText(1), 'Next up: what you need is well remembered. The ring marks it.')
-  assert.equal(frontierKeyText(2), 'Next up: what you need is well remembered. The ring marks Start here, the first of them.')
+  assert.equal(frontierKeyText(1), 'Next up: ready to study. You answered what it builds on well recently. The ring marks it.')
+  assert.equal(frontierKeyText(2), 'Next up: ready to study. You answered what it builds on well recently. The ring marks Start here, the first of them.')
   assert.doesNotMatch(frontierKeyText(1), /solid/i)
+})
+
+test('names that occur twice in a unit are found without regard to case', () => {
+  assert.deepEqual([...duplicateNames([{ name: 'Mock idea 1' }, { name: 'mock idea 1' }, { name: 'Other' }])], ['mock idea 1'])
+  assert.equal(duplicateNames([{ name: 'A' }, { name: 'B' }]).size, 0)
+})
+
+test('the question about a suggested link names both ideas and which comes first', () => {
+  assert.equal(edgeQuestionText('needs', 'Tries', 'Hashing'), 'Does Tries require Hashing first?')
+  assert.equal(edgeQuestionText('needed_by', 'Hashing', 'Tries'), 'Does Tries require Hashing first?')
+  assert.equal(edgeQuestionText('covers', 'A', 'B'), 'Does A cover B?')
+  assert.equal(edgeQuestionText('confusable', 'A', 'B'), 'Are A and B easy to mix up?')
 })

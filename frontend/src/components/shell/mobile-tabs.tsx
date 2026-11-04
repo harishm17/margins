@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useParams, usePathname } from 'next/navigation'
 import {
   ArrowsClockwise,
+  ArrowsLeftRight,
   CalendarCheck,
   ChatCircleText,
   DotsThree,
@@ -33,7 +34,7 @@ function TabLink({ tab }: { tab: Tab }) {
       href={tab.href}
       aria-current={tab.active ? 'page' : undefined}
       className={cn(
-        'relative flex h-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-control text-caption transition-colors duration-120',
+        'relative flex h-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-control text-small transition-colors duration-120',
         tab.active ? 'text-fg after:absolute after:inset-x-3 after:top-0 after:h-0.5 after:rounded-full after:bg-accent' : 'text-fg-2 active:bg-surface-2'
       )}
     >
@@ -81,11 +82,11 @@ function MoreRow({
 /**
  * The course navigation on a phone or small tablet: a bar of five targets fixed to the bottom, inside
  * a course (research idea 9). Overview, Plan, Topics and Ask are one tap away; More holds Review, Map, Mock
- * exams, Materials and the course settings, and the full menu (courses, topic tree, account) stays
- * on the top bar's menu button. Hidden from 1024px, where the sidebar takes over.
+ * exams, Materials, the course settings, a way to browse the topics and a way to switch course. The top bar's menu
+ * button opens "Courses and account" (switch course, search, theme, account); topic trees live on the Topics page. Hidden from 1024px, where the sidebar takes over.
  */
 export function MobileTabs() {
-  const { nav, setMobileNavOpen } = useShell()
+  const { nav, setMobileNavOpen, attemptActive } = useShell()
   const params = useParams<{ courseId?: string }>()
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = React.useState(false)
@@ -97,7 +98,8 @@ export function MobileTabs() {
     setLastPath(pathname)
     setMoreOpen(false)
   }
-  if (!course) return null
+  // An open attempt owns the phone screen: no bar, no --tabbar-height, no spacer.
+  if (!course || attemptActive) return null
 
   const base = `/courses/${course.id}`
   const inMore = ['review', 'map', 'exams', 'materials', 'settings'].some((section) => pathname.startsWith(`${base}/${section}`))
@@ -153,7 +155,7 @@ export function MobileTabs() {
             aria-expanded={moreOpen}
             onClick={() => setMoreOpen(true)}
             className={cn(
-              'flex h-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-control text-caption transition-colors duration-120',
+              'flex h-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-control text-small transition-colors duration-120',
               inMore ? 'text-fg' : 'text-fg-2 active:bg-surface-2'
             )}
           >
@@ -174,6 +176,7 @@ export function MobileTabs() {
             <MoreRow href={`${base}/exams`} icon={Exam} label="Mock exams" />
             <MoreRow href={`${base}/materials`} icon={Files} label="Materials" />
             <MoreRow href={`${base}/settings`} icon={Gear} label="Course settings" />
+            <MoreRow href={`${base}/topics`} icon={ListBullets} label="Browse topics" />
             <button
               type="button"
               onClick={() => {
@@ -182,8 +185,8 @@ export function MobileTabs() {
               }}
               className="flex min-h-12 items-center gap-3 rounded-control px-3 text-left text-body-strong text-fg hover:bg-surface-2"
             >
-              <List aria-hidden="true" className="size-5 text-fg-3" />
-              <span className="min-w-0 flex-1 truncate">Switch course or browse topics</span>
+              <ArrowsLeftRight aria-hidden="true" className="size-5 text-fg-3" />
+              <span className="min-w-0 flex-1 truncate">Switch course</span>
             </button>
           </div>
         </SheetContent>

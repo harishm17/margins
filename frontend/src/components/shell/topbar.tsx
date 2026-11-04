@@ -58,7 +58,7 @@ function Breadcrumbs({ crumbs, mobile }: { crumbs: Crumb[]; mobile: MobileContex
  * page's actions.
  */
 export function Topbar() {
-  const { nav, setMobileNavOpen } = useShell()
+  const { nav, setMobileNavOpen, attemptActive } = useShell()
   const { crumbs: override } = useSlots()
   const pathname = usePathname()
   const collapsed = useSidebarCollapsed()
@@ -76,7 +76,9 @@ export function Topbar() {
   return (
     <header
       data-scrolled={scrolled || undefined}
+      // During a study attempt the phone shows the attempt bar alone; the notch gap stays so nothing sits under it.
       className={cn(
+        attemptActive && 'max-lg:h-[env(safe-area-inset-top,0px)] max-lg:overflow-hidden max-lg:border-0 max-lg:p-0 max-lg:[&>*]:hidden',
         'sticky top-0 z-topbar flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-transparent pt-[env(safe-area-inset-top)] px-4 md:px-6 lg:px-8',
         'transition-[background-color,border-color,backdrop-filter] duration-180',
         'data-[scrolled]:border-border data-[scrolled]:bg-canvas data-[scrolled]:backdrop-blur-md'

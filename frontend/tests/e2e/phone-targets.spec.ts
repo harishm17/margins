@@ -77,7 +77,7 @@ test.describe('signed in', () => {
     await page.getByRole('button', { name: /account menu/ }).click()
     await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible()
     await expectBig(page, 'account menu')
-    const tile = await page.getByRole('menuitemradio', { name: 'Light' }).boundingBox()
+    const tile = await page.getByRole('menuitemradio', { name: 'Light', exact: true }).boundingBox()
     expect(tile?.height ?? 0, 'theme tiles keep their size').toBeGreaterThanOrEqual(56)
   })
 

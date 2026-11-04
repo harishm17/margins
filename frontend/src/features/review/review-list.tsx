@@ -96,7 +96,7 @@ function SessionCard({ courseId, dueConceptCount, active }: { courseId: string; 
  * topic buttons are outlined. Without it (a course from before concepts) the first topic's main action
  * is filled, so the most overdue topic is where to start.
  */
-export function ReviewList({ data, active = null }: { data: ReviewPageData; active?: ActiveSession | null }) {
+export function ReviewList({ data, active = null, omitUpcoming = false }: { data: ReviewPageData; active?: ActiveSession | null; /** The page shows the schedule itself (behind "Keep studying"). */ omitUpcoming?: boolean }) {
   const courseId = data.course.id
   const next = data.upcoming[0]
   // Concepts due, or a session already started today that is still open.
@@ -138,29 +138,35 @@ export function ReviewList({ data, active = null }: { data: ReviewPageData; acti
         </section>
       ) : null}
 
-      {data.upcoming.length > 0 ? (
-        <section aria-labelledby="upcoming-heading">
-          <h2 id="upcoming-heading" className="text-heading text-fg">
-            Coming up
-          </h2>
-          <ul className="mt-3 divide-y divide-border border-y border-border">
-            {data.upcoming.map((topic) => (
-              <li key={topic.id} id={`review-${topic.id}`} className="flex min-h-12 items-center gap-3 py-1 max-sm:min-h-14">
-                <MasteryIndicator mastery={topic.mastery} variant="ring" />
-                <Link
-                  href={`/courses/${courseId}/topics/${topic.id}?view=quiz`}
-                  className="inline-flex min-h-6 min-w-0 flex-1 items-center truncate rounded-chip text-body-strong text-fg hover:underline max-sm:min-h-11"
-                >
-                  {topic.name}
-                </Link>
-                <time dateTime={topic.dueAt} suppressHydrationWarning className="shrink-0 text-small text-fg-3">
-                  {formatDate(topic.dueAt)}
-                </time>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      {omitUpcoming ? null : <UpcomingReviews courseId={courseId} upcoming={data.upcoming} />}
     </div>
+  )
+}
+
+/** The topics whose next review is on its way, with the date. With nothing due the page puts this behind "Keep studying". */
+export function UpcomingReviews({ courseId, upcoming }: { courseId: string; upcoming: ReviewPageData['upcoming'] }) {
+  if (upcoming.length === 0) return null
+  return (
+    <section aria-labelledby="upcoming-heading">
+      <h2 id="upcoming-heading" className="text-heading text-fg">
+        Coming up
+      </h2>
+      <ul className="mt-3 divide-y divide-border border-y border-border">
+        {upcoming.map((topic) => (
+          <li key={topic.id} id={`review-${topic.id}`} className="flex min-h-12 items-center gap-3 py-1 max-sm:min-h-14">
+            <MasteryIndicator mastery={topic.mastery} variant="ring" />
+            <Link
+              href={`/courses/${courseId}/topics/${topic.id}?view=quiz`}
+              className="inline-flex min-h-6 min-w-0 flex-1 items-center truncate rounded-chip text-body-strong text-fg hover:underline max-sm:min-h-11"
+            >
+              {topic.name}
+            </Link>
+            <time dateTime={topic.dueAt} suppressHydrationWarning className="shrink-0 text-small text-fg-3">
+              {formatDate(topic.dueAt)}
+            </time>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }

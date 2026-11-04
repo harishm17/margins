@@ -255,15 +255,17 @@ test.describe('phone', () => {
     for (const height of heights) expect(parseFloat(height.split(': ').pop()!), height).toBeGreaterThanOrEqual(43.5)
   })
 
-  test('the menu drawer has a close button and does not repeat the tab bar', async ({ page }) => {
+  test('the menu drawer is "Courses and account": a close button, no course places, no topic tree', async ({ page }) => {
     await signIn(page, DEMO_EMAIL)
     await page.goto(`/courses/${course}`)
     await page.getByRole('button', { name: 'Open menu' }).click()
-    const drawer = page.getByRole('dialog')
-    await expect(drawer.getByRole('link', { name: 'Materials' })).toBeVisible()
-    for (const name of ['Overview', 'Plan', 'Ask']) {
-      await expect(drawer.getByRole('navigation', { name: 'Course' }).getByRole('link', { name, exact: true })).toHaveCount(0)
-    }
+    const drawer = page.getByRole('dialog', { name: 'Courses and account' })
+    await expect(drawer.getByRole('button', { name: /^Course: / })).toBeVisible()
+    await expect(drawer.getByRole('radio', { name: /Match device/ })).toBeVisible()
+    // Each course place is on one phone surface (the tab bar or its More sheet), never here.
+    await expect(drawer.getByRole('navigation', { name: 'Course', exact: true })).toHaveCount(0)
+    await expect(drawer.getByRole('link', { name: 'Materials' })).toHaveCount(0)
+    await expect(drawer.locator('ul[data-collapsible]')).toHaveCount(0)
     expect((await drawer.getByRole('button', { name: 'Close menu' }).boundingBox())!.height).toBeGreaterThanOrEqual(44)
     await drawer.getByRole('button', { name: 'Close menu' }).click()
     await expect(drawer).toBeHidden()

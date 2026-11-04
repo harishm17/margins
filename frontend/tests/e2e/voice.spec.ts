@@ -1,3 +1,4 @@
+import { openKeepStudying } from './helpers/review'
 import { expect, test, type Page } from '@playwright/test'
 import { signIn as signInAs } from './helpers/auth'
 import { clearVoiceSessions, ensureVoiceFixture, makeLoadFactorStrong, VOICE_TEST_EMAIL, type VoiceFixture } from './helpers/voice-fixture'
@@ -45,6 +46,7 @@ test('the Review page links to voice practice, which has a screen of its own wit
   await installVoiceStubs(page, { recognition: false, synthesis: false })
   await page.goto(`/courses/${ids.courseId}/review`)
   await expect(page.getByRole('heading', { level: 1, name: 'Review' })).toBeVisible()
+  await openKeepStudying(page)
   await expect(page.getByRole('heading', { level: 2, name: 'Voice practice' })).toBeVisible()
   // The session does not run inside the Review page: there is no lobby here, only the way in.
   await expect(page.getByTestId('voice-lobby')).toHaveCount(0)

@@ -118,7 +118,7 @@ export function AiAllowance({ timeZone }: { timeZone: string }) {
   )
 }
 
-/** Light, Dark or System. */
+/** Light, Dark or Match device. */
 export function ThemeSetting() {
   const { choice, setChoice } = useThemeChoice()
   return (

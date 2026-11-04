@@ -58,7 +58,7 @@ test('new topics on an active course wait for review and join the plan when conf
   await expect(page.getByRole('link', { name: /Counting/, includeHidden: true }).first()).toBeAttached()
   await expect(page.getByRole('link', { name: /Bayes rule/, includeHidden: true })).toHaveCount(0)
   await page.keyboard.press('Control+k')
-  await page.getByPlaceholder(/^Search topics/).fill('Bayes')
+  await page.getByPlaceholder(/^Search courses/).fill('Bayes')
   await expect(page.getByText(/Nothing matches/)).toBeVisible()
   await page.keyboard.press('Escape')
   await page.goto(`${base}/exams/new`)

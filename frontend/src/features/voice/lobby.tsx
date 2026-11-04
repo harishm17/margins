@@ -12,6 +12,7 @@ import { Field } from '@/components/ui/field'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { SegmentedControl } from '@/components/ui/segmented-control'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { quizIsMissing, quizMissingCopy, styleNeedsQuiz, type VoiceQuizStatus } from './quiz-status'
@@ -70,6 +71,8 @@ type LobbyProps = {
   /** Whether Quiz me can begin, known before Start. Absent: not known, and a start that finds no questions says so. */
   quiz?: VoiceQuizStatus
   onStart: (config: StartConfig) => void
+  /** A card above the controls for the session that ended when the page was hidden ("Pick up where you left off"). */
+  resumeCard?: React.ReactNode
 }
 
 export function Lobby({
@@ -90,6 +93,7 @@ export function Lobby({
   claimsOfIdea = false,
   quiz,
   onStart,
+  resumeCard,
 }: LobbyProps) {
   // Never begin on a style that cannot run: without claims only Quiz me can (a start that fails for lack of them says so too).
   const needsClaims = !hasClaims || lobbyAlert?.kind === 'needs-claims'
@@ -111,6 +115,8 @@ export function Lobby({
     defaultLanguageCode(typeof navigator === 'undefined' ? undefined : navigator.language)
   )
   const [focus, setFocus] = React.useState('')
+  // How the student answers: out loud, or typed. Chosen before Start, so Start is one button that always says the same thing.
+  const [answerBy, setAnswerBy] = React.useState<'speak' | 'type'>('speak')
 
   // Where the voice goes depends on whether this browser can recognise on the device for this language (pack already installed).
   const tag = languageTag(language)
@@ -167,8 +173,9 @@ export function Lobby({
           ? 'Checking your minutes for today.'
           : undefined
 
-  const begin = (typed: boolean) => {
+  const begin = () => {
     if (outOfTime || starting || blocked || quizBlocked) return
+    const typed = recognitionSupported && answerBy === 'type'
     onStart({
       style: effectiveStyle,
       language,
@@ -178,7 +185,7 @@ export function Lobby({
     })
   }
 
-  // Quiz me asks from the topic's quiz, so that is where the student goes to make one (a sprint spans topics: the list).
+  // Quiz me asks from the topic's quiz, so that is where the student goes to make one (a quick round spans topics: the list).
   const createContentHref =
     mode === 'topic' && topic ? `/courses/${courseId}/topics/${topic.id}?view=quiz` : `/courses/${courseId}/topics`
   const quizCopy = quizIsMissing(quiz) ? quizMissingCopy(mode, quiz, mode === 'topic') : null
@@ -187,7 +194,7 @@ export function Lobby({
     <div className="flex max-w-[640px] flex-col gap-6" data-testid="voice-lobby">
       <div className="flex flex-col gap-1.5">
         <div className="flex items-start justify-between gap-4">
-          <h2 className="text-heading text-fg">{mode === 'sprint' ? 'Start a sprint' : 'Voice practice'}</h2>
+          <h2 className="text-heading text-fg">{mode === 'sprint' ? 'Voice practice: quick round' : 'Voice practice'}</h2>
           <div className="flex h-[26px] shrink-0 items-center" aria-live="polite">
             {usage === null ? (
               <Skeleton className="h-4 w-28 rounded-chip" />
@@ -217,6 +224,7 @@ export function Lobby({
         )}
       </div>
 
+      {resumeCard}
       {alert ? <LobbyAlertView alert={alert} createContentHref={createContentHref} mode={mode} quizWorks={!quizBlocked} /> : null}
       {quizBlocked && quizCopy && (!alert || alert.kind === 'needs-claims') ? (
         <InlineAlert
@@ -242,7 +250,7 @@ export function Lobby({
         className="flex flex-col gap-5"
         onSubmit={(event) => {
           event.preventDefault()
-          begin(false)
+          begin()
         }}
       >
         {mode === 'topic' ? (
@@ -327,31 +335,37 @@ export function Lobby({
           ) : null}
         </div>
 
+        {recognitionSupported ? (
+          <div className="flex flex-col gap-1.5">
+            <span id="voice-answer-by-label" className="text-small font-medium text-fg">
+              How you answer
+            </span>
+            <SegmentedControl<'speak' | 'type'>
+              aria-labelledby="voice-answer-by-label"
+              value={answerBy}
+              onValueChange={setAnswerBy}
+              disabled={starting}
+              className="self-start"
+              options={[
+                { value: 'speak', label: 'Speak your answers' },
+                { value: 'type', label: 'Type answers instead' },
+              ]}
+            />
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
           <Button
             type="submit"
             variant="primary"
             size="lg"
-            icon={<Microphone />}
+            icon={recognitionSupported && answerBy === 'type' ? <Keyboard /> : <Microphone />}
             loading={starting}
             disabled={outOfTime || usage === null || !!blocked || quizBlocked}
             disabledReason={startReason}
           >
-            {mode === 'sprint' ? 'Start sprint' : 'Start voice practice'}
+            Start voice practice
           </Button>
-          {recognitionSupported ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="lg"
-              icon={<Keyboard />}
-              disabled={outOfTime || starting || !!blocked || usage === null || quizBlocked}
-              disabledReason={startReason}
-              onClick={() => begin(true)}
-            >
-              Start by typing
-            </Button>
-          ) : null}
           {note ? <p className="max-w-[34ch] text-small text-fg-2">{note}</p> : null}
         </div>
       </form>

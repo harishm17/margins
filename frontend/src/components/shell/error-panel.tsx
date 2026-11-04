@@ -4,6 +4,7 @@ import * as React from 'react'
 import { WarningCircle } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { GoBack } from './go-back'
 
 /** The body of every error.tsx: a calm message and a retry button. */
 export function ErrorPanel({
@@ -33,6 +34,7 @@ export function ErrorPanel({
             Try again
           </Button>
         }
+        secondary={<GoBack />}
       >
         This page could not load. Try again, and if it keeps happening, reload the page.
       </EmptyState>

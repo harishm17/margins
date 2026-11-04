@@ -10,7 +10,7 @@ export function FrontierBadge({ text, className }: { text: string; className?: s
   return (
     <span
       className={cn(
-        'whitespace-nowrap text-caption',
+        'whitespace-nowrap text-caption max-sm:text-small',
         start ? 'rounded-chip border border-accent bg-accent-soft px-1.5 font-medium text-accent-soft-fg' : 'font-normal text-fg-2',
         className
       )}

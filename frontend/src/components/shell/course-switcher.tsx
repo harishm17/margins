@@ -27,7 +27,7 @@ export function CourseSwitcher({ rail }: { rail?: boolean }) {
         type="button"
         aria-label={`Course: ${label}. Switch course`}
         className={cn(
-          'flex h-9 w-full items-center gap-2 rounded-control border border-border-strong bg-surface px-2.5 text-left text-body-strong text-fg',
+          'flex h-9 max-lg:min-h-11 w-full items-center gap-2 rounded-control border border-border-strong bg-surface px-2.5 text-left text-body-strong text-fg',
           'transition-colors duration-120 hover:bg-surface-2 data-[state=open]:bg-surface-2',
           'rail:justify-center rail:px-0'
         )}

@@ -49,7 +49,7 @@ export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId
         state={state}
         orb={orb}
         controller={controller}
-        title={mode === 'sprint' ? 'Weakest topics sprint' : (topic?.name ?? 'Voice practice')}
+        title={mode === 'sprint' ? 'Voice practice: weakest topics' : (topic?.name ?? 'Voice practice')}
         hasQuestions={state.style === 'oral_quiz'}
         recognitionSupported={browserRecognition || state.recognizer === 'cloud'}
       />

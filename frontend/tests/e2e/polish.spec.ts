@@ -55,13 +55,13 @@ test('the theme is a visible choice in the account menu', async ({ page }) => {
   await signIn(page, DEMO_EMAIL)
   await page.getByRole('button', { name: /account menu/i }).click()
   // Not behind a submenu: the three choices are in the menu itself.
-  for (const name of ['Light', 'Dark', 'System']) {
-    await expect(page.getByRole('menuitemradio', { name })).toBeVisible()
+  for (const name of ['Light', 'Dark', 'Match device']) {
+    await expect(page.getByRole('menuitemradio', { name: name === 'Match device' ? /^Match device/ : name, exact: name !== 'Match device' })).toBeVisible()
   }
-  await page.getByRole('menuitemradio', { name: 'Dark' }).click()
+  await page.getByRole('menuitemradio', { name: 'Dark', exact: true }).click()
   await expect(page.locator('html')).toHaveClass(/dark/)
-  await expect(page.getByRole('menuitemradio', { name: 'Dark' })).toBeChecked()
-  await page.getByRole('menuitemradio', { name: 'Light' }).click()
+  await expect(page.getByRole('menuitemradio', { name: 'Dark', exact: true })).toBeChecked()
+  await page.getByRole('menuitemradio', { name: 'Light', exact: true }).click()
   await expect(page.locator('html')).not.toHaveClass(/dark/)
 })
 

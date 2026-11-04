@@ -76,7 +76,7 @@ test.describe('knowledge map', () => {
     const w = await world(page, 'map-show')
     await open(page, mapUrl(w))
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Map' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Idea map' })).toBeVisible()
     // Today's plan starts in the first unit, so it is the one shown.
     await expect(page.getByRole('combobox', { name: 'Unit' })).toHaveText(/Hashing/)
     const unit = page.getByRole('group', { name: /^Hashing: 4 ideas$/ })
@@ -127,7 +127,7 @@ test.describe('knowledge map', () => {
     await expect(key.getByRole('list', { name: 'States' }).getByRole('listitem')).toHaveText(['Not started', /^(Shaky|Fading|Getting there)$/])
     await expect(key.getByText('Leads to')).toBeVisible()
     await expect(key.getByText('Easy to mix up')).toBeVisible()
-    await expect(key.getByText(/^Next up: what you need is well remembered/)).toContainText('The ring marks Start here, the first of them')
+    await expect(key.getByText(/^Next up: ready to study. You answered what it builds on well recently/)).toContainText('The ring marks Start here, the first of them')
     await expect(key.getByText('Suggested, not confirmed')).toHaveCount(0)
     await expect(key.getByText('Inferred means')).toHaveCount(0)
     await screenshotIfAsked(page, 'final-map-key-1440x900')
@@ -440,15 +440,16 @@ test.describe('knowledge map', () => {
 
     await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${advanced}`))
     const panel = page.getByTestId('node-panel')
-    // A suggestion reads as a question with a yes and a no.
-    await expect(panel.getByText('Covers Chaining?')).toBeVisible()
-    await expect(panel.getByRole('button', { name: 'Yes: Covers Chaining' })).toBeVisible()
-    // The tick and the cross carry their words.
-    await expect(panel.getByRole('button', { name: 'Yes: Covers Chaining' })).toHaveText('Yes')
-    await expect(panel.getByRole('button', { name: 'No: Covers Chaining' })).toHaveText('No')
+    // A suggestion is a question, kept under "Edit connections" away from the study actions, and the buttons say what they do.
+    await expect(panel.getByTestId('practice-this').or(panel.getByTestId('read-first'))).toBeVisible()
+    await expect(panel.getByText('Does Collisions cover Chaining?')).toBeHidden()
+    await panel.getByText('Edit connections').click()
+    await expect(panel.getByText('Does Collisions cover Chaining?')).toBeVisible()
+    await expect(panel.getByRole('button', { name: 'Yes, keep link' })).toBeVisible()
+    await expect(panel.getByRole('button', { name: 'No, remove link' })).toBeVisible()
     await screenshotIfAsked(page, 'map-edge-question-1440x900')
-    await panel.getByRole('button', { name: 'No: Covers Chaining' }).click()
-    await expect(panel.getByText('Covers Chaining?')).toHaveCount(0)
+    await panel.getByRole('button', { name: 'No, remove link' }).click()
+    await expect(panel.getByText('Does Collisions cover Chaining?')).toHaveCount(0)
 
     expect(await implicitCount()).toBe(0)
     const row = await withPrisma((prisma) => prisma.conceptEdge.findUniqueOrThrow({ where: { id: edge.id } }))
@@ -469,10 +470,11 @@ test.describe('knowledge map', () => {
     const edge = await link(w.courseId, w.concepts['Open addressing'], w.concepts.Chaining, 'prerequisite', 'proposed', 0.8)
     await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts.Chaining}`))
     const panel = page.getByTestId('node-panel')
-    await expect(panel.getByText('Needs Open addressing?')).toBeVisible()
-    await panel.getByRole('button', { name: 'Yes: Needs Open addressing' }).click()
+    await panel.getByText('Edit connections').click()
+    await expect(panel.getByText('Does Chaining require Open addressing first?')).toBeVisible()
+    await panel.getByRole('button', { name: 'Yes, keep link' }).click()
     await expect(panel.getByText('Needs Open addressing', { exact: true })).toBeVisible()
-    await expect(panel.getByRole('button', { name: /^(Yes|No):/ })).toHaveCount(0)
+    await expect(panel.getByRole('button', { name: /^(Yes|No), (keep|remove) link$/ })).toHaveCount(0)
     const row = await withPrisma((prisma) => prisma.conceptEdge.findUniqueOrThrow({ where: { id: edge.id } }))
     expect([row.status, row.origin]).toEqual(['confirmed', 'student'])
   })
@@ -705,5 +707,51 @@ test.describe('knowledge map on a wide window with a phone-width cookie left ove
     // Put right without choosing anything: the address names no view.
     expect(new URL(page.url()).searchParams.get('view')).toBeNull()
     expect(new URL(page.url()).searchParams.get('unit')).toBe(w.units.Hashing)
+  })
+})
+
+test.describe('round 4: edges, repeated names, one status per row', () => {
+  test('a suggested link is dashed at full contrast, a confirmed one solid; the key shows both', async ({ page }) => {
+    test.setTimeout(90_000)
+    const w = await world(page, 'map-dashed')
+    await link(w.courseId, w.concepts['Open addressing'], w.concepts.Chaining, 'prerequisite', 'proposed', 0.8)
+    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=map`))
+    const unit = page.getByRole('group', { name: /^Hashing: 4 ideas$/ })
+    const suggested = unit.locator('path', { has: page.locator('title', { hasText: '(suggested)' }) })
+    await expect(suggested).toHaveAttribute('stroke-dasharray', '6 4')
+    await expect(suggested).toHaveClass(/stroke-edge-suggested/)
+    const confirmed = unit.locator('path', { has: page.locator('title', { hasText: 'Collisions needs Hash function' }) })
+    await expect(confirmed).not.toHaveAttribute('stroke-dasharray', /./)
+    await expect(confirmed).toHaveClass(/stroke-edge-confirmed/)
+    const key = page.locator('details').filter({ has: page.getByText('Key', { exact: true }) })
+    if (!(await key.evaluate((element) => (element as HTMLDetailsElement).open))) await key.getByText('Key', { exact: true }).click()
+    await expect(key.getByText('Dashed: suggested, not confirmed')).toBeVisible()
+    await expect(key.getByText(/Two different things/)).toBeVisible()
+  })
+
+  test('an idea name that occurs in two topics names its topic in the picture', async ({ page }) => {
+    test.setTimeout(90_000)
+    const w = await world(page, 'map-dupe')
+    await withPrisma((prisma) =>
+      prisma.concept.create({
+        data: { projectId: w.courseId, topicId: w.topics.Probing, name: 'Collisions', summary: 'Collisions again.', kind: 'concept', orderIndex: 1, objectiveIndexes: [] },
+      })
+    )
+    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=map`))
+    const unit = page.getByRole('group', { name: /^Hashing: 5 ideas$/ })
+    // Only the repeated name names its topic (once in each topic); the other ideas stay as they were.
+    await expect(unit.locator('text', { hasText: 'Hash tables' })).toHaveCount(1)
+    await expect(unit.locator('text', { hasText: 'Probing' })).toHaveCount(1)
+  })
+
+  test('the panel says why an idea is ready, and a list row carries one status', async ({ page }) => {
+    test.setTimeout(90_000)
+    const w = await world(page, 'map-reason')
+    await link(w.courseId, w.concepts['Open addressing'], w.concepts.Chaining, 'prerequisite', 'proposed', 0.8)
+    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts.Chaining}&view=list`))
+    const panel = page.getByTestId('node-panel')
+    await expect(panel).toContainText('Builds on Open addressing (suggested connection, not confirmed)')
+    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts['Open addressing']}&view=list`))
+    await expect(page.getByTestId('node-panel')).toContainText('No prerequisites: start here')
   })
 })
