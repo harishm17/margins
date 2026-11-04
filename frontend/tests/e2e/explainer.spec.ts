@@ -103,6 +103,8 @@ test('explainer locked before recall', async ({ page }) => {
 
   await expect(gate(page)).toBeVisible()
   await expect(page.getByRole('link', { name: 'Start recall' })).toHaveAttribute('href', /view=recall/)
+  // The gate is the task and says what is next: the topic's own "next" line does not name another step above it.
+  await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
   // The topic has not been read: the way round is there, and says why it is shut.
   await expect(unlockButton(page)).toBeDisabled()
   await expect(page.getByText('Available once you have read this topic.')).toBeVisible()

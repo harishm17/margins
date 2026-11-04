@@ -60,7 +60,8 @@ const description = 'mt-1 text-small text-fg-2'
 export function SetupGuide({ courseId, name, setup }: { courseId: string; name: string; setup: SetupData }) {
   const { step, materials } = setup
   const filesProcessing = materials.processingCount > 0
-  const link = 'rounded-chip text-accent hover:underline'
+  // On a phone a link in a finished step is a 44px row, not a line of text.
+  const link = 'rounded-chip text-accent hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center'
 
   return (
     <Page>

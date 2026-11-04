@@ -116,6 +116,11 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await expect(page.getByRole('heading', { name: /Question 2 of/ })).toBeVisible()
   await page.getByRole('button', { name: 'Flag', exact: true }).click()
   await expect(page.getByText(/1 answered, 1 flagged/)).toBeVisible()
+  // The same navigator the quiz uses: answered has a check, the current one an outline, a flagged one a flag.
+  const navigator = page.getByRole('complementary', { name: 'Question navigator' })
+  await expect(navigator.getByRole('button', { name: 'Question 1, answered' }).locator('svg')).toHaveCount(1)
+  await expect(navigator.getByRole('button', { name: 'Question 2, not answered, flagged' })).toHaveAttribute('aria-current', 'step')
+  expect(await navigator.getByRole('button', { name: /^Question 2,/ }).evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('2px')
   await expect(page.getByText('Saved')).toBeVisible({ timeout: 15_000 })
 
   // Exit asks first.
@@ -146,6 +151,8 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await screenshotIfAsked(page, 'exam-submit-prompt')
   await prompt.getByRole('button', { name: 'Submit exam' }).click()
   await expect(page).toHaveURL(/\/results\/[0-9a-f-]{36}$/, { timeout: 30_000 })
+  // The exam is over: the course's "in progress" line is gone on its own results, at once, not after a fresh load.
+  await expect(page.getByRole('complementary', { name: 'Mock exam in progress' })).toHaveCount(0)
 
   // Grading, then the score and the review.
   await expect(page.getByText('of ').first()).toBeVisible({ timeout: 120_000 })

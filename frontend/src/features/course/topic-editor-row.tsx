@@ -13,6 +13,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr'
 import { SourceIcon } from '@/components/learning/source-link'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -132,6 +133,15 @@ function EditFields({
         onChange={(event) => setDescription(event.target.value)}
         onKeyDown={keys}
       />
+      {/* Enter, Escape and leaving the fields still save or cancel; the two buttons say so on a screen with no keyboard. */}
+      <div className="flex items-center gap-2">
+        <Button type="button" size="sm" variant="primary" className="max-sm:min-h-11" onClick={commit}>
+          Save
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className="max-sm:min-h-11" onClick={cancel}>
+          Cancel
+        </Button>
+      </div>
     </div>
   )
 }
@@ -225,7 +235,7 @@ export function TopicEditorRow({
         onKeyDown={onHandleKey}
         onPointerDown={() => onArm(true)}
         onPointerUp={() => onArm(false)}
-        className="mt-0.5 inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-chip text-fg-3 hover:bg-surface-2 hover:text-fg active:cursor-grabbing max-sm:size-8"
+        className="mt-0.5 inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-chip text-fg-3 hover:bg-surface-2 hover:text-fg active:cursor-grabbing max-sm:size-11"
       >
         <DotsSixVertical aria-hidden="true" weight="bold" className="size-4" />
       </button>
@@ -240,12 +250,12 @@ export function TopicEditorRow({
               type="button"
               onClick={onStartEdit}
               aria-label={`Rename ${topic.name}`}
-              className="block max-w-full truncate rounded-chip text-left text-body-strong text-fg hover:underline"
+              className="block max-w-full truncate rounded-chip text-left text-body-strong text-fg hover:underline max-sm:min-h-11 max-sm:whitespace-normal max-sm:py-2.5"
             >
               {topic.name}
             </button>
             {topic.description ? (
-              <p className="mt-0.5 truncate text-small text-fg-2" title={topic.description}>
+              <p className="mt-0.5 line-clamp-3 text-small text-fg-2 sm:line-clamp-1" title={topic.description}>
                 {topic.description}
               </p>
             ) : null}

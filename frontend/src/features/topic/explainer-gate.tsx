@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { EXPLAINER_ESCAPE_LABEL } from '@/features/learning/expected-miss-copy'
+import { useActivityInProgress } from './topic-provider'
 
 /**
  * The explainer before a recall (spec §5.4): "Try recalling first." The way on is Start recall. A student who would
@@ -19,6 +20,8 @@ export function ExplainerGate({ topicId, recallHref, canUnlock }: { topicId: str
   const router = useRouter()
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  // The gate says what to do next (Start recall), so the topic's own "next" line steps aside rather than name another step above it.
+  useActivityInProgress(true)
 
   async function unlock() {
     setBusy(true)

@@ -27,7 +27,8 @@
 /* Inline math cannot wrap. A formula wider than the column scrolls the passage sideways instead of
    widening the page; the small block padding keeps tall formulas from being clipped. */
 .md-reading,
-.md-compact {
+.md-compact,
+.md-question {
   overflow-x: auto;
   overflow-y: hidden;
   padding-block: 0.25em;
@@ -43,6 +44,24 @@
 .md-compact {
   font-size: 14px;
   line-height: 22px;
+}
+
+/* The compact reading style: the text of a question or a worked example, a step smaller than the 17px of notes so a
+   problem and its answer field fit together on a phone. One named style, so no screen overrides the reading size. */
+.md-question {
+  font-size: 16px;
+  line-height: 27px;
+  max-width: 68ch;
+}
+.md-question h2,
+.md-question h3,
+.md-question h4,
+.md-question h5,
+.md-question h6 {
+  font-size: 16px;
+  line-height: 27px;
+  font-weight: 600;
+  margin-block: 0.9em 0.35em;
 }
 
 /* A question stem: the paragraphs read as the question (heading size and weight), the table or

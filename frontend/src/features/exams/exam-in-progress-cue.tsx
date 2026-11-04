@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Timer } from '@phosphor-icons/react/dist/ssr'
 
 /**
@@ -11,6 +12,13 @@ import { Timer } from '@phosphor-icons/react/dist/ssr'
  * line never pushes their bottom edge out of view.
  */
 export function ExamInProgressCue({ courseId, examId }: { courseId: string; examId: string }) {
+  // The results of this exam are the end of the attempt: the layout may still be the one read before it was submitted.
+  const ended = usePathname().startsWith(`/courses/${courseId}/exams/${examId}/results/`)
+  if (ended) return null
+  return <Cue courseId={courseId} examId={examId} />
+}
+
+function Cue({ courseId, examId }: { courseId: string; examId: string }) {
   const ref = React.useRef<HTMLElement>(null)
   React.useLayoutEffect(() => {
     const root = document.documentElement

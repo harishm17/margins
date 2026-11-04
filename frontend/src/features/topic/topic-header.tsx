@@ -44,7 +44,6 @@ import { KIND_COPY } from './copy'
 import { RegenerateDialog } from './generation-ui'
 import { ToolsMenu } from './path'
 import { TopicStructureBlock, unitLabel } from './topic-structure'
-import { useTopic } from './topic-provider'
 import { useTopicView } from './use-topic-view'
 import { CONTENT_KINDS, type ContentKind } from './types'
 
@@ -147,15 +146,12 @@ export function TopicHeader({
 }: TopicHeaderProps) {
   const router = useRouter()
   const view = useTopicView()
-  // On a phone what the topic covers (its ideas, objectives, sources) folds behind one button next to the status.
+  // What the topic covers (its description, ideas, objectives, sources and the map link) is behind one button next to the status
+  // line, on every width: the title and that line are all that stand between the student and the step's task.
   const [aboutOpen, setAboutOpen] = React.useState(false)
   const aboutId = React.useId()
   const descriptionId = React.useId()
-  // While a question is on screen (a warm-up, quiz or recall being answered) what the topic covers steps aside, so the
-  // question starts near the top instead of below a screen of introduction. The same button opens it, on every width.
-  const { inProgress } = useTopic()
-  const folded = inProgress && !aboutOpen
-  const fold = folded ? 'hidden' : !aboutOpen && 'max-sm:hidden'
+  const fold = !aboutOpen && 'hidden'
   // Why the ring is lower than the last score: mastery fades while a review is late.
   const fade =
     daysUntilDue !== null && daysUntilDue < 0
@@ -166,12 +162,6 @@ export function TopicHeader({
   }
   const wrong = concepts.filter((concept) => concept.wrongIdea).length
   const hasAbout = concepts.length > 0 || structure.objectives.length > 0 || structure.prerequisites.length > 0 || structure.sources.length > 0 || !!description
-  const aboutLabel =
-    concepts.length > 0
-      ? conceptSummary(concepts)
-      : structure.objectives.length > 0
-        ? `By the end you can (${structure.objectives.length})`
-        : 'About this topic'
 
   return (
     <header className="pb-4 sm:pb-6">
@@ -210,7 +200,7 @@ export function TopicHeader({
         </div>
       </div>
       {description ? (
-        <p id={descriptionId} className={cn('mt-1.5 max-w-[68ch] text-body text-fg-2 sm:line-clamp-2', fold)}>
+        <p id={descriptionId} className={cn('mt-1.5 max-w-[68ch] text-body text-fg-2', fold)}>
           <MathText>{description}</MathText>
         </p>
       ) : null}
@@ -230,10 +220,11 @@ export function TopicHeader({
             aria-expanded={aboutOpen}
             aria-controls={description ? `${descriptionId} ${aboutId}` : aboutId}
             onClick={() => setAboutOpen((current) => !current)}
-            className={cn('inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg', !inProgress && 'sm:hidden')}
+            className="inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg max-sm:min-h-11"
           >
             {wrong > 0 ? <WarningCircle aria-hidden="true" weight="fill" className="size-4 text-warning" /> : null}
-            {aboutLabel}
+            About this topic
+            {concepts.length > 0 ? <span className="sr-only">: {conceptSummary(concepts)}</span> : null}
             <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', aboutOpen && 'rotate-180')} />
           </button>
         ) : null}

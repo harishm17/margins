@@ -152,10 +152,10 @@ export function ActiveStep({
   // Hints the student opened or closed by hand; without a choice only the newest is open.
   const [toggled, setToggled] = React.useState<Record<number, boolean>>({})
   const [helpOpen, setHelpOpen] = React.useState(false)
+  const [workingOpen, setWorkingOpen] = React.useState(false)
   const helpId = React.useId()
   const tutor = useStepTutor(tutorConfig, { onHelp })
   const workingId = React.useId()
-  const revealNoteId = React.useId()
   const inputRef = React.useRef<HTMLInputElement>(null)
   const nextRef = React.useRef<HTMLButtonElement>(null)
   const retryRef = React.useRef<HTMLButtonElement>(null)
@@ -214,10 +214,10 @@ export function ActiveStep({
   const canReveal = attempted
   const newest = opened.length > 0 ? Math.max(...opened) : -1
   const failedFirstTry = stepFailedFirstTry({ checks: tutor.checks, rung, dontKnow: tutor.dontKnow, twoOption: choices?.options.length === 2 })
-  // The next hint to open, in order, once the step has an attempt.
-  const nextHint = available.find((index) => !opened.includes(index) && canOpenHint(index as 0 | 1 | 2, attempted)) ?? null
-  // After a miss the help is in view, not folded. A hint opened before any miss folds the rest behind one row.
-  const helpFolded = opened.length > 0 && !missed && !missFeedback
+  // The hint ladder is one button: the next hint in order. It is offered before the first check too (Locate is free) but
+  // the later ones wait for an attempt and say so, instead of three cost-labelled buttons up front.
+  const ladder = available.find((index) => !opened.includes(index)) ?? null
+  const ladderOpen = ladder !== null && canOpenHint(ladder as 0 | 1 | 2, attempted)
 
   React.useEffect(() => {
     if (feedback === 'correct' || feedback === 'revealed') nextRef.current?.focus()
@@ -259,6 +259,11 @@ export function ActiveStep({
   }
 
   const draftStatus = statusLabel(draft.status)
+  // The working is one line under the answer until it is wanted (or already written). The help is folded behind one button
+  // until the step has been missed or the tutor is in use; then it is in view, after the way on.
+  const workingShown = workingOpen || working.trim() !== ''
+  const helpForced = missed || missFeedback || tutor.turns.length > 0 || tutor.pending !== null
+  const helpShown = helpForced || helpOpen
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
@@ -277,9 +282,7 @@ export function ActiveStep({
         />
       ) : (
         <>
-          <LazyMarkdown variant="reading" className="text-[16px]! leading-[27px]!">
-            {step.question}
-          </LazyMarkdown>
+          <LazyMarkdown variant="question">{step.question}</LazyMarkdown>
           <Input
             ref={inputRef}
             aria-label="Your answer"
@@ -296,19 +299,51 @@ export function ActiveStep({
         </>
       )}
 
-      {!locked
-        ? [...opened]
-            .sort((a, b) => a - b)
-            .map((index) => (
-              <OpenedHint
-                key={index}
-                index={index}
-                text={step.hints[index]}
-                expanded={toggled[index] ?? index === newest}
-                onToggle={() => setToggled((current) => ({ ...current, [index]: !(current[index] ?? index === newest) }))}
-              />
-            ))
-        : null}
+      {!locked ? (
+        <div className="-mt-2 flex flex-col gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={workingShown}
+            aria-controls={workingId}
+            className="-ml-2.5 self-start max-sm:min-h-11"
+            onClick={() => setWorkingOpen((current) => !current)}
+          >
+            <span className="inline-flex items-center gap-1">
+              Your working (optional)
+              <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', workingShown && 'rotate-180')} />
+            </span>
+          </Button>
+          <div id={workingId} hidden={!workingShown} className="flex flex-col gap-1.5">
+            <Textarea
+              rows={2}
+              value={working}
+              aria-label="Your working (optional)"
+              placeholder="Write down how you are thinking about this step"
+              onChange={(event) => changeWorking(event.target.value)}
+            />
+            {draftStatus && (working.trim() || answer.trim()) ? <span className="text-caption text-fg-3">{draftStatus}</span> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {!feedback ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" variant="primary" icon={<Check />} disabled={!answer.trim()}>
+            Check
+          </Button>
+          {!attempted ? (
+            <Button variant="secondary" onClick={dontKnow}>
+              I don&apos;t know
+            </Button>
+          ) : null}
+          {canReveal ? (
+            <Button variant="ghost" icon={<Eye />} onClick={reveal}>
+              Show answer
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
 
       {feedback === 'correct' ? (
         <InlineAlert tone="accent" title="Correct" className="items-start">
@@ -367,79 +402,89 @@ export function ActiveStep({
         </InlineAlert>
       ) : null}
 
+      {/* The way on comes straight after what just happened; the help (below) is for the next try, not in front of it. */}
+      {missFeedback ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button ref={retryRef} variant="primary" onClick={tryAgain}>
+            Try again
+          </Button>
+          <Button variant="ghost" icon={<Eye />} onClick={reveal}>
+            Show answer
+          </Button>
+        </div>
+      ) : null}
+      {locked ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button ref={nextRef} variant="primary" onClick={onNext} icon={<ArrowRight />}>
+            {isLast ? 'Finish' : 'Next step'}
+          </Button>
+        </div>
+      ) : null}
+
+      {!locked
+        ? [...opened]
+            .sort((a, b) => a - b)
+            .map((index) => (
+              <OpenedHint
+                key={index}
+                index={index}
+                text={step.hints[index]}
+                expanded={toggled[index] ?? index === newest}
+                onToggle={() => setToggled((current) => ({ ...current, [index]: !(current[index] ?? index === newest) }))}
+              />
+            ))
+        : null}
+
       {!locked && missed && tutor.help ? <HelpAfterMissNote help={tutor.help} /> : null}
 
       {!locked ? <TalkOffer tutor={tutor} working={working} /> : null}
 
       {!locked ? <TutorThread turns={tutor.turns} pending={tutor.pending} /> : null}
 
-      {!locked && helpFolded ? (
-        <div>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-expanded={helpOpen}
-            aria-controls={helpId}
-            icon={<Question />}
-            className="-ml-2.5"
-            onClick={() => setHelpOpen((current) => !current)}
-          >
-            <span className="inline-flex items-center gap-1">
-              Get help
-              <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', helpOpen && 'rotate-180')} />
-            </span>
-          </Button>
-        </div>
-      ) : null}
-
       {!locked ? (
-        <div id={helpId} hidden={helpFolded && !helpOpen} className="flex flex-col gap-4">
-          {!feedback && available.length > 0 ? (
-            <div role="group" aria-label="Hints" className="grid gap-2 sm:grid-cols-3">
-              {available.map((index) => {
-                const isOpen = opened.includes(index)
-                // In order, so that the stored rung says every earlier hint was opened too.
-                const waiting = (!isOpen && available.some((earlier) => earlier < index && !opened.includes(earlier))) || !canOpenHint(index as 0 | 1 | 2, attempted)
-                return (
-                  <Button
-                    key={index}
-                    variant="secondary"
-                    size="sm"
-                    icon={<Lightbulb />}
-                    aria-pressed={isOpen}
-                    disabled={waiting}
-                    className="h-auto w-full max-w-full shrink items-start justify-start py-1.5 text-left max-sm:h-auto max-sm:min-h-11"
-                    onClick={() => {
-                      if (!isOpen) openHint(index)
-                    }}
-                  >
-                    <span className="flex flex-col whitespace-normal">
-                      <span>{HINT_KINDS[index].name}</span>
-                      <span className="text-caption font-normal text-fg-2">
-                        {HINT_KINDS[index].gives} ({hintCostCopy(index as 0 | 1 | 2, { attempted, failedFirstTry })})
-                      </span>
-                    </span>
-                  </Button>
-                )
-              })}
+        <div className="flex flex-col gap-3">
+          {!helpForced ? (
+            <div>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-expanded={helpOpen}
+                aria-controls={helpId}
+                icon={<Question />}
+                className="-ml-2.5 max-sm:min-h-11"
+                onClick={() => setHelpOpen((current) => !current)}
+              >
+                <span className="inline-flex items-center gap-1">
+                  Get help
+                  <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', helpOpen && 'rotate-180')} />
+                </span>
+              </Button>
             </div>
           ) : null}
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1.5">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <label htmlFor={workingId} className="text-small text-fg-2">
-                  Your working (optional)
-                </label>
-                {draftStatus && (working.trim() || answer.trim()) ? <span className="text-caption text-fg-3">{draftStatus}</span> : null}
+          <div id={helpId} hidden={!helpShown} className="flex flex-col gap-3">
+            {ladder !== null ? (
+              <div role="group" aria-label="Hints">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Lightbulb />}
+                  disabled={!ladderOpen}
+                  className="h-auto max-w-full shrink items-start justify-start py-1.5 text-left max-sm:h-auto max-sm:min-h-11"
+                  onClick={() => {
+                    openHint(ladder)
+                    // The last hint has gone and the step was missed: put focus back on the way forward.
+                    if (missFeedback && !available.some((index) => index !== ladder && !opened.includes(index))) requestAnimationFrame(() => retryRef.current?.focus())
+                  }}
+                >
+                  <span className="flex flex-col whitespace-normal">
+                    <span>Next hint: {HINT_KINDS[ladder].name}</span>
+                    <span className="text-caption font-normal text-fg-2">
+                      {ladderOpen ? `${HINT_KINDS[ladder].gives} (${hintCostCopy(ladder as 0 | 1 | 2, { attempted, failedFirstTry })})` : 'Opens after your first try'}
+                    </span>
+                  </span>
+                </Button>
               </div>
-              <Textarea
-                id={workingId}
-                rows={2}
-                value={working}
-                placeholder="Write down how you are thinking about this step"
-                onChange={(event) => changeWorking(event.target.value)}
-              />
-            </div>
+            ) : null}
             <TutorActions
               tutor={tutor}
               working={working}
@@ -452,61 +497,6 @@ export function ActiveStep({
           </div>
         </div>
       ) : null}
-
-      <div className="flex flex-wrap items-center gap-2">
-        {!feedback ? (
-          <>
-            <Button type="submit" variant="primary" icon={<Check />} disabled={!answer.trim()}>
-              Check
-            </Button>
-            {!attempted ? (
-              <Button variant="secondary" onClick={dontKnow}>
-                I don&apos;t know
-              </Button>
-            ) : null}
-            <Button variant="ghost" icon={<Eye />} onClick={reveal} disabled={!canReveal} aria-describedby={revealNoteId}>
-              Show answer
-            </Button>
-            {!canReveal ? (
-              <span id={revealNoteId} className="text-caption text-fg-3">
-                Check an answer first, or say you don&apos;t know.
-              </span>
-            ) : null}
-          </>
-        ) : null}
-        {missFeedback ? (
-          <>
-            <Button ref={retryRef} variant="primary" onClick={tryAgain}>
-              Try again
-            </Button>
-            {nextHint !== null ? (
-              <Button
-                variant="secondary"
-                icon={<Lightbulb />}
-                className="h-auto max-w-full shrink items-start py-1.5 text-left max-sm:h-auto max-sm:min-h-11"
-                onClick={() => {
-                  openHint(nextHint)
-                  // The last hint has gone: put focus back on the way forward.
-                  if (!available.some((index) => index !== nextHint && !opened.includes(index))) requestAnimationFrame(() => retryRef.current?.focus())
-                }}
-              >
-                <span className="flex flex-col whitespace-normal">
-                  <span>Next hint: {HINT_KINDS[nextHint].name}</span>
-                  <span className="text-caption font-normal text-fg-2">{hintCostCopy(nextHint as 0 | 1 | 2, { attempted, failedFirstTry })}</span>
-                </span>
-              </Button>
-            ) : null}
-            <Button variant="ghost" icon={<Eye />} onClick={reveal}>
-              Show answer
-            </Button>
-          </>
-        ) : null}
-        {locked ? (
-          <Button ref={nextRef} variant="primary" onClick={onNext} icon={<ArrowRight />}>
-            {isLast ? 'Finish' : 'Next step'}
-          </Button>
-        ) : null}
-      </div>
     </form>
   )
 }

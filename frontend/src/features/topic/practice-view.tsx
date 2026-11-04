@@ -152,7 +152,7 @@ export function PracticeView({ topicId, practice }: { topicId: string; practice:
 
       <div className="mt-6 flex flex-col gap-3">
         {problem.problem ? (
-          <LazyMarkdown variant="reading" className="text-[16px]! leading-[27px]!">
+          <LazyMarkdown variant="question">
             {problem.problem}
           </LazyMarkdown>
         ) : null}

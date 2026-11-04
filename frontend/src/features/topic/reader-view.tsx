@@ -109,7 +109,7 @@ function PageDivider({ file, page }: { file: ReaderFile; page: number }) {
           href={originalHref(file, page)}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex shrink-0 items-center gap-1 rounded-chip text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg"
+          className="inline-flex shrink-0 items-center gap-1 rounded-chip text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg max-sm:min-h-11"
         >
           Open the original at p. {page}
           <ArrowSquareOut aria-hidden="true" className="size-3.5" />
@@ -208,7 +208,7 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
           <h2 id="read-to-answer" className="text-body-strong text-fg">
             Read to answer
           </h2>
-          <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-5 text-small text-fg">
+          <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-5 text-small text-fg max-sm:gap-0">
             {questions.map((item) => (
               <li key={`${item.objectiveIndex}:${item.question}`}>
                 {item.chunkId ? (
@@ -218,7 +218,7 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
                       event.preventDefault()
                       jumpTo(passageDomId(item.chunkId as string))
                     }}
-                    className="rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] hover:decoration-fg-3"
+                    className="rounded-chip underline decoration-border-strong decoration-1 underline-offset-[3px] hover:decoration-fg-3 max-sm:inline-flex max-sm:min-h-11 max-sm:items-center"
                   >
                     {item.question}
                     <span className="sr-only"> (go to the passage)</span>
@@ -251,7 +251,7 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
               href={originalHref(file, null)}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg"
+              className="inline-flex items-center gap-1 rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg max-sm:min-h-11"
             >
               Open the original
               <ArrowSquareOut aria-hidden="true" className="size-3.5" />

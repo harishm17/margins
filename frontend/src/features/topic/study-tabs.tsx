@@ -30,6 +30,8 @@ type StudyTabsProps = {
   steps: PathView[]
   /** What to do next on this topic: the path tags its step, and a card offers it. */
   nextActivity: { kind: ActivityKind; reason: string; href: string }
+  /** The topic is not started and still being prepared: Warm-up and Recall say so, and no step is tagged Next until it settles. */
+  preparingEntry?: boolean
 }
 
 const Missing = () => (
@@ -42,6 +44,12 @@ const Missing = () => (
 
 const Writing = () => (
   <span role="img" aria-label="Being written" className="inline-flex max-sm:sr-only">
+    <Spinner className="size-3.5 text-fg-3" />
+  </span>
+)
+
+const Preparing = () => (
+  <span role="img" aria-label="Being prepared" className="inline-flex max-sm:sr-only">
     <Spinner className="size-3.5 text-fg-3" />
   </span>
 )
@@ -106,6 +114,7 @@ export function StudyTabs({
   recallProgress,
   steps,
   nextActivity,
+  preparingEntry = false,
 }: StudyTabsProps) {
   const view = useTopicView()
   const { running, preparingNotes } = useTopic()
@@ -113,7 +122,8 @@ export function StudyTabs({
   const base = `/courses/${courseId}/topics/${topicId}`
   const solved = solvedCount(practice.progress, practiceKeys)
   const practiceDone = practiceKeys.length > 0 && solved / practiceKeys.length >= PRACTICE_DONE_SHARE
-  const nextStep = pathStepFor(nextActivity.kind)
+  // While the topic is being prepared the first step is not known yet, so none is tagged (the tag would move when the warm-up arrives).
+  const nextStep = preparingEntry ? null : pathStepFor(nextActivity.kind)
 
   const hrefs = steps.map((id) => `${base}?view=${id}`)
   useTopicShortcuts({
@@ -139,6 +149,7 @@ export function StudyTabs({
 
   /** A status after the label: content being written or missing, solved steps, the best quiz score. */
   function glyphFor(id: PathView): React.ReactNode {
+    if (preparingEntry && (id === 'warmup' || id === 'recall')) return <Preparing />
     switch (id) {
       case 'read':
         // A just-opened topic's notes count as being written from the first paint.
@@ -185,10 +196,10 @@ export function StudyTabs({
         activeId={view}
         stickyPanel="[data-tab-panel]"
         trailing={<ToolLinks courseId={courseId} topicId={topicId} />}
-        className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 max-sm:[&_a::after]:inset-x-1 max-sm:[&_[data-tab-indicator]]:inset-x-1 max-sm:[&_a]:gap-1 max-sm:[&_a]:px-1 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
+        className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 max-sm:[&_a::after]:inset-x-1 max-sm:[&_[data-tab-indicator]]:inset-x-1 max-sm:[&_a]:gap-1 max-sm:[&>div]:h-[45px] max-sm:[&_a]:h-11 max-sm:[&_a]:px-1 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
       />
       {/* On the voice view the student is choosing what to do out loud; the way on can wait. */}
-      {view === 'voice' ? null : <NextActivityCard next={nextActivity} settled={settled} />}
+      {view === 'voice' ? null : <NextActivityCard next={nextActivity} settled={settled && !preparingEntry} />}
     </>
   )
 }

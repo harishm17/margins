@@ -39,7 +39,7 @@ export default async function TopicLayout({
   const requestHeaders = await headers()
   const path = requestHeaders.get('x-pathname')
   if (path !== null && requestHeaders.get('sec-fetch-mode') === 'navigate') {
-    const bare = bareTopicRedirect(`/courses/${courseId}/topics/${topicId}`, viewInPath(path), { kind: data.nextActivity.kind, href: data.nextActivity.href })
+    const bare = bareTopicRedirect(`/courses/${courseId}/topics/${topicId}`, viewInPath(path), { kind: data.nextActivity.kind, href: data.nextActivity.href }, data.preparingEntry)
     if (bare) redirect(bare)
   }
   const { topic, content } = data
@@ -94,6 +94,7 @@ export default async function TopicLayout({
           recallProgress={data.recallProgress}
           steps={data.pathSteps}
           nextActivity={data.nextActivity}
+          preparingEntry={data.preparingEntry}
         />
         <div data-tab-panel="" className="pt-5 sm:pt-8">
           {children}

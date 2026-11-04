@@ -92,6 +92,16 @@ test('a bare topic address redirects to the next activity, a named view does not
   assert.equal(bareTopicRedirect(base, undefined, { kind: 'done_for_now', href: `${base}?view=quiz&difficulty=hard` }), `${base}?view=practice`)
 })
 
+test('a topic still being prepared opens on the preparation screen, whatever its next activity says', () => {
+  const base = '/courses/c1/topics/t1'
+  // Nothing opened yet, or the concepts written and the warm-up not: not the reader, which would change its mind when the warm-up arrives.
+  assert.equal(bareTopicRedirect(base, undefined, { kind: 'start', href: base }, true), `${base}?view=read&entry=1`)
+  assert.equal(bareTopicRedirect(base, undefined, { kind: 'read', href: `${base}?view=read` }, true), `${base}?view=read&entry=1`)
+  // A named view is the student's choice, prepared or not; and once it is ready the address names the first step.
+  assert.equal(bareTopicRedirect(base, 'read', { kind: 'start', href: base }, true), null)
+  assert.equal(bareTopicRedirect(base, undefined, { kind: 'warmup', href: `${base}?view=warmup` }, false), `${base}?view=warmup`)
+})
+
 test('the view of a request path', () => {
   assert.equal(viewInPath('/courses/c1/topics/t1'), null)
   assert.equal(viewInPath('/courses/c1/topics/t1?view=read&concept=k'), 'read')

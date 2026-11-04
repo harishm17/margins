@@ -1,12 +1,14 @@
 'use client'
 
 import * as React from 'react'
-import { ArrowLeft, ArrowRight, Check, SignOut } from '@phosphor-icons/react/dist/ssr'
+import { ArrowLeft, ArrowRight, Check, ListNumbers, SignOut } from '@phosphor-icons/react/dist/ssr'
+import { QuestionNavigator } from '@/components/learning/question-navigator'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Progress } from '@/components/ui/progress'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { QuestionRenderer } from '@/components/ui/question-renderer'
 import { isAnswered as hasAnswer, type QuizAnswer } from '@/lib/learning/quiz-answers'
 import type { PublicQuizQuestion } from '@/lib/learning/quiz-questions'
@@ -52,16 +54,12 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
   const total = questions.length
   const current = Math.min(index, total - 1)
   const motion = useQuestionMotion(current)
-  // The current number stays in view in the row that scrolls (the page itself is left where it is).
-  const navRef = React.useRef<HTMLElement>(null)
-  React.useEffect(() => {
-    const row = navRef.current
-    const tile = row?.querySelector<HTMLElement>('[aria-current="step"]')
-    if (row && tile && row.scrollWidth > row.clientWidth) row.scrollLeft = tile.offsetLeft - (row.clientWidth - tile.offsetWidth) / 2
-  }, [current])
+  // On a phone every number is also in one sheet, so reaching question 9 does not take precise swiping along a row.
+  const [pickerOpen, setPickerOpen] = React.useState(false)
   const question = questions[current]
   const answeredCount = questions.filter((_q, position) => isAnswered(answers, position)).length
   const unanswered = total - answeredCount
+  const answeredSet = React.useMemo(() => new Set(questions.flatMap((_q, position) => (isAnswered(answers, position) ? [position] : []))), [questions, answers])
   const isLast = current === total - 1
   const dontKnow = answers[String(current)]?.idk === true
 
@@ -116,30 +114,14 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
         <h2 className="tabular text-body-strong text-fg">
           Question {current + 1} of {total}
         </h2>
-        {/* On a phone the numbers are one row that scrolls sideways (two rows of them pushed the question down the screen). */}
-        <nav ref={navRef} aria-label="Questions" className="relative flex flex-wrap items-center gap-1 max-sm:w-full max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:pb-1">
-          {questions.map((_q, position) => {
-            const answered = isAnswered(answers, position)
-            const active = position === current
-            return (
-              <button
-                key={position}
-                type="button"
-                aria-label={`Question ${position + 1}${answered ? ', answered' : ', not answered'}`}
-                aria-current={active ? 'step' : undefined}
-                onClick={() => go(position)}
-                className={cn(
-                  'grid size-7 shrink-0 place-items-center rounded-chip border text-caption tabular transition-colors duration-120 max-sm:size-9',
-                  active && 'border-accent text-fg ring-2 ring-accent/25',
-                  !active && answered && 'border-transparent bg-surface-3 text-fg',
-                  !active && !answered && 'border-border text-fg-3 hover:border-border-strong hover:text-fg-2'
-                )}
-              >
-                {position + 1}
-              </button>
-            )
-          })}
-        </nav>
+        {/* The numbers are one row (it scrolls sideways on a phone, two rows of them pushed the question down the screen), and the same
+            numbers are in a sheet from the Questions button: the one navigator the mock exam uses. */}
+        <div className="flex items-center gap-2 max-sm:w-full max-sm:flex-col max-sm:items-stretch">
+          <QuestionNavigator total={total} current={current} answered={answeredSet} onSelect={go} layout="row" />
+          <Button variant="secondary" size="sm" icon={<ListNumbers />} className="shrink-0 sm:hidden max-sm:min-h-11" onClick={() => setPickerOpen(true)}>
+            All questions
+          </Button>
+        </div>
       </div>
 
       <Progress aria-label="Questions answered" className="mt-4" value={(answeredCount / total) * 100} />
@@ -204,6 +186,25 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
           </Button>
         )}
       </div>
+
+      <Sheet open={pickerOpen} onOpenChange={setPickerOpen}>
+        <SheetContent className="sm:hidden">
+          <SheetHeader>
+            <SheetTitle>Questions</SheetTitle>
+          </SheetHeader>
+          <div className="overflow-y-auto p-5">
+            <QuestionNavigator
+              total={total}
+              current={current}
+              answered={answeredSet}
+              onSelect={(position) => {
+                go(position)
+                setPickerOpen(false)
+              }}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <ConfirmDialog
         open={confirmSubmit}

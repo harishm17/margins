@@ -85,7 +85,7 @@ export function NodePanel({
       <button
         type="button"
         onClick={backToNodes}
-        className="mb-3 rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg"
+        className="mb-3 inline-flex min-h-8 items-center rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg max-sm:min-h-11"
       >
         {backLabel}
       </button>

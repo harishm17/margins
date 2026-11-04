@@ -228,7 +228,11 @@ function ExampleCard({
   }
   const visible = stepMode ? Math.min(example.steps.length, Math.max(1, shown)) : example.steps.length
   const pending = fade.hidden.some((step) => step < visible && !done[`step-${step}`])
-  const allShown = visible >= example.steps.length && !fade.hidden.some((step) => !done[`step-${step}`])
+  // A "why" the student was asked to guess and has not (written or "I don't know") is a prediction still owed: the answer waits for it,
+  // as it does for a hidden step, so the closing line is never read before the guess is made.
+  const whyOwed = fade.hideWhy && example.steps.some((step, step_index) => !!step.explanation && !done[`why-${step_index}`])
+  const stepsOwed = fade.hidden.some((step) => !done[`step-${step}`])
+  const allShown = visible >= example.steps.length && !stepsOwed && !whyOwed
 
   return (
     <Card className="p-0">
@@ -258,9 +262,7 @@ function ExampleCard({
       {open ? (
         <div id={panelId} className="flex flex-col gap-6 border-t border-border px-5 pb-5 pt-5">
           {example.problem ? (
-            <LazyMarkdown variant="reading" className="text-[16px]! leading-[27px]!">
-              {example.problem}
-            </LazyMarkdown>
+            <LazyMarkdown variant="question">{example.problem}</LazyMarkdown>
           ) : null}
 
           {example.steps.length > 0 ? (
@@ -283,6 +285,10 @@ function ExampleCard({
                 </Button>
               ) : null}
             </section>
+          ) : null}
+
+          {example.finalAnswer && !allShown && (stepsOwed || whyOwed) ? (
+            <p className="text-small text-fg-3">The answer opens once you have written your guesses.</p>
           ) : null}
 
           {example.finalAnswer && allShown ? (
