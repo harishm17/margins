@@ -14,6 +14,7 @@ import { StepPlaceholder } from '@/features/topic/step-placeholder'
 import { parseView } from '@/features/topic/types'
 import { VoiceView } from '@/features/topic/voice-view'
 import { WarmupView } from '@/features/topic/warmup-view'
+import { voiceQuizStatus } from '@/lib/voice/drill-pack'
 import { explainerAccess, loadGapExplainer } from '@/lib/learning/explainer-server'
 import { prisma } from '@/lib/db/prisma'
 import { fadeStart, type FadeLevel } from '@/lib/learning/fade'
@@ -230,7 +231,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
         </ContentGate>
       )
     default: {
-      const claims = await teachBackClaims(topicId, first(concept))
+      const [claims, quiz] = await Promise.all([teachBackClaims(topicId, first(concept)), voiceQuizStatus([topicId], user.id)])
       return (
         <VoiceView
           courseId={courseId}
@@ -239,6 +240,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
           conceptId={first(concept)}
           hasClaims={claims.hasClaims}
           claimsOfIdea={claims.ofIdea}
+          quiz={quiz}
         />
       )
     }
