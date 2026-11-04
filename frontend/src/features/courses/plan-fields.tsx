@@ -13,13 +13,15 @@ type PlanFieldsProps = {
   onExamDate: (value: string) => void
   onDailyMinutes: (value: number) => void
   error?: string | null
+  /** Names the group ("Study plan") for the pages where the two fields stand among others. */
+  heading?: string
 }
 
 /** The two things the study plan needs: when the exam is, and how long you can study each day. */
-export function PlanFields({ examDate, dailyMinutes, onExamDate, onDailyMinutes, error }: PlanFieldsProps) {
+export function PlanFields({ examDate, dailyMinutes, onExamDate, onDailyMinutes, error, heading }: PlanFieldsProps) {
   // A saved value outside the usual choices is still shown.
   const choices = [...new Set<number>([...DAILY_MINUTE_CHOICES, dailyMinutes])].sort((a, b) => a - b)
-  return (
+  const fields = (
     <div className="grid gap-5 sm:grid-cols-2">
       <Field label="Exam date" optional hint="Margins plans your days up to it." error={error}>
         <Input
@@ -38,5 +40,12 @@ export function PlanFields({ examDate, dailyMinutes, onExamDate, onDailyMinutes,
         />
       </Field>
     </div>
+  )
+  if (!heading) return fields
+  return (
+    <fieldset className="flex flex-col gap-3">
+      <legend className="mb-3 text-body-strong text-fg">{heading}</legend>
+      {fields}
+    </fieldset>
   )
 }

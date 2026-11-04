@@ -177,7 +177,7 @@ test.describe('desktop', () => {
   test('the public not-found page leads a visitor to the landing page', async ({ page, context }) => {
     await context.clearCookies()
     await page.goto('/no-such-page')
-    await expect(page.getByRole('link', { name: /^Go to Margins$/ })).toHaveAttribute('href', '/')
+    await expect(page.getByRole('link', { name: /^Go to the home page$/ })).toHaveAttribute('href', '/')
   })
 })
 
@@ -208,8 +208,8 @@ test.describe('refused files in materials', () => {
     await expect(row.getByText(/\bB$/)).toHaveCount(0)
     // The problem is an alert with a way to fix it.
     await expect(page.getByText('1 file ready; 2 files need attention.').or(page.getByText(/files need attention/))).toBeVisible()
-    await page.getByRole('button', { name: 'Remove failed files' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Remove failed files' }).click()
+    await page.getByRole('button', { name: 'Remove files with problems' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Remove files with problems' }).click()
     await expect(page.getByRole('row', { name: /notes\.txt/ })).toHaveCount(0)
     await expect(page.getByRole('row', { name: /bad\.exe/ })).toHaveCount(0)
     // The file that was fine is still there.

@@ -62,7 +62,7 @@ test('desktop keeps the compact sizes', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   await signIn(page, DEMO_EMAIL)
   await page.goto(course)
-  await page.getByRole('button', { name: 'More course actions' }).click()
+  await page.getByRole('button', { name: 'Course actions' }).click()
   const row = await page.getByRole('menuitem', { name: 'Course settings' }).boundingBox()
   expect(row?.height ?? 0).toBeLessThan(40)
 })

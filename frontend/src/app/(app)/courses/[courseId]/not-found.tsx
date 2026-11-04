@@ -13,7 +13,7 @@ export default function CourseNotFound() {
         className="py-24"
         body="The topic or exam may have been deleted, or the address is not quite right."
         action={{ href: `/courses/${courseId}`, label: 'Back to the course' }}
-        secondary={{ href: '/home', label: 'Go to home' }}
+        secondary={{ href: '/home', label: 'Go to your courses' }}
       />
     </Page>
   )

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { FrontierBadge } from './frontier-badge'
 import { StateIcon } from './state-icon'
 import { MathText } from '@/components/ui/math-text'
 import { frontierTexts, LABEL_TEXT } from '@/lib/map/copy'
@@ -60,7 +61,7 @@ export function ListView({
                         <StateIcon label={node.label} size={14} />
                         {LABEL_TEXT[node.label]}
                       </span>
-                      {frontier[node.id] ? <span className="rounded-chip border border-accent px-1.5 text-caption text-fg">{frontier[node.id]}</span> : null}
+                      {frontier[node.id] ? <FrontierBadge text={frontier[node.id]} /> : null}
                     </span>
                     {relations.map((relation) => (
                       <span key={relation.label} className="text-small text-fg-3">

@@ -193,7 +193,7 @@ test.describe('the demo course', () => {
     // One label per file: the category it was uploaded under while its role is still content. The upload category is not a column of its own.
     await expect(page.getByRole('columnheader', { name: 'Type' })).toHaveCount(0)
     await expect(page.getByRole('row', { name: /algorithms\.pdf/ }).getByText('Lecture notes', { exact: true }).filter({ visible: true })).toBeVisible()
-    await expect(page.getByRole('radiogroup', { name: 'Use these as:' }).getByRole('radio', { name: 'Syllabus or schedule' })).toBeVisible()
+    await expect(page.getByRole('radiogroup', { name: 'For the next upload:' }).getByRole('radio', { name: 'Syllabus or schedule' })).toBeVisible()
     // One uploader on the page (a second one can only be a view that is still leaving).
     const hint = page.getByText("PDFs need selectable text. Scans can't be read.", { exact: false })
     await expect(hint).toHaveCount(1)

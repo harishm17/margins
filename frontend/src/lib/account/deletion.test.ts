@@ -173,7 +173,9 @@ test('the account row that disappears between the check and the delete still end
 test('confirmation needs the word DELETE', () => {
   assert.equal(confirmsDeletion('DELETE'), true)
   assert.equal(confirmsDeletion('  DELETE '), true)
-  assert.equal(confirmsDeletion('delete'), false)
+  assert.equal(confirmsDeletion('delete'), true)
+  assert.equal(confirmsDeletion(' Delete '), true)
+  assert.equal(confirmsDeletion('delet'), false)
   assert.equal(confirmsDeletion(''), false)
   assert.equal(confirmsDeletion('DELETE ME'), false)
 })

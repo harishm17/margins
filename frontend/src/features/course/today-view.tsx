@@ -4,6 +4,7 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { Page, PageIntro } from '@/components/shell/page'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { StatusGuide } from '@/components/learning/status-guide'
 import { Card } from '@/components/ui/card'
 import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -290,19 +291,18 @@ export function TodayView({ course, today }: { course: CourseShell; today: Today
               title={newTopics}
               action={
                 <Button asChild size="sm" variant="primary">
-                  <Link href={`${base}/topics?edit=1`}>Review topics</Link>
+                  <Link href={`${base}/topics?edit=1`}>Review new topics</Link>
                 </Button>
               }
             >
               They join your plan once you confirm them.
             </InlineAlert>
           ) : null}
-          {/* On a phone the exam-date line sits right under "Up next", so the whole of it is above the tab bar on the first
-              paint; from a laptop width it runs under both cards. */}
-          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+          {/* The planning context: what to do next, and the exam-date line that the plan depends on, directly under it. The
+              detail (course mastery, mock-exam history) comes after the topics, so the first screen is the next move. */}
+          <div className="flex flex-col gap-4">
             <UpNext courseId={course.id} next={today.next} />
-            {today.examPrompt ? <ExamPromptCard courseId={course.id} className="lg:col-span-2 lg:row-start-2" /> : null}
-            <ProgressCard average={today.averageMastery} counts={today.counts} topicCount={today.topicCount} className="lg:col-start-2 lg:row-start-1" />
+            {today.examPrompt ? <ExamPromptCard courseId={course.id} /> : null}
           </div>
         </div>
 
@@ -324,9 +324,15 @@ export function TodayView({ course, today }: { course: CourseShell; today: Today
           </ul>
         </section>
 
-        <div className={cn('grid items-start gap-10', building && 'lg:grid-cols-2 lg:gap-6')}>
-          <RecentExams courseId={course.id} exams={today.recentExams} />
-          {building ? <BuildingContent courseId={course.id} generation={today.generation} /> : null}
+        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-6">
+          <div className="flex min-w-0 flex-col gap-10 max-lg:order-2">
+            <RecentExams courseId={course.id} exams={today.recentExams} />
+            {building ? <BuildingContent courseId={course.id} generation={today.generation} /> : null}
+          </div>
+          <div className="flex flex-col gap-3 max-lg:order-1">
+            <ProgressCard average={today.averageMastery} counts={today.counts} topicCount={today.topicCount} />
+            <StatusGuide parts={['topic', 'steps', 'quiz']} id="overview-status-guide" />
+          </div>
         </div>
       </div>
     </Page>

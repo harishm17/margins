@@ -4,13 +4,15 @@ import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { TreeStructure } from '@phosphor-icons/react/dist/ssr'
 import { Page, PageIntro } from '@/components/shell/page'
+import { StatusGuide } from '@/components/learning/status-guide'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ListView } from '@/features/map/list-view'
 import { MapToolbar } from '@/features/map/map-toolbar'
 import { InPageSkipLink } from '@/components/shell/skip-link'
 import { MapView } from '@/features/map/map-view'
-import { NodePanel, type PanelWords } from '@/features/map/node-panel'
+import { type PanelWords } from '@/features/map/node-panel'
+import { NodePanelFrame } from '@/features/map/node-panel-frame'
 import { prisma } from '@/lib/db/prisma'
 import { conceptTeachBackPrompt } from '@/lib/learning/recall-server'
 import { eventLine, frontierTexts, stateLine } from '@/lib/map/copy'
@@ -136,7 +138,9 @@ export default async function MapPage({
         topicId={topicParam ?? null}
         explicitView={explicitView}
       />
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
+      {/* An idea's state and a topic's status are different scales that sit side by side here: one place says how. */}
+      <StatusGuide parts={['idea', 'topic']} id="map-status-guide" className="mt-2" />
+      <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
         <section aria-labelledby="map-unit-heading" className="min-w-0">
           <h2 id="map-unit-heading" className="sr-only">
             {label}
@@ -164,7 +168,9 @@ export default async function MapPage({
         </section>
         {panel && words ? (
           <div className="min-w-0 lg:sticky lg:top-4">
-            <NodePanel
+            {/* On a phone the details open in a bottom sheet over the list (with a Back); anywhere wider they sit beside or under it. */}
+            <NodePanelFrame
+              serverNarrow={isNarrow(cookieStore.get(NARROW_COOKIE)?.value)}
               courseId={courseId}
               panel={panel}
               words={words}

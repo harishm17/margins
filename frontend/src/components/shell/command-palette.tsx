@@ -28,6 +28,7 @@ import {
 } from '@phosphor-icons/react/dist/ssr'
 import { DialogOverlay } from '@/components/ui/dialog'
 import { IconButton } from '@/components/ui/icon-button'
+import { useMediaQuery } from '@/lib/hooks/use-media-query'
 import { Kbd, KeyHint } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
 import { paletteFilter, paletteItem } from './palette-search'
@@ -83,6 +84,8 @@ function PaletteBody() {
   const params = useParams<{ courseId?: string }>()
   const { resolvedTheme, setTheme } = useTheme()
   const [search, setSearch] = React.useState('')
+  // The long placeholder is cut off on a phone and would no longer say what is searched: there it is the short one.
+  const narrow = useMediaQuery('(max-width: 639px)')
   // The body mounts when the palette opens, so this reads the recent list fresh each time.
   const [recent] = React.useState<string[]>(readRecent)
 
@@ -199,7 +202,7 @@ function PaletteBody() {
               <Command.Input
                 value={search}
                 onValueChange={setSearch}
-                placeholder="Search topics, files, courses and actions"
+                placeholder={narrow ? 'Search your courses' : 'Search topics, files, courses and actions'}
                 className="h-full min-w-0 flex-1 bg-transparent text-[15px] max-sm:text-[16px] text-fg outline-none placeholder:text-fg-3"
               />
               <Kbd>Esc</Kbd>

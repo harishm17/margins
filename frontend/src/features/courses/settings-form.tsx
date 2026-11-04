@@ -7,9 +7,9 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/components/ui/toaster'
 import { apiFetch, isApiError } from '@/lib/api/client'
+import { DescriptionField } from './description-field'
 import { PlanFields } from './plan-fields'
 
 type CourseSettingsFormProps = {
@@ -72,18 +72,11 @@ export function CourseSettingsForm({ course }: CourseSettingsFormProps) {
   return (
     <div className="flex flex-col gap-12">
       <form onSubmit={onSave} noValidate className="flex flex-col gap-5">
-        <Field label="Course name" error={nameError}>
+        <Field label="Course name" required error={nameError}>
           <Input name="name" autoComplete="off" maxLength={255} value={name} onChange={(event) => setName(event.target.value)} />
         </Field>
-        <Field label="Description" optional hint="What are you preparing for?">
-          <Textarea
-            name="description"
-            rows={3}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-        </Field>
-        <PlanFields examDate={examDate} dailyMinutes={dailyMinutes} onExamDate={setExamDate} onDailyMinutes={setDailyMinutes} />
+        <PlanFields heading="Study plan" examDate={examDate} dailyMinutes={dailyMinutes} onExamDate={setExamDate} onDailyMinutes={setDailyMinutes} />
+        <DescriptionField value={description} onChange={setDescription} rows={3} />
         {error ? <InlineAlert tone="danger">{error}</InlineAlert> : null}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <Button type="submit" variant="primary" loading={saving} disabled={!dirty} aria-describedby={dirty ? undefined : 'save-state'}>
@@ -122,14 +115,19 @@ export function CourseSettingsForm({ course }: CourseSettingsFormProps) {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="Delete this course?"
-        description={`Everything in ${course.name} goes with it. Type the course name to confirm.`}
+        description={
+          <>
+            Everything in <strong className="font-medium text-fg wrap-anywhere">{course.name}</strong> goes with it, including its topics, study
+            content, quiz and exam history, and the files you uploaded. Type the course name to confirm.
+          </>
+        }
         confirmLabel="Delete course"
         destructive
         confirmDisabled={typedName.trim() !== course.name}
         confirmDisabledReason="Type the course name to turn this on."
         onConfirm={onDelete}
       >
-        <Field label={`Type "${course.name}"`}>
+        <Field label={<span className="wrap-anywhere">{`Type "${course.name}"`}</span>}>
           <Input autoComplete="off" value={typedName} onChange={(event) => setTypedName(event.target.value)} />
         </Field>
       </ConfirmDialog>

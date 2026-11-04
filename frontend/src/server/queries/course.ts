@@ -79,6 +79,8 @@ export type MaterialRow = {
   job: (JobRef & { jobType: string }) | null
   /** A past exam whose style analysis failed: the job's error code (null when it did not fail). */
   examAnalysisFailure: { errorCode: string | null } | null
+  /** The topics taught from this file, so deleting it can say which ones lose their source. */
+  topics: { id: string; name: string }[]
 }
 
 export type MaterialsData = {
@@ -195,6 +197,20 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
     else jobsByMaterial.set(materialId, [job])
   }
 
+  const taught = materials.length
+    ? await prisma.topicSource.findMany({
+        where: { materialId: { in: materials.map((material) => material.id) }, topic: { projectId: courseId } },
+        orderBy: { topic: { orderIndex: 'asc' } },
+        select: { materialId: true, topic: { select: { id: true, name: true } } },
+      })
+    : []
+  const topicsByMaterial = new Map<string, { id: string; name: string }[]>()
+  for (const { materialId, topic } of taught) {
+    const list = topicsByMaterial.get(materialId) ?? []
+    if (!list.some((item) => item.id === topic.id)) list.push(topic)
+    topicsByMaterial.set(materialId, list)
+  }
+
   const rows: MaterialRow[] = materials.map((material) => {
     const jobs = jobsByMaterial.get(material.id) ?? []
     // Newest first, so the first active job is the one in front.
@@ -219,6 +235,7 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
       examAnalysisFailure: examState.failedFileIds.includes(material.id)
         ? { errorCode: examFailureCode.get(material.id) ?? null }
         : null,
+      topics: topicsByMaterial.get(material.id) ?? [],
     }
   })
 

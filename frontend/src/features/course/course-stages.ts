@@ -17,9 +17,16 @@ export const COURSE_STAGES = [
   {
     title: 'Start studying',
     time: 'Your daily time',
-    text: 'Set your exam date and daily time for a day-by-day plan that ends at your exam. Every topic has five steps: Warm-up (try a few questions first), Read (your own pages), Recall (with the book closed), Practice and a Quiz. Reviews and mock exams come before the exam.',
+    text: 'Set your exam date and daily time for a day-by-day plan that ends at your exam. Reviews and mock exams come before it.',
   },
 ] as const
+
+/**
+ * What a topic holds, said once the course exists (the setup page's "What each step involves"), not on Home's three-stage
+ * overview, where it made the third stage far longer than the first two.
+ */
+export const TOPIC_STEPS_TEXT =
+  'Every topic has five steps: Warm-up (try a few questions first), Read (your own pages), Recall (with the book closed), Practice and a Quiz.'
 
 /** The line under a course's name while it is being set up, and the heading of the same list on Home. */
 export const COURSE_STAGES_SUMMARY = 'Three steps and you’re ready to study.'

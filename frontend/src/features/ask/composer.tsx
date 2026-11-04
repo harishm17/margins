@@ -71,6 +71,9 @@ export function Composer({
   const typed = typedState.key === draftKey ? typedState.text : null
   const setTyped = (text: string) => setTypedState({ key: draftKey, text })
   const value = typed ?? draft.value?.text ?? ''
+  // The box was filled from a saved draft (a reload, another device, a send that never got an answer), not typed or prefilled
+  // here: say so, quietly, until the student changes it.
+  const restored = typed === null && !!draft.value?.text && !disabled
   const setValue = (next: string) => {
     setTyped(next)
     if (next.trim()) draft.set({ text: next })
@@ -159,7 +162,14 @@ export function Composer({
         className="block max-h-48 w-full resize-none max-sm:min-h-11 bg-transparent px-2 py-1 text-[15px] max-sm:text-[16px] leading-6 text-fg outline-none placeholder:text-fg-3 disabled:cursor-not-allowed"
         style={{ height: LINE + 8 }}
       />
+      {restored ? (
+        <p role="status" className="px-2 pb-0.5 text-caption font-normal text-fg-3" data-testid="ask-restored">
+          Your unsent question was restored.
+        </p>
+      ) : null}
       <div className="mt-1 flex items-center gap-2">
+        {/* The scope says what the question is about, not a filter on the conversation: the words are on screen, not only in the name. */}
+        {fixedScope || (scopeOptions && onScopeChange) ? <span className="shrink-0 text-small text-fg-2">Ask about</span> : null}
         {fixedScope ? (
           <span className="inline-flex h-7 min-w-0 max-w-[60%] items-center truncate rounded-control bg-surface-2 px-2.5 text-small text-fg-2">
             <span className="truncate">{fixedScope}</span>

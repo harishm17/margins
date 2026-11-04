@@ -262,6 +262,17 @@ export default function EvaluationPage() {
       </ul>
 
       <h3 className={h3}>Results</h3>
+      {/* The column names are the field's own; each gets one plain line here, before the numbers. */}
+      <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1 text-small text-fg-2 sm:grid-cols-[max-content_minmax(0,1fr)]">
+        <dt className="font-medium text-fg">recall@{RETRIEVAL.k}</dt>
+        <dd className="mb-2 sm:mb-0">Of the right chunks, the share that made it into the top {RETRIEVAL.k}.</dd>
+        <dt className="font-medium text-fg">MRR</dt>
+        <dd className="mb-2 sm:mb-0">How high the first right chunk ranks. 1 means it is first.</dd>
+        <dt className="font-medium text-fg">nDCG@{RETRIEVAL.k}</dt>
+        <dd className="mb-2 sm:mb-0">How well all the right chunks are ordered, with the highest ones counting most.</dd>
+        <dt className="font-medium text-fg">hit@5</dt>
+        <dd>Whether at least one right chunk is in the first five.</dd>
+      </dl>
       <ComparisonTable
         caption={`Retrieval, run of October 20, 2026. Hybrid search with fusion, the search the app uses now, finds and ranks the right pages best. Averages over ${RETRIEVAL.topics} topics, top ${RETRIEVAL.k}.`}
         rowHeader="System"

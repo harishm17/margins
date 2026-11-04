@@ -11,7 +11,6 @@ import {
   Files,
   House,
   ListBullets,
-  Lock,
   MagnifyingGlass,
   ArrowsClockwise,
   TreeStructure,
@@ -24,8 +23,9 @@ import { useIsMac } from '@/lib/hooks/use-is-mac'
 import { cn } from '@/lib/utils'
 import { AccountMenu } from './account-menu'
 import { Brand } from './brand'
-import { isSectionNotReady, NOT_READY_REASON } from './course-nav'
+import { inFirstSetup } from './course-nav'
 import { CourseSwitcher } from './course-switcher'
+import { SetupProgress } from './setup-progress'
 import { useShell } from './shell-provider'
 import { useSidebarCollapsed } from './sidebar-state'
 import { readUnitChoices, useUnitState } from './unit-state'
@@ -34,6 +34,8 @@ import { unitMastery } from '@/lib/topics/units'
 
 /** The course pages the phone tab bar (mobile-tabs.tsx) already holds. */
 const PHONE_TAB_KEYS: ReadonlySet<string> = new Set(['overview', 'plan', 'topics', 'ask'])
+/** The pages a course in the first two steps of setup has: its setup steps and its files. */
+const SETUP_KEYS: ReadonlySet<string> = new Set(['overview', 'materials'])
 
 type NavItem = {
   key: string
@@ -42,40 +44,10 @@ type NavItem = {
   icon: React.ElementType
   active: boolean
   badge?: React.ReactNode
-  /** The course is still in setup and this page has nothing to show yet (components/shell/course-nav.ts). */
-  notReady?: boolean
 }
 
-function NavLink({ item, rail, reasonId }: { item: NavItem; rail: boolean; reasonId?: string }) {
+function NavLink({ item, rail }: { item: NavItem; rail: boolean }) {
   const Icon = item.icon
-  if (item.notReady) {
-    // Not a link: there is nothing behind it yet. It stays in the list, dimmed, and a screen reader hears why.
-    const row = (
-      <span
-        role="link"
-        aria-disabled="true"
-        aria-label={rail ? item.label : undefined}
-        aria-describedby={reasonId}
-        tabIndex={0}
-        className={cn(
-          // Meta-text colour, not a faded copy of the link: the label stays readable (5.3:1), and the lock says why it is off.
-          'flex h-[34px] max-lg:h-11 cursor-not-allowed items-center gap-2.5 rounded-control px-2.5 text-body-strong text-fg-3',
-          'rail:justify-center rail:px-0'
-        )}
-      >
-        <Icon aria-hidden="true" className="size-[18px] shrink-0 text-fg-3" />
-        <span className="min-w-0 flex-1 truncate rail:hidden">{item.label}</span>
-        <Lock aria-hidden="true" className="size-3.5 shrink-0 text-fg-3 rail:hidden" />
-      </span>
-    )
-    return rail ? (
-      <Tooltip content={`${item.label}. ${NOT_READY_REASON}`} side="right">
-        {row}
-      </Tooltip>
-    ) : (
-      row
-    )
-  }
   const link = (
     <Link
       href={item.href}
@@ -274,11 +246,11 @@ export function SidebarContent({ allowRail = false, omitTabs = false }: { allowR
         { key: 'map', label: 'Map', href: `${base}/map`, icon: TreeStructure, active: pathname.startsWith(`${base}/map`) },
       ]
     : []
-  const items = allItems
-    .filter((item) => !(omitTabs && PHONE_TAB_KEYS.has(item.key)))
-    .map((item) => ({ ...item, notReady: course ? isSectionNotReady(item.key, course) : false }))
-  const anyNotReady = items.some((item) => item.notReady)
-  const reasonId = `${topicsLabelId}-not-ready`
+  // Steps 1 and 2 of setup: the study pages have nothing behind them, so they are not listed as dead links. The
+  // student sees Overview (the setup steps) and Materials, and a compact setup progress block saying what opens next.
+  const settingUp = !!course && inFirstSetup(course)
+  const items = allItems.filter((item) => !(omitTabs && PHONE_TAB_KEYS.has(item.key))).filter((item) => !settingUp || SETUP_KEYS.has(item.key))
+  const settingUpStep = settingUp && course?.setupStep ? course.setupStep : null
 
   const search = (
     <button
@@ -315,13 +287,8 @@ export function SidebarContent({ allowRail = false, omitTabs = false }: { allowR
       {items.length > 0 ? (
         <nav aria-label="Course" className="mt-3 flex flex-col gap-0.5 px-3">
           {items.map((item) => (
-            <NavLink key={item.key} item={item} rail={rail} reasonId={item.notReady ? reasonId : undefined} />
+            <NavLink key={item.key} item={item} rail={rail} />
           ))}
-          {anyNotReady ? (
-            <p id={reasonId} className="px-2.5 pt-1.5 text-caption font-normal text-fg-3 rail:sr-only">
-              {NOT_READY_REASON}
-            </p>
-          ) : null}
         </nav>
       ) : (
         <nav aria-label="Courses" className="mt-3 flex flex-col gap-0.5 px-3">
@@ -331,6 +298,8 @@ export function SidebarContent({ allowRail = false, omitTabs = false }: { allowR
           />
         </nav>
       )}
+
+      {settingUpStep ? <SetupProgress step={settingUpStep} className="mx-3 mt-4 rail:hidden" /> : null}
 
       {course?.active && course.topics.length > 0 ? (
         // A labelled group, not a heading: the sidebar comes before <main> in the page, and its label

@@ -57,6 +57,7 @@ function setupOf(
     confirmedTopicCount: project.topics.filter((topic) => topic.userConfirmed).length,
     extractedTopicCount: extracted.length,
     confirmedExtractedTopicCount: extracted.filter((topic) => topic.userConfirmed).length,
+    sourceRemovedTopicCount: project.topics.filter((topic) => !topic.userConfirmed && !isExtracted(topic)).length,
     contentBlockCount: project.topics.reduce((sum, topic) => sum + topic._count.content, 0),
     extraction,
   })
@@ -284,6 +285,8 @@ export type NavCourse = {
   active: boolean
   /** The topics are confirmed, so Plan, Topics, Ask, Mock exams, Review and Map have something to show (lib/course-setup.ts `readyToStudy`). */
   ready: boolean
+  /** The step of setup the course is on (1 to 3), or null once it is set up. */
+  setupStep: 1 | 2 | 3 | null
   /** In course order; empty for a flat course. */
   units: NavUnit[]
   topics: NavTopic[]
@@ -344,6 +347,7 @@ export const getNavIndex = cache(async (userId: string, timeZone = 'UTC'): Promi
       needsTopicReview: needsTopicReview(setup),
       active: setup.mode === 'active',
       ready: readyToStudy(setup),
+      setupStep: setup.mode === 'setup' ? setup.step : null,
       units: project.units,
       files: project.materials,
       // New topics found after the student confirmed wait for review: the sidebar, the command palette and

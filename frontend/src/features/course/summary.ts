@@ -33,7 +33,7 @@ export function problemMessage(problem: FileProblem, maxUploadMb: number): strin
   return `Files can be up to ${maxUploadMb} MB.`
 }
 
-/** The upload picker's words ("Use these as:"). They only set a file's starting role (lib/materials/role.ts). */
+/** The upload picker's words ("For the next upload:"). They only set a file's starting role (lib/materials/role.ts). */
 export const CATEGORY_LABELS: Record<string, string> = {
   lecture_notes: 'Lecture notes',
   sample_exams: 'Past exams',

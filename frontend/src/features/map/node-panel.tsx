@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { BookOpenText, ChatCircleText, ChatText, Microphone, PencilLine, WarningCircle } from '@phosphor-icons/react/dist/ssr'
+import { ArrowLeft, BookOpenText, CaretDown, ChatCircleText, ChatText, Microphone, PencilLine, WarningCircle } from '@phosphor-icons/react/dist/ssr'
 import { SourceLink } from '@/components/learning/source-link'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
@@ -12,6 +12,7 @@ import { linkText } from '@/lib/map/copy'
 import { reviewSessionHref } from '@/lib/learning/review-links'
 import type { ConceptPanel } from '@/server/queries/map'
 import { EdgeQuestion } from './edge-question'
+import { FrontierBadge } from './frontier-badge'
 import { StateIcon } from './state-icon'
 
 /** What the server worked out in words for this panel: the state line and the evidence lines carry dates in the student's zone. */
@@ -34,6 +35,7 @@ export function NodePanel({
   words,
   closeHref,
   backLabel,
+  inSheet = false,
 }: {
   courseId: string
   panel: ConceptPanel
@@ -41,17 +43,23 @@ export function NodePanel({
   closeHref: string
   /** "Back to the map" or "Back to the list". */
   backLabel: string
+  /** Shown in the phone's bottom sheet (map-panel-frame.tsx): "Back" closes the sheet instead of moving focus to the idea. */
+  inSheet?: boolean
 }) {
   const headingRef = React.useRef<HTMLHeadingElement>(null)
   const sectionRef = React.useRef<HTMLElement>(null)
   // Which idea the teach-back card is open for, so choosing another idea closes it.
   const [explainingFor, setExplainingFor] = React.useState<string | null>(null)
   const explaining = explainingFor === panel.id
+  // "Other ways to study" is closed until asked for; it stays open while the explain card (one of its actions) is.
+  const [othersOpenFor, setOthersOpenFor] = React.useState<string | null>(null)
+  const othersOpen = othersOpenFor === panel.id || explaining
 
   // Choosing an idea (from a node or a list row) shows its panel. Where the panel is already on screen (desktop) focus
   // stays on the node, so moving through the map is not broken; where it is below the fold (a phone) focus and the view
   // move to it. A page opened straight onto an idea (from a topic page) leaves focus alone.
   React.useEffect(() => {
+    if (inSheet) return
     const active = document.activeElement
     if (!(active instanceof Element) || !active.closest('[data-node-link]')) return
     const box = sectionRef.current?.getBoundingClientRect()
@@ -81,14 +89,25 @@ export function NodePanel({
   )
 
   return (
-    <section ref={sectionRef} aria-labelledby="map-panel-heading" data-testid="node-panel" className="scroll-mt-4 rounded-card border border-border bg-surface p-5">
-      <button
-        type="button"
-        onClick={backToNodes}
-        className="mb-3 inline-flex min-h-8 items-center rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg max-sm:min-h-11"
-      >
-        {backLabel}
-      </button>
+    <section ref={sectionRef} aria-labelledby="map-panel-heading" data-testid="node-panel" className={inSheet ? 'p-4' : 'scroll-mt-4 rounded-card border border-border bg-surface p-5'}>
+      {inSheet ? (
+        <Link
+          href={closeHref}
+          scroll={false}
+          className="mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg"
+        >
+          <ArrowLeft aria-hidden="true" className="size-4" />
+          {backLabel}
+        </Link>
+      ) : (
+        <button
+          type="button"
+          onClick={backToNodes}
+          className="mb-3 inline-flex min-h-8 items-center rounded-chip text-small text-fg-2 underline decoration-border-strong underline-offset-[3px] hover:text-fg max-sm:min-h-11"
+        >
+          {backLabel}
+        </button>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 id="map-panel-heading" ref={headingRef} tabIndex={-1} className="text-heading text-fg outline-none">
@@ -106,7 +125,7 @@ export function NodePanel({
       <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-body-strong text-fg">
         <StateIcon label={panel.label} size={18} />
         <span>{stateLine}</span>
-        {words.frontier ? <span className="rounded-chip border border-accent px-1.5 text-caption text-fg">{words.frontier}</span> : null}
+        {words.frontier ? <FrontierBadge text={words.frontier} /> : null}
       </p>
       {panel.misconception ? (
         <InlineAlert className="mt-3" tone="warning" icon={<WarningCircle />}>
@@ -118,6 +137,7 @@ export function NodePanel({
         <MathText>{panel.summary}</MathText>
       </p>
 
+      {/* One recommended move: read first when the idea is waiting for instruction, else practise it. The other ways in are one tap away. */}
       <div className="mt-5 flex flex-col gap-2">
         {readFirst ? (
           <Button asChild variant="primary" icon={<BookOpenText />}>
@@ -125,21 +145,47 @@ export function NodePanel({
               Read about it first
             </Link>
           </Button>
+        ) : (
+          <Button asChild variant="primary" icon={<PencilLine />}>
+            <Link href={reviewSessionHref(courseId, { conceptId: panel.id })} data-testid="practice-this">
+              Practice this
+            </Link>
+          </Button>
+        )}
+      </div>
+      <div className="mt-3">
+        <button
+          type="button"
+          aria-expanded={othersOpen}
+          aria-controls="map-other-ways"
+          onClick={() => setOthersOpenFor(othersOpenFor === panel.id && !explaining ? null : panel.id)}
+          className="inline-flex min-h-8 items-center gap-1.5 rounded-chip text-small text-fg-2 hover:text-fg max-sm:min-h-11"
+        >
+          Other ways to study
+          <CaretDown aria-hidden="true" className={`size-3.5 transition-transform duration-180 ${othersOpen ? 'rotate-180' : ''}`} />
+        </button>
+        {othersOpen ? (
+          <div id="map-other-ways" className="mt-2 flex flex-col gap-2">
+            {readFirst ? (
+              <Button asChild variant="secondary" icon={<PencilLine />}>
+                <Link href={reviewSessionHref(courseId, { conceptId: panel.id })} data-testid="practice-this">
+                  Practice this
+                </Link>
+              </Button>
+            ) : null}
+            <Button variant="secondary" icon={<ChatText />} aria-expanded={explaining} aria-controls={explaining ? "map-teach-back" : undefined} onClick={() => setExplainingFor(explaining ? null : panel.id)}>
+              Explain it
+            </Button>
+            <Button asChild variant="secondary" icon={<ChatCircleText />}>
+              <Link href={`/courses/${courseId}/ask?concept=${encodeURIComponent(panel.id)}`}>Ask about this</Link>
+            </Button>
+            <Button asChild variant="secondary" icon={<Microphone />}>
+              <Link href={`${base}?view=voice&style=teach_back&concept=${encodeURIComponent(panel.id)}`} data-testid="do-it-out-loud">
+                Do it out loud
+              </Link>
+            </Button>
+          </div>
         ) : null}
-        <Button asChild variant={readFirst ? 'secondary' : 'primary'} icon={<PencilLine />}>
-          <Link href={reviewSessionHref(courseId, { conceptId: panel.id })}>Practice this</Link>
-        </Button>
-        <Button variant="secondary" icon={<ChatText />} aria-expanded={explaining} aria-controls={explaining ? "map-teach-back" : undefined} onClick={() => setExplainingFor(explaining ? null : panel.id)}>
-          Explain it
-        </Button>
-        <Button asChild variant="secondary" icon={<ChatCircleText />}>
-          <Link href={`/courses/${courseId}/ask?concept=${encodeURIComponent(panel.id)}`}>Ask about this</Link>
-        </Button>
-        <Button asChild variant="secondary" icon={<Microphone />}>
-          <Link href={`${base}?view=voice&style=teach_back&concept=${encodeURIComponent(panel.id)}`} data-testid="do-it-out-loud">
-            Do it out loud
-          </Link>
-        </Button>
       </div>
 
       {panel.needsInstruction && panel.explainer ? (

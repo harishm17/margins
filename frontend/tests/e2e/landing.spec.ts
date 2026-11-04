@@ -94,6 +94,10 @@ test('on a phone every step shows its own phone-sized screenshot', async ({ page
   await expect(page.getByRole('tablist')).toBeHidden()
   const steps = page.locator('#how-it-works ol > li')
   await expect(steps).toHaveCount(6)
+  // One step is open at a time (the first); the rest are a line each until opened.
+  await expect(steps.locator('details[open]')).toHaveCount(1)
+  await steps.nth(2).locator('summary').click()
+  await expect(steps.locator('details[open]')).toHaveCount(1)
   await steps.nth(2).scrollIntoViewIfNeeded()
   const image = steps.nth(2).locator('img:visible')
   await expect(image).toHaveCount(1)

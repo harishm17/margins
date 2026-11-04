@@ -498,8 +498,8 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
     await dueWorld(page, `s5-home-${stamp}`, 8)
     await page.goto('/home')
     const card = page.getByTestId('short-session').locator('visible=true')
-    await expect(card.getByRole('heading', { name: 'Have 10 minutes?' })).toBeVisible()
-    await expect(card).toContainText('6 reviews, about 9 minutes')
+    await expect(card.getByRole('heading', { name: 'Quick practice' })).toBeVisible()
+    await expect(card).toContainText('About 9 minutes · 6 reviews')
     await expectNoAxeViolations(page, 'home with the short session')
     // A long course name is cut inside its card, not pushed past the screen edge (the page was 402px wide on a 390px phone).
     const original = page.viewportSize()
@@ -532,7 +532,7 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
     const w = await dueWorld(page, `s5-review-${stamp}`, 8)
     await page.goto(`/courses/${w.course.courseId}/review`)
     const card = page.getByTestId('short-session').locator('visible=true')
-    await expect(card).toContainText('Have 10 minutes?')
+    await expect(card).toContainText('Quick practice')
     await card.getByRole('button', { name: 'Start' }).click()
     await expect(page.getByRole('heading', { name: /^Question 1 of 6/ })).toBeVisible({ timeout: 60_000 })
     // Miss all six: the counter caps the retests at two.
@@ -564,14 +564,14 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
 
     await page.goto('/home')
     const card = page.getByTestId('short-session').locator('visible=true')
-    await expect(card).toContainText('One recall card, about 5 minutes')
+    await expect(card).toContainText('About 5 minutes · one recall card')
     await expect(card.getByRole('link', { name: 'Start' })).toHaveAttribute('href', `/courses/${course.courseId}/topics/${topicId}?view=recall`)
 
     // With the AI down the recall card is not offered: a short check on rule-graded items stands in.
     await markAiUnavailable()
     await page.goto('/home')
     // The card says the number the session really has (the world holds two questions), not the format's ceiling of four.
-    await expect(page.getByTestId('short-session').locator('visible=true')).toContainText('A 2-question check, about 2 minutes')
+    await expect(page.getByTestId('short-session').locator('visible=true')).toContainText('About 2 minutes · 2 questions')
     await page.getByTestId('short-session').locator('visible=true').getByRole('button', { name: 'Start' }).click()
     await expect(page.getByRole('heading', { name: /^Question 1 of 2/ })).toBeVisible({ timeout: 60_000 })
   })

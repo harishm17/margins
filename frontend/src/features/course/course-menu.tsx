@@ -8,10 +8,22 @@ import { IconButton } from '@/components/ui/icon-button'
 import { PrepareAllDialog } from './prepare-all'
 
 /**
- * The overflow menu on the course overview. "Prepare all topics now" is the only place that
+ * The course actions menu: on the course overview and in the topic editor. "Prepare all topics now" is the only place that
  * writes content for the whole course; it is left out when every topic is already written.
  */
-export function CourseMenu({ courseId, topicsToPrepare = 0 }: { courseId: string; topicsToPrepare?: number }) {
+export function CourseMenu({
+  courseId,
+  topicsToPrepare = 0,
+  hideEditTopics = false,
+  extraItems,
+}: {
+  courseId: string
+  topicsToPrepare?: number
+  /** The page is the topic editor already. */
+  hideEditTopics?: boolean
+  /** Actions that belong to the page that shows the menu (the topic editor's "Find topics again"), above the common ones. */
+  extraItems?: React.ReactNode
+}) {
   const router = useRouter()
   const [preparing, setPreparing] = React.useState(false)
   const base = `/courses/${courseId}`
@@ -19,15 +31,18 @@ export function CourseMenu({ courseId, topicsToPrepare = 0 }: { courseId: string
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <IconButton label="More course actions" icon={<DotsThree weight="bold" />} variant="secondary" />
+          <IconButton label="Course actions" icon={<DotsThree weight="bold" />} variant="secondary" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {extraItems}
           <DropdownMenuItem icon={<Files />} onSelect={() => router.push(`${base}/materials`)}>
             Add materials
           </DropdownMenuItem>
-          <DropdownMenuItem icon={<ListBullets />} onSelect={() => router.push(`${base}/topics?edit=1`)}>
-            Edit topics
-          </DropdownMenuItem>
+          {hideEditTopics ? null : (
+            <DropdownMenuItem icon={<ListBullets />} onSelect={() => router.push(`${base}/topics?edit=1`)}>
+              Edit topics
+            </DropdownMenuItem>
+          )}
           {topicsToPrepare > 0 ? (
             <DropdownMenuItem icon={<Sparkle />} onSelect={() => setPreparing(true)}>
               Prepare all topics now
