@@ -63,6 +63,6 @@ test('desktop keeps the compact sizes', async ({ page }) => {
   await signIn(page, DEMO_EMAIL)
   await page.goto(course)
   await page.getByRole('button', { name: 'Course actions' }).click()
-  const row = await page.getByRole('menuitem', { name: 'Course settings' }).boundingBox()
+  const row = await page.getByRole('menuitem', { name: 'Edit topics' }).boundingBox()
   expect(row?.height ?? 0).toBeLessThan(40)
 })

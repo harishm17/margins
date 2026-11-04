@@ -9,6 +9,9 @@ import { InlineAlert } from '@/components/ui/inline-alert'
 import { apiFetch, isApiError } from '@/lib/api/client'
 import { SHORT_SESSION_NAME, shortSessionLabel, type ShortSessionPlan } from '@/lib/learning/short-session'
 
+/** The label on the quick-practice start action (W3-12 puts it on the card; the Review page uses it too). */
+export const QUICK_PRACTICE_START = 'Start quick practice'
+
 /** Makes the quick practice session and opens it; `error` is what to show when it cannot. Shared by the card and the "nothing is due" screen. */
 export function useStartShortSession(courseId: string) {
   const router = useRouter()
