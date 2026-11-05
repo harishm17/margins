@@ -13,7 +13,7 @@ describe('materialsSummary', () => {
   it('says what to do when nothing could be read', () => {
     assert.equal(
       materialsSummary({ ready: 0, working: 0, needsAttention: 1 }),
-      '1 file needs attention. Remove it, or upload a supported file.'
+      '1 file needs attention. Remove it or replace it with course files.'
     )
   })
   it('keeps the leave-the-page note while files are being read, and still mentions a rejected one', () => {

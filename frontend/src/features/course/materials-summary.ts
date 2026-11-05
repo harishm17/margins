@@ -18,6 +18,9 @@ export function materialsSummary({ ready, working, needsAttention }: MaterialsCo
   }
   if (needsAttention === 0) return 'Every file here has been read.'
   // The claim "read" is only made for the files that were: a rejected file is never counted in it.
-  if (ready === 0) return `${attention} Remove it, or upload a supported file.`
+  if (ready === 0) {
+    const them = needsAttention === 1 ? 'it' : 'them'
+    return `${attention} Remove ${them} or replace ${them} with course files.`
+  }
   return `${files(ready)} ready; ${attention}`
 }
