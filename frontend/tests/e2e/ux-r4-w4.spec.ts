@@ -93,8 +93,8 @@ test.describe('not found', () => {
     await page.goto(base)
     await page.getByRole('navigation', { name: 'Course' }).getByRole('link', { name: 'Topics' }).first().click()
     await page.waitForURL(/\/topics$/)
-    await page.goto(`${base}/no-such-page`)
-    // goto from a loaded page keeps the history and the same-site referrer.
+    // A full load from a page of the site, as a typed or pasted link followed from it would be: a same-site referrer.
+    await page.goto(`${base}/no-such-page`, { referer: page.url() })
     await expect(page.getByRole('heading', { level: 1, name: "We couldn't find that page" })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Go back' })).toBeVisible()
     await page.getByRole('button', { name: 'Go back' }).click()
@@ -103,6 +103,8 @@ test.describe('not found', () => {
     const fresh = await page.context().newPage()
     await fresh.goto(`${base}/no-such-page`)
     await expect(fresh.getByRole('heading', { level: 1, name: "We couldn't find that page" })).toBeVisible()
+    // Checked after hydration, when the button would appear if it were going to.
+    await fresh.waitForLoadState('networkidle')
     await expect(fresh.getByRole('button', { name: 'Go back' })).toHaveCount(0)
   })
 })

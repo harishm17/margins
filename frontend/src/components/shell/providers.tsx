@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { NarrowScreenCookie } from '@/features/shell/narrow-screen-cookie'
 import { TimeZoneCookie } from '@/features/shell/time-zone-sync'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { InAppNavigationRecorder } from './in-app-navigation'
 
 /** Theme (System, Light, Dark; class on <html>), tooltips and toasts for the whole app. */
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -15,6 +16,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <Toaster />
       <TimeZoneCookie />
       <NarrowScreenCookie />
+      <InAppNavigationRecorder />
     </ThemeProvider>
   )
 }
