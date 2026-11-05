@@ -153,7 +153,7 @@ function PhoneSteps({ steps }: { steps: LoopStep[] }) {
               inert={!expanded}
               className={cn(
                 'grid transition-[grid-template-rows,opacity] ease-enter motion-reduce:transition-none',
-                expanded ? 'grid-rows-[1fr] opacity-100 duration-300' : 'grid-rows-[0fr] opacity-0 duration-240'
+                expanded ? 'grid-rows-[1fr] opacity-100 duration-240' : 'grid-rows-[0fr] opacity-0 duration-180'
               )}
             >
               <div className="min-h-0 overflow-hidden">
