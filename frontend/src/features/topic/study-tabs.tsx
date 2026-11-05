@@ -1,17 +1,17 @@
 'use client'
 
 import * as React from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, type TabItem } from '@/components/ui/tabs'
 import type { ActivityKind } from '@/lib/learning/next-activity'
-import { nextLineShows, nextPathStep } from './activity-copy'
-import { NextActivityCard, NextTag, QUIZ_LOW_SCORE, StepMarker, StepStatus, ToolLinks } from './path'
+import { nextLineShows, nextPathStep, opensHere } from './activity-copy'
+import { NextActivityCard, NextTag, PhonePath, QUIZ_LOW_SCORE, StepMarker, StepStatus, ToolLinks, type PhoneStep } from './path'
 import { PRACTICE_DONE_SHARE, solvedCount } from './practice-keys'
 import { usePracticeProgress } from './practice-progress'
 import { useTopic } from './topic-provider'
 import { useTopicView } from './use-topic-view'
-import { SHORT_LABELS, VIEW_LABELS, type ContentKind, type PathView } from './types'
+import { VIEW_LABELS, type ContentKind, type PathView } from './types'
 
 type StudyTabsProps = {
   courseId: string
@@ -142,7 +142,9 @@ export function StudyTabs({
   // Otherwise the tag is on the step the next activity belongs to while that is not done, else the first step that is not done.
   const nextStep = preparingEntry ? null : nextPathStep(nextActivity, steps, done)
   // One next signal: the tag in the path. The line below it only shows where the open view has no action of its own (see nextLineShows).
-  const showLine = !preparingEntry && nextLineShows(nextActivity, view, steps)
+  const pathname = usePathname()
+  const search = useSearchParams()
+  const showLine = !preparingEntry && nextLineShows(nextActivity, view, steps, opensHere(nextActivity.href, pathname, search))
 
   /** A status after the label: content being written or missing, solved steps, the best quiz score. */
   function glyphFor(id: PathView): React.ReactNode {
@@ -168,32 +170,65 @@ export function StudyTabs({
     }
   }
 
-  // On a phone the labels are short and the markers small, so all five steps fit without scrolling.
+  const lowScore = progress.quizScore !== null && progress.quizScore < QUIZ_LOW_SCORE ? progress.quizScore : null
   const items: TabItem[] = steps.map((id, index) => ({
     id,
     label: (
       <>
-        <StepMarker number={index + 1} done={done[id]} next={nextStep === id} lowScore={id === 'quiz' && progress.quizScore !== null && progress.quizScore < QUIZ_LOW_SCORE ? progress.quizScore : null} />
-        <span className="sm:hidden">{SHORT_LABELS[id]}</span>
-        <span className="max-sm:hidden">{VIEW_LABELS[id]}</span>
+        <StepMarker number={index + 1} done={done[id]} next={nextStep === id} lowScore={id === 'quiz' ? lowScore : null} />
+        {VIEW_LABELS[id]}
         {nextStep === id ? <NextTag /> : null}
       </>
     ),
     href: hrefs[index],
     glyph: glyphFor(id),
-    // On a phone a glyph is read out, not drawn (no room), so its gap goes too.
-    glyphClassName: 'max-sm:-ml-1',
+  }))
+
+  /** The same statuses as words, for the phone's list of steps (the wide screen draws them as glyphs). */
+  function statusFor(id: PathView): string | null {
+    if (preparingEntry && (id === 'warmup' || id === 'recall')) return 'Being prepared'
+    switch (id) {
+      case 'read':
+        if ((running.notes && !running.notes.done) || (preparingNotes && !present.notes)) return 'Being written'
+        return present.notes ? null : 'Not created yet'
+      case 'practice':
+        if (running.practice && !running.practice.done) return 'Being written'
+        if (!present.practice) return 'Not created yet'
+        return solved > 0 && !practiceDone ? `${solved}/${practiceKeys.length}` : null
+      case 'quiz':
+        if (running.quiz && !running.quiz.done) return 'Being written'
+        if (!present.quiz) return 'Not created yet'
+        return progress.quizScore !== null ? `${Math.round(progress.quizScore)}%` : null
+      case 'recall':
+        return pathDone.recall && recallProgress.answered < recallProgress.total ? `${recallProgress.answered}/${recallProgress.total}` : null
+      default:
+        return null
+    }
+  }
+  const phoneSteps: PhoneStep[] = steps.map((id, index) => ({
+    id,
+    href: hrefs[index],
+    done: done[id],
+    next: nextStep === id,
+    status: statusFor(id),
+    lowScore: id === 'quiz' ? lowScore : null,
   }))
 
   return (
     <>
+      {/* A phone gets one line, "Step 2 of 5: Read", that opens the steps (W2-02); the five-tab strip is for wider screens. */}
+      <PhonePath
+        steps={phoneSteps}
+        view={view}
+        className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 group-data-[attempt]/topic:hidden sm:hidden"
+      />
       <Tabs
         aria-label="Topic path"
         items={items}
         activeId={view}
         stickyPanel="[data-tab-panel]"
         trailing={quizTaking ? undefined : <ToolLinks courseId={courseId} topicId={topicId} />}
-        className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 group-data-[attempt]/topic:max-sm:hidden max-sm:[&_a::after]:inset-x-1 max-sm:[&_[data-tab-indicator]]:inset-x-1 max-sm:[&_a]:gap-1 max-sm:[&>div]:h-[45px] max-sm:[&_a]:h-11 max-sm:[&_a]:px-1 max-sm:[&_a]:text-small md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
+        className="sticky top-(--topbar-height) z-sticky -mx-4 bg-canvas px-4 max-sm:hidden md:-mx-6 md:px-6 lg:-mx-8 lg:px-8"
       />
       {/* On the voice view the student is choosing what to do out loud; the way on can wait. */}
       {view === 'voice' || !showLine ? null : <NextActivityCard next={nextActivity} />}

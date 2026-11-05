@@ -9,7 +9,8 @@ import { EVAL_FACTS, FAQ, LINKS, LOOP_STEPS } from '@/features/marketing/content
 import { Loop } from '@/features/marketing/loop'
 import { SectionArrival, SectionLink } from '@/features/marketing/section-link'
 import { Shot } from '@/features/marketing/shot'
-import { SLOT_SIZES } from '@/features/marketing/shot-sources'
+import SCREENS from '@/features/marketing/screens.json'
+import { SLOT_SIZES, screenFile, type ScreensManifest } from '@/features/marketing/shot-sources'
 
 export const metadata: Metadata = {
   // "Margins" alone is a common word, so the home title also says what the product makes.
@@ -108,15 +109,37 @@ function Hero() {
           </p>
           <HeroActions />
         </div>
-        <div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-card border border-border bg-surface md:max-w-none">
-          <Shot
-            name="plan"
-            mobile
-            eager
-            alt="The Margins plan page. Today lists a review and a quiz, and the days after it lead to the exam date."
-            sizes={SLOT_SIZES.hero}
-            className="h-auto w-full"
-          />
+        {/*
+          On a phone the preview is the top of the Plan page (Today) drawn edge to edge, so its 12px captions are 12px on a 390px
+          screen instead of shrinking with the page margins, with a link to the whole screen. From 768px it is the whole desktop crop.
+        */}
+        <div className="max-md:-mx-4">
+          <div className="relative mx-auto w-full max-w-[420px] overflow-hidden rounded-card border border-border bg-surface max-md:max-h-[380px] max-md:max-w-none max-md:rounded-none max-md:border-x-0 md:max-w-none">
+            <Shot
+              name="plan"
+              mobile
+              eager
+              alt="The Margins plan page. Today lists a review and a quiz, and the days after it lead to the exam date."
+              sizes={SLOT_SIZES.hero}
+              mobileSizes="100vw"
+              className="h-auto w-full"
+            />
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-surface to-transparent md:hidden" />
+          </div>
+          <p className="mt-3 px-4 md:hidden">
+            {(['light', 'dark'] as const).map((theme) => (
+              <span key={theme} className={theme === 'light' ? 'dark:hidden' : 'hidden dark:inline'}>
+                <a
+                  href={screenFile('plan-mobile', theme, Math.max(...(SCREENS as ScreensManifest)['plan-mobile'].widths))}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={link}
+                >
+                  See the whole plan screen <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                </a>
+              </span>
+            ))}
+          </p>
         </div>
       </div>
     </section>

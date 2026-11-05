@@ -130,6 +130,35 @@ function StepTimeline({ example, visible, fade }: { example: SolvedExample; visi
   )
 }
 
+const STEP_MODE_KEY = 'margins.examplesStepMode'
+const stepModeListeners = new Set<() => void>()
+const subscribeStepMode = (listener: () => void) => {
+  stepModeListeners.add(listener)
+  return () => void stepModeListeners.delete(listener)
+}
+/** "Try each step" (guess first) unless the student chose "See the steps" before; the server render and the first paint say the same. */
+const readStepMode = () => {
+  try {
+    return window.localStorage.getItem(STEP_MODE_KEY) !== 'all'
+  } catch {
+    return true
+  }
+}
+
+/** Whether the examples open one step at a time, with the choice kept in this browser. Guess-first is the default (effort before help). */
+function useStepMode(): [boolean, (on: boolean) => void] {
+  const stepMode = React.useSyncExternalStore(subscribeStepMode, readStepMode, () => true)
+  const set = React.useCallback((on: boolean) => {
+    try {
+      window.localStorage.setItem(STEP_MODE_KEY, on ? 'step' : 'all')
+    } catch {
+      // Private mode: the choice lasts until the page is left.
+    }
+    stepModeListeners.forEach((listener) => listener())
+  }, [])
+  return [stepMode, set]
+}
+
 /** What the example asks of the student, in a few words (draft copy, spec 18.6): how much of it is worked for them. */
 function levelCaption(level: FadeLevel, hidden: number): string {
   if (level === 'full') return 'Steps shown, guess each reason first'
@@ -411,7 +440,7 @@ export function ExamplesView({ courseId, ...props }: ExamplesViewProps) {
 function ExamplesBody({ topicId, examples, completed, nextHref, level, focusConceptId, saved, onWork, onLevel }: ExamplesBodyProps) {
   const items = examples.items
   const [openIds, setOpenIds] = React.useState<number[]>([0])
-  const [stepMode, setStepMode] = React.useState(false)
+  const [stepMode, setStepMode] = useStepMode()
   const [shown, setShown] = React.useState<Record<number, number>>({})
   // Each example's level follows the self-grades given so far (spec 18.6): one Missed or "I don't know" on the example before
   // moves it towards more support, all Got it on each of the two before moves it towards less. It is recomputed as the student
@@ -445,31 +474,35 @@ function ExamplesBody({ topicId, examples, completed, nextHref, level, focusConc
 
   return (
     <div className="max-w-[720px]">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-small text-fg-2">{pluralize(items.length, 'example')}</p>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* How the steps show is a choice between two views, not an action: a segmented control, as elsewhere. */}
-          <SegmentedControl
-            aria-label="Show the steps"
-            value={stepMode ? 'step' : 'all'}
-            onValueChange={(value) => setStepMode(value === 'step')}
-            options={[
-              { value: 'all', label: 'All steps' },
-              { value: 'step', label: 'Step by step' },
-            ]}
-          />
-          <GenerateOptions
-            kind="examples"
-            mode="more"
-            submitLabel="Generate"
-            focusPlaceholder="e.g. problems with cycles"
-            align="end"
-          >
-            <Button size="sm" variant="secondary" icon={<Plus />}>
-              More examples
-            </Button>
-          </GenerateOptions>
-        </div>
+        <GenerateOptions
+          kind="examples"
+          mode="more"
+          submitLabel="Generate"
+          focusPlaceholder="e.g. problems with cycles"
+          align="end"
+        >
+          <Button size="sm" variant="secondary" icon={<Plus />}>
+            More examples
+          </Button>
+        </GenerateOptions>
+      </div>
+      {/* How the steps show is a choice between two views, not an action: a quiet segmented control with one line on the chosen one.
+          The first visit is "Try each step" (guess before a step opens); the choice is remembered in this browser afterwards. */}
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <SegmentedControl
+          aria-label="How to work an example"
+          value={stepMode ? 'step' : 'all'}
+          onValueChange={(value) => setStepMode(value === 'step')}
+          options={[
+            { value: 'step', label: 'Try each step' },
+            { value: 'all', label: 'See the steps' },
+          ]}
+        />
+        <p className="min-w-0 flex-1 basis-56 text-small text-fg-2" data-testid="examples-mode-note">
+          {stepMode ? 'Guess each step before it opens.' : 'Every step is shown at once.'}
+        </p>
       </div>
 
       <div className="flex flex-col gap-3">

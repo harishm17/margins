@@ -3,6 +3,7 @@ import { animationsSettled } from './helpers/settle'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import { addContent, createCourse, practiceProblem, quizQuestions, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
+import { chooseConfidence } from './helpers/confidence'
 
 // The topic's "Next" card (spec §8.1) steps aside while the student is in the middle of an activity and is
 // back, with the refreshed next activity, once it is done; and the quiz results and the topic header say the
@@ -49,7 +50,7 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await expect(card(page)).toHaveCount(0)
   await screenshotIfAsked(page, 'next-card-quiz-taking-1440x900')
   await page.getByRole('radio', { name: 'False' }).click()
-  await page.getByRole('radio', { name: 'Certain' }).click()
+  await chooseConfidence(page, 'Certain')
   await page.getByRole('button', { name: 'Next', exact: true }).click()
   await expect(card(page)).toHaveCount(0)
   await page.getByRole('button', { name: 'Question 3', exact: false }).first().click()
@@ -74,7 +75,7 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await expect(page.getByText('Question 1 of')).toBeVisible()
   await expect(card(page)).toHaveCount(0)
   await page.getByRole('radio', { name: 'False' }).click()
-  await page.getByRole('radio', { name: 'Certain' }).click()
+  await chooseConfidence(page, 'Certain')
   await page.getByRole('button', { name: 'Question 3', exact: false }).first().click()
   await page.getByRole('button', { name: 'Submit quiz' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
@@ -93,7 +94,7 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   await expect(results.getByText(/Mastery is/)).toHaveCount(0)
   await expect(header.getByText(/Learning \d+%|Getting there \d+%|Strong \d+%/)).toHaveCount(1)
   // The header shows the best score; the results do not repeat it when it is this attempt's own.
-  await expect(header.getByText(/Best quiz \d+%/)).toBeVisible()
+  await expect(header.getByText(/Quiz score \(best\) \d+%/)).toBeVisible()
   await expect(results.getByText(/Your best is/)).toHaveCount(0)
 
   // Rating how sure they felt moves the review date: the line and the header move together.
@@ -107,7 +108,7 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
     expect((await results.getByRole('heading', { name: /points/ }).boundingBox())!.width, `score heading width, ${name}`).toBeGreaterThanOrEqual(150)
   }
   await page.setViewportSize(SIZES[0][1])
-  await results.getByRole('radio', { name: 'Guessing' }).click()
+  await chooseConfidence(results, 'Guessing')
   await expect(results.getByText('Next review tomorrow').first()).toBeVisible()
   await expect(header.getByText('Next review tomorrow')).toBeVisible()
   await screenshotIfAsked(page, 'next-card-quiz-results-rated-1440x900')
@@ -226,11 +227,11 @@ test('next card offers reading after a failed drill, and the reading ends the wa
   const sentence = 'You missed Collision last time. Read p. 5 again before trying again.'
   await page.goto('/home')
   const home = page.getByRole('region', { name: /Up next/ })
-  await expect(home.getByRole('link', { name: 'Start learning' })).toHaveAttribute('href', instruct)
+  await expect(home.getByRole('link', { name: 'Read that part again' })).toHaveAttribute('href', instruct)
   await expect(home).toContainText(sentence)
   await page.goto(`/courses/${course.courseId}`)
   const upNext = page.getByRole('region', { name: 'Up next' })
-  await expect(upNext.getByRole('link', { name: 'Start learning' })).toHaveAttribute('href', instruct)
+  await expect(upNext.getByRole('link', { name: 'Read that part again' })).toHaveAttribute('href', instruct)
   await expect(upNext).toContainText(sentence)
   await page.goto(`/courses/${course.courseId}/plan`)
   const planRow = page.getByRole('listitem').filter({ has: page.locator(`a[href="${instruct}"]`) }).first()
@@ -248,7 +249,7 @@ test('next card offers reading after a failed drill, and the reading ends the wa
   // ... a tool says it once, at the concept; not back to the drill or the review.
   await page.goto(`/courses/${course.courseId}/topics/${topic}?view=examples`)
   await expect(card(page)).toContainText('You missed Collision last time. Read p. 5 again before trying again.')
-  await expect(card(page).getByRole('link', { name: 'Start learning' })).toHaveAttribute('href', `/courses/${course.courseId}/topics/${topic}?view=read&focus=${conceptId}#chunk-chunk-5`)
+  await expect(card(page).getByRole('link', { name: 'Read that part again' })).toHaveAttribute('href', `/courses/${course.courseId}/topics/${topic}?view=read&focus=${conceptId}#chunk-chunk-5`)
   await screenshotIfAsked(page, 'v31-next-card-instruct-1440x900')
   await page.goto(`/courses/${course.courseId}/topics/${topic}`)
   await expect(page).toHaveURL(new RegExp(`view=read&focus=${conceptId}`))

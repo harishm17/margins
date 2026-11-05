@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { ExpectedMiss } from '@/features/learning/expected-miss'
 import { statusLabel, useServerDraft } from '@/features/learning/use-server-draft'
 import { canOpenHint } from '@/lib/learning/help-policy'
+import { outcomeLabel } from '@/lib/learning/outcome-words'
 import type { HelpAfterMiss } from '@/lib/learning/instruction-server'
 import { AUTHORED_HINT_RUNG, availableHints } from '@/lib/learning/practice-evidence'
 import { cn } from '@/lib/utils'
@@ -23,11 +24,15 @@ import { useOptionalTopic } from './topic-provider'
 import type { PracticeProblem, PracticeStep } from './types'
 import { hintCostCopy, problemSolved, stepFailedFirstTry, type Feedback } from './practice-state'
 
-/** The three authored hints, in ladder order. Each says what it costs before it is opened (spec §5.6). */
+/**
+ * The three authored hints, in ladder order. `action` is the button, `title` names the hint once it is open, `gives` is one plain line
+ * on what the clue is. What opening it costs is not on the button: it is in "How hints count" beside it (spec §5.6), so the choice to
+ * ask for a clue is not made while reading about scoring.
+ */
 const HINT_KINDS = [
-  { name: 'Locate', gives: 'Where to look' },
-  { name: 'Connect', gives: 'Name the idea' },
-  { name: 'Structure', gives: 'Show the general form' },
+  { action: 'Show where to look', title: 'Where to look', gives: 'A small clue about where to look.' },
+  { action: 'Show the first step', title: 'The first step', gives: 'A clue that names the idea.' },
+  { action: 'Show the method', title: 'The method', gives: 'A clue that shows the general form.' },
 ] as const
 
 /**
@@ -46,8 +51,7 @@ function OpenedHint({ index, text, expanded, onToggle }: { index: number; text: 
         className="flex min-h-9 w-full items-center gap-2 rounded-control px-3 py-1.5 text-left text-small text-fg max-sm:min-h-11"
       >
         <Lightbulb aria-hidden="true" className="size-4 shrink-0 text-fg-3" />
-        <span className="font-medium">Hint: {HINT_KINDS[index].name}</span>
-        <span className="min-w-0 flex-1 truncate text-fg-3 max-sm:hidden">{HINT_KINDS[index].gives}</span>
+        <span className="font-medium">Hint: {HINT_KINDS[index].title}</span>
         <CaretDown aria-hidden="true" className={cn('ml-auto size-3.5 shrink-0 text-fg-3 transition-transform duration-180', expanded && 'rotate-180')} />
       </button>
       <div id={bodyId} hidden={!expanded} className="px-3 pb-2.5">
@@ -55,6 +59,28 @@ function OpenedHint({ index, text, expanded, onToggle }: { index: number; text: 
           {text}
         </LazyMarkdown>
       </div>
+    </div>
+  )
+}
+
+/** "How hints count": what opening the next hint does to the step's score, said on request under the hint button. */
+function HintCount({ cost }: { cost: string }) {
+  const [open, setOpen] = React.useState(false)
+  const id = React.useId()
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((current) => !current)}
+        className="inline-flex min-h-8 items-center gap-1 rounded-chip text-caption text-fg-3 underline decoration-border-strong underline-offset-[3px] hover:text-fg max-sm:min-h-11"
+      >
+        How hints count
+      </button>
+      <p id={id} hidden={!open} className="text-caption text-fg-2">
+        Opening this hint: {cost}.
+      </p>
     </div>
   )
 }
@@ -268,24 +294,25 @@ export function ActiveStep({
   const helpShown = helpOpen || tutor.turns.length > 0 || tutor.pending !== null
   const hintButton =
     ladder === null ? null : (
-      <Button
-        variant="secondary"
-        icon={<Lightbulb />}
-        disabled={!ladderOpen}
-        className="h-auto max-w-full shrink items-start justify-start py-1.5 text-left max-sm:h-auto max-sm:min-h-11"
-        onClick={() => {
-          openHint(ladder)
-          // The last hint has gone and the step was missed: put focus back on the way forward.
-          if (missFeedback && !available.some((index) => index !== ladder && !opened.includes(index))) requestAnimationFrame(() => retryRef.current?.focus())
-        }}
-      >
-        <span className="flex flex-col whitespace-normal">
-          <span>Next hint: {HINT_KINDS[ladder].name}</span>
-          <span className="text-caption font-normal text-fg-2">
-            {ladderOpen ? `${HINT_KINDS[ladder].gives} · ${hintCostCopy(ladder as 0 | 1 | 2, { attempted, failedFirstTry })}` : 'Opens after your first try'}
+      <div className="flex max-w-full flex-col items-start gap-1">
+        <Button
+          variant="secondary"
+          icon={<Lightbulb />}
+          disabled={!ladderOpen}
+          className="h-auto max-w-full shrink items-start justify-start py-1.5 text-left max-sm:h-auto max-sm:min-h-11"
+          onClick={() => {
+            openHint(ladder)
+            // The last hint has gone and the step was missed: put focus back on the way forward.
+            if (missFeedback && !available.some((index) => index !== ladder && !opened.includes(index))) requestAnimationFrame(() => retryRef.current?.focus())
+          }}
+        >
+          <span className="flex flex-col whitespace-normal">
+            <span>{HINT_KINDS[ladder].action}</span>
+            <span className="text-caption font-normal text-fg-2">{ladderOpen ? HINT_KINDS[ladder].gives : 'Opens after your first try'}</span>
           </span>
-        </span>
-      </Button>
+        </Button>
+        {ladderOpen ? <HintCount cost={hintCostCopy(ladder as 0 | 1 | 2, { attempted, failedFirstTry })} /> : null}
+      </div>
     )
 
   return (
@@ -386,7 +413,7 @@ export function ActiveStep({
 
       {feedback === 'incorrect' ? (
         // A wrong answer is part of practice, not an error: the amber of Recall's gaps and the quiet mark of the warm-up, not the red of a failure.
-        <InlineAlert tone="warning" title="Not quite" icon={<MinusCircle weight="fill" />}>
+        <InlineAlert tone="warning" title={outcomeLabel({})} icon={<MinusCircle weight="fill" />}>
           {step.feedbackIncorrect ? (
             <LazyMarkdown variant="compact" className="text-current!">
               {step.feedbackIncorrect}
@@ -402,7 +429,8 @@ export function ActiveStep({
       ) : null}
 
       {feedback === 'idk' ? (
-        <InlineAlert title="That's okay">
+        // Not knowing is a fine answer: it reads "Here's what to learn" in a neutral tone, never the word or colour of a wrong answer.
+        <InlineAlert title={outcomeLabel({ idk: true })}>
           <p>Not knowing is a place to start. Look at where it is covered, or open a hint.</p>
           <div className="mt-1 empty:hidden">
             <ExpectedMiss surface="practice_miss" />
@@ -425,7 +453,8 @@ export function ActiveStep({
 
       {/* The way on comes straight after what just happened; the help (below) is for the next try, not in front of it. */}
       {missFeedback ? (
-        <div className="flex flex-wrap items-start gap-2">
+        // One primary after a miss, and the next hint directly under it. The tutor's offer, Show answer and the rest are in More help.
+        <div className="flex flex-col items-start gap-3">
           <Button ref={retryRef} variant="primary" onClick={tryAgain}>
             Try again
           </Button>
@@ -454,8 +483,6 @@ export function ActiveStep({
             ))
         : null}
 
-      {!locked ? <TalkOffer tutor={tutor} working={working} /> : null}
-
       {!locked ? <TutorThread turns={tutor.turns} pending={tutor.pending} /> : null}
 
       {!locked ? (
@@ -475,8 +502,11 @@ export function ActiveStep({
                 <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', helpShown && 'rotate-180')} />
               </span>
             </Button>
+            {tutor.offerVisible && !helpShown ? <span className="text-caption text-fg-3">The tutor can talk it through with you.</span> : null}
           </div>
           <div id={helpId} hidden={!helpShown} className="flex flex-col gap-3">
+            {/* The tutor's offer to talk it through (after two wrong checks) lives here, with the rest of the help. */}
+            <TalkOffer tutor={tutor} working={working} />
             {missed && tutor.help ? <HelpAfterMissNote help={tutor.help} /> : null}
             {ladder !== null && !missed && !missFeedback ? (
               <div role="group" aria-label="Hints" className="flex">

@@ -1,23 +1,16 @@
 import { pluralize } from '@/lib/format'
-import { countMasteryLevels, type MasteryLevel } from '@/lib/mastery'
+import { countMasteryLevels, MASTERY_LABELS, type MasteryLevel } from '@/lib/mastery'
 
 /**
- * The status line on an active course card: the topic count plus the most advanced mastery
- * bucket that has any topics in it: "2 strong", else "1 getting there", else "1 learning".
- * A bucket with no topics is never named, so there is no "0 strong".
+ * The status line on an active course card, as one count in the glossary's topic words (lib/learning/progress-words.ts):
+ * the most advanced level that has any topics in it, out of all of them: "2 of 4 topics strong", else "1 of 3 topics
+ * getting there", else "1 of 3 topics learning". A level with no topics is never named, so there is no "0 of 4 strong";
+ * nothing started says only "4 topics".
  */
 export function activeStatusLine(levels: MasteryLevel[]): string {
   const counts = countMasteryLevels(levels)
   const topics = pluralize(levels.length, 'topic')
-  if (counts.strong > 0) return `${topics}, ${counts.strong} strong`
-  if (counts.getting > 0) return `${topics}, ${counts.getting} getting there`
-  if (counts.learning > 0) return `${topics}, ${counts.learning} learning`
-  return topics
+  const named = (['strong', 'getting', 'learning'] as const).find((level) => counts[level] > 0)
+  if (!named) return topics
+  return `${counts[named]} of ${topics} ${MASTERY_LABELS[named].toLowerCase()}`
 }
-
-/**
- * The colour legend explains what the squares mean. While every topic is "Not started" all squares are
- * the same grey and there is nothing to explain, so the legend waits for the first coloured one.
- */
-export const hasMasteryColours = (levelsPerCourse: MasteryLevel[][]): boolean =>
-  levelsPerCourse.some((levels) => levels.some((level) => level !== 'none'))

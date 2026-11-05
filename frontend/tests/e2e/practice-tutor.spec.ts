@@ -79,13 +79,13 @@ test.describe('the practice tutor', () => {
 
     // Before a first try the help is one button (open here by `open`): one hint ladder, with the next hint only.
     await expect(getHelp).toHaveAttribute('aria-expanded', 'true')
-    await expect(page.getByRole('group', { name: 'Hints' }).locator('visible=true').getByRole('button')).toHaveCount(1)
-    await page.getByRole('button', { name: /Next hint: Locate/ }).click()
-    await expect(hint('Locate')).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('group', { name: 'Hints' }).locator('visible=true').getByRole('button', { name: /^Show / })).toHaveCount(1)
+    await page.getByRole('button', { name: /Show where to look/ }).click()
+    await expect(hint('Where to look')).toHaveAttribute('aria-expanded', 'true')
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
     // The next hint waits for an attempt and says so; it is not a second button of costs.
-    await expect(page.getByRole('button', { name: /Next hint: Connect/ }).locator('visible=true')).toBeDisabled()
-    await expect(page.getByRole('button', { name: /Next hint: Connect/ }).locator('visible=true')).toContainText('Opens after your first try')
+    await expect(page.getByRole('button', { name: /Show the first step/ }).locator('visible=true')).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Show the first step/ }).locator('visible=true')).toContainText('Opens after your first try')
     // Connect waits for an attempt (spec 18.4): a wrong check opens it.
     await check(page, '5')
     await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
@@ -93,15 +93,15 @@ test.describe('the practice tutor', () => {
     await expect(getHelp).toHaveCount(0)
     await tryAgain(page)
     // The next hint stays beside Check for a step that has been missed.
-    await expect(page.getByRole('button', { name: /Next hint: Connect/ }).locator('visible=true')).toBeVisible()
-    await page.getByRole('button', { name: /Next hint: Connect/ }).click()
+    await expect(page.getByRole('button', { name: /Show the first step/ }).locator('visible=true')).toBeVisible()
+    await page.getByRole('button', { name: /Show the first step/ }).click()
     // The newest hint is open, the one before it is a line that opens on a tap.
-    await expect(hint('Connect')).toHaveAttribute('aria-expanded', 'true')
-    await expect(hint('Locate')).toHaveAttribute('aria-expanded', 'false')
+    await expect(hint('The first step')).toHaveAttribute('aria-expanded', 'true')
+    await expect(hint('Where to look')).toHaveAttribute('aria-expanded', 'false')
     await expect(page.getByText('Look at the number.').locator('visible=true')).toHaveCount(0)
-    await hint('Locate').click()
+    await hint('Where to look').click()
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
-    await hint('Locate').click()
+    await hint('Where to look').click()
     await expect(page.getByText('Look at the number.').locator('visible=true')).toHaveCount(0)
 
     // A miss: the authored feedback stays, nothing leaks the answer, Try again is the one primary button.
@@ -269,13 +269,13 @@ test.describe('the practice tutor', () => {
     await check(page, '5')
     await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
     await tryAgain(page)
-    await page.getByRole('button', { name: /Locate/ }).click()
+    await page.getByRole('button', { name: /Show where to look/ }).click()
     await check(page, '4')
     await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
     await page.getByRole('button', { name: 'Next step' }).locator('visible=true').click()
     // Step two: the locate hint first, then the right answer on the first try.
     await openHelp(page)
-    await page.getByRole('button', { name: /Next hint: Locate/ }).click()
+    await page.getByRole('button', { name: /Show where to look/ }).click()
     await check(page, '9')
     await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
 
@@ -360,7 +360,7 @@ test.describe('the practice tutor', () => {
       await expect(askButton(page)).toHaveCount(0)
       await expect(workedButton(page)).toHaveCount(0)
       await expect(page.getByText('AI features are paused right now. Your files and progress are safe. Try again later.').locator('visible=true').first()).toBeVisible()
-      await page.getByRole('button', { name: /Locate/ }).click()
+      await page.getByRole('button', { name: /Show where to look/ }).click()
       await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
     } finally {
       await withPrisma((prisma) => prisma.aiStatus.deleteMany({}))
@@ -444,7 +444,7 @@ test.describe('the practice tutor', () => {
     await page.getByRole('button', { name: 'Next step' }).locator('visible=true').click()
     // Step two: a hint, then the right answer.
     await openHelp(page)
-    await page.getByRole('button', { name: /Next hint: Locate/ }).click()
+    await page.getByRole('button', { name: /Show where to look/ }).click()
     await check(page, '9')
     await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
     const confirm = page.getByRole('button', { name: 'Check my understanding' }).locator('visible=true')

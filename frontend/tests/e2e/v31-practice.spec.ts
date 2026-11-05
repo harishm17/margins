@@ -69,7 +69,7 @@ test.describe('practice: help after an attempt', () => {
     // Nothing gated is drawn as a disabled button: Show answer and the worked example are not there before a first try.
     await expect(button(page, 'Show answer')).toHaveCount(0)
     await expect(button(page, /Show me a worked example/)).toHaveCount(0)
-    await expect(button(page, /Next hint/)).toHaveCount(0)
+    await expect(button(page, /Show (where to look|the first step|the method)/)).toHaveCount(0)
     // The answer, then Check, then the help: no help sits between them, on a phone too.
     for (const size of [DESKTOP, PHONE]) {
       await page.setViewportSize(size)
@@ -80,14 +80,15 @@ test.describe('practice: help after an attempt', () => {
     await page.setViewportSize(DESKTOP)
     // The help opens from one button. Locate is open from the start and says it still counts, as a harder try.
     await button(page, 'Get help').click()
-    await expect(button(page, /Next hint: Locate/)).toBeEnabled()
-    await expect(visible(page, /Where to look · your next try still counts, as a harder one/)).toBeVisible()
+    await expect(button(page, /Show where to look/)).toBeEnabled()
+    await button(page, 'How hints count').click()
+    await expect(visible(page, 'Opening this hint: your next try still counts, as a harder one.')).toBeVisible()
     await expect(visible(page, "Check an answer first, or say you don't know, to open the later hints, a worked example and questions about your working.")).toBeVisible()
     await screenshotIfAsked(page, 'q-practice-gate-1440x900')
     // Once Locate is open the ladder offers the next hint, which waits for an attempt and says so.
-    await button(page, /Next hint: Locate/).click()
-    await expect(button(page, /Next hint: Connect/)).toBeDisabled()
-    await expect(button(page, /Next hint: Connect/)).toContainText('Opens after your first try')
+    await button(page, /Show where to look/).click()
+    await expect(button(page, /Show the first step/)).toBeDisabled()
+    await expect(button(page, /Show the first step/)).toContainText('Opens after your first try')
 
     // The server holds the same line: Connect before any attempt is refused.
     const refused = await page.request.post(`/api/topics/${topicId}/practice-tutor`, { data: { problemIndex: 0, problemTitle: 'Squares', stepIndex: 0, event: 'hint', hintIndex: 1 } })
@@ -118,11 +119,13 @@ test.describe('practice: help after an attempt', () => {
       probe.remove()
       return color
     }))
-    // Two buttons first: Try again (primary, focused) and the next hint with what it costs.
-    const next = button(page, /Next hint: Locate/)
+    // Two buttons first: Try again (primary, focused) and the next hint, with what it costs one tap away.
+    const next = button(page, /Show where to look/)
     await expect(next).toBeEnabled()
-    await expect(next).toContainText('your next try still counts')
+    await expect(next).not.toContainText('harder one')
     await expect(button(page, 'Try again')).toBeFocused()
+    await button(page, 'How hints count').click()
+    await expect(visible(page, 'Opening this hint: your next try still counts, as a harder one.')).toBeVisible()
     // Show answer, the worked example and the tutor are behind one "More help", closed until it is asked for.
     const more = page.getByRole('button', { name: 'More help' })
     await expect(more).toHaveAttribute('aria-expanded', 'false')
@@ -146,14 +149,15 @@ test.describe('practice: help after an attempt', () => {
     // Opening it: the hint shows and the button moves on. Connect is the one that makes the step a miss; after it, more help is free.
     await next.click()
     await expect(visible(page, 'Look at the number.')).toBeVisible()
-    const connect = button(page, /Next hint: Connect/)
-    await expect(connect).toContainText('this step will count as a miss')
+    const connect = button(page, /Show the first step/)
+    // The cost note stays open once it has been asked for, and says what the next hint costs.
+    await expect(visible(page, 'Opening this hint: this step will count as a miss.')).toBeVisible()
     await connect.click()
     await expect(visible(page, 'Squaring is repeated product.')).toBeVisible()
-    const structure = button(page, /Next hint: Structure/)
-    await expect(structure).toContainText('no extra cost: this step already counts as a miss')
+    const structure = button(page, /Show the method/)
+    await expect(visible(page, 'Opening this hint: no extra cost, as this step already counts as a miss.')).toBeVisible()
     await structure.click()
-    await expect(button(page, /Next hint/)).toHaveCount(0)
+    await expect(button(page, /Show (where to look|the first step|the method)/)).toHaveCount(0)
     await expect(button(page, 'Try again')).toBeFocused()
     // Nothing overflows on a phone.
     await page.setViewportSize(PHONE)
@@ -165,9 +169,9 @@ test.describe('practice: help after an attempt', () => {
     const { email, topicId } = await open(page, 'q-idk', [problem('Squares', 'medium')], true)
     await page.setViewportSize(DESKTOP)
     await button(page, "I don't know").click()
-    await expect(visible(page, "That's okay")).toBeVisible()
+    await expect(visible(page, "Here's what to learn")).toBeVisible()
     await expect(visible(page, 'Missing a step is part of practice. The next try, or a hint, is where it sticks.')).toBeVisible()
-    await expect(button(page, /Next hint: Locate/)).toBeEnabled()
+    await expect(button(page, /Show where to look/)).toBeEnabled()
     await openMoreHelp(page)
     await expect(button(page, 'Show answer')).toBeEnabled()
     await expect(button(page, "I don't know")).toHaveCount(0)
@@ -311,6 +315,11 @@ test.describe('practice: help after an attempt', () => {
 })
 
 test.describe('worked examples: a full example viewed with a focus concept is instruction', () => {
+  // These look at the whole example at once: the "See the steps" view (the default is "Try each step", one step at a time).
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('margins.examplesStepMode', 'all'))
+  })
+
   const example = (title: string) => ({
     title,
     difficulty: 'medium',

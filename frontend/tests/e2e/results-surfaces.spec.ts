@@ -4,6 +4,7 @@ import { withPrisma } from './helpers/db'
 import { animationsSettled, streamedPartsArrived } from './helpers/settle'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { addContent, addQuizSet, createCourse, quizQuestions, signUpAndIn, ZONE } from './helpers/loop'
+import { chooseConfidence } from './helpers/confidence'
 
 // The surfaces that show confidence and calibration: the quiz results, the mock exam's question
 // screen with its confidence row, and the exam results. Each is opened at a desktop and a phone size
@@ -129,12 +130,16 @@ test('the exam question screen with its confidence row: no axe violations, deskt
     await page.reload()
     await expect(page.getByRole('heading', { name: /Question 1 of/ })).toBeVisible()
     await animationsSettled(page)
-    await expect(page.getByRole('radio', { name: 'Certain', checked: true })).toBeVisible()
+    // The answer's rating came back: a chosen level on the row (folded to one line on a phone).
+    if (size.width < 640) await expect(page.getByRole('button', { name: 'Confidence: Certain' })).toBeVisible()
+    else await expect(page.getByRole('radio', { name: 'Certain', checked: true })).toBeVisible()
     await expectNoAxeViolations(page, `exam taker, ${name}`)
     await screenshotIfAsked(page, `exam-taker-${name}`)
     // A question with no confidence yet asks for one; a short answer has the row too.
     await page.getByRole('button', { name: 'Next', exact: true }).click()
     await expect(page.getByRole('heading', { name: /Question 2 of/ })).toBeVisible()
+    // Optional: on a phone the row sits behind one chip until it is tapped.
+    if (size.width < 640) await page.getByRole('button', { name: 'Confidence (optional)' }).click()
     await expect(page.getByText('How sure are you?')).toBeVisible()
     // The question slides in; colours are read once it has settled.
     await animationsSettled(page)
@@ -193,13 +198,21 @@ test('the exam results with its calibration line and sure-and-wrong group: no ax
     await expect(focus).toContainText('Graph search')
     await expect(focus).not.toContainText('62.5%')
     await expect(focus).not.toContainText('Weakest first')
-    await expect(focus.getByRole('link', { name: 'Study Graph search' })).toBeVisible()
+    // The one recommended first step is above, once; the focus row only opens the topic.
+    await expect(page.getByRole('link', { name: 'Review Graph search' })).toHaveCount(1)
+    await expect(focus.getByRole('link', { name: 'Graph search' })).toBeVisible()
+    await expect(page.getByText('Other ways to study')).toBeVisible()
     await expectNoAxeViolations(page, `exam results, ${name}`)
     await screenshotIfAsked(page, `exam-results-${name}`)
     await page.getByRole('radio', { name: /^Missed/ }).click()
     await expect(page.getByRole('heading', { name: 'Questions' })).toBeVisible()
-    // "Missed 2" is two questions (one wrong, one only partly right), each with its points spelled out.
+    // "Missed 2" is two questions (one wrong, one only partly right), each a labelled row; Expand all opens their reviews,
+    // each with its points spelled out. The first miss to read starts open and the rest collapsed.
     await expect(page.getByRole('radio', { name: 'Missed 2' })).toBeChecked()
+    const rows = page.locator('section[aria-labelledby="exam-questions-review"]')
+    await expect(rows.locator('button[aria-expanded]')).toHaveCount(2)
+    await expect(rows.locator('button[aria-expanded="true"]')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Expand all' }).click()
     await expect(page.getByText('0 of 2 pts')).toBeVisible()
     await expect(page.getByText('2 of 3 pts')).toBeVisible()
     await expect(page.getByText('2 of 2 pts')).toHaveCount(0)
@@ -226,15 +239,17 @@ test('the quiz results with the confidence it was answered with: no axe violatio
     await screenshotIfAsked(page, `quiz-question-${name}`)
     // Question 1 wrong and certain; question 2 right and unsure; question 3 left blank.
     await page.getByRole('radio', { name: 'False' }).click()
-    await page.getByRole('radio', { name: 'Certain' }).click()
+    await chooseConfidence(page, 'Certain')
     await page.getByRole('button', { name: 'Next', exact: true }).click()
     await expect(page.getByText('Question 2 of')).toBeVisible()
     await page.getByRole('radio', { name: 'True' }).click()
-    await page.getByRole('radio', { name: 'Unsure' }).click()
+    await chooseConfidence(page, 'Unsure')
     // True or false: "Unsure" stores the same 0.5 as "Guessing", and still comes back as "Unsure" after a reload.
     await page.reload()
     await expect(page.getByText('Question 2 of')).toBeVisible()
-    await expect(page.getByRole('radio', { name: 'Unsure', checked: true })).toBeVisible()
+    // The rating came back (folded to one line on a phone).
+    if (size.width < 640) await expect(page.getByRole('button', { name: 'Confidence: Unsure' })).toBeVisible()
+    else await expect(page.getByRole('radio', { name: 'Unsure', checked: true })).toBeVisible()
     if (size.width < 640) {
       // One navigator on a phone: the Questions button and its sheet.
       await page.getByRole('button', { name: 'Questions', exact: true }).click()
@@ -250,6 +265,8 @@ test('the quiz results with the confidence it was answered with: no axe violatio
     await screenshotIfAsked(page, `quiz-results-${name}`)
     // On a phone the question-by-question review is one button away, so the score and the next step come first.
     if (size.width < 640) await page.getByRole('button', { name: /Review the questions/ }).click()
+    // With misses the review opens on the first missed question; the filter belongs to the whole list.
+    await page.getByTestId('all-questions').click()
     await page.getByRole('radio', { name: /Missed/ }).click()
     await expectNoAxeViolations(page, `quiz results, missed, ${name}`)
     await screenshotIfAsked(page, `quiz-results-missed-${name}`)

@@ -42,12 +42,15 @@ export async function expectClearOfTabBar(page: Page, action: Locator, label: st
   await action.evaluate((element) => (element as HTMLElement).blur())
   await action.focus()
   const gap = async () => {
-    const bar = await page.getByRole('navigation', { name: 'Course tabs' }).boundingBox()
+    const tabs = page.getByRole('navigation', { name: 'Course tabs' })
+    // boundingBox() waits for an element that is not there, so look first.
+    const bar = (await tabs.count()) > 0 ? await tabs.boundingBox() : null
     const box = await action.boundingBox()
-    expect(bar, 'the tab bar is on screen').not.toBeNull()
     expect(box, `${label} is on screen`).not.toBeNull()
+    // During a study attempt the phone shell hides the tab bar (useShellAttempt), so the window's foot is the limit then.
+    const limit = bar ? bar.y : (page.viewportSize()?.height ?? 0)
     // Positive when the action ends above the bar. The scroll the focus caused may still be under way, so this is polled.
-    return Math.round(bar!.y - (box!.y + box!.height))
+    return Math.round(limit - (box!.y + box!.height))
   }
   await expect.poll(gap, { message: `${label} ends above the tab bar` }).toBeGreaterThanOrEqual(0)
 }

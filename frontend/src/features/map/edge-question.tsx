@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/toaster'
 import { apiFetch, isApiError } from '@/lib/api/client'
 
-/** A suggested link in the panel, as a question with Yes and No (spec §9; each with its tick or cross): the answer is the student's own and is kept. */
+/**
+ * A suggested link in the panel, as a question whose two buttons say what they do (spec §9): the answer is the student's own
+ * and is kept. It sits under "Edit connections", away from the study actions.
+ */
 export function EdgeQuestion({ edgeId, text }: { edgeId: string; text: string }) {
   const router = useRouter()
   const [pending, setPending] = React.useState<'confirmed' | 'rejected' | null>(null)
-  // The question for the statement, without its question mark, names the buttons.
-  const statement = text.replace(/\?$/, '')
 
   async function answer(status: 'confirmed' | 'rejected') {
     if (pending) return
@@ -28,30 +29,28 @@ export function EdgeQuestion({ edgeId, text }: { edgeId: string; text: string })
   }
 
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="min-w-0 text-body text-fg">{text}</span>
-      <span className="flex shrink-0 items-center gap-1.5">
+    <div role="group" aria-label={text} className="flex flex-col gap-2">
+      <p className="min-w-0 text-body text-fg">{text}</p>
+      <span className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
           variant="secondary"
           icon={<Check weight="bold" />}
-          aria-label={`Yes: ${statement}`}
           loading={pending === 'confirmed'}
           disabled={pending !== null}
           onClick={() => void answer('confirmed')}
         >
-          Yes
+          Yes, keep link
         </Button>
         <Button
           size="sm"
           variant="secondary"
           icon={<X weight="bold" />}
-          aria-label={`No: ${statement}`}
           loading={pending === 'rejected'}
           disabled={pending !== null}
           onClick={() => void answer('rejected')}
         >
-          No
+          No, remove link
         </Button>
       </span>
     </div>

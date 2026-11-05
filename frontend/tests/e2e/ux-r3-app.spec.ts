@@ -1,3 +1,4 @@
+import { openKeepStudying } from './helpers/review'
 import { expect, test } from '@playwright/test'
 import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
 import { createCourse, createEmptyCourse, setZoneCookie, signIn, signUpAndIn } from './helpers/loop'
@@ -39,6 +40,7 @@ test.describe('public pages', () => {
 
   test('the evaluation page says in a line what each retrieval measure is', async ({ page }) => {
     await page.goto('/evaluation')
+    await page.getByText('Retrieval: method, results and limits').click()
     const definitions = page.locator('#retrieval ~ dl, dl:has(dt:text("MRR"))').first()
     await expect(definitions.getByText('How high the first right chunk ranks. 1 means it is first.')).toBeVisible()
     await expect(definitions.getByText('Whether at least one right chunk is in the first five.')).toBeVisible()
@@ -68,6 +70,7 @@ test.describe('Home and quick practice', () => {
     await setZoneCookie(context)
     await signIn(page, DEMO_EMAIL)
     await page.goto(`${base}/review`)
+    await openKeepStudying(page)
     const card = page.getByTestId('short-session').locator('visible=true')
     await expect(card.getByRole('heading', { name: 'Quick practice' })).toBeVisible()
     await expect(card).toContainText(/About \d+ minutes · (up to )?\d+ (questions|reviews)/)
@@ -91,21 +94,54 @@ test.describe('Home and quick practice', () => {
 test.describe('course forms', () => {
   test.use({ viewport: { width: 390, height: 844 } })
 
-  test('new course: the name is marked required, the plan comes next and the description is put away', async ({ page }) => {
+  test('new course: a name and an optional date first, the daily time and description behind "More details"', async ({ page }) => {
     await signUpAndIn(page, 'r3-forms', { own: true })
     await page.goto('/courses/new')
     await expect(page.getByLabel(/Course name/)).toBeVisible()
     await expect(page.getByText('(required)')).toBeVisible()
-    await expect(page.getByRole('group', { name: 'Study plan' })).toBeVisible()
+    await expect(page.getByLabel(/Exam date/)).toBeVisible()
+    // The defaults are said on the closed line; the time field and the description are not in view yet.
+    const more = page.getByText('More details')
+    await expect(more).toBeVisible()
+    await expect(page.getByText('45 min a day')).toBeVisible()
+    await expect(page.getByRole('combobox', { name: 'Typical daily study time' })).toBeHidden()
     await expect(page.getByLabel('Description')).toHaveCount(0)
-    const order = await page.locator('form label, form legend, form button').allTextContents()
-    expect(order.findIndex((text) => /Study plan/.test(text))).toBeLessThan(order.findIndex((text) => /Add a description/.test(text)))
+    await expect(page.getByText('You add your files next. Everything here can be changed later.')).toBeVisible()
+    const order = await page.locator('form label, form summary, form button').allTextContents()
+    expect(order.findIndex((text) => /Exam date/.test(text))).toBeLessThan(order.findIndex((text) => /More details/.test(text)))
+    await more.click()
+    await expect(page.getByRole('combobox', { name: 'Typical daily study time' })).toBeVisible()
     await page.getByRole('button', { name: 'Add a description' }).click()
     await expect(page.getByLabel(/Description/)).toBeFocused()
-    // The validation message still names the field and focuses it.
+    // The validation message still names the field and focuses it, and goes as soon as there is a name.
     await page.getByRole('button', { name: 'Create course' }).click()
     await expect(page.getByText('Give the course a name.')).toBeVisible()
     await expect(page.getByLabel(/Course name/)).toBeFocused()
+    await page.getByLabel(/Course name/).fill('A')
+    await expect(page.getByText('Give the course a name.')).toHaveCount(0)
+  })
+
+  test('a custom daily time is saved as typed and a number out of range is refused in words', async ({ page }) => {
+    await signUpAndIn(page, 'r3-custom-minutes', { own: true })
+    await page.goto('/courses/new')
+    await page.getByLabel(/Course name/).fill('Custom time course')
+    await page.getByText('More details').click()
+    await page.getByRole('combobox', { name: 'Typical daily study time' }).click()
+    await page.getByRole('option', { name: 'Custom...' }).click()
+    const minutes = page.getByLabel('Minutes a day')
+    await minutes.fill('5')
+    await expect(page.getByText('Use 10 to 600 minutes.')).toBeVisible()
+    await page.getByRole('button', { name: 'Create course' }).click()
+    await expect(page.getByText('Check the daily study time under More details.')).toBeVisible()
+    await minutes.fill('50')
+    await expect(page.getByText('Use 10 to 600 minutes.')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Create course' }).click()
+    await expect(page).toHaveURL(/\/courses\/[0-9a-f-]{36}$/)
+    const created = await (await page.request.get(`/api/projects/${page.url().split('/').pop()}`)).json()
+    expect(created.project.dailyMinutes).toBe(50)
+    // Settings shows the saved 50 as a custom value, not a preset.
+    await page.goto(`/courses/${page.url().split('/').pop()}/settings`)
+    await expect(page.getByLabel('Minutes a day')).toHaveValue('50')
   })
 
   test('course settings: study plan first, description behind a button unless the course has one; the delete dialog names the course in full', async ({ page }) => {
@@ -129,6 +165,9 @@ test.describe('account', () => {
   test('allowance explanation and a lower-case confirmation word', async ({ page }) => {
     await signUpAndIn(page, 'r3-account', { own: true })
     await page.goto('/settings')
+    // The answer is one line; how it is counted is behind "How the allowance works".
+    await expect(page.getByTestId('allowance-summary')).toContainText('Available')
+    await page.getByText('How the allowance works').click()
     await expect(page.getByTestId('allowance-explainer')).toContainText('not a count of questions left')
     await expect(page.getByRole('link', { name: 'What happens at the limit' })).toHaveAttribute('href', '/#faq')
     await page.getByRole('button', { name: 'Delete account' }).click()
@@ -162,8 +201,10 @@ test.describe('setup', () => {
     await signUpAndIn(page, 'r3-ready', { own: true })
     const { courseId } = await createCourse(page, 'Ready course', [{ name: 'Bayes rule' }])
     await page.goto(`/courses/${courseId}`)
-    await expect(page.getByText('Set an exam date, then start your first topic.')).toBeVisible()
-    await page.getByRole('button', { name: 'Skip for now' }).click()
+    await expect(page.getByText('Your topics are confirmed. Add your exam date if you know it, then start your first topic.')).toBeVisible()
+    await page.getByRole('button', { name: 'Start without a date' }).click()
+    await expect(page).toHaveURL(/\/topics\//)
+    await page.goto(`/courses/${courseId}`)
     await expect(page.getByText('Your course is ready. Start with your first topic.')).toBeVisible()
     const start = page.getByRole('link', { name: 'Start warm-up: Bayes rule' })
     await expect(start).toHaveAttribute('href', /\/topics\//)
@@ -174,15 +215,15 @@ test.describe('setup', () => {
 test.describe('topic editor', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
-  test('Rename and Move are on each row, merging is a mode, and Find topics again is a course action', async ({ page, context }) => {
+  test('Rename is on each row, the rest is one row menu, merging is a mode, and Find topics again is a course action', async ({ page, context }) => {
     await setZoneCookie(context)
     await signUpAndIn(page, 'r3-editor', { own: true })
     const { courseId } = await createCourse(page, 'Editor course', [{ name: 'Alpha', unit: 'Unit one' }, { name: 'Beta', unit: 'Unit one' }, { name: 'Gamma', unit: 'Unit two' }])
     await page.goto(`/courses/${courseId}/topics?edit=1`)
     const alpha = page.getByRole('listitem').filter({ hasText: 'Alpha' }).first()
     await expect(alpha.getByRole('button', { name: 'Rename Alpha' })).toBeVisible()
-    await expect(alpha.getByRole('button', { name: 'Move Alpha' })).toBeVisible()
-    await alpha.getByRole('button', { name: 'Move Alpha' }).click()
+    await expect(alpha.getByRole('button', { name: 'Move Alpha' })).toHaveCount(0)
+    await alpha.getByRole('button', { name: 'Actions for Alpha' }).click()
     await expect(page.getByRole('menuitem', { name: 'Move to unit...' })).toBeVisible()
     await expect(page.getByRole('menuitem', { name: 'Move up' })).toBeDisabled()
     await page.keyboard.press('Escape')
@@ -216,7 +257,7 @@ test.describe('materials', () => {
   test('the upload category says it is for the next upload; deleting a file offers its affected topics', async ({ page }) => {
     await signIn(page, DEMO_EMAIL)
     await page.goto(`${base}/materials`)
-    await expect(page.getByRole('radiogroup', { name: 'For the next upload:' })).toBeVisible()
+    await expect(page.getByRole('radiogroup', { name: 'These files are:' })).toBeVisible()
     await expect(page.getByText('Use these as:')).toHaveCount(0)
     await page.getByRole('button', { name: /^Actions for / }).first().click()
     await page.getByRole('menuitem', { name: 'Delete' }).click()
@@ -306,7 +347,7 @@ test.describe('menus', () => {
     await signIn(page, email)
     await page.goto('/home')
     await page.keyboard.press('Control+k')
-    await expect(page.getByPlaceholder('Search your courses')).toBeVisible()
+    await expect(page.getByPlaceholder('Search courses, topics and files')).toBeVisible()
     await page.keyboard.press('Escape')
     await page.getByRole('button', { name: /Open (the )?menu|Menu/i }).first().click()
     await page.getByRole('button', { name: new RegExp('account menu') }).click()
@@ -316,13 +357,16 @@ test.describe('menus', () => {
     expect(box!.x + box!.width).toBeLessThanOrEqual(390)
   })
 
-  test('the phone More sheet names its way to the full menu', async ({ page, context }) => {
+  test('the phone More sheet has a Switch course row and a Browse topics link', async ({ page, context }) => {
     await setZoneCookie(context)
     await page.setViewportSize({ width: 390, height: 844 })
     await signIn(page, DEMO_EMAIL)
     await page.goto(base)
     await page.getByRole('button', { name: 'More' }).click()
-    await expect(page.getByRole('dialog').getByRole('button', { name: 'Switch course or browse topics' })).toBeVisible()
+    const sheet = page.getByRole('dialog')
+    await expect(sheet.getByRole('link', { name: 'Browse topics' })).toHaveAttribute('href', `${base}/topics`)
+    await sheet.getByRole('button', { name: 'Switch course' }).click()
+    await expect(page.getByRole('dialog', { name: 'Courses and account' })).toBeVisible()
   })
 
   test('the course actions button is named for what it is', async ({ page, context }) => {

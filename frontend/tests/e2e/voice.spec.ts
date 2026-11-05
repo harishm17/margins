@@ -1,3 +1,4 @@
+import { openKeepStudying } from './helpers/review'
 import { expect, test, type Page } from '@playwright/test'
 import { signIn as signInAs } from './helpers/auth'
 import { clearVoiceSessions, ensureVoiceFixture, makeLoadFactorStrong, VOICE_TEST_EMAIL, type VoiceFixture } from './helpers/voice-fixture'
@@ -45,6 +46,7 @@ test('the Review page links to voice practice, which has a screen of its own wit
   await installVoiceStubs(page, { recognition: false, synthesis: false })
   await page.goto(`/courses/${ids.courseId}/review`)
   await expect(page.getByRole('heading', { level: 1, name: 'Review' })).toBeVisible()
+  await openKeepStudying(page)
   await expect(page.getByRole('heading', { level: 2, name: 'Voice practice' })).toBeVisible()
   // The session does not run inside the Review page: there is no lobby here, only the way in.
   await expect(page.getByTestId('voice-lobby')).toHaveCount(0)
@@ -96,7 +98,7 @@ test('text mode: start, first question, answer, evaluation, end, summary', async
   await expect(page.getByTestId('voice-summary')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Practice finished' })).toBeVisible()
   // The answer was typed, so the summary does not say "talked".
-  await expect(page.getByTestId('voice-summary')).toContainText(/You typed for \d+ minutes?\./)
+  await expect(page.getByTestId('voice-summary')).toContainText(/You typed for (under a minute|\d+ minutes?)\./)
   await expect(page.getByTestId('voice-summary')).not.toContainText('talked')
   await expect(page.getByTestId('voice-stat-answered')).toHaveText('1')
   await expect(page.getByRole('link', { name: 'Back to review' })).toHaveAttribute('href', `/courses/${ids.courseId}/review`)
@@ -292,7 +294,7 @@ test('the teach-back card links "Do it out loud" to the voice lobby with Teach i
   await page.getByRole('button', { name: 'End', exact: true }).click()
   await expect(page.getByTestId('voice-ideas-explained')).toContainText('Load factor')
   await expect(page.getByTestId('voice-ideas-taught')).toHaveCount(0)
-  await expect(page.getByTestId('voice-summary')).toContainText(/You typed for \d+ minutes? and sent 2 messages\./)
+  await expect(page.getByTestId('voice-summary')).toContainText(/You typed for (under a minute|\d+ minutes?) and sent 2 messages\./)
   // Everything was explained: the one next step is to explain it again tomorrow.
   await expect(page.getByTestId('voice-next-step')).toContainText('Explain it again tomorrow')
   await expect(page.getByRole('link', { name: 'Practice this' })).toHaveCount(0)

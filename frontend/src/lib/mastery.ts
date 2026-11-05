@@ -3,14 +3,12 @@
  * No row (null or undefined) means no signal yet: "Not started".
  */
 
+import { TOPIC_PROGRESS_WORDS } from './learning/progress-words'
+
 export type MasteryLevel = 'none' | 'learning' | 'getting' | 'strong'
 
-export const MASTERY_LABELS: Record<MasteryLevel, string> = {
-  none: 'Not started',
-  learning: 'Learning',
-  getting: 'Getting there',
-  strong: 'Strong',
-}
+// The words are the glossary's (lib/learning/progress-words.ts): the only place a topic band is named.
+export const MASTERY_LABELS: Record<MasteryLevel, string> = TOPIC_PROGRESS_WORDS
 
 export const LEARNING_BELOW = 0.4
 export const STRONG_FROM = 0.8

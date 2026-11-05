@@ -81,7 +81,7 @@ test.describe('desktop', () => {
     await page.getByRole('button', { name: 'Delete course' }).click()
     const confirm = page.getByRole('dialog').getByRole('button', { name: 'Delete course' })
     await expect(confirm).toBeDisabled()
-    await expect(confirm).toHaveAccessibleDescription('Type the course name to turn this on.')
+    await expect(confirm).toHaveAccessibleDescription('Type the name exactly to confirm.')
   })
 
   test('the allowance bar has a 3:1 edge', async ({ page }) => {
@@ -148,7 +148,9 @@ test.describe('desktop', () => {
 
   test('a plan day without an exam date says what is missing, and one open task has the button', async ({ page }) => {
     await page.goto(`/courses/${course}/plan`)
-    await expect(page.getByText('No tasks yet. Set an exam date to fill these days.').first()).toBeVisible()
+    // Empty days are said once, with the way to fill them (a stretch of them is one row).
+    await expect(page.getByText(/nothing planned yet/i).locator('visible=true').first()).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Set an exam date' }).first()).toBeVisible()
     await expect(page.getByText('A good day to rest.')).toHaveCount(0)
     const today = page.locator('li[aria-current="date"]')
     await expect(today.getByRole('link', { name: /^(Start|Continue|Read|Practice|Take quiz|Review)/ })).toHaveCount(1)
@@ -208,8 +210,8 @@ test.describe('refused files in materials', () => {
     await expect(row.getByText(/\bB$/)).toHaveCount(0)
     // The problem is an alert with a way to fix it.
     await expect(page.getByText('1 file ready; 2 files need attention.').or(page.getByText(/files need attention/))).toBeVisible()
-    await page.getByRole('button', { name: 'Remove files with problems' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Remove files with problems' }).click()
+    await page.getByRole('button', { name: 'Dismiss failed uploads' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Dismiss failed uploads' }).click()
     await expect(page.getByRole('row', { name: /notes\.txt/ })).toHaveCount(0)
     await expect(page.getByRole('row', { name: /bad\.exe/ })).toHaveCount(0)
     // The file that was fine is still there.
@@ -253,15 +255,17 @@ test.describe('phone', () => {
     for (const height of heights) expect(parseFloat(height.split(': ').pop()!), height).toBeGreaterThanOrEqual(43.5)
   })
 
-  test('the menu drawer has a close button and does not repeat the tab bar', async ({ page }) => {
+  test('the menu drawer is "Courses and account": a close button, no course places, no topic tree', async ({ page }) => {
     await signIn(page, DEMO_EMAIL)
     await page.goto(`/courses/${course}`)
     await page.getByRole('button', { name: 'Open menu' }).click()
-    const drawer = page.getByRole('dialog')
-    await expect(drawer.getByRole('link', { name: 'Materials' })).toBeVisible()
-    for (const name of ['Overview', 'Plan', 'Ask']) {
-      await expect(drawer.getByRole('navigation', { name: 'Course' }).getByRole('link', { name, exact: true })).toHaveCount(0)
-    }
+    const drawer = page.getByRole('dialog', { name: 'Courses and account' })
+    await expect(drawer.getByRole('button', { name: /^Course: / })).toBeVisible()
+    await expect(drawer.getByRole('radio', { name: /Match device/ })).toBeVisible()
+    // Each course place is on one phone surface (the tab bar or its More sheet), never here.
+    await expect(drawer.getByRole('navigation', { name: 'Course', exact: true })).toHaveCount(0)
+    await expect(drawer.getByRole('link', { name: 'Materials' })).toHaveCount(0)
+    await expect(drawer.locator('ul[data-collapsible]')).toHaveCount(0)
     expect((await drawer.getByRole('button', { name: 'Close menu' }).boundingBox())!.height).toBeGreaterThanOrEqual(44)
     await drawer.getByRole('button', { name: 'Close menu' }).click()
     await expect(drawer).toBeHidden()

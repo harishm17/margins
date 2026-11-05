@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { CaretDown } from '@phosphor-icons/react/dist/ssr'
 import { phoneInlineHit } from '@/components/ui/styles'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { BRAND_NAME } from '@/config/brand'
@@ -42,11 +43,6 @@ export function LoginForm({ googleEnabled, testLoginEnabled, next, initialError 
           <InlineAlert tone="warning">Google sign-in is not set up on this server.</InlineAlert>
         )}
 
-        <p className="text-small text-fg-2">
-          Made your account with a password? Continue with Google using the same email, and your courses will be
-          there.
-        </p>
-
         {/* One sentence at every width; on a phone each link keeps its place in the line and gets a 44px hit strip. */}
         <p className="text-small font-normal text-fg-2">
           By continuing you agree to the{' '}
@@ -59,6 +55,17 @@ export function LoginForm({ googleEnabled, testLoginEnabled, next, initialError 
           </Link>
           .
         </p>
+
+        {/* Only a few students have an old password account: the note is there when asked for, below the one action everyone takes. */}
+        <details className="group text-small text-fg-2" data-testid="legacy-password-note">
+          <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-chip text-fg-2 hover:text-fg max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
+            Used a password before?
+            <CaretDown aria-hidden="true" className="size-3.5 transition-transform duration-180 group-open:rotate-180" />
+          </summary>
+          <p className="mt-1.5 max-w-[56ch]">
+            Continue with Google using the same email, and your courses will be there.
+          </p>
+        </details>
 
         {testLoginEnabled ? <TestLoginForm next={next} /> : null}
       </div>

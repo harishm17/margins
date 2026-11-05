@@ -39,6 +39,24 @@ export function preselectTopics(topics: readonly TopicSignal[], now: number): st
   return (wanted.length > 0 ? wanted : topics).map((topic) => topic.id)
 }
 
+/** Keeps only the topics that have pages to write questions from (the exam leaves the others out anyway). */
+export function onlyWithPages(ids: readonly string[], hasPages: ReadonlySet<string>): string[] {
+  return ids.filter((id) => hasPages.has(id))
+}
+
+/**
+ * What Create exam will cover, from the ticked topics: "Covers 3 topics" or "Covers 3 topics (1 without pages is left out)".
+ * Null when no topic is ticked.
+ */
+export function coverageNote(selectedCount: number, withoutPagesCount: number): string | null {
+  if (selectedCount === 0) return null
+  const covered = selectedCount - withoutPagesCount
+  const topics = (count: number) => `${count} ${count === 1 ? 'topic' : 'topics'}`
+  if (withoutPagesCount === 0) return `Covers ${topics(covered)}`
+  const left = withoutPagesCount === 1 ? '1 without pages is left out' : `${withoutPagesCount} without pages are left out`
+  return `Covers ${topics(covered)} (${left})`
+}
+
 const DIFFICULTY_LABELS: Record<string, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 export const difficultyLabel = (value: string): string => DIFFICULTY_LABELS[value] ?? value
 

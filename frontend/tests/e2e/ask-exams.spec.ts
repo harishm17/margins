@@ -5,6 +5,7 @@ import { signIn } from './helpers/auth'
 import { addMaterial, createCourse, createEmptyCourse, signUpAndIn } from './helpers/loop'
 import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
 import { animationsSettled } from './helpers/settle'
+import { chooseConfidence } from './helpers/confidence'
 
 // Runs against the demo course (seeded by global-setup.ts) on a stack with the mock AI service.
 const course = `/courses/${demoIds().course}`
@@ -59,8 +60,14 @@ test('mock exam: a topic with no pages is left out and said so, and the exam is 
   test.setTimeout(240_000)
   await signIn(page, DEMO_EMAIL)
   await page.goto(`${course}/exams/new`)
-  // The demo's "Discrete random variables" has no file behind it; every topic is chosen by default, and the form says it may be left out.
-  await expect(page.getByText('No pages linked yet, so it may be left out').first()).toBeVisible()
+  // The demo's "Discrete random variables" has no file behind it: it starts unticked and says why, and the count says what is covered.
+  const noPages = page.getByRole('checkbox', { name: /Discrete random variables/ })
+  await expect(page.getByText('Add source pages to include.').first()).toBeVisible()
+  await expect(noPages).not.toBeChecked()
+  await expect(page.getByTestId('exam-footer-summary')).not.toContainText('left out')
+  // Ticking it anyway is allowed; the form then says it is left out.
+  await noPages.check()
+  await expect(page.getByTestId('exam-footer-summary')).toContainText('without pages is left out')
   await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '5', exact: true }).click()
   await page.getByRole('radio', { name: '30 min' }).click()
@@ -113,14 +120,14 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   // Answer the first question, flag the second, and the navigator shows both.
   await answerQuestion(page, kinds[0])
   // How sure the student is rides along with the answer.
-  await page.getByRole('radio', { name: 'Certain' }).click()
+  await chooseConfidence(page, 'Certain')
   await expect(page.getByRole('radio', { name: 'Certain', checked: true })).toBeVisible()
   // The tapped level, not just its value, is saved: "Guessing" on a true or false question stores 0.5, like "Unsure".
-  await page.getByRole('radio', { name: 'Guessing' }).click()
-  await expect(page.getByText('Saved')).toBeVisible({ timeout: 15_000 })
+  await chooseConfidence(page, 'Guessing')
+  await expect(page.getByTestId('exam-save-status')).toHaveText('Saved', { timeout: 15_000 })
   await page.reload()
   await expect(page.getByRole('radio', { name: 'Guessing', checked: true })).toBeVisible()
-  await page.getByRole('radio', { name: 'Certain' }).click()
+  await chooseConfidence(page, 'Certain')
   await page.getByRole('button', { name: 'Next' }).click()
   await expect(page.getByRole('heading', { name: /Question 2 of/ })).toBeVisible()
   await page.getByRole('button', { name: 'Flag', exact: true }).click()
@@ -130,7 +137,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await expect(navigator.getByRole('button', { name: 'Question 1, answered' }).locator('svg')).toHaveCount(1)
   await expect(navigator.getByRole('button', { name: 'Question 2, not answered, flagged' })).toHaveAttribute('aria-current', 'step')
   expect(await navigator.getByRole('button', { name: /^Question 2,/ }).evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('2px')
-  await expect(page.getByText('Saved')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('exam-save-status')).toHaveText('Saved', { timeout: 15_000 })
 
   // Exit asks first.
   await page.getByRole('link', { name: 'Exit' }).click()
@@ -139,7 +146,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
 
   // One filled button: Next. Submit is final, so it is the quiet one until the last question (where "Submit exam" is the way on).
   const fill = (name: string) => page.getByRole('button', { name, exact: true }).evaluate((el) => getComputedStyle(el).backgroundColor)
-  expect(await fill('Submit')).not.toBe(await fill('Next'))
+  expect(await fill('Submit exam')).not.toBe(await fill('Next'))
 
   // The course's "in progress" line is on every page but the exam's own lobby, which already says Resume.
   const takeUrl = page.url()
@@ -154,7 +161,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await expect(page.getByRole('heading', { name: /Question \d+ of/ })).toBeVisible()
 
   // Submitting with blanks asks for confirmation, and says how many are unanswered and flagged.
-  await page.getByRole('button', { name: 'Submit', exact: true }).click()
+  await page.getByRole('button', { name: 'Submit exam', exact: true }).first().click()
   const prompt = page.getByRole('dialog', { name: 'Submit your exam?' })
   await expect(prompt).toContainText(/unanswered and will score zero\. 1 is flagged to come back to\./)
   await prompt.getByRole('button', { name: 'Keep working' }).click()
@@ -170,7 +177,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
     await expect(position).not.toHaveText(new RegExp(`Question ${number} of`))
   }
   await expect(page.getByText(/1 flagged/)).toBeVisible()
-  await page.getByRole('button', { name: 'Submit', exact: true }).click()
+  await page.getByRole('button', { name: 'Submit exam', exact: true }).first().click()
   await expect(prompt).toContainText(/You answered all \d+ questions\. 1 is flagged to come back to\. You can.t change your answers after you submit\./)
   await animationsSettled(page)
   await screenshotIfAsked(page, 'exam-submit-prompt')
@@ -291,7 +298,7 @@ test.describe('attempt-first Ask', () => {
     // Answer from memory, say how sure, look at the answer, grade it.
     await expect(card.getByRole('button', { name: 'Show the answer' })).toBeDisabled()
     await card.getByLabel(/^Your answer:/).fill('Keys divided by buckets')
-    await card.getByRole('radio', { name: 'Fairly sure' }).click()
+    await chooseConfidence(card, 'Fairly sure')
     await card.getByRole('button', { name: 'Show the answer' }).click()
     await expect(card.getByText('The answer', { exact: true })).toBeVisible()
     await expect(card.getByRole('group', { name: 'How did you do?' })).toBeVisible()
@@ -563,7 +570,8 @@ test.describe('attempt-first Ask', () => {
       const box = await target.boundingBox()
       return box !== null && box.y + box.height <= (await composerTop())
     }
-    const confidence = card.getByText('How sure are you?')
+    // On a phone the row is a single "Confidence (optional)" chip until it is tapped; either way the row's own box is what must clear the composer.
+    const confidence = card.locator('[data-confidence-row]')
     await expect.poll(() => clearOfComposer(confidence), { timeout: 5_000, message: 'the confidence row ends above the composer' }).toBe(true)
     await expect.poll(() => clearOfComposer(card.getByRole('button', { name: "I don't know" })), { timeout: 5_000, message: 'the card buttons end above the composer' }).toBe(true)
     await animationsSettled(page)

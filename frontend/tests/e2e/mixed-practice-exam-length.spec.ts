@@ -116,6 +116,13 @@ test('the link names the topics to tick; unknown and unconfirmed ids are ignored
   const hidden = await withPrisma((prisma) =>
     prisma.topic.create({ data: { projectId: course.courseId, name: 'Unreviewed', orderIndex: 9, userConfirmed: false, sourceMaterialIds: [] } }).then((row) => row.id)
   )
+  // Only topics with pages can be ticked into an exam, so every visible topic is given one.
+  const material = await withPrisma((prisma) => prisma.material.findFirstOrThrow({ where: { projectId: course.courseId } }))
+  await withPrisma((prisma) =>
+    prisma.topicSource.createMany({
+      data: Object.values(course.topics).map((topicId) => ({ topicId, materialId: material.id, pageStart: 1, pageEnd: 2, chunkIndexStart: 0, chunkIndexEnd: 1 })),
+    })
+  )
   const form = `/courses/${course.courseId}/exams/new`
   const checked = (name: string) => page.getByRole('checkbox', { name })
 

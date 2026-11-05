@@ -2,7 +2,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { KeyDetails } from './key-details'
 import { StateIcon, STATE_TONE } from './state-icon'
-import { frontierKeyText, frontierTexts, LABEL_ORDER, LABEL_TEXT, START_HERE_TEXT } from '@/lib/map/copy'
+import { duplicateNames, frontierKeyText, frontierTexts, KEY_TWO_MEASURES, LABEL_ORDER, LABEL_TEXT, START_HERE_TEXT } from '@/lib/map/copy'
 import { BADGE_RADIUS, NODE_HEIGHT, NODE_WIDTH, type MapLayout } from '@/lib/map/layout'
 import { wrapName } from '@/lib/map/wrap'
 import { relationsOf, relationsSentence } from '@/lib/map/relations'
@@ -68,9 +68,11 @@ export function MapView({
   const nameOf = new Map(nodes.map((node) => [node.id, node.name]))
   const frontier = frontierTexts(nodes)
   const frontierCount = nodes.filter((node) => node.frontier).length
+  // The same idea name in two topics of the unit: each such node also names its topic.
+  const repeated = duplicateNames(nodes)
   return (
     <div>
-      <p className="mb-2 text-small text-fg-3 sm:hidden">Scroll sideways, or use List view.</p>
+      <p className="mb-2 text-small text-fg-2 sm:hidden">Scroll sideways, or use List view.</p>
       <div
         role="region"
         aria-label={`${label}, scrolls sideways`}
@@ -87,7 +89,7 @@ export function MapView({
         >
           <defs>
             <marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-fg-3" />
+              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-edge-confirmed" />
             </marker>
             {/* The same idea name can occur in two topics of a unit, so each idea also says which topic it is in. */}
             {nodes.map((node) => (
@@ -99,7 +101,7 @@ export function MapView({
               return sentence ? <desc key={node.id} id={`map-relations-${node.id}`}>{sentence}</desc> : null
             })}
             <marker id="map-arrow-suggested" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-border-strong" />
+              <path d="M 0 0 L 10 5 L 0 10 z" className="fill-edge-suggested" />
             </marker>
           </defs>
           <g aria-hidden="true">
@@ -131,8 +133,10 @@ export function MapView({
                 key={edge.id}
                 d={linkPath(from, to)}
                 fill="none"
-                strokeWidth={1.5}
-                className={suggested ? 'stroke-border-strong' : 'stroke-fg-3'}
+                // Suggested is told by the dashes, at the same contrast as a confirmed line (a faint line failed 3:1).
+                strokeWidth={suggested ? 1.75 : 2.25}
+                strokeDasharray={suggested ? '6 4' : undefined}
+                className={suggested ? 'stroke-edge-suggested' : 'stroke-edge-confirmed'}
                 markerEnd={suggested ? 'url(#map-arrow-suggested)' : 'url(#map-arrow)'}
               >
                 <title>{`${text}${suggested ? ' (suggested)' : ''}`}</title>
@@ -146,7 +150,9 @@ export function MapView({
             const left = at.x - NODE_WIDTH / 2
             const top = at.y - NODE_HEIGHT / 2
             const selected = node.id === selectedId
-            const lines = wrapName(node.name, NAME_WIDTH, NAME_LINES)
+            const showTopic = repeated.has(node.name.trim().toLowerCase())
+            const lines = wrapName(node.name, NAME_WIDTH, showTopic ? 1 : NAME_LINES)
+            const topicLine = showTopic ? wrapName(node.topicName, NAME_WIDTH, 1)[0] : null
             const state = LABEL_TEXT[node.label]
             // One ring, on the one idea to start with. When several are ready, the others say "Next up" in words and have no ring.
             const ringed = node.frontier && (frontierCount === 1 || frontier[node.id] === START_HERE_TEXT)
@@ -201,6 +207,11 @@ export function MapView({
                     {line}
                   </text>
                 ))}
+                {topicLine ? (
+                  <text x={left + 12} y={top + 22 + 16} className="fill-fg-2 text-caption">
+                    {topicLine}
+                  </text>
+                ) : null}
                 <StateIcon label={node.label} size={14} x={left + 12} y={top + NODE_HEIGHT - 24} />
                 <text x={left + 31} y={top + NODE_HEIGHT - 12} className={cn('fill-fg-2 text-caption')}>
                   {state}
@@ -243,11 +254,11 @@ function MapKey({ nodes, edges }: { nodes: MapNode[]; edges: MapEdge[] }) {
     has('prerequisite') || has('encompasses')
       ? {
           key: 'leads',
-          text: 'Leads to',
+          text: 'Leads to (confirmed)',
           mark: (
             <svg aria-hidden="true" width="28" height="10" className="shrink-0">
-              <line x1="0" y1="5" x2="22" y2="5" strokeWidth="1.5" className="stroke-fg-3" />
-              <path d="M 20 1.5 L 27 5 L 20 8.5 z" className="fill-fg-3" />
+              <line x1="0" y1="5" x2="22" y2="5" strokeWidth="2.25" className="stroke-edge-confirmed" />
+              <path d="M 20 1.5 L 27 5 L 20 8.5 z" className="fill-edge-confirmed" />
             </svg>
           ),
         }
@@ -268,11 +279,11 @@ function MapKey({ nodes, edges }: { nodes: MapNode[]; edges: MapEdge[] }) {
     edges.some((edge) => edge.status === 'proposed')
       ? {
           key: 'suggested',
-          text: 'Suggested, not confirmed',
+          text: 'Dashed: suggested, not confirmed',
           mark: (
             <svg aria-hidden="true" width="28" height="10" className="shrink-0">
-              <line x1="0" y1="5" x2="22" y2="5" strokeWidth="1.5" className="stroke-border-strong" />
-              <path d="M 20 1.5 L 27 5 L 20 8.5 z" className="fill-border-strong" />
+              <line x1="0" y1="5" x2="22" y2="5" strokeWidth="1.75" strokeDasharray="6 4" className="stroke-edge-suggested" />
+              <path d="M 20 1.5 L 27 5 L 20 8.5 z" className="fill-edge-suggested" />
             </svg>
           ),
         }
@@ -310,6 +321,7 @@ function MapKey({ nodes, edges }: { nodes: MapNode[]; edges: MapEdge[] }) {
             ))}
           </ul>
         ) : null}
+        {nodes.some((node) => node.frontier) ? <p className="text-caption text-fg-2">{KEY_TWO_MEASURES}</p> : null}
         {nodes.some((node) => node.label === 'inferred') ? (
           <p className="text-caption text-fg-2">Inferred means credited through a related idea and not yet tested on its own.</p>
         ) : null}

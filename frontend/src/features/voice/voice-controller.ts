@@ -80,7 +80,12 @@ export type VoiceController = {
   meter: MicMeter
   /** The course and topic the next session is for (the props can change between sessions). */
   setOptions: (options: VoiceControllerOptions) => void
-  start: (config: StartConfig) => Promise<void>
+  /**
+   * `opening` replaces the empty first turn: a session continued after a reload says what happened and which question to ask again.
+   */
+  start: (config: StartConfig, opening?: string | null) => Promise<void>
+  /** What the open session was started with (null before the first start): a reload snapshot continues from it. */
+  getConfig: () => StartConfig | null
   end: () => void
   /** Back to the lobby from the summary. */
   reset: () => void
@@ -1062,7 +1067,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
 
   // ---- Public API ------------------------------------------------------------------------
 
-  async function start(config: StartConfig): Promise<void> {
+  async function start(config: StartConfig, opening?: string | null): Promise<void> {
     if (options.mode === 'topic' && !options.topic) {
       dispatch({ type: 'start-failed', lobbyAlert: { kind: 'error', text: 'Pick a topic to review first.' } })
       return
@@ -1146,7 +1151,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     }, HEARTBEAT_MS)
 
     if (startVoice) void enableVoice()
-    queueTurn('')
+    queueTurn(opening ?? '')
   }
 
   async function enableMicrophone(): Promise<void> {
@@ -1160,6 +1165,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       options = next
     },
     start,
+    getConfig: () => ctx.config,
     enableMicrophone,
 
     end() {

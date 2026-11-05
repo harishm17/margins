@@ -5,7 +5,7 @@ import { Exam } from '@phosphor-icons/react/dist/ssr'
 import { Page, PageIntro } from '@/components/shell/page'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { examDefaultsFromParams, preselectTopics } from '@/features/exams/exam-options'
+import { examDefaultsFromParams, onlyWithPages, preselectTopics } from '@/features/exams/exam-options'
 import { topicsFromParam } from '@/lib/exams/form-defaults'
 import { NewExamForm } from '@/features/exams/new-exam-form'
 import { prisma } from '@/lib/db/prisma'
@@ -63,14 +63,16 @@ export default async function NewExamPage({
         <NewExamForm
           courseId={courseId}
           topics={topics.map((topic) => ({ id: topic.id, name: topic.name, mastery: topic.mastery, hasPages: linked.has(topic.id) }))}
-          preselected={
+          preselected={onlyWithPages(
             // A link from the plan names its topics; ids that are not confirmed topics of this course are ignored.
+            // Either way a topic with no pages is left unticked: the exam would leave it out, so it is the student's choice to add it.
             topicsFromParam(query.topics, topics.map((topic) => topic.id)) ??
-            preselectTopics(
-              topics.map((topic) => ({ id: topic.id, mastery: topic.mastery, dueAt: topic.dueAt })),
-              serverClock()
-            )
-          }
+              preselectTopics(
+                topics.map((topic) => ({ id: topic.id, mastery: topic.mastery, dueAt: topic.dueAt })),
+                serverClock()
+              ),
+            linked
+          )}
           activeJob={activeJob}
           examStyle={examStyle}
           initial={initial}

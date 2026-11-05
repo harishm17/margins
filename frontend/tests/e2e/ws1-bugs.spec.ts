@@ -6,6 +6,7 @@ import { DEMO_EMAIL, FIXTURE_PDF, demoIds } from './helpers/seed-demo'
 import { recallWorld } from './helpers/v31-recall'
 import { seedConcepts } from './helpers/v31-sessions'
 import { streamedPartsArrived } from './helpers/settle'
+import { chooseConfidence } from './helpers/confidence'
 
 // UX review fixes, workstream 1: bugs that lose work or break a flow (items 1, 2, 5, 6, 7 and 14 of the review).
 test.use({ timezoneId: ZONE })
@@ -52,15 +53,18 @@ test.describe('unsent text survives a reload', () => {
     await page.getByRole('button', { name: 'Start warm-up' }).click()
     await expect(page.getByRole('heading', { name: /Warm-up question 1 of/ })).toBeVisible()
     await page.getByRole('radio', { name: /Option B for question/ }).click()
-    await page.getByRole('radio', { name: 'Fairly sure' }).click()
+    await chooseConfidence(page, 'Fairly sure')
     await expect(page.getByTestId('warmup-draft-status')).toHaveText('Saved', { timeout: 15_000 })
     await page.reload()
     await expect(page.getByRole('heading', { name: /Warm-up question 1 of/ })).toBeVisible()
     await expect(page.getByRole('radio', { name: /Option B for question/, checked: true })).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByRole('radio', { name: 'Fairly sure', checked: true })).toBeVisible()
+    // The row is folded on a phone: the line says the level that came back.
+    await expect(page.getByRole('button', { name: 'Confidence: Fairly sure' })).toBeVisible()
   })
 
   test('worked examples: the prediction, the reveal and the grade come back', async ({ page }) => {
+    // This is about the guess boxes of an example on screen together: the "See the steps" view (the default is "Try each step").
+    await page.addInitScript(() => localStorage.setItem('margins.examplesStepMode', 'all'))
     await page.setViewportSize({ width: 1280, height: 900 })
     await setZoneCookie(page.context())
     const { email } = await signUpAndIn(page, 'ws1-examples', { own: true })
@@ -270,6 +274,8 @@ test('the timed exam shows Saving, Saved and a failure with Retry on a phone', a
   await page.getByRole('button', { name: 'Next' }).click()
   await page.getByRole('radio').first().click()
   await expect(status).toContainText('Not saved', { timeout: 20_000 })
+  // First "Not saved yet" while the change waits its turn, then "Not saved" with Retry once the save has failed.
+  await expect(status.getByRole('button', { name: 'Retry' })).toBeVisible({ timeout: 20_000 })
   await page.unroute(`**/api/exams/${examId}/attempt`)
   await status.getByRole('button', { name: 'Retry' }).click()
   await expect(status).toHaveText('Saved', { timeout: 20_000 })

@@ -65,7 +65,18 @@ export function StartExamButton({ courseId, examId, resumeSeconds = null, label,
  * "Practice what you missed": a review session of new questions on the ideas the missed ones were about (not the exam's own
  * questions again). The count is what the session is set up to serve, and it is on the button.
  */
-export function PracticeMissedButton({ courseId, submissionId, count }: { courseId: string; submissionId: string; count: number }) {
+export function PracticeMissedButton({
+  courseId,
+  submissionId,
+  count,
+  variant = 'primary',
+}: {
+  courseId: string
+  submissionId: string
+  count: number
+  /** Primary when it is the one recommended step; secondary when reviewing the weakest topic comes first. */
+  variant?: ButtonProps['variant']
+}) {
   const router = useRouter()
   const [busy, setBusy] = React.useState(false)
 
@@ -89,7 +100,7 @@ export function PracticeMissedButton({ courseId, submissionId, count }: { course
   }
 
   return (
-    <Button variant="primary" size="md" loading={busy} onClick={start} className="tabular">
+    <Button variant={variant} size="md" loading={busy} onClick={start} className="tabular">
       {`Practice ${pluralize(count, 'new question')} on what you missed`}
     </Button>
   )

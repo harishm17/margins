@@ -1,14 +1,15 @@
 'use client'
 
 import * as React from 'react'
-import { ArrowSquareOut, Crosshair, NotePencil } from '@phosphor-icons/react/dist/ssr'
+import { ArrowSquareOut, CaretDown, Crosshair, NotePencil, X } from '@phosphor-icons/react/dist/ssr'
 import { SourceIcon } from '@/components/learning/source-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { InlineAlert } from '@/components/ui/inline-alert'
+import { IconButton } from '@/components/ui/icon-button'
 import { LazyMarkdown } from '@/components/ui/lazy-markdown'
 import { apiFetch } from '@/lib/api/client'
 import { viewerUrl } from '@/lib/chat/citations'
+import { cn } from '@/lib/utils'
 import { demoteHeadings } from '@/lib/reader/passage-text'
 import type { MarginNoteView, ReaderCheckView, ReaderData, ReaderFile, ReaderPassage } from '@/lib/reader/load-reader'
 import { CompletionRow } from './completion-row'
@@ -25,46 +26,41 @@ type Props = {
   nextLabel: string
   /** `?focus=<conceptId>`: the concept a pointer or the next activity opened the reader for (spec 18.3): its claim passages are marked and the reader opens at the first. */
   focusConceptId?: string | null
+  /** The student closed the "About this reading" row before (on this or another device). */
+  noteDismissed?: boolean
 }
 
-const PDF_NOTE_KEY = 'margins.readerPdfNoteClosed'
-const pdfNoteListeners = new Set<() => void>()
-const subscribePdfNote = (listener: () => void) => {
-  pdfNoteListeners.add(listener)
-  return () => void pdfNoteListeners.delete(listener)
-}
-const pdfNoteClosed = () => {
-  try {
-    return window.localStorage.getItem(PDF_NOTE_KEY) !== null
-  } catch {
-    return false
+/**
+ * The one row above the reading: what Focus here means (when the warm-up marked passages) and that text taken from a PDF can
+ * lose its layout and maths (when there is one). It replaces two stacked notices, takes one close control, and the close is kept
+ * on the student's account (`User.seenReaderNoteAt`), so it does not come back on another device. Each page keeps its own link to
+ * the original, and each marked passage says "Focus here" itself, so nothing the row said is lost by closing it.
+ */
+function ReaderNote({ focusCount, hasPdf, dismissed }: { focusCount: number; hasPdf: boolean; dismissed: boolean }) {
+  const [closed, setClosed] = React.useState(dismissed)
+  if (closed || (focusCount === 0 && !hasPdf)) return null
+  const close = () => {
+    setClosed(true)
+    // If saving fails the row comes back, so closing it never silently does nothing.
+    apiFetch('/api/me/reader-note', { method: 'POST' }).catch(() => setClosed(false))
   }
-}
-
-/** The caveat about text taken from a PDF: said once, then gone. Each page keeps its own link to the original. */
-function PdfNote() {
-  // Closed on the server so the first paint never flashes it for a student who has dismissed it.
-  const closed = React.useSyncExternalStore(subscribePdfNote, pdfNoteClosed, () => true)
-  if (closed) return null
   return (
-    <div className="mb-8 flex max-w-[680px] flex-wrap items-center gap-x-3 gap-y-1 text-small text-fg-2" data-testid="reader-pdf-note">
-      <p className="min-w-0 flex-1 basis-64">Text taken from a PDF can lose its layout and maths. The original is the better view for figures and equations: each page links to it.</p>
-      <Button
-        size="sm"
-        variant="ghost"
-        className="shrink-0"
-        onClick={() => {
-          try {
-            window.localStorage.setItem(PDF_NOTE_KEY, '1')
-          } catch {
-            // Private mode: it comes back next time, which is harmless.
-          }
-          pdfNoteListeners.forEach((listener) => listener())
-        }}
-      >
-        Got it
-      </Button>
-    </div>
+    <section
+      aria-label="About this reading"
+      data-testid="reader-note"
+      className="mb-6 flex max-w-[680px] items-start gap-2 rounded-card border border-border bg-surface-2 py-2 pl-3 pr-1 text-small text-fg-2"
+    >
+      <p className="min-w-0 flex-1 py-1.5">
+        {focusCount > 0 ? (
+          <>
+            <Crosshair aria-hidden="true" className="mr-1 inline size-3.5 align-[-2px] text-accent" />
+            {focusCount === 1 ? 'One passage is' : `${focusCount} passages are`} marked Focus here, from your warm-up. You still read everything.{' '}
+          </>
+        ) : null}
+        {hasPdf ? 'Text from a PDF can lose its layout and maths: each page links to the original.' : null}
+      </p>
+      <IconButton label="Close this note" icon={<X />} size="sm" variant="ghost" className="shrink-0 max-sm:size-11" onClick={close} />
+    </section>
   )
 }
 
@@ -220,8 +216,9 @@ function Passage({ topicId, file, passage, focused, number, notes, check, onAdd,
  * and "Focus here" on the passages the warm-up says to look at. Nothing is hidden: the student reads it all.
  * Text taken from a PDF can lose layout and maths, so each page links to the original.
  */
-export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, focusConceptId = null }: Props) {
+export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, focusConceptId = null, noteDismissed = false }: Props) {
   const [notes, setNotes] = React.useState<MarginNoteView[]>(reader.notes)
+  const [questionsOpen, setQuestionsOpen] = React.useState(false)
   const { completed: isCompleted, saving, mark } = useMarkComplete(topicId, 'readAt', completed)
   const checks = React.useMemo(() => new Map(reader.checks.map((check) => [check.afterChunkId, check])), [reader.checks])
   const byChunk = React.useMemo(() => {
@@ -238,18 +235,25 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
 
   return (
     <div className="max-w-[1000px]">
-      {reader.focusCount > 0 ? (
-        <InlineAlert className="mb-6 max-w-[680px]" tone="neutral" icon={<Crosshair aria-hidden="true" />}>
-          {reader.focusCount === 1 ? 'One passage is' : `${reader.focusCount} passages are`} marked Focus here, for the ideas your warm-up showed you to look at. You still read everything.
-        </InlineAlert>
-      ) : null}
+      <ReaderNote focusCount={reader.focusCount} hasPdf={hasPdf} dismissed={noteDismissed} />
 
       {questions.length > 0 ? (
         <section aria-labelledby="read-to-answer" className="mb-8 max-w-[680px] rounded-card border border-border bg-surface-2 px-4 py-4 sm:px-5">
-          <h2 id="read-to-answer" className="text-body-strong text-fg">
+          <h2 id="read-to-answer" className="flex items-center justify-between gap-3 text-body-strong text-fg">
             Read to answer
+            {/* On a phone the questions fold, so the reading is the first thing under the note. */}
+            <button
+              type="button"
+              aria-expanded={questionsOpen}
+              aria-controls="read-to-answer-list"
+              onClick={() => setQuestionsOpen((current) => !current)}
+              className="-my-2 inline-flex min-h-11 items-center gap-1 rounded-chip text-small font-normal text-fg-2 hover:text-fg sm:hidden"
+            >
+              {questionsOpen ? 'Hide' : `Show ${questions.length}`}
+              <CaretDown aria-hidden="true" className={cn('size-3.5 transition-transform duration-180', questionsOpen && 'rotate-180')} />
+            </button>
           </h2>
-          <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-5 text-small text-fg max-sm:gap-0">
+          <ol id="read-to-answer-list" className={cn('mt-2 flex list-decimal flex-col gap-1.5 pl-5 text-small text-fg max-sm:gap-0', !questionsOpen && 'max-sm:hidden')}>
             {questions.map((item) => (
               <li key={`${item.objectiveIndex}:${item.question}`}>
                 {item.chunkId ? (
@@ -272,8 +276,6 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
           </ol>
         </section>
       ) : null}
-
-      {hasPdf ? <PdfNote /> : null}
 
       {reader.files.map((file) => (
         <section key={file.materialId} aria-labelledby={`file-${file.materialId}`} className="mb-10">

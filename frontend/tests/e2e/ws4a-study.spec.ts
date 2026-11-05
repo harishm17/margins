@@ -51,7 +51,7 @@ test.describe('the first entry of a topic', () => {
     try {
       await page.goto(base)
       await expect(page).toHaveURL(/\?view=read&entry=1$/)
-      await expect(page.getByRole('heading', { name: 'Getting this topic ready' })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Writing your warm-up questions, about a minute' })).toBeVisible()
       // The reader is not shown, and the path keeps its five steps: Warm-up and Recall say they are being prepared, none is tagged Next.
       await expect(page.locator('[data-passage]')).toHaveCount(0)
       for (const label of ['Warm-up', 'Read', 'Recall', 'Practice', 'Quiz']) await expect(path(page).getByRole('link', { name: new RegExp(label) })).toBeVisible()
@@ -77,7 +77,7 @@ test.describe('the first entry of a topic', () => {
       // so the Read step shows its notes being written).
       await reading.click()
       await expect(page).toHaveURL(/\?view=read$/)
-      await expect(page.getByRole('heading', { name: 'Getting this topic ready' })).toHaveCount(0)
+      await expect(page.getByRole('heading', { name: 'Writing your warm-up questions, about a minute' })).toHaveCount(0)
       await page.goto(base)
       await expect(page).toHaveURL(/\?view=read&entry=1$/)
     } finally {
@@ -154,7 +154,8 @@ test.describe('phone targets in the study surfaces', () => {
     await expect(page.getByRole('button', { name: /^Reorder Hashing/ })).toBeHidden()
     const rename = page.getByRole('button', { name: 'Rename Hashing' })
     expect((await rename.boundingBox())!.height, 'rename').toBeGreaterThanOrEqual(44)
-    // The description wraps, so the student can read what they are confirming.
+    // The description wraps, so the student can read what they are confirming (on a phone it is behind Show details).
+    await page.getByRole('button', { name: 'Show details of Hashing' }).click()
     const description = page.getByText('A long description of what this topic covers').first()
     expect((await description.boundingBox())!.height, 'description is more than one line').toBeGreaterThan(30)
     // Saving and cancelling are buttons, not only Enter and Escape.

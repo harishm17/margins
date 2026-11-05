@@ -1,5 +1,6 @@
 import { phoneInlineHit } from '@/components/ui/styles'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { CONTACT_EMAIL } from '@/config/site'
 import { LegalContents, LegalPage, LegalSection } from '@/features/marketing/legal-page'
 
@@ -32,7 +33,11 @@ export default function TermsPage() {
       <LegalSection id="generated" heading="Generated study material">
         <p>
           Study material created by Margins can contain mistakes. Check important facts against your course
-          materials and your instructors.
+          materials and your instructors.{' '}
+          <Link href="/evaluation" className={`${phoneInlineHit} text-accent underline underline-offset-4 hover:text-accent-hover`}>
+            See how we check quality
+          </Link>
+          .
         </p>
       </LegalSection>
       <LegalSection id="acceptable-use" heading="Acceptable use">

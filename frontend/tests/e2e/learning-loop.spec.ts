@@ -24,6 +24,7 @@ import {
 } from './helpers/loop'
 import { expectClearOfTabBar } from './helpers/overflow'
 import { animationsSettled, streamedPartsArrived } from './helpers/settle'
+import { chooseConfidence } from './helpers/confidence'
 
 // The learning loop: exam date and plan, practice progress on the server, reviews (retry what you
 // missed, fresh review) and graded mock exams that move mastery. Every spec has its own account and
@@ -141,11 +142,12 @@ test.describe('plan', () => {
 
     await page.goto(`/courses/${course.courseId}`)
     const upNext = page.getByRole('region', { name: 'Up next' })
-    await expect(upNext).toContainText('Learn Sorting')
+    await expect(upNext).toContainText('Sorting')
     await expect(upNext.getByRole('link', { name: 'See the plan' })).toHaveAttribute('href', `/courses/${course.courseId}/plan`)
     const card = page.getByRole('region', { name: 'When is your exam?' })
     await expect(card).toBeVisible()
 
+    await card.getByRole('button', { name: 'Set exam date' }).click()
     await card.getByLabel('Exam date').locator('visible=true').fill(dayIn(ZONE, 30))
     await card.getByRole('button', { name: 'Save date' }).click()
     await expect(page.getByRole('region', { name: 'When is your exam?' })).toHaveCount(0)
@@ -158,6 +160,7 @@ test.describe('plan', () => {
     const other = await createCourse(page, 'No date wanted', [{ name: 'One', minutes: 30 }], { existingCourseId: emptyOther })
     await addContent(other.topics.One, { section_notes: '# One' })
     await page.goto(`/courses/${other.courseId}`)
+    await page.getByRole('region', { name: 'When is your exam?' }).getByRole('button', { name: 'Set exam date' }).click()
     await page.getByRole('region', { name: 'When is your exam?' }).getByRole('button', { name: 'Not now' }).click()
     await expect(page.getByRole('region', { name: 'When is your exam?' })).toHaveCount(0)
     await page.reload()
@@ -196,7 +199,9 @@ test.describe('plan', () => {
     await page.goto('/courses/new')
     await page.getByLabel('Course name').locator('visible=true').fill('Dated course')
     await page.getByLabel('Exam date').locator('visible=true').fill(dayIn(ZONE, 40))
-    await page.getByRole('combobox', { name: 'Time to study each day' }).click()
+    // The daily time waits behind "More details".
+    await page.getByText('More details').click()
+    await page.getByRole('combobox', { name: 'Typical daily study time' }).click()
     await page.getByRole('option', { name: '1 hour 30 minutes' }).click()
     await page.getByRole('button', { name: 'Create course' }).click()
     await expect(page).toHaveURL(/\/courses\/[0-9a-f-]{36}$/)
@@ -207,7 +212,7 @@ test.describe('plan', () => {
 
     await page.goto(`/courses/${courseId}/settings`)
     await expect(page.getByLabel('Exam date').locator('visible=true')).toHaveValue(dayIn(ZONE, 40))
-    await expect(page.getByRole('combobox', { name: 'Time to study each day' })).toContainText('1 hour 30 minutes')
+    await expect(page.getByRole('combobox', { name: 'Typical daily study time' })).toContainText('1 hour 30 minutes')
   })
 })
 
@@ -264,7 +269,7 @@ test.describe('practice progress', () => {
     await phone.getByRole('button', { name: 'Check', exact: true }).click()
     await expect(phone.getByText('Not quite').locator('visible=true')).toBeVisible()
     await phone.getByRole('button', { name: 'Try again' }).click()
-    await phone.getByRole('button', { name: /Connect/ }).click()
+    await phone.getByRole('button', { name: /Show the first step/ }).click()
     await answer(phone).fill('9')
     await phone.getByRole('button', { name: 'Check', exact: true }).click()
     await expect(phone.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
@@ -302,7 +307,7 @@ test.describe('practice progress', () => {
       .toEqual([])
   })
 
-  test('hints say what they cost, and Connect, Structure and Show answer wait for an attempt', async ({ page }) => {
+  test('hints say what they cost on request, and the first step, the method and Show answer wait for an attempt', async ({ page }) => {
     test.setTimeout(120_000)
     await signUpAndIn(page, 'rungs')
     const course = await createCourse(page, 'Rungs course', [{ name: 'Squares' }])
@@ -319,10 +324,14 @@ test.describe('practice progress', () => {
     // before it is clicked, and Connect and Structure wait for an attempt (spec 18.4).
     await expect(reveal).toHaveCount(0)
     await page.getByRole('button', { name: 'Get help' }).click()
-    await expect(page.getByRole('button', { name: /Where to look · your next try still counts, as a harder one/ })).toBeEnabled()
-    await page.getByRole('button', { name: /Next hint: Locate/ }).click()
+    await expect(page.getByRole('button', { name: /Show where to look/ })).toBeEnabled()
+    // The cost is not on the button: it is said on request, under it.
+    await expect(page.getByRole('button', { name: /Show where to look/ })).not.toContainText(/harder one/)
+    await page.getByRole('button', { name: 'How hints count' }).click()
+    await expect(page.getByText('Opening this hint: your next try still counts, as a harder one.')).toBeVisible()
+    await page.getByRole('button', { name: /Show where to look/ }).click()
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
-    await expect(page.getByRole('button', { name: /Next hint: Connect/ })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Show the first step/ })).toBeDisabled()
     await expect(reveal).toHaveCount(0)
     // A reload keeps the opened hint and the gate.
     await expect
@@ -332,15 +341,15 @@ test.describe('practice progress', () => {
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
     await expect(reveal).toHaveCount(0)
     await page.getByRole('button', { name: 'Get help' }).click()
-    await expect(page.getByRole('button', { name: /Next hint: Connect/ })).toBeDisabled()
+    await expect(page.getByRole('button', { name: /Show the first step/ })).toBeDisabled()
 
     // One wrong check is the attempt: now Connect and Structure open, and Show answer.
     await answer(page).fill('5')
     await page.getByRole('button', { name: 'Check', exact: true }).click()
     await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
     await page.getByRole('button', { name: 'Try again' }).click()
-    await page.getByRole('button', { name: /Next hint: Connect/ }).click()
-    await page.getByRole('button', { name: /Next hint: Structure/ }).click()
+    await page.getByRole('button', { name: /Show the first step/ }).click()
+    await page.getByRole('button', { name: /Show the method/ }).click()
     await expect(reveal).toBeEnabled()
     // Opened hints count after a reload too.
     await expect
@@ -487,14 +496,14 @@ test.describe('practice progress', () => {
       await expect(page.getByRole('button', { name: 'Get help' })).toBeVisible()
       if (shots) await page.screenshot({ path: `${shots}/practice-${name}-start.png` })
       await page.getByRole('button', { name: 'Get help' }).click()
-      await page.getByRole('button', { name: /Next hint: Locate/ }).click()
+      await page.getByRole('button', { name: /Show where to look/ }).click()
       // Connect and Structure wait for an attempt: a wrong check opens them.
       await answer(page).fill('5')
       await page.getByRole('button', { name: 'Check', exact: true }).click()
       await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
       await page.getByRole('button', { name: 'Try again' }).click()
       // After a miss the helps stay open.
-      await page.getByRole('button', { name: /Next hint: Connect/ }).click()
+      await page.getByRole('button', { name: /Show the first step/ }).click()
       await checkAxe(`${name}, hints open`)
       await answer(page).fill('5')
       await page.getByRole('button', { name: 'Check', exact: true }).click()
@@ -1122,7 +1131,7 @@ test.describe('review sessions', () => {
 
       // A miss with a confidence tap: the feedback.
       await page.getByRole('radio', { name: /False/ }).click()
-      await page.getByRole('radio', { name: 'Certain' }).click()
+      await chooseConfidence(page, 'Certain')
       await page.getByRole('button', { name: 'Check answer' }).click()
       await expect(page.getByRole('heading', { level: 2, name: /^Not quite/ })).toBeVisible()
       await animationsSettled(page)
@@ -1157,16 +1166,16 @@ test.describe('review sessions', () => {
     // The draft (answer and confidence) is kept across a reload.
     await page.getByRole('radio', { name: /False/ }).click()
     // True or false: "Guessing" and "Unsure" both store 0.5, so each must come back as the one tapped.
-    await page.getByRole('radio', { name: 'Unsure' }).click()
+    await chooseConfidence(page, 'Unsure')
     await page.reload()
     await expect(page.getByRole('radio', { name: /False/ })).toBeChecked()
     await expect(page.getByRole('radio', { name: 'Unsure', checked: true })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'Guessing', checked: true })).toHaveCount(0)
-    await page.getByRole('radio', { name: 'Guessing' }).click()
+    await chooseConfidence(page, 'Guessing')
     await page.reload()
     await expect(page.getByRole('radio', { name: 'Guessing', checked: true })).toBeVisible()
     await expect(page.getByRole('radio', { name: 'Unsure', checked: true })).toHaveCount(0)
-    await page.getByRole('radio', { name: 'Certain' }).click()
+    await chooseConfidence(page, 'Certain')
     await page.reload()
     await expect(page.getByRole('radio', { name: 'Certain', checked: true })).toBeVisible()
 

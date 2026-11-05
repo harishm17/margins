@@ -3,7 +3,7 @@
 import * as React from 'react'
 import Link from 'next/link'
 import { signOut } from 'next-auth/react'
-import { SignOut } from '@phosphor-icons/react/dist/ssr'
+import { CaretDown, SignOut } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
@@ -48,7 +48,8 @@ export function AccountDetails({ email, signInProvider }: { email: string; signI
     <div className="flex flex-col gap-4">
       <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-2 text-body">
         <dt className="text-fg-2">Email</dt>
-        <dd className="truncate text-fg" data-testid="account-email">
+        {/* A long address wraps (and can be selected whole) instead of being cut off with an ellipsis. */}
+        <dd className="min-w-0 select-text text-fg wrap-anywhere" data-testid="account-email">
           {email}
         </dd>
         <dt className="text-fg-2">Sign-in</dt>
@@ -75,37 +76,49 @@ export function AiAllowance({ timeZone }: { timeZone: string }) {
   return (
     <div className="flex flex-col gap-4">
       {!status.available && blocked ? <InlineAlert tone="warning" title={blocked.title}>{blocked.text}</InlineAlert> : null}
-      <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-2 text-body">
-        <dt className="text-fg-2">AI features</dt>
-        <dd className="text-fg">{status.available ? 'Available' : 'Paused'}</dd>
-      </dl>
-      <p className="max-w-[56ch] text-small text-fg-2" data-testid="allowance-explainer">
-        Different actions use different amounts, so the percentage is a share of the day&apos;s allowance, not a count of questions left. When it
-        runs out, new notes, quizzes and answers wait until it resets; what is already written stays readable.{' '}
-        <Link href="/#faq" target="_blank" rel="noopener noreferrer" className="rounded-chip text-accent underline underline-offset-2 hover:text-accent-hover max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
-          What happens at the limit
-        </Link>
+      {/* The answer first: whether AI works, how much of today is used and when it resets. How it is counted is a click away. */}
+      <p className="flex flex-wrap items-baseline gap-x-2 text-body text-fg" data-testid="allowance-summary">
+        <span>{status.available ? 'Available' : 'Paused'}</span>
+        <span aria-hidden="true" className="text-fg-3">·</span>
+        {view.kind === 'used' ? (
+          <>
+            <span>{view.exhausted ? "Today's allowance used" : `${view.percent}% used`}</span>
+            <span aria-hidden="true" className="text-fg-3">·</span>
+            <span className="text-fg-2">resets {resets}</span>
+          </>
+        ) : view.kind === 'exhausted' ? (
+          <>
+            <span>Today&apos;s allowance used</span>
+            <span aria-hidden="true" className="text-fg-3">·</span>
+            <span className="text-fg-2">resets {resets}</span>
+          </>
+        ) : view.kind === 'unlimited' ? (
+          <span className="text-fg-2">No daily limit on this account</span>
+        ) : (
+          <span className="text-fg-2">Allowance can&apos;t be shown right now</span>
+        )}
       </p>
       {view.kind === 'used' ? (
-        <div className="flex max-w-[420px] flex-col gap-2">
-          <div className="flex items-baseline justify-between gap-4 text-small">
-            <span className="text-fg">{view.exhausted ? "You've used today's allowance" : `${view.percent}% used`}</span>
-            <span className="text-fg-2">Resets {resets}</span>
-          </div>
-          <Progress value={view.percent} tone={view.exhausted ? 'warning' : 'accent'} aria-label="Today's AI allowance used" />
-        </div>
-      ) : view.kind === 'exhausted' ? (
-        <p className="text-small text-fg">You&apos;ve used today&apos;s AI allowance. It resets {resets}.</p>
-      ) : view.kind === 'unlimited' ? (
-        <p className="text-small text-fg-2">No daily limit on this account.</p>
-      ) : (
-        <p className="text-small text-fg-2">Your allowance can&apos;t be shown right now. Try again later.</p>
-      )}
+        <Progress value={view.percent} tone={view.exhausted ? 'warning' : 'accent'} aria-label="Today's AI allowance used" className="max-w-[420px]" />
+      ) : null}
+      <details className="group text-small text-fg-2">
+        <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-chip text-fg-2 hover:text-fg max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
+          How the allowance works
+          <CaretDown aria-hidden="true" className="size-3.5 transition-transform duration-180 group-open:rotate-180" />
+        </summary>
+        <p className="mt-2 max-w-[56ch]" data-testid="allowance-explainer">
+          Different actions use different amounts, so the percentage is a share of the day&apos;s allowance, not a count of questions left. When it
+          runs out, new notes, quizzes and answers wait until it resets; what is already written stays readable.{' '}
+          <Link href="/#faq" target="_blank" rel="noopener noreferrer" className="rounded-chip text-accent underline underline-offset-2 hover:text-accent-hover max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
+            What happens at the limit
+          </Link>
+        </p>
+      </details>
     </div>
   )
 }
 
-/** Light, Dark or System. */
+/** Light, Dark or Match device. */
 export function ThemeSetting() {
   const { choice, setChoice } = useThemeChoice()
   return (
@@ -162,18 +175,18 @@ export function DeleteAccount({ email }: { email: string }) {
         title="Delete your account?"
         description={
           <>
-            This deletes <span className="font-medium text-fg wrap-anywhere">{email}</span> and everything in it. Type {CONFIRM_WORD}{' '}
-            to confirm.
+            This permanently deletes <span className="font-medium text-fg wrap-anywhere">{email}</span> and all courses, files, study content
+            and progress. Enter {CONFIRM_WORD} to confirm.
           </>
         }
         confirmLabel="Delete account"
         destructive
         confirmDisabled={!confirmsDeletion(typed)}
-        confirmDisabledReason={`Type ${CONFIRM_WORD} to turn this on.`}
+        confirmDisabledReason={`Enter ${CONFIRM_WORD} to confirm.`}
         onConfirm={onConfirm}
       >
         <div className="flex flex-col gap-4">
-          <Field label={`Type "${CONFIRM_WORD}"`}>
+          <Field label="Confirmation" hint={`Enter ${CONFIRM_WORD} to confirm`}>
             <Input
               autoComplete="off"
               autoCapitalize="characters"

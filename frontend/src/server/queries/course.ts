@@ -16,10 +16,11 @@ import { courseMastery, masteryLevel, countMasteryLevels, type MasteryCounts } f
 import { readRole, type MaterialRole } from '@/lib/materials/role'
 import { practiceDoneTopics } from '@/lib/learning/practice-done'
 import { mergeSources, type SourceRef } from '@/lib/topics/sources'
-import type { CourseSetup, TopicListState } from '@/lib/course-setup'
+import { deriveSetupStep, filesStepDone, type CourseSetup, type TopicListState } from '@/lib/course-setup'
 import { getCourseShell, type CourseShell, type ShellTopic, type ShellUnit } from '@/server/queries/courses'
 import { getPlanData } from '@/server/queries/plan'
 import { withTopicActivity } from '@/server/queries/topic-activity'
+import { jobMaterialId, materialStatusOf, type MaterialStatus } from '@/server/queries/material-status'
 import { backfillIfDue } from '@/lib/learning/backfill'
 import { startPrepareConceptsForCourse } from '@/lib/learning/prepare-concepts'
 import { deriveExamStyleState, examProfileTarget, materialIdFromProfileTarget } from '@/lib/exams/style-state'
@@ -62,7 +63,7 @@ const toJobRef = (job: JobRow): JobRef => ({
 // ---------------------------------------------------------------------------------------
 // Materials
 
-export type MaterialStatus = 'processing' | 'ready' | 'unusable' | 'failed'
+export type { MaterialStatus }
 
 export type MaterialRow = {
   id: string
@@ -190,7 +191,7 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
 
   const jobsByMaterial = new Map<string, typeof pipelineJobs>()
   for (const job of pipelineJobs) {
-    const materialId = isRecord(job.inputData) && typeof job.inputData.materialId === 'string' ? job.inputData.materialId : null
+    const materialId = jobMaterialId(job.inputData)
     if (!materialId) continue
     const list = jobsByMaterial.get(materialId)
     if (list) list.push(job)
@@ -215,12 +216,8 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
     const jobs = jobsByMaterial.get(material.id) ?? []
     // Newest first, so the first active job is the one in front.
     const active = jobs.find((job) => ACTIVE_JOB_STATUSES.includes(job.status))
-    const latest = jobs[0]
-    let status: MaterialStatus
-    if (material.validationStatus === 'invalid') status = 'unusable'
-    else if (active) status = 'processing'
-    else if (material.validationStatus === 'pending') status = latest?.status === 'completed' ? 'processing' : 'failed'
-    else status = latest?.status === 'failed' ? 'failed' : 'ready'
+    // The same rule the sidebar's setup step reads (material-status.ts).
+    const status = materialStatusOf(material.validationStatus, jobs)
 
     return {
       id: material.id,
@@ -388,6 +385,8 @@ export type SetupData = {
   materials: MaterialsData
   /** The topic list and where it came from (lib/course-setup.ts). */
   topics: TopicListState
+  /** The first three topic names in course order, so step 2 shows what was found without leaving the page. */
+  topicPreview: string[]
   /** What step 2 asks for: "Review topics", "Confirm topics", "Add topics". */
   label: string
   /** The first confirmed topic in course order, where "Start studying" goes. */
@@ -444,9 +443,14 @@ export async function getCourseOverview(
     // The files step stays open while no file is usable yet or one is still being read, unless
     // topic finding has already started. A course with no files at all is in step 2 only when it has
     // content (lib/course-setup.ts), so there is nothing being read to wait for.
-    const filesDone =
-      materials.readyCount > 0 && (materials.processingCount === 0 || !!materials.extractJob || course.topics.length > 0)
-    const step = course.setup.step === 2 && course.materialCount > 0 && !filesDone ? 1 : course.setup.step
+    // The sidebar asks the same two functions (getNavIndex), so the two never name different steps.
+    const filesDone = filesStepDone({
+      readyCount: materials.readyCount,
+      processingCount: materials.processingCount,
+      extractionRunning: !!materials.extractJob,
+      topicCount: course.topics.length,
+    })
+    const step = deriveSetupStep({ step: course.setup.step, materialCount: course.materialCount, filesDone })
     return {
       mode: 'setup',
       course,
@@ -454,6 +458,7 @@ export async function getCourseOverview(
         step,
         materials,
         topics: course.setup.topics,
+        topicPreview: course.topics.slice(0, 3).map((topic) => topic.name),
         label: course.setup.label,
         firstTopic: course.topics.find((topic) => topic.confirmed) ?? null,
         generation,

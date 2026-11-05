@@ -6,18 +6,22 @@ export function minutesLeftLabel(remainingSeconds: number): string {
   return `${Math.floor(seconds / 60)} min left today`
 }
 
-/** A session length for the summary: "1 minute", "12 minutes". */
-export function minutesLabel(minutes: number): string {
+/** A session length for the summary: "under a minute", "1 minute", "12 minutes". A session is never rounded up to a minute it did not last. */
+export function minutesLabel(seconds: number): string {
+  if (seconds < 60) return 'under a minute'
+  const minutes = Math.round(seconds / 60)
   return minutes === 1 ? '1 minute' : `${minutes} minutes`
 }
 
 /**
  * The summary's line about the session: "You talked for 3 minutes.", "You typed for 3 minutes and sent 4 messages.".
- * The verb follows how the student answered, so a session of typed answers is not "talked".
+ * The verb follows how the student answered, so a session of typed answers is not "talked", and a session with no
+ * answers at all says so instead of claiming any talking.
  */
-export function sessionLine(summary: { minutes: number; exchanges: number; typed: number }, withMessages: boolean): string {
+export function sessionLine(summary: { seconds: number; exchanges: number; typed: number }, withMessages: boolean): string {
+  if (summary.exchanges === 0) return `No answers sent. The session lasted ${minutesLabel(summary.seconds)}.`
   const verb = summary.typed === 0 ? 'talked' : summary.typed >= summary.exchanges ? 'typed' : 'talked and typed'
-  const base = `You ${verb} for ${minutesLabel(summary.minutes)}`
+  const base = `You ${verb} for ${minutesLabel(summary.seconds)}`
   return withMessages ? `${base} and sent ${summary.exchanges} ${summary.exchanges === 1 ? 'message' : 'messages'}.` : `${base}.`
 }
 

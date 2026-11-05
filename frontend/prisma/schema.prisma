@@ -26,6 +26,8 @@ model User {
   updatedAt         DateTime  @updatedAt @map("updated_at")
   // When the student closed the one-time card that says Margins asks for an attempt before it helps (spec §5).
   seenEffortIntroAt DateTime? @map("seen_effort_intro_at")
+  // When the student closed the "About this reading" row above the reader (the Focus and PDF notes), on any device.
+  seenReaderNoteAt  DateTime? @map("seen_reader_note_at")
 
   // Relations
   projects            Project[]
@@ -842,6 +844,8 @@ model ChatMessage {
   llmOutputTokens Int      @default(0) @map("llm_output_tokens")
   llmCostUsd      Decimal  @default(0) @map("llm_cost_usd") @db.Decimal(12, 6)
   createdAt       DateTime @default(now()) @map("created_at")
+  // User messages: the browser's id for this send, so a repeated send never stores the question twice.
+  clientRequestId String?  @unique @map("client_request_id")
 
   // Relations
   thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)

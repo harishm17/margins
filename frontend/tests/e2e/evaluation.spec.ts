@@ -12,6 +12,11 @@ test('the evaluation page shows its method, key numbers, failed checks and cavea
   await page.goto('/evaluation')
 
   await expect(page.getByRole('heading', { level: 1, name: 'How Margins is evaluated' })).toBeVisible()
+  // The summary and the limits are in view; each method, table and file list sits behind a closed disclosure.
+  await expect(page.getByText('What this means for you')).toBeVisible()
+  await expect(page.getByText('Limits: a small, tidy textbook corpus')).toBeVisible()
+  await expect(page.getByRole('table', { name: /Retrieval, run of October 20, 2026/ })).toBeHidden()
+  await page.evaluate(() => document.querySelectorAll('details').forEach((details) => (details.open = true)))
   for (const name of ['Retrieval', 'Generation quality', 'Model choice', 'Raw results']) {
     await expect(page.getByRole('heading', { level: 2, name })).toBeVisible()
   }
@@ -59,6 +64,11 @@ test('the evaluation page shows its method, key numbers, failed checks and cavea
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+  // On a phone no table scrolls sideways: each row is a block of label and value pairs instead.
+  expect(await page.evaluate(() => Array.from(document.querySelectorAll('[role="region"]')).filter((el) => (el as HTMLElement).offsetParent !== null).length)).toBe(0)
+  const stacked = page.getByRole('listitem').filter({ hasText: 'Hybrid search with reciprocal rank fusion' })
+  await expect(stacked.getByText('MRR')).toBeVisible()
+  await expect(stacked).toContainText('0.961')
   expect(errors).toEqual([])
 })
 

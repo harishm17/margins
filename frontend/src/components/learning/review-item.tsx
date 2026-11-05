@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { LazyMarkdown } from '@/components/ui/lazy-markdown'
 import { MathText } from '@/components/ui/math-text'
 import { QuestionText, stemHasBlocks } from '@/components/ui/question-text'
+import { outcomeLabel } from '@/lib/learning/outcome-words'
 import type { RubricLine, RubricResult } from '@/lib/learning/rubric'
 import type { SourceRef } from '@/lib/topics/sources'
 import { cn } from '@/lib/utils'
@@ -23,14 +24,18 @@ export function reviewStatus(item: { isCorrect: boolean; pointsEarned: number; n
 }
 
 const STATUS_LABEL: Record<ReviewStatus, string> = {
-  correct: 'Correct',
+  correct: outcomeLabel({ correct: true }),
   partial: 'Partly correct',
-  incorrect: 'Not quite',
+  incorrect: outcomeLabel({}),
   review: 'Needs review',
 }
 
-function StatusIcon({ status }: { status: ReviewStatus }) {
+/** "I don't know" is not a miss: nothing was attempted, so it gets a neutral mark and its own words (no red "Not quite"). */
+const statusLabel = (status: ReviewStatus, unknown: boolean) => (unknown ? outcomeLabel({ idk: true }) : STATUS_LABEL[status])
+
+function StatusIcon({ status, unknown }: { status: ReviewStatus; unknown: boolean }) {
   const common = 'size-5 shrink-0'
+  if (unknown) return <Question aria-hidden="true" weight="fill" className={cn(common, 'text-fg-3')} />
   switch (status) {
     case 'correct':
       return <CheckCircle aria-hidden="true" weight="fill" className={cn(common, 'text-accent')} />
@@ -78,6 +83,9 @@ export type ReviewItemProps = {
   gradeAction?: React.ReactNode
   className?: string
 }
+
+/** Past this many characters a question is shown as two lines with a "Show full question" button. */
+const QUESTION_CLAMP_CHARS = 140
 
 const formatPoints = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1))
 
@@ -168,15 +176,35 @@ export function ReviewItem({
 }: ReviewItemProps) {
   const showKey = status !== 'correct'
   const blocks = stemHasBlocks(questionText)
+  const unknown = !!dontKnow && !studentAnswer && status === 'incorrect'
+  // A long question is the same text the student just answered: one tap shows all of it, the rest of the card is the new information.
+  const longQuestion = questionText.length > QUESTION_CLAMP_CHARS || blocks
+  const [questionOpen, setQuestionOpen] = React.useState(false)
+  const questionId = React.useId()
   return (
     <li className={cn('flex gap-3 border-b border-border py-5 first:pt-0 last:border-b-0', className)}>
-      <StatusIcon status={status} />
+      <StatusIcon status={status} unknown={unknown} />
       <div className="min-w-0 flex-1">
-        <span className="sr-only">{STATUS_LABEL[status]}. </span>
+        <span className="sr-only">{statusLabel(status, unknown)}. </span>
         <div className="flex items-start gap-3">
           <div className="flex min-w-0 flex-1 items-start gap-2 text-body-strong text-fg">
             <span className="tabular text-fg-3">{number}</span>
-            <div className="min-w-0 flex-1">{blocks ? <QuestionText compact>{questionText}</QuestionText> : <MathText>{questionText}</MathText>}</div>
+            <div className="min-w-0 flex-1">
+              <div id={questionId} className={cn(longQuestion && !questionOpen && 'max-h-[3.25rem] overflow-hidden')}>
+                {blocks ? <QuestionText compact>{questionText}</QuestionText> : <MathText>{questionText}</MathText>}
+              </div>
+              {longQuestion ? (
+                <button
+                  type="button"
+                  aria-expanded={questionOpen}
+                  aria-controls={questionId}
+                  onClick={() => setQuestionOpen((open) => !open)}
+                  className="mt-1 inline-flex min-h-6 items-center rounded-chip text-small font-normal text-fg-2 underline-offset-2 hover:text-fg hover:underline max-sm:min-h-11"
+                >
+                  {questionOpen ? 'Hide full question' : 'Show full question'}
+                </button>
+              ) : null}
+            </div>
           </div>
           <span className="shrink-0 tabular text-small text-fg-2">
             {formatPoints(pointsEarned)} of {formatPoints(points)} {points === 1 ? 'pt' : 'pts'}
@@ -187,6 +215,7 @@ export function ReviewItem({
           {topicName ? <Badge>{topicName}</Badge> : null}
           {status === 'review' ? <Badge tone="warning">Needs review</Badge> : null}
           {status === 'partial' ? <Badge tone="warning">Partly correct</Badge> : null}
+          {unknown ? <Badge>{outcomeLabel({ idk: true })}</Badge> : null}
         </div>
 
         <dl className="mt-3 flex flex-col gap-3">

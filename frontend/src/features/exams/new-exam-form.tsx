@@ -30,6 +30,7 @@ import {
   QUESTION_COUNTS,
   QUESTION_MIXES,
   TIME_LIMITS,
+  coverageNote,
   difficultyLabel,
   examSummary,
   type Difficulty,
@@ -139,6 +140,12 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
     },
   })
 
+  // A ticked topic with no pages is left out of the exam, so only the others count toward being able to create one.
+  const ticked = topics.filter((topic) => selected.has(topic.id))
+  const withoutPages = ticked.filter((topic) => !topic.hasPages).length
+  const coverable = ticked.length - withoutPages
+  const coverage = coverageNote(ticked.length, withoutPages)
+  const canCreate = coverable > 0
   const matchStyle = examStyle.kind === 'ready' && matchPastExams
 
   const toggle = (id: string, checked: boolean) =>
@@ -209,7 +216,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
       noValidate
       onSubmit={(event) => {
         event.preventDefault()
-        if (selected.size > 0 && !submitting && !blocked) void create()
+        if (canCreate && !submitting && !blocked) void create()
       }}
       className="flex flex-col gap-8"
     >
@@ -233,7 +240,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
 
       <section aria-labelledby="exam-topics" className="flex flex-col gap-3">
         <div className="flex items-end justify-between gap-3">
-          <SectionLabel id="exam-topics" hint="Topics that are due or still being learned are ticked for you.">
+          <SectionLabel id="exam-topics" hint="Topics that are due or still being learned are ticked for you. Topics without source pages are left out until you add some.">
             Topics
           </SectionLabel>
           <div className="flex shrink-0 items-center gap-1">
@@ -262,7 +269,12 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
                   <span className="min-w-0 flex-1">
                     <span className="block truncate">{topic.name}</span>
                     {topic.hasPages ? null : (
-                      <span className="block text-caption font-normal text-warning-soft-fg">No pages linked yet, so it may be left out</span>
+                      <span className="block text-caption font-normal text-warning-soft-fg">
+                        Add source pages to include.{' '}
+                        <Link href={`/courses/${courseId}/topics?edit=1`} className="underline underline-offset-2">
+                          Edit topics
+                        </Link>
+                      </span>
                     )}
                   </span>
                   <MasteryIndicator mastery={topic.mastery} className="shrink-0" />
@@ -389,15 +401,31 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
         </section>
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-border pt-6">
+      {/* On a phone the summary and Create exam stay in view above the tab bar, so opening the settings never pushes them off screen. */}
+      <div className="flex flex-col gap-3 border-t border-border pt-6 max-sm:sticky max-sm:bottom-(--tabbar-height,0px) max-sm:z-sticky max-sm:-mx-4 max-sm:bg-surface max-sm:px-4 max-sm:py-3">
+        <p className="text-small text-fg-2 empty:hidden" data-testid="exam-footer-summary">
+          <span className="sm:hidden">{examSummary({ questionCount: totalQuestions, durationMinutes, difficulty })}. </span>
+          {coverage}
+        </p>
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="primary" size="lg" loading={submitting} disabled={selected.size === 0 || !!blocked} disabledReason={selected.size === 0 ? 'Pick at least one topic first.' : 'AI is unavailable right now.'}>
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            loading={submitting}
+            disabled={!canCreate || !!blocked}
+            disabledReason={!canCreate ? (ticked.length === 0 ? 'Pick at least one topic first.' : 'Add source pages to a topic first, or tick one that has pages.') : 'AI is unavailable right now.'}
+          >
             Create exam
           </Button>
           <Button asChild variant="ghost" size="lg">
             <Link href={`/courses/${courseId}/exams`}>Cancel</Link>
           </Button>
-          {selected.size === 0 ? <span className="text-small text-fg-2">Pick at least one topic.</span> : null}
+          {!canCreate ? (
+            <span className="text-small text-fg-2">
+              {ticked.length === 0 ? 'Pick at least one topic.' : 'None of the ticked topics has source pages yet.'}
+            </span>
+          ) : null}
         </div>
         <AiBlockedNote />
       </div>

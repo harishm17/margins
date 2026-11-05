@@ -44,7 +44,7 @@ export type ShortSessionPlan = {
   href: string | null
 }
 
-const itemMinutes = (count: number, ai: 'up' | 'down') => Math.ceil(count * (ai === 'down' ? 1 : 1.5))
+export const itemMinutes = (count: number, ai: 'up' | 'down') => Math.ceil(count * (ai === 'down' ? 1 : 1.5))
 
 /** What to offer, or null when there is nothing to do in a short session (nothing due and no topic to quiz). */
 export function shortSessionPlan(state: ShortSessionState): ShortSessionPlan | null {

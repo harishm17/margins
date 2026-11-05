@@ -39,7 +39,7 @@ export function ExplainerGate({ topicId, recallHref, readHref, canUnlock }: { to
   return (
     <EmptyState
       icon={<LockSimple />}
-      title="Try recalling first. It's how this sticks"
+      title="Try Recall to get an explanation of your gaps"
       action={
         <Button asChild variant="primary">
           <Link href={recallHref} scroll={false}>
@@ -58,14 +58,15 @@ export function ExplainerGate({ topicId, recallHref, readHref, canUnlock }: { to
             </>
           ) : (
             // Not a disabled button with a reason under it: until the topic is read there is nothing to press, so the other way to the
-            // explanation is a real link (to the reading), said in a sentence that also says where the reading stands.
-            <p className="text-center text-small text-fg-2">
-              You have not finished reading this topic yet. Finish it to unlock the explanation:{' '}
-              <Link href={readHref} scroll={false} className="rounded-chip text-accent underline underline-offset-2 hover:text-accent-hover max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
-                Read the topic
-              </Link>
-              .
-            </p>
+            // explanation is a real link to the reading, with its requirement said once.
+            <>
+              <Button asChild variant="link" className="text-small">
+                <Link href={readHref} scroll={false}>
+                  Read the topic first
+                </Link>
+              </Button>
+              <p className="text-center text-caption text-fg-3">Finishing the reading also opens the explanation.</p>
+            </>
           )}
           {error ? (
             <InlineAlert tone="danger" className="mt-2 text-left">
@@ -75,7 +76,7 @@ export function ExplainerGate({ topicId, recallHref, readHref, canUnlock }: { to
         </div>
       }
     >
-      Writing what you remember before you read an explanation makes the explanation stick. Try recall now, or finish reading the topic to unlock the explanation.
+      Writing what you remember first is what makes an explanation stick.
     </EmptyState>
   )
 }

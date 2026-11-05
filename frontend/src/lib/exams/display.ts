@@ -31,6 +31,20 @@ export function shortExamTitle(title: string): string {
   return `${first} · Mock${match[2] ? ` ${match[2]}` : ''}`
 }
 
+/** A generated title as examTitle builds it: "Mock exam, Nov 4: Sorting, Hash tables (2)", the topics and the number optional. */
+const FULL_GENERATED_TITLE = /^Mock exam, ([A-Z][a-z]{2} \d{1,2}(?:, \d{4})?)(?:: (.+?))?(?: \((\d+)\))?$/
+
+/**
+ * A generated title split into the name to show in a heading or breadcrumb ("Mock exam · Nov 4", with the number that tells two of
+ * a day apart) and the topics it covers, which are said on their own line. The stored name keeps the full form, so older exams
+ * still read right. A name the student gave is returned as it is, with no topics line.
+ */
+export function splitExamTitle(title: string): { name: string; covers: string | null } {
+  const match = FULL_GENERATED_TITLE.exec(title)
+  if (!match) return { name: title, covers: null }
+  return { name: `Mock exam · ${match[1]}${match[3] ? ` (${match[3]})` : ''}`, covers: match[2] ?? null }
+}
+
 type TitledExam = { id: string; name: string; createdAt: string | Date; topicsCovered?: readonly string[] }
 
 /**

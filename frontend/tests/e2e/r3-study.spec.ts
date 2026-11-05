@@ -23,19 +23,19 @@ async function theme(page: Page) {
     document.documentElement.classList.toggle('dark', value === 'dark')
   }, dark ? 'dark' : 'light')
 }
-
-const pathTabs = (page: Page) => page.getByRole('navigation', { name: 'Topic path' })
+// The path: one line on a phone (the button that opens the steps), the five tabs on a wide screen. Only the visible one counts.
+const pathTabs = (page: Page) => page.locator('[data-testid="phone-path"], nav[aria-label="Topic path"]').locator('visible=true')
 const attemptBar = (page: Page) => page.getByTestId('attempt-bar')
 
 /** The action ends above the course bar without scrolling to it: it is in the first screen. */
 async function expectAboveCourseBar(page: Page, action: Locator, label: string) {
-  const bar = await page.getByRole('navigation', { name: 'Course tabs' }).boundingBox()
+  // The course bar gives way during an attempt (the shell hides it), so the action need only end inside the screen then.
+  const tabs = page.getByRole('navigation', { name: 'Course tabs' })
+  const bar = (await tabs.count()) > 0 ? await tabs.boundingBox() : null
   const box = await action.boundingBox()
-  expect(bar, 'the course bar is on screen').not.toBeNull()
   expect(box, `${label} is on screen`).not.toBeNull()
-  expect(box!.y + box!.height, `${label} ends above the course bar`).toBeLessThanOrEqual(bar!.y)
+  expect(box!.y + box!.height, `${label} ends above the course bar`).toBeLessThanOrEqual(bar ? bar.y : (page.viewportSize()?.height ?? 844))
 }
-
 async function expectCompact(page: Page) {
   await expect(attemptBar(page)).toBeVisible()
   await expect(attemptBar(page).getByText('Exit')).toBeVisible()
@@ -53,7 +53,7 @@ test.describe('an attempt on a phone', () => {
     // The lobby keeps the path and says the misses are fine.
     await expect(pathTabs(page)).toBeVisible()
     await expect(attemptBar(page)).toHaveCount(0)
-    await expect(page.getByText('It is fine to miss these: they show you where to focus your reading')).toBeVisible()
+    await expect(page.getByText('Try what you know; answers and page pointers come at the end').locator('visible=true')).toBeVisible()
     await screenshotIfAsked(page, 'r3-warmup-intro-390x844')
     await page.getByRole('button', { name: 'Start warm-up' }).click()
 
@@ -109,7 +109,7 @@ test.describe('an attempt on a phone', () => {
     await page.goto(`${base}?view=quiz`)
     // The lobby keeps the path and offers the optional guess in words.
     await expect(pathTabs(page)).toBeVisible()
-    await expect(page.getByText('Guess your score to compare it with your result (optional)')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Guess your score (optional)' })).toBeVisible()
     await page.getByRole('button', { name: 'Start quiz' }).click()
     await expect(page.getByRole('heading', { name: 'Question 1 of 4' })).toBeVisible()
     await expectCompact(page)
@@ -142,10 +142,10 @@ test.describe('the study copy', () => {
     await page.setViewportSize(PHONE)
     const { topicUrl } = await recallWorld(page, 'r3-gate', { readAt: false })
     await page.goto(`${topicUrl}?view=explainer`)
-    await expect(page.getByRole('heading', { name: "Try recalling first. It's how this sticks" })).toBeVisible()
-    await expect(page.getByText('Try recall now, or finish reading the topic to unlock the explanation.')).toBeVisible()
-    await expect(page.getByText('You have not finished reading this topic yet.')).toBeVisible()
-    const read = page.getByRole('link', { name: 'Read the topic' })
+    await expect(page.getByRole('heading', { name: 'Try Recall to get an explanation of your gaps' })).toBeVisible()
+    await expect(page.getByText('Writing what you remember first is what makes an explanation stick.')).toBeVisible()
+    await expect(page.getByText('Finishing the reading also opens the explanation.')).toBeVisible()
+    const read = page.getByRole('link', { name: 'Read the topic first' })
     await expect(read).toHaveAttribute('href', /view=read/)
     // A standalone link is a 44px target on a phone.
     expect((await read.boundingBox())!.height).toBeGreaterThanOrEqual(44)
@@ -175,7 +175,7 @@ test.describe('the mock exam', () => {
     await expect(page.getByRole('textbox', { name: 'Name' })).toBeVisible()
     await screenshotIfAsked(page, 'r3-exam-new-settings-390x844')
     // A topic with no pages linked says so beside its name, before the exam is written.
-    await expect(page.getByText('No pages linked yet, so it may be left out').first()).toBeVisible()
+    await expect(page.getByText('Add source pages to include.').first()).toBeVisible()
     await expectNoAxeViolations(page, 'new exam, 390')
   })
 })

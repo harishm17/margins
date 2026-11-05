@@ -19,7 +19,7 @@ export function Welcome() {
       <div className="flex flex-col gap-10">
         <section aria-labelledby="stages-heading">
           <h2 id="stages-heading" className="text-heading text-fg">
-            How a course goes
+            Set up your first course
           </h2>
           <p className="mt-1 text-small text-fg-2">{COURSE_STAGES_SUMMARY}</p>
           <ol className="mt-5 flex flex-col gap-5">

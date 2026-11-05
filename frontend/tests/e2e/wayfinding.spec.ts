@@ -78,8 +78,9 @@ test.describe('the course overview', () => {
     const exam = page.getByRole('region', { name: 'When is your exam?' })
     await expect(exam).toBeVisible()
     const [upBox, examBox] = [await upNext.boundingBox(), await exam.boundingBox()]
-    expect(upBox!.y).toBeLessThan(examBox!.y)
-    expect(examBox!.height).toBeLessThan(120)
+    // The date is a line in the header: above the next step, not a card between it and the topics.
+    expect(examBox!.y).toBeLessThan(upBox!.y)
+    expect(examBox!.height).toBeLessThan(80)
   })
 })
 
@@ -134,14 +135,11 @@ test.describe('a phone', () => {
     // The course and the unit are named above the page name, and every step of its path (a course with no concepts: Read, Practice, Quiz) is on screen.
     const crumb = page.getByRole('navigation', { name: 'Breadcrumb' })
     await expect(crumb.getByText(/A course with a long name for a phone \/ Unit with a long title/)).toBeVisible()
-    const study = page.getByRole('navigation', { name: 'Topic path' })
-    const edges = await study.evaluate((nav) => {
-      const links = [...nav.querySelectorAll('a')].filter((link) => link.offsetParent !== null)
-      const row = nav.firstElementChild as HTMLElement
-      return { count: links.length, scrolls: row.scrollWidth > row.clientWidth + 1, sw: row.scrollWidth, cw: row.clientWidth }
-    })
-    expect(edges.count).toBe(3)
-    expect(edges.scrolls, JSON.stringify(edges)).toBe(false)
+    // On a phone the path is one line, "Step 1 of 3: Read", that opens the sheet of its three steps.
+    await expect(page.getByTestId('phone-path')).toHaveText(/Step 1 of 3: Read/)
+    await page.getByTestId('phone-path').click()
+    await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link')).toHaveCount(3)
+    await page.keyboard.press('Escape')
 
     // More holds the other places in the course.
     await tabs.getByRole('button', { name: 'More' }).click()

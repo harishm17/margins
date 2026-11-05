@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { weekStart, type Plan, type PlanDay } from '@/lib/learning/plan'
+import { groupEmptyRuns } from './empty-runs'
 import {
   dayLabel,
   daySummary,
@@ -174,7 +175,7 @@ function DayLine({ day, items, rest }: { day: PlanDay; items: DescribedPlanItem[
           </h3>
           <span className="flex shrink-0 items-center gap-1.5 sm:order-last">
             <DayBadges day={day} collapsed />
-            <span className="tabular text-caption font-normal text-fg-3">{minutes} min</span>
+            <span className="tabular text-caption font-normal text-fg-3 max-sm:text-small">{minutes} min</span>
             <CaretDown aria-hidden="true" className="size-4 text-fg-3 transition-transform duration-180 group-open:rotate-180" />
           </span>
           <span className="min-w-0 flex-1 truncate text-small text-fg-2 max-sm:order-last max-sm:basis-full">
@@ -191,15 +192,70 @@ function DayLine({ day, items, rest }: { day: PlanDay; items: DescribedPlanItem[
 
 /** What an empty day says. With an exam date it is a real rest day; without one the plan only reaches as far as the topics do. */
 const restText = (plan: Pick<Plan, 'mode'>) =>
-  plan.mode === 'exam' ? 'Nothing planned. A good day to rest.' : 'No tasks yet. Set an exam date to fill these days.'
+  plan.mode === 'exam' ? 'Nothing planned. A good day to rest.' : 'Nothing planned yet. Set an exam date to fill these days.'
 
-type WeekProps = { describe: (day: PlanDay) => DescribedPlanItem[]; open: ReadonlySet<string>; rest: string }
+type WeekProps = {
+  describe: (day: PlanDay) => DescribedPlanItem[]
+  open: ReadonlySet<string>
+  rest: string
+  /** The plan's mode and where the exam date is changed, for the one row that stands for a stretch of empty days. */
+  mode: Plan['mode']
+  settingsHref: string
+}
 
-function WeekDays({ week, describe, open, rest }: WeekProps & { week: Week }) {
-  // Today and the next two days show their items; every other day is a line.
+/**
+ * Days with nothing planned that follow each other are one row: "Nov 8 - Nov 14: nothing planned yet", with the one action
+ * that fills them (a rolling plan: set an exam date), and "Show every day" for anyone who wants the days one by one.
+ */
+function EmptyRun({ days, rest, mode, settingsHref }: { days: PlanDay[]; rest: string; mode: Plan['mode']; settingsHref: string }) {
+  const first = days[0].date
+  const last = days[days.length - 1].date
+  return (
+    <li aria-label={`${dayLabel(first)} to ${dayLabel(last)}: nothing planned`} className="rounded-card border border-border bg-surface">
+      <div className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
+        <p className="min-w-0 flex-1 text-small text-fg-2">
+          <span className="font-medium text-fg-2">
+            {dayLabel(first)} - {dayLabel(last)}:
+          </span>{' '}
+          {mode === 'exam' ? 'nothing planned. Good days to rest.' : 'nothing planned yet.'}
+        </p>
+        {mode === 'rolling' ? (
+          <Link
+            href={settingsHref}
+            className="inline-flex min-h-6 items-center rounded-chip text-small text-accent hover:underline max-sm:min-h-11"
+          >
+            Set an exam date
+          </Link>
+        ) : null}
+      </div>
+      <details className="group border-t border-border">
+        <summary className="inline-flex min-h-11 w-full cursor-pointer list-none items-center gap-1.5 px-4 text-caption text-fg-3 hover:text-fg max-sm:text-small [&::-webkit-details-marker]:hidden">
+          Show every day
+          <CaretDown aria-hidden="true" className="size-3.5 transition-transform duration-180 group-open:rotate-180" />
+        </summary>
+        <ol className="flex flex-col gap-2 px-4 pb-3">
+          {days.map((day) => (
+            <li key={day.date} className="flex flex-wrap items-center gap-x-3 text-small text-fg-2">
+              <span className="w-[116px] shrink-0 font-medium">{dayLabel(day.date)}</span>
+              <span>{rest}</span>
+            </li>
+          ))}
+        </ol>
+      </details>
+    </li>
+  )
+}
+
+function WeekDays({ week, describe, open, rest, mode, settingsHref }: WeekProps & { week: Week }) {
+  // Today and the next two days show their items; every other day is a line; a stretch of empty days is one row.
+  const rows = groupEmptyRuns(week.days, (day) => !open.has(day.date) && describe(day).length === 0)
   return (
     <ol className="flex flex-col gap-3">
-      {week.days.map((day) => {
+      {rows.map((row) => {
+        if (row.kind === 'empty') {
+          return <EmptyRun key={row.days[0].date} days={row.days} rest={rest} mode={mode} settingsHref={settingsHref} />
+        }
+        const { day } = row
         const items = describe(day)
         return open.has(day.date) ? (
           <DayCard key={day.date} day={day} items={items} rest={rest} />
@@ -211,7 +267,7 @@ function WeekDays({ week, describe, open, rest }: WeekProps & { week: Week }) {
   )
 }
 
-function WeekSection({ week, current, describe, open, rest }: WeekProps & { week: Week; current: boolean }) {
+function WeekSection({ week, current, describe, open, rest, mode, settingsHref }: WeekProps & { week: Week; current: boolean }) {
   const headingId = `week-${week.start}`
   return (
     <section aria-labelledby={headingId}>
@@ -224,14 +280,14 @@ function WeekSection({ week, current, describe, open, rest }: WeekProps & { week
           {rest === restText({ mode: 'exam' }) ? 'Nothing planned this week. A good time to rest or catch up.' : rest}
         </p>
       ) : (
-        <WeekDays week={week} describe={describe} open={open} rest={rest} />
+        <WeekDays week={week} describe={describe} open={open} rest={rest} mode={mode} settingsHref={settingsHref} />
       )}
     </section>
   )
 }
 
 /** A week in the middle of a long plan: one line with what it holds, opening to its days. */
-function FoldedWeek({ week, describe, open, rest }: WeekProps & { week: Week }) {
+function FoldedWeek({ week, describe, open, rest, mode, settingsHref }: WeekProps & { week: Week }) {
   const items = week.days.flatMap((day) => day.items)
   const count = items.length
   const minutes = week.days.reduce((sum, day) => sum + day.minutes + day.doneMinutes, 0)
@@ -241,12 +297,12 @@ function FoldedWeek({ week, describe, open, rest }: WeekProps & { week: Week }) 
         <summary className="flex min-h-11 cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-0.5 rounded-card px-4 py-2 hover:bg-surface-2 [&::-webkit-details-marker]:hidden">
           <h2 className="min-w-0 flex-1 text-body-strong text-fg">{weekLabel(week.start)}</h2>
           <span className="flex shrink-0 items-center gap-2 text-small text-fg-2">
-            {count === 0 ? (rest === restText({ mode: 'exam' }) ? 'Nothing planned' : 'No tasks yet') : `${pluralize(count, 'item')}, about ${minutesLabel(minutes)}`}
+            {count === 0 ? (rest === restText({ mode: 'exam' }) ? 'Nothing planned' : 'Nothing planned yet') : `${pluralize(count, 'item')}, about ${minutesLabel(minutes)}`}
             <CaretDown aria-hidden="true" className="size-4 text-fg-3 transition-transform duration-180 group-open:rotate-180" />
           </span>
         </summary>
         <div className="border-t border-border p-3">
-          <WeekDays week={week} describe={describe} open={open} rest={rest} />
+          <WeekDays week={week} describe={describe} open={open} rest={rest} mode={mode} settingsHref={settingsHref} />
         </div>
       </details>
     </li>
@@ -431,7 +487,7 @@ export function PlanView({
       ) : (
         <div className="mt-6 flex flex-col gap-10">
           {head.map((week) => (
-            <WeekSection key={week.start} week={week} current={week.start === thisWeek} describe={describe} open={open} rest={rest} />
+            <WeekSection key={week.start} week={week} current={week.start === thisWeek} describe={describe} open={open} rest={rest} mode={plan.mode} settingsHref={`${base}/settings`} />
           ))}
           {middle.length > 0 ? (
             <section aria-labelledby="later-weeks-heading">
@@ -440,13 +496,13 @@ export function PlanView({
               </h2>
               <ul className="flex flex-col gap-3">
                 {middle.map((week) => (
-                  <FoldedWeek key={week.start} week={week} describe={describe} open={open} rest={rest} />
+                  <FoldedWeek key={week.start} week={week} describe={describe} open={open} rest={rest} mode={plan.mode} settingsHref={`${base}/settings`} />
                 ))}
               </ul>
             </section>
           ) : null}
           {tail.map((week) => (
-            <WeekSection key={week.start} week={week} current={false} describe={describe} open={open} rest={rest} />
+            <WeekSection key={week.start} week={week} current={false} describe={describe} open={open} rest={rest} mode={plan.mode} settingsHref={`${base}/settings`} />
           ))}
         </div>
       )}

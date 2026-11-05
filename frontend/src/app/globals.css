@@ -28,6 +28,10 @@
   --fg-2: oklch(0.43 0.012 255);
   /* Meta text: 4.6:1 even on the grey fills (surface-3), where 0.54 was 4.2:1. */
   --fg-3: oklch(0.52 0.01 255);
+  /* Lines between ideas on the knowledge map. Both are graphics, so they need 3:1 (WCAG 1.4.11) on the canvas and the
+     surface; "suggested" is told apart by a dashed line, never by being fainter. */
+  --edge-confirmed: oklch(0.43 0.012 255);
+  --edge-suggested: oklch(0.52 0.01 255);
 
   --accent: oklch(0.52 0.11 168);
   --accent-hover: oklch(0.47 0.11 168);
@@ -65,6 +69,13 @@
   --topbar-height: calc(56px + env(safe-area-inset-top, 0px));
 }
 
+/* While a study attempt is open the phone hides the app bar (see useShellAttempt); sticky offsets drop its height too. */
+@media (max-width: 1023px) {
+  :root[data-shell-attempt] {
+    --topbar-height: env(safe-area-inset-top, 0px);
+  }
+}
+
 .dark {
   color-scheme: dark;
 
@@ -78,6 +89,8 @@
   --fg: oklch(0.95 0.004 255);
   --fg-2: oklch(0.77 0.008 255);
   --fg-3: oklch(0.65 0.008 255);
+  --edge-confirmed: oklch(0.77 0.008 255);
+  --edge-suggested: oklch(0.65 0.008 255);
 
   --accent: oklch(0.74 0.12 168);
   --accent-hover: oklch(0.79 0.12 168);
@@ -116,6 +129,8 @@
   --color-fg: var(--fg);
   --color-fg-2: var(--fg-2);
   --color-fg-3: var(--fg-3);
+  --color-edge-confirmed: var(--edge-confirmed);
+  --color-edge-suggested: var(--edge-suggested);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-fg: var(--accent-fg);
@@ -383,6 +398,24 @@
 /* Numbers that update or are compared. */
 @utility tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+  Phone type floor. The scale stays 14 / 13 / 12 (muted text and control outlines keep their contrast), but copy a student has to
+  act on is never set under 14px on a phone: button labels, error and blocker messages, and the one line of instruction above a
+  control use `phone-body` (14px below 640px, whatever size they have above it). The 12px caption is for metadata only. Long
+  explanations use `phone-reading`, the 17/29 reading style of the topic reader.
+*/
+@utility phone-body {
+  @media (max-width: 639px) {
+    font-size: 14px;
+    line-height: 22px;
+  }
+}
+
+@utility phone-reading {
+  font-size: var(--text-reading);
+  line-height: var(--text-reading--line-height);
 }
 
 @layer base {

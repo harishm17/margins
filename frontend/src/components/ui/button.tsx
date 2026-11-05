@@ -35,7 +35,7 @@ export const buttonVariants = cva(
         ].join(' '),
       },
       size: {
-        sm: 'h-7 gap-1.5 px-2.5 text-small max-sm:h-11',
+        sm: 'h-7 gap-1.5 px-2.5 text-small max-sm:h-11 max-sm:text-body',
         md: 'h-[34px] gap-1.5 px-3.5 text-body max-sm:h-11',
         lg: 'h-10 gap-1.5 px-[18px] text-[15px] leading-[22px] max-sm:h-11',
       },

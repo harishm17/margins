@@ -388,8 +388,9 @@ const SHOTS: Shot[] = [
     crop: async (page) => {
       const height = Math.round(MAIN.width / FRAME)
       const rows = await page.locator('main tbody tr').evaluateAll((items) => items.map((item) => item.getBoundingClientRect().bottom))
-      const bottom = Math.round(Math.max(...rows.filter((value) => value <= height + 24)))
-      return fitRatio(page, [MAIN.left, Math.max(0, bottom - height), MAIN.width, Math.min(height, bottom)], FRAME, { bottom })
+      // A short list (the file roles now come first) still fills the frame from the top of the page.
+      const bottom = Math.max(height, Math.round(Math.max(...rows.filter((value) => value <= height + 24))))
+      return fitRatio(page, [MAIN.left, Math.max(0, bottom - height), MAIN.width, height], FRAME, { bottom })
     },
   },
   {
@@ -484,6 +485,8 @@ const SHOTS: Shot[] = [
     prepare: async (page) => {
       await openThread(page)
       await page.getByText('Both take').waitFor()
+      // The source list is folded under "N sources"; the frame shows it open.
+      await page.locator('main').getByRole('button', { name: /^\d+ sources?$/ }).last().click()
       await page.getByRole('button', { name: /Source 1/ }).first().hover()
       await page.getByText('Open page').first().waitFor()
       await page.waitForTimeout(400)
@@ -559,6 +562,8 @@ const SHOTS: Shot[] = [
     prepare: async (page) => {
       await openThread(page)
       await page.getByText('Both take').waitFor()
+      // The source list is folded under "N sources"; the frame shows it open.
+      await page.locator('main').getByRole('button', { name: /^\d+ sources?$/ }).last().click()
       // Scroll the answer up, so the citation card opens above the tab bar and not over it.
       await scrollTo(page.getByRole('button', { name: /Source 1/ }).first(), 250)
       await page.getByRole('button', { name: /Source 1/ }).first().click()

@@ -14,6 +14,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
@@ -53,6 +54,9 @@ const bodySchema = z.object({
   conceptId: z.string().uuid().optional(),
   // "Show me a worked example" (spec 6.2): the student's button, allowed after one genuine attempt.
   event: z.enum(['show_worked']).optional(),
+  // The browser's id for this send. The same id again (a double Enter, a retry after a dropped connection, a reload while the
+  // request was in flight) is answered with the conversation that already holds the question instead of storing it twice.
+  clientRequestId: z.string().uuid().optional(),
 })
 
 function chatFailure(code: string) {
@@ -95,7 +99,7 @@ export async function POST(
   if (!parsed.success) {
     return apiInvalidInput(parsed.error.issues[0]?.message ?? 'Invalid input', zodDetails(parsed.error))
   }
-  const { threadId, topicId, conceptId } = parsed.data
+  const { threadId, topicId, conceptId, clientRequestId } = parsed.data
   const showWorked = parsed.data.event === 'show_worked'
   const question = showWorked ? WORKED_EXAMPLE_REQUEST : parsed.data.question
 
@@ -105,6 +109,15 @@ export async function POST(
     select: { id: true },
   })
   if (!project) return apiNotFound('Project not found')
+
+  // A send the server already took: say where it went. Nothing is asked of the model or stored a second time.
+  if (clientRequestId) {
+    const taken = await prisma.chatMessage.findFirst({
+      where: { clientRequestId, thread: { projectId, userId } },
+      select: { threadId: true },
+    })
+    if (taken) return NextResponse.json({ duplicate: true, threadId: taken.threadId })
+  }
 
   if (topicId) {
     const topic = await prisma.topic.findFirst({ where: { id: topicId, projectId }, select: { id: true } })
@@ -188,11 +201,18 @@ export async function POST(
       })
     }
     const userMessage = await prisma.chatMessage.create({
-      data: { threadId: thread.id, role: 'user', content: declined ? EXAM_GUARD_NOTE : question },
+      data: { threadId: thread.id, role: 'user', content: declined ? EXAM_GUARD_NOTE : question, clientRequestId: clientRequestId ?? null },
       select: { id: true },
     })
     userMessageId = userMessage.id
   } catch (error) {
+    // The same send arrived twice at once and the other one stored it first: no second question, and no empty conversation left behind.
+    if (clientRequestId && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      await upstream.cancel().catch(() => {})
+      const taken = await prisma.chatMessage.findFirst({ where: { clientRequestId }, select: { threadId: true } })
+      if (isNewThread && thread && thread.id !== taken?.threadId) await prisma.chatThread.delete({ where: { id: thread.id } }).catch(() => {})
+      return NextResponse.json({ duplicate: true, threadId: taken?.threadId ?? null })
+    }
     console.error('[CHAT] Could not store the question:', error)
     await upstream.cancel().catch(() => {})
     return apiError(ApiErrorCode.INTERNAL_ERROR, 'Could not save your question. Try again.', undefined, 500)

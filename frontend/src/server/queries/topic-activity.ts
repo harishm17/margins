@@ -1,5 +1,5 @@
 import { loadTopicLearningState, resolveTopicActivity } from '@/lib/learning/next-activity-server'
-import { nextPathStep } from '@/features/topic/activity-copy'
+import { activityTitle, nextPathStep } from '@/features/topic/activity-copy'
 import { nextStepWords, pathGlyphs, pathSteps, type PathGlyph } from '@/features/topic/path-steps'
 import type { NextStep } from '@/lib/learning/next-step'
 import { overlayActivity, wantsTopicActivity, type ActivityOverlay } from '@/features/topic/step-activity'
@@ -14,12 +14,18 @@ export async function withTopicActivity(
   userId: string,
   courseId: string,
   step: NextStep,
-  topics: { id: string; unitId: string | null; confirmed: boolean }[],
+  topics: { id: string; unitId: string | null; confirmed: boolean; name?: string }[],
   listConfirmed: boolean
 ): Promise<NextStep> {
   const topicId = wantsTopicActivity(step)
-  if (!topicId || !topics.some((item) => item.id === topicId)) return step
-  return overlayActivity(step, await topicActivity(userId, courseId, topicId, topics, listConfirmed))
+  const topic = topics.find((item) => item.id === topicId)
+  if (!topicId || !topic) return step
+  const activity = await topicActivity(userId, courseId, topicId, topics, listConfirmed)
+  const worded = overlayActivity(step, activity)
+  // The title is the activity's name too, not the plan's generic "Learn <topic>", so the overview, Home and the topic's own
+  // button call one activity by one name (activity-copy.ts), followed by the topic it is in.
+  const name = activityTitle(activity)
+  return { ...worded, title: topic.name ? `${name}: ${topic.name}` : name }
 }
 
 type TopicRef = { id: string; unitId: string | null; confirmed: boolean }

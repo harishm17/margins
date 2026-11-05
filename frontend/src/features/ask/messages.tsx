@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { ArrowClockwise, Info } from '@phosphor-icons/react/dist/ssr'
+import { ArrowClockwise, Info, PencilSimple } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { LazyMarkdown } from '@/components/ui/lazy-markdown'
@@ -137,15 +137,36 @@ export function LiveAnswer({ turn }: { turn: LiveTurn }) {
   )
 }
 
-export function FailureBlock({ message, onRetry, disabled }: { message: FailureMessage; onRetry: () => void; disabled?: boolean }) {
+export function FailureBlock({
+  message,
+  onRetry,
+  onEdit,
+  disabled,
+}: {
+  message: FailureMessage
+  onRetry: () => void
+  /** Puts the question back in the box to be changed; the failed try makes way for it. */
+  onEdit?: () => void
+  disabled?: boolean
+}) {
+  const again = message.retryable && !!message.question
   return (
     <InlineAlert
       tone="danger"
       action={
-        message.retryable && message.question ? (
-          <Button size="sm" variant="secondary" icon={<ArrowClockwise />} onClick={onRetry} disabled={disabled}>
-            Try again
-          </Button>
+        again || (onEdit && message.question) ? (
+          <span className="flex flex-wrap items-center gap-2">
+            {again ? (
+              <Button size="sm" variant="secondary" icon={<ArrowClockwise />} onClick={onRetry} disabled={disabled}>
+                Try again
+              </Button>
+            ) : null}
+            {onEdit && message.question ? (
+              <Button size="sm" variant="ghost" icon={<PencilSimple />} onClick={onEdit} disabled={disabled}>
+                Edit question
+              </Button>
+            ) : null}
+          </span>
         ) : undefined
       }
     >

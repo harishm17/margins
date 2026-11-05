@@ -14,18 +14,24 @@ describe('minutesLeftLabel', () => {
 
 describe('sessionLine', () => {
   it('says talked for spoken answers, typed for typed ones, and both when mixed', () => {
-    assert.equal(sessionLine({ minutes: 3, exchanges: 4, typed: 0 }, false), 'You talked for 3 minutes.')
-    assert.equal(sessionLine({ minutes: 1, exchanges: 4, typed: 4 }, false), 'You typed for 1 minute.')
-    assert.equal(sessionLine({ minutes: 3, exchanges: 4, typed: 1 }, true), 'You talked and typed for 3 minutes and sent 4 messages.')
-    assert.equal(sessionLine({ minutes: 2, exchanges: 1, typed: 1 }, true), 'You typed for 2 minutes and sent 1 message.')
-    assert.equal(sessionLine({ minutes: 1, exchanges: 0, typed: 0 }, true), 'You talked for 1 minute and sent 0 messages.')
+    assert.equal(sessionLine({ seconds: 12 * 60, exchanges: 3, typed: 0 }, false), 'You talked for 12 minutes.')
+    assert.equal(sessionLine({ seconds: 40, exchanges: 1, typed: 1 }, false), 'You typed for under a minute.')
+    assert.equal(sessionLine({ seconds: 180, exchanges: 4, typed: 1 }, true), 'You talked and typed for 3 minutes and sent 4 messages.')
+    assert.equal(sessionLine({ seconds: 120, exchanges: 1, typed: 1 }, true), 'You typed for 2 minutes and sent 1 message.')
+  })
+
+  it('never claims talking or a minute for a session with no answers', () => {
+    assert.equal(sessionLine({ seconds: 5, exchanges: 0, typed: 0 }, true), 'No answers sent. The session lasted under a minute.')
+    assert.equal(sessionLine({ seconds: 5, exchanges: 0, typed: 0 }, false), 'No answers sent. The session lasted under a minute.')
+    assert.equal(sessionLine({ seconds: 3 * 60, exchanges: 0, typed: 0 }, true), 'No answers sent. The session lasted 3 minutes.')
   })
 })
 
 describe('minutesLabel', () => {
-  it('pluralises', () => {
-    assert.equal(minutesLabel(1), '1 minute')
-    assert.equal(minutesLabel(12), '12 minutes')
+  it('pluralises and never rounds a short session up', () => {
+    assert.equal(minutesLabel(59), 'under a minute')
+    assert.equal(minutesLabel(60), '1 minute')
+    assert.equal(minutesLabel(12 * 60), '12 minutes')
   })
 })
 
