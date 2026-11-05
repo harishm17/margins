@@ -171,7 +171,7 @@ Sample Content (first 500 words):
 
 Set is_valid to true for anything a student could reasonably study from: lecture notes, slides, textbook chapters, papers, problem sets, past exams, documentation, standards or legal texts, and so on. A category that does not match exactly is fine.
 Set is_valid to false only when the file clearly is not study material (a receipt, an invoice, spam, a personal letter) or the text is unreadable (garbled characters, almost no text).
-Give a one or two sentence note explaining the decision.
+Give a one or two sentence note explaining the decision. The student reads the note next to the file, so when is_valid is false, say what the file appears to be and why it can't be studied from. Don't mention the category they chose, because the category never decides is_valid.
 Set kind to what the file is, whatever the category says: content (lecture notes, slides, a textbook chapter, a paper, a problem set or documentation to learn from), syllabus (a course syllabus, schedule or calendar), exam (a past exam, midterm, final or quiz paper) or other.
 """
     kind = "content"

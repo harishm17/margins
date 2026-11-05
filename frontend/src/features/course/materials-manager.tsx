@@ -431,10 +431,13 @@ function ServerRow({
         json: { role: next },
       })
       const dropped = next === 'syllabus' || next === 'exam'
+      // What the new role does, so the line is not just the new name: a syllabus is not read for topics, a past exam sets the
+      // style of mock exams.
+      const effect = next === 'syllabus' ? " It isn't used to find topics." : next === 'exam' ? ' Mock exams follow its style.' : ''
       const message = dropped
         ? result.material.removedSources > 0
-          ? `Marked as ${ROLE_LABELS[next].toLowerCase()}. Topics no longer use it. Find topics again to update them.`
-          : `Marked as ${ROLE_LABELS[next].toLowerCase()}`
+          ? `Marked as ${ROLE_LABELS[next].toLowerCase()}.${effect} Topics no longer use it. Find topics again to update them.`
+          : `Marked as ${ROLE_LABELS[next].toLowerCase()}.${effect}`
         : `Marked as ${ROLE_LABELS[next].toLowerCase()}. Find topics again to use it.`
       toast.success(message)
       // The toast goes in a few seconds; what changed for the topics stays under the upload area.
@@ -446,6 +449,8 @@ function ServerRow({
     }
   }
 
+  const unused = row.status === 'failed' || row.status === 'unusable'
+
   return (
     <>
       <RowShell
@@ -454,7 +459,7 @@ function ServerRow({
         category={row.category}
         size={row.sizeBytes}
         status={status}
-        unused={row.status === 'failed' || row.status === 'unusable'}
+        unused={unused}
         menu={
           <RowMenu filename={row.filename}>
             <DropdownMenuItem
@@ -463,6 +468,13 @@ function ServerRow({
             >
               Open file
             </DropdownMenuItem>
+            {/* A refused or unread file is never used, whatever it is marked as, so its menu offers a replacement instead of a
+                role: changing the role of a file nothing reads only left "Marked as syllabus" with the file still refused. */}
+            {unused ? (
+              <DropdownMenuItem icon={<UploadSimple />} onSelect={onReplace}>
+                Replace with another file
+              </DropdownMenuItem>
+            ) : (
             <DropdownMenuSub>
               <DropdownMenuSubTrigger icon={<Tag />}>Use as</DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
@@ -475,6 +487,7 @@ function ServerRow({
                 </DropdownMenuRadioGroup>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem icon={<Trash />} destructive onSelect={() => setConfirmOpen(true)}>
               Delete
@@ -719,12 +732,17 @@ export function MaterialsManager({
       (_, arrived) => {
         if (!arrived) return
         void removeKnown(target.id)
+        const builtTopics = target.topics.length > 0
         setNotice({
-          text: `Replaced ${target.filename} with ${file.name}. Topics built from the old file keep their content, but their links to it no longer open.`,
-          reviewTopics: target.topics.length > 0,
+          text: builtTopics
+            ? `Replaced ${target.filename} with ${file.name}. Topics built from the old file keep their content, but their links to it no longer open.`
+            : `Replaced ${target.filename} with ${file.name}.`,
+          reviewTopics: builtTopics,
         })
       },
-      isCategory(target.category) ? target.category : undefined
+      // A file that was used keeps its kind in the new copy. One that was refused or unread was never used, so the new file
+      // takes the kind chosen above the drop area (it may be a different kind of file altogether).
+      target.status === 'ready' || target.status === 'processing' ? (isCategory(target.category) ? target.category : undefined) : undefined
     )
   }
 
@@ -929,9 +947,9 @@ export function MaterialsManager({
             <thead className="max-md:hidden">
               <tr className="border-b border-border text-caption text-fg-3">
                 <th scope="col" className="py-2 pr-3 font-medium">Name</th>
-                <th scope="col" className="px-3 py-2 font-medium">Used as</th>
-                <th scope="col" className="px-3 py-2 font-medium">Size</th>
-                <th scope="col" className="px-3 py-2 font-medium">Status</th>
+                <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Used as</th>
+                <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Size</th>
+                <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Status</th>
                 <th scope="col" className="w-10 py-2 pl-3">
                   <span className="sr-only">Actions</span>
                 </th>
