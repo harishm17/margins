@@ -190,7 +190,16 @@ export function ReviewItem({
           <div className="flex min-w-0 flex-1 items-start gap-2 text-body-strong text-fg">
             <span className="tabular text-fg-3">{number}</span>
             <div className="min-w-0 flex-1">
-              <div id={questionId} className={cn(longQuestion && !questionOpen && 'max-h-[3.25rem] overflow-hidden')}>
+              <div
+                id={questionId}
+                className={cn(
+                  longQuestion &&
+                    !questionOpen &&
+                    // Two whole lines, never a sliver of the third: plain text is clamped by line; a question with blocks
+                    // (a list, a formula) is cut by height and fades out over its last line instead.
+                    (blocks ? 'max-h-[3.25rem] overflow-hidden [mask-image:linear-gradient(to_bottom,black_45%,transparent)]' : 'line-clamp-2')
+                )}
+              >
                 {blocks ? <QuestionText compact>{questionText}</QuestionText> : <MathText>{questionText}</MathText>}
               </div>
               {longQuestion ? (

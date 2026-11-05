@@ -94,13 +94,23 @@ test('on a phone every step shows its own phone-sized screenshot', async ({ page
   await expect(page.getByRole('tablist')).toBeHidden()
   const steps = page.locator('#how-it-works ol > li')
   await expect(steps).toHaveCount(6)
-  // One step is open at a time (the first); the rest are a line each until opened.
-  await expect(steps.locator('details[open]')).toHaveCount(1)
-  await steps.nth(2).locator('summary').click()
-  await expect(steps.locator('details[open]')).toHaveCount(1)
+  // The first step is open; the rest are a line each until opened.
+  const toggles = steps.locator('button[aria-expanded]')
+  await expect(toggles.and(page.locator('[aria-expanded="true"]'))).toHaveCount(1)
+  // A closed step's picture is already in the page and loaded once the list is in view, so opening it never shows an empty
+  // frame (the theme on show is the one that loads).
   await steps.nth(2).scrollIntoViewIfNeeded()
-  const image = steps.nth(2).locator('img:visible')
+  const loadedBeforeOpen = steps.nth(2).locator('picture:visible img')
+  await expect.poll(() => loadedBeforeOpen.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0)).toBe(true)
+  await toggles.nth(2).click()
+  await expect(toggles.nth(2)).toHaveAttribute('aria-expanded', 'true')
+  // Opening a step leaves the one above it open, so nothing above the tapped step moves.
+  await expect(toggles.nth(0)).toHaveAttribute('aria-expanded', 'true')
+  await steps.nth(2).scrollIntoViewIfNeeded()
+  const image = steps.nth(2).locator('picture:visible img')
   await expect(image).toHaveCount(1)
+  // The panel finishes opening to the picture's full height.
+  await expect.poll(async () => (await steps.nth(2).getByRole('region').boundingBox())?.height ?? 0).toBeGreaterThan(300)
   // The phone picture is used (390 px page, 2x), and it is shown near its natural size, not shrunk to a thumbnail.
   await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0)).toBe(true)
   const shown = await image.evaluate((node: HTMLImageElement) => node.getBoundingClientRect().width)
