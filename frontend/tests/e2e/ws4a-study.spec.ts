@@ -154,7 +154,8 @@ test.describe('phone targets in the study surfaces', () => {
     await expect(page.getByRole('button', { name: /^Reorder Hashing/ })).toBeHidden()
     const rename = page.getByRole('button', { name: 'Rename Hashing' })
     expect((await rename.boundingBox())!.height, 'rename').toBeGreaterThanOrEqual(44)
-    // The description wraps, so the student can read what they are confirming.
+    // The description wraps, so the student can read what they are confirming (on a phone it is behind Show details).
+    await page.getByRole('button', { name: 'Show details of Hashing' }).click()
     const description = page.getByText('A long description of what this topic covers').first()
     expect((await description.boundingBox())!.height, 'description is more than one line').toBeGreaterThan(30)
     // Saving and cancelling are buttons, not only Enter and Escape.
