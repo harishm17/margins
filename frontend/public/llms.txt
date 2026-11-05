@@ -7,9 +7,10 @@ How it works:
 - Upload lecture notes, book chapters and past exams as PDF, Word (DOCX or DOC) or PowerPoint (PPTX) files, up to 25 MB each. PDFs need selectable text.
 - Margins splits the course into units and topics, each tied to the pages that teach it. You can rename, merge or move anything before it writes a word.
 - Give your exam date and the time you have each day. Margins lists what to learn, quiz and review on each day, with spaced reviews and full mock exams before the date.
-- Each topic has notes written from your own pages, worked examples, step-by-step practice and a quiz. Each section names the files and pages it came from.
+- Each topic is a short path: a warm-up before reading, your own pages with margin notes and a link to the original, recall with the book closed, practice one step at a time, and a quiz. Worked examples, an explainer and voice practice sit beside it. Margins asks you to try first and gives the smallest hint that helps, and mastery counts only answers you gave without help.
 - Mock exams are timed and autosaved. With Match my past exams, the questions follow the wording, task verbs and answer length of the exams you uploaded.
-- Ask is a chat that answers only from your files, with numbered citations, and says so when the files do not cover the question.
+- Ask is a chat that answers only from your files, with numbered citations, and says so when the files do not cover the question. For a problem of your own it asks about your attempt first and does not give the solution.
+- Voice practice can quiz you, listen while you teach an idea back, or read your pages with you. Speech recognition runs through Deepgram, or through your browser if you choose.
 
 Margins is free to use, with a daily AI allowance per account. It uses Claude, from Anthropic. The code is MIT licensed and can be self-hosted. Margins was built by Harish Manoharan.
 
@@ -23,7 +24,8 @@ Margins is free to use, with a daily AI allowance per account. It uses Claude, f
 ## Source code
 
 - [GitHub repository](https://github.com/harishm17/margins): the full code for the web app and the AI service, with a README on how it works and how to run it
-- [Evaluation results](https://github.com/harishm17/margins/blob/main/evals/results/2026-10-21-structure.md): the latest generation eval run, with the errors the judge found
+- [Evaluation results](https://github.com/harishm17/margins/tree/main/evals/results): every run, including the tutoring gates for the practice tutor, Ask and voice teach-back (November 2, 2026) and the latest generation run, with the errors the judge found
+- [Design decisions](https://github.com/harishm17/margins/blob/main/docs/design/DECISIONS.md): why the system is built the way it is
 - [MIT license](https://github.com/harishm17/margins/blob/main/LICENSE)
 
 ## Optional

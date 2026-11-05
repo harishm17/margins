@@ -139,7 +139,7 @@ export const FAQ: Faq[] = [
     question: 'Which AI model does it use?',
     // README "Models" and evals/results/2026-10-21-model-decision.md. These are the defaults in ai-service/app/config.py.
     answer: [
-      'Claude, from Anthropic. By default Claude Opus writes the notes, examples, quizzes and exams, plans the course and answers questions in Ask. Claude Haiku checks uploaded files, grades short answers and runs the voice coach.',
+      'Claude, from Anthropic, with a model for each job. By default Claude Opus writes the notes, examples, quizzes and exams, plans the course and answers questions in Ask. Claude Sonnet writes the practice tutor\'s replies and grades what you write in recall. Claude Haiku checks uploaded files, grades short answers, sorts Ask messages, checks tutor replies for leaked answers and runs the voice coach.',
       'We tried Sonnet and Haiku for writing as well. They made maths errors in our eval, so writing stays on Opus.',
     ],
   },
