@@ -60,7 +60,8 @@ jobs:
     # Playwright against the real stack: Postgres with pgvector, the AI service on the mock LLM (no
     # API calls) and the production build of the web app. scripts/e2e-stack.sh starts both services.
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # The suite alone takes about 20 minutes and setup about 3; at 25 a slow runner cut the job (and the deploy) short.
+    timeout-minutes: 40
     services:
       postgres:
         image: pgvector/pgvector:pg16
