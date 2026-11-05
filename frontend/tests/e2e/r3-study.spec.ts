@@ -162,7 +162,7 @@ test.describe('the mock exam', () => {
     await signUpAndIn(page, 'r3-exam', { own: true })
     const course = await createCourse(page, `R3 exam ${Date.now()}`, [{ name: 'Graphs' }, { name: 'Trees' }])
     await page.goto(`/courses/${course.courseId}/exams/new`)
-    await expect(page.getByTestId('exam-preset')).toContainText('20 questions, 1 hr, medium, balanced mix')
+    await expect(page.getByTestId('exam-preset').locator('visible=true')).toContainText('20 questions, 1 hr, medium, balanced mix')
     // The five question counts, seven limits, difficulty and mix are behind one button.
     const settings = page.getByRole('button', { name: 'Change settings' })
     await expect(settings).toHaveAttribute('aria-expanded', 'false')
@@ -171,7 +171,7 @@ test.describe('the mock exam', () => {
     await screenshotIfAsked(page, 'r3-exam-new-390x844')
     await settings.click()
     await page.getByRole('radio', { name: '30 min' }).click()
-    await expect(page.getByTestId('exam-preset')).toContainText('30 min')
+    await expect(page.getByTestId('exam-preset').locator('visible=true')).toContainText('30 min')
     await expect(page.getByRole('textbox', { name: 'Name' })).toBeVisible()
     await screenshotIfAsked(page, 'r3-exam-new-settings-390x844')
     // A topic with no pages linked says so beside its name, before the exam is written.

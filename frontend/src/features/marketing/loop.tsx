@@ -105,6 +105,79 @@ function useLoopAutoplay(steps: number, zone: React.RefObject<HTMLElement | null
 }
 
 /**
+ * The phone list of steps. Each step is a button that opens its panel; the panel grows from no height (0fr to 1fr rows)
+ * instead of appearing at once. Closed panels stay in the page (inert, so not read or tabbed into), which lets their
+ * pictures load as the list scrolls into view rather than after the tap. Several can be open at a time, so opening a
+ * step never closes one above it and pulls the page up under the finger.
+ */
+function PhoneSteps({ steps }: { steps: LoopStep[] }) {
+  const [open, setOpen] = React.useState<ReadonlySet<number>>(() => new Set([0]))
+  const toggle = (index: number) =>
+    setOpen((previous) => {
+      const next = new Set(previous)
+      if (next.has(index)) next.delete(index)
+      else next.add(index)
+      return next
+    })
+  return (
+    <ol className="flex flex-col border-t border-border lg:hidden">
+      {steps.map((step, index) => {
+        const expanded = open.has(index)
+        return (
+          <li key={step.id} className="border-b border-border">
+            <h3>
+              <button
+                type="button"
+                id={`loop-step-${step.id}`}
+                aria-expanded={expanded}
+                aria-controls={`loop-step-panel-${step.id}`}
+                onClick={() => toggle(index)}
+                className="flex min-h-11 w-full items-center justify-between gap-4 rounded-chip py-4 text-left text-heading text-fg"
+              >
+                <span>
+                  <span aria-hidden="true" className="tabular mr-3 text-fg-3">
+                    {index + 1}
+                  </span>
+                  {step.title}
+                </span>
+                <CaretDown
+                  aria-hidden="true"
+                  className={cn('size-4 shrink-0 text-fg-3 transition-transform duration-240 ease-enter motion-reduce:transition-none', expanded && 'rotate-180')}
+                />
+              </button>
+            </h3>
+            <div
+              id={`loop-step-panel-${step.id}`}
+              role="region"
+              aria-labelledby={`loop-step-${step.id}`}
+              inert={!expanded}
+              className={cn(
+                'grid transition-[grid-template-rows,opacity] ease-enter motion-reduce:transition-none',
+                expanded ? 'grid-rows-[1fr] opacity-100 duration-240' : 'grid-rows-[0fr] opacity-0 duration-180'
+              )}
+            >
+              <div className="min-h-0 overflow-hidden">
+                <p className="max-w-[52ch] pb-1 text-reading text-fg-2">{step.text}</p>
+                <div className={cn(FRAME, 'mx-auto my-5 max-w-[420px] md:max-w-none')}>
+                  <Shot
+                    name={step.shot}
+                    mobile
+                    desktopMedia="(min-width: 768px) and (max-width: 1023px)"
+                    alt={step.alt}
+                    sizes={SLOT_SIZES.loopList}
+                    className="h-auto w-full"
+                  />
+                </div>
+              </div>
+            </div>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/**
  * The loop from files to exam day. On a wide screen it is a list of steps with one screenshot beside it
  * (a vertical tab list: arrow keys move between steps, and the open step explains itself). Once it is
  * in view it steps through the six by itself, once (see loop-autoplay.ts), with a pause button. On a
@@ -270,36 +343,9 @@ export function Loop({ steps }: { steps: LoopStep[] }) {
         </div>
       </div>
 
-      {/* On a phone the six steps are a short list; one opens at a time, with its text and picture, so the
-          page is six lines long before the visitor chooses to read more. The first is open. */}
-      <ol className="flex flex-col border-t border-border lg:hidden">
-        {steps.map((step, index) => (
-          <li key={step.id} className="border-b border-border">
-            <details name="loop-steps" open={index === 0} className="group">
-              <summary className="flex min-h-11 list-none items-center justify-between gap-4 rounded-chip py-4 text-heading text-fg marker:hidden [&::-webkit-details-marker]:hidden">
-                <span>
-                  <span aria-hidden="true" className="tabular mr-3 text-fg-3">
-                    {index + 1}
-                  </span>
-                  {step.title}
-                </span>
-                <CaretDown aria-hidden="true" className="size-4 shrink-0 text-fg-3 transition-transform duration-180 group-open:rotate-180" />
-              </summary>
-              <p className="max-w-[52ch] pb-1 text-reading text-fg-2">{step.text}</p>
-              <div className={cn(FRAME, 'mx-auto my-5 max-w-[420px] md:max-w-none')}>
-                <Shot
-                  name={step.shot}
-                  mobile
-                  desktopMedia="(min-width: 768px) and (max-width: 1023px)"
-                  alt={step.alt}
-                  sizes={SLOT_SIZES.loopList}
-                  className="h-auto w-full"
-                />
-              </div>
-            </details>
-          </li>
-        ))}
-      </ol>
+      {/* On a phone the six steps are a short list, each opening to its text and picture, so the page is six lines long
+          before the visitor chooses to read more. The first is open. */}
+      <PhoneSteps steps={steps} />
     </>
   )
 }

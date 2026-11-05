@@ -78,7 +78,7 @@ test('the form shows "Match my past exams" on, and the choice reaches the exam j
   await signIn(page, email)
   await page.goto(`/courses/${courseId}/exams/new`)
   // The size, time, difficulty, mix and style are behind Change settings; the preset line says the style is on.
-  await expect(page.getByTestId('exam-preset')).toContainText('in the style of your past exams')
+  await expect(page.getByTestId('exam-preset').locator('visible=true')).toContainText('in the style of your past exams')
   await page.getByRole('button', { name: 'Change settings' }).click()
   const toggle = page.getByRole('checkbox', { name: /Match my past exams/ })
   await expect(toggle).toBeChecked()
