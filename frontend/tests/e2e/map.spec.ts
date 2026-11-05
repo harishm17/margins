@@ -117,7 +117,8 @@ test.describe('knowledge map', () => {
     await expect(nodeLink(page, 'Open addressing')).toHaveAccessibleName('Open addressing Not started Next up')
 
     // The key opens by itself the first time this browser sees a map, and is folded away after that.
-    const key = page.locator('details').filter({ has: page.getByText('Key', { exact: true }) })
+    // The list view has its own key, hidden while the graph shows; only the visible one is the student's.
+    const key = page.locator('details:visible').filter({ has: page.getByText('Key', { exact: true }) })
     await expect(key.getByText('Leads to')).toBeVisible()
     await page.reload()
     await expect(key.getByText('Key', { exact: true }).locator('visible=true').first()).toBeVisible()
@@ -723,7 +724,7 @@ test.describe('round 4: edges, repeated names, one status per row', () => {
     const confirmed = unit.locator('path', { has: page.locator('title', { hasText: 'Collisions needs Hash function' }) })
     await expect(confirmed).not.toHaveAttribute('stroke-dasharray', /./)
     await expect(confirmed).toHaveClass(/stroke-edge-confirmed/)
-    const key = page.locator('details').filter({ has: page.getByText('Key', { exact: true }) })
+    const key = page.locator('details:visible').filter({ has: page.getByText('Key', { exact: true }) })
     if (!(await key.evaluate((element) => (element as HTMLDetailsElement).open))) await key.getByText('Key', { exact: true }).click()
     await expect(key.getByText('Dashed: suggested, not confirmed')).toBeVisible()
     await expect(key.getByText(/Two different things/)).toBeVisible()
