@@ -9,8 +9,9 @@ numbered placeholders in order of first appearance (`⟨id1⟩`, `⟨email1⟩`,
 with new ids still matches the recording. Answers are stored with the same placeholders and filled
 with the new request's values on replay, so an answer that names a topic id names the new topic.
 
-- The same request made several times replays its recorded answers in order (a regenerated quiz gets
-  the second set), then repeats the last.
+- A request is recorded once. Every repeat replays that answer, in this run and later ones: each
+  workflow signs up a fresh user and builds the same course, and the recording run pays for it once.
+  (A regenerate whose prompt is unchanged therefore shows the same content on replay.)
 - With LLM_REPLAY_MISS=error, a request with no exact recording replays the nearest recording of the
   same call (same method, purpose and schema) when they share at least half their word triples, and
   otherwise fails with LLMReplayMissError. With LLM_REPLAY_MISS=record, it calls the real model and
@@ -167,7 +168,6 @@ class ReplayProvider(LLMProvider):
         self.on_miss = on_miss
         self.inner = inner
         self._entries: Dict[str, _Entry] = {}
-        self._served: Dict[str, int] = {}
         self._load()
 
     def _load(self) -> None:
@@ -184,6 +184,12 @@ class ReplayProvider(LLMProvider):
     def model_for(self, purpose: str) -> Optional[str]:
         return resolve_model(purpose).model
 
+    def _real_model(self) -> LLMProvider:
+        # Only reached in record mode, which always has the real model; replay raises a miss first.
+        if self.inner is None:
+            raise LLMReplayMissError("No recording, and LLM_REPLAY_MISS=error does not call the model")
+        return self.inner
+
     # -- lookup and storage -------------------------------------------------------------------
 
     def _nearest(self, request: _Request) -> Tuple[Optional[_Entry], float]:
@@ -198,53 +204,39 @@ class ReplayProvider(LLMProvider):
                 best, best_score = entry, score
         return best, best_score
 
-    def _next_answer(self, entry: _Entry) -> Dict[str, Any]:
-        """The next recorded answer for this entry; the last one again once they are used up."""
-        responses = entry.data["responses"]
-        served = self._served.get(entry.data["key"], 0)
-        self._served[entry.data["key"]] = served + 1
-        return responses[min(served, len(responses) - 1)]
-
     def _find(self, request: _Request) -> Optional[Tuple[_Entry, Dict[str, Any]]]:
         """The answer to replay, or None when the real model must be called (record mode)."""
         entry = self._entries.get(request.key)
         if entry is not None:
-            served = self._served.get(request.key, 0)
-            if self.on_miss == "record" and served >= len(entry.data["responses"]):
-                return None
             logger.info("replay hit %s key=%s", request.describe(), request.key[:12])
-            return entry, self._next_answer(entry)
+            return entry, entry.data["response"]
         if self.on_miss == "record":
             return None
         near, score = self._nearest(request)
         if near is not None and score >= NEAR_MATCH_MIN:
             logger.info("replay near match %s key=%s score=%.2f -> %s", request.describe(), request.key[:12], score, near.path.name)
-            return near, self._next_answer(near)
+            return near, near.data["response"]
         detail = f"; nearest shares {score:.2f}" if near is not None else ""
         raise LLMReplayMissError(f"No recording for {request.describe()} (key {request.key[:12]}{detail})")
 
     def _store(self, request: _Request, answer: Dict[str, Any]) -> None:
-        entry = self._entries.get(request.key)
-        if entry is None:
-            path = self.dir / request.method / (request.purpose or "none") / f"{request.key[:24]}.json"
-            entry = _Entry(path, {
-                "key": request.key,
-                "method": request.method,
-                "purpose": request.purpose,
-                "schema": request.schema,
-                "request": request.text,
-                "recorded_values": request.values,
-                "responses": [],
-            })
-            self._entries[request.key] = entry
-        entry.data["responses"].append(answer)
-        self._served[request.key] = len(entry.data["responses"])
-        entry.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=entry.path.parent, suffix=".tmp")
+        path = self.dir / request.method / (request.purpose or "none") / f"{request.key[:24]}.json"
+        entry = _Entry(path, {
+            "key": request.key,
+            "method": request.method,
+            "purpose": request.purpose,
+            "schema": request.schema,
+            "request": request.text,
+            "recorded_values": request.values,
+            "response": answer,
+        })
+        self._entries[request.key] = entry
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
         with os.fdopen(fd, "w") as handle:
             json.dump(entry.data, handle, ensure_ascii=False, indent=1)
-        os.replace(tmp, entry.path)
-        logger.info("replay recorded %s key=%s answer=%d", request.describe(), request.key[:12], len(entry.data["responses"]))
+        os.replace(tmp, path)
+        logger.info("replay recorded %s key=%s", request.describe(), request.key[:12])
 
     @staticmethod
     def _encode(request: _Request, value: Any) -> Any:
@@ -274,7 +266,7 @@ class ReplayProvider(LLMProvider):
             self._replay_usage(answer["usage"])
             return LLMResponse.model_validate(self._decode(request, entry, answer["result"]))
         with track_llm_usage() as usages:
-            response = await self.inner.generate_text(messages, purpose=purpose, max_tokens=max_tokens)
+            response = await self._real_model().generate_text(messages, purpose=purpose, max_tokens=max_tokens)
         for usage in usages:
             record_usage(usage)
         self._store(request, {"result": self._encode(request, response.model_dump(mode="json")), "usage": [u.model_dump() for u in usages]})
@@ -294,7 +286,7 @@ class ReplayProvider(LLMProvider):
             self._replay_usage(answer["usage"])
             return result
         with track_llm_usage() as usages:
-            result = await self.inner.generate_structured(messages, schema, purpose=purpose, max_tokens=max_tokens)
+            result = await self._real_model().generate_structured(messages, schema, purpose=purpose, max_tokens=max_tokens)
         for usage in usages:
             record_usage(usage)
         self._store(request, {"result": self._encode(request, result.model_dump(mode="json")), "usage": [u.model_dump() for u in usages]})
@@ -327,7 +319,7 @@ class ReplayProvider(LLMProvider):
                 yield event
             return
         events: List[Dict[str, Any]] = []
-        async for event in self.inner.stream_cited_answer(
+        async for event in self._real_model().stream_cited_answer(
             system=system, history=history, question=question, excerpts=excerpts, max_tokens=max_tokens, purpose=purpose
         ):
             events.append(event.model_dump(mode="json"))
@@ -355,7 +347,7 @@ class ReplayProvider(LLMProvider):
                 yield event
             return
         events: List[Dict[str, Any]] = []
-        async for event in self.inner.stream_turn(system=system, messages=messages, tools=tools, max_tokens=max_tokens, purpose=purpose):
+        async for event in self._real_model().stream_turn(system=system, messages=messages, tools=tools, max_tokens=max_tokens, purpose=purpose):
             events.append(event.model_dump(mode="json"))
             yield event
         self._store(request, {"events": self._encode(request, events)})

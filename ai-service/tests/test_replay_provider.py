@@ -121,24 +121,18 @@ class TestStructured:
             await _replayer(tmp_path).generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
         assert during_replay == during_record
 
-    async def test_the_same_request_twice_replays_both_recorded_answers_in_order(self, tmp_path):
-        recorder = _recorder(tmp_path)
-        for _ in range(2):
-            await recorder.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
-
-        replayer = _replayer(tmp_path)
-        reasons = [(await replayer.generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")).reason for _ in range(3)]
-        assert reasons == ["call 1", "call 2", "call 2"]
-
-    async def test_record_mode_replays_what_it_has_and_records_only_the_new_call(self, tmp_path):
+    async def test_a_request_is_recorded_once_and_every_repeat_replays_it(self, tmp_path):
+        # Each workflow signs up a fresh user and builds the same course: the recording run pays for it once.
         inner = FakeModel()
-        await _recorder(tmp_path, inner).generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
+        recorder = _recorder(tmp_path, inner)
+        first = await recorder.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
+        again = await recorder.generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
+        assert inner.calls == 1
+        assert (first.reason, again.reason, again.topic_id) == ("call 1", "call 1", NEW_A)
+
         second_run = FakeModel()
-        recorder = _recorder(tmp_path, second_run)
-        await recorder.generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
+        await _recorder(tmp_path, second_run).generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
         assert second_run.calls == 0
-        await recorder.generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
-        assert second_run.calls == 1
 
     async def test_a_request_never_recorded_fails_clearly_without_retries(self, tmp_path):
         with pytest.raises(LLMReplayMissError, match="concepts") as raised:
@@ -163,7 +157,7 @@ class TestStructured:
         assert len(files) == 1
         entry = json.loads(files[0].read_text())
         assert entry["purpose"] == "concepts" and entry["schema"] == "Linked"
-        assert TOPIC_A not in entry["request"] and "⟨id1⟩" in json.dumps(entry["responses"], ensure_ascii=False)
+        assert TOPIC_A not in entry["request"] and "⟨id1⟩" in json.dumps(entry["response"], ensure_ascii=False)
 
 
 class TestText:
