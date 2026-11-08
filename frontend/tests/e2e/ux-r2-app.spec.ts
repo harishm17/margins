@@ -148,6 +148,10 @@ test.describe('desktop', () => {
 
   test('a plan day without an exam date says what is missing, and one open task has the button', async ({ page }) => {
     await page.goto(`/courses/${course}/plan`)
+    // A rolling plan's empty days come at its end, which falls inside a folded later week on some dates (a Sunday, say):
+    // open the folds first, as a student looking for them would.
+    const folds = page.getByRole('region', { name: /^Later weeks/ }).locator(':scope > ul > li > details > summary')
+    for (const fold of await folds.all()) await fold.click()
     // Empty days are said once, with the way to fill them (a stretch of them is one row).
     await expect(page.getByText(/nothing planned yet/i).locator('visible=true').first()).toBeVisible()
     // A stretch of empty days carries the link; a lone empty day says the same in a sentence (which one the plan has depends on the date).
