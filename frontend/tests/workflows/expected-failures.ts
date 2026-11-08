@@ -70,4 +70,10 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF7.replace-keeps-note': { fixedBy: 'F2', finding: '78' }, // the margin note is deleted with the old copy
   'WF7.replace-in-menu': { fixedBy: 'F4', finding: '75' }, // only a refused or unread file's menu offers Replace
   'WF7.lost-claims-repaired': { fixedBy: 'F0', finding: '89' }, // there is no repair yet
+  // WF8, regenerate
+  'WF8.dialogs-say-kept': { fixedBy: 'SW8', finding: '66' }, // notes, examples and practice say only what is replaced; the quiz's "earlier sets and attempts stay" passes
+  'WF8.dialogs-say-time-and-share': { fixedBy: 'X4', finding: '65' }, // no dialog says how long it takes or its share of today's allowance
+  'WF8.notes-dialog-says-reading': { fixedBy: 'D1', finding: '66' }, // "This replaces your current notes.", nothing on margin notes or the reading done
+  'WF8.dialogs-say-which-drafts-go': { fixedBy: 'SW10', finding: '66' }, // neither dialog mentions the student's unsent work
+  'WF8.practice-draft-rule': { fixedBy: 'SW10', finding: '66' }, // the working typed on step 1 shows under the new set's step 1: drafts are keyed by the content id, which a regenerate keeps
 }
