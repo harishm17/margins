@@ -577,3 +577,12 @@ test('latestGrade is the grade of the latest group, null without one', () => {
   assert.equal(replayConcept([ev({ score: 1, createdAt: day('10') }), ev({ score: 0.6, createdAt: day('12') })], opts).latestGrade, Rating.Hard)
   assert.equal(replayConcept([ev({ score: 1, createdAt: day('10') }), ev({ score: 0, createdAt: day('12') })], opts).latestGrade, Rating.Again)
 })
+
+test('answers given at one moment are replayed in question order, whatever order they were read in', () => {
+  // One quiz submitted at once: every answer has the same time, and each names its own mix-up.
+  const at = chicago('2026-11-10', '10:00')
+  const wrong = (index: number, misconception: string) =>
+    ev({ sessionKey: 'one-quiz', itemKey: `quiz:set:${index}`, score: 0, createdAt: at, metadata: { missKind: 'misconception', misconception } })
+  const state = replayConcept([wrong(10, 'Thinks the later question'), wrong(2, 'Thinks the earlier question')], opts)
+  assert.equal(state.misconception, 'Thinks the earlier question')
+})
