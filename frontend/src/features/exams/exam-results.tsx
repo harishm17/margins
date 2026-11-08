@@ -27,7 +27,7 @@ import { formatScore } from './exam-options'
 type Graded = Extract<ExamResult, { status: 'graded' }>
 type NotGraded = Extract<ExamResult, { status: 'grading' | 'failed' }>
 
-type Filter = 'all' | 'missed' | 'review'
+type Filter = 'all' | 'missed' | 'blank' | 'review'
 
 const pointsText = (value: number) => (Number.isInteger(value) ? String(value) : value.toFixed(1))
 
@@ -101,7 +101,7 @@ export function GradingFailed({ result }: { result: NotGraded }) {
 }
 
 /** A topic's row under "Where to focus". With one topic only, its score is the whole exam's, shown by the ring above. */
-function FocusRow({ topic, courseId, showScore }: { topic: Graded['topics'][number]; courseId: string; showScore: boolean }) {
+function FocusRow({ topic, courseId, showScore, answered }: { topic: Graded['topics'][number]; courseId: string; showScore: boolean; answered: boolean }) {
   const low = topic.percent < 60
   const href = topic.linkable && topic.topicId ? `/courses/${courseId}/topics/${topic.topicId}` : null
   return (
@@ -116,7 +116,10 @@ function FocusRow({ topic, courseId, showScore }: { topic: Graded['topics'][numb
           topic.topicName
         )}
       </span>
-      {showScore ? (
+      {showScore && !answered ? (
+        // A topic whose questions were all left blank was not tested: 0% would say the student knows nothing about it.
+        <span className="shrink-0 text-small text-fg-3">Not answered</span>
+      ) : showScore ? (
         <>
           {/* The track has an edge, and 0% is an empty track: a dot at 0% looked like a bar that had not drawn. */}
           <span aria-hidden="true" className="hidden h-1.5 w-32 shrink-0 overflow-hidden rounded-full ring-1 ring-inset ring-control sm:block">
@@ -133,7 +136,10 @@ function FocusRow({ topic, courseId, showScore }: { topic: Graded['topics'][numb
   )
 }
 
-const STATUS_WORD: Record<ReturnType<typeof reviewStatus>, { label: string; tone: 'accent' | 'warning' | 'danger' | 'neutral' }> = {
+type RowStatus = ReturnType<typeof reviewStatus> | 'blank'
+
+const STATUS_WORD: Record<RowStatus, { label: string; tone: 'accent' | 'warning' | 'danger' | 'neutral' }> = {
+  blank: { label: 'Not answered', tone: 'neutral' },
   correct: { label: 'Correct', tone: 'accent' },
   partial: { label: 'Partly correct', tone: 'warning' },
   incorrect: { label: 'Missed', tone: 'danger' },
@@ -157,7 +163,7 @@ function QuestionRow({
 }: {
   number: number
   questionText: string
-  status: ReturnType<typeof reviewStatus>
+  status: RowStatus
   points: number
   pointsEarned: number
   open: boolean
@@ -166,7 +172,7 @@ function QuestionRow({
 }) {
   const panelId = React.useId()
   const word = STATUS_WORD[status]
-  const preview = questionText.replace(/\s+/g, ' ').replace(/\$/g, '').trim()
+  const preview = questionText.replace(/\s+/g, ' ').replace(/\$|\*\*|__|`/g, '').trim()
   return (
     <li className="border-b border-border last:border-b-0">
       <div>
@@ -218,20 +224,30 @@ function RegradeBanner({ jobId, waitingForAi }: { jobId: string; waitingForAi: b
   )
 }
 
+/** The student wrote or picked something: a blank is not a wrong answer. */
+const isAnswered = (question: { studentAnswer: string | null }) => !!question.studentAnswer?.trim()
+
 /** The graded results: score, where to focus, and every question with its review. */
 export function GradedResults({ result, submittedLabel }: { result: Graded; submittedLabel: string }) {
   const [filter, setFilter] = React.useState<Filter>('all')
-  const missed = result.questions.filter((q) => !q.isCorrect && !q.needsReview)
+  const lostPoints = result.questions.filter((q) => isAnswered(q) && !q.isCorrect && !q.needsReview)
+  const blank = result.questions.filter((q) => !isAnswered(q))
   const review = result.questions.filter((q) => q.needsReview)
-  const shown = filter === 'all' ? result.questions : filter === 'missed' ? missed : review
+  const shown = filter === 'all' ? result.questions : filter === 'missed' ? lostPoints : filter === 'blank' ? blank : review
   // The answers the student was sure about and got wrong come first (spec §5.9).
   const sureWrong = shown.filter(isSureAndWrong)
   const others = shown.filter((question) => !isSureAndWrong(question))
   const calibration = examCalibration(result.questions)
-  // The weakest topic that has a page to open and something left to learn (topics come weakest first).
-  const reviewTopic = result.topics.find((topic) => topic.linkable && topic.topicId && topic.percent < 100) ?? null
+  // Topics with at least one answered question: a topic left blank was not tested, so it is not the weakest.
+  const answeredTopics = new Set(result.questions.filter(isAnswered).map((q) => q.topicId))
+  const isTopicAnswered = (topic: Graded['topics'][number]) => !!topic.topicId && answeredTopics.has(topic.topicId)
+  // The weakest tested topic that has a page to open and something left to learn (topics come weakest first).
+  const openable = (topic: Graded['topics'][number]) => topic.linkable && topic.topicId && topic.percent < 100
+  const reviewTopic = result.topics.find((topic) => openable(topic) && isTopicAnswered(topic)) ?? result.topics.find(openable) ?? null
+  // Several tested topics level at the lowest score: none of them is "the" weakest.
+  const reviewTied = !!reviewTopic && result.topics.filter((topic) => isTopicAnswered(topic) && topic.percent === reviewTopic.percent).length > 1
   // The first miss to read: one the student was sure about if there is one, otherwise the first missed. The rest start collapsed.
-  const firstMiss = result.questions.find(isSureAndWrong) ?? result.questions.find((q) => !q.isCorrect && !q.needsReview) ?? null
+  const firstMiss = result.questions.find(isSureAndWrong) ?? lostPoints[0] ?? null
   const [open, setOpen] = React.useState<Set<number>>(() => new Set(firstMiss ? [firstMiss.questionIndex] : []))
   const allOpen = shown.length > 0 && shown.every((q) => open.has(q.questionIndex))
   const toggleQuestion = (index: number) =>
@@ -248,7 +264,7 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
       key={question.questionIndex}
       number={question.questionIndex + 1}
       questionText={question.questionText}
-      status={reviewStatus(question)}
+      status={isAnswered(question) ? reviewStatus(question) : 'blank'}
       points={question.points}
       pointsEarned={question.pointsEarned}
       open={open.has(question.questionIndex)}
@@ -289,7 +305,8 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
 
   const options: { value: Filter; label: string }[] = [
     { value: 'all', label: `All ${result.questions.length}` },
-    { value: 'missed', label: `Missed ${missed.length}` },
+    { value: 'missed', label: `Lost points ${lostPoints.length}` },
+    ...(blank.length > 0 ? [{ value: 'blank' as const, label: `Not answered ${blank.length}` }] : []),
     ...(review.length > 0 ? [{ value: 'review' as const, label: `Needs review ${review.length}` }] : []),
   ]
 
@@ -328,7 +345,7 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
                   <Button asChild variant="primary" size="md">
                     <Link href={`/courses/${result.courseId}/topics/${reviewTopic.topicId}`}>{`Review ${reviewTopic.topicName}`}</Link>
                   </Button>
-                  <span className="text-small text-fg-2">Your weakest topic in this exam.</span>
+                  <span className="text-small text-fg-2">{reviewTied ? 'A good place to start.' : isTopicAnswered(reviewTopic) ? 'Your weakest topic in this exam.' : 'Not answered in this exam.'}</span>
                 </li>
               ) : null}
               {result.practice ? (
@@ -340,7 +357,7 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
                     count={result.practice.count}
                     variant={reviewTopic ? 'secondary' : 'primary'}
                   />
-                  {reviewTopic ? <span className="text-small text-fg-2">Then, to check it stuck.</span> : null}
+                  {reviewTopic ? <span className="text-small text-fg-2">Do this after, to check that it stuck.</span> : null}
                 </li>
               ) : null}
             </ol>
@@ -371,7 +388,7 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
           </div>
           <ul className="mt-3 border-t border-border">
             {result.topics.map((topic) => (
-              <FocusRow key={topic.topicId ?? topic.topicName} topic={topic} courseId={result.courseId} showScore={result.topics.length > 1} />
+              <FocusRow key={topic.topicId ?? topic.topicName} topic={topic} courseId={result.courseId} showScore={result.topics.length > 1} answered={isTopicAnswered(topic)} />
             ))}
           </ul>
         </section>
@@ -393,7 +410,7 @@ export function GradedResults({ result, submittedLabel }: { result: Graded; subm
         ) : null}
         {shown.length === 0 ? (
           <p className="mt-6 text-small text-fg-2">
-            {filter === 'missed' ? 'You got every question right.' : 'Nothing needs review.'}
+            {filter === 'missed' ? 'No answered question lost points.' : filter === 'blank' ? 'You answered every question.' : 'Nothing needs review.'}
           </p>
         ) : (
           <>

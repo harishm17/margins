@@ -45,8 +45,8 @@ test('a 20-minute mixed block opens the exam form with 20 minutes and 5 question
   await expect(page.getByRole('radio', { name: '5', exact: true, checked: true })).toBeVisible()
 
   // Both stay changeable.
-  await page.getByRole('radio', { name: '60 min' }).click()
-  await expect(page.getByRole('radio', { name: '60 min', checked: true })).toBeVisible()
+  await page.getByRole('radio', { name: '1 hr' }).click()
+  await expect(page.getByRole('radio', { name: '1 hr', checked: true })).toBeVisible()
   await expect(page.getByRole('radio', { name: '20 min', checked: true })).toHaveCount(0)
 })
 
@@ -70,17 +70,17 @@ test('the form reads minutes and questions from the link, clamps them and ignore
 
   await page.goto(`${form}?minutes=100000&questions=-3`)
   await page.getByRole('button', { name: 'Change settings' }).click()
-  await expect(time('60 min')).toBeVisible()
+  await expect(time('1 hr')).toBeVisible()
   await expect(count('20')).toBeVisible()
 
   await page.goto(`${form}?minutes=abc`)
   await page.getByRole('button', { name: 'Change settings' }).click()
-  await expect(time('60 min')).toBeVisible()
+  await expect(time('1 hr')).toBeVisible()
   await expect(count('20')).toBeVisible()
 
   await page.goto(form)
   await page.getByRole('button', { name: 'Change settings' }).click()
-  await expect(time('60 min')).toBeVisible()
+  await expect(time('1 hr')).toBeVisible()
   await expect(count('20')).toBeVisible()
 })
 

@@ -62,11 +62,12 @@ describe('shortExamTitle', () => {
     assert.equal(shortExamTitle('Midterm practice'), 'Midterm practice')
   })
 
-  it('shortens a generated title to its first topic and says Mock, with the number that tells two of a day apart', () => {
-    assert.equal(shortExamTitle('Mock exam, Nov 4: Sorting algorithms and 3 more'), 'Sorting algorithms · Mock')
-    assert.equal(shortExamTitle('Mock exam, Nov 4: Sorting, Hash tables'), 'Sorting · Mock')
-    assert.equal(shortExamTitle('Mock exam, Nov 4: Sorting algorithms and 3 more (2)'), 'Sorting algorithms · Mock 2')
-    assert.equal(shortExamTitle('Mock exam, Nov 4'), 'Mock exam, Nov 4')
+  it('is the same short name the other exam pages use, whatever the topics are called', () => {
+    assert.equal(shortExamTitle('Mock exam, Nov 4: Sorting algorithms and 3 more'), 'Mock exam · Nov 4')
+    // A topic name with commas is not cut at the comma.
+    assert.equal(shortExamTitle('Mock exam, Nov 7: Problems, Algorithms, and Efficiency and 7 more'), 'Mock exam · Nov 7')
+    assert.equal(shortExamTitle('Mock exam, Nov 4: Sorting algorithms and 3 more (2)'), 'Mock exam · Nov 4 (2)')
+    assert.equal(shortExamTitle('Mock exam, Nov 4'), 'Mock exam · Nov 4')
   })
 })
 

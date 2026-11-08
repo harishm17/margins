@@ -165,7 +165,7 @@ test('mock exam: a failed exam goes back to the form with every choice kept', as
   await expect(failure).toContainText('The AI is busy right now. Try again in a few minutes.')
   // No promise that it is still coming, and nothing chosen is lost.
   await expect(page.getByText('Writing your exam')).toBeHidden()
-  await expect(page.getByText(/This takes about a minute or two/)).toBeHidden()
+  await expect(page.getByText(/This takes a few minutes/)).toBeHidden()
   await expect(page.getByRole('radio', { name: '10', exact: true })).toBeChecked()
   await expect(page.getByRole('radio', { name: '30 min' })).toBeChecked()
 

@@ -46,7 +46,7 @@ export default async function NewExamPage({
 
   return (
     <Page width="focus">
-      <PageIntro title="New mock exam" description="Choose what to cover and how it should feel." />
+      <PageIntro title="New mock exam" description="Choose what to cover and how it should feel. Writing the exam takes a few minutes." />
       {topics.length === 0 ? (
         <EmptyState
           icon={<Exam />}

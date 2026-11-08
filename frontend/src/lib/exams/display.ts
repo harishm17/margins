@@ -21,14 +21,12 @@ export function examTitle(name: string, createdAt: string | Date, topics: readon
 }
 
 /**
- * The exam's name for a header with little room (a phone's focus bar): a custom name as it is; a generated one as its first topic,
- * "Sorting algorithms · Mock", with the number that told two of a day apart ("· Mock 2"). The full title stays in the Questions list.
+ * The exam's name for a header with little room (a phone's focus bar): the same short name every other exam page uses
+ * ("Mock exam · Nov 4", with "(2)" for a second one that day; a custom name as it is). The topics are not in it: a topic
+ * name can hold commas and be long, and the Questions list says what the exam covers.
  */
 export function shortExamTitle(title: string): string {
-  const match = /^Mock exam, [^:]+: (.+?)(?: \((\d+)\))?$/.exec(title)
-  if (!match) return title
-  const first = match[1].replace(/ and \d+ more$/, '').split(', ')[0]
-  return `${first} · Mock${match[2] ? ` ${match[2]}` : ''}`
+  return splitExamTitle(title).name
 }
 
 /** A generated title as examTitle builds it: "Mock exam, Nov 4: Sorting, Hash tables (2)", the topics and the number optional. */
