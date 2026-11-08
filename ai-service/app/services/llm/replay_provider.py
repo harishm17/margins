@@ -351,3 +351,37 @@ class ReplayProvider(LLMProvider):
             events.append(event.model_dump(mode="json"))
             yield event
         self._store(request, {"events": self._encode(request, events)})
+
+
+def _usages(response: Dict[str, Any]) -> List[LLMUsage]:
+    if "usage" in response:
+        return [LLMUsage.model_validate(u) for u in response["usage"]]
+    return [LLMUsage.model_validate(e["usage"]) for e in response.get("events", []) if e.get("type") == "done"]
+
+
+def recording_cost(cassette_dir: Path | str, *, since: float = 0.0) -> Dict[str, Any]:
+    """What the recordings written at or after `since` (a Unix time) cost to make: a recording run's spend."""
+    from app.services.llm.usage import estimate_cost_usd
+
+    recordings, usages = 0, []
+    for path in Path(cassette_dir).rglob("*.json"):
+        if path.stat().st_mtime < since:
+            continue
+        recordings += 1
+        usages.extend(_usages(json.loads(path.read_text())["response"]))
+    costs = [estimate_cost_usd(u) for u in usages]
+    return {
+        "recordings": recordings,
+        "calls": len(usages),
+        "cost_usd": sum(c for c in costs if c is not None),
+        "unpriced_calls": sum(1 for c in costs if c is None),
+    }
+
+
+if __name__ == "__main__":
+    # python -m app.services.llm.replay_provider CASSETTE_DIR [SINCE_UNIX_TIME]
+    import sys
+
+    if len(sys.argv) not in (2, 3):
+        sys.exit("usage: python -m app.services.llm.replay_provider CASSETTE_DIR [SINCE_UNIX_TIME]")
+    print(json.dumps(recording_cost(sys.argv[1], since=float(sys.argv[2]) if len(sys.argv) == 3 else 0.0)))

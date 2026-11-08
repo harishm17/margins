@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any, AsyncIterator, List
 from unittest.mock import patch
 
 import pytest
@@ -24,7 +24,11 @@ from app.services.llm.base import (
 )
 from app.services.llm.factory import LLMFactory
 from app.services.llm.observed import ObservedProvider
-from app.services.llm.replay_provider import LLMReplayMissError, ReplayProvider, normalise
+from app.services.llm.replay_provider import (
+    LLMReplayMissError,
+    ReplayProvider,
+    normalise,
+)
 from app.services.llm.usage import record_usage, track_llm_usage
 
 TOPIC_A = "0b6f1c1e-1111-4a4a-8a8a-000000000001"
@@ -240,3 +244,26 @@ class TestWiring:
     def test_record_mode_needs_the_real_model(self, tmp_path):
         with pytest.raises(LLMNotConfiguredError, match="record"):
             ReplayProvider(tmp_path, on_miss="record", inner=None)
+
+
+class TestRecordingCost:
+    async def test_the_cost_of_a_recording_run_counts_only_what_it_recorded(self, tmp_path):
+        import os
+        import time
+
+        from app.services.llm.replay_provider import recording_cost
+
+        recorder = _recorder(tmp_path)
+        await recorder.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
+        [older] = list(tmp_path.rglob("*.json"))
+        os.utime(older, (1_000, 1_000))
+        started = time.time() - 1
+        await recorder.generate_text(_messages(TOPIC_A, TOPIC_B), purpose="section_notes")
+        _ = [e async for e in recorder.stream_cited_answer(system="s", history=[], question="q", excerpts=[Excerpt(ref=f"chunk:{TOPIC_A}", title="t", text="x")])]
+
+        summary = recording_cost(tmp_path, since=started)
+        assert summary["recordings"] == 2
+        assert summary["calls"] == 2
+        # Haiku 5.5 at $0.10 in and $0.50 out per million: (101 + 102) input and 20 output tokens.
+        assert summary["cost_usd"] == pytest.approx((203 * 0.10 + 20 * 0.50) / 1_000_000)
+        assert recording_cost(tmp_path, since=0)["recordings"] == 3
