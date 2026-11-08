@@ -94,7 +94,7 @@ export async function courseTermsForTopics(topicIds: string[]): Promise<string[]
   if (topicIds.length === 0) return []
   const concepts = await prisma.concept.findMany({
     where: { topicId: { in: topicIds }, status: 'active' },
-    orderBy: [{ topicId: 'asc' }, { orderIndex: 'asc' }],
+    orderBy: [{ topic: { orderIndex: 'asc' } }, { orderIndex: 'asc' }],
     select: { name: true, claims: { orderBy: { orderIndex: 'asc' }, select: { text: true } } },
   })
   return selectCourseTerms({

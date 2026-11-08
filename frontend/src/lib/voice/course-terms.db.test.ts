@@ -42,3 +42,18 @@ test('a topic gives its active concepts in order, then terms from their claims; 
   assert.equal(got.includes('Retired idea'), false)
   assert.deepEqual(await terms.courseTermsForTopics([]), [])
 })
+
+test("several topics' terms come in course order, not in the order of the topics' ids", async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const user = await prisma.user.create({ data: { email: `ct-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com` } })
+  userIds.push(user.id)
+  const project = await prisma.project.create({ data: { userId: user.id, name: 'P' } })
+  // The course's first topic has the larger id, so an order by topic id would put it last.
+  const earlier = await prisma.topic.create({ data: { id: `f${crypto.randomUUID().slice(1)}`, projectId: project.id, name: 'Graphs', orderIndex: 0, userConfirmed: true } })
+  const later = await prisma.topic.create({ data: { id: `0${crypto.randomUUID().slice(1)}`, projectId: project.id, name: 'Heaps', orderIndex: 1, userConfirmed: true } })
+  await prisma.concept.create({ data: { projectId: project.id, topicId: later.id, name: 'Heap', summary: 's', kind: 'concept', orderIndex: 0 } })
+  await prisma.concept.create({ data: { projectId: project.id, topicId: earlier.id, name: 'Graph', summary: 's', kind: 'concept', orderIndex: 0 } })
+
+  const got = await terms.courseTermsForTopics([later.id, earlier.id])
+  assert.deepEqual(got.slice(0, 2), ['Graph', 'Heap'])
+})
