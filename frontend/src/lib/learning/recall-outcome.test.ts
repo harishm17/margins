@@ -14,13 +14,13 @@ describe('recallOutcome', () => {
       missed: [missed('Define a problem', 'c3'), missed('What an algorithm solves', 'c4'), missed('What an algorithm solves', 'c5')],
     })
     assert.deepEqual(outcome, { total: 2, full: 0, partly: 1 })
-    assert.equal(recallSummary(outcome), 'You covered 0 of 2 ideas, and part of one more.')
+    assert.equal(recallSummary(outcome), 'You covered 0 of 2 ideas completely, and 1 partly.')
   })
 
   it('counts whole, part and missing ideas separately', () => {
     const outcome = recallOutcome({ got: [got('A'), got('B', true)], wrong: [], missed: [missed('C')] })
     assert.deepEqual(outcome, { total: 3, full: 1, partly: 1 })
-    assert.equal(recallSummary(outcome), 'You covered 1 of 3 ideas, and part of one more.')
+    assert.equal(recallSummary(outcome), 'You covered 1 of 3 ideas completely, and 1 partly.')
   })
 
   it('treats a wrong claim as a gap in its idea', () => {

@@ -58,7 +58,7 @@ export function recallOutcome(feedback: Pick<RecallFeedback, 'got' | 'wrong' | '
 /** The one line under an answer, in the same ideas the lists below it are made of. */
 export function recallSummary(outcome: { total: number; full: number; partly: number }): string {
   const ideas = `${outcome.total} ${outcome.total === 1 ? 'idea' : 'ideas'}`
-  const part = outcome.partly > 0 ? `, and part of ${outcome.partly === 1 ? 'one more' : `${outcome.partly} more`}` : ''
+  const part = outcome.partly > 0 ? ` completely, and ${outcome.partly} partly` : ''
   return `You covered ${outcome.full} of ${ideas}${part}.`
 }
 
