@@ -130,3 +130,23 @@ export async function statusTexts(page: Page): Promise<string[]> {
 export function expectNone(found: string[], what: string) {
   expect(found, `${what}: ${found.join('; ')}`).toEqual([])
 }
+
+/**
+ * The actions in `scope` drawn as buttons: filled ones (a background) and outlined ones (a border), by name. Plain
+ * links and text buttons are left out. An end screen with one main action has one filled action and no outlined one.
+ */
+export async function buttonLikeActions(scope: Locator): Promise<{ filled: string[]; outlined: string[] }> {
+  return scope.evaluate((root) => {
+    const found = { filled: [] as string[], outlined: [] as string[] }
+    for (const element of Array.from(root.querySelectorAll<HTMLElement>('a, button'))) {
+      if (!element.checkVisibility()) continue
+      const style = getComputedStyle(element)
+      const name = (element.getAttribute('aria-label') || element.innerText).replace(/\s+/g, ' ').trim()
+      const filled = style.backgroundColor !== 'transparent' && !/rgba\(\d+, \d+, \d+, 0\)/.test(style.backgroundColor)
+      const outlined = style.borderTopStyle !== 'none' && parseFloat(style.borderTopWidth) > 0
+      if (filled) found.filled.push(name)
+      else if (outlined) found.outlined.push(name)
+    }
+    return found
+  })
+}

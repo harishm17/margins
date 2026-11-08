@@ -22,4 +22,14 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF2.concept-sentences': { fixedBy: 'SW3', finding: '2' }, // "Re-read <idea>" under a worked example, "missed <idea>" on Examples
   'WF2.choice-check-reason': { fixedBy: 'SW1', finding: '95' }, // "Type an answer first." beside radio buttons
   'WF2.no-blank-busy-button': { fixedBy: 'SW1', finding: '6' }, // sign-in, create course, confirm topics, start, warm-up next, show the source, save note
+  // WF3, review and drill
+  'WF3.weakest-are-studied': { fixedBy: 'G1', finding: '83' }, // voice practice's three weakest topics are all topics the student never opened
+  'WF3.focus-mix-ups-once': { fixedBy: 'G7', finding: '82' }, // one answer's mix-up is shown under several ideas of the focus
+  'WF3.fix-it-now-wait-estimate': { fixedBy: 'SW7', finding: '80' }, // "Preparing your questions" and a bar, no time
+  'WF3.position-second-browser': { fixedBy: 'SW10', finding: '30, 31' }, // a second browser opens the review on the next question, not the feedback
+  'WF3.follow-up-wait-estimate': { fixedBy: 'SW7', finding: '53' }, // "This takes a moment" while a fresh question is written
+  'WF3.retests-as-announced': { fixedBy: 'S4', finding: '97' }, // the header announced "(+5 to retest)"; three retests came
+  'WF3.review-end-one-action': { fixedBy: 'R1', finding: '55' }, // a filled button and an outlined one
+  'WF3.drill-end-one-action': { fixedBy: 'R1', finding: '55' }, // a filled button and two outlined ones
+  'WF3.practice-confidence': { fixedBy: 'Q3', finding: '88' }, // a practice step's answer options have no "How sure are you?" row
 }

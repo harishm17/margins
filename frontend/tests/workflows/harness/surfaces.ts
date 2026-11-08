@@ -147,3 +147,26 @@ export async function readSurfaces(page: Page, at: { courseUrl: string; topicUrl
   }
   return readings
 }
+
+/**
+ * The topic a topics-list row names, when the student never opened it, or null. The name comes from the row's details
+ * button ("Show details: Hash tables"); the status from the row's link ("... Topic progress: Not started ...").
+ */
+export function notStartedName(detailsLabel: string, rowText: string): string | null {
+  const name = detailsLabel.match(/^(?:Show|Hide) details: (.+)$/)?.[1]
+  return name && /\bTopic progress: Not started\b/.test(squash(rowText)) ? name : null
+}
+
+/** The topics the student has never opened, as the topics list names them. */
+export async function notStartedTopics(page: Page, courseUrl: string): Promise<string[]> {
+  await page.goto(`${courseUrl}/topics`)
+  await page.waitForLoadState('networkidle')
+  const names: string[] = []
+  for (const row of await page.locator('main').getByRole('listitem').all()) {
+    const details = row.getByRole('button', { name: /^(Show|Hide) details: / })
+    if (!(await details.count())) continue
+    const name = notStartedName((await details.getAttribute('aria-label')) ?? '', await row.getByRole('link').first().innerText())
+    if (name) names.push(name)
+  }
+  return names
+}

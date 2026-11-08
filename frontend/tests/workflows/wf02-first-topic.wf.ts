@@ -1,5 +1,5 @@
 import { test, expect } from './harness/fixtures'
-import { openOnWarmup, readyCourse, startStudying } from './harness/course'
+import { openOnWarmup, readyCourse, startStudying, takeQuiz, takeWarmup } from './harness/course'
 import { expectNone, ideaNames, textProblems, watchBusyButtons } from './harness/page-checks'
 import { disagreements, percentShown, readSurfaces } from './harness/surfaces'
 
@@ -45,20 +45,7 @@ test('WF2 first topic: warm-up, reading, recall, practice, quiz', async ({ page,
 
   await test.step('warm-up', async () => {
     await openOnWarmup(page, topicUrl)
-    await page.getByRole('button', { name: 'Start warm-up' }).click()
-    for (let question = 1; question <= 3; question++) {
-      await expect(page.getByText(`Warm-up question ${question} of 3`)).toBeVisible()
-      await look(`warm-up question ${question}`)
-      // One right with confidence, one "I don't know" (it moves on by itself), one wrong.
-      if (question === 2) {
-        await page.getByRole('button', { name: "I don't know" }).click()
-        continue
-      }
-      await page.getByRole('radiogroup', { name: /Answer options|True or false/ }).getByRole('radio').nth(question === 1 ? 2 : 0).click()
-      if (question === 1) await page.getByRole('radio', { name: 'Fairly sure' }).click()
-      await page.getByRole('button', { name: /Next question|See answers/ }).click()
-    }
-    await expect(page.getByRole('region', { name: 'Ready to read' })).toBeVisible()
+    await takeWarmup(page, (question) => look(`warm-up question ${question}`))
     ideas = await (async () => {
       const results = page.url()
       await look('warm-up results')
@@ -143,25 +130,7 @@ test('WF2 first topic: warm-up, reading, recall, practice, quiz', async ({ page,
   })
 
   await test.step('quiz: every question type, one "I don\'t know", then the results', async () => {
-    await page.goto(`${topicUrl}?view=quiz`)
-    await page.getByRole('button', { name: 'Start quiz' }).click()
-    const heading = page.getByRole('heading', { level: 2, name: /^Question \d+ of \d+$/ })
-    await expect(heading).toBeVisible()
-    const total = Number((await heading.innerText()).match(/of (\d+)/)![1])
-    const answer = page.getByRole('textbox', { name: 'Your answer' })
-    for (let question = 1; question <= total; question++) {
-      await expect(page.getByRole('heading', { level: 2, name: `Question ${question} of ${total}` })).toBeVisible()
-      await look(`quiz question ${question}`)
-      const options = page.getByRole('radiogroup', { name: /^(Answer options|True or false)$/ })
-      if (question === 2) await page.getByRole('button', { name: "I don't know" }).click()
-      else if (await options.isVisible()) await options.getByRole('radio').nth(question % 2).click()
-      else if ((await answer.getAttribute('inputmode')) === 'decimal') await answer.fill('2')
-      else await answer.fill('It is correct for every input because each step keeps the invariant, shown by induction on the input size.')
-      if (question < total) await page.getByRole('button', { name: 'Next', exact: true }).click()
-    }
-    // Every question has an answer or an "I don't know", so submitting goes straight to grading, with no dialog.
-    await page.getByRole('button', { name: 'Submit quiz' }).last().click()
-    await expect(page.getByLabel(/^Score /)).toBeVisible({ timeout: 3 * 60_000 })
+    await takeQuiz(page, topicUrl, (question) => look(`quiz question ${question}`))
     await look('quiz results')
   })
   await sameEverywhere('quiz', { enoughEvidence: true })

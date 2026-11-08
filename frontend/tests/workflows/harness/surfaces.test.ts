@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { disagreements, masteryOf, minutesOf, percentShown, planItemReading, stepOf } from './surfaces'
+import { disagreements, masteryOf, minutesOf, notStartedName, percentShown, planItemReading, stepOf } from './surfaces'
 
 describe('reading a surface', () => {
   it('names the study step a phrase points to', () => {
@@ -104,5 +104,20 @@ describe('a plan item', () => {
     const reading = planItemReading([`Quiz: ${topic}`, 'Your first quiz on this topic.', '15 min'], topic, true)
     assert.equal(reading.next, undefined)
     assert.equal(reading.said, `Quiz: ${topic}, ticked done`)
+  })
+})
+
+describe('topics the student never opened', () => {
+  // A row of the topics list: its link (name, next step, status) and its details button, which names the topic.
+  const row = (status: string) => `Hash tables, chaining\nOn past exams\nNext: Warm-up\nTopic progress: \n${status}\nDue today`
+
+  it('reads the topic from its details button when the status says "Not started"', () => {
+    assert.equal(notStartedName('Show details: Hash tables, chaining', row('Not started')), 'Hash tables, chaining')
+    assert.equal(notStartedName('Hide details: Hash tables, chaining', row('Not started')), 'Hash tables, chaining')
+  })
+
+  it('skips a topic that was opened', () => {
+    assert.equal(notStartedName('Show details: Hash tables, chaining', row('In progress')), null)
+    assert.equal(notStartedName('Show details: Hash tables, chaining', row('Learning')), null)
   })
 })
