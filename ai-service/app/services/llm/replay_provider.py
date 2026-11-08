@@ -12,6 +12,9 @@ with the new request's values on replay, so an answer that names a topic id name
 - A request is recorded once. Every repeat replays that answer, in this run and later ones: each
   workflow signs up a fresh user and builds the same course, and the recording run pays for it once.
   (A regenerate whose prompt is unchanged therefore shows the same content on replay.)
+- A request whose lines are a recording's lines in another order, excerpt numbers aside, replays that
+  recording in both modes. Retrieval breaks score ties by random chunk ids, so the same excerpts can
+  come back in a different order from run to run; the content is the same, so is the answer.
 - With LLM_REPLAY_MISS=error, a request with no exact recording replays the nearest recording of the
   same call (same method, purpose and schema) when they share at least half their word triples, and
   otherwise fails with LLMReplayMissError. With LLM_REPLAY_MISS=record, it calls the real model and
@@ -118,6 +121,14 @@ def _filled(text: str, values: Dict[str, str], fallback: Dict[str, str]) -> str:
     return _PLACEHOLDER.sub(lambda m: values.get(m.group(0), fallback.get(m.group(0), m.group(0))), text)
 
 
+_EXCERPT_NUMBER = re.compile(r'index=\\*"\d+\\*"')
+
+
+def _content(text: str) -> Tuple[str, ...]:
+    """A request's lines in sorted order, excerpt numbers aside: equal for the same content listed in another order."""
+    return tuple(sorted(_EXCERPT_NUMBER.sub("index", text).replace("\\n", "\n").splitlines()))
+
+
 def _shingles(text: str) -> set:
     words = re.findall(r"\w+|[^\w\s]", text.lower())
     return {" ".join(words[i : i + 3]) for i in range(max(len(words) - 2, 1))}
@@ -146,6 +157,7 @@ class _Entry:
         self.path = path
         self.data = data
         self._shingles: Optional[set] = None
+        self._content: Optional[Tuple[str, ...]] = None
 
     @property
     def group(self) -> Tuple[str, str, str]:
@@ -156,6 +168,12 @@ class _Entry:
         if self._shingles is None:
             self._shingles = _shingles(self.data["request"])
         return self._shingles
+
+    @property
+    def content(self) -> Tuple[str, ...]:
+        if self._content is None:
+            self._content = _content(self.data["request"])
+        return self._content
 
 
 class ReplayProvider(LLMProvider):
@@ -204,11 +222,20 @@ class ReplayProvider(LLMProvider):
                 best, best_score = entry, score
         return best, best_score
 
+    def _reordered(self, request: _Request) -> Optional[_Entry]:
+        """A recording of the same call whose request has the same lines in another order (excerpt numbers aside)."""
+        content = _content(request.text)
+        return next((entry for entry in self._entries.values() if entry.group == request.group and entry.content == content), None)
+
     def _find(self, request: _Request) -> Optional[Tuple[_Entry, Dict[str, Any]]]:
         """The answer to replay, or None when the real model must be called (record mode)."""
         entry = self._entries.get(request.key)
         if entry is not None:
             logger.info("replay hit %s key=%s", request.describe(), request.key[:12])
+            return entry, entry.data["response"]
+        entry = self._reordered(request)
+        if entry is not None:
+            logger.info("replay reordered %s key=%s -> %s", request.describe(), request.key[:12], entry.path.name)
             return entry, entry.data["response"]
         if self.on_miss == "record":
             return None

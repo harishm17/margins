@@ -49,6 +49,18 @@ def _messages(first: str, second: str, extra: str = "") -> List[LLMMessage]:
     ]
 
 
+def _excerpts(locations: List[str], extra: str = "") -> List[LLMMessage]:
+    """A generation prompt whose excerpts are numbered in the order given, as the content generator numbers them."""
+    blocks = "\n".join(
+        f'<excerpt index="{index}" source="lecture-2.pdf" location="{where}">\nThe text on {where}.\n</excerpt>'
+        for index, where in enumerate(locations, start=6)
+    )
+    return [
+        LLMMessage(role="system", content="You write warm-ups."),
+        LLMMessage(role="user", content=f"Topics: {TOPIC_A} (Sorting), {TOPIC_B} (Hashing).\n{extra}Supporting excerpts:\n{blocks}"),
+    ]
+
+
 class FakeModel(LLMProvider):
     """Stands in for the real API: answers from the request and records usage the way the real provider does."""
 
@@ -137,6 +149,21 @@ class TestStructured:
         second_run = FakeModel()
         await _recorder(tmp_path, second_run).generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
         assert second_run.calls == 0
+
+    async def test_the_same_excerpts_in_another_order_replay_the_recording(self, tmp_path):
+        # Retrieval breaks ties by random chunk ids (finding 92), so one course can list the same excerpts in another
+        # order, renumbered. Record mode replays the recording instead of paying for the same content again.
+        inner = FakeModel()
+        await _recorder(tmp_path, inner).generate_structured(_excerpts(["p. 1", "p. 5"]), Linked, purpose="warmup")
+        again = await _recorder(tmp_path, inner).generate_structured(_excerpts(["p. 5", "p. 1"]), Linked, purpose="warmup")
+        assert inner.calls == 1
+        assert again.reason == "call 1"
+
+    async def test_a_prompt_with_a_line_more_is_recorded(self, tmp_path):
+        inner = FakeModel()
+        await _recorder(tmp_path, inner).generate_structured(_excerpts(["p. 1", "p. 5"]), Linked, purpose="topics")
+        await _recorder(tmp_path, inner).generate_structured(_excerpts(["p. 1", "p. 5"], "Past exam files: quiz-1.pdf\n"), Linked, purpose="topics")
+        assert inner.calls == 2
 
     async def test_a_request_never_recorded_fails_clearly_without_retries(self, tmp_path):
         with pytest.raises(LLMReplayMissError, match="concepts") as raised:
