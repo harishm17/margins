@@ -164,7 +164,7 @@ test('one before-you-go-on check per section with a claim; the claim text stays 
   assert.deepEqual(data.checks.map((c) => c.afterChunkId), [w.chunks[1].id, w.chunks[2].id, w.chunks[3].id])
   assert.deepEqual(data.checks.map((c) => c.kind), ['claim', 'focus', 'claim'])
   assert.equal(data.checks[1].question, 'How are two keys in one bucket handled?')
-  assert.equal(data.checks[0].question, 'What does the reading say about Hash function?')
+  assert.equal(data.checks[0].question, 'Quick check, from memory: Hash function.')
   // Neither the claim nor its quote is sent with the reading: the source is asked for when the student shows it.
   assert.equal(JSON.stringify(data).includes('Hash function claim.'), false)
   assert.equal(JSON.stringify(data).includes('quote of Hash function'), false)

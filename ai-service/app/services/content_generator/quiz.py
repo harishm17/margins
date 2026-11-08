@@ -53,7 +53,7 @@ DIFFICULTY_GUIDANCE = {
 }
 
 QUESTION_FORMAT_RULES = """Question rules:
-- multiple_choice: exactly 4 options with ids A, B, C, D, one correct answer, plausible distractors. Vary which letter is correct. Keep options short and put any code in the question text, not the options.
+- multiple_choice: exactly 4 options with ids A, B, C, D, one correct answer, plausible distractors. Vary which letter is correct. Keep options short and put any code in the question text, not the options. Make the four options about the same length and level of detail: the correct one must not be the longest, the most specific or the only one with a qualification, which would give it away. When a wrong option states a rule, give it the same kind of conditions the right one has.
 - short_answer: answerable in 1-3 sentences; give a sample_answer and 2-4 key_points a grader can check.
 - numerical: correct_answer is a plain number; give an absolute tolerance. Give `unit` only when the quantity has one (m/s, mol/L, dollars). For a probability, a count or a ratio leave `unit` empty: never put the name of the quantity there.
 - true_false: correct_answer is a boolean; the explanation says why.

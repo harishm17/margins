@@ -178,7 +178,7 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
               phone it is in the Questions sheet). Unanswered questions are named in the dialog before anything is sent. */}
           {isLast ? null : (
             <Button variant="ghost" icon={<Check />} className="text-fg-2 max-sm:hidden" onClick={requestSubmit} data-testid="finish-and-submit">
-              Finish and submit
+              Submit quiz
             </Button>
           )}
         </div>
@@ -220,7 +220,7 @@ export function QuizTaking({ questions, answers, index, error, onAnswer, onDetai
                 requestSubmit()
               }}
             >
-              Finish and submit
+              Submit quiz
             </Button>
           </div>
         </SheetContent>

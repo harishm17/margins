@@ -1022,9 +1022,9 @@ test.describe('the reader', () => {
     // Three sections hold a claim (Hashing, Chaining, Resizing): three checks, one each.
     const checks = page.locator('[data-check]')
     await expect(checks).toHaveCount(3)
-    await expect(checks.nth(0)).toContainText('What does the reading say about Hash function?')
+    await expect(checks.nth(0)).toContainText('Quick check, from memory: Hash function.')
     await expect(checks.nth(1)).toContainText('How are two keys in one bucket handled?')
-    await expect(checks.nth(2)).toContainText('What does the reading say about Resizing?')
+    await expect(checks.nth(2)).toContainText('Quick check, from memory: Resizing.')
 
     // The source sentence is not on the check until the student has answered or said they don't know.
     const first = checks.nth(0)

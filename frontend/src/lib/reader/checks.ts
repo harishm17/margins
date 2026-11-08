@@ -43,6 +43,12 @@ export function sectionsOf<T extends ReaderPassageRef>(passages: T[]): T[][] {
   return sections
 }
 
+/**
+ * The question for a section with no focus question. A concept is named as something to do or understand ("Explain what an
+ * algorithm solves", "Compute a sample mean"), so the name is the task itself and is not put inside a sentence.
+ */
+export const claimCheckQuestion = (conceptName: string): string => `Quick check, from memory: ${conceptName.trim().replace(/[.?!:]+$/, '')}.`
+
 /** At most one check per section, and only for a section that holds a claim. */
 export function buildChecks(passages: ReaderPassageRef[], claims: ReaderClaimRef[], focusQuestions: ReaderFocusQuestion[]): ReaderCheck[] {
   const checks: ReaderCheck[] = []
@@ -57,7 +63,7 @@ export function buildChecks(passages: ReaderPassageRef[], claims: ReaderClaimRef
       checks.push({ afterChunkId, kind: 'focus', question: focus.question, claim })
     } else {
       const claim = held[0]
-      checks.push({ afterChunkId, kind: 'claim', question: `What does the reading say about ${claim.conceptName}?`, claim })
+      checks.push({ afterChunkId, kind: 'claim', question: claimCheckQuestion(claim.conceptName), claim })
     }
   }
   return checks

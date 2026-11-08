@@ -12,6 +12,7 @@ import { usePracticeProgress } from './practice-progress'
 import { useTopic } from './topic-provider'
 import { useTopicView } from './use-topic-view'
 import { VIEW_LABELS, type ContentKind, type PathView } from './types'
+import { formatScore } from '@/lib/format'
 
 type StudyTabsProps = {
   courseId: string
@@ -161,7 +162,7 @@ export function StudyTabs({
       case 'quiz':
         if (running.quiz && !running.quiz.done) return <Writing />
         if (!present.quiz) return <Missing />
-        return progress.quizScore !== null ? <StepStatus>{`${Math.round(progress.quizScore)}%`}</StepStatus> : null
+        return progress.quizScore !== null ? <StepStatus>{formatScore(progress.quizScore)}</StepStatus> : null
       case 'recall':
         // Recalled by the first answer, finished by the last: say how far it is.
         return pathDone.recall && recallProgress.answered < recallProgress.total ? <StepStatus>{`${recallProgress.answered}/${recallProgress.total}`}</StepStatus> : null
@@ -198,7 +199,7 @@ export function StudyTabs({
       case 'quiz':
         if (running.quiz && !running.quiz.done) return 'Being written'
         if (!present.quiz) return 'Not created yet'
-        return progress.quizScore !== null ? `${Math.round(progress.quizScore)}%` : null
+        return progress.quizScore !== null ? formatScore(progress.quizScore) : null
       case 'recall':
         return pathDone.recall && recallProgress.answered < recallProgress.total ? `${recallProgress.answered}/${recallProgress.total}` : null
       default:

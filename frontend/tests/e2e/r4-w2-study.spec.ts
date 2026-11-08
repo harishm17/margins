@@ -250,7 +250,7 @@ test.describe('practice and the quiz', () => {
 
     // On a phone it is in the Questions sheet; on question 1 of 4, with nothing answered, the dialog names the cost.
     await page.getByRole('button', { name: 'Questions', exact: true }).click()
-    await page.getByRole('button', { name: 'Finish and submit' }).click()
+    await page.getByRole('button', { name: 'Submit quiz' }).click()
     const dialog = page.getByRole('dialog', { name: 'Submit your quiz?' })
     await expect(dialog).toContainText('4 unanswered. They\'ll be marked wrong.')
     await screenshotIfAsked(page, 'r4w2-quiz-submit-390x844')

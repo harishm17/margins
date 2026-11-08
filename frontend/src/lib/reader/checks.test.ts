@@ -45,7 +45,7 @@ test('one before-you-go-on check per section with a claim, skippable, self-grade
   assert.deepEqual(checks.map((c) => c.claim.id), ['a', 'c'])
   // A claim turned into a question; the source sentence is held back for the reveal.
   assert.equal(checks[0].kind, 'claim')
-  assert.equal(checks[0].question, 'What does the reading say about Hash function?')
+  assert.equal(checks[0].question, 'Quick check, from memory: Hash function.')
   assert.equal(checks[0].claim.quote, 'quote a')
   // Self-graded: Got it, Partly, Missed.
   assert.deepEqual([checkScore('got_it'), checkScore('partly'), checkScore('missed')], [1, 0.5, 0])

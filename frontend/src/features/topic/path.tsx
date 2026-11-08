@@ -14,6 +14,7 @@ import { activityLabel, opensHere } from './activity-copy'
 import { useTopic } from './topic-provider'
 import { useTopicView } from './use-topic-view'
 import { SHORT_LABELS, TOOL_VIEWS, VIEW_LABELS, type PathView, type ToolView } from './types'
+import { formatScore } from '@/lib/format'
 
 /** A quiz score under this is "taken, not passed yet": the step is finished, but its mark does not say well done. */
 export const QUIZ_LOW_SCORE = 70
@@ -27,7 +28,7 @@ export const QUIZ_LOW_SCORE = 70
 export function StepMarker({ number, done, next, lowScore = null }: { number: number; done: boolean; next: boolean; lowScore?: number | null }) {
   if (done && lowScore !== null) {
     return (
-      <span role="img" aria-label={`Taken, ${Math.round(lowScore)}%`} className="inline-flex size-4 items-center justify-center rounded-full border border-warning text-warning sm:size-5">
+      <span role="img" aria-label={`Taken, ${formatScore(lowScore)}`} className="inline-flex size-4 items-center justify-center rounded-full border border-warning text-warning sm:size-5">
         <Check weight="bold" className="size-2.5 sm:size-3" />
       </span>
     )
