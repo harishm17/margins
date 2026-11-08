@@ -97,6 +97,22 @@ class ChoiceOption(BaseModel):
     )
 
 
+# A past exam heads each problem "Problem 3. [5 points]". The app numbers and scores questions itself, so a copied
+# header would contradict both ("Problem 3" is question 12; "[5 points]" sits beside "4 pts").
+_EXAM_HEADER = re.compile(
+    r"^\s*(\*\*|__)?\s*(?:problem|question|q)\s*\d+[.:)]?\s*[\[(]\s*\d+(?:\.\d+)?\s*(?:points?|pts?|marks?)\s*[\])]\s*[.:\-–—]?\s*",
+    re.IGNORECASE,
+)
+
+
+def strip_exam_header(text: str) -> str:
+    """`text` without a leading past-exam header such as "Problem 3. [5 points]"; a bold title after it stays."""
+    stripped = _EXAM_HEADER.sub(lambda m: m.group(1) or "", text, count=1)
+    if stripped == text:
+        return text
+    return re.sub(r"^(\*\*|__)\s*\1", "", stripped.strip()).strip()
+
+
 class GeneratedQuestion(BaseModel):
     """One quiz or exam question. Fields that do not apply to the type are left out."""
 
@@ -136,7 +152,7 @@ class GeneratedQuestion(BaseModel):
         """The stored question dict, or None when the question is unusable. A multiple-choice
         question whose wrong option does not name its misconception is unusable: the results
         page and the concept's misconception tracking both depend on it."""
-        text = self.question_text.strip()
+        text = strip_exam_header(self.question_text.strip())
         if not text or not self.explanation.strip():
             return None
         stored: Dict[str, Any] = {

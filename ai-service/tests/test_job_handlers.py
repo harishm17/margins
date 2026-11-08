@@ -164,8 +164,8 @@ class TestGradeExam:
                     "earned_points": 1,
                     "total_points": 2,
                     "graded_questions": [
-                        {"question_index": 0, "points_possible": 1, "points_earned": 1},
-                        {"question_index": 1, "points_possible": 1, "points_earned": 0},
+                        {"question_index": 0, "points_possible": 1, "points_earned": 1, "student_answer": "A"},
+                        {"question_index": 1, "points_possible": 1, "points_earned": 0, "student_answer": "text"},
                     ],
                 }
 
@@ -259,6 +259,25 @@ class TestGradeExam:
 
         rows = await db.fetch("SELECT score FROM learning_signals WHERE source = 'exam' ORDER BY score")
         assert [r["score"] for r in rows] == [0.0, 1.0]
+
+    async def test_a_question_left_blank_leaves_no_learning_signal(self, db, world, submission, monkeypatch):
+        class Grader:
+            async def grade_submission(self, submission_id, questions, answers):
+                return {
+                    "overall_score": 100,
+                    "earned_points": 1,
+                    "total_points": 2,
+                    "graded_questions": [
+                        {"question_index": 0, "points_possible": 1, "points_earned": 1, "student_answer": "A"},
+                        {"question_index": 1, "points_possible": 1, "points_earned": 0, "student_answer": None},
+                    ],
+                }
+
+        monkeypatch.setattr(jobs, "ExamGrader", Grader)
+        await self.grade(db, world, submission)
+
+        rows = await db.fetch("SELECT score FROM learning_signals WHERE source = 'exam'")
+        assert [r["score"] for r in rows] == [1.0]
 
     async def test_regrading_one_submission_leaves_other_submissions_signals(self, db, world, submission):
         await db.execute(
