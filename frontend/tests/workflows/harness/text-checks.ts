@@ -10,7 +10,7 @@ export function conceptNameOf(node: string): string {
   return node.replace(IDEA_STATES, '').trim()
 }
 
-const SENTENCE_WORDS = ['about', 'on', 'at', 'of', 'with', 'missed', 'Re-read', 'Read', 'Practice', 'Practise', 'Review', 'Learn']
+const SENTENCE_WORDS = ['about', 'on', 'at', 'of', 'with', 'missed', 'explain', 'Explain', 'Re-read', 'Read', 'Practice', 'Practise', 'Review', 'Learn']
 
 /**
  * SW3: places where a sentence uses an idea's name (an ability: "Compute a sample mean") as a noun, right after a

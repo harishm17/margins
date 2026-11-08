@@ -17,6 +17,8 @@ describe('concept names in sentences (SW3)', () => {
     ])
     assert.deepEqual(misusedConcepts('Re-read Define a confidence interval, p. 1', names), ['"Re-read Define a confidence interval"'])
     assert.deepEqual(misusedConcepts('A question about Compute a sample mean.', names), ['"about Compute a sample mean"'])
+    assert.deepEqual(misusedConcepts('Ask me to explain Compute a sample mean in my own words', names), ['"explain Compute a sample mean"'])
+    assert.deepEqual(misusedConcepts('Explain Define a confidence interval', names), ['"Explain Define a confidence interval"'])
   })
 
   it('accepts the name as a label, a heading or a list item', () => {

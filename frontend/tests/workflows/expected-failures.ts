@@ -44,4 +44,7 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF4.jump-to-missed': { fixedBy: 'U9', finding: '37' }, // no "Next missed" or "Next not answered"
   'WF4.results-rendered': { fixedBy: 'SW2', finding: '32' }, // a question row's preview strips "$" and shows the LaTeX ("\log")
   'WF4.one-exam-name': { fixedBy: 'U7', finding: '22, 39' }, // the tab titles say "Mock exam", "Taking a mock exam", "Mock exam results"
+  // WF5, Ask
+  'WF5.tagline-guides': { fixedBy: 'E5', finding: '9' }, // "Answers come only from your files, with sources."
+  'WF5.concept-sentences': { fixedBy: 'SW3', finding: '2, 48' }, // "about <idea>" in the intro, "explain <idea>" and "about <idea>" in the suggestions
 }

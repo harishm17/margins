@@ -79,11 +79,12 @@ export async function watchBusyButtons(page: Page): Promise<() => string[]> {
 }
 
 /**
- * SW2 on a whole screen: the visible text of each block in main (rendered maths, code and form fields left out),
- * judged by `unrenderedText`. Returns each problem once.
+ * SW2 on a screen, or one region of it: the visible text of each block in main or in the region (rendered maths,
+ * code and form fields left out), judged by `unrenderedText`. Returns each problem once.
  */
-export async function unrendered(page: Page): Promise<string[]> {
-  const blocks = await page.locator('main').evaluate((main) => {
+export async function unrendered(scope: Page | Locator): Promise<string[]> {
+  const root = 'locator' in scope && !('goto' in scope) ? scope : (scope as Page).locator('main')
+  const blocks = await root.evaluate((main) => {
     const skip = '.katex, code, pre, textarea, input, script, style, [aria-hidden="true"]'
     const block = 'p, li, h1, h2, h3, h4, h5, h6, td, th, dd, dt, blockquote, figcaption, label, button, a, div'
     const texts = new Map<Element, string>()
