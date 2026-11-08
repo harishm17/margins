@@ -62,7 +62,7 @@ test('a mock exam resumed after a reload shows its question without moving (at 2
   await page.goto(`/courses/${course}/exams/new`)
   await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '10', exact: true }).click()
-  await page.getByRole('radio', { name: '30 min' }).click()
+  await page.getByRole('radio', { name: '30 min', exact: true }).click()
   await page.getByRole('button', { name: 'Create exam' }).click()
   await expect(page).toHaveURL(/\/exams\/[0-9a-f-]{36}$/, { timeout: 180_000 })
   await page.getByRole('button', { name: /^(Start exam|Resume)/ }).click()
