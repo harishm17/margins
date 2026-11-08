@@ -97,10 +97,20 @@ test('WF2 first topic: warm-up, reading, recall, practice, quiz', async ({ page,
     await prompts.first().getByRole('textbox').fill(
       'A problem says which answers are acceptable for each input, usually by a rule the answers must meet rather than a full list. A general problem allows inputs of any size, not just one small case.'
     )
+    // The student opens the next prompt while the first is still being checked: its answer is held until then.
+    let release = () => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    await page.route('**/api/topics/*/recall', async (route) => (await held, route.continue()), { times: 1 })
     await prompts.first().getByRole('button', { name: 'Check my answer' }).click()
-    await expect(prompts.first().getByRole('region', { name: 'Feedback on your answer' })).toBeVisible({ timeout: 2 * 60_000 })
+    await expect(prompts.first().getByRole('button', { name: /Checking/ })).toBeVisible()
+    await prompts.nth(1).getByRole('button', { name: /Not answered yet$/ }).click()
+    const graded = page.waitForResponse((response) => response.url().includes('/recall') && response.request().method() === 'POST')
+    release()
+    await graded
+    await checks.check('WF2.recall-check-kept', "a check's feedback shows when it lands after the student opened another prompt (SW10)", () =>
+      expect(prompts.first().getByRole('region', { name: 'Feedback on your answer' })).toBeVisible({ timeout: 5000 })
+    )
     await look('recall feedback')
-    // A check opens the next prompt.
     await prompts.nth(1).getByRole('button', { name: "I don't remember" }).click()
     await expect(prompts.nth(1).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible({ timeout: 2 * 60_000 })
     await look('recall feedback')

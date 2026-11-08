@@ -15,6 +15,7 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF2.reading.same-next-step': { fixedBy: 'G5', finding: '11' }, // the plan ticks "Learn <topic>" done after warm-up and reading; the topic says Recall
   'WF2.reading.no-percent-yet': { fixedBy: 'SW11', finding: '49' },
   'WF2.recall.same-next-step': { fixedBy: 'SW9, G5', finding: '10, 11' }, // list "Next: Read that part again", path "Recall (next up) 2/5", plan ticked done
+  'WF2.recall-check-kept': { fixedBy: 'SW10', finding: '96' }, // the first prompt comes back empty with "Check my answer"
   'WF2.recall.no-percent-yet': { fixedBy: 'SW11', finding: '49' }, // "Learning 16%" after one written recall and one "I don't remember"
   'WF2.quiz.same-next-step': { fixedBy: 'SW9', finding: '10' }, // after the quiz: list "Next: Read that part again", path "Recall (next up) 2/5"
   'WF2.maths-renders': { fixedBy: 'SW2', finding: '93' }, // Examples: a block at the start of the line ends the numbered list, items 3 and 4 run together
