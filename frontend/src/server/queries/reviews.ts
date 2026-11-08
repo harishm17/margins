@@ -24,6 +24,8 @@ export async function dueReviews(userId: string, timeZone: string, limit = 5): P
   // every screen shows (topic-standing.ts).
   const rows = await prisma.reviewSchedule.findMany({
     where: { userId, project: { userId }, topic: { userConfirmed: true } },
+    // Course by course, each in course order: topics due at one moment (a blank exam marks them all) keep it.
+    orderBy: [{ project: { createdAt: 'asc' } }, { topic: { orderIndex: 'asc' } }],
     select: { topicId: true, topic: { select: { name: true } }, project: { select: { id: true, name: true } } },
   })
   const standings = await topicStandings(userId, rows.map((row) => row.topicId), now)

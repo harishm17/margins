@@ -404,3 +404,19 @@ test('the first week of answers is exposed, so the panel knows the early weeks',
   const other = await world('first-week-other')
   assert.equal((await get(other)).firstWeekStart, null)
 })
+
+test('ideas that tie for the focus come in course order, whatever order their memories were written in', async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const w = await world('focus-tie')
+  const ideas = [await w.concept('Probing', 0), await w.concept('Buckets', 1), await w.concept('Resizing', 2), await w.concept('Tombstones', 3)]
+  // The same mix-up named at the same moment for each idea (one answer tagged with them all), written last idea first.
+  const at = new Date(NOW.getTime() - DAY)
+  for (const [n, idea] of [...ideas].reverse().entries()) {
+    await answer(w, idea.id, { at, score: 0, session: `tie${n}`, metadata: { missKind: 'misconception', misconception: 'Thinks the table never fills' } })
+  }
+  const result = await get(w)
+  assert.deepEqual(
+    result.focus.map((f) => f.name),
+    ['Probing', 'Buckets', 'Resizing']
+  )
+})

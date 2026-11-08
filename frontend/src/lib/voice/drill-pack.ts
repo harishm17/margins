@@ -146,6 +146,8 @@ export const buildSprintQuestionSet = async (
       project: { userId },
       userConfirmed: true,
     },
+    // In course order, so topics that tie below (none opened yet) are taken the same way every time.
+    orderBy: { orderIndex: 'asc' },
     include: {
       content: true,
       progress: {

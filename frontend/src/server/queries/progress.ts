@@ -58,8 +58,10 @@ function startOfLocalDay(day: string, timeZone: string): Date {
 }
 
 async function focusConcepts(userId: string, projectId: string, now: Date) {
+  // In course order: ideas that tie below (one answer's mix-up is written to every idea it tags, at one moment) keep it.
   const rows = await prisma.conceptMemory.findMany({
     where: { userId, projectId, concept: { status: 'active', topic: { userConfirmed: true } } },
+    orderBy: [{ concept: { topic: { orderIndex: 'asc' } } }, { concept: { orderIndex: 'asc' } }, { concept: { name: 'asc' } }],
     include: { concept: { select: { name: true, kind: true, topicId: true, topic: { select: { name: true } } } } },
   })
   const learned = rows.map((row) => {
