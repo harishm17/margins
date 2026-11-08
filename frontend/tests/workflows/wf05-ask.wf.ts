@@ -1,6 +1,6 @@
-import type { Locator, Page } from '@playwright/test'
+import type { Locator } from '@playwright/test'
 import { test, expect } from './harness/fixtures'
-import { markerPlaces, markerProblems, type MarkerPlace } from './harness/ask'
+import { askScreen, markerPlaces, markerProblems, type MarkerPlace } from './harness/ask'
 import { openOnWarmup, readyCourse, startStudying } from './harness/course'
 import { expectNone, ideaNames, unrendered } from './harness/page-checks'
 import { misusedConcepts } from './harness/text-checks'
@@ -129,28 +129,3 @@ test('WF5 Ask: a question, a follow-up, a citation, a check question, the sugges
     )
   })
 })
-
-/** What a student reads and uses on the Ask page. */
-function askScreen(page: Page) {
-  const main = page.locator('main')
-  // Finished replies; the one being written is marked busy until it is saved.
-  const replies = main.locator('article:not([aria-busy])')
-  const box = page.locator('form[data-ask-composer] textarea')
-  return {
-    suggestions: main.getByRole('list', { name: 'Suggested questions' }),
-    /** The line under the empty page's heading that says what Ask does. */
-    intro: main.getByRole('heading', { level: 2, name: 'Ask your materials' }).locator('xpath=following-sibling::p[1]'),
-    send: async (text: string) => {
-      await box.fill(text)
-      await box.press('Enter')
-    },
-    /** Sends a message with `send` and returns the reply once it is written and saved. */
-    reply: async (send: () => Promise<void>) => {
-      const before = await replies.count()
-      await send()
-      await expect(replies).toHaveCount(before + 1, { timeout: 4 * 60_000 })
-      await expect(main.locator('article[aria-busy]')).toHaveCount(0)
-      return replies.last()
-    },
-  }
-}

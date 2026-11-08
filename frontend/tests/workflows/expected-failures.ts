@@ -58,4 +58,16 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF6.round-can-start': { fixedBy: 'G1', finding: '83' }, // the round's weakest topics are never-opened ones with no quiz, so Start is disabled
   'WF6.unended-closed': { fixedBy: 'V5', finding: '85' }, // the dead tab's session stays active
   'WF6.drill-keeps-set': { fixedBy: 'V5', finding: '81' }, // Quiz me reads only the newest set: 4 questions before Fix it now, 2 after
+  // WF7, files
+  'WF7.renamed-copy-caught': { fixedBy: 'F1', finding: '73' }, // "lecture-2 (1).pdf" is taken as a new file and read, and topic finding runs again
+  'WF7.delete-states-counts': { fixedBy: 'F7', finding: '74' }, // "Existing topic content stays. Links to this file ... will stop opening.", with no counts
+  'WF7.note-kept-on-delete': { fixedBy: 'F7', finding: '78' }, // the margin note is deleted with the file
+  'WF7.citation-marked': { fixedBy: 'F5', finding: '74' }, // both citations of the deleted file still offer "Open page"
+  'WF7.ideas-keep-claims': { fixedBy: 'SW13', finding: '74' }, // 4 of the topic's ideas are left with no claim
+  'WF7.replace-says-what-happened': { fixedBy: 'F3', finding: '89' }, // no message after the duplicate dialog's Replace
+  'WF7.replace-keeps-claims': { fixedBy: 'F2', finding: '72' }, // 11 claims before, 0 after
+  'WF7.replace-keeps-source': { fixedBy: 'F2', finding: '72' }, // the topic no longer reads from the replaced lecture
+  'WF7.replace-keeps-note': { fixedBy: 'F2', finding: '78' }, // the margin note is deleted with the old copy
+  'WF7.replace-in-menu': { fixedBy: 'F4', finding: '75' }, // only a refused or unread file's menu offers Replace
+  'WF7.lost-claims-repaired': { fixedBy: 'F0', finding: '89' }, // there is no repair yet
 }

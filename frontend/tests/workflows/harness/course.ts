@@ -81,12 +81,12 @@ export async function openUploadArea(page: Page) {
   if (await folded.count()) await folded.locator('summary').click()
 }
 
-/** Picks the category, then the files, in the upload area on the page that is open. */
+/** Picks the category, then the files, in the upload area on the page that is open: course files by name, others by path. */
 export async function chooseFiles(page: Page, names: string[], category: Category = 'Lecture notes') {
   await openUploadArea(page)
   await page.getByRole('radio', { name: category, exact: true }).click()
-  if (names.length > 1) await arriveInOrder(page, names)
-  await page.getByLabel('Choose files to upload').setInputFiles(names.map(courseFile))
+  if (names.length > 1) await arriveInOrder(page, names.map((name) => path.basename(name)))
+  await page.getByLabel('Choose files to upload').setInputFiles(names.map((name) => (path.isAbsolute(name) ? name : courseFile(name))))
 }
 
 /**
