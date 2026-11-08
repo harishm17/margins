@@ -405,10 +405,24 @@ def recording_cost(cassette_dir: Path | str, *, since: float = 0.0) -> Dict[str,
     }
 
 
+def duplicate_recordings(cassette_dir: Path | str) -> List[List[Path]]:
+    """Recordings the reordered rule treats as one request, each group sorted. A group should not exist: replay picks
+    its member by the run's excerpt order, so what follows from the answer differs from run to run. Groups are left
+    from before the rule, when each order was recorded with an answer of its own; keep one recording of each."""
+    groups: Dict[Tuple[Tuple[str, str, str], Tuple[str, ...]], List[Path]] = {}
+    for entry in ReplayProvider(cassette_dir, on_miss="error")._entries.values():
+        groups.setdefault((entry.group, entry.content), []).append(entry.path)
+    return [sorted(paths) for paths in groups.values() if len(paths) > 1]
+
+
 if __name__ == "__main__":
     # python -m app.services.llm.replay_provider CASSETTE_DIR [SINCE_UNIX_TIME]
+    # Prints what the recordings made since then cost, and any groups of recordings that replay as one request.
     import sys
 
     if len(sys.argv) not in (2, 3):
         sys.exit("usage: python -m app.services.llm.replay_provider CASSETTE_DIR [SINCE_UNIX_TIME]")
-    print(json.dumps(recording_cost(sys.argv[1], since=float(sys.argv[2]) if len(sys.argv) == 3 else 0.0)))
+    root = Path(sys.argv[1])
+    summary = recording_cost(root, since=float(sys.argv[2]) if len(sys.argv) == 3 else 0.0)
+    summary["duplicates"] = [[str(p.relative_to(root)) for p in group] for group in duplicate_recordings(root)]
+    print(json.dumps(summary))

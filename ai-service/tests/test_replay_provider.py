@@ -294,3 +294,31 @@ class TestRecordingCost:
         # Haiku 5.5 at $0.10 in and $0.50 out per million: (101 + 102) input and 20 output tokens.
         assert summary["cost_usd"] == pytest.approx((203 * 0.10 + 20 * 0.50) / 1_000_000)
         assert recording_cost(tmp_path, since=0)["recordings"] == 3
+
+
+class TestDuplicateRecordings:
+    async def test_recordings_of_one_prompt_in_two_orders_are_reported_together(self, tmp_path):
+        import shutil
+
+        from app.services.llm.replay_provider import duplicate_recordings
+
+        await _recorder(tmp_path).generate_structured(_excerpts(["p. 1", "p. 5"]), Linked, purpose="warmup")
+        await _recorder(tmp_path).generate_structured(_excerpts(["p. 1", "p. 5"], "Past exam files: quiz-1.pdf\n"), Linked, purpose="warmup")
+        # Made before the reordered rule: the same excerpts in another order, recorded with an answer of its own.
+        older = tmp_path / "older"
+        await _recorder(older).generate_structured(_excerpts(["p. 5", "p. 1"]), Linked, purpose="warmup")
+        [copy] = list(older.rglob("*.json"))
+        shutil.move(copy, tmp_path / copy.relative_to(older))
+        shutil.rmtree(older)
+
+        [group] = duplicate_recordings(tmp_path)
+        assert len(group) == 2
+        assert {path.parent.name for path in group} == {"warmup"}
+        assert copy.name in {path.name for path in group}
+
+    async def test_one_recording_per_prompt_reports_nothing(self, tmp_path):
+        from app.services.llm.replay_provider import duplicate_recordings
+
+        await _recorder(tmp_path).generate_structured(_excerpts(["p. 1", "p. 5"]), Linked, purpose="warmup")
+        await _recorder(tmp_path).generate_structured(_excerpts(["p. 1", "p. 5"]), Linked, purpose="topics")
+        assert duplicate_recordings(tmp_path) == []
