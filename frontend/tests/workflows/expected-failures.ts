@@ -76,4 +76,9 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF8.notes-dialog-says-reading': { fixedBy: 'D1', finding: '66' }, // "This replaces your current notes.", nothing on margin notes or the reading done
   'WF8.dialogs-say-which-drafts-go': { fixedBy: 'SW10', finding: '66' }, // neither dialog mentions the student's unsent work
   'WF8.practice-draft-rule': { fixedBy: 'SW10', finding: '66' }, // the working typed on step 1 shows under the new set's step 1: drafts are keyed by the content id, which a regenerate keeps
+  // WF9, the allowance
+  'WF9.settings-plain-terms': { fixedBy: 'D2', finding: '77' }, // "Available · 10% used · resets at 4:00 PM"
+  'WF9.prepare-all-says-share': { fixedBy: 'X4', finding: '77' }, // the dialog says neither how long nor its share of today
+  'WF9.one-job-past-limit': { fixedBy: 'S2', finding: 'K4' }, // three topics opened together on the last cent: 3 jobs ran, $0.26 past the limit
+  'WF9.same-allowance-state': { fixedBy: 'D2, X4', finding: '77' }, // the regenerate dialog only disables its button; Settings says "Today's allowance used"; topic finding gives no reset time
 }
