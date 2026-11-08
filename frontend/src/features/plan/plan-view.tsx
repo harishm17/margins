@@ -108,7 +108,8 @@ function DayBadges({ day, collapsed = false }: { day: PlanDay; collapsed?: boole
 
 function dayMinutesLine(day: PlanDay): string | null {
   if (day.minutes + day.doneMinutes === 0) return null
-  return day.isToday && day.doneMinutes > 0 ? `${day.doneMinutes} min done, ${day.minutes} to go` : `About ${day.minutes + day.doneMinutes} min`
+  if (day.isToday && day.doneMinutes > 0) return day.minutes === 0 ? `${day.doneMinutes} min done: today's plan is complete` : `${day.doneMinutes} min done, ${day.minutes} to go`
+  return `About ${day.minutes + day.doneMinutes} min`
 }
 
 function ItemList({ items, today }: { items: DescribedPlanItem[]; today: boolean }) {
