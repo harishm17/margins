@@ -81,4 +81,11 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF9.prepare-all-says-share': { fixedBy: 'X4', finding: '77' }, // the dialog says neither how long nor its share of today
   'WF9.one-job-past-limit': { fixedBy: 'S2', finding: 'K4' }, // three topics opened together on the last cent: 3 jobs ran, $0.26 past the limit
   'WF9.same-allowance-state': { fixedBy: 'D2, X4', finding: '77' }, // the regenerate dialog only disables its button; Settings says "Today's allowance used"; topic finding gives no reset time
+  // WF10, devices
+  'WF10.touch-targets-ipad': { fixedBy: 'SW5', finding: '41' }, // the menu button 34x34, the course's action links 34 px tall, radio chips 30 px: touch sizes are keyed to phone width
+  'WF10.cut-off-text-ipad': { fixedBy: 'SW6', finding: '20, 43, 87' }, // topic names clamped on the course page, plan items cut with an ellipsis
+  'WF10.cut-off-text-phone': { fixedBy: 'SW6', finding: '20, 43' }, // the same, and "and 1 more task" plan rows
+  'WF10.focus-returns': { fixedBy: 'X5', finding: '100' }, // the menu gives focus back to its button, but the Regenerate notes dialog opened from it gives it to the page
+  'WF10.palette-focus-returns': { fixedBy: 'X5', finding: '100' }, // closing the command palette leaves the focus on the page
+  'WF10.phone-voice-turn-whole': { fixedBy: 'V6', finding: '86' }, // the coach's turn is partly hidden inside the sheet's scrolling strip on a phone
 }
