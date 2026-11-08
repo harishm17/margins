@@ -47,4 +47,15 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   // WF5, Ask
   'WF5.tagline-guides': { fixedBy: 'E5', finding: '9' }, // "Answers come only from your files, with sources."
   'WF5.concept-sentences': { fixedBy: 'SW3', finding: '2, 48' }, // "about <idea>" in the intro, "explain <idea>" and "about <idea>" in the suggestions
+  // WF6, voice
+  'WF6.one-verdict': { fixedBy: 'V2', finding: '69' }, // the evaluation row repeats the coach's words under the chip
+  'WF6.next-button': { fixedBy: 'V1', finding: '68' }, // the coach asks whether the student is ready; only a typed "yes" moves on
+  'WF6.summary-one-action': { fixedBy: 'R1', finding: '84' }, // "Practice this" filled, "Start again" and the back link outlined
+  'WF6.revisit-in-full': { fixedBy: 'R1', finding: '84' }, // the question to revisit is clipped and has no answer
+  'WF6.idle-not-counted': { fixedBy: 'V4', finding: '71' }, // wall time counts while the open tab sends heartbeats
+  'WF6.start-here-instead': { fixedBy: 'V4', finding: '71' }, // "Another voice practice looks open", with no way to take over
+  'WF6.round-size-stated': { fixedBy: 'V5', finding: '83' }, // "Up to 12 questions" for a round that has none
+  'WF6.round-can-start': { fixedBy: 'G1', finding: '83' }, // the round's weakest topics are never-opened ones with no quiz, so Start is disabled
+  'WF6.unended-closed': { fixedBy: 'V5', finding: '85' }, // the dead tab's session stays active
+  'WF6.drill-keeps-set': { fixedBy: 'V5', finding: '81' }, // Quiz me reads only the newest set: 4 questions before Fix it now, 2 after
 }
