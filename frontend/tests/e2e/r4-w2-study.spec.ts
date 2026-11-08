@@ -162,7 +162,7 @@ test.describe('recall', () => {
     await page.reload()
     await expect(page.getByRole('heading', { name: 'Recall feedback' })).toBeVisible()
     await expect(page.getByTestId('recall-submitted').first()).toContainText('A hash table sends each key to a bucket')
-    await expect(page.getByTestId('recall-result-line').first()).toHaveText(/You covered \d+ of \d+ ideas?\.|You covered every idea/)
+    await expect(page.getByTestId('recall-result-line').first()).toHaveText(/You covered \d+ of \d+ ideas?(, and part of (one|\d+) more)?\.|You covered every idea/)
     // One way on: the explanation of the gaps, with the next step as the plain choice beside it, and the skip link gone.
     await expect(page.getByRole('link', { name: 'Read the explanation of your gaps' })).toBeVisible()
     await expect(page.getByTestId('recall-skip-explainer').locator('visible=true')).toHaveText('Continue to Practice')

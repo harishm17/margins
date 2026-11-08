@@ -47,7 +47,7 @@ Edges:
 
 Reading and recall:
 - For each objective write one focus question: the question the reading answers, phrased for a student about to read, with the chunk_id of the excerpt that answers it.
-- For each objective write one recall prompt that asks the student to explain it in their own words, such as "Explain how ..." or "Why does ...".
+- For each objective write one recall prompt that asks the student to explain it in their own words, such as "Explain how ..." or "Why does ...". The student's answer is checked against every claim of every concept that serves the objective, so word the prompt to ask for all of those concepts together (for an objective with two concepts, "Explain what a problem is and what it means for an algorithm to solve it"), not for one of them.
 
 Example of one concept with its claim:
 concept: key "c1", name "Compute a sample mean", kind "procedure", summary "The sample mean is the sum of the values divided by how many there are.", objective_indexes [0]
