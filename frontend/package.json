@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "tsx --test \"src/**/*.test.ts\" \"tests/workflows/**/*.test.ts\"",
     "test:e2e": "playwright test",
     "screens": "tsx scripts/capture-screens.ts",
     "backfill-evidence": "tsx scripts/backfill-evidence.ts",
