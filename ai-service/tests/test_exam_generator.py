@@ -84,6 +84,15 @@ class TestGeneration:
         assert exam["topics_covered"] == ["Topic 1", "Topic 2"]
 
     @pytest.mark.asyncio
+    async def test_the_same_questions_come_in_the_same_order(self):
+        orders = set()
+        for _ in range(6):
+            exam = await _generate([_mcqs(5, "one"), _mcqs(5, "two")], total=8)
+            orders.add(tuple(q["question_text"] for q in exam["questions"]))
+        assert len(orders) == 1
+        assert list(next(iter(orders))) != sorted(next(iter(orders)))
+
+    @pytest.mark.asyncio
     async def test_one_failed_topic_keeps_the_rest(self):
         exam = await _generate([_mcqs(2, "one"), LLMUnavailableError("timeout")])
         assert exam["total_questions"] == 2

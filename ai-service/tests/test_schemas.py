@@ -89,6 +89,20 @@ class TestShuffle:
         }
         assert positions == {"A", "B", "C", "D"}
 
+    def test_the_same_question_is_always_shuffled_the_same_way(self):
+        orders = {
+            tuple(o["text"] for o in shuffle_choice_options(_mcq(question_text="Which is a heap?").normalized())["options"])
+            for _ in range(10)
+        }
+        assert len(orders) == 1
+
+    def test_without_a_generator_the_answer_position_is_still_spread(self):
+        positions = {
+            shuffle_choice_options(_mcq(question_text=f"Question {n}").normalized())["correct_answer"]
+            for n in range(40)
+        }
+        assert positions == {"A", "B", "C", "D"}
+
     def test_other_types_unchanged(self):
         question = {"question_type": "true_false", "correct_answer": True}
         assert shuffle_choice_options(dict(question)) == question

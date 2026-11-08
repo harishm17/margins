@@ -5,7 +5,6 @@ Creates comprehensive exams combining multiple topics.
 
 import asyncio
 import logging
-import random
 from typing import Dict, List, Mapping
 
 from datetime import UTC, datetime
@@ -33,7 +32,7 @@ from app.services.content_generator.support_check import check_support
 from app.services.exam_style import project_style_profile, style_guidance
 from app.services.llm.base import LLMError, LLMOutputError
 from app.services.llm.factory import LLMFactory
-from app.services.llm.schemas import QuestionSet
+from app.services.llm.schemas import QuestionSet, content_rng
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +179,8 @@ class ExamGenerator:
                 f"Exam had {len(all_questions)} usable questions of {total_questions} requested"
             )
 
-        random.shuffle(all_questions)
+        # Mixed across topics, the same way every time for the same questions.
+        content_rng([str(q.get('question_text')) for q in all_questions]).shuffle(all_questions)
         return {
             'questions': all_questions,
             'total_questions': len(all_questions),
