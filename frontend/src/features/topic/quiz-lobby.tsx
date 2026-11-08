@@ -233,7 +233,7 @@ export function QuizLobby({ courseId, topicId, review, sets, attempts, setId, on
               </span>
             </div>
             <p className="tabular text-small text-fg-2">
-              {best !== null ? `Best ${Math.round(best)}%, ` : ''}
+              {best !== null ? `Best ${formatScore(best)}, ` : ''}
               {setAttempts.length === 0 ? 'No attempts yet' : pluralize(setAttempts.length, 'attempt')}
             </p>
           </div>

@@ -49,6 +49,7 @@ import { useTopic } from './topic-provider'
 import { TopicStructureBlock, unitLabel } from './topic-structure'
 import { useTopicView } from './use-topic-view'
 import { CONTENT_KINDS, type ContentKind } from './types'
+import { formatScore } from '@/lib/format'
 
 // The chat client loads the first time the sheet is asked for, so it is not in the topic page's first load.
 const loadAskSheet = () => import('@/features/ask/ask-sheet').then((m) => m.AskSheet)
@@ -176,7 +177,7 @@ export function TopicHeader({
       </span>
       {bestQuiz !== null ? (
         <span className="tabular">
-          <span className="text-fg-3">{PROGRESS_MEASURE.quiz} (best)</span> {Math.round(bestQuiz)}%
+          <span className="text-fg-3">{PROGRESS_MEASURE.quiz} (best)</span> {formatScore(bestQuiz)}
         </span>
       ) : null}
       {dueAt && daysUntilDue !== null ? <NextReview dueAt={dueAt} daysUntil={daysUntilDue} label={nextReviewText} /> : null}

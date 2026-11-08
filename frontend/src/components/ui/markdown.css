@@ -73,6 +73,12 @@
   letter-spacing: -0.01em;
 }
 
+.md-stem-long > p {
+  font-size: 17px;
+  line-height: 27px;
+  font-weight: 500;
+}
+
 .md-stem-compact > p {
   font-weight: 500;
 }

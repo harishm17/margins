@@ -8,6 +8,10 @@ import { MathText } from './math-text'
 // and grow back. The fallback is only for a question that appears after the page has loaded.
 const Markdown = React.lazy(() => import('./markdown').then((m) => ({ default: m.Markdown })))
 
+/** Past this many characters a stem is a paragraph to read, not a headline: it is set at a lighter weight. */
+export const LONG_STEM_CHARS = 140
+export const stemIsLong = (text: string): boolean => text.trim().length > LONG_STEM_CHARS
+
 /** A stem with a line break holds more than one block: a paragraph break, a table or a code block. */
 export const stemHasBlocks = (text: string): boolean => /\n/.test(text.trim())
 
@@ -30,7 +34,7 @@ export function QuestionText({
   if (!stemHasBlocks(children)) return <MathText className={className}>{children}</MathText>
   return (
     <React.Suspense fallback={<div className={`whitespace-pre-wrap ${compact ? 'text-body' : 'text-heading'} ${className ?? ''}`}>{children}</div>}>
-      <Markdown variant={compact ? 'stem-compact' : 'stem'} className={className}>
+      <Markdown variant={compact ? 'stem-compact' : 'stem'} className={stemIsLong(children) && !compact ? `md-stem-long ${className ?? ''}` : className}>
         {children}
       </Markdown>
     </React.Suspense>

@@ -1092,6 +1092,11 @@ async def grade_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
 
     signals = []
     for graded_question in grading_result.get("graded_questions", []):
+        # A question left blank says nothing about the topic. Scoring it 0 would mark a topic the student never
+        # studied as "Learning" and schedule a review of it.
+        student_answer = graded_question.get("student_answer")
+        if student_answer is None or (isinstance(student_answer, str) and not student_answer.strip()):
+            continue
         topic_id = None
         question_index = graded_question.get("question_index")
         if isinstance(question_index, int) and 0 <= question_index < len(questions):

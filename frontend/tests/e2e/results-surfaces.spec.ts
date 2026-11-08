@@ -204,11 +204,11 @@ test('the exam results with its calibration line and sure-and-wrong group: no ax
     await expect(page.getByText('Other ways to study')).toBeVisible()
     await expectNoAxeViolations(page, `exam results, ${name}`)
     await screenshotIfAsked(page, `exam-results-${name}`)
-    await page.getByRole('radio', { name: /^Missed/ }).click()
+    await page.getByRole('radio', { name: /^Lost points/ }).click()
     await expect(page.getByRole('heading', { name: 'Questions' })).toBeVisible()
-    // "Missed 2" is two questions (one wrong, one only partly right), each a labelled row; Expand all opens their reviews,
+    // "Lost points 2" is two questions (one wrong, one only partly right), each a labelled row; Expand all opens their reviews,
     // each with its points spelled out. The first miss to read starts open and the rest collapsed.
-    await expect(page.getByRole('radio', { name: 'Missed 2' })).toBeChecked()
+    await expect(page.getByRole('radio', { name: 'Lost points 2' })).toBeChecked()
     const rows = page.locator('section[aria-labelledby="exam-questions-review"]')
     await expect(rows.locator('button[aria-expanded]')).toHaveCount(2)
     await expect(rows.locator('button[aria-expanded="true"]')).toHaveCount(1)

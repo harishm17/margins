@@ -162,7 +162,7 @@ test.describe('recall', () => {
     await page.reload()
     await expect(page.getByRole('heading', { name: 'Recall feedback' })).toBeVisible()
     await expect(page.getByTestId('recall-submitted').first()).toContainText('A hash table sends each key to a bucket')
-    await expect(page.getByTestId('recall-result-line').first()).toHaveText(/You covered \d+ of \d+ ideas?\.|You covered every idea/)
+    await expect(page.getByTestId('recall-result-line').first()).toHaveText(/You covered \d+ of \d+ ideas?( completely, and \d+ partly)?\.|You covered every idea/)
     // One way on: the explanation of the gaps, with the next step as the plain choice beside it, and the skip link gone.
     await expect(page.getByRole('link', { name: 'Read the explanation of your gaps' })).toBeVisible()
     await expect(page.getByTestId('recall-skip-explainer').locator('visible=true')).toHaveText('Continue to Practice')
@@ -250,7 +250,7 @@ test.describe('practice and the quiz', () => {
 
     // On a phone it is in the Questions sheet; on question 1 of 4, with nothing answered, the dialog names the cost.
     await page.getByRole('button', { name: 'Questions', exact: true }).click()
-    await page.getByRole('button', { name: 'Finish and submit' }).click()
+    await page.getByRole('button', { name: 'Submit quiz' }).click()
     const dialog = page.getByRole('dialog', { name: 'Submit your quiz?' })
     await expect(dialog).toContainText('4 unanswered. They\'ll be marked wrong.')
     await screenshotIfAsked(page, 'r4w2-quiz-submit-390x844')

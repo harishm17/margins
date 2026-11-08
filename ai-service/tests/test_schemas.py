@@ -8,6 +8,7 @@ from app.services.llm.schemas import (
     GeneratedQuestion,
     QuestionSet,
     rewrite_option_letters,
+    strip_exam_header,
     shuffle_choice_options,
 )
 
@@ -210,3 +211,25 @@ def test_the_generator_keeps_the_problems_whose_hints_are_clean():
     good = _practice_problem(["Re-read.", "Add the colours.", "total = red + blue"])
     kept = [s for e in InteractiveExampleSet(examples=[bad, good]).examples if (s := e.stored()) is not None]
     assert len(kept) == 1
+
+
+class TestPastExamHeader:
+    """A past exam's "Problem 3. [5 points]" header must not reach a question: the app numbers and scores them."""
+
+    @pytest.mark.parametrize(
+        "text, expected",
+        [
+            ("**Problem 3. [5 points] Upside-Down Build**\n\nProfessor Quill wants", "**Upside-Down Build**\n\nProfessor Quill wants"),
+            ("Problem 4. [4 points] The Coatroom\n\nThe Grand Hotel", "The Coatroom\n\nThe Grand Hotel"),
+            ("**Problem 1. [3 points]** Gardener Odalys keeps", "Gardener Odalys keeps"),
+            ("Question 2 (3 pts): Which is faster?", "Which is faster?"),
+            ("What is Problem 3 about?", "What is Problem 3 about?"),
+            ("Consider the cost [5 points] of a scan", "Consider the cost [5 points] of a scan"),
+        ],
+    )
+    def test_strip(self, text, expected):
+        assert strip_exam_header(text) == expected
+
+    def test_normalized_question_has_no_header(self):
+        stored = _mcq(question_text="Problem 2. [3 points] Which holds?").normalized()
+        assert stored["question_text"] == "Which holds?"

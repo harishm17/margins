@@ -149,7 +149,7 @@ test('mock exam: a failed exam goes back to the form with every choice kept', as
   await page.goto(`${course}/exams/new`)
   await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '10', exact: true }).click()
-  await page.getByRole('radio', { name: '30 min' }).click()
+  await page.getByRole('radio', { name: '30 min', exact: true }).click()
 
   // The job fails (a passing outage that used its retries).
   await page.route('**/api/jobs/*', async (route) => {
@@ -165,9 +165,9 @@ test('mock exam: a failed exam goes back to the form with every choice kept', as
   await expect(failure).toContainText('The AI is busy right now. Try again in a few minutes.')
   // No promise that it is still coming, and nothing chosen is lost.
   await expect(page.getByText('Writing your exam')).toBeHidden()
-  await expect(page.getByText(/This takes about a minute or two/)).toBeHidden()
+  await expect(page.getByText(/This takes a few minutes/)).toBeHidden()
   await expect(page.getByRole('radio', { name: '10', exact: true })).toBeChecked()
-  await expect(page.getByRole('radio', { name: '30 min' })).toBeChecked()
+  await expect(page.getByRole('radio', { name: '30 min', exact: true })).toBeChecked()
 
   // Try again works once the AI is back.
   await page.unroute('**/api/jobs/*')

@@ -119,10 +119,10 @@ class AnswerText(BaseModel):
 
 
 class AnswerCitation(BaseModel):
-    """The model cited an excerpt. It belongs to the text written just before it.
+    """The model cited an excerpt. It belongs to the text block it arrived with.
 
-    `offset` is the number of characters of answer text written so far, so a marker for
-    this citation goes at that position.
+    `offset` is the number of characters of answer text written up to the end of that block,
+    so a marker for this citation goes at that position, after the words it supports.
     """
 
     type: Literal["citation"] = "citation"

@@ -57,6 +57,13 @@ export function coverageNote(selectedCount: number, withoutPagesCount: number): 
   return `Covers ${topics(covered)} (${left})`
 }
 
+/** A heads-up when the exam covers topics the student has not started: those questions are about pages they have not met. Null when there are none. */
+export function unstartedNote(coveredCount: number, unstartedCount: number): string | null {
+  if (unstartedCount <= 0 || coveredCount <= 0) return null
+  if (unstartedCount >= coveredCount) return coveredCount === 1 ? "You haven't started this topic, so its questions will be new to you." : "You haven't started any of these topics, so the questions will be new to you."
+  return `You haven't started ${unstartedCount === 1 ? '1 of them' : `${unstartedCount} of them`}, so those questions will be new to you.`
+}
+
 const DIFFICULTY_LABELS: Record<string, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 export const difficultyLabel = (value: string): string => DIFFICULTY_LABELS[value] ?? value
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { coverageNote, examSummary, formatMinutes, formatScore, onlyWithPages, preselectTopics, QUESTION_MIXES } from './exam-options'
+import { coverageNote, examSummary, formatMinutes, formatScore, onlyWithPages, preselectTopics, QUESTION_MIXES, unstartedNote } from './exam-options'
 
 const NOW = Date.parse('2026-10-20T12:00:00Z')
 
@@ -67,5 +67,18 @@ describe('coverageNote', () => {
     assert.equal(coverageNote(4, 1), 'Covers 3 topics (1 without pages is left out)')
     assert.equal(coverageNote(5, 2), 'Covers 3 topics (2 without pages are left out)')
     assert.equal(coverageNote(1, 1), 'Covers 0 topics (1 without pages is left out)')
+  })
+})
+
+describe('unstartedNote', () => {
+  it('says nothing when every covered topic has been started', () => {
+    assert.equal(unstartedNote(3, 0), null)
+    assert.equal(unstartedNote(0, 0), null)
+  })
+  it('names how many of the covered topics are new', () => {
+    assert.equal(unstartedNote(3, 1), "You haven't started 1 of them, so those questions will be new to you.")
+    assert.equal(unstartedNote(3, 2), "You haven't started 2 of them, so those questions will be new to you.")
+    assert.equal(unstartedNote(3, 3), "You haven't started any of these topics, so the questions will be new to you.")
+    assert.equal(unstartedNote(1, 1), "You haven't started this topic, so its questions will be new to you.")
   })
 })

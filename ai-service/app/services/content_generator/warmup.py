@@ -41,7 +41,7 @@ WARMUP_INSTRUCTIONS = """Write {count} warm-up questions on "{topic}" from the e
 
 - Ask about the objectives of the topic, one idea per question. Use only multiple_choice and true_false questions; no calculations.
 - Tag each question's difficulty as easy, medium or hard. The set has {mix}. Easy questions ask for a definition or a plain fact, medium questions apply an idea to a small case, and hard questions need the idea combined with another or a common mix-up resisted.
-- multiple_choice: exactly 4 options with ids A, B, C, D, one correct answer. Vary which letter is correct. Keep options short.
+- multiple_choice: exactly 4 options with ids A, B, C, D, one correct answer. Vary which letter is correct. Keep options short, and about the same length and level of detail: the correct one must not be the longest or the most specific.
 - true_false: correct_answer is a boolean.
 - Each wrong option is the answer a student would give if they held one specific wrong idea; write that idea in `misconception`. When the wrong idea is a mix-up with another concept of the <concepts> or <confusable_concepts> list, also set `confusable_concept_id` to that concept's id. The correct option has neither.
 - The explanation says why the answer is right in one sentence; the student reads the material afterwards, so keep it short.

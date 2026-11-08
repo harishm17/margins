@@ -31,10 +31,12 @@ const STATUS_LABEL: Record<ReviewStatus, string> = {
 }
 
 /** "I don't know" is not a miss: nothing was attempted, so it gets a neutral mark and its own words (no red "Not quite"). */
-const statusLabel = (status: ReviewStatus, unknown: boolean) => (unknown ? outcomeLabel({ idk: true }) : STATUS_LABEL[status])
+const statusLabel = (status: ReviewStatus, unknown: boolean, blank = false) =>
+  blank ? 'Not answered' : unknown ? outcomeLabel({ idk: true }) : STATUS_LABEL[status]
 
 function StatusIcon({ status, unknown }: { status: ReviewStatus; unknown: boolean }) {
   const common = 'size-5 shrink-0'
+  // `unknown` also covers a blank: neither is a mistake, so neither gets the red cross.
   if (unknown) return <Question aria-hidden="true" weight="fill" className={cn(common, 'text-fg-3')} />
   switch (status) {
     case 'correct':
@@ -177,15 +179,17 @@ export function ReviewItem({
   const showKey = status !== 'correct'
   const blocks = stemHasBlocks(questionText)
   const unknown = !!dontKnow && !studentAnswer && status === 'incorrect'
+  // Nothing was written or picked, and not on purpose: not a wrong answer either.
+  const blank = !dontKnow && !studentAnswer && status === 'incorrect'
   // A long question is the same text the student just answered: one tap shows all of it, the rest of the card is the new information.
   const longQuestion = questionText.length > QUESTION_CLAMP_CHARS || blocks
   const [questionOpen, setQuestionOpen] = React.useState(false)
   const questionId = React.useId()
   return (
     <li className={cn('flex gap-3 border-b border-border py-5 first:pt-0 last:border-b-0', className)}>
-      <StatusIcon status={status} unknown={unknown} />
+      <StatusIcon status={status} unknown={unknown || blank} />
       <div className="min-w-0 flex-1">
-        <span className="sr-only">{statusLabel(status, unknown)}. </span>
+        <span className="sr-only">{statusLabel(status, unknown, blank)}. </span>
         <div className="flex items-start gap-3">
           <div className="flex min-w-0 flex-1 items-start gap-2 text-body-strong text-fg">
             <span className="tabular text-fg-3">{number}</span>
@@ -225,6 +229,7 @@ export function ReviewItem({
           {status === 'review' ? <Badge tone="warning">Needs review</Badge> : null}
           {status === 'partial' ? <Badge tone="warning">Partly correct</Badge> : null}
           {unknown ? <Badge>{outcomeLabel({ idk: true })}</Badge> : null}
+          {blank ? <Badge>Not answered</Badge> : null}
         </div>
 
         <dl className="mt-3 flex flex-col gap-3">

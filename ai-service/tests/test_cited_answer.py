@@ -17,6 +17,7 @@ from anthropic.types.beta import (
     BetaCitationSearchResultLocation,
     BetaRawContentBlockDeltaEvent,
     BetaRawContentBlockStartEvent,
+    BetaRawContentBlockStopEvent,
     BetaTextBlock,
     BetaTextDelta,
 )
@@ -310,6 +311,27 @@ class TestEvents:
         provider, _ = provider_with(events)
         out = await collect(provider)
         assert [c.ref for c in out[-1].citations] == ["chunk:bbb", "chunk:aaa"]
+
+    @pytest.mark.asyncio
+    async def test_a_marker_goes_after_the_block_it_quotes_not_before_it(self):
+        # The API sends a block's citation before the block's text.
+        stop0 = BetaRawContentBlockStopEvent(type="content_block_stop", index=0)
+        stop1 = BetaRawContentBlockStopEvent(type="content_block_stop", index=1)
+        events = [
+            text_start(0),
+            text_delta("A problem is a ", 0),
+            stop0,
+            text_start(1),
+            cite("chunk:aaa", 0, block=1),
+            text_delta("binary relation", 1),
+            text_delta(" from inputs to outputs.", 1),
+            stop1,
+        ]
+        provider, _ = provider_with(events)
+        out = await collect(provider)
+        done = out[-1]
+        assert done.text == "A problem is a binary relation from inputs to outputs."
+        assert [(c.ref, c.offset) for c in done.citations] == [("chunk:aaa", len(done.text))]
 
     @pytest.mark.asyncio
     async def test_other_citation_kinds_are_ignored(self):

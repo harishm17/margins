@@ -272,6 +272,10 @@ def style_guidance(profile: Dict[str, Any]) -> str:
         lines.append("- Examples of the voice (about other things; do not reuse their content):")
         lines.extend(f"    * {stem}" for stem in profile["example_stems"])
     lines.append(
+        "- Do not put problem numbers or point values in the question text (no \"Problem 3.\" or \"[5 points]\"): "
+        "the app numbers and scores the questions."
+    )
+    lines.append(
         "The question kinds and counts requested above stay as given; match everything else (wording, task verbs, "
         "length of the expected answer, how much is given up front). Never copy a question from the past exams."
     )

@@ -8,9 +8,10 @@ import { Button } from '@/components/ui/button'
 import { LazyMarkdownInline } from '@/components/ui/lazy-markdown'
 import { quoteOnOneLine } from '@/lib/chat/citations'
 import { InlineAlert } from '@/components/ui/inline-alert'
+import { Spinner } from '@/components/ui/spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { apiFetch, isApiError } from '@/lib/api/client'
-import { MAX_RECALL_ANSWER_CHARS, type RecallCard, type RecallFeedback, type RecallState, type RevealedClaim } from '@/lib/learning/recall-shared'
+import { groupByConcept, MAX_RECALL_ANSWER_CHARS, recallOutcome, recallSummary, type RecallCard, type RecallFeedback, type RecallState, type RevealedClaim } from '@/lib/learning/recall-shared'
 import { defaultLanguageCode, getRecognitionConstructor, languageTag, newFinalWords, resultsFromEvent, type RecognitionLike } from '@/features/voice/speech'
 import type { ActivityKind } from '@/lib/learning/next-activity'
 import { cn } from '@/lib/utils'
@@ -239,7 +240,9 @@ export function Card({
   // What the student has typed since the page showed; until then the text is the stored draft.
   const [typed, setTyped] = React.useState<string | null>(null)
   const [voice, setVoice] = React.useState(false)
-  const [busy, setBusy] = React.useState(false)
+  // Which of the two answers is being graded: the other button waits, and the one pressed says what is happening.
+  const [pending, setPending] = React.useState<'check' | 'idk' | null>(null)
+  const busy = pending !== null
   const [error, setError] = React.useState<string | null>(null)
   const [clarify, setClarify] = React.useState<string | null>(null)
   const [listening, setListening] = React.useState(false)
@@ -306,7 +309,7 @@ export function Card({
     const answer = idk ? '' : text.trim()
     if ((!answer && !idk) || busy) return
     stopListening()
-    setBusy(true)
+    setPending(idk ? 'idk' : 'check')
     setError(null)
     setClarify(null)
     try {
@@ -344,7 +347,7 @@ export function Card({
       if (isApiError(caught)) report(caught.code)
       setError(isApiError(caught) ? caught.message : 'Your answer could not be graded. Try again.')
     } finally {
-      setBusy(false)
+      setPending(null)
     }
   }
 
@@ -378,7 +381,7 @@ export function Card({
             <InlineAlert className="mt-4" tone="neutral" icon={<Question />} title="Not enough to grade yet">
               {clarify}
               <div className="mt-3">
-                <Button variant="secondary" data-testid="recall-idk" onClick={() => void dontRemember()} loading={busy}>
+                <Button variant="secondary" data-testid="recall-idk" onClick={() => void dontRemember()} disabled={busy} aria-busy={pending === 'idk' || undefined}>
                   I don&apos;t remember
                 </Button>
               </div>
@@ -397,12 +400,26 @@ export function Card({
           )}
           {text.trim() && statusLabel(draft.status) ? <p className="mt-3 text-caption text-fg-3">{statusLabel(draft.status)}</p> : null}
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button variant="primary" onClick={() => void submit()} loading={busy} disabled={!text.trim() || !!blocked} disabledReason={blocked ? 'AI is unavailable right now, so answers cannot be checked.' : 'Write a few words first.'}>
-              Check my answer
+            <Button variant="primary" onClick={() => void submit()} disabled={!text.trim() || !!blocked || busy} aria-busy={pending === 'check' || undefined} disabledReason={blocked ? 'AI is unavailable right now, so answers cannot be checked.' : busy ? undefined : 'Write a few words first.'}>
+              {pending === 'check' ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner />
+                  Checking…
+                </span>
+              ) : (
+                'Check my answer'
+              )}
             </Button>
             {clarify ? null : (
-              <Button variant="secondary" data-testid="recall-idk" onClick={() => void dontRemember()} loading={busy}>
-                I don&apos;t remember
+              <Button variant="secondary" data-testid="recall-idk" onClick={() => void dontRemember()} disabled={busy} aria-busy={pending === 'idk' || undefined}>
+                {pending === 'idk' ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner />
+                    One moment…
+                  </span>
+                ) : (
+                  "I don't remember"
+                )}
               </Button>
             )}
             {canDictate ? (
@@ -470,14 +487,11 @@ function FeedbackView({
   const first = firstCorrection(feedback)
   const detailCount = feedback.got.length + feedback.wrong.length + feedback.missed.length
   // The one-line result, and how many corrections the phone's first card leaves behind the button.
-  const covered = new Set(feedback.got.filter((item) => !item.partial).map((item) => item.conceptName))
-  for (const item of [...feedback.wrong, ...feedback.missed]) covered.delete(item.conceptName)
-  const ideas = new Set([...feedback.got, ...feedback.wrong, ...feedback.missed].map((item) => item.conceptName))
   const summary = complete
     ? 'You covered every idea this question asks about.'
     : feedback.idk
       ? "You said you don't remember. Here is where to look."
-      : `You covered ${covered.size} of ${ideas.size} ${ideas.size === 1 ? 'idea' : 'ideas'}.`
+      : recallSummary(recallOutcome(feedback))
   const corrections = feedback.idk ? (feedback.help?.pointers.length ?? 0) : feedback.wrong.length + feedback.missed.length
   const moreCorrections = Math.max(0, corrections - (first ? 1 : 0))
   // Help on request: the explanation, an easier step and "Show me what I missed" wait behind "More help" until it is asked for.
@@ -556,15 +570,17 @@ function FeedbackView({
             What you got
           </h4>
           <ul className="mt-2 flex flex-col gap-2.5">
-            {feedback.got.map((item, index) => (
-              <li key={index} className="text-small text-fg-2">
+            {groupByConcept(feedback.got).map((group) => (
+              <li key={group.conceptName} className="text-small text-fg-2">
                 <span className="block text-caption text-fg-3">
-                  {item.conceptName}
-                  {item.partial ? ' (part of it)' : ''}
+                  {group.conceptName}
+                  {group.items.every((item) => item.partial) ? ' (part of it)' : ''}
                 </span>
-                <p>
-                  You wrote <span className="text-fg">“{item.quote}”</span>
-                </p>
+                {group.items.map((item, index) => (
+                  <p key={index}>
+                    You wrote <span className="text-fg">“{item.quote}”</span>
+                  </p>
+                ))}
               </li>
             ))}
           </ul>
@@ -616,12 +632,14 @@ function FeedbackView({
             <ExpectedMiss surface="recall_gaps" />
           </div>
           <ul className="mt-2 flex flex-col gap-2.5">
-            {feedback.missed.map((item) => {
-              const pointer = feedback.help?.pointers.find((candidate) => candidate.conceptName === item.conceptName)
+            {groupByConcept(feedback.missed).map((group) => {
+              const pointer = feedback.help?.pointers.find((candidate) => candidate.conceptName === group.conceptName)
               return (
-                <li key={item.claimId} className="text-small text-fg-2">
-                  <span className="block text-caption text-fg-3">{item.conceptName}</span>
-                  {pointer ? <PointerLink pointer={pointer} label={item.pointer} /> : <p>{item.pointer}</p>}
+                <li key={group.conceptName} className="text-small text-fg-2">
+                  <span className="block text-caption text-fg-3">{group.conceptName}</span>
+                  {group.items.map((item) => (
+                    <div key={item.claimId}>{pointer ? <PointerLink pointer={pointer} label={item.pointer} /> : <p>{item.pointer}</p>}</div>
+                  ))}
                 </li>
               )
             })}
@@ -730,14 +748,16 @@ const HELP_LINK = 'inline-flex min-h-8 items-center rounded-chip text-small text
 
 /** "Look again at p. 5": a real link to the reader at the idea's first passage; opening it records the instruction (spec 18.5). */
 function PointerLink({ pointer, label, testId = 'recall-pointer' }: { pointer: Pointer; label?: string; testId?: string }) {
+  // The grader's pointer reads "Look again at p. 5: What does each bucket hold?": the place is the link, the question is plain text.
+  const split = label?.match(/^(Look again at [^:]{1,40}):\s+(\S[\s\S]*)$/)
+  const linkText = split ? split[1] : (label ?? (pointer.page !== null ? `Look again at p. ${pointer.page}` : `Look again at ${pointer.conceptName}`))
   return (
-    <Link
-      href={pointer.href}
-      data-testid={testId}
-      className={cn('mt-1 gap-1', HELP_LINK)}
-    >
-      {label ?? (pointer.page !== null ? `Look again at p. ${pointer.page}` : `Look again at ${pointer.conceptName}`)}
-    </Link>
+    <>
+      {split ? <span className="mt-1 block">{split[2]}</span> : null}
+      <Link href={pointer.href} data-testid={testId} className={cn(split ? 'gap-1' : 'mt-1 gap-1', HELP_LINK)}>
+        {linkText}
+      </Link>
+    </>
   )
 }
 

@@ -76,7 +76,7 @@ function Disclosure({ summary, open, children, className }: { summary: React.Rea
 function introLine(setup: SetupData): string {
   const { step, materials, plan } = setup
   if (step === 1) return materials.materials.length === 0 ? "You haven't added any files yet." : 'Margins is reading your files. Three steps and you’re ready to study.'
-  if (step === 2) return 'Your files are ready.'
+  if (step === 2) return 'Margins found the topics in your files. Check them, then start studying.'
   return plan.askForExamDate ? 'Your topics are confirmed. Add your exam date if you know it, then start your first topic.' : 'Your course is ready. Start with your first topic.'
 }
 

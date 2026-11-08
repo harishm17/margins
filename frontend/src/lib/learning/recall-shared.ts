@@ -38,3 +38,33 @@ export type RecallCard = {
 }
 
 export type RecallState = { mode: 'recall' | 'teach_back'; cards: RecallCard[] }
+
+/** How many of the ideas an answer was graded on it covered whole, and how many only in part. An idea is a concept, which holds several claims. */
+export function recallOutcome(feedback: Pick<RecallFeedback, 'got' | 'wrong' | 'missed'>): { total: number; full: number; partly: number } {
+  const gotWhole = new Set(feedback.got.filter((item) => !item.partial).map((item) => item.conceptName))
+  const gotPart = new Set(feedback.got.filter((item) => item.partial).map((item) => item.conceptName))
+  const lacking = new Set([...feedback.wrong, ...feedback.missed].map((item) => item.conceptName))
+  const all = new Set([...gotWhole, ...gotPart, ...lacking])
+  let full = 0
+  let partly = 0
+  for (const name of all) {
+    const touched = gotWhole.has(name) || gotPart.has(name)
+    if (touched && !lacking.has(name) && !gotPart.has(name)) full += 1
+    else if (touched) partly += 1
+  }
+  return { total: all.size, full, partly }
+}
+
+/** The one line under an answer, in the same ideas the lists below it are made of. */
+export function recallSummary(outcome: { total: number; full: number; partly: number }): string {
+  const ideas = `${outcome.total} ${outcome.total === 1 ? 'idea' : 'ideas'}`
+  const part = outcome.partly > 0 ? ` completely, and ${outcome.partly} partly` : ''
+  return `You covered ${outcome.full} of ${ideas}${part}.`
+}
+
+/** The items of a list gathered under one idea each, in the order the ideas first appear. */
+export function groupByConcept<T extends { conceptName: string }>(items: T[]): { conceptName: string; items: T[] }[] {
+  const groups = new Map<string, T[]>()
+  for (const item of items) groups.set(item.conceptName, [...(groups.get(item.conceptName) ?? []), item])
+  return [...groups].map(([conceptName, grouped]) => ({ conceptName, items: grouped }))
+}

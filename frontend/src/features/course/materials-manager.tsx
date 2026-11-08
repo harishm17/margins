@@ -213,9 +213,14 @@ function PipelineStatus({
             />
           ))}
         </span>
-        <span className="min-w-0 truncate">
+        <span className="min-w-0">
           {elapsed !== null ? <span className="tabular">{formatElapsed(elapsed)}</span> : null}
-          {typicalSeconds ? `${elapsed !== null ? ', ' : ''}usually ${estimateWords(typicalSeconds)}` : null}
+          {/* Past the usual time, "usually about 10 s" would only be wrong; the file is just taking longer. */}
+          {typicalSeconds && (elapsed === null || elapsed <= typicalSeconds)
+            ? `${elapsed !== null ? ', ' : ''}usually ${estimateWords(typicalSeconds)}`
+            : typicalSeconds
+              ? ', taking longer than usual'
+              : null}
         </span>
       </div>
     </div>

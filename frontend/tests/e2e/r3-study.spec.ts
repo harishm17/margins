@@ -166,11 +166,11 @@ test.describe('the mock exam', () => {
     // The five question counts, seven limits, difficulty and mix are behind one button.
     const settings = page.getByRole('button', { name: 'Change settings' })
     await expect(settings).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.getByRole('radio', { name: '30 min' })).toBeHidden()
+    await expect(page.getByRole('radio', { name: '30 min', exact: true })).toBeHidden()
     await expect(page.getByRole('button', { name: 'Create exam' })).toBeVisible()
     await screenshotIfAsked(page, 'r3-exam-new-390x844')
     await settings.click()
-    await page.getByRole('radio', { name: '30 min' }).click()
+    await page.getByRole('radio', { name: '30 min', exact: true }).click()
     await expect(page.getByTestId('exam-preset').locator('visible=true')).toContainText('30 min')
     await expect(page.getByRole('textbox', { name: 'Name' })).toBeVisible()
     await screenshotIfAsked(page, 'r3-exam-new-settings-390x844')

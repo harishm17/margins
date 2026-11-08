@@ -34,6 +34,7 @@ import { statusLabel, useServerDraft } from '@/features/learning/use-server-draf
 import { explainerCheckKey, parseExplainerCheckDraft, type ExplainerCheckDraft } from '@/lib/drafts/explainer-check-draft'
 import { createSlugger } from '@/lib/markdown-outline'
 import { rehypeBindMathPunctuation } from '@/lib/markdown/bind-math'
+import { remarkInlineHtml } from '@/lib/markdown/inline-html'
 import { parseCheckBlock } from '@/lib/markdown/check-block'
 import { Button } from './button'
 import { CheckGradeContext, ExplainerDraftContext } from './check-context'
@@ -79,7 +80,7 @@ function rehypeHeadingIds() {
   }
 }
 
-const remarkPlugins = [remarkGfm, remarkMath]
+const remarkPlugins = [remarkGfm, remarkMath, remarkInlineHtml]
 const rehypePlugins = [
   rehypeHeadingIds,
   [rehypeKatex, { throwOnError: false, strict: 'ignore' }],

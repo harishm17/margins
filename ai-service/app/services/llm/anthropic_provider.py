@@ -419,16 +419,34 @@ class AnthropicProvider(LLMProvider):
         text_parts: List[str] = []
         written = 0
         citations: List[AnswerCitation] = []
+        # A citation arrives before the text of the block it quotes, so its marker belongs at the end
+        # of that block. Citations wait here until the block ends.
+        pending: List[Any] = []
+
+        def settle() -> List[AnswerCitation]:
+            settled = []
+            for raw in pending:
+                citation = _to_answer_citation(raw, refs, written)
+                if citation is not None:
+                    citations.append(citation)
+                    settled.append(citation)
+            pending.clear()
+            return settled
 
         try:
             async with llm_slot(), self.client.beta.messages.stream(**params) as stream:
                 async for event in stream:
                     kind = getattr(event, "type", None)
                     if kind == "content_block_start":
+                        for citation in settle():
+                            yield citation
                         if event.content_block.type == "fallback":
                             # The declined model's partial answer is void.
                             text_parts, written, citations = [], 0, []
                             yield AnswerReset()
+                    elif kind == "content_block_stop":
+                        for citation in settle():
+                            yield citation
                     elif kind == "content_block_delta":
                         delta = event.delta
                         if delta.type == "text_delta" and delta.text:
@@ -436,10 +454,9 @@ class AnthropicProvider(LLMProvider):
                             written += len(delta.text)
                             yield AnswerText(text=delta.text)
                         elif delta.type == "citations_delta":
-                            citation = _to_answer_citation(delta.citation, refs, written)
-                            if citation is not None:
-                                citations.append(citation)
-                                yield citation
+                            pending.append(delta.citation)
+                for citation in settle():
+                    yield citation
                 final = await stream.get_final_message()
         except anthropic.APIError as exc:
             raise _translate_api_error(exc) from exc

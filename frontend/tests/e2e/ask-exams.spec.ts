@@ -70,7 +70,7 @@ test('mock exam: a topic with no pages is left out and said so, and the exam is 
   await expect(page.getByTestId('exam-footer-summary')).toContainText('without pages is left out')
   await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '5', exact: true }).click()
-  await page.getByRole('radio', { name: '30 min' }).click()
+  await page.getByRole('radio', { name: '30 min', exact: true }).click()
   await page.getByRole('button', { name: 'Create exam' }).click()
   await expect(page).toHaveURL(/\/exams\/[0-9a-f-]{36}$/, { timeout: 180_000 })
   // Said before the exam opens, and kept up for a while.
@@ -105,7 +105,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await page.goto(`${course}/exams/new`)
   await page.getByRole('button', { name: 'Change settings' }).click()
   await page.getByRole('radio', { name: '10', exact: true }).click()
-  await page.getByRole('radio', { name: '30 min' }).click()
+  await page.getByRole('radio', { name: '30 min', exact: true }).click()
   await page.getByRole('button', { name: 'Create exam' }).click()
   await expect(page.getByText('Writing your exam')).toBeVisible()
   await expect(page).toHaveURL(/\/exams\/[0-9a-f-]{36}$/, { timeout: 180_000 })
@@ -190,7 +190,7 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   await expect(page.getByText('of ').first()).toBeVisible({ timeout: 120_000 })
   await expect(page.getByRole('heading', { name: 'Where to focus' })).toBeVisible({ timeout: 120_000 })
   await expect(page.getByText(/You were sure about 1 answer and got [01] of them right\./)).toBeVisible()
-  await page.getByRole('radio', { name: /^Missed/ }).click()
+  await page.getByRole('radio', { name: /^Lost points/ }).click()
   await expect(page.getByRole('heading', { name: 'Questions' })).toBeVisible()
 })
 

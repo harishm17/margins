@@ -33,6 +33,8 @@ import {
   coverageNote,
   difficultyLabel,
   examSummary,
+  formatMinutes,
+  unstartedNote,
   type Difficulty,
   type QuestionMix,
 } from './exam-options'
@@ -145,6 +147,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
   const withoutPages = ticked.filter((topic) => !topic.hasPages).length
   const coverable = ticked.length - withoutPages
   const coverage = coverageNote(ticked.length, withoutPages)
+  const unstarted = unstartedNote(coverable, ticked.filter((topic) => topic.hasPages && topic.mastery === null).length)
   const canCreate = coverable > 0
   const matchStyle = examStyle.kind === 'ready' && matchPastExams
 
@@ -187,7 +190,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
         <div className="rounded-card border border-border bg-surface p-5">
           <JobStatus job={job} label="Writing your exam" since={phase.startedAt} timedOut={timedOut} />
           <p className="mt-3 text-small text-fg-2">
-            This takes about a minute or two. You can leave this page and come back, your exam will be in the list.
+            This takes a few minutes. You can leave this page and come back, your exam will be in the list.
           </p>
         </div>
         <div aria-hidden="true" className="mt-6 flex flex-col gap-4 rounded-card border border-border p-5">
@@ -240,7 +243,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
 
       <section aria-labelledby="exam-topics" className="flex flex-col gap-3">
         <div className="flex items-end justify-between gap-3">
-          <SectionLabel id="exam-topics" hint="Topics that are due or still being learned are ticked for you. Topics without source pages are left out until you add some.">
+          <SectionLabel id="exam-topics" hint="Topics you have not mastered yet, or that are due for review, are ticked for you. Topics without source pages are left out until you add some.">
             Topics
           </SectionLabel>
           <div className="flex shrink-0 items-center gap-1">
@@ -267,7 +270,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
                 >
                   <Checkbox checked={checked} onCheckedChange={(value) => toggle(topic.id, value === true)} className="mt-0" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate">{topic.name}</span>
+                    <span className="block leading-snug">{topic.name}</span>
                     {topic.hasPages ? null : (
                       <span className="block text-caption font-normal text-warning-soft-fg">
                         Add source pages to include.{' '}
@@ -327,7 +330,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
           aria-labelledby="exam-time"
           value={String(durationMinutes)}
           onValueChange={(value) => setDurationMinutes(Number(value))}
-          options={TIME_LIMITS.map((minutes) => ({ value: String(minutes), label: `${minutes} min` }))}
+          options={TIME_LIMITS.map((minutes) => ({ value: String(minutes), label: formatMinutes(minutes) }))}
           className="self-start max-sm:flex-wrap"
         />
       </section>
@@ -387,7 +390,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
       ) : null}
 
         <section aria-labelledby="exam-name" className="flex flex-col gap-2">
-          <SectionLabel id="exam-name" hint="Optional. Without one, the exam is named by its date and topics.">
+          <SectionLabel id="exam-name" hint="Optional. Without one, it is called Mock exam with today's date.">
             Name
           </SectionLabel>
           <Input
@@ -406,6 +409,7 @@ export function NewExamForm({ courseId, topics, preselected, activeJob, examStyl
         <p className="text-small text-fg-2 empty:hidden" data-testid="exam-footer-summary">
           <span className="sm:hidden">{examSummary({ questionCount: totalQuestions, durationMinutes, difficulty })}. </span>
           {coverage}
+          {coverage && unstarted ? `. ${unstarted}` : ''}
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button
