@@ -138,16 +138,15 @@ export async function confirmTopics(page: Page, courseUrl: string) {
 }
 
 /**
- * A new student with a confirmed course built from `files`, one at a time (so topic finding starts once, after the
- * last). Ends on the course page at "Start studying", with no topic opened yet.
+ * A new student with a confirmed course built from `files`, chosen as one batch that arrives in order (one file at a
+ * time would find topics once per file, each from a different set). Ends on the course page at "Start studying",
+ * with no topic opened yet.
  */
 export async function readyCourse(page: Page, workflow: string, files: string[] = CORE_FILES) {
   const student = await newStudent(page, workflow)
   const course = await createCourse(page)
-  for (const [index, name] of files.entries()) {
-    await chooseFiles(page, [name])
-    await expect(page.getByText('Ready', { exact: true })).toHaveCount(index + 1, { timeout: 3 * 60_000 })
-  }
+  await chooseFiles(page, files)
+  await expect(page.getByText('Ready', { exact: true })).toHaveCount(files.length, { timeout: 3 * 60_000 })
   await waitForTopics(page, course.courseUrl)
   await confirmTopics(page, course.courseUrl)
   return { ...student, ...course }
