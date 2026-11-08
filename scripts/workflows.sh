@@ -6,7 +6,7 @@
 #
 # Each run starts clean: it stops a stack left from an earlier run, recreates the database, migrates it,
 # starts the stack (scripts/e2e-stack.sh) on replay, runs the suite, prints the checks report and stops.
-# The web app is the production build already in frontend/.next (npm run build after a frontend change).
+# The web app is the production build in frontend/.next, built first when a source of it changed since the last build.
 #
 # Settings:
 #   WF_FILES_DIR     the course files (required; made by scripts/workflow-files.py)
@@ -48,6 +48,7 @@ rm -rf "$E2E_RUN_DIR/uploads" "$E2E_RUN_DIR/hold"
 rm -f "$WF_RESULTS_DIR"/*.json
 started="$(date +%s)"
 trap 'stack stop' EXIT
+stack build
 stack start
 
 status=0

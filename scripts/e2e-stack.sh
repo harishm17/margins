@@ -5,9 +5,11 @@
 #
 #   scripts/e2e-stack.sh start    start both in the background and wait until they answer
 #   scripts/e2e-stack.sh stop     stop them
+#   scripts/e2e-stack.sh build    build the web app when a source of it changed since the last build
 #
 # Before `start`: the database is migrated (cd frontend && npx prisma migrate deploy), the web app is
 # built (cd frontend && npm run build) and the AI service has its dependencies (cd ai-service && uv sync).
+# `start` refuses a build older than the web app's sources: specs run on it would test code that is not there.
 # The web app runs with ENABLE_TEST_LOGIN=true, the local-only test sign-in the specs use (students sign in
 # with Google only, which a test cannot do; frontend/src/lib/auth/test-login.ts), and with a made-up Google
 # client so the sign-in page shows its Google button. NEXTAUTH_URL is on localhost, which the test sign-in needs.
@@ -69,8 +71,32 @@ wait_http() {
   return 1
 }
 
+# The first web app source newer than its production build (or a note that there is no build); empty when the build is current.
+newer_source() {
+  [ -f "$ROOT/frontend/.next/BUILD_ID" ] || { echo "frontend/.next (there is no build)"; return 0; }
+  (cd "$ROOT/frontend" && find src public prisma/schema.prisma next.config.js postcss.config.mjs package.json package-lock.json tsconfig.json \
+    -type f -newer .next/BUILD_ID -print -quit 2>/dev/null) || true
+}
+
+build() {
+  local newer
+  newer="$(newer_source)"
+  if [ -z "$newer" ]; then
+    echo "the web app's build is current"
+    return 0
+  fi
+  echo "building the web app: $newer changed since the last build"
+  (cd "$ROOT/frontend" && npm run build)
+}
+
 start() {
   : "${DATABASE_URL:?set DATABASE_URL to the migrated e2e database}"
+  local newer
+  newer="$(newer_source)"
+  if [ -n "$newer" ] && ! alive "$RUN/web.pid"; then
+    echo "The web app's build is older than $newer: run scripts/e2e-stack.sh build first." >&2
+    return 1
+  fi
   mkdir -p "$RUN/uploads" "$RUN/hold"
   local model_env
   model_env="$(llm_env)"
@@ -139,5 +165,6 @@ stop_one() {
 case "${1:-}" in
   start) start ;;
   stop) stop_one web; stop_one ai ;;
-  *) echo "usage: $0 start|stop" >&2; exit 2 ;;
+  build) build ;;
+  *) echo "usage: $0 start|stop|build" >&2; exit 2 ;;
 esac
