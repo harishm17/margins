@@ -22,6 +22,12 @@
 # The web app allows 1000 voice turns a minute (VOICE_TURNS_PER_MINUTE; 30 in production): the voice specs all sign in as one account
 # and together send more than 30 turns in a minute, which the turn limiter answers with "You're going a little fast".
 # Then run the specs with PLAYWRIGHT_BASE_URL=http://localhost:$E2E_WEB_PORT and the same DATABASE_URL.
+# The model behind the AI service, E2E_LLM_PROVIDER:
+#   mock (the default)  canned answers, no API key, no cost: CI and the Playwright specs
+#   replay              recorded answers from E2E_CASSETTE_DIR (the workflow suite, frontend/tests/workflows);
+#                       E2E_REPLAY_MISS=record calls the real model for a request with no recording and stores it
+#                       (it needs ANTHROPIC_API_KEY, from the shell or ai-service/.env, and costs money)
+#   anthropic           the real model on every call (costs money)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -29,6 +35,23 @@ WEB_PORT="${E2E_WEB_PORT:-3000}"
 AI_PORT="${E2E_AI_PORT:-8000}"
 RUN="${E2E_RUN_DIR:-$ROOT/.e2e}"
 TOKEN="e2e-internal-token"
+PROVIDER="${E2E_LLM_PROVIDER:-mock}"
+
+# The AI service's model settings, as `env` arguments (no spaces inside a value).
+llm_env() {
+  case "$PROVIDER" in
+    mock) echo "-u ANTHROPIC_API_KEY LLM_PROVIDER=mock" ;;
+    replay)
+      : "${E2E_CASSETTE_DIR:?E2E_LLM_PROVIDER=replay needs E2E_CASSETTE_DIR, the folder of recordings}"
+      case "${E2E_REPLAY_MISS:-error}" in
+        error) echo "-u ANTHROPIC_API_KEY LLM_PROVIDER=replay LLM_CASSETTE_DIR=$E2E_CASSETTE_DIR LLM_REPLAY_MISS=error" ;;
+        record) echo "LLM_PROVIDER=replay LLM_CASSETTE_DIR=$E2E_CASSETTE_DIR LLM_REPLAY_MISS=record" ;;
+        *) echo "E2E_REPLAY_MISS must be error or record, not $E2E_REPLAY_MISS" >&2; return 2 ;;
+      esac ;;
+    anthropic) echo "LLM_PROVIDER=anthropic" ;;
+    *) echo "E2E_LLM_PROVIDER must be mock, replay or anthropic, not $PROVIDER" >&2; return 2 ;;
+  esac
+}
 
 alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 
@@ -49,14 +72,17 @@ wait_http() {
 start() {
   : "${DATABASE_URL:?set DATABASE_URL to the migrated e2e database}"
   mkdir -p "$RUN/uploads" "$RUN/hold"
+  local model_env
+  model_env="$(llm_env)"
 
   if alive "$RUN/ai.pid"; then
     echo "AI service already running"
   else
     (
       cd "$ROOT/ai-service"
-      exec setsid env -u ANTHROPIC_API_KEY \
-        LLM_PROVIDER=mock \
+      # Word splitting is wanted: the model settings are several env arguments.
+      # shellcheck disable=SC2086
+      exec setsid env $model_env \
         AI_INTERNAL_TOKEN="$TOKEN" \
         ENVIRONMENT=development \
         JOB_REAPER_INTERVAL_SECONDS=5 \
