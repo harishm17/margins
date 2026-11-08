@@ -6,6 +6,7 @@ from app.services.embeddings.search import (
     SOURCE_BOTH,
     SOURCE_FULLTEXT,
     SOURCE_VECTOR,
+    boost_chunks,
     fulltext_phrases,
     fulltext_query_sql,
     fuse_rankings,
@@ -286,3 +287,63 @@ class TestCoverage:
         await add_chunk(db, material, 0, "loops and functions", unit(0.66, 0.75))
 
         assert await hybrid_search_chunks(project, "Medieval cuisine", "", [], limit=10) == []
+
+
+# ---- ties come in course order --------------------------------------------------------------
+
+EARLIER_UPLOAD = "SQL:(NOW() AT TIME ZONE 'UTC') - interval '1 day'"
+# Ids that sort against course order, so a tie broken by id would put the later chunk first.
+LOW_ID = "00000000000040008000000000000001"
+HIGH_ID = "ffffffffffff4fffbfffffffffffffff"
+
+
+def placed(chunk_id, uploaded, material, index, similarity=0.8):
+    """A row with its place in the course: its file's upload time and id, and its position in the file."""
+    return {**row(chunk_id, similarity), "material_uploaded_at": uploaded, "material_id": material, "chunk_index": index}
+
+
+async def with_id(db, chunk_id, new_id):
+    await db.execute("UPDATE material_chunks SET id = $1 WHERE id = $2", new_id, chunk_id)
+    return new_id
+
+
+class TestTiesInCourseOrder:
+    """Equal scores come in course order (upload order, then position in the file), never in the order of random ids,
+    so the same materials and question give the same excerpts in the same order every time."""
+
+    def test_equal_fused_scores_break_by_upload_order(self):
+        later = placed("0-later", 2, "m1", 0)
+        earlier = placed("f-earlier", 1, "m2", 5)
+        assert [c["id"] for c in fuse([later], [earlier])] == ["f-earlier", "0-later"]
+
+    def test_within_a_file_position_breaks_the_tie(self):
+        second = placed("0-second", 1, "m1", 2)
+        first = placed("f-first", 1, "m1", 1)
+        assert [c["id"] for c in fuse([second], [first])] == ["f-first", "0-second"]
+
+    def test_boosting_keeps_course_order_for_equal_scores(self):
+        chunks = [
+            {**placed("0-later", 2, "m1", 0), "relevance_score": 0.02},
+            {**placed("f-earlier", 1, "m2", 0), "relevance_score": 0.02},
+        ]
+        assert [c["id"] for c in boost_chunks(chunks, [], 1.5)] == ["f-earlier", "0-later"]
+
+    async def test_full_text_ties_come_in_course_order(self, db, project, query_vector):
+        first_file = await seed_material(db, project, filename="a.pdf", status="valid", uploaded_at=EARLIER_UPLOAD)
+        second_file = await seed_material(db, project, filename="b.pdf", status="valid")
+        later = await with_id(db, await add_chunk(db, second_file, 0, "mitochondria make energy", unit(1.0)), LOW_ID)
+        earlier = await with_id(db, await add_chunk(db, first_file, 3, "mitochondria make energy", unit(1.0)), HIGH_ID)
+
+        rows = await search._fulltext_leg(project, ["mitochondria"], unit(1.0), 10)
+
+        assert [str(r["id"]) for r in rows] == [earlier, later]
+
+    async def test_vector_ties_come_in_course_order(self, db, project, query_vector):
+        second_file = await seed_material(db, project, filename="b.pdf", status="valid")
+        first_file = await seed_material(db, project, filename="a.pdf", status="valid", uploaded_at=EARLIER_UPLOAD)
+        earlier = await with_id(db, await add_chunk(db, first_file, 3, "another passage", unit(1.0, 0.2)), HIGH_ID)
+        later = await with_id(db, await add_chunk(db, second_file, 0, "one passage", unit(1.0, 0.2)), LOW_ID)
+
+        rows = await search._vector_leg(project, unit(1.0), 10)
+
+        assert [str(r["id"]) for r in rows] == [earlier, later]

@@ -64,7 +64,8 @@ Set difficulty on every question to the one its request names."""
 
 async def fetch_confusable_partners(concept_ids: Sequence[str]) -> Dict[str, List[Dict[str, Any]]]:
     """For each concept, its near-twins: active concepts joined to it by a confusable edge that is
-    confirmed, or proposed at the link confidence floor or above. Concepts without one are absent."""
+    confirmed, or proposed at the link confidence floor or above. Concepts without one are absent.
+    Most confident first; equal confidence in course order, so the same course gives the same prompt."""
     if not concept_ids:
         return {}
     rows = await execute_query(
@@ -73,10 +74,11 @@ async def fetch_confusable_partners(concept_ids: Sequence[str]) -> Dict[str, Lis
         FROM concept_edges e
         JOIN concepts own ON own.id = ANY($1::text[]) AND own.id IN (e.source_id, e.target_id)
         JOIN concepts n ON n.id = CASE WHEN own.id = e.source_id THEN e.target_id ELSE e.source_id END
+        JOIN topics t ON t.id = n.topic_id
         WHERE e.type = 'confusable'
           AND (e.status = 'confirmed' OR (e.status = 'proposed' AND e.confidence >= $2))
           AND n.status = 'active'
-        ORDER BY e.confidence DESC, n.id
+        ORDER BY e.confidence DESC, t.order_index, n.order_index, n.id
         """,
         list(concept_ids), MIN_LINK_CONFIDENCE,
     )

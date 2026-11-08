@@ -189,7 +189,7 @@ async def _mapped_chunks(topic_id: str, limit: int) -> List[Dict[str, Any]]:
         JOIN material_chunks mc ON tcm.chunk_id = mc.id
         JOIN materials m ON mc.material_id = m.id
         WHERE tcm.topic_id = $1 AND m.role <> ALL($3::text[])
-        ORDER BY tcm.relevance_score DESC, mc.id
+        ORDER BY tcm.relevance_score DESC, m.uploaded_at, m.id, mc.chunk_index
         LIMIT $2
         """,
         topic_id,
@@ -421,18 +421,23 @@ MAX_CONFUSABLE_NEIGHBOURS = 12
 async def fetch_confusable_neighbours(topic_id: str) -> List[Dict[str, Any]]:
     """Active concepts of other topics joined to this topic's concepts by a confusable edge: confirmed,
     or proposed at the link confidence floor or above. A distractor may name one of them as the idea
-    a student mixed up. Empty when the topic has no such edges."""
+    a student mixed up. Empty when the topic has no such edges. In course order: topic by topic, each
+    topic's ideas in their order, so the same course gives the same prompt."""
     rows = await execute_query(
         """
-        SELECT DISTINCT n.id, n.name, n.summary, n.topic_id
-        FROM concept_edges e
-        JOIN concepts own ON own.topic_id = $1 AND own.status = 'active'
-                         AND own.id IN (e.source_id, e.target_id)
-        JOIN concepts n ON n.id = CASE WHEN own.id = e.source_id THEN e.target_id ELSE e.source_id END
-        WHERE e.type = 'confusable'
-          AND (e.status = 'confirmed' OR (e.status = 'proposed' AND e.confidence >= $2))
-          AND n.topic_id <> $1 AND n.status = 'active'
-        ORDER BY n.topic_id, n.id
+        SELECT id, name, summary, topic_id
+        FROM (
+            SELECT DISTINCT n.id, n.name, n.summary, n.topic_id, t.order_index AS topic_order, n.order_index
+            FROM concept_edges e
+            JOIN concepts own ON own.topic_id = $1 AND own.status = 'active'
+                             AND own.id IN (e.source_id, e.target_id)
+            JOIN concepts n ON n.id = CASE WHEN own.id = e.source_id THEN e.target_id ELSE e.source_id END
+            JOIN topics t ON t.id = n.topic_id
+            WHERE e.type = 'confusable'
+              AND (e.status = 'confirmed' OR (e.status = 'proposed' AND e.confidence >= $2))
+              AND n.topic_id <> $1 AND n.status = 'active'
+        ) neighbours
+        ORDER BY topic_order, order_index, id
         LIMIT $3
         """,
         topic_id, MIN_LINK_CONFIDENCE, MAX_CONFUSABLE_NEIGHBOURS,
