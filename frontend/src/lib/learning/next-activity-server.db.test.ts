@@ -358,3 +358,24 @@ dbTest('the easier step since a fail: a delivered worked example or a drill on t
   await prisma.itemSession.create({ data: { userId: other.user.id, projectId: other.project.id, kind: 'drill', topicIds: [other.topic.id], items: [], answers: {}, results: { scope: { conceptId: o.id } } } })
   assert.equal((await load(other)).concepts[0].easierStepSinceFail, true)
 })
+
+dbTest('prerequisites that tie for the weakest are taken in course order, not by their ids', async () => {
+  const w = await world()
+  const other = await prisma.topic.create({ data: { projectId: w.project.id, name: 'Other', orderIndex: 1, userConfirmed: true } })
+  await prisma.topic.update({ where: { id: w.topic.id }, data: { evidenceBackfilledAt: new Date() } })
+  // Neither prerequisite has a memory, so they tie at 0. Their ids sort the other way round from the course.
+  const run = Math.random().toString(36).slice(2)
+  const mk = (id: string, topicId: string, name: string, orderIndex: number) =>
+    prisma.concept.create({ data: { id: `${id}-${run}`, projectId: w.project.id, topicId, name, summary: 's', kind: 'concept', orderIndex } })
+  const target = await mk('m', w.topic.id, 'Target', 0)
+  const later = await mk('a', other.id, 'Later', 0)
+  const earlier = await mk('z', w.topic.id, 'Earlier', 1)
+  for (const source of [later, earlier]) {
+    await prisma.conceptEdge.create({ data: { projectId: w.project.id, sourceId: source.id, targetId: target.id, type: 'prerequisite', weight: 1, confidence: 0.9 } })
+  }
+  const now = new Date()
+  await prisma.conceptMemory.create({ data: { userId: w.user.id, projectId: w.project.id, topicId: w.topic.id, conceptId: target.id, consecutiveFails: 2, nUnassisted: 1, lastEvidenceAt: now } })
+
+  const state = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
+  assert.equal(state.concepts.find((c) => c.id === target.id)?.weakestPrerequisiteId, earlier.id)
+})

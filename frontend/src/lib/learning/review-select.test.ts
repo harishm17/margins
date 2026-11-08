@@ -463,3 +463,22 @@ test('caps at max', () => {
   assert.equal(select(dueList, bank, 3).items.length, 3)
   assert.equal(select(dueList, bank, 0).items.length, 0)
 })
+
+// Item keys carry random ids (a quiz set's id), so a tie broken by key falls differently on every new course.
+// Bank order is the order the questions were written in, the same each time.
+test('two items that tie for a concept are taken in bank order, not by their keys', () => {
+  const bank = [item('quiz:f0:0', ['a']), item('quiz:0a:0', ['a'])]
+  assert.deepEqual(
+    select([due('a')], bank).items.map((i) => i.itemKey),
+    ['quiz:f0:0']
+  )
+})
+
+test('two fresh items that tie for a closing retest are taken in bank order, not by their keys', () => {
+  const answered = [{ itemKey: 'miss', conceptIds: ['a'], correct: false, maxRung: 0 as const, surrendered: false, topicId: 't1' }]
+  const bank = [item('miss', ['a']), item('quiz:f0:1', ['a']), item('quiz:0a:1', ['a'])]
+  assert.deepEqual(
+    closingRetests(answered, bank).items.map((i) => i.itemKey),
+    ['quiz:f0:1']
+  )
+})

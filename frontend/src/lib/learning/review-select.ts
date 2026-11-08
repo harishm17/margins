@@ -153,7 +153,8 @@ function rankCandidates(concept: DueConcept, candidates: BankItem[], now: Date, 
     const ka = key(a)
     const kb = key(b)
     const at = ka.findIndex((v, i) => v !== kb[i])
-    return at >= 0 ? ka[at] - kb[at] : a.itemKey < b.itemKey ? -1 : 1
+    // A tie keeps bank order (the sort is stable): item keys carry random ids, bank order is the same every run.
+    return at >= 0 ? ka[at] - kb[at] : 0
   })
 }
 
@@ -362,8 +363,9 @@ export function closingRetests(
       .sort(
         (a, b) =>
           needCount(b) - needCount(a) ||
+          // A tie keeps bank order (two never-answered items give NaN, which is a tie too).
           lastAnsweredMs(a) - lastAnsweredMs(b) ||
-          (a.itemKey < b.itemKey ? -1 : 1)
+          0
       )[0]
     if (!fresh) {
       const mode = from.mode ?? 'recall'

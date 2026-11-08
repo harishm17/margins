@@ -88,8 +88,9 @@ export function selectDrillItems(input: {
         return (
           unseen(a) - unseen(b) ||
           Math.abs(BANDS.indexOf(a.difficulty) - wanted) - Math.abs(BANDS.indexOf(b.difficulty) - wanted) ||
+          // A tie keeps bank order (two never-answered items give NaN, which is a tie too).
           last(a) - last(b) ||
-          (a.itemKey < b.itemKey ? -1 : 1)
+          0
         )
       })
     return candidates[0] ?? null

@@ -189,11 +189,12 @@ function scopedDue(due: DueConcept[], topicId: string | undefined, timeZone: str
  * concept of its topic(s), due or not, weakest first (spec 18.8): the mini quiz of a topic nothing is due in.
  */
 function sessionConcepts(context: ReviewContext, meta: SessionMeta, now: Date, timeZone: string): DueConcept[] {
+  // Weakest first; ideas that tie (unstudied ones all do) in course order, the same on every run.
+  const place = new Map([...context.concepts.keys()].map((id, index) => [id, index]))
+  const weakestFirst = (a: DueConcept, b: DueConcept) => a.mastery - b.mastery || (place.get(a.conceptId) ?? 0) - (place.get(b.conceptId) ?? 0)
   // Practice on what an exam's misses were about: exactly those concepts, due or not, weakest first.
   if (meta.scope.conceptIds) {
-    return meta.scope.conceptIds
-      .flatMap((id) => asDrillConcept(context, id, now) ?? [])
-      .sort((a, b) => a.mastery - b.mastery || a.conceptId.localeCompare(b.conceptId))
+    return meta.scope.conceptIds.flatMap((id) => asDrillConcept(context, id, now) ?? []).sort(weakestFirst)
   }
   const topics = meta.scope.topicIds ?? (meta.scope.topicId ? [meta.scope.topicId] : undefined)
   if (!meta.includeNotDue || !topics) return scopedDue(context.due, meta.scope.topicId, timeZone)
@@ -201,7 +202,7 @@ function sessionConcepts(context: ReviewContext, meta: SessionMeta, now: Date, t
   return [...context.concepts.values()]
     .filter((info) => wanted.has(info.topicId))
     .flatMap((info) => asDrillConcept(context, info.id, now) ?? [])
-    .sort((a, b) => a.mastery - b.mastery || a.conceptId.localeCompare(b.conceptId))
+    .sort(weakestFirst)
 }
 
 type Plan = { add: SessionItem[]; missing: MissingItems[] }
