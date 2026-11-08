@@ -6,7 +6,7 @@ import { answerUnit, type PublicQuizQuestion } from '@/lib/learning/quiz-questio
 import { cn } from '@/lib/utils'
 import { Input } from './input'
 import { MathText } from './math-text'
-import { QuestionText, stemHasBlocks } from './question-text'
+import { QuestionText, stemHasBlocks, stemIsLong } from './question-text'
 import { useScrollableFocus } from './scrollable'
 import { Textarea } from './textarea'
 
@@ -214,7 +214,7 @@ export function QuestionRenderer({
           {pointsText ? <p className="mt-1 text-small text-fg-3 tabular">{pointsText}</p> : null}
         </div>
       ) : (
-        <h2 ref={headingRef} className="overflow-x-auto text-heading text-fg">
+        <h2 ref={headingRef} className={cn('overflow-x-auto text-fg', stemIsLong(question.question_text) ? 'text-[17px] font-medium leading-[27px]' : 'text-heading')}>
           <MathText>{question.question_text}</MathText>
           {pointsText ? <span className="ml-2 whitespace-nowrap text-small font-normal text-fg-3 tabular">{pointsText}</span> : null}
         </h2>
