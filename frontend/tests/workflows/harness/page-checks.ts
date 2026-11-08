@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test'
+import { conceptNameOf, misusedConcepts, unrenderedText } from './text-checks'
 
 /**
  * Observations the plan's guards define, measured on whatever screen a workflow is on. Each returns what it
@@ -53,6 +54,69 @@ export async function blankBusyButtons(page: Page): Promise<string[]> {
       .filter((button) => (button.innerText ?? '').trim() === '')
       .map((button) => button.getAttribute('aria-label') ?? button.outerHTML.slice(0, 80))
   )
+}
+
+/**
+ * SW1 for a whole workflow: from now on, every button that turns busy with no visible text is recorded, however
+ * briefly (a replayed answer can come back within a frame, so sampling would miss it). Returns a reader.
+ */
+export async function watchBusyButtons(page: Page): Promise<() => string[]> {
+  const found = new Set<string>()
+  await page.exposeBinding('__wfBlankBusy', (source, label: string) => {
+    found.add(`${label} (on ${new URL(source.page.url()).pathname.replace(/[0-9a-f-]{36}/g, ':id')})`)
+  })
+  await page.addInitScript(() => {
+    const scan = () => {
+      for (const button of document.querySelectorAll<HTMLElement>('button')) {
+        const busy = button.getAttribute('aria-busy') === 'true' || button.querySelector('.animate-spin') !== null
+        if (!busy || button.offsetParent === null || (button.innerText ?? '').trim() !== '') continue
+        ;(window as unknown as { __wfBlankBusy?: (label: string) => void }).__wfBlankBusy?.(button.getAttribute('aria-label') || (button.textContent ?? '').trim() || button.outerHTML.slice(0, 80))
+      }
+    }
+    new MutationObserver(scan).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-busy', 'class', 'disabled'] })
+  })
+  return () => [...found]
+}
+
+/**
+ * SW2 on a whole screen: the visible text of each block in main (rendered maths, code and form fields left out),
+ * judged by `unrenderedText`. Returns each problem once.
+ */
+export async function unrendered(page: Page): Promise<string[]> {
+  const blocks = await page.locator('main').evaluate((main) => {
+    const skip = '.katex, code, pre, textarea, input, script, style, [aria-hidden="true"]'
+    const block = 'p, li, h1, h2, h3, h4, h5, h6, td, th, dd, dt, blockquote, figcaption, label, button, a, div'
+    const texts = new Map<Element, string>()
+    const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement
+      if (!parent || parent.closest(skip) || parent.getClientRects().length === 0) continue
+      const owner = parent.closest(block) ?? main
+      texts.set(owner, (texts.get(owner) ?? '') + node.textContent)
+    }
+    return [...texts.values()].map((text) => text.replace(/\s+/g, ' ').trim()).filter(Boolean)
+  })
+  return [...new Set(blocks.flatMap(unrenderedText))]
+}
+
+/** The idea names of the map's first unit (SW3 checks sentences against them). Leaves the page on the map. */
+export async function ideaNames(page: Page, courseUrl: string): Promise<string[]> {
+  await page.goto(`${courseUrl}/map`)
+  const unit = page.locator('main').getByRole('group', { name: /: \d+ ideas$/ }).first()
+  await unit.waitFor()
+  return [...(await unit.ariaSnapshot()).matchAll(/- link "(.*?)"/g)].map((match) => conceptNameOf(match[1]))
+}
+
+/**
+ * SW2 and SW3 on the current screen, labelled with `where`: unrendered model text, and idea names used as nouns
+ * in sentences.
+ */
+export async function textProblems(page: Page, where: string, ideas: string[]): Promise<{ unrendered: string[]; concepts: string[] }> {
+  const main = await page.locator('main').innerText()
+  return {
+    unrendered: (await unrendered(page)).map((problem) => `${where}: ${problem}`),
+    concepts: misusedConcepts(main.replace(/\s+/g, ' '), ideas).map((problem) => `${where}: ${problem}`),
+  }
 }
 
 /** Every status region's text, for waits: SW7 wants each wait to have an accessible status. */

@@ -159,3 +159,18 @@ export async function startStudying(page: Page, courseUrl: string, examInDays = 
   await form.getByRole('button', { name: 'Save and start warm-up' }).click()
   await expect(page).toHaveURL(new RegExp(`${courseUrl}/topics/`))
 }
+
+/**
+ * Waits on a new topic until its warm-up can start. When preparation finishes within a second or so (replayed answers),
+ * the page sometimes settles on Read with no warm-up offered and stays there (finding 94, K53: a parallel render
+ * skips the concept conversion). A student would open the topic again, so the harness does that once and says so in
+ * the log. SW9 removes this.
+ */
+export async function openOnWarmup(page: Page, topicUrl: string) {
+  const start = page.getByRole('button', { name: 'Start warm-up' })
+  await start.or(page.getByRole('button', { name: "I've read it" })).first().waitFor({ timeout: 4 * 60_000 })
+  if (await start.isVisible()) return
+  console.log('note: the new topic opened on Read without its warm-up; opening the topic again')
+  await page.goto(topicUrl)
+  await expect(start).toBeVisible({ timeout: 60_000 })
+}
