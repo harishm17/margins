@@ -43,4 +43,4 @@ Recordings are matched by prompt, so the course has to reach the model the same 
 | Id | Journey |
 |---|---|
 | WF1 | A new course: a batch of lecture notes with a slide deck and a scan, the topics, a past exam, the duplicate dialog, the topic check (rename, merge) and confirm |
-| WF2 | The first topic: the warm-up, reading with a quick check and a margin note, recall, practice with help and a worked example, the examples page and a quiz of every question type. After each stage every surface that shows the topic must agree on the next step, progress and minutes; every screen's model text must render and use idea names right; no button may go blank while busy |
+| WF2 | The first topic: the warm-up, reading with a quick check and a margin note, recall, practice with help and a worked example, the examples page and a quiz of every question type. After each stage every surface that shows the topic must agree on the next step, progress and minutes; every screen's model text must render and use idea names right; no button may go blank while busy, and a waiting Check on a step with options asks to pick one |

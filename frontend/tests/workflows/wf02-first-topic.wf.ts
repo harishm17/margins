@@ -112,6 +112,9 @@ test('WF2 first topic: warm-up, reading, recall, practice, quiz', async ({ page,
     const step = page.getByRole('listitem').filter({ has: page.getByRole('radiogroup', { name: 'Answer options' }) }).first()
     await expect(step).toBeVisible({ timeout: 4 * 60_000 })
     await look('practice')
+    await checks.check('WF2.choice-check-reason', 'a Check waiting on a step with answer options asks to pick one, not to type (SW1)', () =>
+      expect(step.getByRole('button', { name: 'Check' })).toHaveAccessibleDescription('Pick an answer first.', { timeout: 1000 })
+    )
     await step.getByRole('button', { name: 'Get help' }).click()
     await step.getByRole('button', { name: /^Show where to look/ }).click()
     await look('practice hint')
