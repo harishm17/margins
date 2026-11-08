@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { disagreements, masteryOf, minutesOf, notStartedName, percentShown, planItemReading, stepOf } from './surfaces'
+import { disagreements, masteryOf, minutesOf, notStartedName, percentShown, planItemReading, stateChanges, stepOf } from './surfaces'
 
 describe('reading a surface', () => {
   it('names the study step a phrase points to', () => {
@@ -119,5 +119,29 @@ describe('topics the student never opened', () => {
   it('skips a topic that was opened', () => {
     assert.equal(notStartedName('Show details: Hash tables, chaining', row('In progress')), null)
     assert.equal(notStartedName('Show details: Hash tables, chaining', row('Learning')), null)
+  })
+})
+
+describe('a topic before and after', () => {
+  it('names each surface whose mastery or next step changed, and a surface that appeared', () => {
+    const before = [
+      { surface: 'topics list', next: 'Warm-up', mastery: 'Not started' },
+      { surface: 'plan', next: 'Learn', said: 'Learn it next.', minutes: 30 },
+    ]
+    const after = [
+      { surface: 'topics list', next: 'Warm-up', mastery: 'Learning 0%' },
+      { surface: 'plan', next: 'Review', said: 'Due for review, mastery 0%.', minutes: 15 },
+      { surface: 'course overview', mastery: 'Learning 0%' },
+    ]
+    assert.deepEqual(stateChanges(before, after), [
+      'topics list: mastery Not started -> Learning 0%',
+      'plan: next Learn -> Review',
+      'course overview: mastery (none) -> Learning 0%',
+    ])
+  })
+
+  it('is empty when only the minutes or the wording moved', () => {
+    const before = [{ surface: 'plan', next: 'Learn', said: 'Learn it next.', minutes: 30 }]
+    assert.deepEqual(stateChanges(before, [{ surface: 'plan', next: 'Learn', said: 'Learn it today.', minutes: 20 }]), [])
   })
 })

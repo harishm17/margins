@@ -81,8 +81,27 @@ export function planItemReading(lines: string[], topic: string, ticked: boolean)
   return { surface: 'plan', next: /^Learn\b/.test(lines[0] ?? '') ? 'nothing' : undefined, said: `${lines[0]}, ticked done`, mastery, minutes }
 }
 
-/** Visit every surface that shows `topic` and read what it says. Leaves the page on the plan. */
-export async function readSurfaces(page: Page, at: { courseUrl: string; topicUrl: string; topic: string }): Promise<Reading[]> {
+/**
+ * What changed for one topic between two readings of its surfaces: each surface whose mastery or next step differs,
+ * a surface that appeared or went counting as a change. Minutes and wording are left out: they move with the day.
+ */
+export function stateChanges(before: Reading[], after: Reading[]): string[] {
+  const surfaces = [...new Set([...before, ...after].map((reading) => reading.surface))]
+  const show = (value: string | undefined) => value ?? '(none)'
+  return surfaces.flatMap((surface) => {
+    const was = before.find((reading) => reading.surface === surface)
+    const now = after.find((reading) => reading.surface === surface)
+    return (['mastery', 'next'] as const).flatMap((field) =>
+      was?.[field] === now?.[field] ? [] : [`${surface}: ${field} ${show(was?.[field])} -> ${show(now?.[field])}`]
+    )
+  })
+}
+
+/**
+ * Visit every surface that shows `topic` and read what it says. Leaves the page on the plan. Without `topicUrl` the
+ * topic's own page is left out: opening a topic the student never opened starts its preparation, which changes it.
+ */
+export async function readSurfaces(page: Page, at: { courseUrl: string; topicUrl?: string; topic: string }): Promise<Reading[]> {
   const { courseUrl, topicUrl, topic } = at
   const readings: Reading[] = []
   const without = (text: string) => squash(text.replace(topic, ' '))
@@ -99,20 +118,22 @@ export async function readSurfaces(page: Page, at: { courseUrl: string; topicUrl
     readings.push({ surface: 'topics list', next: stepOf(said), said: `Next: ${said}`, mastery: masteryOf(without(text)) })
   }
 
-  await settle(topicUrl)
-  const main = squash(await page.locator('main').innerText())
-  const header = main.match(/Topic progress (.*?)(?= Details|$)/)?.[0] ?? ''
-  const nextUp = page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /\(next up\)/ })
-  const marked = (await nextUp.count()) ? await nameOf(nextUp.first()) : ''
-  readings.push({
-    surface: 'topic header and path',
-    next: marked ? stepOf(marked) : undefined,
-    said: marked || undefined,
-    mastery: masteryOf(header),
-    minutes: minutesOf(header),
-  })
-  const side = page.getByRole('complementary', { name: 'Sidebar' }).getByRole('link', { name: new RegExp(`${escape(topic)}$`) })
-  if (await side.count()) readings.push({ surface: 'sidebar', mastery: masteryOf(without(await nameOf(side.first()))) })
+  if (topicUrl) {
+    await settle(topicUrl)
+    const main = squash(await page.locator('main').innerText())
+    const header = main.match(/Topic progress (.*?)(?= Details|$)/)?.[0] ?? ''
+    const nextUp = page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /\(next up\)/ })
+    const marked = (await nextUp.count()) ? await nameOf(nextUp.first()) : ''
+    readings.push({
+      surface: 'topic header and path',
+      next: marked ? stepOf(marked) : undefined,
+      said: marked || undefined,
+      mastery: masteryOf(header),
+      minutes: minutesOf(header),
+    })
+    const side = page.getByRole('complementary', { name: 'Sidebar' }).getByRole('link', { name: new RegExp(`${escape(topic)}$`) })
+    if (await side.count()) readings.push({ surface: 'sidebar', mastery: masteryOf(without(await nameOf(side.first()))) })
+  }
 
   await settle('/home')
   const upNext = page.locator('main').getByRole('region', { name: /^Up next/ })

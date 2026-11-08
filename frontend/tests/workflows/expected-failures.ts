@@ -32,4 +32,16 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF3.review-end-one-action': { fixedBy: 'R1', finding: '55' }, // a filled button and an outlined one
   'WF3.drill-end-one-action': { fixedBy: 'R1', finding: '55' }, // a filled button and two outlined ones
   'WF3.practice-confidence': { fixedBy: 'Q3', finding: '88' }, // a practice step's answer options have no "How sure are you?" row
+  // WF4, mock exam
+  'WF4.form-up-to': { fixedBy: 'U10', finding: '26' }, // "10 questions": nothing says the exam may hold fewer
+  'WF4.form-plain-words': { fixedBy: 'C4', finding: '23' }, // "the wording, task verbs and answer length of the exams you uploaded"
+  'WF4.build-header': { fixedBy: 'SW7', finding: '25' }, // "New mock exam / Choose what to cover..." stays while the exam is written
+  'WF4.build-wait-estimate': { fixedBy: 'SW7', finding: '25' }, // "This takes a few minutes"
+  'WF4.exam-order': { fixedBy: 'U8', finding: '28' }, // topics interleaved and out of course order, a choice question after a written one
+  'WF4.flag-second-browser': { fixedBy: 'SW10', finding: '30' }, // flags live in the first browser's session storage
+  'WF4.position-second-browser': { fixedBy: 'SW10', finding: '31' }, // a second browser opens the exam on question 1
+  'WF4.unstudied-folded': { fixedBy: 'SW16', finding: '36' }, // one "Not answered" row per never-opened topic
+  'WF4.jump-to-missed': { fixedBy: 'U9', finding: '37' }, // no "Next missed" or "Next not answered"
+  'WF4.results-rendered': { fixedBy: 'SW2', finding: '32' }, // a question row's preview strips "$" and shows the LaTeX ("\log")
+  'WF4.one-exam-name': { fixedBy: 'U7', finding: '22, 39' }, // the tab titles say "Mock exam", "Taking a mock exam", "Mock exam results"
 }

@@ -126,6 +126,9 @@ export async function statusTexts(page: Page): Promise<string[]> {
   )
 }
 
+/** SW7: a wait that says about how long it takes. */
+export const ESTIMATE = /about \d+ (seconds?|minutes?)|\d+ (s|sec|min) (left|to go)/i
+
 /** Fails with `found` listed when it is not empty: the body of most page checks. */
 export function expectNone(found: string[], what: string) {
   expect(found, `${what}: ${found.join('; ')}`).toEqual([])

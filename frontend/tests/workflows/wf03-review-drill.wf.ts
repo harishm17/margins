@@ -3,14 +3,11 @@ import { test, expect } from './harness/fixtures'
 import { daysPass } from './harness/clock'
 import { holdJobs } from './harness/hold'
 import { openOnWarmup, readyCourse, signIn, startStudying, takeQuiz, takeWarmup, ZONE } from './harness/course'
-import { buttonLikeActions, expectNone } from './harness/page-checks'
+import { buttonLikeActions, ESTIMATE, expectNone } from './harness/page-checks'
 import { notStartedTopics } from './harness/surfaces'
 
 // WF3: review and drill. A studied topic comes due the next day: today's review with misses, a reload and a second
 // browser mid-session, the wait for fresh questions, the end screen, a drill, and "Fix it now" while the topic is due.
-
-/** A wait that says about how long it takes. */
-const ESTIMATE = /about \d+ (seconds?|minutes?)|\d+ (s|sec|min) (left|to go)/i
 
 test('WF3 review and drill: Fix it now, a due review, a drill', async ({ page, checks, browser }, testInfo) => {
   const { courseUrl, email } = await readyCourse(page, 'WF3')
