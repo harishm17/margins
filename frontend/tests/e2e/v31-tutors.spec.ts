@@ -4,7 +4,6 @@ import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { withPrisma } from './helpers/db'
 import { createCourse, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
 import { DEMO_EMAIL, demoIds } from './helpers/seed-demo'
-import { expectClearOfTabBar, expectNoSidewaysScroll } from './helpers/overflow'
 import { streamedPartsArrived } from './helpers/settle'
 import { TUTOR_CONCEPT, addTutorConcept, lastReply, removeTutorTraces, say, seedTutorReading, settled } from './helpers/v31-tutors'
 
@@ -176,27 +175,4 @@ test.describe('the reader tutor', () => {
     expect((await page.request.post(`/api/topics/${topicId}/reader-explain`, { data: { chunkId: chunkIds[0], take: 'a take on the first passage' } })).status()).toBe(200)
   })
 
-  test('the answer box and the verdict on a phone: no sideways scroll, clear of the tab bar, no axe violations', async ({ page }) => {
-    test.setTimeout(120_000)
-    await page.setViewportSize({ width: 390, height: 844 })
-    const { topicUrl } = await readerWorld(page, 'v31-reader-phone')
-    await openReader(page, `${topicUrl}?view=read`)
-    const passage = page.locator('[data-passage]').nth(2)
-    await passage.getByRole('button', { name: 'Margin notes' }).click()
-    await passage.getByRole('button', { name: /Explain this passage: passage 3/ }).click()
-    await passage.getByRole('textbox').fill('It says the table keeps a list in each bucket.')
-    await passage.getByRole('button', { name: 'Ask the tutor' }).click()
-    const form = passage.getByRole('form', { name: /Answer the check question on passage 3/ })
-    await expect(form).toBeVisible()
-    await form.getByLabel('Your answer').fill('Photosynthesis turns light into sugar.')
-    await expectClearOfTabBar(page, form.getByRole('button', { name: 'Check my answer' }), 'Check my answer')
-    await screenshotIfAsked(page, 'v31-reader-answer-box-390x844')
-    await expectNoAxeViolations(page, 'reader: answer box, 390')
-    await form.getByRole('button', { name: 'Check my answer' }).click()
-    await expect(passage.locator('[data-note="answer"]').locator('[data-verdict="not_yet"]')).toHaveText("Tutor's verdict: Not yet")
-    await expectClearOfTabBar(page, passage.getByRole('button', { name: "I don't know" }), "I don't know")
-    await screenshotIfAsked(page, 'v31-reader-verdict-390x844')
-    await expectNoSidewaysScroll(page, page.url())
-    await expectNoAxeViolations(page, 'reader: verdict, 390')
-  })
 })

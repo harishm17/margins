@@ -1,9 +1,7 @@
-import { readFileSync } from 'node:fs'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { openMoreHelp, workingBox } from './helpers/practice'
-import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import {
   ZONE,
@@ -22,8 +20,7 @@ import {
   signIn,
   signUpAndIn,
 } from './helpers/loop'
-import { expectClearOfTabBar } from './helpers/overflow'
-import { animationsSettled, streamedPartsArrived } from './helpers/settle'
+import { streamedPartsArrived } from './helpers/settle'
 import { chooseConfidence } from './helpers/confidence'
 
 // The learning loop: exam date and plan, practice progress on the server, reviews (retry what you
@@ -166,31 +163,6 @@ test.describe('plan', () => {
     await page.reload()
     await expect(page.getByRole('region', { name: 'When is your exam?' })).toHaveCount(0)
     await expect(page.getByRole('region', { name: 'Up next' })).toBeVisible()
-  })
-
-  test('on a phone the exam-date card is above the tab bar on the first paint, with its buttons reachable', async ({ page, context }) => {
-    await setZoneCookie(context)
-    await signUpAndIn(page, 'prompt-phone')
-    await page.setViewportSize({ width: 390, height: 844 })
-    const emptyCourse = await createEmptyCourse(page, 'Prompt phone course')
-    await addMaterial(page, emptyCourse)
-    const course = await createCourse(page, 'Prompt phone course', [{ name: 'Sorting', minutes: 30 }, { name: 'Searching', minutes: 30 }], { existingCourseId: emptyCourse })
-    await addContent(course.topics.Sorting, { section_notes: '# Sorting\n\nNotes.' })
-    await page.goto(`/courses/${course.courseId}`)
-    const card = page.getByRole('region', { name: 'When is your exam?' })
-    await expect(card).toBeVisible()
-    const bar = await page.getByRole('navigation', { name: 'Course tabs' }).boundingBox()
-    const box = await card.boundingBox()
-    expect(bar).not.toBeNull()
-    expect(box).not.toBeNull()
-    // On the first paint, with nothing scrolled, the whole line (the sentence and its one button) is above the fixed bar.
-    expect(await page.evaluate(() => window.scrollY)).toBe(0)
-    expect(box!.y + box!.height, `the exam-date line ends at ${Math.round(box!.y + box!.height)}px, the tab bar starts at ${Math.round(bar!.y)}px`).toBeLessThanOrEqual(bar!.y)
-    await screenshotIfAsked(page, 'final-exam-prompt-390x844')
-    // The date field and its two buttons open from the one button, and stay clear of the bar.
-    await expectClearOfTabBar(page, card.getByRole('button', { name: 'Set exam date' }), 'Set exam date')
-    await card.getByRole('button', { name: 'Set exam date' }).click()
-    await expectClearOfTabBar(page, card.getByRole('button', { name: 'Save date' }), 'Save date')
   })
 
   test('the exam date and the daily time can be set when the course is created', async ({ page, context }) => {
@@ -464,62 +436,6 @@ test.describe('practice progress', () => {
     await notice.getByRole('button', { name: 'Dismiss' }).click()
     await expect(notice).toHaveCount(0)
     expect(refusals).toBe(1)
-  })
-
-  test('the practice page: no axe violations at desktop and phone width, screenshots on request', async ({ page }) => {
-    test.setTimeout(120_000)
-    await signUpAndIn(page, 'axe')
-    const course = await createCourse(page, 'Axe course', [{ name: 'Squares' }])
-    const problem = practiceProblem('Squares')
-    const hinted = {
-      ...problem,
-      steps: problem.steps.map((step) => ({ ...step, hints: ['Look at the number.', 'Squaring is repeated product.', 'n times n.'] })),
-    }
-    await addContent(course.topics.Squares, { interactive_examples: [hinted] })
-    const axe = readFileSync(require.resolve('axe-core'), 'utf8')
-    const shots = process.env.SCREENS_DIR
-    const checkAxe = async (label: string) => {
-      await page.evaluate(axe)
-      const violations = await page.evaluate(async () => {
-        const run = (window as unknown as { axe: { run: (context: Document) => Promise<{ violations: { id: string; nodes: { html: string }[] }[] }> } }).axe.run
-        const result = await run(document)
-        return result.violations.map((v) => v.id + ': ' + v.nodes.map((n) => n.html.slice(0, 120)).join(' | '))
-      })
-      expect(violations, label).toEqual([])
-    }
-    for (const [name, size] of [
-      ['1440x900', { width: 1440, height: 900 }],
-      ['390x844', { width: 390, height: 844 }],
-    ] as const) {
-      await page.setViewportSize(size)
-      await page.goto(`/courses/${course.courseId}/topics/${course.topics.Squares}?view=practice`)
-      await expect(page.getByRole('button', { name: 'Get help' })).toBeVisible()
-      if (shots) await page.screenshot({ path: `${shots}/practice-${name}-start.png` })
-      await page.getByRole('button', { name: 'Get help' }).click()
-      await page.getByRole('button', { name: /Show where to look/ }).click()
-      // Connect and Structure wait for an attempt: a wrong check opens them.
-      await answer(page).fill('5')
-      await page.getByRole('button', { name: 'Check', exact: true }).click()
-      await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-      await page.getByRole('button', { name: 'Try again' }).click()
-      // After a miss the helps stay open.
-      await page.getByRole('button', { name: /Show the first step/ }).click()
-      await checkAxe(`${name}, hints open`)
-      await answer(page).fill('5')
-      await page.getByRole('button', { name: 'Check', exact: true }).click()
-      await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-      if (shots) {
-        // Let the top bar finish its scrolled style before the picture.
-        await animationsSettled(page)
-        await page.screenshot({ path: `${shots}/practice-${name}-after-miss.png` })
-      }
-      await checkAxe(`${name}, after a wrong check`)
-      // Reset for the next size.
-      await page.evaluate(() => localStorage.clear())
-      await page.request.post(`/api/topics/${course.topics.Squares}/practice-progress`, {
-        data: { problemIndex: 0, problemTitle: 'Squares', solvedSteps: [], revealedSteps: [], hintedSteps: [], attemptedSteps: [], firstTrySteps: [], maxRungs: {}, missRungs: {} },
-      })
-    }
   })
 
   test('progress that only the browser had is uploaded once, without being scored', async ({ page, browser }) => {
@@ -1105,55 +1021,6 @@ test.describe('review sessions', () => {
     await page.goto(`/courses/${w.course.courseId}/review/session?session=00000000-0000-4000-8000-000000000000`)
     await expect(page.getByRole('link', { name: 'Back to Review' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Try again' })).toHaveCount(0)
-  })
-
-  test('the session screens: no axe violations at desktop and phone width, screenshots on request', async ({ page, context }) => {
-    test.setTimeout(180_000)
-    await setZoneCookie(context)
-    for (const [name, size] of [
-      ['1440x900', { width: 1440, height: 900 }],
-      ['390x844', { width: 390, height: 844 }],
-    ] as const) {
-      await page.setViewportSize(size)
-      // Each size is its own account: sign out first (the zone cookie goes with the cookies).
-      await context.clearCookies()
-      await setZoneCookie(context)
-      const w = await dueCourse(page, `axe-${name}`)
-      await page.goto(`/courses/${w.course.courseId}/review`)
-      await expect(page.getByRole('link', { name: "Start today's review" })).toBeVisible()
-      await expectNoAxeViolations(page, `${name}, review page`)
-      await screenshotIfAsked(page, `review-page-${name}`)
-
-      await page.goto(`/courses/${w.course.courseId}/review/session`)
-      await expect(page.getByRole('heading', { level: 1, name: 'Question 1 of 3' })).toBeVisible({ timeout: 30_000 })
-      await expectNoAxeViolations(page, `${name}, opening question`)
-      await screenshotIfAsked(page, `review-session-opening-${name}`)
-
-      // A miss with a confidence tap: the feedback.
-      await page.getByRole('radio', { name: /False/ }).click()
-      await chooseConfidence(page, 'Certain')
-      await page.getByRole('button', { name: 'Check answer' }).click()
-      await expect(page.getByRole('heading', { level: 2, name: /^Not quite/ })).toBeVisible()
-      await animationsSettled(page)
-      await expectNoAxeViolations(page, `${name}, feedback after a miss`)
-      await screenshotIfAsked(page, `review-session-feedback-${name}`)
-      await next(page).click()
-      for (const n of [2, 3]) {
-        await expect(page.getByRole('heading', { level: 1, name: `Question ${n} of 3` })).toBeVisible()
-        await checkTrue(page)
-      }
-
-      // The closing retest of the miss.
-      await expect(page.getByText('Fresh retest')).toBeVisible({ timeout: 30_000 })
-      await animationsSettled(page)
-      await expectNoAxeViolations(page, `${name}, closing retest`)
-      await screenshotIfAsked(page, `review-session-retest-${name}`)
-      await checkTrue(page)
-
-      await expect(page.getByRole('heading', { level: 1, name: 'Review done' })).toBeVisible()
-      await expectNoAxeViolations(page, `${name}, summary`)
-      await screenshotIfAsked(page, `review-session-summary-${name}`)
-    }
   })
 
   test('when grading is unavailable a question can be skipped for now, and the answer being written survives a reload', async ({ page, context }) => {

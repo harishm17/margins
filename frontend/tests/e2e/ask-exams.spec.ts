@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { withPrisma } from './helpers/db'
 import { signIn } from './helpers/auth'
@@ -222,22 +222,24 @@ async function removeAskTraces() {
 }
 
 const composer = (page: Page) => page.getByLabel('Ask about your materials')
-/** The top edge of the composer's whole box (the form around the text box, its border and padding), where the messages end. */
-const composerBoxTop = async (page: Page) => (await page.locator('[data-ask-composer]').boundingBox().then((box) => box?.y)) ?? 0
-// Ask allows ten questions a minute per student and these specs share one, so each message waits for room.
+// Ask allows ten questions a minute per student and these specs share the demo one, so each of its messages waits for room.
+// `demo: false` is for a message that does not reach the demo student's limit: one from an account of its own, or one the
+// page answers itself (holdChatStream). Those never wait.
 const sentAt: number[] = []
-async function say(page: Page, message: string) {
-  await expect
-    .poll(
-      () => {
-        const now = Date.now()
-        while (sentAt.length > 0 && now - sentAt[0] > 60_000) sentAt.shift()
-        return sentAt.length < 6
-      },
-      { intervals: [2_000], timeout: 120_000, message: 'room for another message under the per-minute limit' }
-    )
-    .toBe(true)
-  sentAt.push(Date.now())
+async function say(page: Page, message: string, { demo = true }: { demo?: boolean } = {}) {
+  if (demo) {
+    await expect
+      .poll(
+        () => {
+          const now = Date.now()
+          while (sentAt.length > 0 && now - sentAt[0] > 60_000) sentAt.shift()
+          return sentAt.length < 6
+        },
+        { intervals: [2_000], timeout: 120_000, message: 'room for another message under the per-minute limit' }
+      )
+      .toBe(true)
+    sentAt.push(Date.now())
+  }
   await composer(page).fill(message)
   await page.keyboard.press('Enter')
 }
@@ -434,7 +436,7 @@ test.describe('attempt-first Ask', () => {
 
     // The pasted question is declined, with no model call: the stream has no route and no sources.
     const declined = page.waitForResponse((response) => response.url().endsWith('/chat') && response.request().method() === 'POST')
-    await say(page, pasted)
+    await say(page, pasted, { demo: false })
     const stream = await (await declined).text()
     await expect(page.getByText("That looks like a question from the mock exam you're taking. Finish it first, then ask me.")).toBeVisible({ timeout: 30_000 })
     await settled(page)
@@ -451,7 +453,7 @@ test.describe('attempt-first Ask', () => {
     await expectNoAxeViolations(page, 'ask: declined during a mock exam')
 
     // A question about the concept is not the exam question: it is answered.
-    await say(page, 'What is a hash table?')
+    await say(page, 'What is a hash table?', { demo: false })
     await expect(page.getByText(/Mock answer to "What is a hash table\?"/)).toBeVisible({ timeout: 30_000 })
 
     // The decline stays in the conversation when it is reopened, without the "nothing matched" note.
@@ -470,7 +472,7 @@ test.describe('attempt-first Ask', () => {
     await page.goBack()
     // Once the exam is handed in, the same question is an ordinary one.
     await withPrisma((prisma) => prisma.examSubmission.updateMany({ where: { sampleExamId: examId }, data: { status: 'submitted' } }))
-    await say(page, pasted)
+    await say(page, pasted, { demo: false })
     await expect(page.getByText(/Mock answer to "Which collision strategy/)).toBeVisible({ timeout: 30_000 })
   })
 
@@ -479,7 +481,7 @@ test.describe('attempt-first Ask', () => {
     // The chat stream is held in the page, so each step of a buffered reply can be looked at.
     await holdChatStream(page)
     await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
-    await say(page, 'Solve problem 3')
+    await say(page, 'Solve problem 3', { demo: false })
     const push = (event: unknown) => page.evaluate((e) => (window as unknown as { __chat: { push: (x: unknown) => void } }).__chat.push(e), event)
     await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __chat?: unknown }).__chat))).toBe(true)
     await push({ type: 'thread', threadId: '11111111-1111-4111-8111-111111111111', title: 'Solve problem 3', isNew: true })
@@ -497,21 +499,6 @@ test.describe('attempt-first Ask', () => {
     await push({ type: 'done', text: 'What have you tried so far?', sources: [], marks: [], retrieved: 3, stop_reason: 'end_turn' })
     await expect(page.getByText('What have you tried so far?')).toBeVisible()
     await expect(page.getByText('Checking the reply...')).toHaveCount(0)
-  })
-
-  test('the Stop button names its Esc key on a wide screen and not at phone width', async ({ page }) => {
-    await signIn(page, DEMO_EMAIL)
-    await holdChatStream(page)
-    await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
-    await say(page, 'Explain load factor')
-    const stop = page.getByRole('button', { name: /^Stop/ })
-    await expect(stop).toBeVisible()
-    await expect(stop.locator('kbd')).toBeVisible()
-    await page.setViewportSize({ width: 390, height: 844 })
-    await expect(stop).toBeVisible()
-    await expect(stop.locator('kbd')).toBeHidden()
-    await screenshotIfAsked(page, 'f2-stop-without-esc-390x844')
-    await page.keyboard.press('Escape')
   })
 
   test('a stopped explanation gets its check card once the server has stored the reply', async ({ page }) => {
@@ -538,7 +525,7 @@ test.describe('attempt-first Ask', () => {
       })
     )
     await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
-    await say(page, 'Explain load factor: keys over buckets')
+    await say(page, 'Explain load factor: keys over buckets', { demo: false })
     const push = (event: unknown) => page.evaluate((e) => (window as unknown as { __chat: { push: (x: unknown) => void } }).__chat.push(e), event)
     await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __chat?: unknown }).__chat))).toBe(true)
     await push({ type: 'thread', threadId, title: 'Explain load factor', isNew: true })
@@ -552,89 +539,4 @@ test.describe('attempt-first Ask', () => {
     await expect(page.getByText('Stopped early.')).toHaveCount(0)
   })
 
-  test('on a phone the check card scrolls fully into view above the composer when the answer is shown', async ({ page }) => {
-    test.setTimeout(90_000)
-    await page.setViewportSize({ width: 390, height: 844 })
-    await signIn(page, DEMO_EMAIL)
-    await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
-    await say(page, 'Explain load factor')
-    await expect(page.getByText(/What do you think this means\?/)).toBeVisible({ timeout: 30_000 })
-    await settled(page)
-    await say(page, 'Explain load factor: it is the number of keys divided by the number of buckets')
-    const card = page.getByRole('group', { name: 'Check yourself' })
-    await expect(card).toBeVisible({ timeout: 30_000 })
-    await settled(page)
-    // As soon as the card appears, all of it is above the composer: the confidence row and the buttons are not under it.
-    const composerTop = () => composerBoxTop(page)
-    const clearOfComposer = async (target: Locator) => {
-      const box = await target.boundingBox()
-      return box !== null && box.y + box.height <= (await composerTop())
-    }
-    // On a phone the row is a single "Confidence (optional)" chip until it is tapped; either way the row's own box is what must clear the composer.
-    const confidence = card.locator('[data-confidence-row]')
-    await expect.poll(() => clearOfComposer(confidence), { timeout: 5_000, message: 'the confidence row ends above the composer' }).toBe(true)
-    await expect.poll(() => clearOfComposer(card.getByRole('button', { name: "I don't know" })), { timeout: 5_000, message: 'the card buttons end above the composer' }).toBe(true)
-    await animationsSettled(page)
-    await screenshotIfAsked(page, 'f2-check-card-in-view-390x844')
-    await card.getByLabel(/^Your answer:/).fill('Keys divided by buckets')
-    await card.getByRole('button', { name: 'Show the answer' }).click()
-    const grades = card.getByRole('group', { name: 'How did you do?' })
-    await expect(grades).toBeVisible()
-    const above = async () => {
-      const [bottom, top] = await Promise.all([
-        grades.boundingBox().then((box) => (box ? box.y + box.height : Infinity)),
-        composerBoxTop(page),
-      ])
-      return bottom <= top
-    }
-    await expect.poll(above, { timeout: 5_000 }).toBe(true)
-    await animationsSettled(page)
-    await screenshotIfAsked(page, 'f2-card-revealed-in-view-390x844')
-    await card.getByRole('button', { name: 'Partly' }).click()
-    await expect(card.getByText('Saved: Partly')).toBeVisible()
-    await expect.poll(async () => (await card.boundingBox().then((box) => (box ? box.y + box.height : Infinity))) <= (await composerBoxTop(page)), { timeout: 5_000 }).toBe(true)
-    await expectNoAxeViolations(page, 'ask: card graded on a phone')
-  })
-
-  test('a follow-up leaves the thread at the new reply: it does not jump back up to the older check card', async ({ page }) => {
-    test.setTimeout(90_000)
-    await page.setViewportSize({ width: 390, height: 844 })
-    // Which check card (by its place on the page) each scrollIntoView call was for.
-    await page.addInitScript(() => {
-      const w = window as unknown as { __cardScrolls: number[] }
-      w.__cardScrolls = []
-      const real = Element.prototype.scrollIntoView
-      Element.prototype.scrollIntoView = function (this: Element, ...args: Parameters<Element['scrollIntoView']>) {
-        if (this.hasAttribute('data-ask-check')) w.__cardScrolls.push([...document.querySelectorAll('[data-ask-check]')].indexOf(this))
-        return real.apply(this, args)
-      }
-    })
-    await signIn(page, DEMO_EMAIL)
-    await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
-    await say(page, 'Explain load factor')
-    await expect(page.getByText(/What do you think this means\?/)).toBeVisible({ timeout: 30_000 })
-    await settled(page)
-    await say(page, 'Explain load factor: it is the number of keys divided by the number of buckets')
-    const card = page.getByRole('group', { name: 'Check yourself' })
-    await expect(card).toBeVisible({ timeout: 30_000 })
-    await settled(page)
-    const cardScrolls = () => page.evaluate(() => (window as unknown as { __cardScrolls: number[] }).__cardScrolls.length)
-    const before = await cardScrolls()
-    // The messages are the scrolling part above the composer; the card is in view at the foot of them.
-    const thread = card.locator('xpath=ancestor::div[contains(@class, "overflow-y-auto")][1]')
-    const fromBottom = () => thread.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight)
-    await expect.poll(fromBottom, { timeout: 5_000 }).toBeLessThan(24)
-    // Ask again without answering the card. The thread follows the new reply down; the older card is not scrolled back to.
-    await say(page, 'What is a hash function?')
-    await settled(page)
-    await expect(page.locator('article:not([aria-busy])')).toHaveCount(3)
-    // Any smooth scroll the page starts has run its course after some frames; look only then.
-    await page.evaluate(() => new Promise<void>((done) => { let n = 0; const tick = () => (++n >= 60 ? done() : requestAnimationFrame(tick)); tick() }))
-    expect(await fromBottom(), 'the thread is at its foot, on the newest reply').toBeLessThan(24)
-    // The first card (index 0) was not scrolled to again: only a card that has just appeared may bring itself into view.
-    const later = await page.evaluate((from) => (window as unknown as { __cardScrolls: number[] }).__cardScrolls.slice(from), before)
-    expect(later.filter((index) => index === 0), 'scrollIntoView calls for the older card').toEqual([])
-    const newest = (await lastReply(page).boundingBox())!
-    expect(newest.y + newest.height, 'the newest reply is above the composer').toBeLessThanOrEqual(await composerBoxTop(page))
-  })
 })

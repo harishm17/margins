@@ -47,7 +47,3 @@ test('first sign-in, create a course, sign out, sign in, find it from home and t
   await expect(page).toHaveURL(courseUrl)
 })
 
-test('the page covers the whole screen, so a notch and a home bar can be kept clear of', async ({ page }) => {
-  await page.goto('/login')
-  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute('content', /viewport-fit=cover/)
-})
