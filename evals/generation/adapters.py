@@ -14,6 +14,7 @@ from `app`.
     fetch_excerpts                      the excerpts a topic is generated from
     app_cost                            the app's price table
 """
+import json
 import os
 import re
 import time
@@ -175,14 +176,31 @@ def estimate_cost(model: str, input_tokens: int, output_tokens: int, cache_write
 # ---------------------------------------------------------------------------------------
 
 
+# Generators that run at the same time (A2 runs every topic at once) share one MeteredProvider; each
+# task opens a `call_sink` so the calls it made are recorded apart from the others'.
+_CALL_SINK: ContextVar[Optional[List[Dict[str, Any]]]] = ContextVar("eval_call_sink", default=None)
+
+
+@contextmanager
+def call_sink():
+    """Collect the MeteredProvider calls this task (and the tasks it starts) makes."""
+    calls: List[Dict[str, Any]] = []
+    token = _CALL_SINK.set(calls)
+    try:
+        yield calls
+    finally:
+        _CALL_SINK.reset(token)
+
+
 class MeteredProvider(LLMProvider):
     """Wraps the app's provider for one model.
 
     With a `spec`, every call is pinned to that model and effort. Without one, the app's own
     choice for the call's purpose applies. Before each call it asks the SpendTracker for permission (raising SpendLimitReached when the
     call would pass a cap). After each call it records purpose, latency, token usage, cost and
-    the raw model output in `calls`. Only `generate_text` and `generate_structured` are
-    supported, which is all the content generators and the judge use.
+    the raw model output in `calls` (and in the task's `call_sink`, if one is open). Only `generate_text` and
+    `generate_structured` are supported, which is all the content generators and the judge use.
+    `price_factor` scales the app's price, 0.5 for calls sent through the Batches API (batching.py).
     """
 
     def __init__(self, inner: LLMProvider, spec: Optional[ModelSpec], tracker: SpendTracker, kind: str):
@@ -191,6 +209,7 @@ class MeteredProvider(LLMProvider):
         self.tracker = tracker
         self.kind = kind
         self.calls: List[Dict[str, Any]] = []
+        self.price_factor = 1.0
 
     def model_for(self, purpose: str):
         return self._model_id(purpose)
@@ -216,10 +235,10 @@ class MeteredProvider(LLMProvider):
             except Exception as exc:  # recorded, then raised
                 error = exc
         latency = time.perf_counter() - started
-        cost = sum(app_cost(u) for u in usages)
+        cost = sum(app_cost(u) for u in usages) * self.price_factor
         output_tokens = sum(u.output_tokens for u in usages)
         self.tracker.settle(token, self._model_id(purpose), purpose, cost, output_tokens if error is None else None)
-        self.calls.append(
+        record = (
             {
                 "purpose": purpose,
                 "model": self._model_id(purpose),
@@ -236,6 +255,10 @@ class MeteredProvider(LLMProvider):
                 "raw_output": raw_of(result) if error is None else None,
             }
         )
+        self.calls.append(record)
+        sink = _CALL_SINK.get()
+        if sink is not None:
+            sink.append(record)
         if error is not None:
             raise error
         return result
@@ -501,3 +524,227 @@ async def read_concept_graph(topic_id: str) -> Dict[str, Any]:
         "claims": [{"concept_id": c["concept_id"], "chunk_id": c["chunk_id"], "quote": c["quote"]} for c in claims],
         "edges": [{"source_id": e["source_id"], "target_id": e["target_id"], "type": e["type"]} for e in edges],
     }
+
+
+# ---------------------------------------------------------------------------------------
+# A2: the item generators, why the app drops an item, and what the support check dropped
+# ---------------------------------------------------------------------------------------
+
+# The generators A2 runs per topic (the exam runs once per corpus over its topics).
+A2_KINDS = ("warmup", "quiz", "review", "solved", "interactive")
+A2_PURPOSES = {
+    "warmup": "warmup",
+    "quiz": "topic_quiz",
+    "review": "review_items",
+    "solved": "solved_examples",
+    "interactive": "interactive_examples",
+    "exam": "exam_questions",
+}
+# The modules that import the support check by name; the recorder replaces the name in each.
+SUPPORT_MODULES = (
+    "app.services.content_generator.quiz",
+    "app.services.content_generator.review_items",
+    "app.services.content_generator.warmup",
+    "app.services.exam_generator",
+)
+_SUPPORT_SINK: ContextVar[Optional[List[Dict[str, Any]]]] = ContextVar("eval_support_sink", default=None)
+
+
+def install_support_recorder(modules=SUPPORT_MODULES) -> None:
+    """Wrap `check_support` where each generator module imported it, so a `support_sink` sees every check: how many
+    items were sent, how many kept, and the dropped items themselves. Behaviour is unchanged. Idempotent."""
+    import importlib
+
+    for module in modules:
+        module = importlib.import_module(module) if isinstance(module, str) else module
+        original = module.check_support
+        if getattr(original, "_eval_recorder", False):
+            continue
+
+        async def recorded(items, chunks, _original=original):
+            kept, dropped = await _original(items, chunks)
+            sink = _SUPPORT_SINK.get()
+            if sink is not None:
+                kept_ids = {id(item) for item in kept}
+                sink.append({"sent": len(items), "kept": len(kept), "dropped": [item for item in items if id(item) not in kept_ids]})
+            return kept, dropped
+
+        recorded._eval_recorder = True
+        module.check_support = recorded
+
+
+@contextmanager
+def support_sink():
+    """Collect the support checks this task (and the tasks it starts) runs."""
+    records: List[Dict[str, Any]] = []
+    token = _SUPPORT_SINK.set(records)
+    try:
+        yield records
+    finally:
+        _SUPPORT_SINK.reset(token)
+
+
+def question_drop_reason(raw: Dict[str, Any]) -> Optional[str]:
+    """Why the app (GeneratedQuestion.normalized) drops this question as the model wrote it, or None when it keeps it.
+
+    The reasons follow normalized()'s own tests in its order. A drop this mirror cannot name is "other", so a change in
+    the app shows up in the report instead of being misnamed.
+    """
+    from pydantic import ValidationError
+    from app.services.llm.schemas import GeneratedQuestion, _as_bool, _as_number, _clean_list, strip_exam_header
+
+    try:
+        question = GeneratedQuestion.model_validate(raw)
+    except ValidationError:
+        return "schema"
+    if question.normalized() is not None:
+        return None
+    if not strip_exam_header(question.question_text.strip()) or not question.explanation.strip():
+        return "empty"
+    if question.question_type == "multiple_choice":
+        options = [o for o in question.options if o.id.strip() and o.text.strip()]
+        ids = [o.id.strip().upper() for o in options]
+        texts = [o.text.strip().lower() for o in options]
+        answer = str(question.correct_answer or "").strip().upper()
+        if len(options) < 3:
+            return "too_few_options"
+        if len(set(ids)) != len(ids) or len(set(texts)) != len(texts):
+            return "duplicate_options"
+        if answer not in ids:
+            return "answer_not_in_options"
+        if any(o.id.strip().upper() != answer and not (o.misconception or "").strip() for o in options):
+            return "missing_misconception"
+        return "other"
+    if question.question_type == "true_false":
+        return "bad_answer" if _as_bool(question.correct_answer) is None else "other"
+    if question.question_type == "numerical":
+        return "bad_answer" if _as_number(question.correct_answer) is None else "other"
+    if not (question.sample_answer or "").strip() or not _clean_list(question.key_points):
+        return "incomplete_short_answer"
+    return "other"
+
+
+def _hint_leak_with_number_words_judged(problem: str, steps: List[Dict[str, Any]]) -> bool:
+    """`hint_leak` (schemas.py) with the tutor's `prose_words_to_judge`: an answer that is only a number word or
+    yes/no is not matched as text. A problem `hint_leak` drops but this keeps was dropped for a word form alone
+    (finding 99)."""
+    from app.services.llm.schemas import step_hints
+    from app.services.tutor.leak import string_leak
+
+    for index, step in enumerate(steps):
+        seen = problem + "\n" + "\n".join(str(s.get("question", "")) for s in steps[: index + 1])
+        for hint in step_hints(step):
+            if not hint:
+                continue
+            for target in steps[index:]:
+                answers = [target["correct_answer"], *target.get("acceptable_answers", [])]
+                answers += [o["text"] for o in target.get("options", []) if o["id"] == target["correct_answer"]]
+                if string_leak(hint, answers, target.get("tolerance"), problem=seen, prose_words_to_judge=True):
+                    return True
+    return False
+
+
+def problem_drop_reason(content_type: str, raw: Dict[str, Any]) -> Optional[str]:
+    """Why the app drops this solved example or practice problem as the model wrote it, or None when it keeps it:
+    unusable (no title, statement or steps), step_unusable (a practice step normalized() rejects, such as one without
+    exactly three hints), hint_leak, or hint_leak_word_form (a hint matched only by a number word; finding 99)."""
+    from pydantic import ValidationError
+    from app.services.llm.schemas import InteractiveExample, SolvedExample, hint_leak
+
+    model = SolvedExample if content_type == "solved" else InteractiveExample
+    try:
+        example = model.model_validate(raw)
+    except ValidationError:
+        return "schema"
+    if example.stored() is not None:
+        return None
+    if not example.usable():
+        return "unusable"
+    if content_type == "solved":
+        return "other"
+    steps = [step.normalized() for step in example.steps]
+    if any(step is None for step in steps):
+        return "step_unusable"
+    problem = f"{example.title}\n{example.problem_statement}"
+    if hint_leak(problem, steps):
+        return "hint_leak" if _hint_leak_with_number_words_judged(problem, steps) else "hint_leak_word_form"
+    return "other"
+
+
+@contextmanager
+def installed_provider(provider: LLMProvider):
+    """`provider` as the app's provider (LLMFactory) for the whole block. A2 runs every topic at once, so the per-call
+    swaps that `make_generators` and `generate` do would undo each other; this sets it once around the run."""
+    from app.services.llm.factory import LLMFactory
+
+    previous = LLMFactory._instance
+    LLMFactory._instance = provider
+    try:
+        yield
+    finally:
+        LLMFactory._instance = previous
+
+
+async def review_requests(topic_id: str, difficulty: str) -> List[Dict[str, Any]]:
+    """One review-item request per active concept of the topic. The modes take turns (recall, discrimination,
+    composition) so all three are measured; a concept with no confusable twin gets recall instead of discrimination,
+    since the app drops a discrimination item that names no twin."""
+    from app.db.connection import execute_query
+    from app.services.content_generator.review_items import fetch_confusable_partners
+
+    rows = await execute_query(
+        "SELECT id FROM concepts WHERE topic_id = $1 AND status = 'active' ORDER BY order_index, id", topic_id
+    )
+    ids = [row["id"] for row in rows]
+    partners = await fetch_confusable_partners(ids)
+    modes = ("recall", "discrimination", "composition")
+    requests = []
+    for n, concept_id in enumerate(ids):
+        mode = modes[n % len(modes)]
+        if mode == "discrimination" and concept_id not in partners:
+            mode = "recall"
+        requests.append({"concept_ids": [concept_id], "mode": mode, "difficulty": difficulty})
+    return requests
+
+
+async def generate_items(topic: Dict[str, Any], kind: str, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Run one A2 generator for one topic, as its job does, and return the items the app stores. The app's provider
+    must be installed (`installed_provider`). The warm-up and the review bank write their own rows; the review bank is
+    emptied first, so a rerun starts from the same state as the first run."""
+    from app.db.connection import execute_one, execute_query
+    from app.services.content_generator.examples import ExampleType, ExamplesGenerator
+    from app.services.content_generator.quiz import QuizGenerator
+    from app.services.content_generator.review_items import generate_review_items
+    from app.services.content_generator.warmup import generate_warmup
+
+    common = dict(topic_id=topic["id"], topic_name=topic["name"], topic_description=topic.get("description") or "")
+    if kind == "warmup":
+        return (await generate_warmup(topic["id"]))["questions"]
+    if kind == "quiz":
+        result = await QuizGenerator().generate_quiz(**common, question_count=params["questions"], difficulty_level=params["difficulty"])
+        return result["questions"]
+    if kind in ("solved", "interactive"):
+        result = await ExamplesGenerator().generate_examples(
+            **common,
+            example_type=ExampleType.SOLVED if kind == "solved" else ExampleType.INTERACTIVE,
+            count=params["examples"],
+            difficulty_level=params["difficulty"],
+        )
+        return result["examples"]
+    if kind == "review":
+        await execute_query("DELETE FROM topic_quizzes WHERE topic_id = $1 AND kind = 'review_bank'", topic["id"])
+        result = await generate_review_items(topic["id"], await review_requests(topic["id"], params["difficulty"]))
+        row = await execute_one("SELECT questions FROM topic_quizzes WHERE id = $1", result["bank_id"])
+        questions = row["questions"] if row else []
+        return json.loads(questions) if isinstance(questions, str) else list(questions or [])
+    raise ValueError(f"unknown A2 kind {kind}")
+
+
+async def generate_exam_items(project_id: str, topic_ids: List[str], total_questions: int, difficulty: str) -> List[Dict[str, Any]]:
+    """The app's exam generator over `topic_ids` with its default mix of question types; returns the questions."""
+    from app.services.exam_generator import ExamGenerator
+
+    result = await ExamGenerator().generate_exam(
+        project_id, topic_ids, {"total_questions": total_questions, "difficulty_level": difficulty}
+    )
+    return result["questions"]
