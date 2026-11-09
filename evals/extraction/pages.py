@@ -52,11 +52,28 @@ def cut_page(source: Path, index: int) -> bytes:
         return out.tobytes(garbage=4, deflate=True, no_new_id=True)
 
 
-def scan_page(pdf: bytes, seed: int = 0) -> bytes:
+def _scan_builder():
+    """ReadableSTEM's scan builder, from its checkout (READABLESTEM_SRC); None when there is no checkout, as in CI."""
     if str(READABLESTEM_SRC) not in sys.path:
         sys.path.insert(0, str(READABLESTEM_SRC))
-    from readablestem.eval.scan import scan_pdf
+    try:
+        from readablestem.eval.scan import scan_pdf
+    except ModuleNotFoundError as exc:
+        if exc.name and exc.name.split(".")[0] == "readablestem":
+            return None
+        raise
+    return scan_pdf
 
+
+def can_scan() -> bool:
+    """Whether scans can be built here. Only building the pages needs it; the committed scans are already built."""
+    return _scan_builder() is not None
+
+
+def scan_page(pdf: bytes, seed: int = 0) -> bytes:
+    scan_pdf = _scan_builder()
+    if scan_pdf is None:
+        raise RuntimeError(f"Building a scan needs a ReadableSTEM checkout; none at {READABLESTEM_SRC} (set READABLESTEM_SRC)")
     scanned, _ = scan_pdf(pdf, seed=seed)
     return scanned
 

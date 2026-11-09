@@ -36,6 +36,8 @@ def test_one_page_is_cut_out_with_its_text_layer(tmp_path):
 
 
 def test_a_scan_has_a_picture_and_no_text_layer(tmp_path):
+    if not pages.can_scan():
+        pytest.skip("building a scan needs a ReadableSTEM checkout (READABLESTEM_SRC); the committed scans are already built")
     pdf = pages.cut_page(two_page_pdf(tmp_path / "two.pdf"), 0)
     scan = pages.scan_page(pdf)
     with pymupdf.open(stream=scan, filetype="pdf") as doc:
