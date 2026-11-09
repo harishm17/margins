@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # with no recording and stores the answer; "error" fails the call instead.
     LLM_CASSETTE_DIR: str = ""
     LLM_REPLAY_MISS: str = "error"
+    # A file the workflow suite writes a provider error code into to stage an outage (WF11); empty or
+    # missing means no outage. Read only by the replay provider.
+    LLM_REPLAY_FAULT_FILE: str = ""
     ANTHROPIC_API_KEY: str = ""
     # The two fallback models. A purpose below with no value of its own uses the main model
     # (notes, examples, practice, quizzes, exams, chat) or the fast one (grading, topics, voice,

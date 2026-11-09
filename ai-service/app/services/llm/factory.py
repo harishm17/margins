@@ -50,7 +50,7 @@ class LLMFactory:
                     timeout=settings.LLM_TIMEOUT_SECONDS,
                     max_retries=settings.LLM_MAX_RETRIES,
                 )
-            return ReplayProvider(settings.LLM_CASSETTE_DIR, on_miss=on_miss, inner=inner)
+            return ReplayProvider(settings.LLM_CASSETTE_DIR, on_miss=on_miss, inner=inner, fault_file=settings.LLM_REPLAY_FAULT_FILE)
         if provider_name == "mock":
             # Settings refuses this at startup; checked again here in case the setting was changed after.
             if settings.is_production:

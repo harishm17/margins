@@ -16,7 +16,9 @@ from app.services.llm.base import (
     LLMMessage,
     LLMNotConfiguredError,
     LLMProvider,
+    LLMRateLimitError,
     LLMResponse,
+    LLMUnavailableError,
     LLMUsage,
     TurnDone,
     TurnText,
@@ -271,6 +273,63 @@ class TestWiring:
     def test_record_mode_needs_the_real_model(self, tmp_path):
         with pytest.raises(LLMNotConfiguredError, match="record"):
             ReplayProvider(tmp_path, on_miss="record", inner=None)
+
+
+class TestProviderFault:
+    """A workflow turns a provider outage on and off with a file, so every surface can be seen failing (WF11)."""
+
+    async def test_every_call_fails_with_the_code_in_the_fault_file(self, tmp_path):
+        await _recorder(tmp_path / "rec").generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
+        fault = tmp_path / "fault"
+        fault.write_text("LLM_UNAVAILABLE\n")
+        replayer = ReplayProvider(tmp_path / "rec", on_miss="error", fault_file=str(fault))
+        with pytest.raises(LLMUnavailableError):
+            await replayer.generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
+        with pytest.raises(LLMUnavailableError):
+            await replayer.generate_text(_messages(NEW_A, NEW_B), purpose="section_notes")
+
+    async def test_the_outage_ends_when_the_file_is_emptied_or_goes(self, tmp_path):
+        recorded = await _recorder(tmp_path / "rec").generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
+        fault = tmp_path / "fault"
+        replayer = ReplayProvider(tmp_path / "rec", on_miss="error", fault_file=str(fault))
+        fault.write_text("LLM_RATE_LIMITED")
+        with pytest.raises(LLMRateLimitError):
+            await replayer.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
+        fault.write_text("")
+        assert await replayer.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts") == recorded
+        fault.unlink()
+        assert await replayer.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts") == recorded
+
+    async def test_a_fault_in_record_mode_calls_nothing_records_nothing_and_counts_no_usage(self, tmp_path):
+        inner = FakeModel()
+        fault = tmp_path / "fault"
+        fault.write_text("LLM_UNAVAILABLE")
+        recorder = ReplayProvider(tmp_path / "rec", on_miss="record", inner=inner, fault_file=str(fault))
+        with track_llm_usage() as usage, pytest.raises(LLMUnavailableError):
+            await recorder.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
+        assert inner.calls == 0
+        assert usage == []
+        assert list((tmp_path / "rec").rglob("*.json")) == []
+
+    async def test_an_unknown_code_is_refused_by_name(self, tmp_path):
+        fault = tmp_path / "fault"
+        fault.write_text("SOMETHING_ELSE")
+        replayer = ReplayProvider(tmp_path, on_miss="error", fault_file=str(fault))
+        with pytest.raises(LLMNotConfiguredError, match="LLM_REPLAY_FAULT_FILE"):
+            await replayer.generate_text(_messages(NEW_A, NEW_B), purpose="section_notes")
+
+    def test_the_factory_passes_the_fault_file(self, tmp_path):
+        with patch("app.services.llm.factory.settings") as settings:
+            settings.LLM_PROVIDER = "replay"
+            settings.is_production = False
+            settings.LLM_CASSETTE_DIR = str(tmp_path)
+            settings.LLM_REPLAY_MISS = "error"
+            settings.LLM_REPLAY_FAULT_FILE = str(tmp_path / "fault")
+            LLMFactory.reset()
+            try:
+                assert LLMFactory.get_provider().inner.fault_file == str(tmp_path / "fault")
+            finally:
+                LLMFactory.reset()
 
 
 class TestRecordingCost:

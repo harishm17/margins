@@ -22,6 +22,10 @@ with the new request's values on replay, so an answer that names a topic id name
 - Replayed calls report the recorded token usage, so the allowance and the cost ledger behave as they
   did when recorded.
 - Failed calls are not recorded.
+- LLM_REPLAY_FAULT_FILE names a file a workflow writes to stage a provider outage: while it holds a
+  provider error code (LLM_UNAVAILABLE, LLM_RATE_LIMITED, LLM_CREDIT_EXHAUSTED, LLM_AUTH_FAILED),
+  every call fails with that error before any lookup, as the real provider's would after its own
+  retries. Emptying or removing the file ends the outage. Nothing is recorded or counted meanwhile.
 
 Recordings hold the course's text, so they live outside the repository (LLM_CASSETTE_DIR). Refused in
 production.
@@ -46,11 +50,15 @@ from app.services.llm.base import (
     AnswerReset,
     AnswerText,
     Excerpt,
+    LLMAuthError,
+    LLMCreditError,
     LLMError,
     LLMMessage,
     LLMNotConfiguredError,
     LLMProvider,
+    LLMRateLimitError,
     LLMResponse,
+    LLMUnavailableError,
     LLMUsage,
     SchemaT,
     TurnDone,
@@ -74,6 +82,12 @@ _PLACEHOLDER = re.compile(r"⟨(?:id|email|date)\d+⟩")
 
 _ANSWER_EVENTS: Dict[str, Type[BaseModel]] = {"text": AnswerText, "citation": AnswerCitation, "reset": AnswerReset, "done": AnswerDone}
 _TURN_EVENTS: Dict[str, Type[BaseModel]] = {"text": TurnText, "tool_use": TurnToolUse, "done": TurnDone}
+
+
+# The provider errors a workflow can stage through LLM_REPLAY_FAULT_FILE, by code.
+_FAULTS: Dict[str, Type[LLMError]] = {
+    error.code: error for error in (LLMUnavailableError, LLMRateLimitError, LLMCreditError, LLMAuthError)
+}
 
 
 class LLMReplayMissError(LLMError):
@@ -177,7 +191,14 @@ class _Entry:
 
 
 class ReplayProvider(LLMProvider):
-    def __init__(self, cassette_dir: Path | str, *, on_miss: str = "error", inner: Optional[LLMProvider] = None):
+    def __init__(
+        self,
+        cassette_dir: Path | str,
+        *,
+        on_miss: str = "error",
+        inner: Optional[LLMProvider] = None,
+        fault_file: Optional[str] = None,
+    ):
         if on_miss not in ("error", "record"):
             raise LLMNotConfiguredError(f"LLM_REPLAY_MISS must be error or record, not {on_miss!r}")
         if on_miss == "record" and inner is None:
@@ -185,6 +206,7 @@ class ReplayProvider(LLMProvider):
         self.dir = Path(cassette_dir)
         self.on_miss = on_miss
         self.inner = inner
+        self.fault_file = fault_file or None
         self._entries: Dict[str, _Entry] = {}
         self._load()
 
@@ -227,8 +249,27 @@ class ReplayProvider(LLMProvider):
         content = _content(request.text)
         return next((entry for entry in self._entries.values() if entry.group == request.group and entry.content == content), None)
 
+    def _staged_fault(self) -> Optional[LLMError]:
+        """The provider error a workflow has staged in the fault file, if any (read on every call)."""
+        if not self.fault_file:
+            return None
+        try:
+            code = Path(self.fault_file).read_text().strip()
+        except FileNotFoundError:
+            return None
+        if not code:
+            return None
+        error = _FAULTS.get(code)
+        if error is None:
+            return LLMNotConfiguredError(f"LLM_REPLAY_FAULT_FILE holds {code!r}; use one of {', '.join(sorted(_FAULTS))}")
+        return error(f"Staged provider fault {code} (LLM_REPLAY_FAULT_FILE)")
+
     def _find(self, request: _Request) -> Optional[Tuple[_Entry, Dict[str, Any]]]:
         """The answer to replay, or None when the real model must be called (record mode)."""
+        fault = self._staged_fault()
+        if fault is not None:
+            logger.info("replay fault %s: %s", request.describe(), fault.code)
+            raise fault
         entry = self._entries.get(request.key)
         if entry is not None:
             logger.info("replay hit %s key=%s", request.describe(), request.key[:12])

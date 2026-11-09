@@ -14,8 +14,7 @@
 # with Google only, which a test cannot do; frontend/src/lib/auth/test-login.ts), and with a made-up Google
 # client so the sign-in page shows its Google button. NEXTAUTH_URL is on localhost, which the test sign-in needs.
 # It reads the AI status uncached (AI_STATUS_CACHE_MS=0), so a spec that marks AI unavailable sees it at once,
-# and the AI service reaps every 5 seconds, so a job that waited for the AI is sent again soon after it is back.
-# Use a database of its own for the stack and the specs (for example margins_e2e, migrated): the AI service's reaper
+# and the AI service reaps every 5 seconds, so a job that waited for the AI is sent again soon after it is back.# Use a database of its own for the stack and the specs (for example margins_e2e, migrated): the AI service's reaper
 # sends any pending job in its database, so a database shared with `npm test` or a dev server lets their jobs, and
 # the shared AI status, leak into the specs. Export the same E2E_RUN_DIR to the stack and to Playwright.
 # Settings, all optional except DATABASE_URL:
@@ -28,7 +27,9 @@
 #   mock (the default)  canned answers, no API key, no cost: CI and the Playwright specs
 #   replay              recorded answers from E2E_CASSETTE_DIR (the workflow suite, frontend/tests/workflows);
 #                       E2E_REPLAY_MISS=record calls the real model for a request with no recording and stores it
-#                       (it needs ANTHROPIC_API_KEY, from the shell or ai-service/.env, and costs money)
+#                       (it needs ANTHROPIC_API_KEY, from the shell or ai-service/.env, and costs money);
+#                       a provider error code written to $RUN/llm-fault fails every model call with that error until
+#                       the file is emptied (a staged outage, WF11); start empties it
 #   anthropic           the real model on every call (costs money)
 set -euo pipefail
 
@@ -46,8 +47,8 @@ llm_env() {
     replay)
       : "${E2E_CASSETTE_DIR:?E2E_LLM_PROVIDER=replay needs E2E_CASSETTE_DIR, the folder of recordings}"
       case "${E2E_REPLAY_MISS:-error}" in
-        error) echo "-u ANTHROPIC_API_KEY LLM_PROVIDER=replay LLM_CASSETTE_DIR=$E2E_CASSETTE_DIR LLM_REPLAY_MISS=error" ;;
-        record) echo "LLM_PROVIDER=replay LLM_CASSETTE_DIR=$E2E_CASSETTE_DIR LLM_REPLAY_MISS=record" ;;
+        error) echo "-u ANTHROPIC_API_KEY LLM_PROVIDER=replay LLM_CASSETTE_DIR=$E2E_CASSETTE_DIR LLM_REPLAY_MISS=error LLM_REPLAY_FAULT_FILE=$RUN/llm-fault" ;;
+        record) echo "LLM_PROVIDER=replay LLM_CASSETTE_DIR=$E2E_CASSETTE_DIR LLM_REPLAY_MISS=record LLM_REPLAY_FAULT_FILE=$RUN/llm-fault" ;;
         *) echo "E2E_REPLAY_MISS must be error or record, not $E2E_REPLAY_MISS" >&2; return 2 ;;
       esac ;;
     anthropic) echo "LLM_PROVIDER=anthropic" ;;
@@ -98,6 +99,8 @@ start() {
     return 1
   fi
   mkdir -p "$RUN/uploads" "$RUN/hold"
+  # No staged outage left over from an earlier run.
+  : >"$RUN/llm-fault"
   local model_env
   model_env="$(llm_env)"
 
