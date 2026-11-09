@@ -1,0 +1,218 @@
+{
+ "arms": {
+  "haiku": {
+   "scored": 120,
+   "errors": 0,
+   "agreement": 0.9083333333333333,
+   "agreement_not_borderline": 0.9380530973451328,
+   "pass_agreement": 0.9916666666666667,
+   "wrong_marked_right": {
+    "count": 1,
+    "of": 72,
+    "rate": 0.013888888888888888
+   },
+   "right_marked_wrong": {
+    "count": 0,
+    "of": 48,
+    "rate": 0.0
+   },
+   "confusion": {
+    "full": {
+     "full": 48
+    },
+    "partial": {
+     "partial": 33,
+     "none": 5,
+     "full": 1
+    },
+    "none": {
+     "none": 28,
+     "partial": 5
+    }
+   },
+   "categories": {
+    "right": {
+     "n": 24,
+     "agreement": 1.0,
+     "marked_right": 1.0,
+     "mean_fraction": 1.0
+    },
+    "other_words": {
+     "n": 24,
+     "agreement": 1.0,
+     "marked_right": 1.0,
+     "mean_fraction": 0.9461805555555555
+    },
+    "partly": {
+     "n": 24,
+     "agreement": 0.875,
+     "marked_right": 0.0,
+     "mean_fraction": 0.37152777777777773
+    },
+    "wrong": {
+     "n": 24,
+     "agreement": 0.9583333333333334,
+     "marked_right": 0.0,
+     "mean_fraction": 0.05034722222222222
+    },
+    "right_number_wrong_quantity": {
+     "n": 12,
+     "agreement": 0.75,
+     "marked_right": 0.08333333333333333,
+     "mean_fraction": 0.4305555555555555
+    },
+    "keyword_wrong": {
+     "n": 12,
+     "agreement": 0.6666666666666666,
+     "marked_right": 0.0,
+     "mean_fraction": 0.2534722222222222
+    }
+   }
+  },
+  "sonnet": {
+   "scored": 120,
+   "errors": 0,
+   "agreement": 0.9166666666666666,
+   "agreement_not_borderline": 0.9646017699115044,
+   "pass_agreement": 0.9833333333333333,
+   "wrong_marked_right": {
+    "count": 2,
+    "of": 72,
+    "rate": 0.027777777777777776
+   },
+   "right_marked_wrong": {
+    "count": 0,
+    "of": 48,
+    "rate": 0.0
+   },
+   "confusion": {
+    "full": {
+     "full": 48
+    },
+    "partial": {
+     "partial": 33,
+     "none": 4,
+     "full": 2
+    },
+    "none": {
+     "none": 29,
+     "partial": 4
+    }
+   },
+   "categories": {
+    "right": {
+     "n": 24,
+     "agreement": 1.0,
+     "marked_right": 1.0,
+     "mean_fraction": 1.0
+    },
+    "other_words": {
+     "n": 24,
+     "agreement": 1.0,
+     "marked_right": 1.0,
+     "mean_fraction": 0.96875
+    },
+    "partly": {
+     "n": 24,
+     "agreement": 0.875,
+     "marked_right": 0.0,
+     "mean_fraction": 0.375
+    },
+    "wrong": {
+     "n": 24,
+     "agreement": 1.0,
+     "marked_right": 0.0,
+     "mean_fraction": 0.03298611111111111
+    },
+    "right_number_wrong_quantity": {
+     "n": 12,
+     "agreement": 0.75,
+     "marked_right": 0.16666666666666666,
+     "mean_fraction": 0.4583333333333333
+    },
+    "keyword_wrong": {
+     "n": 12,
+     "agreement": 0.6666666666666666,
+     "marked_right": 0.0,
+     "mean_fraction": 0.24305555555555555
+    }
+   }
+  }
+ },
+ "dataset": {
+  "questions": 24,
+  "answers": 120,
+  "by_category": {
+   "right": 24,
+   "other_words": 24,
+   "partly": 24,
+   "wrong": 24,
+   "keyword_wrong": 12,
+   "right_number_wrong_quantity": 12
+  },
+  "by_label": {
+   "full": 48,
+   "partial": 39,
+   "none": 33
+  },
+  "borderline": 7
+ },
+ "models": {
+  "haiku": {
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "app_choice": true
+  },
+  "sonnet": {
+   "model": "claude-sonnet-5-5",
+   "effort": "low"
+  }
+ },
+ "cost": {
+  "haiku": 0.023214,
+  "sonnet": 0.390409
+ },
+ "pick": {
+  "arm": "haiku",
+  "reason": "Sonnet marks -1 points fewer wrong answers right and agrees +1 points more: under the bar, so the cheaper, faster model stays"
+ },
+ "run": {
+  "label": "a5",
+  "date": "2026-11-09",
+  "commit": "4f0ede2e",
+  "dirty": true,
+  "arms": {
+   "haiku": {
+    "model": "claude-haiku-5-5",
+    "effort": "low",
+    "app_choice": true
+   },
+   "sonnet": {
+    "model": "claude-sonnet-5-5",
+    "effort": "low"
+   }
+  },
+  "estimate_usd": {
+   "haiku": 0.0252,
+   "sonnet": 0.5031
+  },
+  "cost_usd": {
+   "haiku": 0.023214,
+   "sonnet": 0.390409
+  },
+  "total_cost_usd": 0.413623,
+  "price_factor": 0.5,
+  "mock": false,
+  "batches": [
+   {
+    "id": "msgbatch_0123DjP5ucAqTyewvTvfP9RC",
+    "requests": 240,
+    "seconds": 276.9
+   }
+  ],
+  "outcomes": {
+   "haiku: ok": 120,
+   "sonnet: ok": 120
+  }
+ }
+}
