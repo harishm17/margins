@@ -308,3 +308,29 @@ def test_the_locally_built_ocw_set_is_not_in_git():
     target = str(HERE / "scenarios" / "practice.jsonl")
     assert subprocess.run(["git", "check-ignore", "-q", target], cwd=root).returncode == 0
     assert subprocess.run(["git", "ls-files", "--error-unmatch", target], cwd=root, capture_output=True).returncode != 0
+
+
+WORKED_FILE = HERE / "scenarios" / "practice-worked.jsonl"
+
+
+def test_the_worked_example_set_is_every_original_problem_once_per_worked_pattern():
+    # A6 (finding 60): enough "Show me a worked example" presses to measure how often they fall back to the authored hint.
+    built = build_scenarios.build_worked()
+    problems_by_pattern = {}
+    for scenario in built:
+        problems_by_pattern.setdefault(scenario["pattern"], set()).add(scenario["problem"])
+    assert len(built) == 24 and len({s["id"] for s in built}) == 24
+    assert set(problems_by_pattern) == set(build_scenarios.WORKED_PATTERNS) == {"fallback_worked", "idk_button"}
+    assert all(len(problems) == 12 for problems in problems_by_pattern.values())
+    assert sum(turn["event"] == "show_worked" for scenario in built for turn in scenario["turns"]) == 36
+
+
+def test_the_committed_worked_example_set_is_what_the_builder_makes():
+    committed = [json.loads(line) for line in WORKED_FILE.read_text().splitlines() if line.strip()]
+    assert build_scenarios.build_worked() == committed  # rebuild with build_scenarios.py --worked when problems change
+
+
+def test_the_builder_takes_exactly_one_source(capsys):
+    for argv in ([], ["--original", "--worked"], ["--worked", "--raw-dir", "x"]):
+        with pytest.raises(SystemExit):
+            build_scenarios.main(argv)

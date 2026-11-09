@@ -1,0 +1,38 @@
+{"id": "py-while", "topic": "py-while", "first": "How does a while loop decide when to stop repeating?", "followup": "What if that condition never turns false?", "kind": "leaning"}
+{"id": "py-for", "topic": "py-for", "first": "How do I go through every item in a list with a for loop?", "followup": "Can you show me an example?", "kind": "bare"}
+{"id": "py-range", "topic": "py-range", "first": "What do the three numbers inside range() mean?", "followup": "Why does it stop one before the end number?", "kind": "leaning"}
+{"id": "py-nested", "topic": "py-nested", "first": "What is a nested loop?", "followup": "How many times does the inner one run in total?", "kind": "leaning"}
+{"id": "py-break-continue", "topic": "py-break-continue", "first": "What's the difference between break and continue?", "followup": "When would I use the second one?", "kind": "leaning"}
+{"id": "py-loop-else", "topic": "py-loop-else", "first": "Why would a loop have an else clause?", "followup": "Does it still run if I break out early?", "kind": "leaning"}
+{"id": "py-define", "topic": "py-define", "first": "How do I write my own function in Python?", "followup": "Why bother?", "kind": "bare"}
+{"id": "py-scope", "topic": "py-scope", "first": "What is the difference between a local and a global variable?", "followup": "How do I change the global one from inside a function?", "kind": "leaning"}
+{"id": "py-params", "topic": "py-params", "first": "What's the difference between a parameter and an argument?", "followup": "What happens if a function changes a list that was passed to it?", "kind": "standalone"}
+{"id": "py-return", "topic": "py-return", "first": "What does the return statement do?", "followup": "And if a function has none?", "kind": "leaning"}
+{"id": "py-kwargs", "topic": "py-kwargs", "first": "How do default values for parameters work?", "followup": "Can you give an example?", "kind": "bare"}
+{"id": "bio-redox", "topic": "bio-redox", "first": "What do oxidation and reduction mean in cellular respiration?", "followup": "Where does NADH fit into this?", "kind": "leaning"}
+{"id": "bio-atp", "topic": "bio-atp", "first": "Why is ATP called the energy currency of the cell?", "followup": "How does it actually release the energy?", "kind": "leaning"}
+{"id": "bio-glycolysis", "topic": "bio-glycolysis", "first": "Does glycolysis need oxygen?", "followup": "Why not?", "kind": "bare"}
+{"id": "bio-pyruvate", "topic": "bio-pyruvate", "first": "What happens to pyruvate after glycolysis?", "followup": "Where in the cell does that happen?", "kind": "leaning"}
+{"id": "bio-krebs", "topic": "bio-krebs", "first": "What does the Krebs cycle produce?", "followup": "Why is it called a cycle?", "kind": "leaning"}
+{"id": "bio-etc", "topic": "bio-etc", "first": "What does the electron transport chain do?", "followup": "Why is oxygen needed at the end of the electron transport chain?", "kind": "standalone"}
+{"id": "bio-chemiosmosis", "topic": "bio-chemiosmosis", "first": "How does ATP synthase make ATP?", "followup": "Where does the proton gradient come from?", "kind": "standalone"}
+{"id": "bio-yield", "topic": "bio-yield", "first": "How many ATP does one glucose molecule give?", "followup": "Why isn't it an exact number?", "kind": "leaning"}
+{"id": "bio-ferment", "topic": "bio-ferment", "first": "Do muscle cells switch to fermentation when oxygen runs low?", "followup": "Why?", "kind": "bare"}
+{"id": "bio-other-fuels", "topic": "bio-other-fuels", "first": "Can cells get energy from fats and proteins too?", "followup": "How?", "kind": "bare"}
+{"id": "bio-regulation", "topic": "bio-regulation", "first": "How does a cell slow down respiration when it already has plenty of ATP?", "followup": "Which enzyme is the main control point?", "kind": "leaning"}
+{"id": "psy-classical", "topic": "psy-classical", "first": "What did Pavlov discover with his dogs?", "followup": "Can you explain it with an everyday example?", "kind": "bare"}
+{"id": "psy-cc-processes", "topic": "psy-cc-processes", "first": "What is extinction in classical conditioning?", "followup": "Can the response come back after that?", "kind": "leaning"}
+{"id": "psy-watson", "topic": "psy-watson", "first": "What was the Little Albert experiment?", "followup": "Was it ethical?", "kind": "leaning"}
+{"id": "psy-operant", "topic": "psy-operant", "first": "What is operant conditioning?", "followup": "How is that different from classical conditioning?", "kind": "contrast", "also": ["psy-classical"]}
+{"id": "psy-reinf-punish", "topic": "psy-reinf-punish", "first": "What's the difference between negative reinforcement and punishment?", "followup": "Can you give an example of each?", "kind": "bare"}
+{"id": "psy-schedules", "topic": "psy-schedules", "first": "What are the schedules of reinforcement?", "followup": "Which one is the hardest to extinguish?", "kind": "leaning"}
+{"id": "psy-gambling", "topic": "psy-gambling", "first": "Why is gambling so addictive?", "followup": "What does dopamine have to do with it?", "kind": "leaning"}
+{"id": "psy-bandura", "topic": "psy-bandura", "first": "What did the Bobo doll experiment show?", "followup": "Does that mean violent TV makes kids aggressive?", "kind": "leaning"}
+{"id": "psy-memory-stages", "topic": "psy-memory-stages", "first": "What are the stages of memory?", "followup": "How long does the short-term one last?", "kind": "leaning"}
+{"id": "psy-explicit-implicit", "topic": "psy-explicit-implicit", "first": "What is the difference between explicit and implicit memory?", "followup": "Which one is riding a bike?", "kind": "leaning"}
+{"id": "psy-encoding", "topic": "psy-encoding", "first": "What does encoding mean for memory?", "followup": "Which kind works best for remembering words?", "kind": "leaning"}
+{"id": "psy-brain", "topic": "psy-brain", "first": "Which parts of the brain are involved in memory?", "followup": "What does the hippocampus do?", "kind": "standalone"}
+{"id": "psy-amnesia", "topic": "psy-amnesia", "first": "What's the difference between retrograde and anterograde amnesia?", "followup": "What causes them?", "kind": "leaning"}
+{"id": "psy-eyewitness", "topic": "psy-eyewitness", "first": "Why is eyewitness testimony unreliable?", "followup": "How can someone end up with a false memory?", "kind": "standalone"}
+{"id": "psy-forgetting", "topic": "psy-forgetting", "first": "Why do we forget things?", "followup": "How is proactive interference different from retroactive interference?", "kind": "standalone"}
+{"id": "psy-mnemonics", "topic": "psy-mnemonics", "first": "How can I memorise a long list better?", "followup": "What is the method of loci?", "kind": "standalone"}
