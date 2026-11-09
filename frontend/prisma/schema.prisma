@@ -874,8 +874,11 @@ model LlmUsageEvent {
   source       String // job|chat|voice|tutor|recall
   sourceId     String   @map("source_id") // processing job id, chat message id or voice session id
   models       String   @default("") // comma-separated
-  inputTokens  Int      @default(0) @map("input_tokens")
+  inputTokens  Int      @default(0) @map("input_tokens") // cache reads and writes included
   outputTokens Int      @default(0) @map("output_tokens")
+  // The part of inputTokens read from, and written to, the prompt cache (A4: what caching saves, per source).
+  cacheReadTokens  Int      @default(0) @map("cache_read_tokens")
+  cacheWriteTokens Int      @default(0) @map("cache_write_tokens")
   costUsd      Decimal  @default(0) @map("cost_usd") @db.Decimal(12, 6)
   createdAt    DateTime @default(now()) @map("created_at")
 

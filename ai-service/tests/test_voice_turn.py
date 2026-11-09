@@ -323,8 +323,8 @@ class ScriptedProvider(LLMProvider):
             raise self.error
 
 
-def usage(model="claude-haiku-5-5"):
-    return LLMUsage(model=model, purpose="voice", input_tokens=1000, output_tokens=100)
+def usage(model="claude-haiku-5-5", **cache):
+    return LLMUsage(model=model, purpose="voice", input_tokens=1000, output_tokens=100, **cache)
 
 
 @pytest.fixture
@@ -481,7 +481,7 @@ class TestLedgerInTheDatabase:
         monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "test-key")
         monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 3.0)
         provider = ScriptedProvider(
-            [TurnDone(stop_reason="end_turn", content=[{"type": "text", "text": "Hi."}], usage=usage())]
+            [TurnDone(stop_reason="end_turn", content=[{"type": "text", "text": "Hi."}], usage=usage(cache_read_input_tokens=600, cache_creation_input_tokens=100))]
         )
         monkeypatch.setattr(LLMFactory, "get_provider", classmethod(lambda cls: provider))
 
@@ -495,7 +495,8 @@ class TestLedgerInTheDatabase:
 
         row = await db.fetchrow("SELECT * FROM llm_usage_events WHERE user_id = $1", user_id)
         assert (row["source"], row["source_id"], row["project_id"]) == ("voice", "sess-1", project_id)
-        assert row["input_tokens"] == 1000 and float(row["cost_usd"]) == pytest.approx(0.00015)
+        assert row["input_tokens"] == 1700 and float(row["cost_usd"]) == pytest.approx(0.000169)
+        assert (row["cache_read_tokens"], row["cache_write_tokens"]) == (600, 100)
 
         # Once the day's spend reaches the cap, the next turn is refused.
         monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 0.0001)

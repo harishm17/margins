@@ -141,9 +141,9 @@ test('chat spend recorded while the account is being deleted still counts toward
     const answerCost = 0.004321
     const failureCost = 0.001234
     await expect(
-      storage.saveAnswer({ text: 'A.', sources: [], marks: [], usage: { model: 'm', inputTokens: 10, outputTokens: 5, costUsd: answerCost } })
+      storage.saveAnswer({ text: 'A.', sources: [], marks: [], usage: { model: 'm', inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: answerCost } })
     ).rejects.toThrow()
-    await storage.recordFailure('LLM_ERROR', { model: 'm', inputTokens: 10, outputTokens: 5, costUsd: failureCost })
+    await storage.recordFailure('LLM_ERROR', { model: 'm', inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: failureCost })
 
     const rows = await prisma.llmUsageEvent.findMany({
       where: { costUsd: { in: [answerCost.toFixed(6), failureCost.toFixed(6)] }, createdAt: { gte: user.createdAt } },

@@ -558,15 +558,17 @@ def usage_total(usages: Sequence[LLMUsage]) -> Dict[str, Any]:
 
 
 def usage_payload(usage: Optional[LLMUsage]) -> Dict[str, Any]:
-    """Token counts and cost, as stored on the assistant message."""
+    """Token counts and cost, as stored on the assistant message and in the web app's ledger row."""
     if usage is None:
-        return {"model": None, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+        return {"model": None, "input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": 0.0}
     cost = estimate_cost_usd(usage)
     return {
         "model": usage.model,
-        # Cache reads and writes are input too.
+        # Cache reads and writes are input too; they are also given apart (A4).
         "input_tokens": usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens,
         "output_tokens": usage.output_tokens,
+        "cache_read_tokens": usage.cache_read_input_tokens,
+        "cache_write_tokens": usage.cache_creation_input_tokens,
         "cost_usd": round(cost, 6) if cost is not None else 0.0,
     }
 
@@ -730,6 +732,8 @@ def _add_usage(total: Dict[str, Any], more: Dict[str, Any]) -> Dict[str, Any]:
         "model": more.get("model") or total.get("model"),
         "input_tokens": total["input_tokens"] + more["input_tokens"],
         "output_tokens": total["output_tokens"] + more["output_tokens"],
+        "cache_read_tokens": total.get("cache_read_tokens", 0) + more.get("cache_read_tokens", 0),
+        "cache_write_tokens": total.get("cache_write_tokens", 0) + more.get("cache_write_tokens", 0),
         "cost_usd": round(total["cost_usd"] + more["cost_usd"], 6),
     }
 

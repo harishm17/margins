@@ -255,7 +255,7 @@ class TestRoute:
 
         class Billed(Scripted):
             async def generate_structured(self, messages, schema, **kwargs):
-                record_usage(LLMUsage(model="claude-sonnet-5-5", purpose=kwargs["purpose"], input_tokens=1000, output_tokens=100))
+                record_usage(LLMUsage(model="claude-sonnet-5-5", purpose=kwargs["purpose"], input_tokens=1000, output_tokens=100, cache_read_input_tokens=800, cache_creation_input_tokens=200))
                 return await super().generate_structured(messages, schema, **kwargs)
 
         rows = []
@@ -270,6 +270,7 @@ class TestRoute:
             response = client.post("/tutor/reader", json=self.body(user_id="u1", project_id="p1", session_id="s1"))
         assert response.status_code == 200
         assert len(rows) == 1 and rows[0]["source"] == "tutor" and rows[0]["source_id"] == "s1"
+        assert rows[0]["cache_read_tokens"] > 0 and rows[0]["cache_read_tokens"] == 4 * rows[0]["cache_write_tokens"]
 
 
 def test_the_system_prompt_is_plain_words_without_pressure():

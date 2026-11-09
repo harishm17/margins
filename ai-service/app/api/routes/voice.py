@@ -32,6 +32,7 @@ from app.services.llm.base import (
 )
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import DrillQuestionSet
+from app.services.llm.usage import ledger_figures
 
 logger = logging.getLogger(__name__)
 
@@ -113,16 +114,12 @@ async def _record_voice_usage(payload: VoiceTurnRequest, usage: Optional[LLMUsag
     """One ledger row per model call, so voice counts toward the daily budget."""
     if usage is None:
         return
-    figures = usage_payload(usage)
     await record_usage_event(
         user_id=payload.user_id,
         project_id=payload.project_id,
         source="voice",
         source_id=payload.session_id,
-        models=usage.model,
-        input_tokens=figures["input_tokens"],
-        output_tokens=figures["output_tokens"],
-        cost_usd=figures["cost_usd"],
+        **ledger_figures([usage]),
     )
 
 

@@ -15,7 +15,7 @@ from app.services import ai_status
 from app.services.budget import over_budget_message, record_usage_event
 from app.services.exam_grader import ExamGrader
 from app.services.llm.schemas import RecallGradeRequest, RecallGradeResult
-from app.services.llm.usage import estimate_cost_usd, track_llm_usage
+from app.services.llm.usage import ledger_figures, track_llm_usage
 from app.services.recall_grader import grade_recall
 
 router = APIRouter(prefix="/grade")
@@ -136,14 +136,10 @@ async def grade_recall_answer(payload: RecallGradeRequest) -> Union[RecallGradeR
             return await grade_recall(payload)
         finally:
             if payload.user_id and usages:
-                cost = sum(c for c in (estimate_cost_usd(usage) for usage in usages) if c is not None)
                 await record_usage_event(
                     user_id=payload.user_id,
                     project_id=payload.project_id,
                     source="recall",
                     source_id=payload.session_id or "",
-                    models=",".join(sorted({usage.model for usage in usages})),
-                    input_tokens=sum(u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens for u in usages),
-                    output_tokens=sum(u.output_tokens for u in usages),
-                    cost_usd=round(cost, 6),
+                    **ledger_figures(usages),
                 )
