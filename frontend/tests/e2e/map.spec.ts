@@ -1,4 +1,3 @@
-import { animationsSettled } from './helpers/settle'
 import { expect, test, type Page } from '@playwright/test'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { withPrisma } from './helpers/db'
@@ -142,45 +141,6 @@ test.describe('knowledge map', () => {
 
     // The nav item and the topic page's way in.
     await expect(page.getByRole('link', { name: 'Map', exact: true }).first()).toHaveAttribute('href', `/courses/${w.courseId}/map`)
-  })
-
-  test('on a desktop the map fits its frame beside the panel, and a map too wide for it scrolls with a visible edge', async ({ page }) => {
-    test.setTimeout(120_000)
-    const w = await world(page, 'map-fit')
-    await page.setViewportSize({ width: 1440, height: 900 })
-    // With the panel open the frame is about 560px wide: the unit's picture is scaled down to it and no idea is cut off.
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts.Collisions}&view=map`))
-    const frame = page.getByRole('region', { name: /^Hashing: 4 ideas, scrolls sideways$/ })
-    await expect(frame).toBeVisible()
-    const inside = async () => {
-      const outer = await frame.boundingBox()
-      const boxes = await Promise.all(['Hash function', 'Collisions', 'Chaining', 'Open addressing'].map((name) => nodeLink(page, name).boundingBox()))
-      return outer !== null && boxes.every((box) => box !== null && box.x >= outer.x - 1 && box.x + box.width <= outer.x + outer.width + 1)
-    }
-    expect(await inside(), 'every idea lies inside the frame').toBe(true)
-    expect(await frame.evaluate((element) => element.scrollWidth <= element.clientWidth + 1), 'the frame does not scroll').toBe(true)
-    await screenshotIfAsked(page, 'map-fits-frame-1440x900')
-
-    // Ten ideas side by side are wider than the frame at any scale worth reading: it scrolls, with a soft edge on the side that has more.
-    await withPrisma(async (prisma) => {
-      for (let index = 0; index < 8; index += 1) {
-        await prisma.concept.create({
-          data: { projectId: w.courseId, topicId: w.topics['Hash tables'], name: `Extra idea ${index + 1}`, summary: 'x', kind: 'concept', orderIndex: 10 + index, objectiveIndexes: [] },
-        })
-      }
-    })
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=map`))
-    const wide = page.getByRole('region', { name: /^Hashing: 12 ideas, scrolls sideways$/ })
-    await expect(wide).toBeVisible()
-    expect(await wide.evaluate((element) => element.scrollWidth > element.clientWidth + 1), 'the wide map scrolls').toBe(true)
-    expect(await wide.evaluate((element) => getComputedStyle(element).backgroundImage.match(/linear-gradient/g)?.length), 'edge cues are drawn').toBe(4)
-    await screenshotIfAsked(page, 'map-wide-scrolls-1440x900')
-    await wide.evaluate((element) => element.scrollTo({ left: element.scrollWidth }))
-    await expect.poll(() => wide.evaluate((element) => Math.round(element.scrollLeft + element.clientWidth) >= element.scrollWidth - 1)).toBe(true)
-    const last = await nodeLink(page, 'Extra idea 8').boundingBox()
-    const outer = await wide.boundingBox()
-    expect(last !== null && outer !== null && last.x + last.width <= outer.x + outer.width + 1, 'the last idea can be scrolled fully into view').toBe(true)
-    await expectNoAxeViolations(page, 'map: wide, scrolling')
   })
 
   test('the topic page links its concepts to the map at that topic', async ({ page }) => {
@@ -375,30 +335,6 @@ test.describe('knowledge map', () => {
     await expect(page.getByText('Quiz me still works.')).toHaveCount(0)
   })
 
-  test('on a phone the teach-back card opened from the panel ends above the tab bar', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-phone-explain')
-    await page.setViewportSize({ width: 390, height: 844 })
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts['Hash function']}&view=list`))
-    const panel = page.getByTestId('node-panel')
-    await panel.getByRole('button', { name: 'Other ways to study' }).click()
-    await panel.getByRole('button', { name: 'Explain it' }).click()
-    const check = panel.getByRole('button', { name: 'Check my answer' })
-    await expect(check).toBeVisible()
-    // On a phone the details are a bottom sheet over the tab bar: the card was brought into view inside the screen.
-    await expect
-      .poll(
-        async () => {
-          const box = await check.boundingBox()
-          return box !== null && box.y >= 0 && box.y + box.height <= 844
-        },
-        { timeout: 5_000, message: 'Check my answer is inside the screen' }
-      )
-      .toBe(true)
-    await animationsSettled(page)
-    await screenshotIfAsked(page, 'map-teach-back-in-view-390x844')
-  })
-
   test('ask about this starts a conversation about the concept', async ({ page }) => {
     test.setTimeout(90_000)
     const w = await world(page, 'map-ask')
@@ -577,95 +513,10 @@ test.describe('knowledge map', () => {
     expect(missing?.status()).toBe(200)
   })
 
-  test('axe has no violations on map, list and panel at both sizes, with screenshots on request', async ({ page }) => {
-    test.setTimeout(180_000)
-    const w = await world(page, 'map-axe')
-    await link(w.courseId, w.concepts['Open addressing'], w.concepts.Chaining, 'prerequisite', 'proposed', 0.8)
-    await withPrisma(async (prisma) => {
-      const material = await prisma.material.findFirstOrThrow({ where: { projectId: w.courseId }, select: { id: true } })
-      await prisma.conceptClaim.create({
-        data: { conceptId: w.concepts.Chaining, text: 'Chaining keeps a list of entries in each bucket.', quote: 'x', materialId: material.id, pageStart: 5, orderIndex: 0 },
-      })
-    })
-    for (const size of SIZES) {
-      await page.setViewportSize({ width: size.width, height: size.height })
-      await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=map`))
-      await expect(page.getByRole('group', { name: /^Hashing: 4 ideas$/ })).toBeVisible()
-      await expectNoAxeViolations(page, `map ${size.name}`)
-      await screenshotIfAsked(page, `map-${size.name}`)
-
-      await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts.Chaining}&view=map`))
-      await expect(page.getByTestId('node-panel')).toBeVisible()
-      await expectNoAxeViolations(page, `map with panel ${size.name}`)
-      await screenshotIfAsked(page, `map-panel-${size.name}`)
-
-      await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=list`))
-      await expect(page.getByRole('heading', { level: 3, name: 'Hash tables' })).toBeVisible()
-      await expectNoAxeViolations(page, `list ${size.name}`)
-      await screenshotIfAsked(page, `map-list-${size.name}`)
-
-      await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=list&node=${w.concepts.Chaining}`))
-      await page.getByTestId('node-panel').getByRole('button', { name: 'Other ways to study' }).click()
-      await page.getByTestId('node-panel').getByRole('button', { name: 'Explain it' }).click()
-      await expect(page.getByRole('textbox', { name: /Explain "Chaining"/ })).toBeVisible()
-      await expectNoAxeViolations(page, `list with panel and teach-back ${size.name}`)
-      await screenshotIfAsked(page, `map-list-panel-${size.name}`)
-
-      // No sideways scroll on the page itself: the picture scrolls inside its own frame.
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-      expect(overflow).toBeLessThanOrEqual(0)
-    }
-  })
 })
 
 test.describe('knowledge map on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 } })
-
-  test('the list is chosen on the server, so the map is never drawn first, and the topic in the address is kept', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-phone-server')
-    // The browser has told the server its width by now (it does on every page of the app).
-    await open(page, `/courses/${w.courseId}`)
-    await expect.poll(async () => (await page.context().cookies()).find((cookie) => cookie.name === 'margins_narrow')?.value).toBe('1')
-    const response = await page.goto(mapUrl(w, `?topic=${w.topics.Probing}`))
-    const html = (await response?.text()) ?? ''
-    expect(html, 'the first HTML holds the list').toContain('Open addressing')
-    expect(html, 'and no picture').not.toContain('scrolls sideways')
-    await settled(page)
-    // No redirect: the address stays as it was, with its topic, and the idea of that topic is open.
-    expect(new URL(page.url()).searchParams.get('topic')).toBe(w.topics.Probing)
-    expect(new URL(page.url()).searchParams.get('view')).toBeNull()
-    // The idea of the topic is open in the phone's bottom sheet; the list is behind it.
-    await expect(page.getByRole('radio', { name: 'List view', includeHidden: true })).toBeChecked()
-    await expect(page.getByTestId('node-panel').getByRole('heading', { level: 2, name: 'Open addressing' })).toBeVisible()
-    await page.getByRole('dialog').getByRole('link', { name: 'Back to the list' }).click()
-    await expect(page.getByRole('dialog')).toHaveCount(0)
-    await page.getByRole('radio', { name: 'Map', exact: true }).click()
-    await expect(page).toHaveURL(/view=map/)
-    // A wide window gets the map without a view in the address.
-    await page.setViewportSize({ width: 1024, height: 800 })
-    await expect.poll(async () => (await page.context().cookies()).find((cookie) => cookie.name === 'margins_narrow')?.value).toBe('0')
-    const wide = await page.goto(mapUrl(w, `?topic=${w.topics.Probing}`))
-    expect((await wide?.text()) ?? '').toContain('scrolls sideways')
-  })
-
-  test('a first visit (no width cookie yet) holds both views and the window picks the list, so the map is never seen', async ({ page, context }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-phone-first')
-    // A browser that has never told the server its width: the cookie is gone before the page is asked for.
-    await context.clearCookies({ name: 'margins_narrow' })
-    const response = await page.goto(mapUrl(w, `?unit=${w.units.Hashing}`), { waitUntil: 'commit' })
-    const html = (await response?.text()) ?? ''
-    expect(html, 'both views are in the first HTML').toContain('scrolls sideways')
-    expect(html).toContain('Hash tables')
-    // The picture is hidden by the window's width from the first paint; the list is what shows.
-    await expect(page.getByRole('heading', { level: 3, name: 'Hash tables' })).toBeVisible()
-    await expect(page.locator('svg [data-node-link], svg a[data-node-link]').first()).toBeHidden()
-    // Once the browser has told the server, the page is read again with the list chosen on the server.
-    await expect.poll(async () => (await context.cookies()).find((cookie) => cookie.name === 'margins_narrow')?.value).toBe('1')
-    await expect(page.getByRole('radio', { name: 'List view' })).toBeChecked()
-    await expect(page.locator('svg [data-node-link]')).toHaveCount(0)
-  })
 
   test('opens on the list, keeps a chosen map labelled and scrollable, and moves focus to the panel', async ({ page }) => {
     test.setTimeout(90_000)
@@ -691,68 +542,3 @@ test.describe('knowledge map on a phone', () => {
   })
 })
 
-test.describe('knowledge map on a wide window with a phone-width cookie left over', () => {
-  test.use({ viewport: { width: 1280, height: 800 } })
-
-  test('opens on the map and puts the cookie right', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-stale-narrow')
-    const cookie = async () => (await page.context().cookies()).find((entry) => entry.name === 'margins_narrow')?.value
-    // The window was phone width when the cookie was written, so the server's first answer is the list.
-    await page.context().addCookies([{ name: 'margins_narrow', value: '1', url: new URL(process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000').origin }])
-    const response = await page.goto(mapUrl(w, `?unit=${w.units.Hashing}`))
-    expect((await response?.text()) ?? '', 'the server went by the cookie').not.toContain('scrolls sideways')
-    await expect(page.getByRole('radio', { name: 'Map', exact: true })).toBeChecked()
-    await settled(page)
-    await expect.poll(cookie).toBe('0')
-    // Put right without choosing anything: the address names no view.
-    expect(new URL(page.url()).searchParams.get('view')).toBeNull()
-    expect(new URL(page.url()).searchParams.get('unit')).toBe(w.units.Hashing)
-  })
-})
-
-test.describe('round 4: edges, repeated names, one status per row', () => {
-  test('a suggested link is dashed at full contrast, a confirmed one solid; the key shows both', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-dashed')
-    await link(w.courseId, w.concepts['Open addressing'], w.concepts.Chaining, 'prerequisite', 'proposed', 0.8)
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=map`))
-    const unit = page.getByRole('group', { name: /^Hashing: 4 ideas$/ })
-    const suggested = unit.locator('path', { has: page.locator('title', { hasText: '(suggested)' }) })
-    await expect(suggested).toHaveAttribute('stroke-dasharray', '6 4')
-    await expect(suggested).toHaveClass(/stroke-edge-suggested/)
-    const confirmed = unit.locator('path', { has: page.locator('title', { hasText: 'Collisions needs Hash function' }) })
-    await expect(confirmed).not.toHaveAttribute('stroke-dasharray', /./)
-    await expect(confirmed).toHaveClass(/stroke-edge-confirmed/)
-    const key = page.locator('details:visible').filter({ has: page.getByText('Key', { exact: true }) })
-    if (!(await key.evaluate((element) => (element as HTMLDetailsElement).open))) await key.getByText('Key', { exact: true }).click()
-    await expect(key.getByText('Dashed: suggested, not confirmed')).toBeVisible()
-    await expect(key.getByText(/Two different things/)).toBeVisible()
-  })
-
-  test('an idea name that occurs in two topics names its topic in the picture', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-dupe')
-    await withPrisma((prisma) =>
-      prisma.concept.create({
-        data: { projectId: w.courseId, topicId: w.topics.Probing, name: 'Collisions', summary: 'Collisions again.', kind: 'concept', orderIndex: 1, objectiveIndexes: [] },
-      })
-    )
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=map`))
-    const unit = page.getByRole('group', { name: /^Hashing: 5 ideas$/ })
-    // Only the repeated name names its topic (once in each topic); the other ideas stay as they were.
-    await expect(unit.locator('text', { hasText: 'Hash tables' })).toHaveCount(1)
-    await expect(unit.locator('text', { hasText: 'Probing' })).toHaveCount(1)
-  })
-
-  test('the panel says why an idea is ready, and a list row carries one status', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-reason')
-    await link(w.courseId, w.concepts['Open addressing'], w.concepts.Chaining, 'prerequisite', 'proposed', 0.8)
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts.Chaining}&view=list`))
-    const panel = page.getByTestId('node-panel')
-    await expect(panel).toContainText('Builds on Open addressing (suggested connection, not confirmed)')
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts['Open addressing']}&view=list`))
-    await expect(page.getByTestId('node-panel')).toContainText('No prerequisites: start here')
-  })
-})

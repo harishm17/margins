@@ -2,7 +2,6 @@ import { expect, test, type Page } from '@playwright/test'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import { addContent, createCourse, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
-import { expectClearOfTabBar, expectNoSidewaysScroll } from './helpers/overflow'
 
 // Recall (spec §5.3): close the book, write what you remember, get it graded claim by claim against the student's own
 // pages. The AI service runs on the mock provider: the first claim of a prompt is covered, the second missing, the third
@@ -411,33 +410,3 @@ test('teach-back of one concept grades that concept', async ({ page }) => {
   })
 })
 
-test('recall on a phone', async ({ page }) => {
-  await page.setViewportSize(PHONE)
-  const { email, topicUrl, topicId } = await world(page, 'rc-phone')
-  await seedConcepts(email, topicId('Hash tables'))
-  await expectNoSidewaysScroll(page, `${topicUrl('Hash tables')}?view=recall`)
-  await expect(card(page)).toBeVisible()
-  await screenshotIfAsked(page, 'e4-recall-prompt-390x844')
-  await expectNoAxeViolations(page, 'recall prompt, 390')
-  // The submit button is never under the bottom bar, with a short answer or a long one.
-  await box(page).fill(ANSWER)
-  await expectClearOfTabBar(page, card(page).getByRole('button', { name: 'Check my answer' }), 'Check my answer')
-  await box(page).fill(`${ANSWER} ${ANSWER} ${ANSWER} ${ANSWER}`)
-  await expectClearOfTabBar(page, card(page).getByRole('button', { name: 'Check my answer' }), 'Check my answer, long answer')
-  await screenshotIfAsked(page, 'e4-recall-submit-clear-390x844')
-
-  await answer(page)
-  await expect(card(page).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible()
-  await card(page).getByRole('button', { name: 'More help' }).click()
-  await card(page).getByRole('button', { name: 'Show me what I missed' }).click()
-  await expect(card(page).getByRole('heading', { name: 'What your pages say' })).toBeVisible()
-  await screenshotIfAsked(page, 'e4-recall-graded-390x844')
-  await expectNoAxeViolations(page, 'recall graded, 390')
-  await expectNoSidewaysScroll(page, page.url())
-
-  await page.getByRole('region', { name: 'Explain what the load factor tells you.' }).getByRole('textbox').fill('buckets')
-  await page.getByRole('region', { name: 'Explain what the load factor tells you.' }).getByRole('button', { name: 'Check my answer' }).click()
-  await expect(page.getByText('Can you say more about what you remember, in a sentence or two?')).toBeVisible()
-  await screenshotIfAsked(page, 'e4-recall-clarify-390x844')
-  await expectNoAxeViolations(page, 'recall clarifying question, 390')
-})

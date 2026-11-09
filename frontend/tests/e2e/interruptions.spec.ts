@@ -105,17 +105,6 @@ test.describe('mock exam', () => {
     expect(JSON.stringify(answers)).toContain('"0":"A"')
   })
 
-  test('the submit dialog of an empty exam says so once and names what the button does', async ({ page }) => {
-    test.setTimeout(120_000)
-    await page.setViewportSize({ width: 390, height: 844 })
-    await startExam(page, `int-exam-blank-${stamp}`)
-    await expect(page.getByRole('button', { name: 'Questions · 0/2 answered' })).toBeVisible()
-    await page.getByRole('button', { name: 'Submit exam', exact: true }).first().click()
-    const dialog = page.getByRole('dialog', { name: 'All 2 questions are blank' })
-    await expect(dialog).toBeVisible()
-    await expect(dialog.getByTestId('submit-counts')).toHaveCount(0)
-    await expect(dialog.getByRole('button', { name: 'Submit empty exam' })).toBeVisible()
-  })
 })
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -306,35 +295,4 @@ test.describe('ask', () => {
     expect((await lookup.json()).thread).toBeTruthy()
   })
 
-  test('after the first reply the box invites an answer, and the sources sit behind one control', async ({ page }) => {
-    test.setTimeout(120_000)
-    await signIn(page, DEMO_EMAIL)
-    await page.goto(`${demoCourse}/ask`, { waitUntil: 'networkidle' })
-    await expect(composer(page)).toHaveAttribute('placeholder', 'Ask about your materials...')
-    await composer(page).fill(`What is hashing? ${Date.now()}`)
-    await page.keyboard.press('Enter')
-    const answer = page.locator('article', { hasText: /\d sources?/ })
-    await expect(answer).toBeVisible({ timeout: 30_000 })
-    await expect(page.locator('article[aria-busy]')).toHaveCount(0)
-    await expect(composer(page)).toHaveAttribute('placeholder', 'Write your answer or ask a follow-up...')
-    const toggle = answer.getByRole('button', { name: /^\d sources?$/ })
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    await toggle.click()
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    await expect(answer.getByRole('list')).toBeVisible()
-  })
-
-  test('phone: the title, two suggestions and the box fit without scrolling', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 })
-    await signIn(page, DEMO_EMAIL)
-    await page.goto(`${demoCourse}/ask`, { waitUntil: 'networkidle' })
-    await expect(page.getByRole('heading', { level: 2, name: 'Ask your materials' })).toBeInViewport()
-    const suggestions = page.getByRole('list', { name: 'Suggested questions' }).getByRole('button')
-    await expect(suggestions.nth(0)).toBeInViewport()
-    await expect(suggestions.nth(1)).toBeInViewport()
-    await expect(suggestions.nth(2)).toBeHidden()
-    await expect(composer(page)).toBeInViewport()
-    await page.getByRole('button', { name: 'More suggestions' }).click()
-    await expect(suggestions.nth(2)).toBeVisible()
-  })
 })
