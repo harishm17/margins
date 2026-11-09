@@ -1,0 +1,1901 @@
+{
+ "arms": [
+  "text",
+  "haiku",
+  "sonnet",
+  "opus"
+ ],
+ "classes": [
+  "tables",
+  "maths",
+  "figures",
+  "code",
+  "scans",
+  "handwriting"
+ ],
+ "by_class": {
+  "tables": {
+   "text": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.1837,
+    "formulas_exact": 0.0,
+    "formula_symbols": 1.0,
+    "table_cells": 0.6206,
+    "table_shape": 0.7778,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   },
+   "haiku": {
+    "pages": 3,
+    "words_dropped": 0.0034,
+    "words_invented": 0.0,
+    "formulas_exact": 0.9444,
+    "formula_symbols": 1.0,
+    "table_cells": 0.9762,
+    "table_shape": 0.8889,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   },
+   "sonnet": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.9444,
+    "formula_symbols": 1.0,
+    "table_cells": 0.8413,
+    "table_shape": 0.7778,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   },
+   "opus": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.9444,
+    "formula_symbols": 1.0,
+    "table_cells": 0.9841,
+    "table_shape": 0.8889,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  "maths": {
+   "text": {
+    "pages": 5,
+    "words_dropped": 0.3578,
+    "words_invented": 0.2817,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.4937,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.24,
+    "heading_levels": 1.0,
+    "code_lines": 0.7728,
+    "figures_noted": null
+   },
+   "haiku": {
+    "pages": 5,
+    "words_dropped": 0.0913,
+    "words_invented": 0.0,
+    "formulas_exact": 0.9429,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.4091,
+    "figures_noted": null
+   },
+   "sonnet": {
+    "pages": 5,
+    "words_dropped": 0.0663,
+    "words_invented": 0.0,
+    "formulas_exact": 0.9253,
+    "formula_symbols": 0.9649,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 0.7644,
+    "code_lines": 0.5,
+    "figures_noted": null
+   },
+   "opus": {
+    "pages": 5,
+    "words_dropped": 0.0,
+    "words_invented": 0.0062,
+    "formulas_exact": 0.9253,
+    "formula_symbols": 0.9676,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 0.87,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  "figures": {
+   "text": {
+    "pages": 3,
+    "words_dropped": 0.0023,
+    "words_invented": 0.0859,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.8229,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.3333,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": 0.0
+   },
+   "haiku": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.5,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": 1.0
+   },
+   "sonnet": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.9166,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 0.8889,
+    "code_lines": null,
+    "figures_noted": 1.0
+   },
+   "opus": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.9166,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 0.8889,
+    "code_lines": null,
+    "figures_noted": 1.0
+   }
+  },
+  "code": {
+   "text": {
+    "pages": 3,
+    "words_dropped": 0.2569,
+    "words_invented": 0.0255,
+    "formulas_exact": 0.0,
+    "formula_symbols": 1.0,
+    "table_cells": 0.0,
+    "table_shape": 0.0,
+    "headings_found": 0.5,
+    "heading_levels": 1.0,
+    "code_lines": 0.4132,
+    "figures_noted": null
+   },
+   "haiku": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0036,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": 1.0,
+    "heading_levels": 0.75,
+    "code_lines": 0.9608,
+    "figures_noted": null
+   },
+   "sonnet": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 1.0,
+    "figures_noted": null
+   },
+   "opus": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  "scans": {
+   "text": {
+    "pages": 3,
+    "words_dropped": 1.0,
+    "words_invented": null,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.0,
+    "table_cells": 0.0,
+    "table_shape": 0.0,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": 0.0,
+    "figures_noted": null
+   },
+   "haiku": {
+    "pages": 3,
+    "words_dropped": 0.1119,
+    "words_invented": 0.0,
+    "formulas_exact": 0.6111,
+    "formula_symbols": 0.9677,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.0,
+    "figures_noted": null
+   },
+   "sonnet": {
+    "pages": 3,
+    "words_dropped": 0.2984,
+    "words_invented": 0.0,
+    "formulas_exact": 0.6111,
+    "formula_symbols": 0.9677,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.0,
+    "figures_noted": null
+   },
+   "opus": {
+    "pages": 3,
+    "words_dropped": 0.1119,
+    "words_invented": 0.0044,
+    "formulas_exact": 0.6111,
+    "formula_symbols": 0.9677,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.0,
+    "figures_noted": null
+   }
+  },
+  "handwriting": {
+   "text": {
+    "pages": 3,
+    "words_dropped": 1.0,
+    "words_invented": null,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   },
+   "haiku": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.3333,
+    "formula_symbols": 0.8574,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   },
+   "sonnet": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.6,
+    "formula_symbols": 0.8826,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   },
+   "opus": {
+    "pages": 3,
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.6306,
+    "formula_symbols": 0.8984,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  "all": {
+   "text": {
+    "pages": 20,
+    "words_dropped": 0.4283,
+    "words_invented": 0.1638,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.4773,
+    "table_cells": 0.3724,
+    "table_shape": 0.4667,
+    "headings_found": 0.2625,
+    "heading_levels": 1.0,
+    "code_lines": 0.4642,
+    "figures_noted": 0.0
+   },
+   "haiku": {
+    "pages": 20,
+    "words_dropped": 0.0401,
+    "words_invented": 0.0005,
+    "formulas_exact": 0.7283,
+    "formula_symbols": 0.9691,
+    "table_cells": 0.9857,
+    "table_shape": 0.9333,
+    "headings_found": 1.0,
+    "heading_levels": 0.9688,
+    "code_lines": 0.6168,
+    "figures_noted": 1.0
+   },
+   "sonnet": {
+    "pages": 20,
+    "words_dropped": 0.0613,
+    "words_invented": 0.0,
+    "formulas_exact": 0.8192,
+    "formula_symbols": 0.9633,
+    "table_cells": 0.9048,
+    "table_shape": 0.8667,
+    "headings_found": 1.0,
+    "heading_levels": 0.9056,
+    "code_lines": 0.6667,
+    "figures_noted": 1.0
+   },
+   "opus": {
+    "pages": 20,
+    "words_dropped": 0.0168,
+    "words_invented": 0.0022,
+    "formulas_exact": 0.8246,
+    "formula_symbols": 0.9668,
+    "table_cells": 0.9905,
+    "table_shape": 0.9333,
+    "headings_found": 1.0,
+    "heading_levels": 0.9385,
+    "code_lines": 0.8333,
+    "figures_noted": 1.0
+   }
+  }
+ },
+ "outcomes": {
+  "text": {
+   "ok": 14,
+   "empty": 6
+  },
+  "haiku": {
+   "ok": 20
+  },
+  "sonnet": {
+   "ok": 20
+  },
+  "opus": {
+   "ok": 20
+  }
+ },
+ "usd": {
+  "text": 0.0,
+  "haiku": 0.0159,
+  "sonnet": 0.3025,
+  "opus": 0.6034
+ },
+ "pages": [
+  {
+   "id": "os-tables-1",
+   "class": "tables",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.1158,
+    "formulas_exact": 0.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-tables-1",
+   "class": "tables",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-tables-1",
+   "class": "tables",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-tables-1",
+   "class": "tables",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-tables-2",
+   "class": "tables",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.202,
+    "formulas_exact": 0.0,
+    "formula_symbols": 1.0,
+    "table_cells": 0.6,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-tables-2",
+   "class": "tables",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.8333,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-tables-2",
+   "class": "tables",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-tables-2",
+   "class": "tables",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-1",
+   "class": "maths",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.9806,
+    "words_invented": 0.7778,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.0135,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-1",
+   "class": "maths",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-1",
+   "class": "maths",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.7692,
+    "formula_symbols": 0.8243,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-1",
+   "class": "maths",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.7692,
+    "formula_symbols": 0.8378,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 0.75,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-2",
+   "class": "maths",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.4054,
+    "words_invented": 0.3846,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.0847,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.2,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-2",
+   "class": "maths",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.7143,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-2",
+   "class": "maths",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 0.6,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-2",
+   "class": "maths",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 0.6,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-3",
+   "class": "maths",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.4029,
+    "words_invented": 0.1491,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.3704,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-3",
+   "class": "maths",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-3",
+   "class": "maths",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.8571,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 0.2222,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-maths-3",
+   "class": "maths",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.8571,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-figures-1",
+   "class": "figures",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.1118,
+    "formulas_exact": 0.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": 0.0
+   }
+  },
+  {
+   "id": "os-figures-1",
+   "class": "figures",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": 1.0
+   }
+  },
+  {
+   "id": "os-figures-1",
+   "class": "figures",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": 1.0
+   }
+  },
+  {
+   "id": "os-figures-1",
+   "class": "figures",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": 1.0
+   }
+  },
+  {
+   "id": "os-figures-2",
+   "class": "figures",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.007,
+    "words_invented": 0.1218,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.6458,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": 0.0
+   }
+  },
+  {
+   "id": "os-figures-2",
+   "class": "figures",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": 1.0
+   }
+  },
+  {
+   "id": "os-figures-2",
+   "class": "figures",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.8333,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": 1.0
+   }
+  },
+  {
+   "id": "os-figures-2",
+   "class": "figures",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.8333,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": 1.0
+   }
+  },
+  {
+   "id": "os-scans-1",
+   "class": "scans",
+   "arm": "text",
+   "outcome": "empty",
+   "scores": {
+    "words_dropped": 1.0,
+    "words_invented": null,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-scans-1",
+   "class": "scans",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.3333,
+    "formula_symbols": 0.9032,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-scans-1",
+   "class": "scans",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.3333,
+    "formula_symbols": 0.9032,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-scans-1",
+   "class": "scans",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.3333,
+    "formula_symbols": 0.9032,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-scans-2",
+   "class": "scans",
+   "arm": "text",
+   "outcome": "empty",
+   "scores": {
+    "words_dropped": 1.0,
+    "words_invented": null,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.0,
+    "table_cells": 0.0,
+    "table_shape": 0.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-scans-2",
+   "class": "scans",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.5,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-scans-2",
+   "class": "scans",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.5597,
+    "words_invented": 0.0,
+    "formulas_exact": 0.5,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "os-scans-2",
+   "class": "scans",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0132,
+    "formulas_exact": 0.5,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "rs-code-1",
+   "class": "code",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.427,
+    "words_invented": 0.0,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": 0.3571,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "rs-code-1",
+   "class": "code",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "rs-code-1",
+   "class": "code",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "rs-code-1",
+   "class": "code",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": null,
+    "heading_levels": null,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-tables-1",
+   "class": "tables",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.2333,
+    "formulas_exact": 0.0,
+    "formula_symbols": 1.0,
+    "table_cells": 0.2619,
+    "table_shape": 0.3333,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-tables-1",
+   "class": "tables",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0103,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 0.9286,
+    "table_shape": 0.6667,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-tables-1",
+   "class": "tables",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.8333,
+    "formula_symbols": 1.0,
+    "table_cells": 0.5238,
+    "table_shape": 0.3333,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-tables-1",
+   "class": "tables",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.8333,
+    "formula_symbols": 1.0,
+    "table_cells": 0.9524,
+    "table_shape": 0.6667,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-maths-1",
+   "class": "maths",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0613,
+    "formulas_exact": 0.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.6364,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-maths-1",
+   "class": "maths",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.8182,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-maths-1",
+   "class": "maths",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.3317,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-maths-1",
+   "class": "maths",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0308,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-maths-2",
+   "class": "maths",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0355,
+    "formulas_exact": 0.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": 0.9091,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-maths-2",
+   "class": "maths",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.4565,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-maths-2",
+   "class": "maths",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-maths-2",
+   "class": "maths",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "bio-figures-1",
+   "class": "figures",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.024,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": 0.0
+   }
+  },
+  {
+   "id": "bio-figures-1",
+   "class": "figures",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": 1.0
+   }
+  },
+  {
+   "id": "bio-figures-1",
+   "class": "figures",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 0.6667,
+    "code_lines": null,
+    "figures_noted": 1.0
+   }
+  },
+  {
+   "id": "bio-figures-1",
+   "class": "figures",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 0.6667,
+    "code_lines": null,
+    "figures_noted": 1.0
+   }
+  },
+  {
+   "id": "ocw-code-1",
+   "class": "code",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0698,
+    "formulas_exact": 0.0,
+    "formula_symbols": 1.0,
+    "table_cells": 0.0,
+    "table_shape": 0.0,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.8824,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-code-1",
+   "class": "code",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0109,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": 1.0,
+    "heading_levels": 0.5,
+    "code_lines": 0.8824,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-code-1",
+   "class": "code",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-code-1",
+   "class": "code",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": 1.0,
+    "table_shape": 1.0,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "py-code-1",
+   "class": "code",
+   "arm": "text",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.3438,
+    "words_invented": 0.0068,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": 0.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "py-code-1",
+   "class": "code",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "py-code-1",
+   "class": "code",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "py-code-1",
+   "class": "code",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": null,
+    "formula_symbols": null,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 1.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-scans-1",
+   "class": "scans",
+   "arm": "text",
+   "outcome": "empty",
+   "scores": {
+    "words_dropped": 1.0,
+    "words_invented": null,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": 0.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-scans-1",
+   "class": "scans",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.3356,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-scans-1",
+   "class": "scans",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.3356,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "ocw-scans-1",
+   "class": "scans",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.3356,
+    "words_invented": 0.0,
+    "formulas_exact": 1.0,
+    "formula_symbols": 1.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": 0.0,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-1",
+   "class": "handwriting",
+   "arm": "text",
+   "outcome": "empty",
+   "scores": {
+    "words_dropped": 1.0,
+    "words_invented": null,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-1",
+   "class": "handwriting",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.25,
+    "formula_symbols": 0.697,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-1",
+   "class": "handwriting",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.25,
+    "formula_symbols": 0.7273,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-1",
+   "class": "handwriting",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.375,
+    "formula_symbols": 0.7576,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-2",
+   "class": "handwriting",
+   "arm": "text",
+   "outcome": "empty",
+   "scores": {
+    "words_dropped": 1.0,
+    "words_invented": null,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-2",
+   "class": "handwriting",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.75,
+    "formula_symbols": 0.9661,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-2",
+   "class": "handwriting",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.75,
+    "formula_symbols": 0.9661,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-2",
+   "class": "handwriting",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.9167,
+    "formula_symbols": 0.9831,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-3",
+   "class": "handwriting",
+   "arm": "text",
+   "outcome": "empty",
+   "scores": {
+    "words_dropped": 1.0,
+    "words_invented": null,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.0,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 0.0,
+    "heading_levels": null,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-3",
+   "class": "handwriting",
+   "arm": "haiku",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.0,
+    "formula_symbols": 0.9091,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-3",
+   "class": "handwriting",
+   "arm": "sonnet",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.8,
+    "formula_symbols": 0.9545,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  },
+  {
+   "id": "hw-3",
+   "class": "handwriting",
+   "arm": "opus",
+   "outcome": "ok",
+   "scores": {
+    "words_dropped": 0.0,
+    "words_invented": 0.0,
+    "formulas_exact": 0.6,
+    "formula_symbols": 0.9545,
+    "table_cells": null,
+    "table_shape": null,
+    "headings_found": 1.0,
+    "heading_levels": 1.0,
+    "code_lines": null,
+    "figures_noted": null
+   }
+  }
+ ],
+ "run": {
+  "label": "a1",
+  "date": "2026-11-09",
+  "commit": "caa23579",
+  "branch": "plan-v5/w0-pr1",
+  "arms": {
+   "text": null,
+   "haiku": "claude-haiku-5-5",
+   "sonnet": "claude-sonnet-5-5",
+   "opus": "claude-opus-5-5"
+  },
+  "reader": {
+   "dpi": 200,
+   "max_side_px": 2576,
+   "effort": "low",
+   "max_tokens": 16000
+  },
+  "pages": [
+   "os-tables-1",
+   "os-tables-2",
+   "os-maths-1",
+   "os-maths-2",
+   "os-maths-3",
+   "os-figures-1",
+   "os-figures-2",
+   "os-scans-1",
+   "os-scans-2",
+   "rs-code-1",
+   "ocw-tables-1",
+   "ocw-maths-1",
+   "ocw-maths-2",
+   "bio-figures-1",
+   "ocw-code-1",
+   "py-code-1",
+   "ocw-scans-1",
+   "hw-1",
+   "hw-2",
+   "hw-3"
+  ],
+  "dry_run": false,
+  "estimate_usd": 2.002
+ }
+}
