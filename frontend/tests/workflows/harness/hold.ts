@@ -27,3 +27,20 @@ export async function holdJobs(jobType: string, runDir = process.env.E2E_RUN_DIR
     await letGo()
   }
 }
+
+/** Waits until at least one job of `jobType` is held at the gate, and returns the ids of those held. */
+export async function waitForHeld(jobType: string, runDir = process.env.E2E_RUN_DIR || join(process.cwd(), '..', '.e2e'), timeout = 60_000): Promise<string[]> {
+  const dir = join(runDir, 'hold')
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    const held: string[] = []
+    for (const name of await readdir(dir)) {
+      if (!name.endsWith('.request.json')) continue
+      const { payload } = JSON.parse(await readFile(join(dir, name), 'utf8')) as { payload?: { jobId?: string; jobType?: string } }
+      if (payload?.jobId && payload.jobType === jobType) held.push(payload.jobId)
+    }
+    if (held.length > 0) return held
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error(`No ${jobType} job was held in ${timeout / 1000} s`)
+}

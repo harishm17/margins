@@ -88,4 +88,9 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF10.focus-returns': { fixedBy: 'X5', finding: '100' }, // the menu gives focus back to its button, but the Regenerate notes dialog opened from it gives it to the page
   'WF10.palette-focus-returns': { fixedBy: 'X5', finding: '100' }, // closing the command palette leaves the focus on the page
   'WF10.phone-voice-turn-whole': { fixedBy: 'V6', finding: '86' }, // the coach's turn is partly hidden inside the sheet's scrolling strip on a phone
+
+  // WF12, deletion
+  'WF12.course-references-cleared': { fixedBy: 'SW13', finding: '101' }, // the course's Ask and practice tutor states stay: TutorState has no course key
+  'WF12.course-dialog-once': { fixedBy: 'SW15', finding: '76' }, // "Type the name exactly to confirm" is the field's label and, again, the confirm button's reason
+  'WF12.account-dialog-once': { fixedBy: 'U4', finding: '76' }, // "Enter DELETE to confirm" in the description, the field's hint and the confirm button's reason
 }
