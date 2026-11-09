@@ -12,7 +12,8 @@
 # with Google only, which a test cannot do; frontend/src/lib/auth/test-login.ts), and with a made-up Google
 # client so the sign-in page shows its Google button. NEXTAUTH_URL is on localhost, which the test sign-in needs.
 # It reads the AI status uncached (AI_STATUS_CACHE_MS=0), so a spec that marks AI unavailable sees it at once,
-# and the AI service reaps every 5 seconds, so a job that waited for the AI is sent again soon after it is back.
+# and the AI service reaps every 5 seconds and looks again at a job waiting for the AI after 5 seconds (30 in
+# production, JOB_AI_WAIT_RECHECK_SECONDS), so a job that waited for the AI is sent again soon after it is back.
 # Use a database of its own for the stack and the specs (for example margins_e2e, migrated): the AI service's reaper
 # sends any pending job in its database, so a database shared with `npm test` or a dev server lets their jobs, and
 # the shared AI status, leak into the specs. Export the same E2E_RUN_DIR to the stack and to Playwright.
@@ -60,6 +61,7 @@ start() {
         AI_INTERNAL_TOKEN="$TOKEN" \
         ENVIRONMENT=development \
         JOB_REAPER_INTERVAL_SECONDS=5 \
+        JOB_AI_WAIT_RECHECK_SECONDS=5 \
         LOCAL_UPLOADS_DIR="$RUN/uploads" \
         FRONTEND_URL="http://localhost:$WEB_PORT" \
         AI_SERVICE_URL="http://127.0.0.1:$AI_PORT" \
