@@ -1,9 +1,17 @@
 name: CI
 
+# Once per change: a branch is checked through its pull request, and main again after a merge (Railway deploys
+# only after main's checks pass). A push to every branch as well ran each pull request twice.
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
+
+# A newer push to a pull request stops the run for the older one. Main's runs are never cut short: a cancelled
+# run on main makes Railway skip that deploy.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
