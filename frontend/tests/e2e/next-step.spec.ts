@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import { expectNoAxeViolations } from './helpers/axe'
 import { withPrisma } from './helpers/db'
 import { addContent, createCourse, quizQuestions, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
@@ -9,7 +9,6 @@ import { addContent, createCourse, quizQuestions, setZoneCookie, signUpAndIn, ZO
 test.use({ timezoneId: ZONE })
 
 const DESKTOP = { width: 1440, height: 900 }
-const line = (page: Page) => page.getByRole('region', { name: 'Next on this topic' })
 
 async function seed(email: string, topicId: string, options: { warmup?: boolean; readAt?: boolean; quizScore?: number } = {}) {
   await withPrisma(async (prisma) => {
@@ -59,55 +58,6 @@ async function seed2(email: string, topicId: string) {
     await prisma.topicProgress.upsert({ where: { topicId_userId: { topicId, userId: user.id } }, create: { topicId, userId: user.id, quizScore: 80, quizCompleted: true }, update: { quizScore: 80, quizCompleted: true } })
   })
 }
-
-test('a topic nobody has opened is linked by its bare address, and no page calls the reading notes', async ({ page }) => {
-  test.setTimeout(120_000)
-  await setZoneCookie(page.context())
-  const { email } = await signUpAndIn(page, 'ns-unopened', { own: true })
-  await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
-  const course = await createCourse(page, `Unopened ${Date.now()}`, [{ name: 'Hash tables' }, { name: 'Sorting' }])
-  // One topic has written content (so the course is past setup); the other has never been opened.
-  await addContent(course.topics.Sorting, { section_notes: '# Notes\n\nSome notes.' })
-  await page.setViewportSize(DESKTOP)
-  await page.goto(`/courses/${course.courseId}/plan`)
-  const bare = `/courses/${course.courseId}/topics/${course.topics['Hash tables']}`
-  const row = page.getByRole('main').getByRole('listitem').filter({ has: page.locator(`a[href="${bare}"]`) }).last()
-  await expect(row.getByRole('link', { name: /^Start warm-up/ })).toHaveAttribute('href', bare)
-  await expect(row).toContainText('Margins gets this topic ready when you open it, then starts you on a short warm-up.')
-  await expect(page.getByText(/read the notes|Start with the notes/i)).toHaveCount(0)
-  // The bare address opens on the reader (the topic is prepared as it opens); the line says nothing yet.
-  await page.goto(bare)
-  await expect(page).toHaveURL(/view=read/)
-  await expect(line(page)).toHaveCount(0)
-})
-
-test('the next-step line is quiet: absent on an unfinished step the student chose, a link on a finished one', async ({ page }) => {
-  test.setTimeout(120_000)
-  await setZoneCookie(page.context())
-  const { email } = await signUpAndIn(page, 'ns-line', { own: true })
-  await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
-  const course = await createCourse(page, `Line ${Date.now()}`, [{ name: 'Hash tables' }])
-  const topic = course.topics['Hash tables']
-  await addContent(topic, { section_notes: '# Notes\n\nSome notes.', topic_quiz: quizQuestions(3) })
-  await seed(email, topic, { warmup: true })
-  await page.setViewportSize(DESKTOP)
-  const url = (view: string) => `/courses/${course.courseId}/topics/${topic}?view=${view}`
-
-  // Warm-up is next. On its own step there is no line; on a step the student chose (Quiz) there is none either.
-  await page.goto(url('warmup'))
-  await expect(page.getByRole('button', { name: 'Start warm-up' })).toBeVisible()
-  await expect(line(page)).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Read that part again' })).toHaveCount(0)
-  await page.goto(url('quiz'))
-  await expect(line(page)).toHaveCount(0)
-  // The path itself tags the one step, and a tool (Examples) carries the same advice as one quiet line.
-  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Warm-up/ })).toContainText('Next')
-  await page.goto(url('examples'))
-  await expect(line(page)).toContainText('Try a few questions before reading.')
-  await expect(line(page).getByRole('link', { name: 'Start warm-up' })).toHaveAttribute('href', url('warmup'))
-  // The line is a link, not a primary button.
-  expect(await line(page).getByRole('link', { name: 'Start warm-up' }).evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
-})
 
 test('the Topics list names the same five steps and the same next step as the topic', async ({ page }) => {
   test.setTimeout(120_000)

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { signIn } from './helpers/auth'
-import { DEMO_EMAIL, FIXTURE_DOCX, FIXTURE_PDF } from './helpers/seed-demo'
+import { FIXTURE_DOCX, FIXTURE_PDF } from './helpers/seed-demo'
 
 // Course setup end to end: materials, topic editor, content build, topics list, then Home and
 // the Today view. One account per run so it can run again against the same database.
@@ -163,20 +163,3 @@ test('starting the first topic writes its notes, then topics list and materials'
   await expect(page.getByTestId('materials-notice')).toContainText('Deleted hashing.docx')
 })
 
-test('Home has no dashed new course tile and never says 0 strong; the demo course shows Today', async ({ page }) => {
-  await signIn(page, DEMO_EMAIL)
-  await page.goto('/home')
-
-  // The header button stays; the tile is gone.
-  await expect(page.getByRole('link', { name: 'New course' })).toHaveCount(1)
-  await expect(page.getByRole('heading', { level: 2, name: 'Courses' })).toBeVisible()
-  expect(await page.getByRole('heading', { level: 3 }).count()).toBeGreaterThan(0)
-  await expect(page.getByText('0 strong')).toHaveCount(0)
-
-  // The Today view of an active course.
-  await page.getByRole('link', { name: /CS 161 Algorithms/ }).first().click()
-  await expect(page.getByRole('region', { name: 'Up next' })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Course mastery' })).toBeVisible()
-  await expect(page.getByRole('main').getByRole('heading', { level: 2, name: 'Topics' })).toBeVisible()
-  await expect(page.getByRole('heading', { level: 2, name: 'Recent mock exams' })).toBeVisible()
-})

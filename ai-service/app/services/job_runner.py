@@ -87,8 +87,6 @@ class DailyBudgetExceeded(PermanentJobError):
 
 # The stage of a job that is waiting for the AI (or the allowance) instead of failing.
 WAITING_FOR_AI = "waiting_for_ai"
-# How soon the reaper may look at a job that is waiting for the AI again.
-AI_WAIT_RECHECK_SECONDS = 30.0
 
 
 def waits_for_ai(exc: Exception) -> bool:
@@ -401,7 +399,7 @@ async def _defer(job: JobContext, exc: Exception, usages) -> bool:
     summary, input_tokens, output_tokens, cost = _usage_columns(usages)
     await _record_ledger(job, summary, input_tokens, output_tokens, cost)
     budget = isinstance(exc, DailyBudgetExceeded)
-    wait = _seconds_until_reset() + 60 if budget else AI_WAIT_RECHECK_SECONDS
+    wait = _seconds_until_reset() + 60 if budget else settings.JOB_AI_WAIT_RECHECK_SECONDS
     code = exc.code if isinstance(exc, (LLMError, PermanentJobError)) else "LLM_UNAVAILABLE"
     row = await execute_one(
         f"""

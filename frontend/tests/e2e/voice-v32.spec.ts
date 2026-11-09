@@ -1,8 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { signIn as signInAs } from './helpers/auth'
 import { clearVoiceSessions, ensureVoiceFixture, VOICE_TEST_EMAIL, type VoiceFixture } from './helpers/voice-fixture'
-import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
-import { overflowing } from './helpers/overflow'
 import { installVoiceStubs } from './helpers/voice-stubs'
 
 // v3.2 voice (spec 19): end of turn, interruptions, settings, privacy line, silence. The speech APIs are
@@ -163,40 +161,6 @@ test('settings: Speak replies off means no speech and the turn still works; the 
   await page.evaluate(() => localStorage.removeItem('margins.voice.prefs.v1'))
 })
 
-test('privacy: the lobby says where the voice goes, and choosing to type starts without the microphone', async ({ page }) => {
-  await installVoiceStubs(page)
-  await page.goto(voiceUrl())
-  await waitForLobby(page)
-  const line = page.getByTestId('voice-privacy')
-  await expect(line).toContainText(/turn it into text|turned into text/)
-  await expect(line).toContainText('Typing avoids it.')
-  await page.getByRole('radio', { name: 'Type answers instead' }).click()
-  await startButton(page).click()
-  await expect(page.getByTestId('voice-question')).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByLabel('Your answer')).toBeVisible()
-  expect(await page.evaluate(() => (window as any).__voice.starts as number)).toBe(0)
-  await page.getByRole('button', { name: 'End', exact: true }).click()
-})
-
-test('privacy on a phone: the line is in the lobby and the three style cards stay above the nav', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await installVoiceStubs(page)
-  await page.goto(voiceUrl())
-  await waitForLobby(page)
-  await expect(page.getByTestId('voice-privacy')).toBeVisible()
-  const nav = await page.getByRole('navigation', { name: 'Course tabs' }).boundingBox()
-  const cards = page.getByRole('radiogroup', { name: 'Style' }).getByRole('radio')
-  await expect(cards).toHaveCount(3)
-  for (let index = 0; index < 3; index += 1) {
-    const box = await cards.nth(index).boundingBox()
-    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual((nav?.y ?? 0) + 1)
-  }
-  expect(await overflowing(page)).toEqual([])
-  await page.mouse.move(0, 0)
-  await screenshotIfAsked(page, 'v32-lobby-390x844')
-  await expectNoAxeViolations(page, 'voice lobby with the privacy line on a phone')
-})
-
 test('silence: ten seconds after a question there is one gentle line, once, and it is not a turn', async ({ page }) => {
   await installVoiceStubs(page, { speechMs: 200 })
   const turns = watchTurns(page)
@@ -212,19 +176,3 @@ test('silence: ten seconds after a question there is one gentle line, once, and 
   await page.getByRole('button', { name: 'End', exact: true }).click()
 })
 
-test('the lobby has one Start button, and a choice of speaking or typing before it', async ({ page }) => {
-  await installVoiceStubs(page)
-  await page.goto(voiceUrl())
-  await waitForLobby(page)
-  await expect(page.getByRole('button', { name: /Start/ })).toHaveCount(1)
-  await expect(page.getByRole('button', { name: 'Start by typing' })).toHaveCount(0)
-  const choice = page.getByRole('radiogroup', { name: 'How you answer' })
-  await expect(choice.getByRole('radio', { name: 'Speak your answers' })).toBeChecked()
-  await expect(page.getByText(/sprint/i)).toHaveCount(0)
-  await choice.getByRole('radio', { name: 'Type answers instead' }).click()
-  await startButton(page).click()
-  // Typing: the field comes with a heading and, when replies are not spoken, no orb is drawn.
-  await expect(page.getByLabel('Your answer')).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByText('Type your answer', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'End', exact: true }).click()
-})

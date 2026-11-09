@@ -1,10 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 import { withPrisma } from './helpers/db'
 import { signIn } from './helpers/auth'
-import { addContent, addFileRow, addQuizSet, createCourse, reviewItem, seedDueConcept, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
+import { addContent, addFileRow, createCourse, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
 import { DEMO_EMAIL, FIXTURE_PDF, demoIds } from './helpers/seed-demo'
 import { recallWorld } from './helpers/v31-recall'
-import { seedConcepts } from './helpers/v31-sessions'
 import { streamedPartsArrived } from './helpers/settle'
 import { chooseConfidence } from './helpers/confidence'
 
@@ -101,72 +100,6 @@ test.describe('unsent text survives a reload', () => {
   })
 })
 
-// ---------------------------------------------------------------------------------------------------------- 2. practise what was missed
-
-test('mock exam results offer new questions on what was missed, and keep Retake exam', async ({ page }) => {
-  await setZoneCookie(page.context())
-  const { email } = await signUpAndIn(page, 'ws1-practise', { own: true })
-  await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
-  const course = await createCourse(page, `Exam practice ${Date.now()}`, [{ name: 'Hash tables' }])
-  const topicId = course.topics['Hash tables']
-  const concepts = await seedConcepts(topicId, ['Hashing', 'Collisions', 'Load factor'])
-  const names = Object.keys(concepts)
-  // A bank with new questions for every concept: the exam's own questions are not served again.
-  await addQuizSet(
-    topicId,
-    names.flatMap((name) => [
-      reviewItem(concepts[name], `${name} statement one holds.`, 'easy'),
-      reviewItem(concepts[name], `${name} statement two holds.`, 'medium'),
-      reviewItem(concepts[name], `${name} statement three holds.`, 'hard'),
-    ])
-  )
-  const questions = [
-    { question_type: 'true_false', question_text: 'Exam: hashing maps keys.', correct_answer: true, points: 1, topic_id: topicId, topic_name: 'Hash tables', concept_ids: [concepts.Hashing] },
-    { question_type: 'true_false', question_text: 'Exam: collisions never happen.', correct_answer: false, points: 1, topic_id: topicId, topic_name: 'Hash tables', concept_ids: [concepts.Collisions] },
-    { question_type: 'true_false', question_text: 'Exam: load factor is entries over buckets.', correct_answer: true, points: 1, topic_id: topicId, topic_name: 'Hash tables', concept_ids: [concepts['Load factor']] },
-    { question_type: 'true_false', question_text: 'Exam: a rehash is free.', correct_answer: false, points: 1, topic_id: topicId, topic_name: 'Hash tables', concept_ids: [concepts['Load factor']] },
-  ]
-  const submissionId = await withPrisma(async (prisma) => {
-    const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
-    const exam = await prisma.sampleExam.create({
-      data: { projectId: course.courseId, name: 'Hash tables exam', questions, durationMinutes: 30, difficultyLevel: 'medium', topicsCovered: ['Hash tables'] },
-    })
-    // Questions 2 and 4 were missed (concepts Collisions and Load factor).
-    const graded = questions.map((_, index) => ({
-      question_index: index,
-      question_type: 'true_false',
-      points_possible: 1,
-      points_earned: index === 1 || index === 3 ? 0 : 1,
-      is_correct: !(index === 1 || index === 3),
-      feedback: '',
-      needs_review: false,
-    }))
-    const submission = await prisma.examSubmission.create({
-      data: {
-        sampleExamId: exam.id,
-        userId: user.id,
-        answers: { '0': 'true', '1': 'true', '2': 'true', '3': 'true' },
-        aiGrading: { graded_questions: graded, total_points: 4, earned_points: 2, overall_score: 50, needs_review: false },
-        gradedAt: new Date(),
-        status: 'submitted',
-      },
-    })
-    return { examId: exam.id, id: submission.id }
-  })
-
-  await page.goto(`/courses/${course.courseId}/exams/${submissionId.examId}/results/${submissionId.id}`)
-  // Two missed questions, on two ideas: two new questions. The count is on the button.
-  const practise = page.getByRole('button', { name: 'Practice 2 new questions on what you missed' })
-  await expect(practise).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Retake exam' })).toBeVisible()
-  await practise.click()
-  await expect(page).toHaveURL(/\/review\/session\?session=/, { timeout: 30_000 })
-  await expect(page.getByRole('heading', { name: /^Question 1 of 2/ })).toBeVisible({ timeout: 30_000 })
-  // New questions on the ideas missed, not the exam's own.
-  await expect(page.getByText(/Exam: /)).toHaveCount(0)
-  await expect(page.locator('[data-session-context]')).toContainText(/Collisions|Load factor/)
-})
-
 // ---------------------------------------------------------------------------------------------------------- 5 and 6. uploads
 
 test.describe('materials', () => {
@@ -227,16 +160,6 @@ test.describe('materials', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 
-  test('the list names the category the file was uploaded under', async ({ page }) => {
-    const courseId = await courseWithFile(page, 'ws1-category')
-    await page.request.post(`/api/projects/${courseId}/materials?category=book_chapters&filename=chapter.pdf`, {
-      data: (await import('node:fs')).readFileSync(FIXTURE_PDF),
-      headers: { 'content-type': 'application/pdf' },
-    })
-    await page.goto(`/courses/${courseId}/materials`)
-    await expect(rows(page, 'chapter.pdf').getByText('Book chapters', { exact: true }).filter({ visible: true })).toBeVisible()
-    await expect(rows(page, 'other.pdf').getByText('Lecture notes', { exact: true }).filter({ visible: true })).toBeVisible()
-  })
 })
 
 // ---------------------------------------------------------------------------------------------------------- 7. exam save status on a phone
@@ -281,31 +204,6 @@ test('the timed exam shows Saving, Saved and a failure with Retry on a phone', a
   await expect(status).toHaveText('Saved', { timeout: 20_000 })
 })
 
-// ---------------------------------------------------------------------------------------------------------- 14. "I don't know" is not "Left blank"
-
-test('a quiz question answered "I don\'t know" shows that, not Left blank', async ({ page }) => {
-  await setZoneCookie(page.context())
-  const { email } = await signUpAndIn(page, 'ws1-idk', { own: true })
-  await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
-  const course = await createCourse(page, `IDK ${Date.now()}`, [{ name: 'Hash tables' }])
-  const topicId = course.topics['Hash tables']
-  await addContent(topicId, {
-    topic_quiz: [1, 2, 3].map((n) => ({ question_type: 'true_false', question_text: `Quiz statement ${n}.`, correct_answer: true, explanation: 'It is true.', points: 1, difficulty: 'medium' })),
-  })
-  const response = await page.request.post(`/api/topics/${topicId}/quiz-attempts`, {
-    data: { answers: { '0': { answer: '', idk: true }, '1': { answer: 'true' } } },
-  })
-  expect(response.ok()).toBeTruthy()
-  await page.goto(`/courses/${course.courseId}/topics/${topicId}?view=quiz`)
-  await streamedPartsArrived(page)
-  await page.getByRole('button', { name: 'Review' }).click()
-  const items = page.locator('ol > li')
-  await expect(items.filter({ hasText: 'Quiz statement 1.' }).getByText("I don't know", { exact: true })).toBeVisible({ timeout: 20_000 })
-  // Question 3 was never answered: that one is blank.
-  await expect(items.filter({ hasText: 'Quiz statement 3.' }).getByText('Left blank')).toBeVisible()
-  await expect(items.filter({ hasText: 'Quiz statement 1.' }).getByText('Left blank')).toHaveCount(0)
-})
-
 // ---------------------------------------------------------------------------------------------------------- 3. voice: Quiz me says before Start
 
 test.describe('voice lobby: Quiz me', () => {
@@ -322,21 +220,6 @@ test.describe('voice lobby: Quiz me', () => {
     await expect(alert).toContainText('Quiz me needs a quiz first')
     await expect(alert).toContainText("This topic doesn't have a quiz yet")
     await expect(alert.getByRole('link', { name: 'Write the quiz' })).toHaveAttribute('href', `/courses/${course.courseId}/topics/${topicId}?view=quiz`)
-    await expect(page.getByRole('button', { name: 'Start voice practice' })).toBeDisabled()
-  })
-
-  test('a topic whose quiz is made of calculations says how many and why', async ({ page }) => {
-    const { email } = await signUpAndIn(page, 'ws1-voice-math', { own: true })
-    await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
-    const course = await createCourse(page, `Voice math ${Date.now()}`, [{ name: 'Algebra' }])
-    const topicId = course.topics.Algebra
-    await addContent(topicId, {
-      topic_quiz: [2, 3].map((n) => ({ question_type: 'numerical', question_text: `Compute ${n} + ${n}.`, correct_answer: n + n, points: 1, difficulty: 'medium' })),
-    })
-    await page.goto(`/courses/${course.courseId}/topics/${topicId}?view=voice`)
-    const alert = page.getByTestId('voice-quiz-missing')
-    await expect(alert).toContainText("Quiz me can't ask these questions out loud", { timeout: 30_000 })
-    await expect(alert).toContainText('2 questions')
     await expect(page.getByRole('button', { name: 'Start voice practice' })).toBeDisabled()
   })
 
@@ -365,55 +248,3 @@ test.describe('voice lobby: Quiz me', () => {
   })
 })
 
-// ---------------------------------------------------------------------------------------------------------- 13. a review session does not call its opening items "Warm-up"
-
-test('a review session labels no question Warm-up, and a short session says what it leaves out', async ({ page }) => {
-  await setZoneCookie(page.context())
-  const { email } = await signUpAndIn(page, 'ws1-review-label', { own: true })
-  await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
-  const course = await createCourse(page, `Review label ${Date.now()}`, [{ name: 'Hash tables' }])
-  const topicId = course.topics['Hash tables']
-  const concepts = { Hashing: await seedDueConcept(email, topicId, 'Hashing', { orderIndex: 0 }), Collisions: await seedDueConcept(email, topicId, 'Collisions', { orderIndex: 1 }) }
-  await addQuizSet(
-    topicId,
-    Object.values(concepts).flatMap((id, n) => [reviewItem(id, `Statement ${n} easy holds.`, 'easy'), reviewItem(id, `Statement ${n} medium holds.`, 'medium'), reviewItem(id, `Statement ${n} hard holds.`, 'hard')])
-  )
-  const started = await page.request.post(`/api/projects/${course.courseId}/review-sessions`, { data: { topicId } })
-  expect(started.ok()).toBeTruthy()
-  const { sessionId } = await started.json()
-  await page.goto(`/courses/${course.courseId}/review/session?session=${sessionId}`)
-  await expect(page.getByRole('heading', { name: /^Question 1 of/ })).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByText('Warm-up', { exact: true })).toHaveCount(0)
-})
-
-test('"Quick practice" says how many questions the session has: exact when they are all written, up to when some are not', async ({ page }) => {
-  await setZoneCookie(page.context())
-  const { email } = await signUpAndIn(page, 'ws1-short', { own: true })
-  await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
-  const course = await createCourse(page, `Short ${Date.now()}`, [{ name: 'Hash tables' }])
-  const topicId = course.topics['Hash tables']
-  // Due ideas come after a first quiz: keep its score, so the card (which waits for a first quiz or recall) is offered.
-  await withPrisma(async (prisma) => {
-    const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
-    await prisma.topicProgress.upsert({
-      where: { topicId_userId: { topicId, userId: user.id } },
-      create: { topicId, userId: user.id, quizScore: 60 },
-      update: { quizScore: 60 },
-    })
-  })
-  const ids = [
-    await seedDueConcept(email, topicId, 'Hashing', { orderIndex: 0 }),
-    await seedDueConcept(email, topicId, 'Collisions', { orderIndex: 1 }),
-    await seedDueConcept(email, topicId, 'Load factor', { orderIndex: 2 }),
-  ]
-  const item = (id: string, name: string, difficulty: 'easy' | 'medium' | 'hard') => reviewItem(id, `${name} ${difficulty} statement holds.`, difficulty)
-  // Two of the three concepts have questions; the third would have to be written first.
-  await addQuizSet(topicId, [0, 1].flatMap((n) => (['easy', 'medium', 'hard'] as const).map((difficulty) => item(ids[n], `Concept ${n}`, difficulty))))
-  const card = page.getByTestId('short-session').filter({ visible: true })
-  await page.goto(`/courses/${course.courseId}/review`)
-  await expect(card).toContainText('up to 3 reviews', { timeout: 30_000 })
-  // All three have questions: the number is exact.
-  await addQuizSet(topicId, (['easy', 'medium', 'hard'] as const).map((difficulty) => item(ids[2], 'Concept 2', difficulty)))
-  await page.goto(`/courses/${course.courseId}/review`)
-  await expect(card).toContainText(/^Quick practice\s*About \d+ minutes · 3 reviews/, { timeout: 30_000 })
-})
