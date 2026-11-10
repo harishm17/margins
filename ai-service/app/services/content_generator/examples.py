@@ -17,6 +17,7 @@ from app.services.content_generator.context import (
     format_concept_block,
     resolve_concept_ids,
 )
+from app.services.content_generator.quiz import OPTION_SIMILARITY_RULE
 from app.services.content_generator.refill import refill_figures, refill_wanted
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
@@ -30,6 +31,10 @@ from app.services.llm.schemas import (
     word_form_hints,
 )
 from app.services.tutor.leak import judge_leak
+
+
+# Prompt audit R5: under PROMPTS_V2=generation an interactive example's time comes from its step count, not the model.
+MINUTES_PER_STEP = 3
 
 
 class ExampleType(str, Enum):
@@ -184,12 +189,7 @@ Difficulty: {difficulty_level}. {guidance}
         v2 = prompts_v2("generation")
         difficulty_line = "" if v2 else f'- Set difficulty to "{difficulty_level}".\n'
         # v2 adds the similar-length rule the other question types have.
-        option_rule = (
-            " Make the options about the same length, form and level of detail: the correct one is not the longest, "
-            "the most specific or the only one with a qualification."
-            if v2
-            else ""
-        )
+        option_rule = f" {OPTION_SIMILARITY_RULE}" if v2 else ""
         instructions = f"""Write {count} interactive practice problems on "{topic_name}" from the excerpts above. The student solves each one step by step.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
@@ -216,6 +216,7 @@ Difficulty: {difficulty_level}. {guidance}
         if v2:
             for example in examples:
                 example["difficulty"] = difficulty_level  # the code knows it; the model is not asked
+                example["estimated_time_minutes"] = max(5, MINUTES_PER_STEP * len(example["steps"]))
         return examples[:count]
 
 

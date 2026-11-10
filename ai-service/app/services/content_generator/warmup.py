@@ -22,7 +22,7 @@ from app.services.content_generator.context import (
     resolve_concept_ids,
 )
 from app.prompt_revision import prompts_v2
-from app.services.content_generator.quiz import CHOICE_RULES, minimum_usable
+from app.services.content_generator.quiz import CHOICE_RULES, RULE_IN_EXCERPTS, SOURCE_EXCERPTS_RULE, minimum_usable
 from app.services.content_generator.refill import refill_figures, refill_once, refill_wanted
 from app.services.content_generator.support_check import check_support
 from app.services.llm.base import LLMOutputError
@@ -58,14 +58,18 @@ WARMUP_INSTRUCTIONS_V2 = (
     """Write {count} warm-up questions on "{topic}" from the excerpts above. The student answers some of them before reading, to find out what they already know and to prime what they are about to read.
 
 - Ask about the objectives of the topic, one idea per question. Use only multiple_choice and true_false questions; no calculations.
-- Tag each question's difficulty as easy, medium or hard. The set has {mix}. Easy questions ask for a definition or a plain fact, medium questions apply an idea to a small case, and hard questions need the idea combined with another or a common mix-up resisted.
+- Tag each question's difficulty as easy, medium or hard. The set has {mix}. Easy questions ask for a definition or a plain fact, medium questions apply an idea to a small case, and hard questions need the idea combined with another or a common mix-up resisted. """
+    + RULE_IN_EXCERPTS
+    + """
 """
     + CHOICE_RULES
     + """
 - true_false: correct_answer is a boolean.
 - The explanation says why the answer is right in one sentence; the student reads the material afterwards, so keep it short.
 - Set `mode` to recall on every question.
-- List in source_excerpts the index of every excerpt a question is based on.
+"""
+    + SOURCE_EXCERPTS_RULE
+    + """
 {concepts}"""
 )
 

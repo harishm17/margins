@@ -81,24 +81,34 @@ DIFFICULTY_GUIDANCE_V2 = {
 }
 
 # The option rules every choice question shares: quiz, exam, warm-up and review.
-CHOICE_RULES = """- multiple_choice: exactly 4 options with ids A, B, C, D and one correct answer. Vary which letter is correct. Keep options short and put any code in the question text. Make the options about the same length, form and level of detail: the correct one is not the longest, the most specific or the only one with a qualification, which would give it away. When a wrong option states a rule, give it the same kind of conditions the right one has.
+OPTION_SIMILARITY_RULE = "Make the options about the same length, form and level of detail: the correct one is not the longest, the most specific or the only one with a qualification, which would give it away."
+
+CHOICE_RULES = f"""- multiple_choice: exactly 4 options with ids A, B, C, D and one correct answer. Vary which letter is correct. Keep options short and put any code in the question text. {OPTION_SIMILARITY_RULE} When a wrong option states a rule, give it the same kind of conditions the right one has.
 - Each wrong option is the answer a student would give if they held one specific wrong idea; write that idea in `misconception`. When the wrong idea is a mix-up with a concept of the <concepts> or <confusable_concepts> list, also set `confusable_concept_id` to that concept's id. The correct option has neither.
 - In explanations, refer to options by their content, never by letter, because the options are shuffled after you write them."""
+
+# Lines the quiz, review and warm-up v2 rules all send.
+EXPLANATION_AND_POINTS_RULE = "- Every question has an explanation of the correct answer and points from 1 to 5 by complexity."
+SOURCE_EXCERPTS_RULE = "- List in source_excerpts the index of every excerpt a question is based on."
 
 QUESTION_FORMAT_RULES_V2 = f"""Question rules:
 {CHOICE_RULES}
 - short_answer: answerable in 1-3 sentences; give a sample_answer and 2-4 key_points a grader can check.
 - numerical: correct_answer is a plain number; give an absolute tolerance. Give `unit` only when the quantity has one (m/s, mol/L, dollars). For a probability, a count or a ratio leave `unit` empty: never put the name of the quantity there.
 - true_false: correct_answer is a boolean; the explanation says why.
-- Every question has an explanation of the correct answer and points from 1 to 5 by complexity.
+{EXPLANATION_AND_POINTS_RULE}
 - Set `mode` on every question: recall (bring the idea to mind from a cue, in a new situation), discrimination (choose between near-twin ideas; a wrong option names the twin in `confusable_concept_id`) or composition (run the idea inside a chain with other ideas). Use recall unless the concepts support another mode.
-- List in source_excerpts the index of every excerpt a question is based on."""
+{SOURCE_EXCERPTS_RULE}"""
 
-APPLICATION_RULES_V2 = """Question design:
+# One source for the application rule: quiz, exam, review and warm-up all send it, because the later
+# support check quotes the rule the key was computed with.
+RULE_IN_EXCERPTS = "For a new situation, the rule or method it applies has to be in the excerpts, because a later support check quotes it."
+
+APPLICATION_RULES_V2 = f"""Question design:
 - At least half of the questions must apply a concept to a new situation (a fresh scenario, new numbers, a case the course materials do not show) rather than recall a definition or repeat an example.
 - Use numbers, names and scenarios that differ from the worked examples in the excerpts and in the lesson. A student who memorised the examples must not be able to answer by recall.
 - Spread the questions over the topic's ideas, and come back to an idea only from a different angle.
-- Every answer key must follow from the excerpts, because a later check quotes the passage that supports it. For a new situation, the rule or method it applies has to be in the excerpts."""
+- Every answer key must follow from the excerpts. {RULE_IN_EXCERPTS}"""
 
 
 def question_rules():
