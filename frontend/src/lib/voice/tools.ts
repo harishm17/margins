@@ -9,6 +9,8 @@ import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
  * tool result.
  */
 import { z } from 'zod'
+import { promptsV2 } from '@/lib/prompt-revision'
+import { asksConfidence } from '@/lib/voice/pre-run'
 import { prisma } from '@/lib/db/prisma'
 import { ownedTopic } from '@/server/owned'
 import { createRateLimiter } from '@/lib/api/rate-limit'
@@ -154,18 +156,45 @@ export const GUIDED_READING_TOOLS: VoiceToolDefinition[] = [
   },
 ]
 
-/** The tools the coach gets in a style. A topic conversation gets none. */
-export function toolsForStyle(style: CoachStyle): VoiceToolDefinition[] {
-  switch (style) {
-    case 'oral_quiz':
-      return VOICE_TOOLS
-    case 'teach_back':
-      return TEACH_BACK_TOOLS
-    case 'guided_reading':
-      return GUIDED_READING_TOOLS
-    case 'topic_conversation':
-      return []
-  }
+/**
+ * Prompt audit 2026-11-09 (H3): descriptions that say what the code returns. The schemas are the same.
+ * `get_next_question` is described with the two flags that `quizQuestionFlags` adds to its result (H2).
+ */
+const V2_DESCRIPTIONS: Record<string, string> = {
+  get_next_question:
+    'Get the next question of the drill. Returns done: false with question_index and question (question_text, question_type, options for multiple choice, concepts_tested), plus ask_confidence_first and ask_why_if_right; or done: true when the drill is complete.',
+  record_answer:
+    "Record the student's spoken answer to a question and get it graded. The app uses the words the student said since the question was asked, so call it only after they have answered; it returns an error otherwise. Returns is_correct, score (0 to 1), feedback (comment, explanation, and ungraded when the question has no answer key) and, for a wrong answer, where_to_look (pages for the idea). Returns an error if grading is unavailable.",
+  assess_explanation:
+    "Assess the student's spoken explanation of an idea against the claims from their own pages. The app uses the words the student said since your last question, so call it only after they have answered; it returns an error otherwise. Returns what they covered, got wrong or left out, and an action: probe (with probe.type and the gap to ask about), explain or explain_first (with source_claim and its page), ask_new_example, clarify (with a clarifying_question) or wrap_up. Call it when the student has finished explaining, and again after each answer to a probe.",
+}
+
+const withV2Descriptions = (tools: VoiceToolDefinition[]): VoiceToolDefinition[] =>
+  tools.map((tool) => (tool.name in V2_DESCRIPTIONS ? { ...tool, description: V2_DESCRIPTIONS[tool.name] } : tool))
+
+/**
+ * The tools the coach gets in a style. A topic conversation gets none. With `v2` (PROMPTS_V2, area "voice") the
+ * descriptions are the audited ones; without it the result is the v1 list, unchanged.
+ */
+export function toolsForStyle(style: CoachStyle, v2: boolean = promptsV2('voice')): VoiceToolDefinition[] {
+  const tools = ((): VoiceToolDefinition[] => {
+    switch (style) {
+      case 'oral_quiz':
+        return VOICE_TOOLS
+      case 'teach_back':
+        return TEACH_BACK_TOOLS
+      case 'guided_reading':
+        return GUIDED_READING_TOOLS
+      case 'topic_conversation':
+        return []
+    }
+  })()
+  return v2 ? withV2Descriptions(tools) : tools
+}
+
+/** The two quiz steps that depend on a question's place in the drill, decided here so the model does not compute them (H2). */
+export function quizQuestionFlags(questionIndex: number): { ask_confidence_first: boolean; ask_why_if_right: boolean } {
+  return { ask_confidence_first: asksConfidence(questionIndex), ask_why_if_right: questionIndex % 2 === 1 }
 }
 
 const TEACH_TOOL_NAMES = new Set(['get_concept_to_explain', 'assess_explanation', 'next_claim', 'record_check'])
@@ -371,6 +400,7 @@ async function runVoiceTool(
         options: nextQuestion.options || [],
         concepts_tested: nextQuestion.concepts_tested || [],
       },
+      ...(promptsV2('voice') ? quizQuestionFlags(nextIndex) : {}),
     })
   }
 

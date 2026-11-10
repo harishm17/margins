@@ -99,6 +99,12 @@ export function planPreRun(facts: PreRunFacts): PreRunPlan | null {
 /** Keeps a result from closing its own tag. */
 const safe = (json: string) => json.replace(/<\/app_result/gi, '<\\/app_result')
 
+/**
+ * The student's words with any `<app_result` or `</app_result` tag defused, so speech cannot pass for a result from the
+ * app (prompt audit L3). Used only with PROMPTS_V2 on.
+ */
+export const neutralizeAppResultTags = (text: string): string => text.replace(/<(\/?app_result)/gi, '&lt;$1')
+
 /** The text block that carries a step's result to the model, after the student's words. */
 export function appResultBlock(tool: PreRunPlan['tool'], output: Record<string, unknown>): VoiceBlock {
   return { type: 'text', text: `<app_result step="${tool}">${safe(JSON.stringify(output))}</app_result>` }
