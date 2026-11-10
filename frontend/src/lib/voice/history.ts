@@ -5,6 +5,8 @@
  * messages without breaking the pairing of tool calls and tool results.
  */
 
+import { promptsV2 } from '@/lib/prompt-revision'
+
 export type VoiceBlock = { type: string; [key: string]: unknown }
 export type VoiceMessage = { role: 'user' | 'assistant'; content: string | VoiceBlock[] }
 
@@ -66,12 +68,22 @@ export function trimHistory(messages: readonly VoiceMessage[], max = MAX_HISTORY
   return messages.slice(start)
 }
 
+/** With PROMPTS_V2 the history grows to this many messages before it is cut (prompt audit M6)... */
+export const STEPPED_HIGH = 40
+/** ...and is then cut back to about this many, so the start of the conversation, and the cache prefix, stays put between cuts. */
+export const STEPPED_LOW = 20
+
+/** The history as it is, until it passes `high` messages; then the last `low` (cut at a safe start, as `trimHistory`). */
+export function trimHistorySteps(messages: readonly VoiceMessage[], high = STEPPED_HIGH, low = STEPPED_LOW): VoiceMessage[] {
+  return messages.length <= high ? [...messages] : trimHistory(messages, low)
+}
+
 /**
  * The messages as they are stored: thinking blocks are left out (a thinking block is only
  * valid in the conversation that produced it, and a trimmed history is a different one).
- * A message left with no content is dropped.
+ * A message left with no content is dropped. With `v2` the trim is in steps instead of a sliding window.
  */
-export function toStoredHistory(messages: readonly VoiceMessage[], max = MAX_HISTORY_MESSAGES): VoiceMessage[] {
+export function toStoredHistory(messages: readonly VoiceMessage[], max = MAX_HISTORY_MESSAGES, v2: boolean = promptsV2('voice')): VoiceMessage[] {
   const cleaned: VoiceMessage[] = []
   for (const message of messages) {
     if (typeof message.content === 'string') {
@@ -81,7 +93,7 @@ export function toStoredHistory(messages: readonly VoiceMessage[], max = MAX_HIS
     const blocks = message.content.filter((b) => b.type !== 'thinking' && b.type !== 'redacted_thinking')
     if (blocks.length > 0) cleaned.push({ role: message.role, content: blocks })
   }
-  return trimHistory(cleaned, max)
+  return v2 ? trimHistorySteps(cleaned) : trimHistory(cleaned, max)
 }
 
 /** Said in the stored turn after what the student heard (draft copy, for the model only). */

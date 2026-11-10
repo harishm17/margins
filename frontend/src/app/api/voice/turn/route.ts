@@ -50,6 +50,8 @@ import { attachClientTiming, clientTimingSchema, recordTurnTiming } from '@/lib/
 import { planPreRunForSession, startWithPreRun } from '@/lib/voice/pre-run-server'
 import { beginVoiceTurn } from '@/lib/voice/teach-tools'
 import { executeVoiceTool, toolsForStyle, type StepCache } from '@/lib/voice/tools'
+import { promptsV2 } from '@/lib/prompt-revision'
+import { neutralizeAppResultTags } from '@/lib/voice/pre-run'
 import type { VoiceStreamExtra } from '@/lib/voice/turn-contract'
 import { getTimeZone } from '@/server/timezone'
 import { runTurn } from '@/lib/voice/turn-engine'
@@ -198,7 +200,9 @@ async function handlePost(request: NextRequest) {
     // An interrupted reply is stored as what the student heard and a note, so the model does not take the rest as said.
     const stored = parseHistory(session.history)
     const history = interruptedHeard !== undefined ? markInterrupted(stored, interruptedHeard) : stored
-    const userText = utterance || (history.length === 0 ? startMessage(style, context.topicName) : CONTINUE_MESSAGE)
+    // With PROMPTS_V2 the student's words cannot pass for an app_result (prompt audit L3).
+    const spoken = promptsV2('voice') ? neutralizeAppResultTags(utterance) : utterance
+    const userText = spoken || (history.length === 0 ? startMessage(style, context.topicName) : CONTINUE_MESSAGE)
     // The server keeps what the student said, with this turn's number: the tools take an answer from there, not from the model.
     const turn = await beginVoiceTurn(session.id, utterance)
     if (timing) void attachClientTiming(session.id, turn, timing)
