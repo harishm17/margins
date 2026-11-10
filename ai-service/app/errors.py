@@ -30,6 +30,7 @@ PUBLIC_MESSAGES: dict[str, str] = {
     "LLM_BAD_OUTPUT": "The AI returned an answer the app could not use.",
     "LLM_REPLAY_MISS": "No recorded answer exists for this request.",
     "LLM_DAILY_BUDGET": "You've used today's AI allowance.",
+    "AI_UNREACHABLE": "AI features are paused right now.",
     # Jobs.
     "JOB_FAILED": GENERIC_MESSAGE,
     "INVALID_INPUT": "The request was not complete.",
