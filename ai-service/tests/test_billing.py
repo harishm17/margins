@@ -217,9 +217,11 @@ async def test_every_route_is_billed_or_says_why_not():
             assert path in MODEL_ROUTES or path in NO_MODEL_ROUTES, f"{path} is not in test_billing.py"
 
 
+@pytest.mark.parametrize("prompts", ["", "all"])  # the audited prompts (PROMPTS_V2) take the same billed path
 @pytest.mark.parametrize("path", [p for p, (_, _, reachable) in MODEL_ROUTES.items() if reachable])
-async def test_a_model_call_made_for_a_route_carries_the_students_account(path, db, monkeypatch):
+async def test_a_model_call_made_for_a_route_carries_the_students_account(path, prompts, db, monkeypatch):
     body, source, _ = MODEL_ROUTES[path]
+    monkeypatch.setattr(settings, "PROMPTS_V2", prompts)
     await seed_student(db)
     spy = Spy()
     monkeypatch.setattr(LLMFactory, "_instance", BillingProvider(spy))
