@@ -1989,3 +1989,99 @@ class GapExplanationSet(BaseModel):
                 )
             )
         return cls(gaps=gaps)
+
+
+# ---------------------------------------------------------------- ingest area, audited (v2) schemas
+# Picked by `prompts_v2("ingest")`. Only field descriptions differ from the v1 models above, which
+# stay byte-identical for the default path. Delete the v1 models once the area has run on v2.
+
+# One definition of the three edge types, shared by the extractor and linker instructions and by
+# both `type` field descriptions, so the direction of `encompasses` is stated the same way everywhere.
+EDGE_TYPE_DEFINITIONS = """- prerequisite: the source must be known before the target is understood.
+- encompasses: the target is the larger idea and contains the source, so practising the target also exercises the source. weight is how much of the source the target exercises: 0.25, 0.5, 0.75 or 1.
+- confusable: students are likely to mix the two up, because they sound alike, look alike or are easily swapped in an answer. Direction does not matter."""
+
+_EDGE_TYPE_DESCRIPTION_V2 = "How the two concepts relate. " + " ".join(
+    line.lstrip("- ") for line in EDGE_TYPE_DEFINITIONS.splitlines()
+)
+_LINK_TYPE_DESCRIPTION_V2 = "How the two concepts relate. " + " ".join(
+    line.lstrip("- ") for line in EDGE_TYPE_DEFINITIONS.splitlines() if not line.startswith("- prerequisite")
+)
+
+
+class MaterialCheckV2(MaterialCheck):
+    is_valid: bool = Field(description="True when the file is readable material a student could study from")
+
+
+class PlannedTopicV2(PlannedTopic):
+    prerequisite_keys: List[str] = Field(
+        description=(
+            "Keys of EARLIER topics in this plan whose ideas this topic uses directly (for example "
+            "Bayes' theorem builds on conditional probability). Empty for the first topic or one that "
+            "needs nothing earlier"
+        )
+    )
+    estimated_minutes: int = Field(
+        description=(
+            "Minutes to study the topic, 10-90: its sections' token counts in the outline at about "
+            "110 tokens per minute"
+        )
+    )
+
+
+class PlannedUnitV2(PlannedUnit):
+    topics: List[PlannedTopicV2]
+
+
+class CoursePlanV2(CoursePlan):
+    units: List[PlannedUnitV2]
+
+    @classmethod
+    def example(cls) -> "CoursePlanV2":
+        return cls.model_validate(CoursePlan.example().model_dump())
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "CoursePlanV2":
+        return cls.model_validate(CoursePlan.example_for(prompt).model_dump())
+
+
+class ExtractedClaimV2(ExtractedClaim):
+    text: str = Field(
+        description=(
+            "One thing a student who knows the concept can state, in your own words. A recall grader checks "
+            "a student's answer against it, so make it a full statement that makes sense without the excerpt"
+        )
+    )
+
+
+class ExtractedEdgeV2(ExtractedEdge):
+    type: EdgeType = Field(description=_EDGE_TYPE_DESCRIPTION_V2)
+
+
+class ConceptExtractionV2(ConceptExtraction):
+    claims: List[ExtractedClaimV2] = Field(description="2-5 claims per concept")
+    edges: List[ExtractedEdgeV2] = Field(default_factory=list)
+
+    @classmethod
+    def example(cls) -> "ConceptExtractionV2":
+        return cls.model_validate(ConceptExtraction.example().model_dump())
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "ConceptExtractionV2":
+        return cls.model_validate(ConceptExtraction.example_for(prompt).model_dump())
+
+
+class ProposedLinkV2(ProposedLink):
+    type: Literal["confusable", "encompasses"] = Field(description=_LINK_TYPE_DESCRIPTION_V2)
+
+
+class ConceptLinksV2(ConceptLinks):
+    edges: List[ProposedLinkV2] = Field(default_factory=list, description="Only pairs from the candidate list")
+
+    @classmethod
+    def example(cls) -> "ConceptLinksV2":
+        return cls.model_validate(ConceptLinks.example().model_dump())
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "ConceptLinksV2":
+        return cls.model_validate(ConceptLinks.example_for(prompt).model_dump())
