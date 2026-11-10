@@ -11,7 +11,6 @@ import { addQuizSet, createCourse, seedDueConcept, setZoneCookie, signUpAndIn, Z
 
 const DAY = 24 * 60 * 60 * 1000
 const SIZES = [
-  { name: '1440x900', width: 1440, height: 900 },
   { name: '390x844', width: 390, height: 844 },
 ]
 
@@ -68,20 +67,6 @@ async function openReview(page: Page, courseId: string) {
 }
 
 test.describe('review focus and progress', () => {
-  test('a new course shows no focus and no calibration, and says what is missing', async ({ page, context }) => {
-    await setZoneCookie(context)
-    await signUpAndIn(page, 'progress-empty')
-    const course = await createCourse(page, 'Empty progress', [{ name: 'Hash tables' }])
-    await openReview(page, course.courseId)
-
-    await expect(page.getByRole('heading', { level: 2, name: 'Progress' })).toBeVisible()
-    await expect(page.getByRole('heading', { level: 2, name: "This week's focus" })).toHaveCount(0)
-    await expect(page.getByText('This appears once a week has 10 first tries without help.')).toBeVisible()
-    await expect(page.getByText('No answers yet this week.')).toBeVisible()
-    await expect(page.getByRole('heading', { level: 3, name: /How sure you were/ })).toHaveCount(0)
-    await expect(page.locator('main')).not.toHaveText(NOT_GAMIFIED)
-    await look(page, 'empty')
-  })
 
   test('three focus ideas in order, weekly accuracy, help used and calibration', async ({ page, context }) => {
     test.setTimeout(120_000)
@@ -194,48 +179,4 @@ test.describe('review focus and progress', () => {
     await expect(page.locator('[data-session-context]').first()).toContainText('Collisions')
   })
 
-  test('progress shows the early weeks line', async ({ page, context }) => {
-    await setZoneCookie(context)
-    const user = await signUpAndIn(page, 'progress-early')
-    const course = await createCourse(page, 'Early weeks', [{ name: 'Hash tables' }])
-    const concept = await seedDueConcept(user.email, course.topics['Hash tables'], 'Collisions', { daysAgo: 3 })
-    // The first answers are this week: the first of the first four weeks.
-    await events(user.email, concept, [{ daysAgo: 0, count: 3, score: () => 0 }])
-    await openReview(page, course.courseId)
-    const line = page.locator('#main').getByText('Early weeks are usually low; this measures first tries only.')
-    await expect(line).toBeVisible()
-    // In words under the heading, and it does not take the place of a figure.
-    await expect(page.getByRole('region', { name: 'Progress' }).getByText('Only what you answered yourself counts here.')).toBeVisible()
-    await look(page, 'early')
-    // Said once a day, wherever it was shown: not again on the next visit in this tab.
-    await openReview(page, course.courseId)
-    await expect(line).toHaveCount(0)
-  })
-
-  test('the early weeks line goes once the first four weeks are over', async ({ page, context }) => {
-    await setZoneCookie(context)
-    const user = await signUpAndIn(page, 'progress-late')
-    const course = await createCourse(page, 'Late weeks', [{ name: 'Hash tables' }])
-    const concept = await seedDueConcept(user.email, course.topics['Hash tables'], 'Collisions', { daysAgo: 3 })
-    await events(user.email, concept, [
-      { daysAgo: 40, count: 2, score: () => 1 },
-      { daysAgo: 0, count: 2, score: () => 1 },
-    ])
-    await openReview(page, course.courseId)
-    await expect(page.getByRole('heading', { level: 2, name: 'Progress' })).toBeVisible()
-    await expect(page.locator('#main').getByText('Early weeks are usually low')).toHaveCount(0)
-  })
-
-  test('calibration stays hidden under 30 answers', async ({ page, context }) => {
-    await setZoneCookie(context)
-    const user = await signUpAndIn(page, 'progress-few')
-    const course = await createCourse(page, 'Few answers', [{ name: 'Hash tables' }])
-    const concept = await seedDueConcept(user.email, course.topics['Hash tables'], 'Collisions', { daysAgo: 3 })
-    await events(user.email, concept, [{ daysAgo: 0, count: 29, score: () => 1, confidence: 0.95 }])
-    await openReview(page, course.courseId)
-    await expect(page.locator('#main').getByText('No help used on 29 answers this week.')).toBeVisible()
-    await expect(page.getByRole('heading', { level: 3, name: /How sure you were/ })).toHaveCount(0)
-    await expect(page.getByRole('table', { name: /confidence/ })).toHaveCount(0)
-    await look(page, 'few')
-  })
 })

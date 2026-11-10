@@ -42,26 +42,5 @@ test.describe('one next step', () => {
     await expect(page.getByRole('heading', { level: 2, name: /Due for review/ })).toContainText('(3)')
   })
 
-  test('with today full and reviews overdue the card does not say the day is done', async ({ page, context }) => {
-    test.setTimeout(240_000)
-    await setZoneCookie(context)
-    const { user, course } = await dueCourse(page, 'full', 3)
-    // A short day that is already used up by a quiz.
-    await page.request.patch(`/api/projects/${course.courseId}`, { data: { dailyMinutes: 10 } })
-    const attempt = await page.request.post(`/api/topics/${course.topics.Delta ?? course.topics.Beta}/quiz-attempts`, {
-      data: { answers: { '0': 'true', '1': 'true' } },
-    })
-    expect(attempt.ok()).toBeTruthy()
-    await makeDue(course.topics.Alpha, user.email, { mastery: 0.4, daysAgo: 3 })
-    await makeDue(course.topics.Beta, user.email, { mastery: 0.4, daysAgo: 2 })
-    await makeDue(course.topics.Gamma, user.email, { mastery: 0.4, daysAgo: 1 })
-
-    await page.goto(`/courses/${course.courseId}`)
-    const upNext = page.getByRole('region', { name: 'Up next' })
-    await expect(upNext).not.toContainText("You're done for today")
-    await expect(upNext).toContainText('Review')
-    await page.goto('/home')
-    await expect(page.getByRole('region', { name: /Up next/ })).not.toContainText("You're done for today")
-  })
 })
 

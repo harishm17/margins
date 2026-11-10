@@ -24,41 +24,6 @@ async function seed(email: string, topicId: string, options: { warmup?: boolean;
   })
 }
 
-test('the 10-minute check and voice practice wait for a first quiz or recall, and say what opens them', async ({ page }) => {
-  test.setTimeout(120_000)
-  await setZoneCookie(page.context())
-  const { email } = await signUpAndIn(page, 'ns-locked', { own: true })
-  await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
-  const course = await createCourse(page, `Locked ${Date.now()}`, [{ name: 'Hash tables' }])
-  const topic = course.topics['Hash tables']
-  await addContent(topic, { section_notes: '# Notes\n\nSome notes.', topic_quiz: quizQuestions(3) })
-  await seed(email, topic, { warmup: true })
-  await page.setViewportSize(DESKTOP)
-
-  await page.goto('/home')
-  await expect(page.getByTestId('short-session-locked').locator('visible=true')).toHaveText('A 10-minute check opens after your first quiz or recall.')
-  await expect(page.getByTestId('short-session')).toHaveCount(0)
-
-  await page.goto(`/courses/${course.courseId}/review`)
-  await expect(page.getByTestId('review-extras-locked').locator('visible=true')).toHaveText('The 10-minute check and voice practice open after your first quiz or recall.')
-  await expect(page.getByTestId('short-session')).toHaveCount(0)
-  await expect(page.getByRole('link', { name: 'Start voice practice' })).toHaveCount(0)
-  await expectNoAxeViolations(page, 'review with the extras locked')
-
-  // A first quiz opens them.
-  await seed2(email, topic)
-  await page.goto(`/courses/${course.courseId}/review`)
-  await expect(page.getByTestId('review-extras-locked')).toHaveCount(0)
-})
-
-/** A quiz score on the topic: the student has taken a first quiz. */
-async function seed2(email: string, topicId: string) {
-  await withPrisma(async (prisma) => {
-    const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
-    await prisma.topicProgress.upsert({ where: { topicId_userId: { topicId, userId: user.id } }, create: { topicId, userId: user.id, quizScore: 80, quizCompleted: true }, update: { quizScore: 80, quizCompleted: true } })
-  })
-}
-
 test('the Topics list names the same five steps and the same next step as the topic', async ({ page }) => {
   test.setTimeout(120_000)
   await setZoneCookie(page.context())

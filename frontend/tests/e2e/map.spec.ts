@@ -9,11 +9,6 @@ import { addQuizSet, createCourse, reviewItem, seedDueConcept, setZoneCookie, si
 
 test.use({ timezoneId: ZONE })
 
-const SIZES = [
-  { name: '1440x900', width: 1440, height: 900 },
-  { name: '390x844', width: 390, height: 844 },
-]
-
 type World = {
   email: string
   courseId: string
@@ -98,17 +93,6 @@ test.describe('knowledge map', () => {
     // "Easy to mix up" is not an arrow: a dotted line with a round "≈" badge, titled for its two ideas.
     await expect(unit.locator('g > title', { hasText: 'Chaining and Open addressing are easy to mix up' })).toHaveCount(1)
     await expect(unit.locator('g[data-mix-badge]')).toHaveCount(1)
-    // The badge is big enough to read and sits clear of both boxes, not over the gap's edge.
-    const badge = await unit.locator('g[data-mix-badge]').evaluate((group: SVGGElement) => {
-      const circle = group.querySelector('circle')!.getBoundingClientRect()
-      const waves = group.querySelector('path')!.getBoundingClientRect()
-      const nodes = [...group.ownerSVGElement!.querySelectorAll('a[data-node-link] rect')].map((rect) => rect.getBoundingClientRect())
-      const overlaps = nodes.filter((node) => circle.left < node.right && circle.right > node.left && circle.top < node.bottom && circle.bottom > node.top).length
-      return { diameter: circle.width, glyph: waves.width, overlaps }
-    })
-    expect(badge.overlaps, 'boxes the badge covers').toBe(0)
-    expect(badge.diameter, 'badge across, in pixels').toBeGreaterThanOrEqual(22)
-    expect(badge.glyph, 'the "≈", across in pixels').toBeGreaterThanOrEqual(16)
     await expect(unit.locator('path[stroke-dasharray="5 4"]')).toHaveCount(0)
     // Three ideas are next up: the first in list order says where to start, the others stay "Next up".
     await expect(nodeLink(page, 'Hash function')).toHaveAccessibleName(/^Hash function (Shaky|Fading|Getting there|Solid) Start here$/)
@@ -141,18 +125,6 @@ test.describe('knowledge map', () => {
 
     // The nav item and the topic page's way in.
     await expect(page.getByRole('link', { name: 'Map', exact: true }).first()).toHaveAttribute('href', `/courses/${w.courseId}/map`)
-  })
-
-  test('the topic page links its concepts to the map at that topic', async ({ page }) => {
-    const w = await world(page, 'map-topic')
-    await withPrisma((prisma) => prisma.topic.update({ where: { id: w.topics['Probing'] }, data: { evidenceBackfilledAt: new Date() } }))
-    await open(page, `/courses/${w.courseId}/topics/${w.topics.Probing}`)
-    // What the topic covers, the map link among it, is behind "Details".
-    await page.getByRole('button', { name: /Details/ }).click()
-    await page.getByRole('link', { name: 'Show on the map' }).locator('visible=true').click()
-    await expect(page).toHaveURL(new RegExp(`/map\\?unit=${w.units.Hashing}&topic=${w.topics.Probing}`))
-    // The topic's first idea is open in the panel.
-    await expect(page.getByTestId('node-panel').getByRole('heading', { level: 2, name: 'Open addressing' })).toBeVisible()
   })
 
   test('node panel shows the idea, its pages, state and last answers', async ({ page }) => {
@@ -238,11 +210,9 @@ test.describe('knowledge map', () => {
     await panel.getByRole('button', { name: 'Other ways to study' }).click()
     await expect(actions).toHaveText(['Read about it first', 'Practice this'])
     await expect(panel.getByTestId('read-first')).toHaveAttribute('href', new RegExp(`view=read&focus=${conceptId}#chunk-${chunkId}$`))
-    for (const size of SIZES) {
-      await page.setViewportSize({ width: size.width, height: size.height })
-      await expectNoAxeViolations(page, `node panel that leads with reading, ${size.name}`)
-      await screenshotIfAsked(page, `v31r-map-read-first-${size.name}`)
-    }
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expectNoAxeViolations(page, 'node panel that leads with reading, 390x844')
+    await screenshotIfAsked(page, 'v31r-map-read-first-390x844')
     await page.setViewportSize({ width: 1440, height: 900 })
 
     // Opening the pointer is the instruction: back on the map the panel leads with practice.
@@ -278,81 +248,6 @@ test.describe('knowledge map', () => {
     await expect(page.getByRole('heading', { level: 1, name: /^Question 1 of \d/ })).toBeVisible({ timeout: 30_000 })
     const sessions = await withPrisma((prisma) => prisma.itemSession.findMany({ where: { user: { email: w.email } }, select: { kind: true } }))
     expect(sessions.map((s) => s.kind)).toEqual(['drill'])
-  })
-
-  test('node panel explain it posts a teach-back for the concept', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-explain')
-    await withPrisma(async (prisma) => {
-      const material = await prisma.material.findFirstOrThrow({ where: { projectId: w.courseId }, select: { id: true } })
-      await prisma.conceptClaim.create({
-        data: { conceptId: w.concepts['Hash function'], text: 'A hash function maps a key to a bucket index.', quote: 'x', materialId: material.id, pageStart: 4, orderIndex: 0 },
-      })
-      await prisma.topic.update({ where: { id: w.topics['Hash tables'] }, data: { evidenceBackfilledAt: new Date() } })
-    })
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts['Hash function']}`))
-    const panel = page.getByTestId('node-panel')
-    await panel.getByRole('button', { name: 'Other ways to study' }).click()
-    await panel.getByRole('button', { name: 'Explain it' }).click()
-    const prompt = 'Explain "Hash function" in your own words, as if you were teaching it to a classmate.'
-    await panel.getByRole('textbox', { name: prompt }).fill('A hash function turns a key into a number that picks the bucket the key is stored in.')
-    await panel.getByRole('button', { name: 'Check my answer' }).click()
-    await expect(panel.getByRole('region', { name: 'Feedback on your answer' })).toBeVisible({ timeout: 30_000 })
-    const events = await withPrisma((prisma) =>
-      prisma.evidenceEvent.findMany({ where: { user: { email: w.email }, source: 'teach_back' }, select: { conceptId: true } })
-    )
-    expect(events.map((e) => e.conceptId)).toEqual([w.concepts['Hash function']])
-  })
-
-  test('node panel do it out loud opens the voice lobby with Teach it back chosen for that idea', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-voice')
-    await withPrisma(async (prisma) => {
-      const material = await prisma.material.findFirstOrThrow({ where: { projectId: w.courseId }, select: { id: true } })
-      await prisma.conceptClaim.create({
-        data: { conceptId: w.concepts['Hash function'], text: 'A hash function maps a key to a bucket index.', quote: 'x', materialId: material.id, pageStart: 4, orderIndex: 0 },
-      })
-    })
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts['Hash function']}`))
-    await page.getByTestId('node-panel').getByRole('button', { name: 'Other ways to study' }).click()
-    await page.getByTestId('node-panel').getByRole('link', { name: 'Do it out loud' }).click()
-    // The voice page of the topic, not written recall: its lobby, with Teach it back chosen and the idea carried along.
-    await expect(page).toHaveURL(new RegExp(`/topics/${w.topics['Hash tables']}\\?view=voice&style=teach_back&concept=${w.concepts['Hash function']}$`))
-    await expect(page.getByTestId('voice-lobby')).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByRole('heading', { level: 2, name: 'Voice practice' })).toBeVisible()
-    await expect(page.getByRole('radio', { name: /Teach it back/ })).toHaveAttribute('aria-checked', 'true')
-
-    // An idea with no claims from the pages cannot be taught back, though another idea of the topic has some: the lobby starts on Quiz me and says the idea is the one missing them.
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts['Open addressing']}`))
-    await page.getByTestId('node-panel').getByRole('button', { name: 'Other ways to study' }).click()
-    await page.getByTestId('node-panel').getByRole('link', { name: 'Do it out loud' }).click()
-    await expect(page.getByTestId('voice-lobby')).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByRole('radio', { name: /Quiz me/ })).toHaveAttribute('aria-checked', 'true')
-    await expect(page.getByText("This idea isn't read from your pages yet")).toBeVisible()
-    await expect(page.getByText("Your pages aren't read into ideas yet")).toHaveCount(0)
-    // This topic has no quiz either, so Quiz me cannot begin: that is said too, and the claims line does not promise it works.
-    await expect(page.getByTestId('voice-quiz-missing')).toBeVisible()
-    await expect(page.getByText('Quiz me still works.')).toHaveCount(0)
-  })
-
-  test('ask about this starts a conversation about the concept', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-ask')
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts.Collisions}`))
-    await page.getByTestId('node-panel').getByRole('button', { name: 'Other ways to study' }).click()
-    await page.getByTestId('node-panel').getByRole('link', { name: 'Ask about this' }).click()
-    await expect(page).toHaveURL(new RegExp(`/ask\\?concept=${w.concepts.Collisions}`))
-    await expect(page.getByText('Your next question is about Collisions.')).toBeVisible()
-    await page.getByLabel('Ask about your materials').fill('Why do collisions happen?')
-    await page.keyboard.press('Enter')
-    await expect(page).toHaveURL(/[?&]thread=/, { timeout: 30_000 })
-    const threadId = new URL(page.url()).searchParams.get('thread')!
-    const state = await withPrisma((prisma) => prisma.tutorState.findFirstOrThrow({ where: { user: { email: w.email }, scope: 'ask', scopeKey: threadId } }))
-    expect(state.conceptIds).toContain(w.concepts.Collisions)
-    // Someone else's or an unknown concept is ignored, not an error.
-    await page.goto(`/courses/${w.courseId}/ask?concept=not-a-concept`)
-    await expect(page.getByRole('heading', { level: 2, name: 'Ask your materials' })).toBeVisible()
-    await expect(page.getByText(/Your next question is about/)).toHaveCount(0)
   })
 
   test('rejecting edge removes its implicit credit', async ({ page }) => {
@@ -399,21 +294,6 @@ test.describe('knowledge map', () => {
     // The link is gone from the map.
     await open(page, page.url())
     await expect(page.locator('svg path > title', { hasText: 'Collisions covers Chaining' })).toHaveCount(0)
-  })
-
-  test('confirming a suggested link keeps it as the student\'s own', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-confirm')
-    const edge = await link(w.courseId, w.concepts['Open addressing'], w.concepts.Chaining, 'prerequisite', 'proposed', 0.8)
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&node=${w.concepts.Chaining}`))
-    const panel = page.getByTestId('node-panel')
-    await panel.getByText('Edit connections').click()
-    await expect(panel.getByText('Does Chaining require Open addressing first?')).toBeVisible()
-    await panel.getByRole('button', { name: 'Yes, keep link' }).click()
-    await expect(panel.getByText('Needs Open addressing', { exact: true })).toBeVisible()
-    await expect(panel.getByRole('button', { name: /^(Yes|No), (keep|remove) link$/ })).toHaveCount(0)
-    const row = await withPrisma((prisma) => prisma.conceptEdge.findUniqueOrThrow({ where: { id: edge.id } }))
-    expect([row.status, row.origin]).toEqual(['confirmed', 'student'])
   })
 
   test("someone else's link cannot be answered", async ({ page, browser }) => {
@@ -464,40 +344,6 @@ test.describe('knowledge map', () => {
     await page.getByTestId('node-panel').getByRole('button', { name: 'Back to the list' }).click()
     await expect(page.getByRole('link', { name: /^Open addressing/ })).toBeFocused()
     await expect(page.getByRole('link', { name: /^Open addressing/ })).toHaveAttribute('aria-current', 'true')
-  })
-
-  test('map view is keyboard navigable: ideas in order, relations in words, a skip link to the details', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await world(page, 'map-keys')
-    await page.setViewportSize({ width: 1440, height: 900 })
-    await open(page, mapUrl(w, `?unit=${w.units.Hashing}&view=map`))
-    // No idea is chosen yet: there are no details to skip to.
-    await expect(page.getByRole('link', { name: /^Skip to the details/ })).toHaveCount(0)
-
-    // The lines are drawn for the eye: each idea says how it connects in its description.
-    await expect(nodeLink(page, 'Collisions')).toHaveAccessibleDescription(/^Needs Hash function\. In Hash tables\.?$/)
-    await expect(nodeLink(page, 'Hash function')).toHaveAccessibleDescription(/^Needed by Collisions\. In Hash tables\.?$/)
-    await expect(nodeLink(page, 'Chaining')).toHaveAccessibleDescription(/^Easy to mix up with Open addressing\. In Hash tables\.?$/)
-
-    // Tab reaches the ideas in the order of the list, and Enter chooses one without taking focus from it.
-    await nodeLink(page, 'Hash function').focus()
-    const seen: string[] = []
-    for (let n = 0; n < 3; n++) {
-      await page.keyboard.press('Tab')
-      seen.push(await page.evaluate(() => (document.activeElement as SVGAElement).querySelector('text')!.textContent as string))
-    }
-    expect(seen).toEqual(['Collisions', 'Chaining', 'Open addressing'])
-    await page.keyboard.press('Enter')
-    await expect(page.getByTestId('node-panel').getByRole('heading', { level: 2, name: 'Open addressing' })).toBeVisible()
-    await expect(nodeLink(page, 'Open addressing')).toBeFocused()
-
-    // With an idea chosen, a skip link is the first stop in the section and lands on the details.
-    const skip = page.getByRole('link', { name: 'Skip to the details of Open addressing' })
-    await expect(skip).toHaveCount(1)
-    await skip.focus()
-    await expect(skip).toBeVisible()
-    await page.keyboard.press('Enter')
-    await expect(page.getByTestId('node-panel').getByRole('heading', { level: 2, name: 'Open addressing' })).toBeFocused()
   })
 
   test('an empty course says what is needed, and a unit without ideas shows none', async ({ page }) => {

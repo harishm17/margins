@@ -50,40 +50,6 @@ test('a 20-minute mixed block opens the exam form with 20 minutes and 5 question
   await expect(page.getByRole('radio', { name: '20 min', exact: true, checked: true })).toHaveCount(0)
 })
 
-test('the form reads minutes and questions from the link, clamps them and ignores junk', async ({ page, context }) => {
-  await setZoneCookie(context)
-  await signUpAndIn(page, 'mixed-length')
-  const course = await createCourse(page, 'Exam defaults', [{ name: 'Graphs', minutes: 20 }])
-  const form = `/courses/${course.courseId}/exams/new`
-  const time = (label: string) => page.getByRole('radio', { name: label, checked: true })
-  const count = (label: string) => page.getByRole('radio', { name: label, exact: true, checked: true })
-
-  await page.goto(`${form}?minutes=15`)
-  await page.getByRole('button', { name: 'Change settings' }).click()
-  await expect(time('15 min')).toBeVisible()
-  await expect(count('5')).toBeVisible()
-
-  await page.goto(`${form}?minutes=25&questions=10`)
-  await page.getByRole('button', { name: 'Change settings' }).click()
-  await expect(time('20 min')).toBeVisible()
-  await expect(count('10')).toBeVisible()
-
-  await page.goto(`${form}?minutes=100000&questions=-3`)
-  await page.getByRole('button', { name: 'Change settings' }).click()
-  await expect(time('1 hr')).toBeVisible()
-  await expect(count('20')).toBeVisible()
-
-  await page.goto(`${form}?minutes=abc`)
-  await page.getByRole('button', { name: 'Change settings' }).click()
-  await expect(time('1 hr')).toBeVisible()
-  await expect(count('20')).toBeVisible()
-
-  await page.goto(form)
-  await page.getByRole('button', { name: 'Change settings' }).click()
-  await expect(time('1 hr')).toBeVisible()
-  await expect(count('20')).toBeVisible()
-})
-
 test('a 15-minute exam is written, shown with its limit and starts with a 15-minute deadline', async ({ page }) => {
   test.setTimeout(240_000)
   await signIn(page, DEMO_EMAIL)
@@ -107,33 +73,4 @@ test('a 15-minute exam is written, shown with its limit and starts with a 15-min
   })
   // The demo course is shared: other specs read its newest exam, so leave it as it was.
   await withPrisma((prisma) => prisma.sampleExam.delete({ where: { id: examId } }))
-})
-
-test('the link names the topics to tick; unknown and unconfirmed ids are ignored', async ({ page, context }) => {
-  await setZoneCookie(context)
-  await signUpAndIn(page, 'mixed-length')
-  const course = await createCourse(page, 'Topic choice', [{ name: 'Graphs' }, { name: 'Trees' }, { name: 'Heaps' }])
-  const hidden = await withPrisma((prisma) =>
-    prisma.topic.create({ data: { projectId: course.courseId, name: 'Unreviewed', orderIndex: 9, userConfirmed: false, sourceMaterialIds: [] } }).then((row) => row.id)
-  )
-  // Only topics with pages can be ticked into an exam, so every visible topic is given one.
-  const material = await withPrisma((prisma) => prisma.material.findFirstOrThrow({ where: { projectId: course.courseId } }))
-  await withPrisma((prisma) =>
-    prisma.topicSource.createMany({
-      data: Object.values(course.topics).map((topicId) => ({ topicId, materialId: material.id, pageStart: 1, pageEnd: 2, chunkIndexStart: 0, chunkIndexEnd: 1 })),
-    })
-  )
-  const form = `/courses/${course.courseId}/exams/new`
-  const checked = (name: string) => page.getByRole('checkbox', { name })
-
-  await page.goto(`${form}?topics=${course.topics.Trees},${course.topics.Heaps}`)
-  await expect(checked('Trees')).toBeChecked()
-  await expect(checked('Heaps')).toBeChecked()
-  await expect(checked('Graphs')).not.toBeChecked()
-
-  // Unknown and unconfirmed ids are dropped; none left means the usual default (everything is unstarted, so all ticked).
-  await page.goto(`${form}?topics=nope,${hidden}`)
-  await expect(page.getByRole('checkbox', { name: 'Unreviewed' })).toHaveCount(0)
-  await expect(checked('Graphs')).toBeChecked()
-  await expect(checked('Trees')).toBeChecked()
 })

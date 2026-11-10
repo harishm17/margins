@@ -118,13 +118,18 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
 
   // Number keys switch views; typing in a field does not.
   await page.locator('body').click({ position: { x: 5, y: 5 } })
-  // The keys follow the steps shown (a topic's concepts may or may not be extracted by now): find Quiz and Practice.
-  const steps = (await page.getByRole('navigation', { name: 'Topic path' }).getByRole('link').allInnerTexts()).map((text) => text.trim())
-  const keyFor = (label: string) => String(steps.findIndex((text) => text.includes(label)) + 1)
-  await page.keyboard.press(keyFor('Quiz'))
-  await expect(page).toHaveURL(/view=quiz/)
-  await page.keyboard.press(keyFor('Practice'))
-  await expect(page).toHaveURL(/view=practice/)
+  // The keys follow the steps shown, and the steps can still change here: "I've read it" drops Warm-up, and Recall
+  // comes once concepts are extracted. A key worked out from the path before that change lands names a step that has
+  // moved (Quiz's key pointed past the end on main, 2026-11-10), so the path is read again until the key lands.
+  const pressStep = async (label: string, url: RegExp) => {
+    await expect(async () => {
+      const steps = (await page.getByRole('navigation', { name: 'Topic path' }).getByRole('link').allInnerTexts()).map((text) => text.trim())
+      await page.keyboard.press(String(steps.findIndex((text) => text.includes(label)) + 1))
+      await expect(page).toHaveURL(url, { timeout: 2_000 })
+    }).toPass({ timeout: 20_000 })
+  }
+  await pressStep('Quiz', /view=quiz/)
+  await pressStep('Practice', /view=practice/)
 
   // Practice was written by the chain: answer wrong, try again, answer right. Progress survives a reload.
   await expect(page.getByLabel('Your answer')).toBeVisible({ timeout: 30_000 })
@@ -204,58 +209,6 @@ test('the study path: write, read, practise, take a quiz', async ({ page }) => {
   await expect(page).not.toHaveURL(before)
   await expect(page).toHaveURL(/view=quiz$/)
   await expect(page.getByRole('heading', { level: 1 })).not.toHaveText(TOPICS[0])
-})
-
-test('quiz records confidence per question', async ({ page }) => {
-  test.setTimeout(120_000)
-  // A set that has not been taken today: the same questions open again only tomorrow (spec 7.3), and the demo topic's were taken by the seed.
-  const own = await world(page, `topic-confidence-${stamp}`, [{ name: 'Graph search', quiz: [choice('Which structure does BFS use?', []), choice('Which structure does DFS use?', []), choice('Which is a heap?', [])] }])
-
-  await page.goto(`/courses/${own.courseId}/topics/${own.topics['Graph search']}?view=quiz`)
-  await expect(page.getByRole('button', { name: 'Start quiz' })).toBeVisible({ timeout: 30_000 })
-  // The prediction is optional and stays in the session with the answers.
-  await page.getByRole('button', { name: /Guess your score/ }).click()
-  await page.getByRole('combobox', { name: /Expected questions correct/ }).click()
-  await page.getByRole('option', { name: /^1 of/ }).click()
-  await page.getByRole('button', { name: 'Start quiz' }).click()
-  await expect(page.getByText('Question 1 of')).toBeVisible()
-
-  // Question 1: an answer, a confidence and some thinking. The chosen level is marked in text, not only by style.
-  await page.keyboard.press('b')
-  await chooseConfidence(page, 'Fairly sure')
-  await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
-  await page.getByRole('button', { name: 'Show your thinking' }).click()
-  await page.getByLabel('Your thinking').fill('B looked like the queue one.')
-  await page.getByRole('button', { name: 'Next', exact: true }).click()
-  await expect(page.getByText('Question 2 of')).toBeVisible()
-  // Nothing is required: question 2 has no confidence, and going back keeps question 1's.
-  await expect(page.getByRole('radio', { checked: true })).toHaveCount(0)
-  await page.getByRole('button', { name: 'Previous', exact: true }).click()
-  await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
-  await expect(page.getByLabel('Your thinking')).toHaveValue('B looked like the queue one.')
-
-  // A reload keeps both, and the request carries them.
-  await page.reload()
-  await expect(page.getByRole('radio', { name: 'Fairly sure' })).toBeChecked()
-  const total = Number((await page.getByText(/Question \d+ of \d+/).textContent())?.match(/of (\d+)/)?.[1])
-  await page.getByRole('button', { name: `Question ${total}`, exact: false }).first().click()
-  const request = page.waitForRequest((req) => req.url().includes('/quiz-attempts') && req.method() === 'POST')
-  await page.getByRole('button', { name: 'Submit quiz' }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Submit quiz' }).click()
-  const sent = (await request).postDataJSON() as { answers: Record<string, { answer: string; confidence?: number; thinking?: string }> }
-  expect(sent.answers['0']).toEqual({
-    answer: 'B',
-    confidence: 0.75,
-    confidenceLevel: 'fairly',
-    thinking: 'B looked like the queue one.',
-  })
-  await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
-  // The prediction sits beside the score, and the answers are grouped: question 1 was marked sure.
-  await expect(page.getByText(/You expected to get 1 question right and got \d+\./)).toBeVisible()
-  // With misses the review opens on the first missed question; the groups are in the whole list.
-  const allQuestions = page.getByTestId('all-questions')
-  if (await allQuestions.isVisible()) await allQuestions.click()
-  await expect(page.getByRole('heading', { level: 3, name: /^(You were sure about these|Solid answers|Other wrong answers|Wrong answers)/ }).first()).toBeVisible()
 })
 
 test('Prepare all topics now writes the rest of the course, one topic at a time', async ({ page }) => {

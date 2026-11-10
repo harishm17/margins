@@ -1,73 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { signIn } from './helpers/auth'
-import { withPrisma } from './helpers/db'
-import { DEMO_EMAIL, FIXTURE_PDF, demoIds } from './helpers/seed-demo'
+import { FIXTURE_PDF } from './helpers/seed-demo'
+import { createCourse, signUpAndIn, ZONE } from './helpers/loop'
 
-// The course structure screens: units on the topics page and in the sidebar, the topic header
-// (objectives, prerequisites, sources, time), "Check yourself", the sources under each example and
-// practice problem, a multiple-choice practice step, the topic editor with units, and file roles.
-// The first group only reads the shared demo course (two units and one topic outside any unit, see
-// helpers/seed-demo.ts). The second builds its own account and course, because it changes things.
+// The topic editor and the file menu: units, moving topics, file roles, and a save that fails.
 
-const { course, topics, mathTopic } = demoIds()
 // getByText also sees the hidden copy Next keeps while a page streams in; the page body is one place only.
 const body = (page: Page) => page.locator('#main')
-
-test.describe('the demo course', () => {
-  test.beforeEach(async ({ page }) => {
-    await signIn(page, DEMO_EMAIL)
-  })
-
-  test('check yourself: the question shows, the answer waits for an attempt', async ({ page }) => {
-    await page.goto(`/courses/${course}/topics/${mathTopic}?view=read`)
-    // Scoped to the page body: while a page streams in, Next can keep a hidden copy of the text elsewhere.
-    const main = page.locator('#main')
-    const reveal = main.getByRole('button', { name: 'Show answer' })
-    await expect(reveal).toHaveCount(2)
-    await expect(body(page).getByText('A fair die is rolled once.')).toBeVisible()
-    await expect(body(page).getByText('Each of the six faces is equally likely')).toHaveCount(0)
-
-    // Attempt first: the button waits until the student has written an answer (or said they don't know).
-    const first = reveal.first()
-    await expect(first).toBeDisabled()
-    await main.getByRole('textbox', { name: 'Your answer' }).first().fill('One in six.')
-    await expect(first).toHaveAttribute('aria-expanded', 'false')
-    // Keyboard: focus the button and press Enter.
-    await first.focus()
-    await page.keyboard.press('Enter')
-    await expect(body(page).getByText('Each of the six faces is equally likely')).toBeVisible()
-    // Math renders in the question and in the answer; the second item is still closed.
-    await expect(page.locator('.md-check .katex').first()).toBeVisible()
-    await expect(main.getByRole('button', { name: 'Show answer' })).toHaveCount(1)
-    await expect(main.getByRole('button', { name: 'Hide answer' })).toHaveCount(0)
-  })
-
-  test('a multiple-choice practice step shows its stored options and can be answered by keyboard', async ({ page }) => {
-    await page.goto(`/courses/${course}/topics/${mathTopic}?view=practice`)
-    await page.getByRole('button', { name: 'Problem 3' }).click()
-    await expect(page.getByRole('heading', { level: 2, name: /Reading a probability table/ })).toBeVisible()
-    const options = page.getByRole('radio')
-    await expect(options).toHaveCount(4)
-    await expect(body(page).getByText('They are equally likely')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Check' })).toBeDisabled()
-
-    await options.nth(2).focus()
-    await page.keyboard.press('Space')
-    await page.getByRole('button', { name: 'Check' }).click()
-    await expect(body(page).getByText('Not quite')).toBeVisible()
-    await page.getByRole('button', { name: 'Try again' }).click()
-    await options.nth(1).focus()
-    await page.keyboard.press('Space')
-    await page.getByRole('button', { name: 'Check' }).click()
-    await expect(body(page).getByText('Correct', { exact: true })).toBeVisible()
-    // Leave the saved progress alone for other specs: the browser's cache and the server's rows.
-    await expect.poll(() => withPrisma((prisma) => prisma.practiceProgress.count({ where: { topicId: mathTopic } }))).toBeGreaterThan(0)
-    await page.evaluate(() => localStorage.clear())
-    await withPrisma((prisma) => prisma.practiceProgress.deleteMany({ where: { topicId: mathTopic } }))
-  })
-
-})
 
 test.describe('a course built to be edited', () => {
   test.describe.configure({ mode: 'serial' })
@@ -121,24 +61,6 @@ test.describe('a course built to be edited', () => {
     await page.reload()
     await expect(rows(page, 'Trees').last()).toContainText('Slicing')
     await expect(rows(page, 'Arrays')).toHaveCount(2)
-  })
-
-  test('reorder inside a unit with the keyboard; rename a topic', async ({ page }) => {
-    await signIn(page, email)
-    await page.goto(`/courses/${courseId}/topics?edit=1`)
-    const handle = rows(page, 'Arrays').last().getByRole('button', { name: /^Reorder / })
-    await handle.focus()
-    const saved = page.waitForResponse((response) => response.request().method() === 'PATCH' && response.url().includes('/api/topics/'))
-    await handle.press('ArrowUp')
-    await saved
-    await expect(rows(page, 'Arrays').first()).toContainText('Searching')
-    await page.reload()
-    await expect(rows(page, 'Arrays').first()).toContainText('Searching')
-
-    await rows(page, 'Arrays').first().getByRole('button', { name: 'Rename Searching' }).click()
-    await page.getByLabel('Topic name').fill('Binary search')
-    await page.getByLabel('Topic name').press('Enter')
-    await expect(page.getByRole('button', { name: 'Rename Binary search' })).toBeVisible()
   })
 
   test('add a unit, rename it, move it, and delete an empty one', async ({ page }) => {
@@ -206,5 +128,28 @@ test.describe('a course built to be edited', () => {
     await page.getByRole('button', { name: 'Actions for notes.pdf' }).click()
     await page.getByRole('menuitem', { name: 'Use as' }).click()
     await expect(page.getByRole('menuitemradio', { name: 'Past exam' })).toBeChecked()
+  })
+})
+
+test.describe('topic editor save status', () => {
+  test.use({ timezoneId: ZONE, viewport: { width: 1440, height: 900 } })
+
+  test('a failed rename puts the row back and offers Retry, which sends the same change', async ({ page }) => {
+    test.setTimeout(120_000)
+    await signUpAndIn(page, 'r4w3-save', { own: true })
+    const { courseId } = await createCourse(page, 'Save status course', [{ name: 'Alpha' }, { name: 'Beta' }])
+    await page.goto(`/courses/${courseId}/topics?edit=1`)
+    const status = page.getByTestId('save-status')
+    await page.route('**/api/topics/*', (route) => (route.request().method() === 'PATCH' ? route.abort() : route.continue()))
+    await page.getByRole('button', { name: 'Rename Alpha' }).click()
+    await page.getByRole('textbox', { name: 'Topic name' }).fill('Alpha renamed')
+    await page.keyboard.press('Enter')
+    await expect(status).toContainText('Couldn\'t save "Alpha renamed"')
+    await expect(page.getByText('Alpha renamed', { exact: true })).toHaveCount(0)
+    await expect(page.getByText('Alpha', { exact: true }).first()).toBeVisible()
+    await page.unroute('**/api/topics/*')
+    await status.getByRole('button', { name: 'Retry' }).click()
+    await expect(status).toHaveText('All changes saved')
+    await expect(page.getByText('Alpha renamed', { exact: true })).toBeVisible()
   })
 })

@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 import { signIn } from './helpers/auth'
-import { FIXTURE_DOCX, FIXTURE_PDF } from './helpers/seed-demo'
+import { withPrisma } from './helpers/db'
+import { addFileRow, signUpAndIn } from './helpers/loop'
+import { DEMO_EMAIL, FIXTURE_DOCX, FIXTURE_PDF, demoIds } from './helpers/seed-demo'
 
 // Course setup end to end: materials, topic editor, content build, topics list, then Home and
 // the Today view. One account per run so it can run again against the same database.
@@ -163,3 +165,81 @@ test('starting the first topic writes its notes, then topics list and materials'
   await expect(page.getByTestId('materials-notice')).toContainText('Deleted hashing.docx')
 })
 
+
+// Files and addresses: these own their accounts, so they do not wait on the serial setup above.
+test.describe('files and addresses', () => {
+  test.describe.configure({ mode: 'default' })
+
+  async function courseWithFile(page: Page, label: string) {
+    const { email } = await signUpAndIn(page, label, { own: true })
+    await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: new Date() } }))
+    const created = await page.request.post('/api/projects', { data: { name: `Materials ${Date.now()}` } })
+    const id = (await created.json()).project.id as string
+    await addFileRow(id, 'other.pdf')
+    return id
+  }
+  const fileRows = (page: Page, name: string) => page.getByRole('row', { name: new RegExp(name.replace('.', '\\.')) })
+
+  test('a file deleted right after it was uploaded stays deleted', async ({ page }) => {
+    const id = await courseWithFile(page, 'ws1-delete')
+    await page.goto(`/courses/${id}/materials`)
+    await page.getByLabel('Choose files to upload').setInputFiles(FIXTURE_PDF)
+    await expect(fileRows(page, 'algorithms.pdf')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Actions for algorithms.pdf' }).click()
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await page.getByRole('button', { name: 'Delete file' }).click()
+    await expect(page.getByText('File deleted')).toBeVisible()
+    // Not back as a file still being checked, now or after the page refreshes itself.
+    await expect(fileRows(page, 'algorithms.pdf')).toHaveCount(0)
+    await page.waitForTimeout(3000)
+    await expect(fileRows(page, 'algorithms.pdf')).toHaveCount(0)
+    await expect(page.getByText('Checking the file')).toHaveCount(0)
+  })
+
+  test('a repeated file asks first: cancel, keep both, or replace', async ({ page }) => {
+    const id = await courseWithFile(page, 'ws1-duplicate')
+    await page.goto(`/courses/${id}/materials`)
+    const input = page.getByLabel('Choose files to upload')
+    await input.setInputFiles(FIXTURE_PDF)
+    await expect(fileRows(page, 'algorithms.pdf')).toHaveCount(1)
+    await expect(fileRows(page, 'algorithms.pdf').getByText('Ready')).toBeVisible({ timeout: 90_000 })
+
+    // Cancel: nothing is uploaded.
+    await input.setInputFiles(FIXTURE_PDF)
+    const dialog = page.getByRole('dialog', { name: 'This file is already here' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(dialog).toBeHidden()
+    await page.waitForTimeout(1000)
+    await expect(fileRows(page, 'algorithms.pdf')).toHaveCount(1)
+
+    // Keep both: a second row.
+    await input.setInputFiles(FIXTURE_PDF)
+    await page.getByRole('dialog', { name: 'This file is already here' }).getByRole('button', { name: 'Keep both' }).click()
+    await expect(fileRows(page, 'algorithms.pdf')).toHaveCount(2, { timeout: 30_000 })
+
+    // Replace: the new copy goes in and the earlier ones come out.
+    await input.setInputFiles(FIXTURE_PDF)
+    await page.getByRole('dialog', { name: 'This file is already here' }).getByRole('button', { name: 'Replace' }).click()
+    await expect.poll(async () => fileRows(page, 'algorithms.pdf').count(), { timeout: 60_000 }).toBe(1)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
+
+  // A NUL byte is not valid database input: it must be "not found", not a server error.
+  test('an address that names nothing answers 404, in the app and in the exam shell', async ({ page }) => {
+    const { course } = demoIds()
+    await signIn(page, DEMO_EMAIL)
+    for (const path of [
+      '/courses/not-a-uuid',
+      `/courses/${course}/exams/not-a-uuid`,
+      `/courses/${course}/exams/not-a-uuid/take`,
+      `/courses/${course}/topics/not-a-uuid`,
+      '/courses/%00',
+      `/courses/${course}/exams/%00`,
+    ]) {
+      const response = await page.goto(path)
+      expect(response?.status(), path).toBe(404)
+      await expect(page.getByRole('heading', { level: 1, name: "We couldn't find that page" }), path).toBeVisible()
+    }
+  })
+})
