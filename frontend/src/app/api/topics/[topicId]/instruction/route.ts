@@ -14,7 +14,7 @@ import { requireAuth } from '@/lib/auth/get-session'
 import { createRateLimiter } from '@/lib/api/rate-limit'
 import { recordInstruction } from '@/lib/learning/instruction-server'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
-import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { apiInternal, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 

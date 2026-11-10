@@ -27,7 +27,7 @@ import { readJson } from '@/lib/api/read-json'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
 import { clearDraft, loadDraft, saveDraft, type StoredDraft } from '@/lib/drafts/draft-store'
 import { isDraftSurface, MAX_DRAFT_BYTES, parseDraftKey, type DraftSurface, type DraftWire } from '@/lib/drafts/draft-contract'
-import { ApiErrorCode, apiError, apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { ApiErrorCode, apiError, apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 

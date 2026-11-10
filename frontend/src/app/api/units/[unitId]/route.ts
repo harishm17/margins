@@ -19,11 +19,9 @@ import {
   ApiErrorCode,
   apiError,
   apiInternal,
-  apiInvalidInput,
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { moveInOrder } from '@/lib/topics/ordering'
 import { compactUnitOrder, normalizeTopicOrder } from '@/lib/topics/normalize-order'

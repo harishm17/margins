@@ -31,7 +31,6 @@ import {
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'

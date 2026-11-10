@@ -16,7 +16,7 @@ import { requireAuth } from '@/lib/auth/get-session'
 import { ANSWER_FIRST, recordAskCheck, revealAskCheck } from '@/lib/ask/ask-check'
 import { CONFIDENCE_LEVELS } from '@/lib/learning/calibration'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
-import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 

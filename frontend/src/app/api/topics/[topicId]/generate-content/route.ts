@@ -11,12 +11,10 @@ import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/dispa
 import { z } from 'zod'
 import {
   apiInternal,
-  apiInvalidInput,
   apiNotFound,
   apiUnauthorized,
   apiUpstream,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { ensureAiGenerationReady } from '@/lib/api/ai-preflight'
 import {

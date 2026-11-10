@@ -17,11 +17,9 @@ import {
   ApiErrorCode,
   apiError,
   apiInternal,
-  apiInvalidInput,
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { createRateLimiter } from '@/lib/api/rate-limit'
 import { withClientSignal } from '@/lib/ai-service/client-signal'

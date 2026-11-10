@@ -26,7 +26,6 @@ import {
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
 

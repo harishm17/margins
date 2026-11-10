@@ -24,7 +24,7 @@ import { studentTimeZone } from '@/lib/learning/student-time-zone'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
 import { explainerAccess, explainerViewed, loadGapExplainer, markExplainerViewed, recordGapsShown, startMissingGapExplainers } from '@/lib/learning/explainer-server'
-import { ApiErrorCode, apiError, apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { ApiErrorCode, apiError, apiInternal, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 

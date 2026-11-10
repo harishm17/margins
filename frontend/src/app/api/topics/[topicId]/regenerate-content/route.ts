@@ -9,11 +9,9 @@ import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import {
   apiInternal,
-  apiInvalidInput,
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { regenerateContentSchema, startRegeneration } from '@/lib/jobs/regenerate'
 

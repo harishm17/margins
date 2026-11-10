@@ -6,12 +6,9 @@ import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { stableStringify } from '@/lib/utils/stable-json';
 import {
-  apiError,
-  ApiErrorCode,
   apiInternal,
   apiUnauthorized,
   apiUpstream,
-  zodDetails,
 } from '@/lib/api/errors';
 import { ensureAiGenerationReady } from '@/lib/api/ai-preflight';
 

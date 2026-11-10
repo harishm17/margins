@@ -17,7 +17,7 @@ import { requireAuth } from '@/lib/auth/get-session'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
 import { conceptPassageIds } from '@/lib/reader/concept-passages'
 import { recordReaderCheck, revealCheckSource } from '@/lib/reader/reader-server'
-import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 

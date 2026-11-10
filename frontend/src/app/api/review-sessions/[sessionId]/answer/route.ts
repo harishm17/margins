@@ -22,7 +22,6 @@ import {
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { getTimeZone } from '@/server/timezone'
 

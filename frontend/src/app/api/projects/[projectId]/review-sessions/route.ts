@@ -24,7 +24,7 @@ import { examPractice } from '@/lib/learning/exam-practice'
 import { ATTEMPT_SUBMITTED } from '@/lib/exams/attempts'
 import { aiRefusal } from '@/lib/api/ai-preflight'
 import { createRateLimiter } from '@/lib/api/rate-limit'
-import { ApiErrorCode, apiError, apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { ApiErrorCode, apiError, apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 import { getTimeZone } from '@/server/timezone'
 
 export const dynamic = 'force-dynamic'
