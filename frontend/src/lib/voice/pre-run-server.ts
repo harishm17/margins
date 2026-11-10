@@ -44,7 +44,7 @@ export type PreRunOutcome = { result: VoiceToolResult; block: VoiceBlock }
 /** Runs the planned step. A step that throws is reported to the model as a failed tool, like the turn loop does. */
 export async function runPreRun(
   plan: PreRunPlan,
-  ctx: { sessionId: string; userId: string; timeZone: string; turn: number; steps: import('@/lib/voice/tools').StepCache; grade?: Parameters<typeof executeVoiceTool>[0]['grade'] },
+  ctx: { sessionId: string; userId: string; timeZone: string; turn: number; steps: import('@/lib/voice/tools').StepCache; grade?: Parameters<typeof executeVoiceTool>[0]['grade']; defer?: Parameters<typeof executeVoiceTool>[0]['defer'] },
   log: (message: string, error?: unknown) => void = (_message, error) => logServerError('Voice: a pre-run step failed', error)
 ): Promise<PreRunOutcome> {
   let result: VoiceToolResult

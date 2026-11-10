@@ -201,6 +201,47 @@ dbTest('answering the same question again adds no evidence: the coach has alread
   assert.equal(rows[0].score, 1)
 })
 
+dbTest('an answer is recorded against the question the server asked, whatever index the coach passes', async () => {
+  // Bug: the earlier prompts ask the model for question_index and the server believed it, so a coach that miscounted
+  // had the answer graded against another question's key and stored under it.
+  stubGrader(1)
+  const w = await world()
+  await run(w, 'get_next_question', {}) // serves question 0
+  await run(w, 'record_answer', { question_index: 2, user_answer: 'keys map to buckets' })
+  const attempts = await prisma.voiceDrillAttempt.findMany({ where: { sessionId: w.session.id } })
+  assert.deepEqual(attempts.map((attempt) => [attempt.questionIndex, attempt.questionText]), [[0, 'q0']])
+  assert.deepEqual((await events(w)).map((row) => row.itemKey), [`voice:${w.session.id}:0`])
+})
+
+dbTest('an answer whose first recording failed after the attempt was stored gets its evidence when it is recorded again', async () => {
+  // Bug: evidence was written only by the call whose insert was first, so a failure between the insert and the
+  // evidence lost the evidence for good. The row below is what such a failed first try left behind.
+  stubGrader(1)
+  const w = await world()
+  await prisma.voiceDrillAttempt.create({
+    data: { sessionId: w.session.id, userId: w.user.id, topicId: w.topic.id, questionIndex: 0, questionType: 'conceptual', questionText: 'q0', expectedAnswer: {}, userAnswer: 'keys map to buckets', isCorrect: true, score: 1 },
+  })
+  await run(w, 'record_answer', { question_index: 0, user_answer: 'keys map to buckets' })
+  assert.deepEqual((await events(w)).map((row) => [row.itemKey, row.score]), [[`voice:${w.session.id}:0`, 1]])
+})
+
+dbTest('work handed to the turn (signal, schedule, evidence) is done once the turn has waited for it', async () => {
+  stubGrader(1)
+  const w = await world()
+  const turn = await beginVoiceTurn(w.session.id, 'keys map to buckets')
+  const deferred: Promise<void>[] = []
+  const out = await tools.executeVoiceTool(
+    { sessionId: w.session.id, userId: w.user.id, timeZone: 'UTC', turn, defer: (work) => void deferred.push(work) },
+    'record_answer',
+    { question_index: 0 }
+  )
+  assert.equal(out.isError, false)
+  assert.equal(deferred.length, 1)
+  await Promise.all(deferred)
+  assert.equal((await events(w)).length, 1)
+  assert.equal(await prisma.reviewSchedule.count({ where: { userId: w.user.id, topicId: w.topic.id } }), 1)
+})
+
 dbTest('two answers to the same question arriving together write one piece of evidence', async () => {
   stubGrader(1)
   const w = await world()

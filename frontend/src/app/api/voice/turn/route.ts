@@ -217,6 +217,10 @@ async function handlePost(request: NextRequest) {
     // The step the session is waiting for runs before the model speaks (spec 19.1), in the stream below so the browser can be
     // told at once; the model is then called once, with the result in the student's message.
     const steps: StepCache = new Map()
+    // Work a step leaves for later (what a recorded answer does to mastery and the schedule): the reply does not wait for
+    // it, the end of the turn does.
+    const deferred: Promise<void>[] = []
+    const defer = (work: Promise<void>) => void deferred.push(work)
     const preRun = await planPreRunForSession({ userId, sessionId: session.id, language: session.language, utterance, history })
 
     const modelRequest = (messages: VoiceMessage[]) =>
@@ -272,7 +276,7 @@ async function handlePost(request: NextRequest) {
             let preRunMs = 0
             if (preRun) {
               const stepStarted = performance.now()
-              startMessages = (await startWithPreRun(preRun, { sessionId: session.id, userId, timeZone, turn, steps }, startMessages, send)).messages
+              startMessages = (await startWithPreRun(preRun, { sessionId: session.id, userId, timeZone, turn, steps, defer }, startMessages, send)).messages
               preRunMs = performance.now() - stepStarted
               preRan = true
             }
@@ -290,13 +294,14 @@ async function handlePost(request: NextRequest) {
                   if (!response.ok || !response.body) throw await modelErrorFromResponse(response)
                   return readModelEvents(response.body)
                 },
-                runTool: (name, input) => executeVoiceTool({ sessionId: session.id, userId, timeZone, turn, steps }, name, input),
+                runTool: (name, input) => executeVoiceTool({ sessionId: session.id, userId, timeZone, turn, steps, defer }, name, input),
                 emit: send,
                 retryCutOff: promptsV2('voice'),
                 callStartedAt: (call) => (call === 1 ? firstCallStarted : undefined),
               },
               startMessages
             )
+            await Promise.all(deferred)
             await recordTurnTiming({
               sessionId: session.id,
               userId,
@@ -345,6 +350,8 @@ async function handlePost(request: NextRequest) {
             logServerError('Voice: The turn crashed', error)
             sendError('VOICE_TURN_FAILED')
           } finally {
+            // Deferred work catches its own failures; a turn that crashed still waits for it before the next may start.
+            await Promise.allSettled(deferred)
             await releaseTurn()
             try {
               controller.close()

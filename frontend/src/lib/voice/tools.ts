@@ -358,6 +358,12 @@ async function runVoiceTool(
     turn: number
     /** The step runs before the model speaks (spec 19.1): a guided-reading reveal gets the server's own check question. */
     autoCheck?: boolean
+    /**
+     * Takes work the coach's reply does not wait for (a recorded answer's signal, mastery, schedule and evidence), so the
+     * feedback starts sooner. The caller must wait for it before the turn ends. Without it the work is done before the
+     * tool returns.
+     */
+    defer?: (work: Promise<void>) => void
   },
   name: string,
   args: unknown
@@ -468,9 +474,12 @@ async function runVoiceTool(
     if (!parsed.success) return finish({ error: 'Invalid arguments for record_answer' } satisfies ErrorResult)
     const quizState = readCoachState(session.coachState)
     if (session.endedAt) return finish(COMPLETE, { sessionComplete: true })
-    // v2 (R5): the question is the one get_next_question last returned.
+    // The question is the one get_next_question last returned (v2, R5: the model passes no index). The earlier prompts
+    // still ask the model for the index, and it is not trusted either: a model that miscounted had the answer graded
+    // against another question's key. Only a session from before the server kept the current question uses it.
     if (v2 && quizState.quiz.current < 0) return finish({ error: NO_CURRENT.question } satisfies ErrorResult)
-    const questionIndex = v2 ? quizState.quiz.current : (parsed.data as z.infer<typeof recordAnswerArgs>).question_index
+    const questionIndex =
+      quizState.quiz.current >= 0 ? quizState.quiz.current : (parsed.data as z.infer<typeof recordAnswerArgs>).question_index
     const { confidence } = parsed.data
 
     const question = questionSet[questionIndex]
@@ -575,25 +584,28 @@ async function runVoiceTool(
 
     // An ungraded answer is not evidence of anything, so it adds no signal.
     if (inferredTopicId && !grading.ungraded) {
-      await recordLearningSignal({
-        userId,
-        projectId: session.projectId,
-        topicId: inferredTopicId,
-        source: 'voice',
-        score: grading.score,
-        metadata: { sessionId, questionIndex },
-      })
-      await applyPendingQuizResults(userId)
-      const mastery = await computeTopicMastery(userId, session.projectId, inferredTopicId)
-      await upsertReviewSchedule({
-        userId,
-        projectId: session.projectId,
-        topicId: inferredTopicId,
-        mastery: mastery.mastery,
-        wasCorrect: grading.isCorrect,
-      })
-      // After the schedule above, so the concept-derived due date is the one that stays.
-      if (firstAnswer) {
+      const bookkeeping = async () => {
+        await recordLearningSignal({
+          userId,
+          projectId: session.projectId,
+          topicId: inferredTopicId,
+          source: 'voice',
+          score: grading.score,
+          metadata: { sessionId, questionIndex },
+        })
+        await applyPendingQuizResults(userId)
+        const mastery = await computeTopicMastery(userId, session.projectId, inferredTopicId)
+        await upsertReviewSchedule({
+          userId,
+          projectId: session.projectId,
+          topicId: inferredTopicId,
+          mastery: mastery.mastery,
+          wasCorrect: grading.isCorrect,
+        })
+        // After the schedule above, so the concept-derived due date is the one that stays. Asked for on every answer,
+        // not only the one whose insert was first: the evidence writer keeps one event per question (skipIfPresent), so
+        // a second answer adds nothing, and an answer whose first try failed after the insert (bug: the evidence was
+        // then never written) gets its evidence when it is recorded again.
         await recordVoiceEvidence({
           userId,
           projectId: session.projectId,
@@ -608,6 +620,13 @@ async function runVoiceTool(
           idk: dontKnow,
           timeZone: ctx.timeZone ?? 'UTC',
         })
+      }
+      // The coach's feedback needs none of this, so a caller that will wait for it (the turn route) takes it and the
+      // reply starts while it runs. A failure there is logged: the answer itself is stored.
+      if (ctx.defer) {
+        ctx.defer(bookkeeping().catch((error) => logServerError('Voice: recording what a spoken answer showed failed', error, { sessionId, questionIndex })))
+      } else {
+        await bookkeeping()
       }
     }
 
@@ -628,7 +647,9 @@ async function runVoiceTool(
     } else {
       const parsed = hintArgs.safeParse(args)
       if (!parsed.success) return finish({ error: 'Invalid arguments for get_hint' })
-      hintIndex = parsed.data.question_index
+      // As in record_answer: the question being asked is the server's to say, when it has kept it.
+      const current = readCoachState(session.coachState).quiz.current
+      hintIndex = current >= 0 ? current : parsed.data.question_index
     }
     const question = questionSet[hintIndex]
     if (!question) return finish({ error: 'Question not found' })
