@@ -1220,6 +1220,10 @@ class ShortAnswerGradeV2(BaseModel):
         ),
     )
 
+    @classmethod
+    def example(cls) -> "ShortAnswerGradeV2":
+        return cls(points_earned=0, feedback="Mock grading: no model call was made.")
+
 
 class ShortAnswerGrade(BaseModel):
     points_earned: float

@@ -302,6 +302,7 @@ async def test_the_mock_provider_serves_the_v2_schemas(v2_tutor):
         assert out.reply
         graded = await recall_grader.grade_recall(recall_request())
         assert graded.status in ("graded", "ungraded")
+    assert ShortAnswerGradeV2.example().feedback
 
 
 # ---------------------------------------------------------------- recall grader
