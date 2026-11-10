@@ -39,13 +39,20 @@ class BatchedCalls:
         self._ids = itertools.count(1)
         self._sent_again: set = set()
         self._running: set = set()
-        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self.create))
+        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self.create, stream=self.stream))
 
     async def create(self, **params) -> Any:
         request = {k: v for k, v in params.items() if k not in DROPPED_PARAMS}
         future = asyncio.get_running_loop().create_future()
         self._enqueue(f"r{next(self._ids)}", request, future)
         return await future
+
+    def stream(self, **params) -> "_BatchedStream":
+        """The provider streams a call whose max_tokens is above its streaming threshold (llm/caps.py STREAM_ABOVE).
+        A batch has no request timeout to stream around, so the call joins the batch like any other and the
+        "stream" hands back the finished message."""
+        return _BatchedStream(self.create(**params))
+
 
     def _enqueue(self, custom_id: str, request: Dict[str, Any], future: asyncio.Future) -> None:
         self._queue.append((custom_id, request, future))
@@ -110,6 +117,26 @@ class BatchedCalls:
             return
         message = getattr(getattr(getattr(result, "error", None), "error", None), "message", "")
         future.set_exception(BatchRequestError(f"{kind}: {detail}{': ' + message if message else ''}"))
+
+
+class _BatchedStream:
+    """The part of the SDK's message stream the provider uses: `async with`, `get_final_message()`, `request_id`."""
+
+    request_id = None
+
+    def __init__(self, reply):
+        self._reply = reply
+
+    async def __aenter__(self) -> "_BatchedStream":
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        if asyncio.iscoroutine(self._reply):
+            self._reply.close()
+
+    async def get_final_message(self) -> Any:
+        reply, self._reply = self._reply, None
+        return await reply
 
 
 def install_batching(provider, *, quiet: float = 5.0, poll: float = 15.0, log: Optional[Callable[[str], None]] = None) -> BatchedCalls:

@@ -74,8 +74,14 @@ def test_calls_made_together_go_out_as_one_batch_and_each_caller_gets_its_own_re
     batches = FakeBatches()
     calls = BatchedCalls(client_with(batches), quiet=0.02, poll=0.01)
 
+    async def streamed(text):
+        # The provider streams a call capped above 16000 tokens; the PR 1.7 A2 re-run failed on every such call because
+        # this client had no `stream`. It joins the same batch.
+        async with calls.beta.messages.stream(**params(text)) as stream:
+            return await stream.get_final_message()
+
     async def go():
-        return await asyncio.gather(*(calls.beta.messages.create(**params(f"q{i}")) for i in range(3)))
+        return await asyncio.gather(*(calls.beta.messages.create(**params(f"q{i}")) for i in range(2)), streamed("q2"))
 
     replies = run(go())
     assert [r.content[0].text for r in replies] == ["q0", "q1", "q2"]
