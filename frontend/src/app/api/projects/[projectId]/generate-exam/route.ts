@@ -1,3 +1,4 @@
+import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
@@ -14,7 +15,7 @@ import { ensureAiGenerationReady } from '@/lib/api/ai-preflight';
 
 
 const generateExamSchema = z.object({
-  topicIds: z.array(z.string()).min(1, 'At least one topic must be selected'),
+  topicIds: list(id(), 200).min(1, 'At least one topic must be selected'),
   totalQuestions: z.number().min(5).max(100),
   durationMinutes: z.number().min(15).max(300),
   difficultyLevel: z.enum(['easy', 'medium', 'hard']),

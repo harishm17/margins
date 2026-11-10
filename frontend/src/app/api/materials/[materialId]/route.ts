@@ -10,7 +10,7 @@ import { canBeTopicSource, isMaterialRole } from '@/lib/materials/role';
 import { startExamProfileJob, startExamRelevanceJob } from '@/lib/exams/style-jobs';
 
 const roleSchema = z.object({
-  role: z.string().refine(isMaterialRole, 'Role must be content, syllabus, exam or other'),
+  role: z.string().max(20).refine(isMaterialRole, 'Role must be content, syllabus, exam or other'),
 });
 
 /**

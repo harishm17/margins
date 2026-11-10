@@ -5,6 +5,7 @@
  * GET /api/topics/[topicId]/quiz-attempts - Get quiz history
  */
 
+import { id, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
@@ -28,7 +29,7 @@ import { getTimeZone } from '@/server/timezone'
 // An answer is the plain string (a quiz started before confidence existed) or an object with the
 // student's confidence and thinking; a confidence outside 0 to 1 is dropped by normalizeAnswers.
 const saveQuizAttemptSchema = z.object({
-  answers: z.record(
+  answers: record(
     z.union([
       z.string().max(5000),
       z.object({
@@ -38,9 +39,11 @@ const saveQuizAttemptSchema = z.object({
         thinking: z.string().max(4000).optional(),
         idk: z.boolean().optional(),
       }),
-    ])
+    ]),
+    200,
+    20
   ), // { questionIndex: answer | { answer, confidence, confidenceLevel, thinking, idk } }
-  quizSetId: z.string().optional(),
+  quizSetId: id().optional(),
 })
 
 // Each submission can cost model calls for short answers.

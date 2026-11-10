@@ -32,7 +32,7 @@ const generateContentSchema = z.object({
     question_count: z.number().min(5).max(30).optional(),
     difficulty_level: z.enum(['easy', 'medium', 'hard']).optional(),
     focus: z.string().trim().min(3).max(280).optional(),
-    question_types: z.array(z.enum(['multiple_choice', 'short_answer', 'numerical', 'true_false'])).optional(),
+    question_types: z.array(z.enum(['multiple_choice', 'short_answer', 'numerical', 'true_false'])).max(4).optional(),
     append: z.boolean().optional(),
     // When this job finishes, the AI service queues the topic's other missing content one job at
     // a time (see ai-service/app/services/generation_chain.py). Set when a topic is opened.

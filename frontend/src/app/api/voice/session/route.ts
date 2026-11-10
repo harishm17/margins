@@ -1,3 +1,4 @@
+import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
@@ -26,19 +27,19 @@ const sessionSchema = z.object({
     .optional()
     .default('oral_quiz')
     .transform((style) => (style === 'guided_notes' ? 'guided_reading' : style)),
-  projectId: z.string(),
-  topicId: z.string().optional(),
+  projectId: id(),
+  topicId: id().optional(),
   // The idea a teach-back starts with (the "Do it out loud" link names it).
   conceptId: z.string().max(100).optional(),
   language: z.string().regex(/^[a-z]{2,8}$/i).optional().default('en'),
   // Ignored since the coach moved to Claude (the browser chooses the voice). Still accepted.
-  voice: z.string().optional().default('marin'),
+  voice: z.string().max(50).optional().default('marin'),
   // What the student wants to concentrate on; trimmed and cut to MAX_FOCUS_CHARS.
-  focus: z.string().nullish(),
+  focus: z.string().max(2000).nullish(),
 })
 
 const patchSchema = z.object({
-  sessionId: z.string(),
+  sessionId: id(),
   status: z.enum(['active', 'ended', 'aborted']).optional(),
   lastDetectedLanguage: z.string().regex(/^[a-z]{2,8}$/i).nullable().optional(),
   incrementInterruptCount: z.number().int().min(0).max(20).optional(),

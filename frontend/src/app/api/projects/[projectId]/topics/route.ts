@@ -7,6 +7,7 @@
  *   one it is last in the course and belongs to no unit.
  */
 
+import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -16,8 +17,8 @@ import { normalizeTopicOrder } from '@/lib/topics/normalize-order'
 
 const createTopicSchema = z.object({
   name: z.string().min(1).max(255),
-  description: z.string().optional(),
-  unitId: z.string().min(1).nullable().optional(),
+  description: z.string().max(4000).optional(),
+  unitId: id().nullable().optional(),
 })
 
 // Kept for API clients; the UI reads this through server queries.

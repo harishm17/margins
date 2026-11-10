@@ -1,3 +1,4 @@
+import { id, list, record } from '@/lib/api/fields'
 import { NextRequest, NextResponse } from 'next/server'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { z } from 'zod'
@@ -7,8 +8,8 @@ import { buildSprintQuestionSet, buildTopicQuestionSet } from '@/lib/voice/drill
 
 const drillPackSchema = z.object({
   mode: z.enum(['topic_drill', 'sprint']).default('topic_drill'),
-  projectId: z.string(),
-  topicId: z.string().optional(),
+  projectId: id(),
+  topicId: id().optional(),
 })
 
 // Kept for API clients; the UI reads this through server queries.

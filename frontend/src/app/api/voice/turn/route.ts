@@ -7,6 +7,7 @@
  * JSON events (see src/lib/voice/turn-client.ts). Problems found before the reply starts are
  * ordinary JSON errors.
  */
+import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -62,7 +63,7 @@ const MAX_UTTERANCE_CHARS = 2000
 const turnLimiter = createRateLimiter({ name: 'voice-turn', limit: voiceTurnsPerMinute(), windowMs: 60_000 })
 
 const bodySchema = z.object({
-  sessionId: z.string().min(1),
+  sessionId: id(),
   // Empty (or missing) means "start the session" the first time, "carry on" afterwards.
   utterance: z.string().trim().max(MAX_UTTERANCE_CHARS, `Keep it under ${MAX_UTTERANCE_CHARS} characters`).default(''),
   // The student interrupted the coach's last reply: what they heard of it before it stopped (spec 19.4).

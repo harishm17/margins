@@ -15,6 +15,7 @@
  * merged chunks; regenerate it from the topic page if needed.
  */
 
+import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -34,8 +35,8 @@ import {
 } from '@/lib/api/errors'
 
 const mergeSchema = z.object({
-  sourceTopicId: z.string().min(1),
-  targetTopicId: z.string().min(1),
+  sourceTopicId: id(),
+  targetTopicId: id(),
   name: z.string().trim().min(1).max(255).optional(),
 })
 

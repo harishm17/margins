@@ -16,18 +16,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { z } from 'zod'
+import { id, list, record } from '@/lib/api/fields'
 import { moveInOrder } from '@/lib/topics/ordering'
 import { normalizeTopicOrder } from '@/lib/topics/normalize-order'
 import { cleanPrerequisites, reachesPrerequisite } from '@/lib/topics/units'
 
+const MAX_DESCRIPTION_CHARS = 4000
+
 const updateTopicSchema = z.object({
   name: z.string().trim().min(1).max(255).optional(),
-  description: z.string().optional(),
+  description: z.string().max(MAX_DESCRIPTION_CHARS).optional(),
   userConfirmed: z.boolean().optional(),
   orderIndex: z.number().int().min(0).optional(),
-  unitId: z.string().min(1).nullable().optional(),
+  unitId: id().nullable().optional(),
   objectives: z.array(z.string().trim().min(1).max(300)).max(8).optional(),
-  prerequisiteIds: z.array(z.string().min(1)).max(8).optional(),
+  prerequisiteIds: list(id(), 8).optional(),
   estimatedMinutes: z.number().int().min(1).max(600).nullable().optional(),
 })
 

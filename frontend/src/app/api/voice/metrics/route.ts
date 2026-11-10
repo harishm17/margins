@@ -1,3 +1,4 @@
+import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -17,7 +18,7 @@ const metricEntrySchema = z.object({
 }).strict()
 
 const metricsSchema = z.object({
-  sessionId: z.string(),
+  sessionId: id(),
   entry: metricEntrySchema,
 })
 

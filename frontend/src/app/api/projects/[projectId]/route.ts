@@ -16,7 +16,7 @@ import { dailyMinutesSchema, examDateColumn, examDateSchema } from '@/lib/learni
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  description: z.string().optional(),
+  description: z.string().max(1000).optional(),
   status: z.enum(['setup', 'topics_pending', 'active', 'completed']).optional(),
   // The exam date (YYYY-MM-DD, or null to clear it), the minutes to study each day, and whether the
   // "When is your exam?" card was closed.
