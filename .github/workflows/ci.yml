@@ -48,8 +48,26 @@ jobs:
     defaults:
       run:
         working-directory: ai-service
+    # Postgres with pgvector: the tests that touch the database build a throwaway one from the Prisma migrations
+    # (tests/conftest.py), including the check that every SQL statement matches the migrated schema. Without it
+    # they skip.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: margins
+          POSTGRES_USER: dev
+          POSTGRES_PASSWORD: devpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dev -d margins"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       DATABASE_URL: postgresql://dev:devpass@localhost:5432/margins
+      TEST_DB_ADMIN_URL: postgresql://dev:devpass@localhost:5432/postgres
       ANTHROPIC_API_KEY: test-key
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +78,8 @@ jobs:
           cache-dependency-glob: ai-service/uv.lock
       - run: uv sync --locked --python 3.14
       - run: uv run python -m compileall -q app
+      - name: Migrations only add, and the AI service names the newest one
+        run: python3 ../scripts/check_migrations.py
       - run: uv run pytest -q
       - name: Eval tests (retrieval, generation and tutoring; the tutoring ones replay the parity fixture)
         run: uv run pytest ../evals -q

@@ -109,8 +109,8 @@ def test_client():
 
 # ---- A real Postgres for the job tests ----------------------------------------------------
 # The claim, lease and append logic is SQL, so those tests run against a throwaway database
-# built from the Prisma migrations. Point TEST_DB_ADMIN_URL at a server with pgvector; the
-# tests skip when none is reachable.
+# built from the Prisma migrations. Point TEST_DB_ADMIN_URL at a server with pgvector. The tests skip
+# when none is reachable, unless TEST_DB_ADMIN_URL is set (CI sets it): then a missing database fails them.
 
 MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "frontend" / "prisma" / "migrations"
 TEST_DB_ADMIN_URL = os.environ.get("TEST_DB_ADMIN_URL", "postgresql://postgres@127.0.0.1:5544/postgres")
@@ -170,6 +170,8 @@ def test_database_url():
     try:
         asyncio.run(_build_test_database(name))
     except Exception as exc:  # no server, no pgvector, ...
+        if "TEST_DB_ADMIN_URL" in os.environ:
+            pytest.fail(f"TEST_DB_ADMIN_URL is set but the test database could not be built: {exc!r}")
         pytest.skip(f"No test Postgres available ({exc!r}); set TEST_DB_ADMIN_URL")
     yield _swap_database(TEST_DB_ADMIN_URL, name)
     asyncio.run(_drop_test_database(name))
