@@ -15,13 +15,13 @@
  *   `retry_tomorrow`. Resuming an existing quiz draft never is.
  */
 
+import { quota } from '@/lib/api/quota'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { retryOpensAt } from '@/lib/learning/missed'
 import { asQuestionList } from '@/lib/learning/quiz-questions'
 import {
   DRAFT_TTL_MS,
-  MAX_DRAFTS_PER_USER,
   parseDraftKey,
   quizSetOfKey,
   surfaceNamesTopic,
@@ -173,12 +173,14 @@ export async function saveDraft(userId: string, input: SaveDraftInput, options: 
     const opensAt = retryOpensAt(await lastTakenAt(userId, topicId, setId), options.timeZone ?? 'UTC', now)
     if (opensAt) return { status: 'retry_tomorrow', opensAt }
   }
-  if ((await prisma.studyDraft.count({ where: { userId, expiresAt: { gt: now } } })) >= MAX_DRAFTS_PER_USER) return { status: 'too_many' }
-
   try {
-    const created = await prisma.studyDraft.create({
-      data: { userId, projectId: project.id, topicId, surface, scopeKey: key, payload, version: 1, createdAt: now, updatedAt: now, expiresAt },
+    const created = await prisma.$transaction(async (tx) => {
+      if (await quota(tx, { id: userId }, 'drafts', { now })) return null
+      return tx.studyDraft.create({
+        data: { userId, projectId: project.id, topicId, surface, scopeKey: key, payload, version: 1, createdAt: now, updatedAt: now, expiresAt },
+      })
     })
+    if (!created) return { status: 'too_many' }
     return { status: 'saved', draft: toStored(created) }
   } catch (error) {
     // Another tab created it between our read and our write.

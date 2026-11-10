@@ -8,6 +8,10 @@
  *   writes the evidence of misses left open on an earlier day.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { record } from '@/lib/api/fields'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -20,7 +24,6 @@ import {
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
@@ -37,8 +40,8 @@ const saveSchema = z.object({
   // Absent from a browser that predates rungs: the problem is stored as before and writes no evidence.
   attemptedSteps: steps.optional(),
   firstTrySteps: steps.optional(),
-  maxRungs: z.record(z.string().max(4), z.number().int().min(0).max(5)).optional(),
-  missRungs: z.record(z.string().max(4), z.number().int().min(0).max(5)).optional(),
+  maxRungs: record(z.number().int().min(0).max(5), 200, 4).optional(),
+  missRungs: record(z.number().int().min(0).max(5), 200, 4).optional(),
   trippedUp: z.string().max(500).optional(),
   // Progress that was kept in the browser before the server stored it, uploaded once.
   migrated: z.boolean().optional(),
@@ -58,7 +61,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (!(await ownedTopic(session.user.id, topicId))) return apiNotFound('Topic not found')
     return NextResponse.json({ problems: await loadPracticeProgress(session.user.id, topicId, await studentTimeZone()) })
   } catch (error) {
-    console.error('Practice progress read error:', error)
+    logServerError('Practice progress read error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load practice progress')
   }
@@ -67,13 +70,14 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId } = await params
     const topic = await ownedTopic(session.user.id, topicId)
     if (!topic) return apiNotFound('Topic not found')
 
-    const body = await request.json().catch(() => null)
-    const parsed = saveSchema.safeParse(body)
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, saveSchema)
+    if (!parsed.ok) return parsed.response
 
     const result = await savePracticeProgress(session.user.id, topic, { ...parsed.data, timeZone: await studentTimeZone() })
     if (result.status === 'invalid') return apiInvalidInput(result.reason)
@@ -86,7 +90,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     return NextResponse.json({ completed: result.completed, completedNow: result.completedNow, score: result.score })
   } catch (error) {
-    console.error('Practice progress save error:', error)
+    logServerError('Practice progress save error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save practice progress')
   }

@@ -9,6 +9,7 @@
  *   never used for them, so they are read and deleted exactly like `local://path`.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import type { Readable, Transform } from 'stream'
 import {
   deleteS3Object,
@@ -186,7 +187,7 @@ export async function queueDeletionAfterFailure(storagePath: string, reason: str
     const { prisma } = await import('@/lib/db/prisma')
     await prisma.pendingFileDeletion.create({ data: { path: storagePath, reason } })
   } catch (error) {
-    console.error(`[STORAGE] Could not queue ${storagePath} for deletion either; remove it by hand:`, error)
+    logServerError('Storage: could not queue a file for deletion either; remove it by hand', error)
   }
 }
 
@@ -207,7 +208,7 @@ export async function recordStoredFile<T>(
     try {
       await remove(storedPath)
     } catch (cleanupError) {
-      console.error(`[STORAGE] Could not delete ${storedPath} after its record failed; remove it by hand:`, cleanupError)
+      logServerError('Storage: could not delete a file after its record failed; remove it by hand', cleanupError)
       await recordOpsEvent('storage_delete_failed', `${storedPath} (after its record failed): ${String(cleanupError)}`)
       await queueDeletionAfterFailure(storedPath, 'record_failed')
     }
@@ -229,7 +230,7 @@ export async function deleteFilesBestEffort(storagePaths: string[]): Promise<str
       await deleteFile(storagePath)
     } catch (error) {
       failed.push(storagePath)
-      console.error(`[STORAGE] Could not delete ${storagePath}; remove it by hand:`, error)
+      logServerError('Storage: could not delete a file; remove it by hand', error)
       await recordOpsEvent('storage_delete_failed', `${storagePath}: ${String(error)}`)
     }
   }
@@ -251,7 +252,7 @@ export async function deleteProjectFolder(userId: string, projectId: string): Pr
     }
     return true
   } catch (error) {
-    console.error(`[STORAGE] Could not delete the folder ${folder}; remove it by hand:`, error)
+    logServerError('Storage: could not delete a folder; remove it by hand', error)
     await recordOpsEvent('storage_delete_failed', `folder ${folder}: ${String(error)}`)
     return false
   }

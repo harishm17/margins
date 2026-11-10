@@ -12,11 +12,11 @@ import { createRateLimiter, type RateLimiter } from '@/lib/api/rate-limit'
 import { toClientStatus } from '@/lib/ai/status'
 import type { AiStatusDetails } from '@/lib/ai/status'
 
-/** One real fresh read per user per second, in memory in this instance like the other limiters. */
+/** One real fresh read per user per second, counted in the database like the other limiters. */
 export const FRESH_WINDOW_MS = 1000
 
 export function createFreshLimiter(): RateLimiter {
-  return createRateLimiter({ limit: 1, windowMs: FRESH_WINDOW_MS })
+  return createRateLimiter({ name: 'ai-status-fresh', limit: 1, windowMs: FRESH_WINDOW_MS })
 }
 
 type Deps = {
@@ -29,7 +29,7 @@ export function createAiStatusHandler({ getUser, getStatus, freshLimiter }: Deps
   return async function handle(request: Request): Promise<Response> {
     const user = await getUser().catch(() => null)
     const asked = new URL(request.url).searchParams.get('fresh') === '1'
-    const fresh = asked && user !== null && freshLimiter.check(user.id).ok
+    const fresh = asked && user !== null && (await freshLimiter.check(user.id)).ok
     const status = toClientStatus(await getStatus(user?.id ?? null, { fresh }))
     return NextResponse.json(status, { headers: { 'Cache-Control': 'no-store' } })
   }

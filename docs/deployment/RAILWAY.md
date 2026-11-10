@@ -31,6 +31,10 @@ dashboard, or the next apply puts them back.
   for the `web` deploy that applies it. `/health` and the web app's `/api/health/ready` (the uptime check: database,
   AI service and watchdog) say only `ok` or `unavailable`; the detail is at `ai`'s `/health/dependencies` and `web`'s
   `/api/health/runtime`, for a signed-in user or a request carrying `AI_INTERNAL_TOKEN`.
+- Visitor address: the open analytics relay (`/m`) limits each address with the LAST entry of `X-Forwarded-For`, on the
+  understanding that Railway's edge appends the address it saw and earlier entries are whatever the client sent. This
+  is assumed, not documented by Railway; if the edge ever stops appending, every visitor shares one bucket (or a client
+  can pick its own), so recheck after a platform change (`src/lib/analytics/proxy.ts`, `clientAddress`).
 
 ## Everyday commands
 

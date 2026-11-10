@@ -10,6 +10,7 @@
  *
  * A path ending in `/` is a folder (everything under it).
  */
+import { logServerError } from '@/lib/ops/log'
 import type { Prisma } from '@prisma/client'
 import { deleteFile, deleteStoredFolder } from './files'
 
@@ -41,7 +42,7 @@ export async function deleteQueuedFilesNow(paths: readonly string[]): Promise<vo
       else await deleteFile(path)
       await prisma.pendingFileDeletion.updateMany({ where: { path, doneAt: null }, data: { doneAt: new Date() } })
     } catch (error) {
-      console.error(`[STORAGE] Could not delete ${path} right away; the deletion queue will retry:`, error)
+      logServerError('Storage: could not delete a file right away; the deletion queue will retry', error)
     }
   }
 }

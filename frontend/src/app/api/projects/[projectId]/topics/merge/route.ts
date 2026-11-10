@@ -15,6 +15,10 @@
  * merged chunks; regenerate it from the topic page if needed.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { id, list, record } from '@/lib/api/fields'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
@@ -30,12 +34,11 @@ import {
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 
 const mergeSchema = z.object({
-  sourceTopicId: z.string().min(1),
-  targetTopicId: z.string().min(1),
+  sourceTopicId: id(),
+  targetTopicId: id(),
   name: z.string().trim().min(1).max(255).optional(),
 })
 
@@ -45,12 +48,12 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
-    const parsed = mergeSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) {
-      return apiInvalidInput('Invalid input', zodDetails(parsed.error))
-    }
+    const parsed = await readJson(request, mergeSchema)
+    if (!parsed.ok) return parsed.response
     const { sourceTopicId, targetTopicId, name } = parsed.data
     if (sourceTopicId === targetTopicId) {
       return apiInvalidInput('Choose two different topics to merge')
@@ -224,7 +227,7 @@ export async function POST(
 
     return NextResponse.json({ topic: merged, mergedTopicId: source.id })
   } catch (error) {
-    console.error('Merge topics error:', error)
+    logServerError('Merge topics error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof SyntaxError) {
       return apiError(ApiErrorCode.INVALID_INPUT, 'Invalid JSON body', undefined, 400)

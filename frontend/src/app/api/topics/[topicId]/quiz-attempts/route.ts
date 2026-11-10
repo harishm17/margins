@@ -5,6 +5,9 @@
  * GET /api/topics/[topicId]/quiz-attempts - Get quiz history
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { id, record } from '@/lib/api/fields'
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -27,7 +30,7 @@ import { getTimeZone } from '@/server/timezone'
 // An answer is the plain string (a quiz started before confidence existed) or an object with the
 // student's confidence and thinking; a confidence outside 0 to 1 is dropped by normalizeAnswers.
 const saveQuizAttemptSchema = z.object({
-  answers: z.record(
+  answers: record(
     z.union([
       z.string().max(5000),
       z.object({
@@ -37,13 +40,15 @@ const saveQuizAttemptSchema = z.object({
         thinking: z.string().max(4000).optional(),
         idk: z.boolean().optional(),
       }),
-    ])
+    ]),
+    200,
+    20
   ), // { questionIndex: answer | { answer, confidence, confidenceLevel, thinking, idk } }
-  quizSetId: z.string().optional(),
+  quizSetId: id().optional(),
 })
 
 // Each submission can cost model calls for short answers.
-const submitLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 })
+const submitLimiter = createRateLimiter({ name: 'quiz-submit', limit: 10, windowMs: 60_000 })
 
 function isMissingQuizSetColumnError(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
@@ -89,17 +94,10 @@ async function handlePOST(
       )
     }
 
-    const body = await request.json()
-    const validation = saveQuizAttemptSchema.safeParse(body)
+    const validation = await readJson(request, saveQuizAttemptSchema)
+    if (!validation.ok) return validation.response
 
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error },
-        { status: 400 }
-      )
-    }
-
-    const rate = submitLimiter.check(session.user.id)
+    const rate = await submitLimiter.check(session.user.id)
     if (!rate.ok) {
       return NextResponse.json(
         { error: 'Too many quiz submissions. Please wait a moment and try again.' },
@@ -230,7 +228,7 @@ async function handlePOST(
       outcome,
     })
   } catch (error) {
-    console.error('Save quiz attempt error:', error)
+    logServerError('Save quiz attempt error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -368,7 +366,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Fetch quiz attempts error:', error)
+    logServerError('Fetch quiz attempts error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

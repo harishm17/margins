@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { computeTopicMastery, recordLearningSignal, upsertReviewSchedule, type Db } from './mastery'
@@ -63,7 +64,7 @@ export async function quizHelp(
     return { helpAfterMiss: await helpAfterMiss(prisma, { userId, topicId, conceptIds: all, surface: 'quiz' }), missedConcepts }
   } catch (error) {
     // Help is an addition to the result; the result itself must not fail for it.
-    console.error('Help after a missed quiz question failed:', error)
+    logServerError('Help after a missed quiz question failed', error)
     return null
   }
 }

@@ -7,6 +7,7 @@
  * partial unique index, so starting twice returns the same attempt.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import type { ExamSubmission } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { createJobOrFindActive, gradeExamTarget, isUniqueViolation } from '@/lib/jobs/active-jobs'
@@ -130,7 +131,7 @@ export async function startGrading(
     await enqueueExamGradingJob(job.id, submissionId, exam.id)
     return { submissionId, jobId: job.id, started: true }
   } catch (error) {
-    console.error('Error enqueuing grading job:', error)
+    logServerError('Error enqueuing grading job', error)
     const retryable =
       typeof (error as { retryable?: unknown })?.retryable === 'boolean'
         ? Boolean((error as { retryable: boolean }).retryable)

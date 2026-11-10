@@ -13,6 +13,8 @@
  * today's newest unfinished review session, for "Resume today's review (5 of 12)" (spec 18.7).
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -23,13 +25,13 @@ import { examPractice } from '@/lib/learning/exam-practice'
 import { ATTEMPT_SUBMITTED } from '@/lib/exams/attempts'
 import { aiRefusal } from '@/lib/api/ai-preflight'
 import { createRateLimiter } from '@/lib/api/rate-limit'
-import { ApiErrorCode, apiError, apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { ApiErrorCode, apiError, apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 import { getTimeZone } from '@/server/timezone'
 
 export const dynamic = 'force-dynamic'
 
 // Starting a session can send a job that writes new items (a model call), so a script cannot start them without end.
-const startLimiter = createRateLimiter({ limit: 20, windowMs: 60_000 })
+const startLimiter = createRateLimiter({ name: 'review-start', limit: 20, windowMs: 60_000 })
 
 const bodySchema = z
   .object({
@@ -44,13 +46,13 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const auth = await requireAuth()
     const { projectId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => ({})))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema.default({}))
+    if (!parsed.ok) return parsed.response
 
     const project = await prisma.project.findFirst({ where: { id: projectId, userId: auth.user.id }, select: { id: true } })
     if (!project) return apiNotFound('Course not found')
 
-    const limit = startLimiter.check(auth.user.id)
+    const limit = await startLimiter.check(auth.user.id)
     if (!limit.ok) {
       const response = apiError(ApiErrorCode.RATE_LIMITED, 'You are asking quickly. Wait a moment, then try again.', { code: 'RATE_LIMITED', retryable: true }, 429)
       response.headers.set('Retry-After', String(limit.retryAfterSeconds))
@@ -91,7 +93,7 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
     if (result.status === 'empty') return NextResponse.json({ status: 'empty', legacyReview: result.legacyReview })
     return NextResponse.json({ status: 'created', sessionId: result.sessionId }, { status: 201 })
   } catch (error) {
-    console.error('Start review session error:', error)
+    logServerError('Start review session error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to start the review')
   }
@@ -106,7 +108,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!project) return apiNotFound('Course not found')
     return NextResponse.json({ session: await activeSession(auth.user.id, projectId, await getTimeZone()) })
   } catch (error) {
-    console.error('Active review session error:', error)
+    logServerError('Active review session error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to look for a review in progress')
   }

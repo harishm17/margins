@@ -14,6 +14,7 @@
  * nothing here moves on by itself.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { gradeAnswers } from '@/lib/ai-service/grading'
@@ -634,7 +635,7 @@ async function advance(userId: string, sessionId: string, timeZone: string, now:
       if (written) return
     }
     // Not an error for the student (the next read does the work again) but worth knowing about.
-    console.warn(`Review session ${sessionId} changed under every attempt to advance it; the next read tries again.`)
+    logServerError('A review session changed under every attempt to advance it; the next read tries again', undefined, { sessionId })
   } finally {
     await sendJobs(toSend)
   }
@@ -698,7 +699,7 @@ async function missHelp(row: { userId: string; kind: string }, items: SessionIte
     }
     return merged
   } catch (error) {
-    console.error('Help after a missed review item failed:', error)
+    logServerError('Help after a missed review item failed', error)
     return null
   }
 }

@@ -9,6 +9,8 @@
  *   the body says why (error.details.code). A miss comes back with what to read next (`help`).
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -33,7 +35,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 // A model call, and often two.
-const tutorLimiter = createRateLimiter({ limit: 20, windowMs: 60_000 })
+const tutorLimiter = createRateLimiter({ name: 'practice-tutor', limit: 20, windowMs: 60_000 })
 
 const bodySchema = z.object({
   problemIndex: z.number().int().min(0).max(200),
@@ -61,14 +63,13 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
     })
     if (!topic) return apiNotFound('Topic not found')
 
-    const body = await request.json().catch(() => null)
-    const parsed = bodySchema.safeParse(body)
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
 
     // Every model call counts toward the limit; a request that turns out invalid or stale does not.
     const admit = CALLS_THE_TUTOR.has(parsed.data.event)
-      ? () => {
-          const limit = tutorLimiter.check(userId)
+      ? async () => {
+          const limit = await tutorLimiter.check(userId)
           return limit.ok ? ({ ok: true } as const) : ({ ok: false, retryAfterSeconds: limit.retryAfterSeconds } as const)
         }
       : undefined
@@ -96,7 +97,7 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof TutorUnavailableError) return tutorFailure(error)
-    console.error('Practice tutor error:', error)
+    logServerError('Practice tutor error', error)
     return apiInternal('The tutor could not answer')
   }
 }
@@ -122,7 +123,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ state: rest, contentId, ...(help ? { help } : {}) })
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('Practice tutor state error:', error)
+    logServerError('Practice tutor state error', error)
     return apiInternal('The tutor state could not be read')
   }
 }

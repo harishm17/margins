@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 /**
  * The voice coach's three tools, run on the server inside the turn loop.
@@ -188,7 +189,7 @@ const hintArgs = z.object({
 })
 
 // Each graded answer costs a model call, so one user cannot hammer them.
-const answerLimiter = createRateLimiter({ limit: voiceTurnsPerMinute(), windowMs: 60_000 })
+const answerLimiter = createRateLimiter({ name: 'voice-grade', limit: voiceTurnsPerMinute(), windowMs: 60_000 })
 
 export type VoiceToolResult = {
   /** What goes back to the model as the tool result. */
@@ -267,7 +268,7 @@ async function recordVoiceEvidence(input: {
       { timeZone: input.timeZone, userId: input.userId, skipIfPresent: true }
     )
   } catch (error) {
-    console.error('Recording voice evidence failed:', error)
+    logServerError('Recording voice evidence failed', error)
   }
 }
 
@@ -311,7 +312,7 @@ async function runVoiceTool(
       topicId: session.topicId,
       timeZone: ctx.timeZone ?? 'UTC',
       grade: ctx.grade,
-      allowGrading: () => answerLimiter.check(userId).ok,
+      allowGrading: async () => (await answerLimiter.check(userId)).ok,
       turn: ctx.turn,
       autoCheck: ctx.autoCheck,
     }
@@ -401,7 +402,7 @@ async function runVoiceTool(
       // Nothing was answered, so nothing is graded: a wrong answer with score 0 (spec 18.3).
       grading = { score: 0, isCorrect: false, comment: 'The student said they did not know.', ungraded: false }
     } else if (gradable) {
-      const rate = answerLimiter.check(userId)
+      const rate = await answerLimiter.check(userId)
       if (!rate.ok) {
         return finish({ error: 'Too many answers too quickly. Wait a moment and try again.' })
       }

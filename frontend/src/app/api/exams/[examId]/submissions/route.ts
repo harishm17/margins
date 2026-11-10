@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -82,7 +83,7 @@ export async function GET(
       stats,
     });
   } catch (error) {
-    console.error('Error fetching submissions:', error);
+    logServerError('Error fetching submissions', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

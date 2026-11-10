@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { cache } from 'react'
 import { prisma } from '@/lib/db/prisma'
 import { pickGenerationFailures } from '@/lib/jobs/failure-message'
@@ -185,7 +186,7 @@ export const getTopicPage = cache(async function getTopicPage(
   const position = visible.findIndex((item) => item.id === topicId)
 
   // Concepts that finished after the overview was last opened: convert this topic now, so the path and the explainer gate are right from the first view.
-  if (!hidden) await convertTopicIfDue(userId, courseId, topicId, { timeZone: await getTimeZone() }).catch((error) => console.error('Topic conversion failed:', error))
+  if (!hidden) await convertTopicIfDue(userId, courseId, topicId, { timeZone: await getTimeZone() }).catch((error) => logServerError('Topic conversion failed', error))
 
   const [contentRows, quizRows, attemptRows, jobRows, structureRow, sourceRows, practiceRows, learningState, waitingQuizzes, effortIntro] = await Promise.all([
     prisma.topicContent.findMany({

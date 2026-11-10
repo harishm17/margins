@@ -1,3 +1,8 @@
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
+import { id, list, record } from '@/lib/api/fields'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { z } from 'zod'
@@ -25,21 +30,21 @@ const sessionSchema = z.object({
     .optional()
     .default('oral_quiz')
     .transform((style) => (style === 'guided_notes' ? 'guided_reading' : style)),
-  projectId: z.string(),
-  topicId: z.string().optional(),
+  projectId: id(),
+  topicId: id().optional(),
   // The idea a teach-back starts with (the "Do it out loud" link names it).
   conceptId: z.string().max(100).optional(),
-  language: z.string().regex(/^[a-z]{2,8}$/i).optional().default('en'),
+  language: z.string().max(8).regex(/^[a-z]{2,8}$/i).optional().default('en'),
   // Ignored since the coach moved to Claude (the browser chooses the voice). Still accepted.
-  voice: z.string().optional().default('marin'),
+  voice: z.string().max(50).optional().default('marin'),
   // What the student wants to concentrate on; trimmed and cut to MAX_FOCUS_CHARS.
-  focus: z.string().nullish(),
+  focus: z.string().max(2000).nullish(),
 })
 
 const patchSchema = z.object({
-  sessionId: z.string(),
+  sessionId: id(),
   status: z.enum(['active', 'ended', 'aborted']).optional(),
-  lastDetectedLanguage: z.string().regex(/^[a-z]{2,8}$/i).nullable().optional(),
+  lastDetectedLanguage: z.string().max(8).regex(/^[a-z]{2,8}$/i).nullable().optional(),
   incrementInterruptCount: z.number().int().min(0).max(20).optional(),
   // Sent every 30 seconds by an open call; keeps the session counted as live.
   heartbeat: z.boolean().optional(),
@@ -48,8 +53,11 @@ const patchSchema = z.object({
 async function handlePOST(request: NextRequest) {
   try {
     const session = await requireAuth()
-    const body = await request.json()
-    const payload = sessionSchema.parse(body)
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
+    const parsed = await readJson(request, sessionSchema)
+    if (!parsed.ok) return parsed.response
+    const payload = parsed.data
 
     if (payload.mode === 'topic_drill' && !payload.topicId) {
       return apiInvalidInput('topicId is required for topic drills')
@@ -123,21 +131,24 @@ async function handlePOST(request: NextRequest) {
       )
     }
 
-    const voiceSession = await prisma.voiceDrillSession.create({
-      data: {
-        userId: session.user.id,
-        projectId: payload.projectId,
-        topicId: payload.topicId ?? null,
-        mode: payload.mode,
-        language: payload.language || 'en',
-        voice: payload.voice || 'marin',
-        style: payload.style,
-        focus: normalizeFocus(payload.focus),
-        questionSet,
-        ...(startConcept ? { coachState: { teach: { current: startConcept.id, concepts: {} } } } : {}),
-        metrics: { entries: [] },
-        status: 'active',
-      },
+    const voiceSession = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, session.user, 'voiceSessions')
+      return tx.voiceDrillSession.create({
+        data: {
+          userId: session.user.id,
+          projectId: payload.projectId,
+          topicId: payload.topicId ?? null,
+          mode: payload.mode,
+          language: payload.language || 'en',
+          voice: payload.voice || 'marin',
+          style: payload.style,
+          focus: normalizeFocus(payload.focus),
+          questionSet,
+          ...(startConcept ? { coachState: { teach: { current: startConcept.id, concepts: {} } } } : {}),
+          metrics: { entries: [] },
+          status: 'active',
+        },
+      })
     })
 
     // The topic's key terms, for the coach prompt (the turn route builds the same list) and for on-device recognition (spec 19.5).
@@ -154,7 +165,9 @@ async function handlePOST(request: NextRequest) {
       focus: voiceSession.focus,
     })
   } catch (error) {
-    console.error('Create voice session error:', error)
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
+    logServerError('Create voice session error', error)
 
     if (error instanceof z.ZodError) {
       return apiInvalidInput('Invalid input', zodDetails(error))
@@ -171,8 +184,11 @@ async function handlePOST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const auth = await requireAuth()
-    const body = await request.json()
-    const payload = patchSchema.parse(body)
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
+    const parsed = await readJson(request, patchSchema)
+    if (!parsed.ok) return parsed.response
+    const payload = parsed.data
 
     const session = await prisma.voiceDrillSession.findFirst({
       where: {
@@ -225,7 +241,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ session: updated })
   } catch (error) {
-    console.error('Patch voice session error:', error)
+    logServerError('Patch voice session error', error)
 
     if (error instanceof z.ZodError) {
       return apiInvalidInput('Invalid input', zodDetails(error))

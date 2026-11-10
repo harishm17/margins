@@ -35,6 +35,7 @@ import { explainerCheckKey, parseExplainerCheckDraft, type ExplainerCheckDraft }
 import { createSlugger } from '@/lib/markdown-outline'
 import { rehypeBindMathPunctuation } from '@/lib/markdown/bind-math'
 import { remarkInlineHtml } from '@/lib/markdown/inline-html'
+import { safeComponents } from '@/lib/markdown/safe-components'
 import { parseCheckBlock } from '@/lib/markdown/check-block'
 import { Button } from './button'
 import { CheckGradeContext, ExplainerDraftContext } from './check-context'
@@ -281,6 +282,7 @@ type CitationRenderer = (marker: number) => React.ReactNode
 
 function buildComponents(renderCitation?: CitationRenderer, inline = false): Components {
   return {
+    ...safeComponents,
     a({ href, children, node: _node, ...props }) {
       const cite = href ? /^#cite-(\d+)$/.exec(href) : null
       if (cite && renderCitation) return <>{renderCitation(Number(cite[1]))}</>

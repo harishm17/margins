@@ -9,6 +9,9 @@
  * concept, in reading order. The reader opened for an idea (`?focus=`) marks them "Focus here" and scrolls to the first.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -16,7 +19,7 @@ import { requireAuth } from '@/lib/auth/get-session'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
 import { conceptPassageIds } from '@/lib/reader/concept-passages'
 import { recordReaderCheck, revealCheckSource } from '@/lib/reader/reader-server'
-import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,14 +28,16 @@ const bodySchema = z.object({ claimId: z.string().min(1).max(100), grade: z.enum
 async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { topicId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const result = await recordReaderCheck({ userId: auth.user.id, topicId, claimId: parsed.data.claimId, grade: parsed.data.grade, timeZone: await studentTimeZone() })
     if (result.status === 'not_found') return apiNotFound('Check not found')
     return NextResponse.json({ ok: true, recorded: result.recorded })
   } catch (error) {
-    console.error('Reader check error:', error)
+    logServerError('Reader check error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save your answer')
   }
@@ -51,7 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!source) return apiNotFound('Check not found')
     return NextResponse.json(source)
   } catch (error) {
-    console.error('Reader check source error:', error)
+    logServerError('Reader check source error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the source')
   }

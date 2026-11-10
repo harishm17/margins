@@ -8,6 +8,7 @@
  * that cannot be reached reads as unavailable (AI_UNREACHABLE) and is not cached.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 import { parseStatusResponse, unreachableStatus, type AiStatusDetails } from '@/lib/ai/status'
 
@@ -47,7 +48,7 @@ export async function getAiStatus(userId?: string | null, options: Options = {})
     if (!response.ok) throw new Error(`status ${response.status}`)
     value = parseStatusResponse(await response.json())
   } catch (error) {
-    console.error('[AI STATUS] The AI service could not be reached:', error)
+    logServerError('Ai Status: The AI service could not be reached', error)
     cache.delete(key)
     return unreachableStatus()
   }

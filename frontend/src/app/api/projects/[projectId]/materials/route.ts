@@ -8,6 +8,9 @@
  * from Content-Length before any of the body is read.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { Readable } from 'stream'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -30,6 +33,9 @@ import { roleForCategory } from '@/lib/materials/role'
 const uploadSchema = z.object({
   category: z.enum(['lecture_notes', 'sample_exams', 'book_chapters', 'syllabus']),
 })
+
+/** The longest file name accepted; the name is stored and shown, so it is bounded. */
+const MAX_FILENAME_CHARS = 255
 
 const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx', '.pptx', '.doc'])
 
@@ -55,6 +61,8 @@ export async function POST(
   try {
     // 1. Authenticate user
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     // 2. Verify project ownership
@@ -94,6 +102,10 @@ export async function POST(
       )
     }
 
+    if (filename.length > MAX_FILENAME_CHARS) {
+      return NextResponse.json({ error: `File names can have up to ${MAX_FILENAME_CHARS} characters.` }, { status: 400 })
+    }
+
     const extension = getExtension(filename)
     if (!SUPPORTED_EXTENSIONS.has(extension)) {
       return NextResponse.json(
@@ -117,6 +129,11 @@ export async function POST(
     if (!request.body) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
+    // Refuse before the upload is read when the course or the account is full; the insert below checks again under the lock.
+    const full = await prisma.$transaction(async (tx) =>
+      (await quota(tx, session.user, 'files', { projectId })) ?? (await quota(tx, session.user, 'storage', { bytes: lengthCheck.length ?? 0 }))
+    )
+    if (full) return quotaResponse(full)
 
     // 5. Stream the body to storage, checking the size and the file signature on the way.
     // Storage is written first so a failed upload leaves no orphaned database record.
@@ -152,6 +169,8 @@ export async function POST(
     // stored file is deleted too, so nothing is left that no row points at.
     const { material, job } = await recordStoredFile(storedPath, () =>
       prisma.$transaction(async (tx) => {
+        await assertQuota(tx, session.user, 'files', { projectId })
+        await assertQuota(tx, session.user, 'storage', { bytes: fileSize })
         const material = await tx.material.create({
           data: {
             id: materialId,
@@ -231,7 +250,9 @@ export async function POST(
       jobId: job.id,
     })
   } catch (error) {
-    console.error('Material upload error:', error)
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
+    logServerError('Material upload error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -299,7 +320,7 @@ export async function GET(
       })),
     })
   } catch (error) {
-    console.error('Fetch materials error:', error)
+    logServerError('Fetch materials error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

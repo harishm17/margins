@@ -9,13 +9,16 @@
  * student's attempt or "I don't know".
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { ANSWER_FIRST, recordAskCheck, revealAskCheck } from '@/lib/ask/ask-check'
 import { CONFIDENCE_LEVELS } from '@/lib/learning/calibration'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
-import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,8 +32,10 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth()
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const result = await recordAskCheck({
       userId: auth.user.id,
       messageId: parsed.data.messageId,
@@ -43,7 +48,7 @@ export async function POST(request: NextRequest) {
     if (result.status === 'attempt_required') return apiInvalidInput(ANSWER_FIRST)
     return NextResponse.json({ ok: true, recorded: result.recorded, grade: result.grade })
   } catch (error) {
-    console.error('Ask check error:', error)
+    logServerError('Ask check error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save your answer')
   }
@@ -59,7 +64,7 @@ export async function GET(request: NextRequest) {
     if (revealed.status === 'attempt_required') return apiInvalidInput(ANSWER_FIRST)
     return NextResponse.json({ answer: revealed.answer, explanation: revealed.explanation })
   } catch (error) {
-    console.error('Ask check reveal error:', error)
+    logServerError('Ask check reveal error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the answer')
   }

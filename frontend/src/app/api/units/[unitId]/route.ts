@@ -10,6 +10,9 @@
  *   200: { success: true }
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
@@ -18,11 +21,9 @@ import {
   ApiErrorCode,
   apiError,
   apiInternal,
-  apiInvalidInput,
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { moveInOrder } from '@/lib/topics/ordering'
 import { compactUnitOrder, normalizeTopicOrder } from '@/lib/topics/normalize-order'
@@ -40,12 +41,14 @@ const ownedUnit = (unitId: string, userId: string) =>
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ unitId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { unitId } = await params
     const unit = await ownedUnit(unitId, session.user.id)
     if (!unit) return apiNotFound('Unit not found')
 
-    const parsed = updateUnitSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, updateUnitSchema)
+    if (!parsed.ok) return parsed.response
     const { orderIndex, summary, weekLabel, title } = parsed.data
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -76,7 +79,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       unit: { id: updated.id, title: updated.title, summary: updated.summary, weekLabel: updated.weekLabel, orderIndex: updated.orderIndex },
     })
   } catch (error) {
-    console.error('Update unit error:', error)
+    logServerError('Update unit error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof SyntaxError) return apiError(ApiErrorCode.INVALID_INPUT, 'Invalid JSON body', undefined, 400)
     return apiInternal('Failed to update unit')
@@ -86,6 +89,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ unitId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { unitId } = await params
     const unit = await ownedUnit(unitId, session.user.id)
     if (!unit) return apiNotFound('Unit not found')
@@ -100,7 +105,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     })
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Delete unit error:', error)
+    logServerError('Delete unit error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to delete unit')
   }

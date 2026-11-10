@@ -1,3 +1,6 @@
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getServerSession } from 'next-auth'
@@ -66,16 +69,27 @@ export async function POST(
   const { projectId } = await params
   const { userId, project } = await ownedProject(projectId)
   if (!userId) return apiUnauthorized()
+  const limited = await enforceMutationLimit(userId)
+  if (limited) return limited
   if (!project) return apiNotFound('Project not found')
 
-  const body = await req.json().catch(() => ({}))
-  const parsed = createSchema.safeParse(body ?? {})
-  if (!parsed.success) return apiInvalidInput('Invalid title')
+  const parsed = await readJson(req, createSchema.default({}))
+  if (!parsed.ok) return parsed.response
 
-  const thread = await prisma.chatThread.create({
-    data: { userId, projectId, title: parsed.data.title ?? null },
-    select: { id: true, title: true, createdAt: true, updatedAt: true },
-  })
+  let thread
+  try {
+    thread = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, { id: userId }, 'chatThreads', { projectId })
+      return tx.chatThread.create({
+        data: { userId, projectId, title: parsed.data.title ?? null },
+        select: { id: true, title: true, createdAt: true, updatedAt: true },
+      })
+    })
+  } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
+    throw error
+  }
   return NextResponse.json(
     {
       thread: {

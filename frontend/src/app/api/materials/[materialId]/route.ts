@@ -1,3 +1,6 @@
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { getServerSession } from 'next-auth';
@@ -9,7 +12,7 @@ import { canBeTopicSource, isMaterialRole } from '@/lib/materials/role';
 import { startExamProfileJob, startExamRelevanceJob } from '@/lib/exams/style-jobs';
 
 const roleSchema = z.object({
-  role: z.string().refine(isMaterialRole, 'Role must be content, syllabus, exam or other'),
+  role: z.string().max(20).refine(isMaterialRole, 'Role must be content, syllabus, exam or other'),
 });
 
 /**
@@ -35,12 +38,12 @@ export async function PATCH(
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const limited = await enforceMutationLimit(session.user.id);
+    if (limited) return limited;
     const { materialId } = await params;
 
-    const parsed = roleSchema.safeParse(await req.json().catch(() => null));
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
-    }
+    const parsed = await readJson(req, roleSchema);
+    if (!parsed.ok) return parsed.response;
     const role = parsed.data.role as 'content' | 'syllabus' | 'exam' | 'other';
 
     const material = await prisma.material.findFirst({
@@ -79,7 +82,7 @@ export async function PATCH(
 
     return NextResponse.json({ material: { id: materialId, role, removedSources } });
   } catch (error) {
-    console.error('Error updating material:', error);
+    logServerError('Error updating material', error);
     return NextResponse.json({ error: 'Failed to update material' }, { status: 500 });
   }
 }
@@ -93,6 +96,8 @@ export async function DELETE(
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const limited = await enforceMutationLimit(session.user.id);
+    if (limited) return limited;
 
     const { materialId } = await params;
 
@@ -129,7 +134,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting material:', error);
+    logServerError('Error deleting material', error);
     return NextResponse.json(
       { error: 'Failed to delete material' },
       { status: 500 }

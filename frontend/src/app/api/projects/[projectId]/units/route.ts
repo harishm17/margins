@@ -8,6 +8,10 @@
  * Units are read through server queries (course shell, topics data); there is no list route.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
@@ -16,11 +20,9 @@ import {
   ApiErrorCode,
   apiError,
   apiInternal,
-  apiInvalidInput,
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { moveInOrder } from '@/lib/topics/ordering'
 import { compactUnitOrder, normalizeTopicOrder } from '@/lib/topics/normalize-order'
@@ -35,16 +37,19 @@ const createUnitSchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     const project = await prisma.project.findFirst({ where: { id: projectId, userId: session.user.id }, select: { id: true } })
     if (!project) return apiNotFound('Project not found')
 
-    const parsed = createUnitSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, createUnitSchema)
+    if (!parsed.ok) return parsed.response
     const { title, summary, weekLabel, orderIndex } = parsed.data
 
     const unit = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, session.user, 'units', { projectId })
       const last = await tx.unit.findFirst({ where: { projectId }, orderBy: { orderIndex: 'desc' }, select: { orderIndex: true } })
       const created = await tx.unit.create({
         data: { projectId, title, summary: summary || null, weekLabel: weekLabel || null, orderIndex: (last?.orderIndex ?? -1) + 1 },
@@ -63,7 +68,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       unit: { id: unit.id, title: unit.title, summary: unit.summary, weekLabel: unit.weekLabel, orderIndex: unit.orderIndex },
     })
   } catch (error) {
-    console.error('Create unit error:', error)
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
+    logServerError('Create unit error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof SyntaxError) return apiError(ApiErrorCode.INVALID_INPUT, 'Invalid JSON body', undefined, 400)
     return apiInternal('Failed to create unit')

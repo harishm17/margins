@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { prisma } from '@/lib/db/prisma'
 import { ensureAiGenerationReady } from '@/lib/api/ai-preflight'
 import { createJobOrFindActive, prepareConceptsTarget } from '@/lib/jobs/active-jobs'
@@ -139,10 +140,10 @@ export async function startPrepareConceptsForCourse(userId: string, projectId: s
   try {
     if (await deps.hasConcepts(projectId)) return
   } catch (error) {
-    console.error('Could not check concepts for preparation:', error)
+    logServerError('Could not check concepts for preparation', error)
     return
   }
   void startPrepareConcepts(projectId, deps).catch((error) => {
-    console.error('Could not start concept preparation:', error)
+    logServerError('Could not start concept preparation', error)
   })
 }

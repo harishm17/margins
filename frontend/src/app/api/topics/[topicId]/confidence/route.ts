@@ -1,3 +1,6 @@
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -5,11 +8,9 @@ import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import {
   apiInternal,
-  apiInvalidInput,
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { adjustReviewForConfidence, computeTopicMastery, isConfidenceFeedback } from '@/lib/learning/mastery'
 
@@ -24,13 +25,12 @@ export async function POST(
 ) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     await applyPendingQuizResults(auth.user.id)
     const { topicId } = await params
-    const body = await request.json()
-    const parsed = confidenceSchema.safeParse(body)
-    if (!parsed.success) {
-      return apiInvalidInput('Invalid input', zodDetails(parsed.error))
-    }
+    const parsed = await readJson(request, confidenceSchema)
+    if (!parsed.ok) return parsed.response
 
     const topic = await prisma.topic.findFirst({
       where: {
@@ -85,7 +85,7 @@ export async function POST(
       nextReviewAt: schedule?.dueAt ?? null,
     })
   } catch (error) {
-    console.error('Confidence save error:', error)
+    logServerError('Confidence save error', error)
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()
     }

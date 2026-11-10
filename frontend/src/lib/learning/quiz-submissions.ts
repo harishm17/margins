@@ -19,6 +19,7 @@
  * then sees `appliedAt`). There is no separate claim that could be left behind.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
@@ -107,7 +108,7 @@ export async function startQuizGrading(userId: string, topic: Topic, submissionI
     await enqueueQuizGradingJob(job.id, submissionId)
     return { submissionId, jobId: job.id, started: true }
   } catch (error) {
-    console.error('Error enqueuing quiz grading job:', error)
+    logServerError('Error enqueuing quiz grading job', error)
     const retryable =
       typeof (error as { retryable?: unknown })?.retryable === 'boolean'
         ? Boolean((error as { retryable: boolean }).retryable)
@@ -465,7 +466,7 @@ export async function applyPendingQuizResults(
     try {
       if (await applyQuizSubmission(userId, id)) applied += 1
     } catch (error) {
-      console.error('Applying a graded quiz to mastery failed:', error)
+      logServerError('Applying a graded quiz to mastery failed', error)
     }
   }
   return applied

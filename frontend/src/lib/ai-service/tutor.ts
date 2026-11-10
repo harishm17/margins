@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 import { callSignal } from '@/lib/ai-service/client-signal'
 import type { MissKind } from '@/lib/tutor/state'
@@ -70,12 +71,12 @@ export async function postTutor<T>(path: string, request: unknown): Promise<T> {
       signal: callSignal(TUTOR_TIMEOUT_MS),
     })
   } catch (error) {
-    console.error('Tutor request failed:', error)
+    logServerError('Tutor request failed', error)
     throw new TutorUnavailableError('AI_UNREACHABLE', 503)
   }
   if (!response.ok) {
     const code = await errorCode(response)
-    console.error('Tutor request returned', response.status, code)
+    logServerError('Tutor request returned an error', undefined, { status: response.status, code })
     throw new TutorUnavailableError(code, response.status)
   }
   return (await response.json()) as T

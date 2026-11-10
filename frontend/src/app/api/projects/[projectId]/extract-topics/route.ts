@@ -3,6 +3,9 @@
  * POST /api/projects/[projectId]/extract-topics
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { quotaErrorResponse } from '@/lib/api/quota'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -26,6 +29,8 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     // Verify project ownership
@@ -128,7 +133,9 @@ export async function POST(
       estimatedSeconds: 45,
     })
   } catch (error) {
-    console.error('Topic extraction error:', error)
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
+    logServerError('Topic extraction error', error)
 
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()

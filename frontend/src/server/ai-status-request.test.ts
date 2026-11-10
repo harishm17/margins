@@ -1,7 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createRateLimiter } from '@/lib/api/rate-limit'
+import type { RateLimiter } from '@/lib/api/rate-limit'
 import { createAiStatusHandler } from './ai-status-request'
+
+/** A one-hit-per-key limiter held in the test, so the handler is driven without a database. */
+function oneHitLimiter(): RateLimiter {
+  const seen = new Set<string>()
+  const hit = async (key: string) => {
+    if (seen.has(key)) return { ok: false, retryAfterSeconds: 1 }
+    seen.add(key)
+    return { ok: true, retryAfterSeconds: 0 }
+  }
+  return { check: hit, checkAddress: hit }
+}
 
 const details = { available: true, reason: null, since: null, blocked: null, allowance: null, resetsAt: null } as never
 
@@ -13,7 +24,7 @@ function setup(user: { id: string } | null) {
       calls.push({ userId, fresh: options.fresh })
       return details
     },
-    freshLimiter: createRateLimiter({ limit: 1, windowMs: 1000 }),
+    freshLimiter: oneHitLimiter(),
   })
   return { calls, get: (path: string) => handle(new Request(`http://app.test${path}`)) }
 }
@@ -39,7 +50,7 @@ test('repeat fresh requests inside the window fall back to the cache, per user',
 })
 
 test('one user\'s fresh reads do not use up another user\'s', async () => {
-  const limiter = createRateLimiter({ limit: 1, windowMs: 1000 })
+  const limiter = oneHitLimiter()
   let current = 'u1'
   const fresh: boolean[] = []
   const handle = createAiStatusHandler({

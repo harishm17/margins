@@ -6,6 +6,8 @@
  * already running is returned instead of starting another.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -26,6 +28,8 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { examId, submissionId } = await params
 
     const exam = await findExamForUser(session.user.id, examId)
@@ -48,7 +52,7 @@ export async function POST(
 
     return NextResponse.json({ submissionId: submission.id, jobId: grading.jobId, status: 'queued' })
   } catch (error) {
-    console.error('Error regrading exam:', error)
+    logServerError('Error regrading exam', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Internal server error')
   }

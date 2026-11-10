@@ -1,3 +1,7 @@
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -19,33 +23,33 @@ export async function POST(req: NextRequest) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const limited = await enforceMutationLimit(session.user.id);
+    if (limited) return limited;
 
-    const body = await req.json();
-    const validation = createProjectSchema.safeParse(body);
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error.errors },
-        { status: 400 }
-      );
-    }
+    const validation = await readJson(req, createProjectSchema)
+    if (!validation.ok) return validation.response
 
     const { name, description, examDate, dailyMinutes } = validation.data;
 
-    const project = await prisma.project.create({
-      data: {
-        userId: session.user.id,
-        name,
-        description,
-        status: 'setup',
-        ...(examDate !== undefined ? { examDate: examDateColumn(examDate) } : {}),
-        ...(dailyMinutes !== undefined ? { dailyMinutes } : {}),
-      },
+    const project = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, session.user, 'courses');
+      return tx.project.create({
+        data: {
+          userId: session.user.id,
+          name,
+          description,
+          status: 'setup',
+          ...(examDate !== undefined ? { examDate: examDateColumn(examDate) } : {}),
+          ...(dailyMinutes !== undefined ? { dailyMinutes } : {}),
+        },
+      });
     });
 
     return NextResponse.json({ project });
   } catch (error) {
-    console.error('Error creating project:', error);
+    const refused = quotaErrorResponse(error);
+    if (refused) return refused;
+    logServerError('Error creating project', error);
     return NextResponse.json(
       { error: 'Failed to create project' },
       { status: 500 }

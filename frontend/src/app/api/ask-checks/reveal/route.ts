@@ -4,11 +4,14 @@
  * answer and explanation. Without an attempt (or one stored earlier) the answer is not returned (spec P1).
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { ANSWER_FIRST, revealAskCheck } from '@/lib/ask/ask-check'
-import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,14 +24,16 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth()
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const revealed = await revealAskCheck({ userId: auth.user.id, messageId: parsed.data.messageId, attempt: parsed.data.attempt, dontKnow: parsed.data.idk === true })
     if (revealed.status === 'not_found') return apiNotFound('Question not found')
     if (revealed.status === 'attempt_required') return apiInvalidInput(ANSWER_FIRST)
     return NextResponse.json({ answer: revealed.answer, explanation: revealed.explanation })
   } catch (error) {
-    console.error('Ask check reveal error:', error)
+    logServerError('Ask check reveal error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the answer')
   }

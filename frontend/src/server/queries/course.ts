@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { notFound } from 'next/navigation'
 import { areRecordIds } from '@/lib/ids'
 import { prisma } from '@/lib/db/prisma'
@@ -497,7 +498,7 @@ export async function getCourseOverview(
   // promise keeps running after the response is sent. On a host that freezes or stops the process when the
   // response ends (serverless), this must move to a job. A run that dies midway marks nothing; its lease
   // (Project.evidenceBackfillClaimedAt) expires and a later visit finishes it, so a failure here is only logged.
-  void backfillIfDue(userId, courseId, { timeZone }).catch((error) => console.error('Evidence backfill failed:', error))
+  void backfillIfDue(userId, courseId, { timeZone }).catch((error) => logServerError('Evidence backfill failed', error))
 
   const examTitles = await getExamTitles(userId, courseId)
   const now = new Date()

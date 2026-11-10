@@ -3,6 +3,7 @@
  * cap. Both are checked and the session is marked connected in one serializable transaction,
  * so two requests cannot both pass.
  */
+import { logServerError } from '@/lib/ops/log'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { spendKeyFor } from '@/lib/account/spend-key-store'
@@ -72,5 +73,5 @@ export async function claimVoiceTurn(sessionId: string, now = new Date()): Promi
 export async function releaseVoiceTurn(sessionId: string): Promise<void> {
   await prisma.voiceDrillSession
     .updateMany({ where: { id: sessionId }, data: { turnStartedAt: null } })
-    .catch((error) => console.error('[VOICE] Could not release the turn claim:', error))
+    .catch((error) => logServerError('Voice: Could not release the turn claim', error))
 }

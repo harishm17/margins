@@ -1,3 +1,6 @@
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 /**
  * API route for topic progress tracking
@@ -25,6 +28,8 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId } = await params
 
     // Verify topic ownership
@@ -44,15 +49,8 @@ export async function POST(
       )
     }
 
-    const body = await request.json()
-    const validation = updateProgressSchema.safeParse(body)
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error },
-        { status: 400 }
-      )
-    }
+    const validation = await readJson(request, updateProgressSchema)
+    if (!validation.ok) return validation.response
 
     // Upsert progress
     const { readAt: markRead, ...fields } = validation.data
@@ -98,7 +96,7 @@ export async function POST(
 
     return NextResponse.json({ progress })
   } catch (error) {
-    console.error('Update progress error:', error)
+    logServerError('Update progress error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -161,7 +159,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Fetch progress error:', error)
+    logServerError('Fetch progress error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -53,7 +54,7 @@ export async function GET(
       plan: data.plan,
     })
   } catch (error) {
-    console.error('Study plan error:', error)
+    logServerError('Study plan error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load study plan')
   }

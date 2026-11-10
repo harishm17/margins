@@ -4,6 +4,7 @@
  * that turn when they arrive (they come with the next turn). `summarizeTimings` gives the P50 and P95 per style;
  * `scripts/voice-timing.ts` prints it. Nothing here holds what anyone said.
  */
+import { logServerError } from '@/lib/ops/log'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
@@ -82,7 +83,7 @@ export async function recordTurnTiming(row: TurnTimingRow, log: (line: string) =
       update: {},
     })
   } catch (error) {
-    console.error('[VOICE] Could not store the turn timing:', error)
+    logServerError('Voice: Could not store the turn timing', error)
   }
 }
 
@@ -92,7 +93,7 @@ export async function attachClientTiming(sessionId: string, thisTurn: number, cl
   try {
     await prisma.voiceTurnTiming.updateMany({ where: { sessionId, turn: thisTurn - 1 }, data: { client: client as unknown as Prisma.InputJsonValue } })
   } catch (error) {
-    console.error('[VOICE] Could not store the browser timing:', error)
+    logServerError('Voice: Could not store the browser timing', error)
   }
 }
 

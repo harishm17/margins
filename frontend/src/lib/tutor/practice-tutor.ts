@@ -5,6 +5,7 @@
  * rung. Using the worked example surrenders the step: it is recorded at level 3 for the closing retest.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { prisma } from '@/lib/db/prisma'
 import { checkPracticeAnswer } from '@/features/topic/practice-check'
 import type { PracticeProblem, PracticeStep } from '@/features/topic/types'
@@ -37,7 +38,8 @@ export type PracticeTutorResult =
   | { status: 'rate_limited'; retryAfterSeconds: number }
   | { status: 'ok'; body: PracticeTutorResponse }
 
-export type Admit = () => { ok: true } | { ok: false; retryAfterSeconds: number }
+type Admitted = { ok: true } | { ok: false; retryAfterSeconds: number }
+export type Admit = () => Admitted | Promise<Admitted>
 
 const MAX_ATTEMPT_CHARS = 500
 
@@ -63,7 +65,7 @@ async function helpFor(userId: string, topicId: string, step: PracticeStep): Pro
   try {
     return await helpAfterMiss(prisma, { userId, topicId, conceptIds: step.conceptIds, surface: 'practice' })
   } catch (error) {
-    console.error('Help after a miss failed:', error)
+    logServerError('Help after a miss failed', error)
     return undefined
   }
 }
@@ -206,7 +208,7 @@ export async function runPracticeTutor(
   if (body.event === 'show_worked' && (!gateHelp(before, event).ok || !preview.workedAllowed)) return { status: 'attempt_first' }
   // Effort first (spec 5.6): the tutor looks at working once the student has checked an answer.
   if (body.event === 'ask' && before.checks < 1) return { status: 'not_allowed' }
-  const admitted = options.admit?.()
+  const admitted = await options.admit?.()
   if (admitted && !admitted.ok) return { status: 'rate_limited', retryAfterSeconds: admitted.retryAfterSeconds }
 
   // What the checks said comes from the server's own record of them, never from the browser's list.

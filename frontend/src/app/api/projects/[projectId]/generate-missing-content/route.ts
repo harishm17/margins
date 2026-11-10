@@ -12,6 +12,9 @@
  * generation job running.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { quotaErrorResponse } from '@/lib/api/quota'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -39,6 +42,8 @@ export async function POST(
 ) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     const project = await prisma.project.findFirst({
@@ -160,7 +165,9 @@ export async function POST(
       message: `Writing content for ${missing.length} topic${missing.length === 1 ? '' : 's'}, one at a time.`,
     })
   } catch (error) {
-    console.error('Prepare all topics error:', error)
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
+    logServerError('Prepare all topics error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to queue missing content generation')
   }
