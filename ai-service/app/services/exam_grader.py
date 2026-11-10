@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 from app.services.ai_status import PROVIDER_DOWN_CODES, TRANSIENT_CODES
 from app.services.budget import DailyBudgetExceeded
-from app.services.llm.base import LLMError, LLMMessage
+from app.services.llm.base import LLMBusyError, LLMError, LLMMessage
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import ShortAnswerGrade
 
@@ -323,7 +323,8 @@ If the answer states a specific wrong idea, give it in misconception as the idea
         except DailyBudgetExceeded:
             raise  # the allowance is spent: not a bad answer
         except LLMError as e:
-            if e.code in PROVIDER_DOWN_CODES or e.code in TRANSIENT_CODES:
+            # Down, overloaded, or every model slot busy (interactive lane): the student's answer is not wrong.
+            if e.code in PROVIDER_DOWN_CODES or e.code in TRANSIENT_CODES or isinstance(e, LLMBusyError):
                 raise
             logger.error("Error grading short answer: %s", e)
             return {

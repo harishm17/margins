@@ -55,3 +55,10 @@ export function refusalNote(refused: 'user' | 'first_day' | 'reserve' | 'global'
   }
   return null
 }
+
+/** The heading that goes with `refusalNote` (a paused new account has not used its allowance), or null for the ordinary case. */
+export function refusalTitle(refused: 'user' | 'first_day' | 'reserve' | 'global' | null): string | null {
+  if (refused === 'first_day') return "You've used today's first-day allowance"
+  if (refused === 'reserve') return 'New accounts are paused for today'
+  return null
+}

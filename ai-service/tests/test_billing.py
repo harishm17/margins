@@ -4,6 +4,7 @@ Every route that can reach the model is listed here with a request that does. A 
 fails `test_every_route_is_billed_or_says_why_not`, so it cannot ship unbilled by omission.
 """
 import ast
+import asyncio
 import pathlib
 
 import httpx
@@ -15,7 +16,7 @@ from app.main import app
 from app.services import budget as budget_module
 from app.services.billing import BillingProvider, UnbilledModelCall, billed, current_scope, unbilled
 from app.services.budget import DailyBudgetExceeded
-from app.services.llm.base import LLMProvider, LLMUnavailableError, LLMUsage
+from app.services.llm.base import LLMMessage, LLMProvider, LLMUnavailableError, LLMUsage
 from app.services.llm.factory import LLMFactory
 from app.services.llm.mock_provider import MockProvider
 from app.services.llm.usage import record_usage
@@ -134,6 +135,35 @@ async def test_a_stream_the_reader_drops_is_billed_for_what_it_reported(db, monk
         assert await stream.__anext__() == "first"
         await stream.aclose()
     assert await db.fetchval("SELECT SUM(input_tokens) FROM llm_usage_events WHERE user_id = $1", user_id) == 700
+
+
+async def test_a_call_cancelled_before_it_returns_is_billed_for_its_input(db, monkeypatch):
+    """Review of PR 1.8-1.9b: a tutor or drill call cut off by a dropped request wrote no row, so repeated aborts
+    spent money outside the allowance."""
+    user_id = await seed_user(db)
+    started = asyncio.Event()
+
+    class Slow(Spy):
+        def model_for(self, purpose):
+            return "claude-haiku-5-5"
+
+        async def generate_structured(self, messages, schema, *, purpose, max_tokens=16000):
+            started.set()
+            await asyncio.sleep(60)
+
+    provider = BillingProvider(Slow())
+
+    async def call():
+        async with billed(user_id, None, "drill", "t1"):
+            await provider.generate_structured([LLMMessage(role="user", content="x" * 4000)], object, purpose="drill")
+
+    task = asyncio.create_task(call())
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    row = await db.fetchrow("SELECT input_tokens, cost_usd FROM llm_usage_events WHERE user_id = $1", user_id)
+    assert row["input_tokens"] == 1000 and row["cost_usd"] > 0
 
 
 # ---- the routes

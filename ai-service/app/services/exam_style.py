@@ -128,26 +128,27 @@ def _messages(exam_text: str, filename: str, rejected: Sequence[str] = ()) -> Li
     return [LLMMessage(role="system", content=STYLE_SYSTEM), LLMMessage(role="user", content="\n\n".join(parts))]
 
 
-async def extract_style_profile(exam_text: str, filename: str) -> Dict[str, Any]:
+async def extract_style_profile(exam_text: str, filename: str, material_id: str = "") -> Dict[str, Any]:
     """The style profile of one exam, ready to store. Makes one model call, two when the first
-    answer's stems copy the exam. Stems that still copy are dropped."""
+    answer's stems copy the exam. Stems that still copy are dropped. The filename goes to the model;
+    the logs name the material by its id (a filename is the student's text)."""
     llm = LLMFactory.get_provider()
     result = await llm.generate_structured(
         _messages(exam_text, filename), ExamStyleProfile, max_tokens=4000, purpose="exam_style"
     )
     bad = copying_stems(result.example_stems, exam_text)
     if bad:
-        logger.info("Style profile for %s: %d stem(s) copy the exam, asking again", filename, len(bad))
+        logger.info("Style profile for material %s: %d stem(s) copy the exam, asking again", material_id, len(bad))
         try:
             retry = await llm.generate_structured(
                 _messages(exam_text, filename, rejected=bad), ExamStyleProfile, max_tokens=4000, purpose="exam_style"
             )
             result = retry
         except Exception as exc:  # the first answer is still usable without its stems
-            logger.warning("Style profile retry for %s failed: %s", filename, exc)
+            logger.warning("Style profile retry for material %s failed: %s", material_id, exc)
         bad = copying_stems(result.example_stems, exam_text)
     if bad:
-        logger.info("Style profile for %s: dropping %d stem(s) that still copy the exam", filename, len(bad))
+        logger.info("Style profile for material %s: dropping %d stem(s) that still copy the exam", material_id, len(bad))
         result.example_stems = [stem for stem in result.example_stems if stem not in bad]
     return _normalise(result)
 
@@ -312,7 +313,7 @@ async def profile_exam_material(material_id: str) -> Dict[str, Any]:
     if not text.strip():
         return {"status": "skipped", "reason": "no text"}
 
-    profile = await extract_style_profile(text, material["filename"])
+    profile = await extract_style_profile(text, material["filename"], material_id)
 
     # The role may have changed while the model worked: store only for a file that is still an exam.
     stored = await execute_one(

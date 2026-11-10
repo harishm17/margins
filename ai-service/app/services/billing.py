@@ -9,7 +9,9 @@
 2. checks `allowance_today(user_id)` before each call and raises `DailyBudgetExceeded` when it is spent;
 3. writes one `llm_usage_events` row for each call as soon as the call returns or fails with usage. The write is
    shielded from cancellation, so a student who closes the tab or a job that is killed still pays for the calls
-   already made. A stream that is cut off is billed for the usage it had reported so far (the input tokens at least).
+   already made. A stream that is cut off is billed for the usage it had reported so far (the input tokens at least),
+   and a call cancelled before it returned (the student left, the job was killed) for an estimate of its input: the
+   request was sent, so it is paid for.
 
 `unbilled(reason)` is for evals, replay recording, scripts and tests: no check and no row. Production code under app/
 does not use it (tests/test_billing.py greps for it).
@@ -163,6 +165,15 @@ class BillingProvider(LLMProvider):
     def model_for(self, purpose: str) -> Optional[str]:
         return self.inner.model_for(purpose)
 
+    def _cut_off(self, call: _Call, messages: List[LLMMessage], purpose: str) -> None:
+        """A call cancelled before it reported usage: bill an estimate of the input it sent (about 4 characters a token).
+        An unknown model id is priced at the highest price (usage.estimate_cost_usd)."""
+        if call.usages or call.seen is not None:
+            return
+        chars = sum(len(message.content) for message in messages)
+        model = self.inner.model_for(purpose) or "unknown"
+        call.partial(LLMUsage(model=model, purpose=purpose, input_tokens=max(1, chars // 4)))
+
     async def generate_text(self, messages: List[LLMMessage], *, purpose: str, max_tokens: int = 16000) -> LLMResponse:
         begun = await _begin()
         if begun is None:
@@ -171,6 +182,9 @@ class BillingProvider(LLMProvider):
         try:
             with billing_sink(call):
                 return await self.inner.generate_text(messages, purpose=purpose, max_tokens=max_tokens)
+        except asyncio.CancelledError:
+            self._cut_off(call, messages, purpose)
+            raise
         finally:
             await _write(scope, call)
 
@@ -184,6 +198,9 @@ class BillingProvider(LLMProvider):
         try:
             with billing_sink(call):
                 return await self.inner.generate_structured(messages, schema, purpose=purpose, max_tokens=max_tokens)
+        except asyncio.CancelledError:
+            self._cut_off(call, messages, purpose)
+            raise
         finally:
             await _write(scope, call)
 

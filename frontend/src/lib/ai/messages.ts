@@ -99,6 +99,9 @@ const MESSAGES: Record<string, AiMessage> = {
   EXAM_PROFILE_FAILED: failed('We could not read the style of your past exams. Try again, or mock exams will use the default style.'),
   EXAM_RELEVANCE_FAILED: failed('We could not match your past exams to your topics. Try again.'),
   MATERIAL_NOT_FOUND: failed('That file was removed before it could be read.', false),
+  // The file itself is the problem (refused, unreadable, or no text): running the same file again cannot help.
+  MATERIAL_UNREADABLE: failed('We could not read this file. Try another copy of it, for example one exported again from the original.', false),
+  NO_CONTENT: failed('No readable text was found in this file. If it is a scan, upload a copy with selectable text.', false),
   SUBMISSION_NOT_FOUND: failed('That exam attempt could not be found, so it could not be graded.', false),
   QUIZ_SUBMISSION_NOT_FOUND: failed('That quiz attempt could not be found, so it could not be graded.', false),
   INVALID_INPUT: failed('The request was not complete. Try again.'),

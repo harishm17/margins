@@ -14,7 +14,7 @@ from app.models.jobs import JobPayload
 from app.services import ai_status, job_reaper
 from app.services.exam_grader import ExamGrader
 from app.services.job_runner import JobOutcome, job_handler
-from app.services.llm.base import LLMCreditError, LLMUnavailableError
+from app.services.llm.base import LLMBusyError, LLMCreditError, LLMUnavailableError
 from tests.db_helpers import get_job, seed_job, seed_usage, seed_user
 
 SHORT = {"question_type": "short_answer", "question_text": "Why cache?", "points": 2,
@@ -31,7 +31,7 @@ def grader_with(error=None, reply=None):
 
 
 class TestGrader:
-    @pytest.mark.parametrize("error", [LLMCreditError("credit"), LLMUnavailableError("overloaded")])
+    @pytest.mark.parametrize("error", [LLMCreditError("credit"), LLMUnavailableError("overloaded"), LLMBusyError("busy")])
     async def test_an_unreachable_model_fails_the_grading_instead_of_scoring_zero(self, error):
         grader = grader_with(error=error)
         with pytest.raises(type(error)):

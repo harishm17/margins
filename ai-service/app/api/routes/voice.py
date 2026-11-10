@@ -292,12 +292,16 @@ For each, give 2-4 key points a listener can check, a short sample answer, and t
     ]
 
     async with billed(payload.user_id, payload.project_id, "drill", payload.topic_id):
-        result = await run_unless_disconnected(request, LLMFactory.get_provider().generate_structured(
+        work = LLMFactory.get_provider().generate_structured(
             messages,
             DrillQuestionSet,
             max_tokens=8000,
             purpose="voice_drill",
-        ))
+        )
+        # A topic's set is kept below and reused by the next session, so it is finished even when the web app has given
+        # up waiting (its 20 s session-start timeout can be shorter than a busy lane plus the generation); without a
+        # topic nothing is kept, and a caller that has gone cancels the call.
+        result = await (work if inputs_hash is not None else run_unless_disconnected(request, work))
 
     cleaned: List[Dict[str, Any]] = []
     for q in result.questions:

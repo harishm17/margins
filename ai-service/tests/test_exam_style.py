@@ -195,8 +195,8 @@ class TestStorage:
         material = await exam_file(course)
         real = exam_style.extract_style_profile
 
-        async def slow(text, filename):
-            result = await real(text, filename)
+        async def slow(text, filename, material_id=""):
+            result = await real(text, filename, material_id)
             await course.db.execute("UPDATE materials SET role = 'content' WHERE id = $1", material)
             return result
 
