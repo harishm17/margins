@@ -109,7 +109,7 @@ async def test_a_quote_that_is_not_in_the_excerpt_is_dropped(db, world, monkeypa
 
 async def test_the_job_checks_the_topic_belongs_to_the_course_and_runs_off_by_default(db, world):
     job_id = await seed_job(db, world.user_id, "requote_concepts", project_id=world.project_id)
-    data = {"topic_id": world.topic_id, "project_id": world.project_id}
+    data = {"topicId": world.topic_id, "projectId": world.project_id}
     await jobs.requote_concepts_job(JobPayload(jobId=job_id, jobType="requote_concepts", data=data))
     job = await get_job(db, job_id)
     assert job["status"] == "completed" and "CLAIM_REQUOTE is off" in job["result_data"]

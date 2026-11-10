@@ -1,7 +1,7 @@
 """Pydantic models for job processing."""
 from datetime import datetime
 from typing import Any, Dict, Optional
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
 class JobPayload(BaseModel):
@@ -33,13 +33,10 @@ class ConceptExtractionInput(BaseModel):
 
 
 class ConceptRequoteInput(BaseModel):
-    """Input for the requote_concepts job: the topic whose claimless concepts get new claims, and its course. The web app
-    writes camelCase keys like every other job; snake_case is accepted too."""
+    """Input for the requote_concepts job: the topic whose claimless concepts get new claims, and its course."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    topicId: str = Field(validation_alias=AliasChoices("topicId", "topic_id"))
-    projectId: str = Field(validation_alias=AliasChoices("projectId", "project_id"))
+    topicId: str
+    projectId: str
 
 
 class ConceptLinkingInput(BaseModel):

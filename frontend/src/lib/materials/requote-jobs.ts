@@ -34,9 +34,9 @@ export async function startRequoteJobs(userId: string, projectId: string): Promi
       projectId,
       jobType: 'requote_concepts',
       endpoint: '/jobs/requote-concepts',
-      data: { topic_id: topicId, project_id: projectId },
+      data: { topicId, projectId },
       targetKey: requoteConceptsTarget(topicId),
-      stage: 'extracting',
+      stage: 'generating',
     })
     if (job) started += 1
   }
