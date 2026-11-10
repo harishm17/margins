@@ -36,6 +36,7 @@ from app.services.llm.base import (
 from app.services.llm.limiter import llm_slot
 from app.services.llm.models import resolve_model
 from app.services.llm.usage import estimate_cost_usd, record_usage
+from app.validation_errors import describe_validation_error
 
 logger = logging.getLogger(__name__)
 
@@ -384,7 +385,8 @@ class AnthropicProvider(LLMProvider):
             return schema.model_validate_json(text)
         except ValidationError as exc:
             raise LLMOutputError(
-                f"Output did not match {schema.__name__} ({purpose or 'llm call'}): {exc}"
+                f"Output did not match {schema.__name__} ({purpose or 'llm call'}): "
+                f"{describe_validation_error(exc)}"
             ) from exc
 
     async def stream_cited_answer(
