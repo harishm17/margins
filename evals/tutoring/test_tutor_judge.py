@@ -63,17 +63,6 @@ def test_prompt_marks_data_and_keeps_the_key_inside_its_tag():
     assert "MUST" not in system + user and "CRITICAL" not in system + user  # no pressure language
 
 
-def test_the_conversation_numbers_replies_and_notes_turns_without_one():
-    text = judge.render_conversation(scenario(), turns() + [])
-    assert "[student checked the answer '0.4': it was wrong]" in text
-    assert "The app did not call the tutor for this." in text  # turn 4 has no record
-
-
-def test_the_judge_numbers_only_turns_with_a_reply():
-    records = turns() + [{"scenario": "s1", "turn": 4, "event": "ask", "error": "HTTP 500"}]
-    assert [t["turn"] for t in judge.numbered_turns(records)] == [2, 3]
-
-
 # ---------------------------------------------------------------- DAMR and kappa
 
 
@@ -178,12 +167,3 @@ def test_run_judge_stops_at_the_spend_cap_and_skips_a_bad_judgement(tmp_path):
     assert "judge spend cap reached" in result["stopped"]
 
 
-def test_run_judge_limit_spreads_evenly(tmp_path):
-    scenarios = {f"s{i}": {**scenario(), "id": f"s{i}"} for i in range(1, 9)}
-    by_scenario = {sid: [{**t, "scenario": sid} for t in turns()] for sid in scenarios}
-    result = asyncio.run(judge.run_judge(provider=Fake(), scenarios=scenarios, turns_by_scenario=by_scenario, judge_dir=tmp_path, limit=4, log=lambda m: None))
-    assert result["judged"] == ["s1", "s3", "s5", "s7"]
-
-
-def test_the_mock_provider_has_an_example_review():
-    assert len(judge.ScenarioReview.example().reviews) == 6

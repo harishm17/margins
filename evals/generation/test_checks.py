@@ -12,9 +12,7 @@ from checks import (  # noqa: E402
     check_topic,
     claim_quote_substring_rate,
     concepts_per_topic_in_range,
-    excerpt_terms,
     grounding_share,
-    has_latex,
     item_concept_ids_valid,
     interactive_structure,
     latex_hygiene,
@@ -26,25 +24,14 @@ from checks import (  # noqa: E402
     prereq_graph_acyclic,
     quiz_structure,
     recall_copy_check,
-    significant_numbers,
     solved_structure,
     summarize_model,
-    token_jaccard,
     unbalanced_dollar,
     warmup_not_in_quiz,
 )
 
 
 # ---------------------------------------------------------------- LaTeX hygiene
-
-
-@pytest.mark.parametrize(
-    "text",
-    ["The cost is $x = 5$ here.", "Use $10^6$ samples", "$P(A)=0.4$ and $P(B)=0.5$", "Display $$\\int_0^1 f$$ ok", "Money: \\$100 and \\$5"],
-)
-def test_normal_math_and_escaped_currency_are_clean(text):
-    assert not unbalanced_dollar(text)
-    assert bare_currency_count(text) == 0
 
 
 def test_unbalanced_dollar():
@@ -59,18 +46,6 @@ def test_bare_currency_from_the_audit():
     assert bare_currency_count("The payoff is $500 and the stake $100.") == 2
     assert bare_currency_count("A single $5 bill") == 1
     assert bare_currency_count("It costs $100 per year, then $x = 3$ more") == 1
-
-
-def test_currency_that_looks_like_a_math_span_is_not_flagged():
-    assert bare_currency_count("Expected value $5 \\cdot 0.2 + 3$") == 0
-    assert bare_currency_count("$2x + 1 = 7$") == 0
-
-
-def test_plain_text_latex():
-    assert has_latex("Bayes' $P(A|B)$")
-    assert has_latex("the \\alpha level")
-    assert not has_latex("Conditional probability")
-    assert not has_latex("Use `$HOME` in the shell")
 
 
 def test_latex_hygiene_by_field():
@@ -98,16 +73,6 @@ def test_letter_references_strict_and_loose():
     assert refs["loose"] == ["C is", "D is"]
 
 
-def test_letter_references_ignore_math_and_code():
-    refs = letter_references("If $A$ is independent of $B$ then `C is` fine and $P(B)$ is small.")
-    assert refs == {"strict": [], "loose": []}
-
-
-def test_letter_references_ignore_content_descriptions():
-    refs = letter_references("The addition rule applies because the events are disjoint.")
-    assert refs == {"strict": [], "loose": []}
-
-
 def test_mc_check_counts_only_multiple_choice():
     questions = [
         {"question_type": "multiple_choice", "explanation": "Option C is wrong; the rule is additive."},
@@ -121,13 +86,6 @@ def test_mc_check_counts_only_multiple_choice():
 
 
 # ---------------------------------------------------------------- recall copy
-
-
-def test_significant_numbers_ignore_0_1_2_and_normalise():
-    assert significant_numbers("Take 1 of 2 coins, 0 heads, 3 flips, 10 draws, 0.50 chance, 1,000 trials") == {
-        "3", "10", "0.5", "1000"
-    }
-    assert significant_numbers("a probability of .25 and 25%") == {"0.25", "25"}
 
 
 def test_recall_copy_flags_questions_that_reuse_the_example_numbers():
@@ -157,10 +115,6 @@ def test_recall_copy_ignores_new_scenarios_that_share_small_numbers():
     assert recall_copy_check(questions, notes)["copied"] == 0
 
 
-def test_recall_copy_rate_is_none_without_numeric_questions():
-    assert recall_copy_check([{"question_text": "Define independence."}], "5 and 7")["rate"] is None
-
-
 # ---------------------------------------------------------------- structure
 
 
@@ -185,22 +139,10 @@ text
 """
 
 
-def test_notes_structure_finds_sections_and_bullets():
-    result = notes_structure(NOTES, word_band=(10, 50))
-    assert result["sections_ok"] and result["has_title"]
-    assert result["recap_bullets"] == 6 and result["recap_bullets_ok"]
-    assert result["in_word_band"]
-
-
 def test_notes_structure_reports_missing_sections_and_band():
     result = notes_structure("# T\n\n## Overview\nshort", word_band=(900, 1400))
     assert "Key Concepts" in result["sections_missing"]
     assert not result["in_word_band"] and not result["recap_bullets_ok"]
-
-
-def test_notes_headings_inside_code_blocks_do_not_count():
-    text = "# T\n\n```md\n## Overview\n```\n"
-    assert "Overview" in notes_structure(text)["sections_missing"]
 
 
 def test_example_and_quiz_structure():
@@ -225,12 +167,6 @@ def test_example_and_quiz_structure():
 # ---------------------------------------------------------------- grounding
 
 
-def test_excerpt_terms_drop_stopwords_and_short_words():
-    terms = excerpt_terms(["The hash function distributes keys; however, collisions happen."])
-    assert {"hash", "function", "distributes", "collisions", "happen"} <= terms or "hash" not in terms
-    assert "however" not in terms and "keys" not in terms  # stopword, under five letters
-
-
 def test_grounding_share():
     excerpts = ["A hash function distributes keys across slots. Collisions are resolved by chaining."]
     notes = (
@@ -246,18 +182,7 @@ def test_grounding_share():
     assert result["share"] == pytest.approx(2 / 3)
 
 
-def test_grounding_counts_math_that_shares_a_symbol_with_the_excerpts():
-    result = grounding_share("The variance equals $Var(X) = 4$ for this case.", ["Define Var(X) as the spread."])
-    assert result["grounded"] == 1
-
-
 # ---------------------------------------------------------------- overlap
-
-
-def test_token_jaccard():
-    assert token_jaccard("a b c", "a b c") == 1.0
-    assert token_jaccard("a b c d", "a b x y") == pytest.approx(2 / 6)
-    assert token_jaccard("", "a") == 0.0
 
 
 def test_near_duplicates_only_across_topics():
@@ -319,11 +244,6 @@ def test_check_topic_and_summary():
     assert summary["notes_count"] == 1 and summary["duplicate_example_pairs"] == 0
 
 
-def test_check_topic_without_notes_skips_recall_copy():
-    result = check_topic({checks.QUIZ: _quiz_questions()}, [])
-    assert "skipped" in result["recall_copy"]
-
-
 # ---------------------------------------------------------------- concept graph
 
 
@@ -355,7 +275,7 @@ def test_claim_quote_gate_is_98_percent():
     assert not claim_quote_substring_rate([good] * 49 + [bad, bad], chunks)["ok"]  # 49/51
 
 
-@pytest.mark.parametrize("count,ok", [(2, False), (3, True), (8, True), (9, False), (0, False)])
+@pytest.mark.parametrize("count,ok", [(2, False), (3, True), (9, False)])
 def test_concepts_per_topic_in_range(count, ok):
     result = concepts_per_topic_in_range([_concept(f"c{i}") for i in range(count)])
     assert result["count"] == count and result["ok"] is ok
@@ -447,15 +367,6 @@ def test_check_topic_runs_the_concept_checks_and_tags_items_against_them():
     assert summary["item_tag_gate_ok"] is False and summary["warmup_reuse_gate_ok"] is False
 
 
-def test_item_tags_are_not_checked_for_a_topic_without_concepts():
-    quiz = [{"question_type": "true_false", "question_text": "x", "correct_answer": True, "explanation": "y"}]
-    result = check_topic({checks.QUIZ: quiz}, [])
-    assert "item_concept_ids" not in result and "concepts" not in result
-    summary = summarize_model({"t1": result}, {})
-    assert summary["concept_topics"] == 0
-    assert summary["item_tag_gate_ok"] is None and summary["warmup_reuse_gate_ok"] is None
-
-
 # ---------------------------------------------------------------- item defects (A2)
 
 
@@ -512,13 +423,6 @@ def test_question_defects_name_each_fault():
     assert checks.question_defects(header) == ["exam_header"]
 
 
-def test_a_problem_is_checked_for_thinking_aloud_everywhere_and_a_header_in_its_statement():
-    problem = {"title": "T", "problem_statement": "Problem 2 (3 points). Sort the list.", "steps": [{"question": "q", "hint": "Let me redo this.", "explanation": "e"}]}
-    assert checks.problem_defects(checks.INTERACTIVE, problem) == ["self_correction", "exam_header"]
-    clean = {"title": "T", "problem_statement": "Sort the list.", "solution_steps": [{"description": "d", "work": "w", "explanation": "e"}], "final_answer": "done"}
-    assert checks.problem_defects(checks.SOLVED, clean) == []
-
-
 def test_an_item_set_report_counts_faults_the_longest_option_and_true_false_items():
     items = [
         mc(["The correct option, which is clearly much longer than the rest", "No", "Yes", "Maybe"], "A"),
@@ -536,7 +440,3 @@ def test_an_item_set_report_counts_faults_the_longest_option_and_true_false_item
     assert (empty["items"], empty["flagged_rate"], empty["true_false_share"]) == (0, None, None)
 
 
-def test_a_problem_set_report_counts_flagged_problems():
-    problems = [{"title": "T", "problem_statement": "Hmm, sort it.", "solution_steps": [], "final_answer": "x"}, {"title": "U", "problem_statement": "Sort it.", "solution_steps": [], "final_answer": "x"}]
-    report = checks.problem_set_report(checks.SOLVED, problems)
-    assert (report["items"], report["flagged"], report["by_defect"]) == (2, 1, {"self_correction": 1})

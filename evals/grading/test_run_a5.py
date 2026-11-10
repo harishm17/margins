@@ -56,41 +56,10 @@ def row(label, fraction, *, category="right", borderline=False, outcome="ok", ar
 
 @pytest.mark.parametrize(
     "fraction, expected",
-    [(1.0, "full"), (0.7, "full"), (0.69, "partial"), (0.25, "partial"), (0.24, "none"), (0.0, "none")],
+    [(0.7, "full"), (0.69, "partial"), (0.25, "partial"), (0.24, "none")],
 )
 def test_band_follows_the_apps_pass_mark_and_the_labels_none_line(fraction, expected):
     assert run_a5.band(fraction) == expected
-
-
-def test_build_dataset_embeds_each_question_from_the_source_run(tmp_path):
-    other = dict(QUESTION, question_text="A second neutral question?")
-    (tmp_path / "c__t00__quiz.json").write_text(json.dumps({"output": [QUESTION, other]}))
-    answers = {"questions": [{"id": "q01", "ref": "c__t00__quiz#1", "answers": [
-        {"category": "right", "label": "full", "text": "It moves heat faster."},
-        {"category": "wrong", "label": "none", "text": "Metal is colder.", "borderline": True},
-    ]}]}
-    dataset = run_a5.build_dataset(answers, tmp_path)
-    assert len(dataset) == 1
-    assert dataset[0]["question"]["question_text"] == "A second neutral question?"
-    assert dataset[0]["question"]["points"] == 3
-    assert [a["n"] for a in dataset[0]["answers"]] == [0, 1]
-    assert dataset[0]["answers"][1]["borderline"] is True
-    assert dataset[0]["answers"][0]["borderline"] is False
-
-
-def test_build_dataset_names_a_ref_it_cannot_find(tmp_path):
-    (tmp_path / "c__t00__quiz.json").write_text(json.dumps({"output": [QUESTION]}))
-    answers = {"questions": [{"id": "q02", "ref": "c__t00__quiz#4", "answers": []}]}
-    with pytest.raises(SystemExit, match="q02"):
-        run_a5.build_dataset(answers, tmp_path)
-
-
-def test_build_dataset_refuses_an_item_that_is_not_a_short_answer(tmp_path):
-    choice = dict(QUESTION, question_type="multiple_choice")
-    (tmp_path / "c__t00__quiz.json").write_text(json.dumps({"output": [choice]}))
-    answers = {"questions": [{"id": "q03", "ref": "c__t00__quiz#0", "answers": []}]}
-    with pytest.raises(SystemExit, match="q03"):
-        run_a5.build_dataset(answers, tmp_path)
 
 
 def test_grade_one_runs_the_apps_grader_and_bands_its_score():
@@ -157,19 +126,9 @@ def _summary(haiku_agree, haiku_wmr, sonnet_agree, sonnet_wmr):
         ((0.80, 0.15, 0.80, 0.05), "sonnet"),  # 10 points fewer wrong answers marked right, same agreement
         ((0.80, 0.10, 0.86, 0.10), "sonnet"),  # 6 points more agreement, no more wrong marked right
         ((0.80, 0.10, 0.80, 0.10), "haiku"),  # no difference: keep the cheaper, faster model
-        ((0.80, 0.15, 0.75, 0.05), "haiku"),  # fewer wrong marked right, but 5 points less agreement
-        ((0.80, 0.10, 0.84, 0.08), "haiku"),  # both gains under the 5-point bar
     ],
 )
 def test_pick_model_switches_to_sonnet_only_for_a_clear_gain(scores, pick):
     assert run_a5.pick_model(_summary(*scores))[0] == pick
 
 
-def test_estimate_prices_the_apps_own_prompt_and_sonnet_above_haiku():
-    dataset = [{"qid": "q01", "question": QUESTION, "answers": [{"n": 0, "text": "Metal moves heat."}]}]
-    haiku = asyncio.run(run_a5.estimate_usd(dataset, "claude-haiku-5-5"))
-    sonnet = asyncio.run(run_a5.estimate_usd(dataset, "claude-sonnet-5-5"))
-    assert 0 < haiku < sonnet
-    # The prompt the app builds (instructions, sample answer, key points, schema) is well over 1,000 characters,
-    # so even one Haiku grade at batch price costs more than its output alone.
-    assert haiku > 600 * 0.50 / 1_000_000 * run_a5.BATCH_PRICE

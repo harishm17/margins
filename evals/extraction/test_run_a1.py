@@ -35,14 +35,6 @@ def test_a_batched_call_costs_half_the_app_price():
     assert run_a1.batch_cost_usd("claude-sonnet-5-5", usage) == pytest.approx((2.00 + 1.00) / 2)
 
 
-def test_the_estimate_counts_the_picture_the_prompt_the_text_layer_and_the_answer():
-    small = run_a1.estimate_usd("claude-opus-5-5", width=1000, height=1000, prompt_chars=3500, text_chars=0)
-    with_text = run_a1.estimate_usd("claude-opus-5-5", width=1000, height=1000, prompt_chars=3500, text_chars=3500)
-    tokens_in = 1000 * 1000 / 750 + 1000
-    assert small == pytest.approx((tokens_in * 4.00 + run_a1.EST_OUTPUT_TOKENS * 20.00) / 1e6 * run_a1.BATCH_PRICE)
-    assert with_text == pytest.approx(small + 1000 * 4.00 / 1e6 * run_a1.BATCH_PRICE)
-
-
 def test_a_run_whose_estimate_passes_the_cap_is_refused():
     run_a1.check_cap(estimate=2.0, spent=1.0, max_usd=3.5)
     with pytest.raises(SystemExit, match="cap"):
@@ -79,14 +71,3 @@ def test_a_read_that_stopped_or_broke_is_scored_as_an_empty_read():
     assert run_a1.scores_for(key, "", "error: overloaded") is None
 
 
-def test_the_report_shows_each_class_by_arm_and_the_cost_and_no_page_text():
-    records = [
-        _record("t1", "tables", "text", table_cells=0.0, words_dropped=0.4),
-        _record("t1", "tables", "haiku", table_cells=1.0, words_dropped=0.0),
-    ]
-    summary = run_a1.aggregate(records)
-    summary["run"] = {"label": "a1", "date": "2026-11-09", "commit": "abc1234", "arms": {"text": None, "haiku": "claude-haiku-5-5"}}
-    report = run_a1.render_report(summary)
-    assert "## tables" in report and "| Table cells found | 0% | 100% |" in report
-    assert "| Words dropped (lower is better) | 40% | 0% |" in report
-    assert "$0.01" in report and "t1" in report

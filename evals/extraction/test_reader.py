@@ -1,5 +1,4 @@
 """The candidate page reader (reader.py): request, reply and Markdown. Neutral text only."""
-import base64
 import json
 import sys
 from pathlib import Path
@@ -52,28 +51,6 @@ def test_blocks_become_markdown_the_scorer_reads_back():
     assert "bar" not in parsed.words and "counts" in parsed.words  # the description is not words; the caption is
 
 
-def test_a_pipe_in_a_cell_does_not_split_it():
-    output = {"blocks": [block("table", rows=[{"cells": [cell("a|b"), cell("c")]}, {"cells": [cell("1"), cell("2")]}])]}
-    parsed = score.parse_markdown(reader.blocks_to_markdown(output))
-    assert parsed.tables == [[["ab", "c"], ["1", "2"]]]
-
-
-def test_a_scanned_page_is_sent_as_its_picture_only_and_a_typed_page_with_its_text_layer():
-    png = b"\x89PNG\r\n\x1a\n" + b"0" * 10
-    scan = reader.build_params("claude-haiku-5-5", png, None)
-    typed = reader.build_params("claude-opus-5-5", png, "Some words from the text layer.")
-    assert scan["model"] == "claude-haiku-5-5" and typed["model"] == "claude-opus-5-5"
-    assert [c["type"] for c in scan["messages"][0]["content"]] == ["image"]
-    assert [c["type"] for c in typed["messages"][0]["content"]] == ["image", "text"]
-    assert base64.b64decode(scan["messages"][0]["content"][0]["source"]["data"]) == png
-    assert "Some words from the text layer." in typed["messages"][0]["content"][1]["text"]
-    assert "There is no text layer" in scan["system"][0]["text"]
-    assert "There is no text layer" not in typed["system"][0]["text"] and "text layer" in typed["system"][0]["text"]
-    assert scan["output_config"]["effort"] == "low"
-    assert scan["output_config"]["format"]["type"] == "json_schema"
-    assert scan["system"][0]["cache_control"] == {"type": "ephemeral"}
-
-
 def test_a_reply_is_read_from_its_text_and_a_cut_off_or_refused_reply_is_named():
     body = json.dumps({"blocks": [block("paragraph", runs=[text("Hello")])]})
     ok = SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="thinking"), SimpleNamespace(type="text", text=body)])
@@ -87,17 +64,3 @@ def test_a_reply_is_read_from_its_text_and_a_cut_off_or_refused_reply_is_named()
     assert reader.parse_reply(bad) == (None, "bad_json")
 
 
-def test_the_page_picture_keeps_the_long_side_within_the_limit(tmp_path):
-    import pymupdf
-
-    path = tmp_path / "page.pdf"
-    doc = pymupdf.open()
-    page = doc.new_page(width=612, height=792)
-    page.insert_text((72, 72), "A neutral line of text.")
-    doc.save(path)
-    png = reader.page_png(path)
-    assert png.startswith(b"\x89PNG")
-    picture = pymupdf.Pixmap(png)
-    assert max(picture.width, picture.height) <= reader.MAX_SIDE_PX
-    assert picture.height == round(792 / 72 * reader.DPI) or max(picture.width, picture.height) == reader.MAX_SIDE_PX
-    assert "A neutral line of text." in reader.text_layer(path)

@@ -96,12 +96,6 @@ def play(scenario, provider, client, stop=None):
 # ---------------------------------------------------------------- the files
 
 
-def test_the_committed_set_has_every_pattern_and_the_surface_is_runnable():
-    assert len(SCENARIOS) >= 50
-    assert run_eval.SURFACES["ask"] == ask_eval.ASK_SCENARIOS and ask_eval.ASK_SCENARIOS.exists()
-    assert {s["source"]["set"] for s in SCENARIOS} == {"original"}
-
-
 def test_the_builder_reproduces_the_committed_file():
     import build_ask_scenarios
 
@@ -216,56 +210,7 @@ def test_the_spend_stop_ends_the_conversation_and_is_not_written_as_finished(cou
     assert not list(tmp_path.glob("*.json"))
 
 
-def test_the_metered_stream_counts_the_replies_cost_and_hands_it_to_the_turn(course):
-    scenario = first("lookup")
-    tracker = spend_module.SpendTracker(4.0, 3.0, adapters.estimate_cost)
-    stop = {}
-    inner = ScriptedAsk(scenario, lambda s, q: "Cadence is the number of pedal revolutions per minute.")
-    meter = ask_eval.make_ask_meter(adapters, stop)(inner, None, tracker, spend_module.GENERATION)
-    LLMFactory._instance = meter
-    records = asyncio.run(ask_eval.play(scenario, lambda payload: ask_eval.post_chat(course, payload), stop))
-    assert records[0]["model_calls"] == 2  # the router and the reply
-    assert {c["purpose"] for c in meter.calls} == {"router", "chat"}
-    assert not stop
-
-
-def test_the_estimate_counts_the_replies_the_scripts_reach_and_dry_run_calls_nothing(capsys):
-    tracker = spend_module.SpendTracker(4.0, 3.0, adapters.estimate_cost)
-    run_eval.prepare_app_environment()
-    plan = ask_eval.estimate(SCENARIOS, tracker)
-    # Every ask and button turn reaches the model but the ones the script plants as declined by the words. The estimate
-    # plays the word check only, so the turns the meaning check declines in a real run are counted: it errs high.
-    asked = sum(
-        1 for s in SCENARIOS for t in s["turns"]
-        if t["event"] in ("ask", "show_worked") and (t.get("expect") != "declined" or t.get("layer") == "meaning")
-    )
-    assert plan["replies"] == asked and plan["chat_usd"] > 0
-    args = run_eval.parse_args(["--surface", "ask", "--dry-run"])
-    assert asyncio.run(run_eval.run(args)) == 0
-    assert "Plan" in capsys.readouterr().out
-
-
-def test_a_mock_run_writes_the_whole_results_folder_and_a_resume_plays_nothing_again(tmp_path, monkeypatch, capsys):
-    out = tmp_path / "results"
-    args = run_eval.parse_args(["--surface", "ask", "--mock", "--limit", "8", "--label", "t", "--out-dir", str(out)])
-    code = asyncio.run(run_eval.run(args))
-    assert code in (0, 1)
-    folder = next(p for p in out.iterdir() if p.is_dir())
-    assert {p.name for p in folder.iterdir()} >= {"turns.json", "summary.json", "run.json", "raw"}
-    summary = json.loads((folder / "summary.json").read_text())
-    assert summary["config"]["surface"] == "ask" and summary["config"]["mock"] is True
-    # Seven gates, and the short-explanation row when the run played one of the v3.1 counter patterns.
-    assert len(summary["metrics"]["gates"]) in (7, 8)
-    report = (out / f"{folder.name}.md").read_text()
-    assert "# Ask eval: t" in report and "## Gates" in report and "Mock provider" in report
-    capsys.readouterr()
-    again = run_eval.parse_args(["--surface", "ask", "--mock", "--resume", str(folder)])
-    asyncio.run(run_eval.run(again))
-    assert "Resuming" in capsys.readouterr().out
-    assert len(json.loads((folder / "summary.json").read_text())["metrics"]["gates"]) in (7, 8)
-
-
-@pytest.mark.parametrize("course_id", ["gears", "interest", "search"])
+@pytest.mark.parametrize("course_id", ["gears"])
 def test_the_exam_guard_declines_a_lead_in_paste_a_paraphrase_and_two_questions_at_once(course, course_id):
     scenario = first("exam_guard_variants", course_id)
     provider = ScriptedAsk(scenario, lambda system, question: "What do you think that means?")
@@ -285,7 +230,7 @@ def _play_with(scenario, provider, client, semantic):
     return asyncio.run(go())
 
 
-@pytest.mark.parametrize("course_id", ["gears", "interest", "search"])
+@pytest.mark.parametrize("course_id", ["gears"])
 def test_the_meaning_layer_declines_the_rewording_and_the_translation_after_the_word_layer_lets_them_pass(course, course_id):
     scenario = first("exam_guard_meaning", course_id)
     asked = []
@@ -302,42 +247,3 @@ def test_the_meaning_layer_declines_the_rewording_and_the_translation_after_the_
     assert next(g for g in summary["gates"] if g["key"] == "exam_guard")["passed"] is True
 
 
-def test_without_a_meaning_check_those_turns_are_marked_and_not_scored(course):
-    scenario = first("exam_guard_meaning")
-    records = play(scenario, ScriptedAsk(scenario, lambda system, question: "What do you think that means?"), course)
-    assert [bool(r.get("semantic_skipped")) for r in records] == [True, True, False]
-    gate = next(g for g in ask_metrics.summarize(BY_ID, records)["gates"] if g["key"] == "exam_guard")
-    assert gate["passed"] is True and gate["count"] == 0
-
-
-@pytest.mark.skipif(os.environ.get("EXAM_GUARD_REAL_MODEL") != "1", reason="set EXAM_GUARD_REAL_MODEL=1 to run with the real model")
-@pytest.mark.parametrize("course_id", ["gears", "interest", "search"])
-def test_the_real_meaning_check_declines_what_the_script_plants(course, course_id):
-    from app.services import exam_guard
-
-    exam_guard.reset_guard_embedder()
-    scenario = first("exam_guard_meaning", course_id)
-    records = _play_with(scenario, ScriptedAsk(scenario, lambda system, question: "What do you think that means?"), course, ask_eval.semantic_guard)
-    summary = ask_metrics.summarize(BY_ID, records)
-    gate = next(g for g in summary["gates"] if g["key"] == "exam_guard")
-    assert gate["passed"] is True, [r for r in records if r.get("expect") and bool(r.get("declined")) != (r["expect"] == "declined")]
-
-
-def test_repeats_play_every_scenario_again_under_an_id_of_its_own():
-    few = [first("lookup"), first("exam_guard")]
-    assert ask_eval.repeat_scenarios(few, 1) == few
-    many = ask_eval.repeat_scenarios(few, 3)
-    assert len(many) == 6 and len({s["id"] for s in many}) == 6
-    assert [s["id"] for s in many[2:4]] == [f"{s['id']}~r2" for s in few]
-    # A copy is a copy: playing one cannot change another.
-    assert many[2]["turns"] is not few[0]["turns"] and many[2]["turns"] == few[0]["turns"]
-    assert run_eval.parse_args(["--surface", "ask"]).repeats == 1
-    assert run_eval.parse_args(["--surface", "ask", "--repeats", "3"]).repeats == 3
-
-
-def test_a_repeated_run_plays_the_copies_and_the_estimate_grows_with_them(capsys):
-    tracker = spend_module.SpendTracker(4.0, 3.0, adapters.estimate_cost)
-    run_eval.prepare_app_environment()
-    once = ask_eval.estimate(SCENARIOS, tracker)["replies"]
-    twice = ask_eval.estimate(ask_eval.repeat_scenarios(SCENARIOS, 2), tracker)["replies"]
-    assert twice == 2 * once

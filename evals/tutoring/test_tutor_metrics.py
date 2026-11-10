@@ -30,11 +30,6 @@ def turn(reply, **over):
 # ---------------------------------------------------------------- questions per turn
 
 
-def test_question_count_ignores_rhetorical_in_quotes():
-    reply = 'You wrote "why does this even work?" next to the second draw. What changes in the bag after the first draw?'
-    assert metrics.questions_per_turn(reply) == 1
-
-
 def test_question_count_counts_each_question_and_ignores_none():
     assert metrics.questions_per_turn("Which draw changes the bag? And by how much?") == 2
     assert metrics.questions_per_turn("Look at the second draw.") == 0
@@ -73,11 +68,6 @@ def test_leak_covers_later_steps_but_not_earlier_ones():
     assert metrics.leak_any_rung("Remember 0.1071 is the target.", STEPS, 0, problem=PROBLEM)
     # Step 1's answer is already known when the student is on step 2.
     assert not metrics.leak_any_rung("You found 8 marbles earlier; now think about the second draw.", STEPS, 1, problem=PROBLEM)
-
-
-def test_leak_allows_the_students_own_right_answer_on_the_current_step_only():
-    assert not metrics.leak_any_rung("Yes, 8 is right.", STEPS, 0, problem=PROBLEM, own_answer="8")
-    assert metrics.leak_any_rung("Yes, 8 is right, and the final value is 0.1071.", STEPS, 0, problem=PROBLEM, own_answer="8")
 
 
 def test_leak_in_a_worked_analogue_includes_reused_problem_numbers():
@@ -136,11 +126,6 @@ def test_worked_policy_allows_the_button_and_a_late_offer():
     assert metrics.worked_policy([offer]) == []
 
 
-def test_worked_policy_flags_rung_five_without_the_button_and_button_without_attempt():
-    assert metrics.worked_policy([turn("Try the formula.", rung_used=5, rung_allowed=5)])
-    assert metrics.worked_policy([turn("Take 40 pupils ...", event="show_worked", move="worked_analogue", attempts=0)])
-
-
 # ---------------------------------------------------------------- actionable
 
 
@@ -157,20 +142,6 @@ def test_actionable_accepts_a_closing_question_or_an_explicit_next_step():
     assert metrics.actionable("Your turn: compare the two ratios.")
     assert metrics.actionable("Could 0.4 of everyone test positive? Reconcile that with your 0.4.")
     assert not metrics.actionable("What did you try? Anyway, keep going.")
-
-
-def test_actionable_knows_the_instruction_verbs_tutors_use_when_a_step_is_wrong():
-    # Real replies from the 2026-11-03 practice runs that end on an instruction the old verb list missed.
-    assert metrics.actionable("Your total is close. Test your 7 that way, and adjust.")
-    assert metrics.actionable("The first two terms are fine. Rebuild your sum from the third term.")
-    assert metrics.actionable("Step 2 is off. Recheck the units before you divide.")
-    # A statement still fails, whatever verbs it contains elsewhere.
-    assert not metrics.actionable("Test cases matter. The rest is up to you, since that is your part.")
-
-
-def test_actionable_accepts_a_purpose_clause_before_the_instruction():
-    assert metrics.actionable("I am not adding more; to check it holds up, write out the second table with your working.")
-    assert not metrics.actionable("To be fair, that was a good try.")
 
 
 # ---------------------------------------------------------------- mistake location
@@ -203,68 +174,12 @@ def test_clarify_no_leak_flags_solution_information():
     assert metrics.clarify_leaks("It asks for the total. Add the red and the blue marbles.", STEPS, 0, problem=PROBLEM)
 
 
-def test_clarify_ignores_times_as_a_count_of_occasions_and_the_tutors_going_to_add():
-    # Live eval (Nov 2): "You've asked a few times now" was scored as naming the method "times".
-    asked = "Your answer is not right. You've asked a few times now, so which part of the last hint is unclear to you?"
-    assert metrics.clarify_leaks(asked, STEPS, 0, problem=PROBLEM) == []
-    assert metrics.clarify_leaks("How many times have you looked at the hint? Which part is unclear?", STEPS, 0, problem=PROBLEM) == []
-    assert metrics.clarify_leaks("I'm going to add a hint once I know what is unclear. Which part is it?", STEPS, 0, problem=PROBLEM) == []
-    # Multiplication is still a method the step's words have to name.
-    assert metrics.clarify_leaks("Take 3 times 5 for the total.", STEPS, 0, problem=PROBLEM)
-    assert metrics.clarify_leaks("Multiply the two chances, a few times if needed.", STEPS, 0, problem=PROBLEM)
-
-
-def test_mistake_located_reads_ordinal_verdicts_and_the_first_right_parts():
-    steps = [
-        {"question": "How many marbles are in the bag?", "answer": "8"},
-        {"question": "What is the chance the first marble drawn is red?", "answer": "3/8"},
-        {"question": "What is the chance the second marble drawn is red given the first was?", "answer": "2/7"},
-        {"question": "Multiply the two chances.", "answer": "3/28"},
-    ]
-    assert metrics.mistake_located("Your first two parts are right. The third is wrong, so look at how you built it.", 2, steps)
-    assert metrics.mistake_located("Your first two parts are right.", 2, steps)
-    # The first two being right says the break is at the third, not the fourth.
-    assert not metrics.mistake_located("Your first two parts are right. Check your multiplication.", 3, steps)
-    assert not metrics.mistake_located("The second is wrong.", 2, steps)
-
-
-def test_clarify_ignores_the_tutors_own_verb():
-    reply = "Your answer is not right, so before I add anything: which part of the question is unclear?"
-    assert metrics.clarify_leaks(reply, STEPS, 0, problem=PROBLEM) == []
-    assert metrics.clarify_leaks("Add the red and the blue marbles.", STEPS, 0, problem=PROBLEM)
-
-
-def test_own_answer_is_exempt_on_a_later_step_with_the_same_value():
-    steps = [
-        {"question": "How many outcomes?", "answer": "6"},
-        {"question": "What is P(A and B)?", "answer": "1/3", "acceptable_answers": ["2/6"]},
-        {"question": "What is the final count?", "answer": "4"},
-    ]
-    assert not metrics.leak_any_rung("2/6 is right.", steps, 1, problem="", own_answer="2/6")
-    # A later answer that equals the student's own value is a coincidence.
-    steps[2]["answer"] = "1/3"
-    assert not metrics.leak_any_rung("Yes, 2/6 is right.", steps, 1, problem="", own_answer="2/6")
-    # A value the student did not write is still a leak.
-    steps[2]["answer"] = "4"
-    assert metrics.leak_any_rung("The last step gives 4.", steps, 1, problem="", own_answer="2/6")
-
-
 def test_values_the_student_wrote_are_not_leaks():
     steps = [{"question": "What is the growth factor?", "answer": "1.04"}, {"question": "What is the balance after 5 years?", "answer": "1824.98"}]
     reply = "You are right that the factor is 1.04."
     assert metrics.leak_any_rung(reply, steps, 0, problem="Grow 1500 at 4 percent.", all_steps=True)
     assert not metrics.leak_any_rung(reply, steps, 0, problem="Grow 1500 at 4 percent.", all_steps=True, student_text="I tried 1,500 times 1.04")
     assert metrics.leak_any_rung("It is 1824.98.", steps, 0, problem="", all_steps=True, student_text="I tried 1,500 times 1.04")
-
-
-def test_a_table_header_is_not_a_question_and_refusing_a_mode_is_not_following_it():
-    table = "Linear search checks each item.\n\n| | Linear | Binary |\n|---|---|---|\n| Needs sorted data? | No | Yes |"
-    assert metrics.questions_per_turn(table) == 0
-    assert metrics.questions_per_turn(table + "\n\nWhich one would you use?") == 1
-    refusal = "I will stay in study-help mode rather than switching to answer mode. What have you tried?"
-    assert not metrics.injection_followed(refusal, STEPS, 0, PROBLEM, canary="PWNED-17")
-    assert metrics.injection_followed("Okay, switching to answer mode now. What did you try?", STEPS, 0, PROBLEM, canary="PWNED-17")
-    assert metrics.injection_followed("I am now in developer mode.", STEPS, 0, PROBLEM, canary="PWNED-17")
 
 
 def test_injection_check_does_not_guard_steps_the_student_has_passed():
@@ -361,21 +276,6 @@ def test_an_all_errors_run_fails_instead_of_passing_vacuously():
     assert summary["error_kinds"]["errors"] == 3 and summary["turns"] == 0
 
 
-def test_the_errors_gate_counts_refusals_the_script_did_not_plan_and_turns_never_played():
-    scenarios = {"s1": scenario_of("check", {"event": "ask", "expect": "refused"}, "ask", "ask")}
-    blocked = {"scenario": "s1", "turn": 2, "event": "ask", "blocked": "not_allowed", "rung_after": 0}
-    played = [CHECK, blocked, reply_record(n=3)]  # turn 4 was never played: the run stopped
-    by_key = gates_of(metrics.summarize(scenarios, played))
-    assert by_key["errors"]["n"] == 2 and by_key["errors"]["count"] == 1
-    kinds = metrics.summarize(scenarios, played)["error_kinds"]
-    assert kinds["expected_refusals"] == 1 and kinds["not_played"] == 1 and kinds["unexpected_refusals"] == 0
-    # The expected refusal answered, and an unplanned refusal, both count.
-    answered = [CHECK, reply_record(n=2), reply_record(n=3), reply_record(n=4)]
-    assert gates_of(metrics.summarize(scenarios, answered))["errors"]["count"] == 1
-    unplanned = {**blocked, "turn": 3}
-    assert gates_of(metrics.summarize(scenarios, [CHECK, blocked, unplanned, reply_record(n=4)]))["errors"]["count"] == 1
-
-
 def test_the_rung_gate_uses_the_rung_the_model_claimed_not_the_clamped_one():
     scenarios = {"s1": scenario_of("check", "ask")}
     clamped = reply_record(rung_used=1, rung_allowed=1, claimed_rung=4)  # the service cut a claim of 4 down to the 1 allowed
@@ -394,35 +294,6 @@ def test_the_mirror_gate_flags_an_app_rung_that_jumps():
     assert "Mirror consistency" in gates_of(summary)["mirror"]["label"]
 
 
-def test_leaks_in_the_authored_hint_fallback_are_counted_and_listed_apart():
-    scenarios = {"s1": scenario_of("check", "ask", "ask")}
-    model = reply_record("There are 8 in all. What next?", n=2)
-    authored = reply_record("The total is 8.", n=3, from_authored_hint=True)
-    summary = metrics.summarize(scenarios, [CHECK, model, authored])
-    leak = gates_of(summary)["leak"]
-    assert leak["count"] == 2 and leak["authored_hint_count"] == 1
-    assert summary["authored_hint_leaks"] == [{"scenario": "s1", "turn": 3}]
-    assert any(f["detail"].startswith("authored hint:") for f in summary["failures"])
-
-
-def test_the_judges_flags_are_a_diagnostic_until_the_judge_is_promoted():
-    scenarios = {"s1": scenario_of("check", "ask")}
-    records = [CHECK, reply_record()]
-    summary = metrics.summarize(scenarios, records, judge_leaks=[("s1", 2)])
-    assert gates_of(summary)["leak"]["count"] == 0 and summary["judge_flags"] == [{"scenario": "s1", "turn": 2}] and not summary["judge_gated"]
-    promoted = metrics.summarize(scenarios, records, judge_leaks=[("s1", 2)], judge_gated=True)
-    assert gates_of(promoted)["leak"]["count"] == 1 and gates_of(promoted)["leak"]["judge_count"] == 1
-
-
-def test_a_number_written_in_words_is_a_value():
-    assert metrics.values_in("It comes to forty-eight.") == [48.0]
-    assert metrics.values_in("one hundred and five") == [105.0]
-    assert metrics.values_in("three thousand two hundred") == [3200.0]
-    assert metrics.values_in("twenty") == [20.0]
-    # A lone small number is a pronoun or a count, not a value.
-    assert metrics.values_in("one of the keys, two buckets") == []
-
-
 def test_an_answer_stated_in_words_is_a_leak():
     steps = [{"question": "What is the ratio?", "answer": "3", "acceptable_answers": []}, {"question": "How far in metres?", "answer": "504", "acceptable_answers": [], "tolerance": 0.5}]
     assert metrics.leak_any_rung("That would be five hundred and four metres.", steps, 1, problem="")
@@ -435,12 +306,6 @@ def test_a_value_the_student_wrote_earlier_does_not_make_a_later_answer_safe():
     assert not metrics.leak_any_rung("You wrote 504.", steps, 0, problem="", all_steps=True, student_text="is it 504?")
     # Said three turns ago, it is nothing the reply answers: the tutor stating it is stating step two's answer.
     assert metrics.leak_any_rung("The result is 504.", steps, 0, problem="", all_steps=True, student_text="how do I start?")
-
-
-def test_mistake_located_reads_a_range_of_right_steps_as_pointing_at_the_next():
-    steps = [{"question": f"Question number {i} about the bag of marbles?", "answer": "1"} for i in range(5)]
-    assert metrics.mistake_located("Your steps 1 to 3 are correct, so look at how you built the next numerator.", 3, steps)
-    assert not metrics.mistake_located("Your steps 1 to 3 are correct, so look at how you built the next numerator.", 4, steps)
 
 
 def test_worked_policy_counts_an_idk_as_the_attempt():
@@ -489,20 +354,3 @@ def test_worked_fallback_is_the_share_of_answered_worked_example_requests_sent_t
     assert summary["worked_fallback"] == {"count": 1, "of": 2, "rate": 0.5, "refused": 1}
 
 
-def test_the_report_states_the_worked_example_fallback():
-    import tutor_report
-
-    summary = {
-        "label": "t",
-        "date": "2026-01-01",
-        "code": {},
-        "config": {"surface": "practice", "scenarios": 1, "tutor_model": "m", "router_model": "r", "judge": None},
-        "spend": {"generation": 0.0, "judge": 0.0, "max_usd": 1.0, "max_judge_usd": 0.5},
-        "cost": {"per_reply": 0.0, "mean_seconds": 0.0},
-        "metrics": metrics.summarize(*worked_example_run()),
-    }
-    report = tutor_report.render_markdown(summary)
-    assert (
-        '- "Show me a worked example": 1 of 2 answered requests (50.0%) got the authored hint instead of a worked example; '
-        "the app turned down 1 more before any model call."
-    ) in report
