@@ -13,7 +13,9 @@ finding through ops.alert, which sends it once per cooldown however many process
   lost_evidence   quiz or exam evidence given up on in the last day (EVIDENCE_MAX_ATTEMPTS failed writes)
   backup          no successful backup within BACKUP_MAX_AGE_HOURS, when BACKUPS_EXPECTED
   embedding_model the stored vectors were made by another model than EMBEDDING_MODEL (retrieval would be garbage)
-  storage_orphans files in the bucket that no material points to, older than a day (checked once a day)
+  storage_orphans files in the bucket that no material points to (swept weekly; dry run by default), and
+                  storage_sweep_refused when too many look orphaned to delete
+  file_deletions  queued file deletions (pending_file_deletions) that failed FILE_DELETION_ALERT_ATTEMPTS times
   ops events      failures counted by ops.note in the last interval, by kind (ledger writes, status writes,
                   storage deletes, dispatches, the reaper), and errors logged by this process
   check_failed    a check above raised: the watchdog says so rather than going quiet
@@ -41,7 +43,9 @@ EVIDENCE_MAX_ATTEMPTS = 5
 EVENT_THRESHOLDS = {"dispatch_failed": 5, "lease_renewal_failed": 5}
 # Errors logged by this process in one interval that make an alert (each kind above is also logged).
 ERRORS_PER_INTERVAL = 20
-ORPHAN_SCAN_EVERY = timedelta(days=1)
+ORPHAN_SCAN_EVERY = timedelta(days=7)
+# A file younger than this is never swept: an upload stores it before its row exists.
+ORPHAN_MIN_AGE = timedelta(hours=1)
 EVENTS_KEPT = timedelta(days=30)
 # Storage prefixes that hold no materials (ops/deletions/, the account-deletion records: writeDeletionRecord in frontend/src/lib/storage/files.ts).
 NON_MATERIAL_PREFIXES = ("ops/",)
@@ -235,6 +239,14 @@ async def check_embedding_model() -> list[Finding]:
 
 
 async def check_storage_orphans(now: datetime) -> list[Finding]:
+    """The weekly sweep of bucket files that no material points to (OPS-L3).
+
+    The deletion queue is what removes files in normal operation; this catches what slipped past it (an upload that
+    died after the file was stored, a bug). It is built not to do harm: files younger than an hour are never touched
+    (an upload stores the file before its row exists), it refuses and alerts when the orphans are more than
+    STORAGE_SWEEP_MAX_SHARE of the bucket or more than STORAGE_SWEEP_MAX_FILES files (a wrong listing or an empty
+    materials table would otherwise delete everything), and while STORAGE_SWEEP_DRY_RUN is on it only reports.
+    """
     from app.services.document_processor import storage
 
     if not settings.S3_BUCKET:
@@ -244,20 +256,44 @@ async def check_storage_orphans(now: datetime) -> list[Finding]:
         return []
     rows = await execute_query("SELECT gcs_path FROM materials WHERE gcs_path LIKE 's3://%'")
     known = {path.split("/", 3)[3] for path in (row["gcs_path"] for row in rows) if path.count("/") >= 3}
-    cutoff = now - timedelta(days=1)
-    orphans = [
-        key
+    cutoff = now - ORPHAN_MIN_AGE
+    objects = [
+        (key, modified)
         for key, modified in await storage.list_bucket_objects()
-        if key not in known and not key.startswith(NON_MATERIAL_PREFIXES) and _utc(modified) < cutoff
+        if not key.startswith(NON_MATERIAL_PREFIXES)
     ]
+    orphans = [key for key, modified in objects if key not in known and _utc(modified) < cutoff]
     # Recorded only after a scan that finished, so a failed one is tried again on the next run.
     await ops.set_state("orphan_scan_at", now.isoformat())
     if not orphans:
         return []
-    return [Finding("storage_orphans", "orphaned files",
-                    f"{len(orphans)} files in the bucket belong to no material: a delete that failed. The watchdog "
-                    "log names them. Remove them once the account or project is confirmed deleted.",
-                    detail=f"e.g. {', '.join(orphans[:5])}")]
+    share = len(orphans) / len(objects)
+    detail = f"e.g. {', '.join(orphans[:5])}"
+    if share > settings.STORAGE_SWEEP_MAX_SHARE or len(orphans) > settings.STORAGE_SWEEP_MAX_FILES:
+        return [Finding("storage_sweep_refused", "orphan sweep refused",
+                        f"{len(orphans)} of {len(objects)} files in the bucket look orphaned ({share:.0%}), more than "
+                        "the sweep is allowed to delete. Nothing was deleted: check that the materials table and the "
+                        "bucket listing are right, then raise STORAGE_SWEEP_MAX_SHARE or delete by hand.",
+                        detail=detail)]
+    if settings.STORAGE_SWEEP_DRY_RUN:
+        return [Finding("storage_orphans", "orphaned files",
+                        f"{len(orphans)} files in the bucket belong to no material (dry run: nothing deleted). The "
+                        "watchdog log names some. Set STORAGE_SWEEP_DRY_RUN=false once they look right.",
+                        detail=detail)]
+    await storage.delete_bucket_objects(orphans)
+    return [Finding("storage_orphans", "orphaned files deleted",
+                    f"Deleted {len(orphans)} files from the bucket that belonged to no material.", detail=detail)]
+
+
+async def check_file_deletions() -> list[Finding]:
+    from app.services import file_deletions
+
+    stuck = await file_deletions.count_stuck()
+    if not stuck:
+        return []
+    return [Finding("file_deletions", "file deletions stuck",
+                    f"{stuck} queued file deletions failed {settings.FILE_DELETION_ALERT_ATTEMPTS} times or more: "
+                    "the storage is refusing deletes. The rows are in pending_file_deletions; the log has the errors.")]
 
 
 async def check_ops_events(since: datetime) -> list[Finding]:
@@ -315,6 +351,7 @@ async def run_watchdog(now: datetime | None = None) -> list[Finding]:
         ("backup", lambda: check_backup(now)),
         ("embedding_model", check_embedding_model),
         ("storage_orphans", lambda: check_storage_orphans(now)),
+        ("file_deletions", check_file_deletions),
         ("ops_events", lambda: check_ops_events(since)),
     ]
     findings: list[Finding] = []

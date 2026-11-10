@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
+import { deleteQueuedFilesNow, queueFileDeletions } from '@/lib/storage/pending-deletions';
 import { canBeTopicSource, isMaterialRole } from '@/lib/materials/role';
 import { startExamProfileJob, startExamRelevanceJob } from '@/lib/exams/style-jobs';
 
@@ -115,17 +116,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'Material not found' }, { status: 404 });
     }
 
-    // Delete the database record first (cascades to chunks and mappings). If that fails
-    // nothing has been lost; a storage failure afterwards only leaves an unreferenced file.
-    await prisma.material.delete({
-      where: { id: materialId },
+    // Delete the database record (cascades to chunks and mappings) and queue its file in the same transaction:
+    // either both happen or neither. The AI service's reaper removes queued files and retries failures.
+    const queued = await prisma.$transaction(async (tx) => {
+      await tx.material.delete({ where: { id: materialId } });
+      return queueFileDeletions(tx, [material.gcsPath], 'material_deleted');
     });
-
-    if (material.gcsPath) {
-      const { deleteFilesBestEffort } = await import('@/lib/storage/files');
-      // Logs the path of any file it could not remove.
-      await deleteFilesBestEffort([material.gcsPath]);
-    }
+    await deleteQueuedFilesNow(queued);
 
     // Topics the deleted exam made relevant are no longer.
     if (material.role === 'exam') await startExamRelevanceJob(session.user.id, material.projectId);

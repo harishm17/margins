@@ -16,6 +16,7 @@ import {
   openS3Object,
   parseS3Path,
   putS3Object,
+  s3Bucket,
   s3Configured,
   uploadStreamToS3,
 } from './s3'
@@ -158,6 +159,37 @@ export async function deleteFile(storagePath: string): Promise<void> {
   }
 }
 
+/** The stored-path form of a folder under the uploads root (`<userId>/<projectId>/`), for the deletion queue. */
+export function storedFolderPath(folder: string): string {
+  const normalized = folder.endsWith('/') ? folder : `${folder}/`
+  return s3Configured() ? `s3://${s3Bucket()}/${normalized}` : `${LOCAL_PREFIX}${normalized}`
+}
+
+/** Delete everything under a folder path made by `storedFolderPath`. Missing folders count as deleted. */
+export async function deleteStoredFolder(storagePath: string): Promise<void> {
+  const s3Path = parseS3Path(storagePath)
+  if (s3Path) {
+    await deleteS3Prefix(s3Path.key)
+    return
+  }
+  const localPath = parseLocalPath(storagePath)
+  if (localPath) await deleteLocalFolder(localPath)
+}
+
+/**
+ * A delete that failed where no row delete could carry the queue entry (a stored file whose row was never written,
+ * the folder of an account that is already gone): put the path in the deletion queue so the reaper retries it.
+ * Never throws; the failure is already logged.
+ */
+export async function queueDeletionAfterFailure(storagePath: string, reason: string): Promise<void> {
+  try {
+    const { prisma } = await import('@/lib/db/prisma')
+    await prisma.pendingFileDeletion.create({ data: { path: storagePath, reason } })
+  } catch (error) {
+    console.error(`[STORAGE] Could not queue ${storagePath} for deletion either; remove it by hand:`, error)
+  }
+}
+
 /**
  * Record a file that was just stored. `record` makes the database rows that point at it; if it
  * fails for any reason (the course or the account was deleted meanwhile, the database refused the
@@ -177,6 +209,7 @@ export async function recordStoredFile<T>(
     } catch (cleanupError) {
       console.error(`[STORAGE] Could not delete ${storedPath} after its record failed; remove it by hand:`, cleanupError)
       await recordOpsEvent('storage_delete_failed', `${storedPath} (after its record failed): ${String(cleanupError)}`)
+      await queueDeletionAfterFailure(storedPath, 'record_failed')
     }
     throw error
   }

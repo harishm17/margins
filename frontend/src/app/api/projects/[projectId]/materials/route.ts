@@ -12,7 +12,8 @@ import { Readable } from 'stream'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
-import { uploadStream, generateMaterialPath, deleteFilesBestEffort, recordStoredFile } from '@/lib/storage/files'
+import { uploadStream, generateMaterialPath, recordStoredFile } from '@/lib/storage/files'
+import { deleteQueuedFilesNow, queueFileDeletions } from '@/lib/storage/pending-deletions'
 import {
   IncompleteUploadError,
   InvalidSignatureError,
@@ -202,12 +203,13 @@ export async function POST(
         },
       })
 
-      // Best-effort cleanup to avoid keeping unprocessable artifacts (a failure is logged and recorded).
-      await deleteFilesBestEffort([storedPath])
-
-      await prisma.material.delete({
-        where: { id: material.id },
+      // Row first, then the file, through the deletion queue: the row delete and the promise to remove the
+      // file commit together, and a failed delete is retried by the AI service's reaper.
+      const queued = await prisma.$transaction(async (tx) => {
+        await tx.material.delete({ where: { id: material.id } })
+        return queueFileDeletions(tx, [storedPath], 'upload_enqueue_failed')
       })
+      await deleteQueuedFilesNow(queued)
 
       return NextResponse.json(
         { error: 'Failed to start material validation' },

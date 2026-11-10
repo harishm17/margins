@@ -13,6 +13,7 @@ Any failure here is a `StorageError`: the file could not be read right now, whic
 about the file's content. Callers must not mark a material invalid because of it.
 """
 import asyncio
+import functools
 import logging
 import os
 import shutil
@@ -28,6 +29,8 @@ logger = logging.getLogger(__name__)
 FALLBACK_UPLOADS_DIR = "/tmp/margins-uploads"
 LOCAL_PREFIX = "local://"
 LEGACY_LOCAL_PREFIX = "gs://"
+S3_CONNECT_TIMEOUT_SECONDS = 5
+S3_READ_TIMEOUT_SECONDS = 60
 
 
 class StorageError(RuntimeError):
@@ -59,24 +62,39 @@ def _local_candidates(blob_path: str) -> List[str]:
     return candidates
 
 
-def _s3_client():
+@functools.lru_cache(maxsize=4)
+def _build_s3_client(endpoint: str, region: str, access_key: str, secret_key: str, path_style: bool):
     import boto3
     from botocore.config import Config
 
     return boto3.client(
         "s3",
-        endpoint_url=settings.S3_ENDPOINT or None,
-        region_name=settings.S3_REGION or "auto",
-        aws_access_key_id=settings.S3_ACCESS_KEY_ID or None,
-        aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY or None,
+        endpoint_url=endpoint or None,
+        region_name=region or "auto",
+        aws_access_key_id=access_key or None,
+        aws_secret_access_key=secret_key or None,
         config=Config(
-            s3={"addressing_style": "path" if settings.S3_FORCE_PATH_STYLE else "virtual"},
+            s3={"addressing_style": "path" if path_style else "virtual"},
             # Checksums only where S3 requires them: not every S3-compatible store accepts
             # the SDK's default ones.
             request_checksum_calculation="when_required",
             response_checksum_validation="when_required",
+            # A stalled store must fail the call, not hold a worker thread for ever.
+            connect_timeout=S3_CONNECT_TIMEOUT_SECONDS,
+            read_timeout=S3_READ_TIMEOUT_SECONDS,
             retries={"max_attempts": 3, "mode": "standard"},
         ),
+    )
+
+
+def _s3_client():
+    """The one client for the current S3 settings (built once; boto3 clients are safe to share between threads)."""
+    return _build_s3_client(
+        settings.S3_ENDPOINT,
+        settings.S3_REGION,
+        settings.S3_ACCESS_KEY_ID,
+        settings.S3_SECRET_ACCESS_KEY,
+        settings.S3_FORCE_PATH_STYLE,
     )
 
 
@@ -87,6 +105,63 @@ def _list_s3_objects(bucket_name: str) -> List[Tuple[str, datetime]]:
         for page in paginator.paginate(Bucket=bucket_name)
         for item in page.get("Contents", [])
     ]
+
+
+def _delete_local(relative: str) -> None:
+    """Remove a file or a folder (relative path ending in `/`) from the local uploads folders. Missing counts as gone."""
+    if relative.strip("/") in ("", ".", ".."):
+        raise StorageError("Refusing to delete the uploads folder itself")
+    for candidate in _local_candidates(relative):
+        if os.path.isdir(candidate):
+            shutil.rmtree(candidate, ignore_errors=False)
+        elif os.path.exists(candidate):
+            os.remove(candidate)
+
+
+def _delete_s3(bucket_name: str, key: str) -> None:
+    """Delete one object, or every object under `key` when it ends in `/`. A missing object counts as gone."""
+    client = _s3_client()
+    if not key.endswith("/"):
+        client.delete_object(Bucket=bucket_name, Key=key)
+        return
+    paginator = client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket_name, Prefix=key):
+        for item in page.get("Contents", []):
+            client.delete_object(Bucket=bucket_name, Key=item["Key"])
+
+
+def _delete_stored(storage_path: str) -> None:
+    if storage_path.startswith("s3://"):
+        parts = storage_path[5:].split("/", 1)
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise StorageError(f"Invalid S3 path format: {storage_path}")
+        _delete_s3(parts[0], parts[1])
+    elif storage_path.startswith((LOCAL_PREFIX, LEGACY_LOCAL_PREFIX)):
+        _delete_local(_local_relative_path(storage_path))
+    else:
+        raise StorageError(f"Not a stored path: {storage_path}")
+
+
+async def delete_stored(storage_path: str) -> None:
+    """Delete a stored file, or a folder when the path ends in `/` (the deletion queue's paths: the web app writes
+    them in the same transaction as the row delete). A file that is already gone counts as deleted. Raises
+    StorageError on any failure, so the queue retries."""
+    try:
+        await asyncio.to_thread(_delete_stored, storage_path)
+    except StorageError:
+        raise
+    except Exception as exc:
+        raise StorageError(f"Could not delete {storage_path}: {exc}") from exc
+
+
+async def delete_bucket_objects(keys: List[str]) -> None:
+    """Delete these keys from S3_BUCKET (the orphan sweep)."""
+    def run() -> None:
+        client = _s3_client()
+        for key in keys:
+            client.delete_object(Bucket=settings.S3_BUCKET, Key=key)
+
+    await asyncio.to_thread(run)
 
 
 async def list_bucket_objects() -> List[Tuple[str, datetime]]:

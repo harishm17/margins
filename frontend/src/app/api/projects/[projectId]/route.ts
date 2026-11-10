@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { z } from 'zod'
+import { storedFolderPath } from '@/lib/storage/files'
+import { deleteQueuedFilesNow, queueFileDeletions } from '@/lib/storage/pending-deletions'
 import { dailyMinutesSchema, examDateColumn, examDateSchema } from '@/lib/learning/plan-settings'
 
 const updateProjectSchema = z.object({
@@ -156,20 +158,25 @@ export async function DELETE(
       select: { gcsPath: true },
     })
 
-    // Delete project (cascade will handle all related records). One statement, so the
-    // database is either fully deleted or untouched.
-    await prisma.project.delete({
-      where: { id: projectId },
+    // Delete the project (cascade will handle all related records) and queue its files and its folder in the same
+    // transaction, so the database is either fully deleted with the files promised for removal, or untouched.
+    const queued = await prisma.$transaction(async (tx) => {
+      await tx.project.delete({ where: { id: projectId } })
+      return queueFileDeletions(
+        tx,
+        [...materials.map((material) => material.gcsPath), storedFolderPath(`${session.user.id}/${projectId}/`)],
+        'project_deleted'
+      )
     })
 
-    // Then the uploaded files. Best effort: the project is already deleted, so a storage
-    // error is logged for manual cleanup instead of failing the request.
+    // Then try the files right away; whatever fails stays queued for the AI service's reaper to retry.
     try {
-      const { deleteFilesBestEffort, deleteProjectFolder } = await import('@/lib/storage/files')
-      await deleteFilesBestEffort(materials.map((material) => material.gcsPath))
+      await deleteQueuedFilesNow(queued)
+      const { deleteProjectFolder } = await import('@/lib/storage/files')
+      // The local uploads folder too (uploads made before a bucket was set up); the queue covers the bucket.
       await deleteProjectFolder(session.user.id, projectId)
     } catch (storageError) {
-      console.error(`Project ${projectId} deleted, but its files could not be cleaned up:`, storageError)
+      console.error(`Project ${projectId} deleted, but its files could not be cleaned up yet:`, storageError)
     }
 
     return NextResponse.json({ success: true })

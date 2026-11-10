@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     TOPIC_LOCK_WAIT_SECONDS: float = 600.0
     # On shutdown, running jobs get this long to finish before they are cancelled and their leases released.
     JOB_SHUTDOWN_GRACE_SECONDS: float = 20.0
+    # Queued file deletions (pending_file_deletions) that failed this many times raise a watchdog alert.
+    FILE_DELETION_ALERT_ATTEMPTS: int = 5
 
     # LLM: Claude for all text generation and grading.
     # "mock" returns schema-valid placeholder output with no API calls (local dev, e2e runs).
@@ -195,6 +197,13 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY_ID: str = ""
     S3_SECRET_ACCESS_KEY: str = ""
     S3_FORCE_PATH_STYLE: bool = False
+    # The weekly sweep of bucket files no material points to (watchdog.py). It ignores files younger than an hour and
+    # refuses to delete when the orphans are more than STORAGE_SWEEP_MAX_SHARE of the bucket, or more than
+    # STORAGE_SWEEP_MAX_FILES files: it alerts instead. While STORAGE_SWEEP_DRY_RUN is true it only reports; the
+    # operator turns it off in .railway/railway.ts after reading a few reports.
+    STORAGE_SWEEP_DRY_RUN: bool = True
+    STORAGE_SWEEP_MAX_SHARE: float = 0.05
+    STORAGE_SWEEP_MAX_FILES: int = 200
 
     # Where the frontend writes uploads when it has no S3 bucket (`local://` material paths).
     LOCAL_UPLOADS_DIR: str = "/data/uploads"

@@ -21,7 +21,13 @@
 
 import { prisma } from '@/lib/db/prisma'
 import { deleteAccount, type DeletionResult, type DeletionStore } from '@/lib/account/deletion'
-import { deleteFile, deleteUserFiles, writeDeletionRecord } from '@/lib/storage/files'
+import {
+  deleteFile,
+  deleteUserFiles,
+  queueDeletionAfterFailure,
+  storedFolderPath,
+  writeDeletionRecord,
+} from '@/lib/storage/files'
 import { recordOpsEvent } from '@/lib/ops/events'
 
 export type AccountDetails = {
@@ -87,7 +93,12 @@ const store: DeletionStore = {
 export function deleteUserAccount(userId: string): Promise<DeletionResult> {
   return deleteAccount(userId, {
     store,
-    files: { deleteFile, deleteUserFiles, recordDeletion: (id) => writeDeletionRecord(id) },
+    files: {
+      deleteFile,
+      deleteUserFiles,
+      recordDeletion: (id) => writeDeletionRecord(id),
+      queueFolder: (id) => queueDeletionAfterFailure(storedFolderPath(`${id}/`), 'account_deleted'),
+    },
     note: recordOpsEvent,
   })
 }
