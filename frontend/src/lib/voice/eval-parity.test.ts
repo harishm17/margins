@@ -6,7 +6,9 @@ import {
   TEACH_PROMPT_FIXTURE,
   TEACH_SCENARIOS,
   TEACH_STATE_FIXTURE,
+  TEACH_STATE_FIXTURE_V2,
   UTTERANCE_FIXTURE,
+  ideasOf,
   loadTeachScenarios,
   teachParityFixture,
   teachPromptFixture,
@@ -24,6 +26,21 @@ test('the teach-back logic over the eval scenarios equals the committed parity f
   assert.deepEqual(actual, expected)
 })
 
+// The tool results read the voice flag themselves (the tags around data, the confront example, the example check's name),
+// so the eval's v2 runs replay a fixture of their own. Regenerate with `npx tsx scripts/teach-parity-fixture.ts --v2`.
+test('with the audited voice prompts on, the same replay equals the v2 parity fixture', () => {
+  const before = process.env.PROMPTS_V2
+  process.env.PROMPTS_V2 = 'voice'
+  try {
+    const actual = JSON.parse(JSON.stringify(teachParityFixture(loadTeachScenarios(TEACH_SCENARIOS))))
+    assert.deepEqual(actual, JSON.parse(fs.readFileSync(TEACH_STATE_FIXTURE_V2, 'utf8')))
+    assert.notDeepEqual(actual, JSON.parse(fs.readFileSync(TEACH_STATE_FIXTURE, 'utf8')))
+  } finally {
+    if (before === undefined) delete process.env.PROMPTS_V2
+    else process.env.PROMPTS_V2 = before
+  }
+})
+
 test('the coach prompt and tools the eval sends equal the committed fixture', () => {
   const scenarios = loadTeachScenarios(TEACH_SCENARIOS)
   const actual = JSON.parse(JSON.stringify(teachPromptFixture(scenarios)))
@@ -33,7 +50,7 @@ test('the coach prompt and tools the eval sends equal the committed fixture', ()
 
 test('a scenario turn is an "I don\'t know" exactly when the app\'s own detector hears one', () => {
   for (const scenario of loadTeachScenarios(TEACH_SCENARIOS)) {
-    for (const turn of scenario.turns) assert.equal(turn.dont_know === true, isDontKnow(turn.say), `${scenario.id}: ${turn.say}`)
+    for (const turn of ideasOf(scenario).flatMap((idea) => idea.turns)) assert.equal(turn.dont_know === true, isDontKnow(turn.say), `${scenario.id}: ${turn.say}`)
   }
 })
 

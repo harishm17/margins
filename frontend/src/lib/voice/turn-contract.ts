@@ -53,7 +53,10 @@ export type VoiceStreamExtra =
   | { type: 'working'; step: 'assess' | 'record_answer' | 'reveal' | 'record_check' }
   /** Sent with the end of each coach turn: what the session waits for next (spec 19.2). */
   | { type: 'listen'; for: ListenFor }
-  /** The call just streamed was cut off at its token limit and is being asked again: drop what has not been spoken of it. */
+  /**
+   * Drop what has not been spoken of the reply so far. The server no longer sends it (a reply cut off at its token limit
+   * now stays said and is finished, turn-engine.ts); the browser still understands it from a server one deploy behind.
+   */
   | { type: 'retract' }
   /** The turn is still running (a long graded step sends nothing else): the browser's wait for the stream starts again. */
   | { type: 'alive' }

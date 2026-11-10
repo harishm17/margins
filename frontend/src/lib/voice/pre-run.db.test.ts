@@ -273,3 +273,79 @@ dbTest('a graded teach-back utterance makes one model call (it made two), and a 
   const request = await play('can you say that again')
   assert.equal(request.calls, 2, 'a request is not an answer: no step is run before the model, which then asks for a tool as before')
 })
+
+// ------------------------------------------------------------------------------------------ v2 (PROMPTS_V2 naming voice)
+
+/** Runs `run` with PROMPTS_V2=voice, then restores the variable. */
+async function withVoiceV2(run: () => Promise<void>): Promise<void> {
+  const before = process.env.PROMPTS_V2
+  process.env.PROMPTS_V2 = 'voice'
+  try {
+    await run()
+  } finally {
+    if (before === undefined) delete process.env.PROMPTS_V2
+    else process.env.PROMPTS_V2 = before
+  }
+}
+
+dbTest('v2: the first step of a session runs before the model speaks, in every style, and is not announced as a graded step', async () => {
+  const quiet = await world('teach_back')
+  assert.equal(await server.planPreRunForSession({ userId: quiet.user.id, sessionId: quiet.session.id, language: 'en', utterance: '', history: [] }), null, 'v1: the model starts')
+  await withVoiceV2(async () => {
+    for (const [style, tool] of [['oral_quiz', 'get_next_question'], ['teach_back', 'get_concept_to_explain'], ['guided_reading', 'next_claim']] as const) {
+      const w = await world(style)
+      const asking = { userId: w.user.id, sessionId: w.session.id, language: 'fr', utterance: '' }
+      const number = await teach.beginVoiceTurn(w.session.id, '')
+      const plan = await server.planPreRunForSession({ ...asking, history: [] })
+      assert.deepEqual(plan, { step: 'start', tool, input: {} }, style)
+      const ctx = { sessionId: w.session.id, userId: w.user.id, timeZone: 'UTC', turn: number, steps: new Map() }
+      const emitted: { type: string }[] = []
+      const started = await server.startWithPreRun(plan!, ctx, [{ role: 'user', content: '[start]' }], (event) => emitted.push(event))
+      assert.equal(emitted.some((event) => event.type === 'working'), false, style)
+      assert.equal(out(started.result).done, false, style)
+      assert.ok(JSON.stringify(started.messages).includes(`<app_result step=\\"${tool}\\">`), style)
+      // A model that asks for the first step anyway gets the same item, not the one after it.
+      assert.deepEqual((await tools.executeVoiceTool(ctx, tool, {})).output, started.result.output, style)
+      // Only the start: a silent turn later in the session runs nothing.
+      const later: VoiceMessage[] = [{ role: 'user', content: '[start]' }, { role: 'assistant', content: [{ type: 'text', text: 'Hello.' }] }]
+      assert.equal(await server.planPreRunForSession({ ...asking, history: later }), null, style)
+    }
+  })
+})
+
+dbTest('v2: a second request to be told on an idea is answered with the explanation, and the first is left to the coach', () =>
+  withVoiceV2(async () => {
+    const w = await world('teach_back')
+    await coachCalls(w, 'get_concept_to_explain')
+    const g = grader({ 'Two keys': COVERED, Chaining: { verdict: 'incorrect', student_quote: 'x', misconception: 'thinks a bucket holds one key' } })
+    const first = await turn(w, 'Two keys that land in one bucket collide, and then one of them is dropped.', [], g.grade)
+    assert.equal(out(first.ran?.result).action, 'probe')
+    // The grader's description of the mistake is marked as the grader's, not as something the student said.
+    assert.equal(out(first.ran?.result).incorrect[0].wrong_idea, '<grader_note>thinks a bucket holds one key</grader_note>')
+    assert.equal((await turn(w, 'just tell me the answer', [], g.grade)).plan, null)
+    assert.equal((await stateOf(w)).teach.concepts[w.collision.id].helpAsked, 1)
+    const second = await turn(w, 'can you just tell me', [], g.grade)
+    assert.equal(second.plan?.tool, 'assess_explanation')
+    const told = out(second.ran?.result)
+    assert.equal(told.action, 'explain_first')
+    assert.match(JSON.stringify(told.source_claim), /Chaining keeps a list/)
+    const state = (await stateOf(w)).teach.concepts[w.collision.id]
+    assert.equal(state.helpAsked, 0)
+    assert.equal(state.gaps[Object.keys(state.gaps)[0]].probes >= 1, true)
+    // Asked again while the say-back waits: the same claim once more, and the request is not scored as a failed say-back.
+    await turn(w, 'please just tell me', [], g.grade)
+    const scored = await prisma.recallAttempt.count({ where: { userId: w.user.id } })
+    const again = await turn(w, 'just tell me the answer', [], g.grade)
+    assert.equal(out(again.ran?.result).action, 'explain')
+    assert.equal((await stateOf(w)).teach.concepts[w.collision.id].sayBack, state.sayBack)
+    assert.equal(await prisma.recallAttempt.count({ where: { userId: w.user.id } }), scored)
+  })
+)
+
+dbTest('v1: requests to be told are never counted, and none of them runs a step', async () => {
+  const w = await world('teach_back')
+  await coachCalls(w, 'get_concept_to_explain')
+  const g = grader({})
+  for (const said of ['just tell me the answer', 'can you just tell me', 'please just tell me']) assert.equal((await turn(w, said, [], g.grade)).plan, null)
+  assert.equal((await stateOf(w)).teach.concepts[w.collision.id]?.helpAsked ?? 0, 0)
+})

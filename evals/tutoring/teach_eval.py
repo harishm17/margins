@@ -34,7 +34,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from utterance import app_result_text, classify_utterance, has_substance
+from utterance import app_result_text, asks_for_help, classify_utterance, has_substance
 
 EXAMPLE_CHECK_TOOLS = ("record_check", "record_example_check")  # v1 and v2 (voice flag) names of the new-example check
 
@@ -134,6 +134,7 @@ class Session:
         self.finished = False  # every idea is closed and the coach has been told so
         self.claims_given: List[str] = []
         self.started = False
+        self.heard = ""  # what the student said in the turn being answered
         self.steps: Dict[str, Dict[str, Any]] = {}  # the results of the steps already run for this utterance (spec 19.1)
 
     @property
@@ -180,9 +181,26 @@ class Session:
         if isinstance(output.get("source_claim"), dict):
             self.claims_given.append(untagged(output["source_claim"]["text"]))
 
-    def begin_turn(self, turn: int) -> None:
+    def begin_turn(self, turn: int, said: str = "") -> None:
+        """A new turn with what the student said in it (teach-tools.ts beginVoiceTurn). Under the voice flag a request to be
+        told is counted on the open idea, so the second one is answered with the explanation."""
+        from app.prompt_revision import prompts_v2
+
         self.turn = turn
         self.steps = {}
+        self.heard = said
+        if said and self.started and not self.closed() and not self.state["outcome"] and prompts_v2("voice") and asks_for_help(said):
+            self.state["helpAsked"] = self.state.get("helpAsked", 0) + 1
+
+    def told(self) -> bool:
+        """The student's words this turn are a second request to be told on the open idea (teach-tools.ts `told`)."""
+        from app.prompt_revision import prompts_v2
+        from teach_state import HELP_ASKS_BEFORE_TELLING
+
+        state = self.state
+        return bool(
+            prompts_v2("voice") and not self.closed() and not state["exampleAsked"] and state.get("helpAsked", 0) >= HELP_ASKS_BEFORE_TELLING and asks_for_help(self.heard)
+        )
 
     def what_follows(self, output: Dict[str, Any]) -> Dict[str, Any]:
         """A closing result with the next step in it (teach-tools.ts withWhatFollows): the next open idea, now the one
@@ -201,14 +219,17 @@ class Session:
     def plan_pre_run(self, said: str, last_coach_text: str) -> Optional[Dict[str, Any]]:
         """The step the app runs before the model speaks for this utterance, or None (frontend/src/lib/voice/pre-run.ts planPreRun,
         teach-back only): an answer or an "I don't know" with some substance, to an idea that is open and was asked about."""
-        kind = classify_utterance(said)
-        if kind not in ("answer", "idk") or not has_substance(said, kind) or not self.started or self.closed():
-            return None
         from app.prompt_revision import prompts_v2
         from teach_state import example_check_tool
 
         # Under the voice flag the tools take no concept_id: the app reads it from the session (frontend tools.ts).
         held = prompts_v2("voice")
+        if held and asks_for_help(said):
+            # The second request to be told on an idea runs the assessment, which answers with the explanation; the first runs nothing.
+            return {"name": "assess_explanation", "input": {}} if self.started and self.told() else None
+        kind = classify_utterance(said)
+        if kind not in ("answer", "idk") or not has_substance(said, kind) or not self.started or self.closed():
+            return None
         concept_id = self.concept["id"]
         if self.state["exampleAsked"]:
             question = last_coach_text.strip()[:1000]
@@ -255,13 +276,15 @@ class Session:
             claims = assessed_claims(concept, self.explain_verdicts())
             covered_something = any(claim["verdict"] in ("covered", "partial") for claim in claims)
             # What the student said was an "I don't know" when the script says so (the parity test pins that flag to the app's detector).
+            told = self.told()
             output, self.states[index], _ = assessment_result(
                 concept["name"],
                 claims,
                 self.state,
                 None if covered_something else concept["prerequisite"],
-                bool(self.current_turn().get("dont_know")),
+                bool(self.current_turn().get("dont_know")) or told,
                 int(self.scenario.get("band", 1)),
+                told,
             )
         else:
             if not self.state["exampleAsked"]:
@@ -275,9 +298,19 @@ class Session:
 # ---------------------------------------------------------------------------- playing
 
 
-async def coach_turn(provider, system: str, tools: List[Dict[str, Any]], messages: List[Dict[str, Any]], session: Session, log: Optional[List[Dict[str, Any]]] = None):
+async def coach_turn(
+    provider,
+    system: str,
+    tools: List[Dict[str, Any]],
+    messages: List[Dict[str, Any]],
+    session: Session,
+    log: Optional[List[Dict[str, Any]]] = None,
+    finish_note: Optional[str] = None,
+):
     """One coach turn as the app's turn loop runs it. Returns (spoken text, the tool calls with their results). `log` starts with
-    the step the app ran before the model, if it ran one."""
+    the step the app ran before the model, if it ran one. `finish_note` (the audited prompts' fixture carries it): a reply that
+    stops at its token limit stays said and the coach is asked to finish it, as the app does under the voice flag; with no
+    call left the turn ends there."""
     from app.config import settings  # the app's own limit for a spoken reply (routes/voice.py)
     from app.services.llm.base import TurnDone, TurnText
 
@@ -291,6 +324,12 @@ async def coach_turn(provider, system: str, tools: List[Dict[str, Any]], message
             spoken.append(text)
         if done is None:
             break
+        if finish_note and done.stop_reason == "max_tokens":
+            if call == MAX_MODEL_CALLS:
+                break
+            if text:
+                messages.extend([{"role": "assistant", "content": [{"type": "text", "text": text}]}, {"role": "user", "content": finish_note}])
+            continue
         content = done.content or ([{"type": "text", "text": text}] if text else [])
         calls = [block for block in done.content if block.get("type") == "tool_use"] if done.stop_reason == "tool_use" else []
         # A tool call cut off is not sent back; the turn ends where the app's would.
@@ -349,9 +388,17 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
     """One scripted conversation: the start of the session, then each student message in turn. One record per coach turn."""
     from spend import SpendLimitReached
 
+    from app.prompt_revision import prompts_v2
+
     entry = prompts["topics"][scenario["topic"]]
     session = Session(scenario)
     messages: List[Dict[str, Any]] = [{"role": "user", "content": entry["start"]}]
+    start: List[Dict[str, Any]] = []
+    if prompts_v2("voice"):
+        # The app fetches the first idea before the model speaks and puts it in the start message (pre-run.ts planStart).
+        first = session.answer("get_concept_to_explain", {})
+        start.append({"name": "get_concept_to_explain", "input": {}, "output": first, "pre_run": True})
+        messages[0]["content"] = [{"type": "text", "text": entry["start"]}, {"type": "text", "text": app_result_text("get_concept_to_explain", first)}]
     records: List[Dict[str, Any]] = []
     last_text = ""
     turn = 0
@@ -362,9 +409,9 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
             if scripted is None:
                 break
             said = scripted["say"]
-        session.begin_turn(turn)
+        session.begin_turn(turn, said)
         idea = session.index  # the idea this student message is about
-        pre_run: List[Dict[str, Any]] = []
+        pre_run: List[Dict[str, Any]] = list(start) if turn == 0 else []
         if turn > 0:
             plan = session.plan_pre_run(said, last_text)
             content: Any = said
@@ -379,7 +426,7 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
         started = time.perf_counter()
         base = {"scenario": scenario["id"], "pattern": scenario["pattern"], "turn": turn, "idea": idea, "student": said}
         try:
-            text, log = await coach_turn(provider, entry["system"], prompts["tools"], messages, session, list(pre_run))
+            text, log = await coach_turn(provider, entry["system"], prompts["tools"], messages, session, list(pre_run), prompts.get("finish_cut_off_note"))
         except SpendLimitReached as exc:
             stop["reason"] = str(exc)
             print(f"  STOP: {exc}", flush=True)
@@ -462,8 +509,8 @@ def estimate(scenarios: List[Dict[str, Any]], prompts: Dict[str, Any], tracker, 
         entry = prompts["topics"][scenario["topic"]]
         history: List[str] = [entry["start"]]
         steps = parity_trace(scenario)
-        # The first turn: get the idea, then ask it.
-        for _ in range(2):
+        # The first turn: get the idea, then ask it (one call when the app has fetched the idea already, under the voice flag).
+        for _ in range(1 if "finish_cut_off_note" in prompts else 2):
             usd += tracker.estimate_call(model, "voice", estimate_prompt_tokens([entry["system"], tools_json, *history], None))
             calls += 1
         history.append("Explain it in your own words as if teaching a classmate.")

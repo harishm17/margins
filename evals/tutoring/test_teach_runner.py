@@ -207,6 +207,48 @@ def test_a_request_is_not_graded_and_a_coach_that_asks_for_the_tool_anyway_gets_
     assert session.state["assessments"] == 2
 
 
+def test_under_the_voice_flag_the_app_starts_the_session_and_answers_a_second_request_to_be_told(monkeypatch):
+    """The audited voice path (PROMPTS_V2 naming voice), mirrored: the first idea is fetched before the model speaks, and the
+    second "just tell me" on an idea runs the assessment, which answers with the explanation (pre-run.ts, teach-tools.ts)."""
+    from app.config import settings
+
+    scenario = BY_ID["tb-just_tell_me-search-1"]  # its request is short enough to be heard as one (utterance.ts asksForHelp)
+
+    def run(flag):
+        monkeypatch.setattr(settings, "PROMPTS_V2", flag)
+        stop = {}
+        tracker = spend_module.SpendTracker(4.0, 3.0, adapters.estimate_cost)
+        provider = teach_eval.make_teach_meter(adapters, stop)(ScriptedCoach(scenario, calm), None, tracker, spend_module.GENERATION)
+        return asyncio.run(teach_eval.play(scenario, provider, load_prompts(), stop))
+
+    v2 = run("voice")
+    assert v2[0]["model_calls"] == 1 and v2[0]["tools"][0]["pre_run"] and v2[0]["last_action"] == "ask"
+    assert [scenario["turns"][i]["say"] for i in (1, 2)] == [v2[2]["student"], v2[3]["student"]]  # the two requests
+    assert v2[2]["pre_run"] is None  # the first request: no step, the coach puts them off once
+    assert v2[3]["pre_run"] == "assess_explanation" and v2[3]["last_action"] in ("explain", "explain_first")
+    v1 = run("")
+    assert v1[0]["model_calls"] == 2 and v1[3]["pre_run"] is None
+
+
+def test_under_the_voice_flag_a_reply_cut_off_at_its_limit_stays_said_and_is_finished():
+    class CutOff:
+        def __init__(self):
+            self.seen = []
+
+        async def stream_turn(self, *, system, messages, tools, max_tokens, purpose):
+            self.seen.append(json.loads(json.dumps(messages)))
+            first_call = len(self.seen) == 1
+            text = "A hash maps a key to a buck" if first_call else "et. What follows from that?"
+            yield TurnText(text=text)
+            yield TurnDone(stop_reason="max_tokens" if first_call else "end_turn", content=[{"type": "text", "text": text}], usage=LLMUsage(model="scripted", purpose=purpose, input_tokens=1, output_tokens=1))
+
+    provider = CutOff()
+    messages = [{"role": "user", "content": "hello"}]
+    text, _ = asyncio.run(teach_eval.coach_turn(provider, "s", [], messages, teach_eval.Session(first("idk3")), None, "[finish]"))
+    assert text == "A hash maps a key to a buck et. What follows from that?"
+    assert provider.seen[1][1:] == [{"role": "assistant", "content": [{"type": "text", "text": "A hash maps a key to a buck"}]}, {"role": "user", "content": "[finish]"}]
+
+
 # ---------------------------------------------------------------- the run
 
 

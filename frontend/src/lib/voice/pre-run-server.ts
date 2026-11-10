@@ -7,7 +7,7 @@ import { prisma } from '@/lib/db/prisma'
 import { coachStyleOf } from '@/lib/voice/coach-prompt'
 import type { VoiceBlock, VoiceMessage } from '@/lib/voice/history'
 import { promptsV2 } from '@/lib/prompt-revision'
-import { appResultBlock, appResultStep, endsWithAppResult, lastCoachText, planPreRun, withAppResult, type PreRunPlan } from '@/lib/voice/pre-run'
+import { appResultBlock, appResultStep, endsWithAppResult, lastCoachText, planPreRun, planStart, withAppResult, type PreRunPlan } from '@/lib/voice/pre-run'
 import { readCoachState } from '@/lib/voice/teach-tools'
 import { executeVoiceTool, type VoiceToolResult } from '@/lib/voice/tools'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
@@ -24,19 +24,23 @@ export async function planPreRunForSession(input: {
   utterance: string
   history: readonly VoiceMessage[]
 }): Promise<PreRunPlan | null> {
-  if (!input.utterance.trim() || endsWithAppResult(input.history)) return null
+  const v2 = promptsV2('voice')
+  // The start of a session (no words, no conversation yet) has a first step under v2; any other silent turn has none.
+  const starting = !input.utterance.trim() && input.history.length === 0
+  if ((!input.utterance.trim() && !(v2 && starting)) || endsWithAppResult(input.history)) return null
   const session = await prisma.voiceDrillSession.findFirst({
     where: { id: input.sessionId, userId: input.userId },
     select: { style: true, coachState: true, endedAt: true },
   })
   if (!session || session.endedAt) return null
   const style = coachStyleOf(session.style)
+  if (starting) return planStart(style)
   const state = readCoachState(session.coachState)
   const currentAnswered =
     style === 'oral_quiz' && state.quiz.current >= 0
       ? (await prisma.voiceDrillAttempt.count({ where: { sessionId: input.sessionId, questionIndex: state.quiz.current } })) > 0
       : false
-  return planPreRun({ style, language: input.language, utterance: input.utterance, state, currentAnswered, lastCoachText: lastCoachText(input.history) })
+  return planPreRun({ style, language: input.language, utterance: input.utterance, state, currentAnswered, lastCoachText: lastCoachText(input.history), v2 })
 }
 
 export type PreRunOutcome = { result: VoiceToolResult; block: VoiceBlock }
@@ -67,7 +71,8 @@ export async function startWithPreRun(
   messages: readonly VoiceMessage[],
   emit: (event: VoiceEvent | VoiceStreamExtra) => void
 ): Promise<{ messages: VoiceMessage[]; result: VoiceToolResult }> {
-  emit({ type: 'working', step: plan.step })
+  // The first step of a session grades nothing: the browser is not told a graded step has begun.
+  if (plan.step !== 'start') emit({ type: 'working', step: plan.step })
   const ran = await runPreRun(plan, ctx)
   for (const event of ran.result.events) emit(event)
   return { messages: withAppResult(messages, ran.block), result: ran.result }

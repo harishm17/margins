@@ -11,7 +11,7 @@ import { logServerError } from '@/lib/ops/log'
 import type { ModelEvent } from '@/lib/voice/ai-turn'
 import { VoiceModelError } from '@/lib/voice/ai-turn'
 import { voiceErrorMessage } from '@/lib/voice/errors'
-import type { VoiceBlock, VoiceMessage } from '@/lib/voice/history'
+import { FINISH_CUT_OFF_NOTE, type VoiceBlock, type VoiceMessage } from '@/lib/voice/history'
 import type { VoiceToolResult } from '@/lib/voice/tools'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
 import type { VoiceStreamExtra } from '@/lib/voice/turn-contract'
@@ -30,7 +30,10 @@ export type TurnDeps = {
   /** When model call `call` was started, if that was before the engine was asked for it (the route opens the first one early). */
   callStartedAt?: (call: number) => number | undefined
   log?: (message: string, error?: unknown) => void
-  /** PROMPTS_V2 (area voice, R7): a call that ends at max_tokens is cut off mid-reply; it is dropped and the coach is asked again. */
+  /**
+   * PROMPTS_V2 (area voice, R7): a call that ends at max_tokens is cut off mid-reply. What it said has been streamed and is
+   * being spoken, so it stays said; the coach is asked to finish in a sentence without repeating it.
+   */
   retryCutOff?: boolean
 }
 
@@ -165,11 +168,17 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
     timed()
     if (!done) return fail('VOICE_INTERRUPTED', undefined, segment)
     if (deps.retryCutOff && done.stopReason === 'max_tokens') {
-      // The reply was cut off: its text is not kept, spoken further or stored, and any tool call in it is incomplete. The coach
-      // answers again from the same conversation, if the call limit leaves a call; otherwise the turn fails.
+      // The reply was cut off, and any tool call in it is incomplete. Its words went to the browser as they came and are
+      // being spoken: taking them back and asking again from the same conversation made the coach say the same opening
+      // twice. They stay in the conversation, and the coach is asked to finish without repeating them. With no call left
+      // the turn fails, and what was said is stored as a reply that did not finish.
       log(`Model call ${call} ended at max_tokens`)
-      if (call === max) return fail('VOICE_TURN_FAILED')
-      deps.emit({ type: 'retract' })
+      if (call === max) return fail('VOICE_TURN_FAILED', undefined, segment)
+      const said = segment.trim()
+      if (said) {
+        spoken.push(said)
+        messages = [...messages, { role: 'assistant', content: [{ type: 'text', text: said }] }, { role: 'user', content: FINISH_CUT_OFF_NOTE }]
+      }
       continue
     }
     if (segment.trim()) spoken.push(segment.trim())

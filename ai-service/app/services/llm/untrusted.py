@@ -29,7 +29,7 @@ PROMPT_TAGS = frozenset(
         "already_seen", "answer_key", "app_result", "ask_what_is_unclear", "authored_answer", "authored_solution",
         "candidate_pairs", "check_question", "claim", "concept", "concepts", "confusable", "confusable_concepts",
         "conversation", "course_concepts", "course_map", "course_terms", "current_step", "difficulty", "entry_points",
-        "exam", "excerpt", "excerpts", "file", "gap", "gaps", "hints_shown", "item", "items", "key_points",
+        "exam", "excerpt", "excerpts", "file", "gap", "gaps", "grader_note", "hints_shown", "item", "items", "key_points",
         "leak_notice", "move", "notes", "objective", "objectives", "outline", "pair", "passage", "past_exam_files",
         "past_exam_style", "prerequisite_concepts", "problem", "question", "quote", "recall_prompt", "request",
         "requests", "rules", "sample_answer", "section", "situation", "source_claim", "source_claims",

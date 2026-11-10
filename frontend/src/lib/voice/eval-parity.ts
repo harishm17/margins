@@ -10,8 +10,10 @@ import { selectCourseTerms } from '@/lib/voice/course-terms'
 import { assessmentResult, exampleResult } from '@/lib/voice/teach-tools'
 import { emptyConceptState, type AssessedClaim, type ConceptState } from '@/lib/voice/teach-back'
 import { toolsForStyle } from '@/lib/voice/tools'
-import { appResultBlock } from '@/lib/voice/pre-run'
-import { classifyUtterance, hasSubstance, UTTERANCE_RULES } from '@/lib/voice/utterance'
+import { appResultBlock, exampleCheckStep } from '@/lib/voice/pre-run'
+import { promptsV2 } from '@/lib/prompt-revision'
+import { FINISH_CUT_OFF_NOTE } from '@/lib/voice/history'
+import { asksForHelp, classifyUtterance, hasSubstance, UTTERANCE_RULES } from '@/lib/voice/utterance'
 import { CORE_WORDS, FILLER, LOW_EFFORT, REQUEST_WORDS } from '@/lib/learning/dont-know'
 import type { Band } from '@/lib/learning/level'
 
@@ -23,17 +25,28 @@ type Verdict = {
   reasoning_gap?: boolean | null
 }
 
+type TeachConcept = { id: string; name: string; prerequisite: string | null; claims: { id: string; text: string; page: number | null }[] }
+type TeachTurn = { kind: 'explain' | 'example'; say: string; verdicts: Verdict[]; dont_know?: boolean }
+
 export type TeachScenario = {
   id: string
   topic: string
-  concept: { id: string; name: string; prerequisite: string | null; claims: { id: string; text: string; page: number | null }[] }
+  concept: TeachConcept
   /** The support band of the concept (no database here to compute it); core when absent. */
   band?: Band
-  turns: { kind: 'explain' | 'example'; say: string; verdicts: Verdict[]; dont_know?: boolean }[]
+  turns: TeachTurn[]
+  /** The ideas that follow the first in the same session, each with its own turns (a session of more than one idea). */
+  then?: { concept: TeachConcept; turns: TeachTurn[] }[]
 }
 
-const claimsOf = (scenario: TeachScenario, verdicts: Verdict[]): AssessedClaim[] =>
-  scenario.concept.claims.map((claim, index) => ({
+/** The ideas of a scenario in order: its own concept and turns, then each entry of `then`. */
+export const ideasOf = (scenario: TeachScenario): { concept: TeachConcept; turns: TeachTurn[] }[] => [
+  { concept: scenario.concept, turns: scenario.turns },
+  ...(scenario.then ?? []),
+]
+
+const claimsOf = (concept: TeachConcept, verdicts: Verdict[]): AssessedClaim[] =>
+  concept.claims.map((claim, index) => ({
     claimId: claim.id,
     text: claim.text,
     page: claim.page,
@@ -44,26 +57,33 @@ const claimsOf = (scenario: TeachScenario, verdicts: Verdict[]): AssessedClaim[]
     reasoningGap: verdicts[index].reasoning_gap ?? null,
   }))
 
-/** Each scenario's turns through the real assessment and example functions, until the idea closes. */
+/**
+ * Each scenario's turns through the real assessment and example functions, idea after idea, each until it closes. The
+ * functions read the voice flag themselves (the tags, the confront example, the name of the example check), so the
+ * fixture of each revision is written with PROMPTS_V2 set for it (scripts/teach-parity-fixture.ts).
+ */
 export function teachParityFixture(scenarios: TeachScenario[]) {
+  const v2 = promptsV2('voice')
   return scenarios.map((scenario) => {
-    let state: ConceptState = emptyConceptState()
     const steps: { kind: string; output: Record<string, unknown>; state: ConceptState; app_result: unknown }[] = []
-    for (const turn of scenario.turns) {
-      if (state.outcome) break
-      const claims = claimsOf(scenario, turn.verdicts)
-      if (turn.kind === 'explain') {
-        const coveredSomething = claims.some((claim) => claim.verdict === 'covered' || claim.verdict === 'partial')
-        const next = assessmentResult(scenario.concept.name, claims, state, coveredSomething ? null : scenario.concept.prerequisite, {
-          dontKnow: turn.dont_know === true,
-          band: scenario.band ?? 1,
-        })
-        state = next.state
-        steps.push({ kind: 'explain', output: next.output, state, app_result: appResultBlock('assess_explanation', next.output).text })
-      } else {
-        const next = exampleResult(scenario.concept.name, claims, state)
-        state = next.state
-        steps.push({ kind: 'example', output: next.output, state, app_result: appResultBlock('record_check', next.output).text })
+    for (const idea of ideasOf(scenario)) {
+      let state: ConceptState = emptyConceptState()
+      for (const turn of idea.turns) {
+        if (state.outcome) break
+        const claims = claimsOf(idea.concept, turn.verdicts)
+        if (turn.kind === 'explain') {
+          const coveredSomething = claims.some((claim) => claim.verdict === 'covered' || claim.verdict === 'partial')
+          const next = assessmentResult(idea.concept.name, claims, state, coveredSomething ? null : idea.concept.prerequisite, {
+            dontKnow: turn.dont_know === true,
+            band: scenario.band ?? 1,
+          })
+          state = next.state
+          steps.push({ kind: 'explain', output: next.output, state, app_result: appResultBlock('assess_explanation', next.output).text })
+        } else {
+          const next = exampleResult(idea.concept.name, claims, state)
+          state = next.state
+          steps.push({ kind: 'example', output: next.output, state, app_result: appResultBlock('record_check', next.output, exampleCheckStep(v2)).text })
+        }
       }
     }
     return { id: scenario.id, steps }
@@ -71,7 +91,7 @@ export function teachParityFixture(scenarios: TeachScenario[]) {
 }
 
 const courseTermsOf = (scenarios: TeachScenario[]) => {
-  const concepts = new Map(scenarios.map((scenario) => [scenario.concept.id, scenario.concept]))
+  const concepts = new Map(scenarios.flatMap((scenario) => ideasOf(scenario).map((idea) => [idea.concept.id, idea.concept] as const)))
   return selectCourseTerms({
     conceptNames: [...concepts.values()].map((concept) => concept.name),
     claimTexts: [...concepts.values()].flatMap((concept) => concept.claims.map((claim) => claim.text)),
@@ -95,11 +115,13 @@ export function teachPromptFixture(scenarios: TeachScenario[], v2 = false) {
             courseTerms: courseTermsOf(scenarios.filter((scenario) => scenario.topic === topic)),
             v2,
           }),
-          start: startMessage('teach_back', topic),
+          start: startMessage('teach_back', topic, v2),
         },
       ])
     ),
     tools: toolsForStyle('teach_back', v2),
+    // v2: what the turn loop says to the model after a reply that stopped at its token limit (turn-engine.ts).
+    ...(v2 ? { finish_cut_off_note: FINISH_CUT_OFF_NOTE } : {}),
   }
 }
 
@@ -117,12 +139,12 @@ export const UTTERANCE_CASES = [
 
 /** How the rules read each scenario utterance and the extra cases, and the tables the Python mirror builds its patterns from. */
 export function utteranceFixture(scenarios: TeachScenario[]) {
-  const texts = [...new Set([...scenarios.flatMap((scenario) => scenario.turns.map((turn) => turn.say)), ...UTTERANCE_CASES])]
+  const texts = [...new Set([...scenarios.flatMap((scenario) => ideasOf(scenario).flatMap((idea) => idea.turns.map((turn) => turn.say))), ...UTTERANCE_CASES])]
   return {
     rules: { ...UTTERANCE_RULES, low_effort: [...LOW_EFFORT], filler: [...FILLER], request_words: [...REQUEST_WORDS], core_words: [...CORE_WORDS] },
     cases: texts.map((text) => {
       const kind = classifyUtterance(text)
-      return { text, kind, substance: hasSubstance(text, kind) }
+      return { text, kind, substance: hasSubstance(text, kind), help: asksForHelp(text) }
     }),
   }
 }

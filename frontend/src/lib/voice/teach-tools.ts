@@ -62,6 +62,7 @@ import type {
 import type { OwnedTopic } from '@/server/owned'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
 import {
+  HELP_ASKS_BEFORE_TELLING,
   afterExample,
   emptyConceptState,
   exampleHeld,
@@ -70,9 +71,9 @@ import {
   type ConceptState,
   type GapOptions,
   type Plan,
-  type PlanOptions,
   type Verdict,
 } from '@/lib/voice/teach-back'
+import { asksForHelp } from '@/lib/voice/utterance'
 
 export type TeachToolContext = {
   sessionId: string
@@ -146,6 +147,7 @@ export function readCoachState(value: unknown): CoachState {
         sayBack: typeof entry.sayBack === 'string' ? entry.sayBack : null,
         exampleAsked: entry.exampleAsked === true,
         outcome: entry.outcome === 'explained' || entry.outcome === 'taught' ? entry.outcome : null,
+        ...(typeof entry.helpAsked === 'number' && entry.helpAsked > 0 ? { helpAsked: entry.helpAsked } : {}),
       }
     }
   }
@@ -189,6 +191,11 @@ export async function beginVoiceTurn(sessionId: string, utterance: string, optio
     const last = state.said[state.said.length - 1]
     const again = options.retry === true && !!last && last.text === text
     if (text) state.said = [...(again ? state.said.slice(0, -1) : state.said), { turn: state.turn, text }].slice(-SAID_KEPT)
+    // v2: a request to be told is counted on the open idea, so the second one is answered with the explanation (planNext `told`).
+    const open = state.teach.current ? state.teach.concepts[state.teach.current] : undefined
+    if (text && !again && open && !open.outcome && state.teach.askedTurn >= 0 && promptsV2('voice') && asksForHelp(text)) {
+      open.helpAsked = (open.helpAsked ?? 0) + 1
+    }
     await tx.voiceDrillSession.update({ where: { id: sessionId }, data: { coachState: state as unknown as Prisma.InputJsonValue } })
     return state.turn
   })
@@ -272,8 +279,15 @@ const escapeText = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '
  * that tells it to do something is not one of its instructions (spec 6.5). v1 escapes the angle brackets inside; with
  * PROMPTS_V2 (area voice) only a closing prompt tag is made inert, so maths and code reach the model as written.
  */
-export const tagged = (name: 'student_words' | 'source_claim', text: string | null | undefined): string | null =>
+export const tagged = (name: 'student_words' | 'source_claim' | 'grader_note', text: string | null | undefined): string | null =>
   text ? (promptsV2('voice') ? inlineTag(name, text) : `<${name}>${escapeText(text)}</${name}>`) : null
+
+/**
+ * The grader's own description of what the student got wrong. It is the grader's paraphrase, not a quotation: v1 put it
+ * in <student_words>, and the coach then quoted it back as something the student had said. v2 names it for what it is.
+ */
+const wrongIdea = (misconception: string | null | undefined): string | null =>
+  tagged(promptsV2('voice') ? 'grader_note' : 'student_words', misconception)
 
 /** The tool that records the answer to the new example: `record_check` in v1, `record_example_check` in v2. */
 const exampleCheckTool = (): string => (promptsV2('voice') ? 'record_example_check' : 'record_check')
@@ -341,7 +355,7 @@ export function findingsOutput(claims: AssessedClaim[]): FindingsFields {
       .filter((c) => c.verdict === 'incorrect')
       .map((c) => ({
         you_said: tagged('student_words', c.studentQuote),
-        wrong_idea: tagged('student_words', c.misconception),
+        wrong_idea: wrongIdea(c.misconception),
         // The page, not the claim: the claim's text comes only with action explain, after the probes (teach-back.ts).
         page: c.page,
       })),
@@ -491,7 +505,12 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
   const explanation = heardSince(state, state.teach.askedTurn)
   if (!explanation) return error(NOBODY_SPOKE)
   // One test for "I don't know", typed or spoken (lib/learning/dont-know.ts). The first one is not graded: nothing was said.
-  const dontKnow = isDontKnow(explanation)
+  // v2: the student has asked to be told for the second time on this idea, and their last words are that request. It is
+  // answered like an "I don't know": nothing more is asked of them before the explanation. The count is the server's.
+  const lastSaid = state.said[state.said.length - 1]
+  const told =
+    promptsV2('voice') && !before.exampleAsked && (before.helpAsked ?? 0) >= HELP_ASKS_BEFORE_TELLING && !!lastSaid && lastSaid.turn === ctx.turn && asksForHelp(lastSaid.text)
+  const dontKnow = isDontKnow(explanation) || told
   const first = before.assessments === 0
   const skipGrader = dontKnow && first
   if (!skipGrader && !(await ctx.allowGrading())) return error(TOO_FAST)
@@ -544,7 +563,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
   const prerequisite = coveredSomething ? null : await weakPrerequisite(ctx.userId, concept.id)
   // The band is read after this explanation's own evidence is written, so a student who has just shown they do not know it gets support.
   const band = await lowestBand(ctx.userId, [concept.id])
-  const next = assessmentResult(concept.name, claims, { ...before, said: said.slice(-12) }, prerequisite, { dontKnow, band })
+  const next = assessmentResult(concept.name, claims, { ...before, said: said.slice(-12) }, prerequisite, { dontKnow, band, told })
   state.teach.current = concept.id
   state.teach.concepts[concept.id] = next.state
   state.teach.askedTurn = ctx.turn
@@ -552,7 +571,8 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
 
   // The say-back: the student's own words for the one claim the coach explained, after two probes. It is judged on what was
   // said just now and against that claim alone, so a wrong sentence from earlier cannot count against it. Level 2.
-  if (before.sayBack) await scoreSayBack(ctx, concept, before.sayBack, explanation)
+  // A request to be told is not an attempt at it, so it is not scored.
+  if (before.sayBack && !told) await scoreSayBack(ctx, concept, before.sayBack, explanation)
   // Every explain step is instruction: it is the explanation the student did not have (lastInstructionAt, spec 18.5).
   if ((next.plan.action === 'explain' || next.plan.action === 'explain_first') && ctx.topic) {
     await recordInstruction(prisma, {
@@ -608,9 +628,9 @@ export function assessmentResult(
   claims: AssessedClaim[],
   before: ConceptState,
   prerequisite: string | null,
-  options: { dontKnow?: boolean; band?: Band } = {}
+  options: { dontKnow?: boolean; band?: Band; told?: boolean } = {}
 ): { output: AssessExplanationResult; state: ConceptState; plan: Plan } {
-  const next = planNext(claims, before, { weakPrerequisite: prerequisite, dontKnow: options.dontKnow, band: options.band })
+  const next = planNext(claims, before, { weakPrerequisite: prerequisite, dontKnow: options.dontKnow, band: options.band, told: options.told, v2: promptsV2('voice') })
   const lookAgain = Object.keys(next.state.gaps)
     .filter((claimId) => next.state.gaps[claimId].explained)
     .flatMap((claimId) => {
@@ -636,7 +656,7 @@ export function assessmentResult(
  */
 export function exampleResult(conceptName: string, claims: AssessedClaim[], before: ConceptState): { output: ExampleCheckResult; state: ConceptState; passed: boolean } {
   const passed = exampleHeld(claims)
-  const next = afterExample(claims, before, passed)
+  const next = afterExample(claims, before, passed, { v2: promptsV2('voice') })
   const findings = findingsOutput(claims)
   return {
     passed,
@@ -1030,7 +1050,7 @@ async function recordReadingCheck(ctx: TeachToolContext, state: CoachState, args
     output: {
       verdict: label,
       ...(verdict.student_quote ? { you_said: tagged('student_words', verdict.student_quote) } : {}),
-      ...(verdict.misconception ? { wrong_idea: tagged('student_words', verdict.misconception) } : {}),
+      ...(verdict.misconception ? { wrong_idea: wrongIdea(verdict.misconception) } : {}),
       claim: { text: tagged('source_claim', claim.text), page: claim.page },
       claims_left: claims.length - guided.index,
       instruction: 'Say in a sentence what was right and the one thing to fix, then call next_claim.',

@@ -215,7 +215,7 @@ async function handlePost(request: NextRequest) {
     }
     // With PROMPTS_V2 the student's words cannot pass for an app_result (prompt audit L3).
     const spoken = promptsV2('voice') ? neutralizeAppResultTags(utterance) : utterance
-    const userText = spoken || (history.length === 0 ? startMessage(style, context.topicName) : CONTINUE_MESSAGE)
+    const userText = spoken || (history.length === 0 ? startMessage(style, context.topicName, promptsV2('voice')) : CONTINUE_MESSAGE)
     // The server keeps what the student said, with this turn's number: the tools take an answer from there, not from the model.
     const turn = await beginVoiceTurn(session.id, utterance, { retry: retry === true })
     if (timing) void attachClientTiming(session.id, turn, timing)
@@ -315,7 +315,7 @@ async function handlePost(request: NextRequest) {
               turn,
               style,
               preRun: preRun?.step ?? null,
-              graded: preRan || steps.size > 0,
+              graded: (preRan && preRun?.step !== 'start') || steps.size > 0,
               calls: outcome.calls,
               stepMs: preRunMs + outcome.toolMs,
               firstTextMs: firstTextAt === null ? null : firstTextAt - requestStarted,
