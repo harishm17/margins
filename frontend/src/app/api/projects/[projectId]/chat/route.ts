@@ -12,6 +12,7 @@
  * declined without a model call. Otherwise the thread's tutor state goes to the AI service with the
  * question, and once the reply is stored the state moves and a reply that taught records level 3.
  */
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
@@ -69,7 +70,7 @@ function chatFailure(code: string) {
   )
 }
 
-export async function POST(
+async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
@@ -282,3 +283,5 @@ function askHooks(input: { userId: string; projectId: string; threadId: string; 
     },
   }
 }
+
+export const POST = withClientSignal(handlePOST)

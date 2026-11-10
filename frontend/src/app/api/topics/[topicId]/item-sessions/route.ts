@@ -8,6 +8,7 @@
  *   "You'll find this on p. N", the test-out offer, how many passages are marked Focus here) after the last.
  */
 
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -65,7 +66,7 @@ async function startable(userId: string, topicId: string): Promise<WarmupState |
   return topic ? loadWarmupState(userId, topicId) : null
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
     const { topicId } = await params
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
+async function handlePATCH(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
     const { topicId } = await params
@@ -123,3 +124,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return apiInternal('Failed to save the answer')
   }
 }
+
+export const POST = withClientSignal(handlePOST)
+
+export const PATCH = withClientSignal(handlePATCH)

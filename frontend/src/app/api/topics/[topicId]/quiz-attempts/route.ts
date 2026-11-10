@@ -5,6 +5,7 @@
  * GET /api/topics/[topicId]/quiz-attempts - Get quiz history
  */
 
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -63,7 +64,7 @@ function isMissingQuizSetColumnError(error: unknown): boolean {
   )
 }
 
-export async function POST(
+async function handlePOST(
   request: NextRequest,
   { params }: { params: Promise<{ topicId: string }> }
 ) {
@@ -382,3 +383,5 @@ export async function GET(
     )
   }
 }
+
+export const POST = withClientSignal(handlePOST)

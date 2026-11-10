@@ -9,6 +9,7 @@
  *   the body says why (error.details.code). A miss comes back with what to read next (`help`).
  */
 
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -49,7 +50,7 @@ const bodySchema = z.object({
 
 const CALLS_THE_TUTOR = new Set(['ask', 'clarify', 'show_worked'])
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const session = await requireAuth()
     const userId = session.user.id
@@ -125,3 +126,5 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return apiInternal('The tutor state could not be read')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

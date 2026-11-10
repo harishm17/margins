@@ -1,5 +1,6 @@
 /** Server-side pieces of the chat routes that do not need a request or a database. */
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { callSignal } from '@/lib/ai-service/client-signal'
 
 export const MAX_QUESTION_CHARS = 2000
 export const MAX_THREAD_TITLE_CHARS = 80
@@ -51,7 +52,7 @@ export function requestChatAnswer(request: ChatAnswerRequest, signal?: AbortSign
       topic_id: request.topicId ?? null,
       ...(request.tutor ? { tutor: request.tutor } : {}),
     }),
-    signal: signal ?? AbortSignal.timeout(CHAT_TIMEOUT_MS),
+    signal: signal ?? callSignal(CHAT_TIMEOUT_MS),
   })
 }
 

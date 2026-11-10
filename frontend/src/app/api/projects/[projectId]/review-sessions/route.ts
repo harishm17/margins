@@ -13,6 +13,7 @@
  * today's newest unfinished review session, for "Resume today's review (5 of 12)" (spec 18.7).
  */
 
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -39,7 +40,7 @@ const bodySchema = z
   })
   .refine((body) => [body.topicId, body.conceptId, body.examSubmissionId].filter(Boolean).length <= 1, { message: 'Give a topic, a concept or an exam, not several' })
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
   try {
     const auth = await requireAuth()
     const { projectId } = await params
@@ -110,3 +111,5 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return apiInternal('Failed to look for a review in progress')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

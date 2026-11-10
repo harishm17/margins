@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -44,7 +45,7 @@ const patchSchema = z.object({
   heartbeat: z.boolean().optional(),
 })
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   try {
     const session = await requireAuth()
     const body = await request.json()
@@ -235,3 +236,5 @@ export async function PATCH(request: NextRequest) {
     return apiInternal('Failed to update voice session')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

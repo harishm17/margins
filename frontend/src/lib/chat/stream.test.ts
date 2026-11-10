@@ -92,27 +92,26 @@ describe('relayChatStream', () => {
     assert.deepEqual(calls.failures, [])
   })
 
-  it('still stores the answer when the browser has gone away', async () => {
+  it('cancels the AI call and removes the question when the browser has gone away', async () => {
     const { storage, calls } = fakeStorage()
-    let release!: () => void
-    const gate = new Promise<void>((resolve) => (release = resolve))
+    let upstreamCancelled = false
     const upstream = new ReadableStream<Uint8Array>({
-      async start(controller) {
+      start(controller) {
         controller.enqueue(encoder.encode(JSON.stringify({ type: 'text', delta: 'Hel' }) + '\n'))
-        await gate
-        controller.enqueue(encoder.encode(JSON.stringify(done) + '\n'))
-        controller.close()
+        // Never finishes: only a cancel ends it.
+      },
+      cancel() {
+        upstreamCancelled = true
       },
     })
     const output = relayChatStream({ head, storage, upstream })
     const reader = output.getReader()
     await reader.read() // thread
     await reader.cancel() // the tab closes
-    release()
-    // Let the pump finish the stream and the write.
-    for (let i = 0; i < 50 && calls.saved.length === 0; i++) await new Promise((r) => setTimeout(r, 5))
-    assert.equal(calls.saved.length, 1)
-    assert.equal(calls.saved[0].usage.costUsd, 0.01)
+    for (let i = 0; i < 50 && calls.failures.length === 0; i++) await new Promise((r) => setTimeout(r, 5))
+    assert.equal(upstreamCancelled, true)
+    assert.equal(calls.saved.length, 0)
+    assert.deepEqual(calls.failures.map((failure) => failure.code), ['CHAT_INTERRUPTED'])
   })
 
   it('records a billed failure with its usage and sends a friendly message', async () => {

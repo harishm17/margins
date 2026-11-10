@@ -23,6 +23,7 @@ import {
   zodDetails,
 } from '@/lib/api/errors'
 import { createRateLimiter } from '@/lib/api/rate-limit'
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { voiceTurnsPerMinute } from '@/lib/voice/turn-limit'
 import {
   VoiceModelError,
@@ -30,7 +31,7 @@ import {
   readModelEvents,
   requestModelTurn,
 } from '@/lib/voice/ai-turn'
-import { claimVoiceSession, isSerializationConflict } from '@/lib/voice/claim'
+import { claimVoiceSession, claimVoiceTurn, isSerializationConflict, releaseVoiceTurn } from '@/lib/voice/claim'
 import {
   coachStyleOf,
   CONTINUE_MESSAGE,
@@ -60,10 +61,6 @@ const MAX_UTTERANCE_CHARS = 2000
 
 // Every turn is at least one model call.
 const turnLimiter = createRateLimiter({ limit: voiceTurnsPerMinute(), windowMs: 60_000 })
-
-// Sessions with a turn running on this instance. Two turns at once would each load the same
-// history and the later write would drop the earlier one.
-const turnsInProgress = new Set<string>()
 
 const bodySchema = z.object({
   sessionId: z.string().min(1),
@@ -127,7 +124,7 @@ async function loadPromptContext(session: { mode: string; topicId: string | null
   }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestStarted = performance.now()
   let userId: string
   try {
@@ -161,10 +158,12 @@ export async function POST(request: NextRequest) {
   if (!session) return apiNotFound('Session not found')
   if (session.status !== 'active' || session.endedAt) return voiceFailure('SESSION_ENDED')
 
-  if (turnsInProgress.has(session.id)) return voiceFailure('TURN_IN_PROGRESS')
-  turnsInProgress.add(session.id)
+  // One turn at a time per session, across server processes (a conditional update on the session row).
+  if (!(await claimVoiceTurn(session.id))) return voiceFailure('TURN_IN_PROGRESS')
   let claimedHere = false
-  const releaseTurn = () => turnsInProgress.delete(session.id)
+  const releaseTurn = () => releaseVoiceTurn(session.id)
+  // Aborted when the browser leaves: the model call stops instead of finishing an answer nobody will hear.
+  const turnAbort = new AbortController()
   // A failed first turn must not leave the session counted as connected.
   const releaseClaim = async () => {
     if (!claimedHere) return
@@ -179,7 +178,7 @@ export async function POST(request: NextRequest) {
     if (!session.connectedAt) {
       const claim = await claimVoiceSession(session)
       if (!claim.ok) {
-        releaseTurn()
+        await releaseTurn()
         return claim.reason === 'busy'
           ? voiceFailure('ACTIVE_SESSION')
           : voiceFailure('VOICE_DAILY_LIMIT', { remainingSeconds: 0, dailyMinutes: claim.capMinutes })
@@ -217,7 +216,7 @@ export async function POST(request: NextRequest) {
     const preRun = await planPreRunForSession({ sessionId: session.id, language: session.language, utterance, history })
 
     const modelRequest = (messages: VoiceMessage[]) =>
-      requestModelTurn({ userId, projectId: session.projectId, sessionId: session.id, system, messages, tools })
+      requestModelTurn({ userId, projectId: session.projectId, sessionId: session.id, system, messages, tools }, turnAbort.signal)
 
     // Ask first, unless a step has to run first. When the AI service refuses (daily budget) or is down, the session keeps its
     // old conversation and the browser gets an ordinary JSON error.
@@ -231,14 +230,14 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         console.error('[VOICE] The AI service is not reachable:', error)
         await releaseClaim()
-        releaseTurn()
+        await releaseTurn()
         return voiceFailure('VOICE_UNAVAILABLE')
       }
       if (!first.ok || !first.body) {
         const failure = await modelErrorFromResponse(first)
         console.error(`[VOICE] ${failure.message}`)
         await releaseClaim()
-        releaseTurn()
+        await releaseTurn()
         return voiceFailure(failure.code, {}, failure.retryable)
       }
       firstBody = first.body
@@ -339,7 +338,7 @@ export async function POST(request: NextRequest) {
             console.error('[VOICE] The turn crashed:', error)
             sendError('VOICE_TURN_FAILED')
           } finally {
-            releaseTurn()
+            await releaseTurn()
             try {
               controller.close()
             } catch {
@@ -349,8 +348,10 @@ export async function POST(request: NextRequest) {
         })()
       },
       cancel() {
-        // The browser left. The turn keeps going so the conversation is still stored.
+        // The browser left: stop the model call. The turn ends through its usual failure path, which keeps what the
+        // tools already recorded.
         clientGone = true
+        turnAbort.abort()
       },
     })
 
@@ -362,10 +363,12 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    releaseTurn()
+    await releaseTurn()
     await releaseClaim()
     if (isSerializationConflict(error)) return voiceFailure('TURN_IN_PROGRESS')
     console.error('[VOICE] Turn failed:', error)
     return apiInternal('Failed to run the turn')
   }
 }
+
+export const POST = withClientSignal(handlePost)

@@ -1,4 +1,5 @@
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { callSignal } from '@/lib/ai-service/client-signal'
 import type { RawQuizAnswer } from '@/lib/learning/quiz-answers'
 
 export type GradedQuestion = {
@@ -61,6 +62,7 @@ const WAIT_CODES = new Set([
   'LLM_NOT_CONFIGURED',
   'LLM_RATE_LIMITED',
   'LLM_UNAVAILABLE',
+  'LLM_BUSY',
   'LLM_DAILY_BUDGET',
   'AI_UNREACHABLE',
 ])
@@ -126,7 +128,7 @@ export async function gradeAnswers(
       method: 'POST',
       headers: aiServiceHeaders(),
       body: JSON.stringify({ questions, answers }),
-      signal: AbortSignal.timeout(GRADING_TIMEOUT_MS),
+      signal: callSignal(GRADING_TIMEOUT_MS),
     })
   } catch (error) {
     console.error('Grading request failed:', error)

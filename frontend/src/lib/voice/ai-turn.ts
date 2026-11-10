@@ -1,5 +1,6 @@
 /** Calls the AI service's POST /voice/turn and reads its newline-delimited JSON reply. */
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { callSignal } from '@/lib/ai-service/client-signal'
 import { createLineSplitter } from '@/lib/chat/events'
 import type { VoiceBlock, VoiceMessage } from '@/lib/voice/history'
 
@@ -34,7 +35,7 @@ export type ModelTurnRequest = {
   tools: unknown[]
 }
 
-/** Starts a model call. Rejects on a network failure or a timeout. */
+/** Starts a model call. Rejects on a network failure, a timeout, or when `signal` (the browser left) or the request aborts. */
 export function requestModelTurn(request: ModelTurnRequest, signal?: AbortSignal): Promise<Response> {
   const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000'
   return fetch(`${aiServiceUrl}/voice/turn`, {
@@ -48,7 +49,7 @@ export function requestModelTurn(request: ModelTurnRequest, signal?: AbortSignal
       messages: request.messages,
       tools: request.tools,
     }),
-    signal: signal ?? AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS),
+    signal: signal ? AbortSignal.any([signal, callSignal(MODEL_CALL_TIMEOUT_MS)]) : callSignal(MODEL_CALL_TIMEOUT_MS),
   })
 }
 

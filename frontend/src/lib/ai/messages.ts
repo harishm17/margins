@@ -60,6 +60,13 @@ const MESSAGES: Record<string, AiMessage> = {
   AI_UNREACHABLE: { ...UNAVAILABLE, retry: true },
   LLM_RATE_LIMITED: BUSY,
   LLM_UNAVAILABLE: BUSY,
+  // Every model slot stayed taken for 20 seconds (ai-service limiter.py): a student-facing call gave up waiting.
+  LLM_BUSY: {
+    title: 'Margins is busy',
+    text: 'Margins is busy right now. Try again in a moment.',
+    tone: 'warning',
+    retry: true,
+  },
   LLM_DAILY_BUDGET: ALLOWANCE,
 
   // The model answered, but not usefully.

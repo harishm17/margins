@@ -2,9 +2,9 @@
  * Relays the AI service's answer stream to the browser while the server stores the result.
  *
  * The browser gets the AI service's events as they arrive (text, citations), with `thread`
- * and `user_message` events first and `saved` last. The relay keeps reading the AI service
- * even when the browser has gone away, so a closed tab still ends with the answer stored and
- * its cost recorded, instead of a paid answer nobody can find.
+ * and `user_message` events first and `saved` last. When the browser goes away the relay cancels the AI
+ * service's stream: the model call stops (the AI service records what was spent so far) and the question is
+ * removed through the usual failure path, so a closed tab leaves no unanswered turn and nothing keeps running.
  */
 import { createLineSplitter, parseChatEvent } from './events'
 import { chatErrorMessage } from './errors'
@@ -76,6 +76,7 @@ export function relayChatStream(args: {
   const log = args.log ?? ((message, error) => console.error(`[CHAT] ${message}`, error ?? ''))
   const encoder = new TextEncoder()
   let clientGone = false
+  let upstreamReader: ReadableStreamDefaultReader<Uint8Array> | null = null
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -164,6 +165,8 @@ export function relayChatStream(args: {
 
           const splitter = createLineSplitter()
           const reader = upstream.getReader()
+          upstreamReader = reader
+          if (clientGone) await reader.cancel().catch(() => {})
           while (true) {
             const { value, done } = await reader.read()
             if (done) break
@@ -191,8 +194,10 @@ export function relayChatStream(args: {
       })()
     },
     cancel() {
-      // The browser left. The loop above keeps going so the answer is still stored.
+      // The browser left: stop the AI call. The loop above then sees the end of the stream and takes the failure path
+      // (the question is removed).
       clientGone = true
+      void upstreamReader?.cancel().catch(() => {})
     },
   })
 }
