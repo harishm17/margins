@@ -323,12 +323,14 @@ def render_report(summary: Dict[str, Any]) -> str:
             "",
             f"## Judge ({run.get('judge') or 'n/a'}, {summary['judge_groups']} topics, ${summary['judge_cost_usd']:.2f})",
             "",
-            "Stored questions with each fault the judge found (item_judge.py).",
+            "Stored questions with each fault the judge found (item_judge.py). A fault counts only with its note; "
+            "\"No note\" is the questions whose only faults came without one, which nobody can check.",
             "",
             _table(
-                ["Generator", "Judged", "Flagged", *item_judge.DEFECTS],
+                ["Generator", "Judged", "Flagged", "No note", *item_judge.DEFECTS],
                 [
-                    [LABELS.get(kind, kind), str(j["judged"]), f"{j['flagged']} ({_pct(j['rate'])})", *[str(j["by_defect"][d]) for d in item_judge.DEFECTS]]
+                    [LABELS.get(kind, kind), str(j["judged"]), f"{j['flagged']} ({_pct(j['rate'])})", str(j.get("unexplained", 0)),
+                     *[str(j["by_defect"][d]) for d in item_judge.DEFECTS]]
                     for kind, j in sorted(judge.items(), key=lambda pair: list(LABELS).index(pair[0]) if pair[0] in LABELS else len(LABELS))
                 ],
             ),
