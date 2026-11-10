@@ -45,6 +45,7 @@ export default function PrivacyPage() {
           items={[
             { name: 'Anthropic', text: 'processes the text of your files and your questions to create study material and answers. It does not use this data to train its models by default.' },
             { name: 'Railway', text: 'hosts the app, the database and the file storage, in the United States.' },
+            { name: 'Cloudflare', text: 'stores the encrypted nightly backups of the database and the files (R2 storage). Cloudflare cannot read them.' },
             { name: 'Google', text: 'provides sign-in.' },
             { name: 'Deepgram', text: 'turns your voice into text in voice practice. It does not keep the audio or use it to train models, and Margins stores only the text.' },
             { name: 'Your browser', text: "does the speech recognition instead if Deepgram is unavailable or you turn off Better speech recognition before a session. It may send audio to your browser vendor (Google for Chrome, Apple for Safari)." },
@@ -56,7 +57,8 @@ export default function PrivacyPage() {
           When you delete a course, its files and everything created from them are deleted. To delete your account
           entirely, open Settings and choose Delete account: your account, your courses, your files and everything
           made from them are deleted straight away. We keep only anonymous AI usage totals (cost and token counts,
-          with nothing that identifies you). If you can&apos;t sign in or need help, email {CONTACT_EMAIL}.
+          with nothing that identifies you). Copies stay in our encrypted backups until those expire, after at most
+          120 days; if we ever restore a backup, deleted accounts are deleted again before the app reopens. If you can&apos;t sign in or need help, email {CONTACT_EMAIL}.
         </p>
       </LegalSection>
       <LegalSection id="contact" heading="Contact">
