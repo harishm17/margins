@@ -73,8 +73,10 @@ describe('eventsForToolOutput', () => {
   })
 })
 
-describe('VOICE_TOOLS', () => {
-  it('are the three drill tools, with no session id for the model to supply', () => {
+describe('toolsForStyle', () => {
+  it('gives each style its own tools and a topic conversation none', () => {
+    assert.deepEqual(toolsForStyle('oral_quiz'), VOICE_TOOLS)
+    // The oral quiz has the three drill tools, with no session id for the model to supply.
     assert.deepEqual(VOICE_TOOLS.map((tool) => tool.name), ['get_next_question', 'record_answer', 'get_hint'])
     for (const tool of VOICE_TOOLS) {
       assert.equal(tool.input_schema.type, 'object')
@@ -82,12 +84,6 @@ describe('VOICE_TOOLS', () => {
       assert.ok(tool.description.length > 20)
     }
     assert.deepEqual(VOICE_TOOLS[1].input_schema.required, ['question_index'])
-  })
-})
-
-describe('toolsForStyle', () => {
-  it('gives each style its own tools and a topic conversation none', () => {
-    assert.deepEqual(toolsForStyle('oral_quiz'), VOICE_TOOLS)
     assert.deepEqual(toolsForStyle('teach_back').map((tool) => tool.name), ['get_concept_to_explain', 'assess_explanation', 'record_check'])
     assert.deepEqual(toolsForStyle('guided_reading').map((tool) => tool.name), ['next_claim', 'record_check'])
     assert.deepEqual(toolsForStyle('topic_conversation'), [])

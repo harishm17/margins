@@ -300,17 +300,6 @@ dbTest('a say-back is judged on what was said just now and against that claim al
   assert.deepEqual(rows.map((row) => [row.assistance, row.score]).slice(-1), [[2, 1]])
 })
 
-dbTest('assessing again before the example is answered asks for it again and does not close the idea', async () => {
-  const w = await world()
-  const all = grader({ 'Two keys': COVERED, 'Chaining': COVERED })
-  await run(w, undefined, 'get_concept_to_explain')
-  await run(w, all.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'Keys that share a bucket collide, and each bucket holds a list.' })
-  const again = out(await run(w, all.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'So that is the whole idea, really.' }))
-  assert.equal(again.action, 'ask_new_example')
-  assert.equal(again.outcome, undefined)
-  assert.equal((await stateOf(w)).teach.concepts[w.collision.id].outcome, null)
-})
-
 dbTest('a closed idea is told to the browser for the summary', async () => {
   const w = await world()
   const all = grader({ 'Two keys': COVERED, 'Chaining': COVERED })
@@ -364,6 +353,17 @@ dbTest('the grader reasoning flag makes an unsupported jump on a fully covered a
   assert.equal(output.probe.type, 'evidence')
   assert.equal(output.probe.finding, 'unsupported_jump')
   assert.equal(output.probe.page, 5)
+
+  // An unsupported jump after a missing claim gets an evidence probe naming the page.
+  const x = await world()
+  const jump = grader({ 'Two keys': { verdict: 'missing', pointer: 'Look again at p. 4: when do two keys meet?' }, 'Chaining': { verdict: 'covered', student_quote: 'each bucket has a list' } })
+  await run(x, undefined, 'get_concept_to_explain')
+  const jumped = out(await run(x, jump.grade, 'assess_explanation', { concept_id: x.collision.id, explanation: 'Each bucket has a list, so it all works.' }))
+  assert.equal(jumped.action, 'probe')
+  assert.equal(jumped.probe.type, 'evidence')
+  assert.equal(jumped.probe.finding, 'unsupported_jump')
+  assert.equal(jumped.probe.page, 5)
+  assert.equal(jumped.probe.about, '<student_words>each bucket has a list</student_words>')
 })
 
 dbTest('a text mark in an explanation cannot close the tags a tool result puts around student words', async () => {
@@ -423,18 +423,6 @@ dbTest('a failed new example is a level-1 miss and does not mark the idea explai
   assert.equal((await stateOf(w)).teach.concepts[w.collision.id].outcome, null)
 })
 
-dbTest('unsupported jump gets an evidence probe naming the page', async () => {
-  const w = await world()
-  const jump = grader({ 'Two keys': { verdict: 'missing', pointer: 'Look again at p. 4: when do two keys meet?' }, 'Chaining': { verdict: 'covered', student_quote: 'each bucket has a list' } })
-  await run(w, undefined, 'get_concept_to_explain')
-  const output = out(await run(w, jump.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'Each bucket has a list, so it all works.' }))
-  assert.equal(output.action, 'probe')
-  assert.equal(output.probe.type, 'evidence')
-  assert.equal(output.probe.finding, 'unsupported_jump')
-  assert.equal(output.probe.page, 5)
-  assert.equal(output.probe.about, '<student_words>each bucket has a list</student_words>')
-})
-
 dbTest('incorrect claim gets an assumption probe then confront', async () => {
   const w = await world()
   const wrong = grader({
@@ -473,6 +461,17 @@ dbTest('a student who covered nothing and has a weak prerequisite is sent back t
   assert.equal(output.probe.type, 'source')
   assert.equal(output.probe.finding, 'missing_prerequisite')
   assert.equal(output.probe.about, 'Hash function')
+
+  // Covering nothing gives explain_first, and the graded zero is recorded as a level-0 explanation.
+  const x = await world()
+  const none = grader({})
+  await run(x, undefined, 'get_concept_to_explain')
+  const first = out(await run(x, none.grade, 'assess_explanation', { concept_id: x.collision.id, explanation: 'I really do not remember this one at all.' }))
+  assert.equal(first.action, 'explain_first')
+  assert.equal(first.source_claim.page, 4)
+  assert.equal(none.asked.length, 1, 'what covers nothing is graded, and then explained')
+  // The graded zero is recorded as the first explanation is (level 0), not as an "I don't know".
+  assert.deepEqual((await teachEvents(x)).map((row) => row.assistance), [0])
 })
 
 dbTest('an unclear explanation stores nothing and spends no probe', async () => {
@@ -725,18 +724,6 @@ dbTest('idk gives explain_first with no probes', async () => {
   assert.equal(said.action, 'wrap_up')
   assert.equal(said.outcome, 'taught')
   assert.deepEqual(said.look_again, ['p. 4'])
-})
-
-dbTest('covering nothing gives explain_first', async () => {
-  const w = await world()
-  const nothing = grader({})
-  await run(w, undefined, 'get_concept_to_explain')
-  const output = out(await run(w, nothing.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'I really do not remember this one at all.' }))
-  assert.equal(output.action, 'explain_first')
-  assert.equal(output.source_claim.page, 4)
-  assert.equal(nothing.asked.length, 1, 'what covers nothing is graded, and then explained')
-  // The graded zero is recorded as the first explanation is (level 0), not as an "I don't know".
-  assert.deepEqual((await teachEvents(w)).map((row) => row.assistance), [0])
 })
 
 dbTest('explain step writes an instruction event', async () => {

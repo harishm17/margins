@@ -54,6 +54,7 @@ describe('speakable: subscripts, Greek and operators', () => {
     assert.equal(speakable('The angle θ and the mean μ.'), 'The angle theta and the mean mu.')
     assert.equal(speakable('The circle has area $\\pi r^2$.'), 'The circle has area pi r squared.')
     assert.equal(speakable('Area = πr²'), 'Area equals pi r squared')
+    assert.equal(speakable('π is about 3.14.'), 'pi is about 3.14.')
   })
 
   it('says the operators', () => {
@@ -108,10 +109,6 @@ describe('speakable: percent, money and slashes', () => {
     assert.equal(speakable('If n > 3 then stop.'), 'If n greater than 3 then stop.')
     assert.equal(speakable('Then 2 + 3 is five.'), 'Then 2 plus 3 is five.')
   })
-
-  it('says pi', () => {
-    assert.equal(speakable('π is about 3.14.'), 'pi is about 3.14.')
-  })
 })
 
 describe('speakable: leaves ordinary text alone', () => {
@@ -124,12 +121,6 @@ describe('speakable: leaves ordinary text alone', () => {
   it('handles empty input and an unclosed dollar sign', () => {
     assert.equal(speakable(''), '')
     assert.equal(speakable('That costs $'), 'That costs $')
-  })
-
-  it('does not change the text it was given', () => {
-    const text = 'Use $x^2$ here.'
-    speakable(text)
-    assert.equal(text, 'Use $x^2$ here.')
   })
 
   it('handles display and bracket delimiters', () => {

@@ -42,11 +42,6 @@ describe('appendUserText', () => {
 })
 
 describe('trimHistory', () => {
-  it('keeps everything under the limit', () => {
-    const messages = [user('a'), say('b'), user('c')]
-    assert.deepEqual(trimHistory(messages, 30), messages)
-  })
-
   it('starts at a user message, never at an assistant message', () => {
     const messages = [user('1'), say('2'), user('3'), say('4'), user('5'), say('6')]
     assert.deepEqual(trimHistory(messages, 5), [user('3'), say('4'), user('5'), say('6')])

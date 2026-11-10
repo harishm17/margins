@@ -14,6 +14,8 @@ describe('buildTiming', () => {
       requestToFirstAudioMs: 2300,
       interrupted: false,
     })
+    // It also says when the student interrupted.
+    assert.equal(buildTiming(clock({ interrupted: true })).interrupted, true)
   })
 
   it('leaves out what was not measured: a typed answer has no wait, a muted coach has no audio', () => {
@@ -22,10 +24,6 @@ describe('buildTiming', () => {
       requestToFirstSentenceMs: 500,
       interrupted: false,
     })
-  })
-
-  it('says when the student interrupted', () => {
-    assert.equal(buildTiming(clock({ interrupted: true })).interrupted, true)
   })
 
   it('never reports a negative or missing time', () => {

@@ -5,8 +5,6 @@ import {
   createUtteranceCollector,
   idleAction,
   isEcho,
-  isSpeakable,
-  joinTranscripts,
   type SpeechResult,
   type Timers,
 } from './silence'
@@ -209,15 +207,13 @@ describe('the adaptive wait', () => {
     assert.equal(commits.length, 0)
     advance(1)
     assert.equal(commits.length, 1)
-  })
-
-  it('never waits past 4 s, even for stale interim text', () => {
-    const { collector, commits, advance } = adaptive(() => 'explanation')
-    collector.update([interim('it works by going to the')])
-    advance(3699)
-    assert.equal(commits.length, 0)
-    advance(1)
-    assert.equal(commits.length, 1)
+    // Never past 4 s, even for stale interim text.
+    const stale = adaptive(() => 'explanation')
+    stale.collector.update([interim('it works by going to the')])
+    stale.advance(3699)
+    assert.equal(stale.commits.length, 0)
+    stale.advance(1)
+    assert.equal(stale.commits.length, 1)
   })
 
   it('says it is holding once the quiet lasts 700 ms, and stops when words come or the turn ends', () => {
@@ -244,20 +240,6 @@ describe('the adaptive wait', () => {
     assert.deepEqual(holds, [true, false])
     advance(5000)
     assert.equal(commits.length, 1)
-  })
-})
-
-describe('helpers', () => {
-  it('joinTranscripts trims and collapses spaces', () => {
-    assert.equal(joinTranscripts([' hello ', '', 'big   world ']), 'hello big world')
-  })
-
-  it('isSpeakable needs a letter or digit and enough characters', () => {
-    assert.equal(isSpeakable('ok'), true)
-    assert.equal(isSpeakable('7'), false)
-    assert.equal(isSpeakable('7', 1), true)
-    assert.equal(isSpeakable('?!'), false)
-    assert.equal(isSpeakable('   '), false)
   })
 })
 

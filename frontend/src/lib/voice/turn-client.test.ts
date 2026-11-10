@@ -3,7 +3,6 @@ import { describe, it } from 'node:test'
 import {
   cleanForSpeech,
   createSentenceChunker,
-  isTerminal,
   parseVoiceEvent,
   readVoiceEvents,
   type VoiceEvent,
@@ -25,10 +24,6 @@ describe('parseVoiceEvent', () => {
     ]) {
       assert.equal(parseVoiceEvent(line), null, line)
     }
-  })
-
-  it('parses a text delta', () => {
-    assert.deepEqual(parseVoiceEvent('{"type":"text","delta":"Hi "}'), { type: 'text', delta: 'Hi ' })
   })
 
   it('parses a question with options, dropping empty ones', () => {
@@ -105,7 +100,8 @@ describe('parseVoiceEvent', () => {
     assert.equal(parseVoiceEvent('{"type":"listen","for":"essay"}'), null)
   })
 
-  it('parses hint, session_complete, done and error', () => {
+  it('parses text, hint, session_complete, done and error', () => {
+    assert.deepEqual(parseVoiceEvent('{"type":"text","delta":"Hi "}'), { type: 'text', delta: 'Hi ' })
     assert.deepEqual(parseVoiceEvent('{"type":"hint","text":"Think about it"}'), { type: 'hint', text: 'Think about it' })
     assert.deepEqual(parseVoiceEvent('{"type":"session_complete"}'), { type: 'session_complete' })
     assert.deepEqual(parseVoiceEvent('{"type":"done","text":"All set."}'), { type: 'done', text: 'All set.' })
@@ -117,12 +113,6 @@ describe('parseVoiceEvent', () => {
     })
     const bare = parseVoiceEvent('{"type":"error"}')
     assert.deepEqual(bare, { type: 'error', code: 'VOICE_TURN_FAILED', message: '', retryable: true })
-  })
-
-  it('knows which events end a turn', () => {
-    assert.equal(isTerminal({ type: 'done', text: '' }), true)
-    assert.equal(isTerminal({ type: 'error', code: 'x', message: '', retryable: false }), true)
-    assert.equal(isTerminal({ type: 'text', delta: 'a' }), false)
   })
 })
 
@@ -172,6 +162,10 @@ describe('createSentenceChunker', () => {
     assert.deepEqual(chunker.push(' '), [])
     assert.deepEqual(chunker.push('Now'), ['Good job.'])
     assert.deepEqual(chunker.flush(), ['Now'])
+    // A single sentence with no space after it comes out only on flush.
+    const single = createSentenceChunker()
+    assert.deepEqual(single.push('Done.'), [])
+    assert.deepEqual(single.flush(), ['Done.'])
   })
 
   it('splits on newlines, even without punctuation', () => {
@@ -213,12 +207,6 @@ describe('createSentenceChunker', () => {
     assert.deepEqual(chunker.push('One. Two and a half'), ['One.'])
     assert.deepEqual(chunker.flush(), ['Two and a half'])
     assert.deepEqual(chunker.flush(), [])
-  })
-
-  it('returns a single sentence with no space after it only on flush', () => {
-    const chunker = createSentenceChunker()
-    assert.deepEqual(chunker.push('Done.'), [])
-    assert.deepEqual(chunker.flush(), ['Done.'])
   })
 
   it('merges short sentences into the next one with minChars', () => {

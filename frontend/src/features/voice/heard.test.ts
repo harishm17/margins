@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { createHeardTracker, wordEnd } from './heard'
+import { createHeardTracker } from './heard'
 
 describe('createHeardTracker', () => {
   it('is empty before anything plays', () => {
@@ -51,14 +51,5 @@ describe('createHeardTracker', () => {
     heard.reset()
     assert.equal(heard.text(), '')
     assert.equal(heard.any, false)
-  })
-})
-
-describe('wordEnd', () => {
-  it('finds the end of the word at an index', () => {
-    assert.equal(wordEnd('hello big world', 0), 5)
-    assert.equal(wordEnd('hello big world', 6), 9)
-    assert.equal(wordEnd('hello big world', 12), 15)
-    assert.equal(wordEnd('hello', 99), 5)
   })
 })

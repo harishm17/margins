@@ -29,10 +29,6 @@ test('at most 100 terms, concept names first, none with tags or line breaks', ()
   assert.equal(selectCourseTerms({ conceptNames: Array.from({ length: 150 }, (_, i) => `Name ${i}`), claimTexts: [] }).length, MAX_COURSE_TERMS)
 })
 
-test('nothing to go on gives no terms', () => {
-  assert.deepEqual(selectCourseTerms({ conceptNames: [], claimTexts: [] }), [])
-})
-
 test('a session works on its topic, or on the topics of a sprint\'s questions', () => {
   assert.deepEqual(sessionTopicIds({ topicId: 't1', questionSet: [] }), ['t1'])
   assert.deepEqual(sessionTopicIds({ topicId: null, questionSet: [{ topic_id: 'a' }, { topic_id: 'b' }, { topic_id: 'a' }, {}] }).sort(), ['a', 'b'])

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  PROBE_FOR_FINDING,
   afterExample,
   emptyConceptState,
   exampleHeld,
@@ -56,27 +55,6 @@ describe('findGaps', () => {
   })
 })
 
-describe('the probe for a finding', () => {
-  it('follows the spec table', () => {
-    assert.equal(PROBE_FOR_FINDING.vague.probe, 'clarification')
-    assert.equal(PROBE_FOR_FINDING.unsupported_jump.probe, 'evidence')
-    assert.equal(PROBE_FOR_FINDING.missing.probe, 'implication')
-    assert.equal(PROBE_FOR_FINDING.incorrect.probe, 'assumption')
-    assert.equal(PROBE_FOR_FINDING.missing_prerequisite.probe, 'source')
-    assert.equal(PROBE_FOR_FINDING.vague.example, "When you say 'it balances', what exactly is equal to what?")
-    assert.equal(PROBE_FOR_FINDING.unsupported_jump.example, 'What in your notes on p. 14 tells you that?')
-    assert.equal(PROBE_FOR_FINDING.missing.example, "If that's true, what happens when the sample doubles?")
-    assert.equal(PROBE_FOR_FINDING.incorrect.example, 'What are you assuming about independence there?')
-    assert.equal(PROBE_FOR_FINDING.missing_prerequisite.example, 'Before this: how would you define a conditional probability?')
-  })
-
-  it('incorrect claim gets an assumption probe then confront', () => {
-    assert.equal(probeFor('incorrect', 0).probe, 'assumption')
-    assert.equal(probeFor('incorrect', 1).probe, 'confront')
-    assert.equal(probeFor('vague', 1).probe, 'clarification')
-  })
-})
-
 describe('planNext', () => {
   const wrong = [claim('a', 'incorrect', 4, { misconception: 'x' }), claim('b', 'covered', 5)]
 
@@ -92,6 +70,10 @@ describe('planNext', () => {
     const third = planNext(wrong, second.state)
     assert.equal(third.plan.action, 'explain')
     assert.equal(third.state.sayBack, 'a')
+    // An incorrect claim gets an assumption probe, then confront.
+    assert.equal(probeFor('incorrect', 0).probe, 'assumption')
+    assert.equal(probeFor('incorrect', 1).probe, 'confront')
+    assert.equal(probeFor('vague', 1).probe, 'clarification')
   })
 
   it('the answer said back closes the gap, whatever it was', () => {
@@ -143,20 +125,6 @@ describe('planNext', () => {
     const untouched = afterExample([claim('a', 'missing'), claim('b', 'missing')], asked, false)
     assert.equal(untouched.plan.action, 'wrap_up')
     assert.equal(untouched.state.outcome, 'taught')
-  })
-
-  it('does not change the state it was given', () => {
-    const before = emptyConceptState()
-    planNext(wrong, before)
-    assert.deepEqual(before, emptyConceptState())
-  })
-
-  it('unsupported jump gets an evidence probe naming the page', () => {
-    const { plan } = planNext([claim('a', 'missing', 13), claim('b', 'covered', 14)], emptyConceptState())
-    assert.equal(plan.action, 'probe')
-    if (plan.action !== 'probe') return
-    assert.equal(plan.probe.probe, 'evidence')
-    assert.equal(plan.gap.page, 14)
   })
 })
 

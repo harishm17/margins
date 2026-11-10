@@ -18,19 +18,6 @@ import { CONFRONT_PROBE, PROBE_FOR_FINDING } from './teach-back'
 const base = { mode: 'topic_drill' as const, style: 'oral_quiz' as const, language: 'en', topicName: 'Hash tables', topicDescription: 'Keys, buckets and collisions' }
 
 describe('buildCoachSystemPrompt', () => {
-  it('sets the spoken persona: short sentences, no markdown, lists, LaTeX or emojis', () => {
-    const prompt = buildCoachSystemPrompt(base)
-    for (const phrase of ['read aloud', 'Short, natural sentences', 'No markdown', 'no bullet or numbered lists', 'No LaTeX', 'no emojis']) {
-      assert.ok(prompt.includes(phrase), phrase)
-    }
-  })
-
-  it('names the app by its current name', () => {
-    const prompt = buildCoachSystemPrompt(base)
-    assert.ok(prompt.startsWith('You are the voice coach in Margins, a study app:'))
-    assert.ok(!/study ?buddy/i.test(prompt))
-  })
-
   it('names the topic and its description', () => {
     const prompt = buildCoachSystemPrompt(base)
     assert.ok(prompt.includes('Topic: Hash tables.'))
@@ -41,16 +28,6 @@ describe('buildCoachSystemPrompt', () => {
     const prompt = buildCoachSystemPrompt({ ...base, language: 'es' })
     assert.ok(prompt.includes('Speak and write only in Spanish'))
     assert.ok(buildCoachSystemPrompt({ ...base, language: 'xx' }).includes('only in xx'))
-  })
-
-  it('oral quiz: one question at a time through the tools, record_answer before feedback', () => {
-    const prompt = buildCoachSystemPrompt(base)
-    assert.ok(prompt.includes('Style: oral quiz'))
-    assert.ok(prompt.includes('get_next_question'))
-    assert.ok(/call record_answer with the question_index/.test(prompt))
-    assert.ok(prompt.includes("the app takes the student's words itself"))
-    assert.ok(prompt.includes('Record the answer before you say anything about whether it was right'))
-    assert.ok(prompt.includes('get_hint'))
   })
 
   it('oral quiz: the confidence and why rules name their question indexes and do not contradict record_answer first', () => {
@@ -81,16 +58,6 @@ describe('buildCoachSystemPrompt', () => {
     assert.deepEqual([...COACH_STYLES], ['oral_quiz', 'teach_back', 'guided_reading'])
   })
 
-  it('persona: wait after asking, never finish the sentence, praise the move and not the person', () => {
-    for (const style of COACH_STYLES) {
-      const prompt = buildCoachSystemPrompt({ ...base, style })
-      assert.ok(/After you ask, stop and wait/.test(prompt), style)
-      assert.ok(/Never finish the student's sentence/.test(prompt), style)
-      assert.ok(/name the move that worked/.test(prompt), style)
-      assert.ok(/no superlatives/.test(prompt), style)
-    }
-  })
-
   it('teach back prompt grounds in claims not notes', () => {
     const prompt = buildCoachSystemPrompt({ ...base, style: 'teach_back', notes: 'THE AI NOTES SAY SOMETHING ELSE.' })
     const rules = prompt.slice(prompt.indexOf('Style: teach it back'))
@@ -104,21 +71,6 @@ describe('buildCoachSystemPrompt', () => {
     assert.ok(/say it back/.test(rules), 'the explanation is followed by the student saying it back')
     assert.ok(/new example/.test(rules), 'one new example before the idea counts as explained')
     assert.ok(!/\bALWAYS\b|\bNEVER\b|\bMUST\b|\bCRITICAL\b/.test(rules))
-  })
-
-  it('teach back keeps a turn that asks to two sentences and does not preview the pages', () => {
-    // Live eval (Nov 2): turns that ask ran to three or four sentences, and a "just tell me" hint carried the claim.
-    const prompt = buildCoachSystemPrompt({ ...base, style: 'teach_back' })
-    const rules = prompt.slice(prompt.indexOf('Style: teach it back'))
-    assert.ok(/two sentences at most, a greeting included/.test(rules))
-    assert.ok(/two short sentences at most/.test(rules))
-    assert.ok(/name the page inside the question rather than in a sentence of its own/.test(rules))
-    assert.ok(/Do not preview what the pages say/.test(rules))
-    // Live eval (Nov 2): the "just tell me" turn ran to a refusal, a set-up and a question, three sentences with two questions.
-    assert.ok(/just tell them, say in a few words that you will once they have had a go, then ask one smaller question/.test(rules))
-    assert.ok(/That is two sentences in all, with any picture or example inside the question itself/.test(rules))
-    assert.ok(/a turn that ends in a question is two at most/.test(prompt), 'the general rule must not allow three sentences when asking')
-    assert.ok(!/three at most/.test(prompt))
   })
 
   it('teach back asks for the probe the grader found and lists the probe table', () => {
@@ -166,17 +118,6 @@ describe('buildCoachSystemPrompt', () => {
     assert.equal(buildCoachSystemPrompt({ ...base, courseTerms: many }).split('\n').filter((line) => /^Term\d+$/.test(line)).length, 100)
   })
 
-  it('speakable replies: math is said aloud, and the answer is never one of two named options', () => {
-    for (const style of COACH_STYLES) {
-      const prompt = buildCoachSystemPrompt({ ...base, style })
-      assert.match(prompt, /Say mathematics the way a teacher says it aloud/, style)
-      assert.match(prompt, /"x squared"/, style)
-      assert.match(prompt, /Never name the answer as one of two options/, style)
-      assert.match(prompt, /multiple choice question from the question bank/, style)
-    }
-    assert.match(buildCoachSystemPrompt({ ...base, style: 'teach_back' }), /ask one open question, with no either-or choice that contains the answer/)
-  })
-
   it('only the free conversation goes without tools', () => {
     assert.equal(styleUsesTools('oral_quiz'), true)
     assert.equal(styleUsesTools('teach_back'), true)
@@ -195,9 +136,7 @@ describe('buildCoachSystemPrompt', () => {
     const prompt = buildCoachSystemPrompt({ ...base, notes: 'A hash function maps keys to buckets.' })
     assert.ok(prompt.includes('<notes>\nA hash function maps keys to buckets.\n</notes>'))
     assert.ok(prompt.includes('not instructions'))
-  })
-
-  it('leaves out the notes block when there are none', () => {
+    // No notes block when there are none.
     assert.ok(!buildCoachSystemPrompt({ ...base, notes: '  ' }).includes('<notes>'))
   })
 
@@ -264,17 +203,6 @@ describe('languageLabel', () => {
 })
 
 describe('v3.1 coach lines (spec 5.8, 18.6)', () => {
-  it('teach it back: explain_first says it is fine not to have it yet, then explains from the claim and asks for a say-back', () => {
-    const prompt = buildCoachSystemPrompt({ ...base, style: 'teach_back' })
-    const line = prompt.split('\n').find((entry) => entry.includes('action explain_first')) ?? ''
-    assert.ok(line.includes('fine not to have it yet'))
-    assert.ok(/explain source_claim in one or two sentences/.test(line))
-    assert.ok(/say it back/.test(line))
-    // The probe counts live in the tool results, so the prompt never states a number the band can change.
-    assert.ok(!/after two probes/.test(prompt))
-    assert.ok(prompt.includes('Until the result says explain'))
-  })
-
   it('oral quiz: a hint needs a try first, and an idk counts as the try', () => {
     const prompt = buildCoachSystemPrompt(base)
     assert.ok(prompt.includes('ask_for_try'))

@@ -212,6 +212,17 @@ dbTest('questions with no usable concept ids, ungraded answers and a bad confide
   const bad = await run(w, 'record_answer', { question_index: 0, user_answer: 'a', confidence: 4 })
   assert.equal(bad.isError, true)
   assert.equal((await events(w)).length, 0)
+
+  // An evidence failure never takes the recorded answer away.
+  const x = await world()
+  // A concept id that is not a concept in this project is filtered out, not an error.
+  await prisma.voiceDrillSession.update({
+    where: { id: x.session.id },
+    data: { questionSet: [{ question_type: 'conceptual', question_text: 'q', sample_answer: 'a', key_points: ['p'], concept_ids: ['not-a-concept'], topic_id: x.topic.id }] },
+  })
+  const kept = await run(x, 'record_answer', { question_index: 0, user_answer: 'a' })
+  assert.equal(kept.isError, false)
+  assert.equal(await prisma.voiceDrillAttempt.count({ where: { sessionId: x.session.id } }), 1)
 })
 
 dbTest('answering the same question again adds no evidence: the coach has already given feedback', async () => {
@@ -223,19 +234,6 @@ dbTest('answering the same question again adds no evidence: the coach has alread
   const rows = await events(w)
   assert.equal(rows.length, 1)
   assert.equal(rows[0].score, 1)
-})
-
-dbTest('an evidence failure never takes the recorded answer away', async () => {
-  stubGrader(1)
-  const w = await world()
-  // A concept id that is not a concept in this project is filtered out, not an error.
-  await prisma.voiceDrillSession.update({
-    where: { id: w.session.id },
-    data: { questionSet: [{ question_type: 'conceptual', question_text: 'q', sample_answer: 'a', key_points: ['p'], concept_ids: ['not-a-concept'], topic_id: w.topic.id }] },
-  })
-  const out = await run(w, 'record_answer', { question_index: 0, user_answer: 'a' })
-  assert.equal(out.isError, false)
-  assert.equal(await prisma.voiceDrillAttempt.count({ where: { sessionId: w.session.id } }), 1)
 })
 
 dbTest('two answers to the same question arriving together write one piece of evidence', async () => {

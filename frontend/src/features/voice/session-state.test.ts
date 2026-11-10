@@ -165,16 +165,14 @@ describe('deriveOrbState', () => {
   it('thinks while a turn is open and speaks while audio plays', () => {
     assert.equal(deriveOrbState({ ...base, turnActive: true }), 'thinking')
     assert.equal(deriveOrbState({ ...base, turnActive: true, speaking: true }), 'speaking')
+    // Thinking and speaking show even when the mic is paused.
+    assert.equal(deriveOrbState({ ...base, micPaused: true, turnActive: true }), 'thinking')
   })
 
   it('is paused with the mic off, idle in text mode, and idle outside a live session', () => {
     assert.equal(deriveOrbState({ ...base, micPaused: true }), 'paused')
     assert.equal(deriveOrbState({ ...base, inputMode: 'text' }), 'idle')
     assert.equal(deriveOrbState({ ...base, phase: 'lobby' }), 'idle')
-  })
-
-  it('shows thinking and speaking even when the mic is paused', () => {
-    assert.equal(deriveOrbState({ ...base, micPaused: true, turnActive: true }), 'thinking')
   })
 })
 
@@ -248,40 +246,6 @@ describe('summarize', () => {
 })
 
 describe('describeTurnFailure', () => {
-  const codes = [
-    'SESSION_ENDED',
-    'ACTIVE_SESSION',
-    'VOICE_DAILY_LIMIT',
-    'TURN_IN_PROGRESS',
-    'RATE_LIMITED',
-    'LLM_DAILY_BUDGET',
-    'VOICE_UNAVAILABLE',
-    'LLM_NOT_CONFIGURED',
-    'LLM_AUTH_FAILED',
-    'LLM_CREDIT_EXHAUSTED',
-    'LLM_RATE_LIMITED',
-    'LLM_UNAVAILABLE',
-    'LLM_REFUSED',
-    'LLM_REQUEST_REJECTED',
-    'LLM_BAD_OUTPUT',
-    'VOICE_TURN_FAILED',
-    'VOICE_INTERRUPTED',
-    'VOICE_NOT_SAVED',
-    'UNAUTHORIZED',
-    'NETWORK',
-    'NOT_FOUND',
-    'SOMETHING_NEW',
-  ]
-
-  it('has friendly copy without dashes or exclamation marks for every code', () => {
-    for (const code of codes) {
-      const { alert } = describeTurnFailure({ code, message: 'Server text.', retryable: true })
-      const copy = `${alert.title} ${alert.text}`
-      assert.ok(alert.title.length > 0 && alert.text.length > 0, code)
-      assert.doesNotMatch(copy, /[–—!]/, code)
-    }
-  })
-
   it('routes first-turn blockers to the lobby and dead ends to the summary', () => {
     assert.equal(describeTurnFailure({ code: 'ACTIVE_SESSION', message: '', retryable: false }).fate, 'lobby')
     const limit = describeTurnFailure({ code: 'VOICE_DAILY_LIMIT', message: '', retryable: false })

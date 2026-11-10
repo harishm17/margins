@@ -88,13 +88,7 @@ describe('voice snapshot', () => {
     assert.equal(readVoiceSnapshot('c1', 't1', store, 2000)?.draft, 'half an answer')
     clearVoiceSnapshot('c1', 't1', store)
     assert.equal(readVoiceDraft('c1', 't1', store, 2000), '')
-  })
-
-  it('clears', () => {
-    const store = memoryStore()
-    persistLiveSession(base, { entries, question: null }, store)
-    clearVoiceSnapshot('c1', 't1', store)
-    assert.equal(readVoiceSnapshot('c1', 't1', store), null)
+    assert.equal(readVoiceSnapshot('c1', 't1', store, 2000), null)
   })
 
   it('caps long transcripts', () => {

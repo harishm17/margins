@@ -30,4 +30,10 @@ test('a topic with no quiz begins on a style that can run', () => {
   assert.equal(startingStyleFor(true, undefined, false), 'oral_quiz')
   assert.equal(startingStyleFor(true, 'guided_reading', true), 'guided_reading')
   assert.equal(startingStyleFor(false, undefined, true), 'oral_quiz')
+  // The style the link names is kept when its claims are there; with no claims it is Quiz me whatever the link names.
+  assert.equal(startingStyleFor(true, 'teach_back'), 'teach_back')
+  assert.equal(startingStyleFor(true, 'guided_reading'), 'guided_reading')
+  assert.equal(startingStyleFor(true, undefined), 'oral_quiz')
+  assert.equal(startingStyleFor(false, 'teach_back'), 'oral_quiz')
+  assert.equal(startingStyleFor(false, 'guided_reading'), 'oral_quiz')
 })

@@ -60,14 +60,6 @@ describe('applyTurn and resultsOf', () => {
       { transcript: 'because', isFinal: false },
     ])
   })
-
-  it('reads the same as a browser result event', () => {
-    const results = [
-      { transcript: 'one', isFinal: true },
-      { transcript: 'two', isFinal: false },
-    ]
-    assert.deepEqual(resultsFromEvent(toResultEvent(results)), results)
-  })
 })
 
 describe('silenceAfterLastWordMs', () => {

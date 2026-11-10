@@ -3,13 +3,10 @@ import { describe, it } from 'node:test'
 import { isBackchannel } from './backchannel'
 
 describe('isBackchannel', () => {
-  it('knows the backchannels from the spec', () => {
+  it('knows the backchannels from the spec, ignoring case, punctuation and recognizer spelling', () => {
     for (const text of ['yeah', 'yes', 'mm-hm', 'uh-huh', 'okay', 'ok', 'right', 'sure', 'got it', 'I see']) {
       assert.equal(isBackchannel(text), true, text)
     }
-  })
-
-  it('ignores case, punctuation and recognizer spelling', () => {
     for (const text of ['Yeah.', 'OK!', 'Mm-hmm', 'mhm', 'uh huh', 'Okay, okay', 'yeah yeah yeah', 'Got it, I see', 'Yes, sure', "I've", 'All right']) {
       assert.equal(isBackchannel(text), text !== "I've", text)
     }

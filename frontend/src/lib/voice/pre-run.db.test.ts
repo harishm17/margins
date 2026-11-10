@@ -142,21 +142,6 @@ dbTest('teach-back: probes come before the explanation, claim text only in the e
   assert.equal(blocks[2].includes('Chaining keeps a list in each bucket.'), true)
 })
 
-dbTest('teach-back: "I don\'t know" is not graded and the first gap is explained at once; asks and short replies run nothing', async () => {
-  const w = await world('teach_back')
-  await coachCalls(w, 'get_concept_to_explain')
-  const g = grader({})
-  for (const said of ['just tell me the answer', 'okay', 'what does collide mean', 'hmm']) {
-    const t = await turn(w, said, [], g.grade)
-    assert.equal(t.plan, null, said)
-  }
-  assert.equal(g.asked.length, 0)
-  // The words since the prompt are all of them, as for the tool: the chatter above is part of what the grader reads.
-  const chatty = await turn(w, "I don't know", [], g.grade)
-  assert.equal(chatty.plan?.tool, 'assess_explanation')
-  assert.equal(g.asked.length, 1)
-})
-
 dbTest('teach-back: a plain "I don\'t know" is not graded and the first gap is explained at once', async () => {
   const w = await world('teach_back')
   await coachCalls(w, 'get_concept_to_explain')
@@ -165,6 +150,20 @@ dbTest('teach-back: a plain "I don\'t know" is not graded and the first gap is e
   assert.equal(out(idk.ran?.result).action, 'explain_first')
   assert.equal(g.asked.length, 0)
   assert.equal((await evidence(w, 'teach_back')).length, 1)
+
+  // Asks and short replies run nothing.
+  const x = await world('teach_back')
+  await coachCalls(x, 'get_concept_to_explain')
+  const h = grader({})
+  for (const said of ['just tell me the answer', 'okay', 'what does collide mean', 'hmm']) {
+    const t = await turn(x, said, [], h.grade)
+    assert.equal(t.plan, null, said)
+  }
+  assert.equal(h.asked.length, 0)
+  // The words since the prompt are all of them, as for the tool: the chatter above is part of what the grader reads.
+  const chatty = await turn(x, "I don't know", [], h.grade)
+  assert.equal(chatty.plan?.tool, 'assess_explanation')
+  assert.equal(h.asked.length, 1)
 })
 
 dbTest('teach-back: a step forced when nobody spoke after the prompt is refused (the student must have spoken)', async () => {

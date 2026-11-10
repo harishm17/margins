@@ -36,12 +36,16 @@ test('a session that never connected uses no time', () => {
 test('an ended session counts from connection to end', () => {
   const ended = session({ connectedAt: ago(600), lastSeenAt: ago(310), endedAt: ago(300) })
   assert.equal(sessionSeconds(ended, now), 300)
+  // An ended session is not live.
+  assert.equal(isSessionLive(session({ connectedAt: ago(60), endedAt: ago(30) }), now), false)
 })
 
 test('a live session counts up to now', () => {
   const live = session({ connectedAt: ago(120), lastSeenAt: ago(10) })
   assert.equal(isSessionLive(live, now), true)
   assert.equal(sessionSeconds(live, now), 120)
+  // A freshly minted session is live before its first heartbeat.
+  assert.equal(isSessionLive(session({ connectedAt: ago(5) }), now), true)
 })
 
 test('an unended session with no recent heartbeat counts only to its last heartbeat', () => {
@@ -56,18 +60,10 @@ test('a session minted but never heard from counts as zero once stale', () => {
   assert.equal(sessionSeconds(orphan, now), 0)
 })
 
-test('a freshly minted session is live before its first heartbeat', () => {
-  assert.equal(isSessionLive(session({ connectedAt: ago(5) }), now), true)
-})
-
 test('a drill that ended while the call stayed open keeps counting while heartbeats arrive', () => {
   const stillOpen = session({ connectedAt: ago(600), lastSeenAt: ago(5), endedAt: ago(300) })
   assert.equal(isSessionLive(stillOpen, now), true)
   assert.equal(sessionSeconds(stillOpen, now), 600)
-})
-
-test('an ended session is not live', () => {
-  assert.equal(isSessionLive(session({ connectedAt: ago(60), endedAt: ago(30) }), now), false)
 })
 
 test('only sessions inside the 24 hour window count', () => {
