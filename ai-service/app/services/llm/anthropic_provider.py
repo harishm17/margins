@@ -350,7 +350,11 @@ class AnthropicProvider(LLMProvider):
             async with llm_slot():
                 if max_tokens > STREAM_ABOVE:
                     # A non-streamed request this long can outlast the HTTP timeout (only v2 caps are this high).
+                    # Its events go through _partial_usage, so a stream cut off part way is billed for what it used.
+                    partial: Optional[LLMUsage] = None
                     async with self.client.beta.messages.stream(**params) as stream:
+                        async for event in stream:
+                            partial = _partial_usage(event, partial, model, purpose)
                         response = await stream.get_final_message()
                     request_id = getattr(stream, "request_id", None)
                 else:

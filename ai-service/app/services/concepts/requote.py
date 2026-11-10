@@ -102,7 +102,7 @@ async def estimate_prompt_tokens(topic_id: str) -> int:
     chunks = [chunk for chunk in context.chunks if chunk.get("source_kind") != "supporting"]
     if not chunks:
         return 0
-    text = format_excerpts(context.topic, chunks, context.course_map) + format_concepts(concepts) + REQUOTE_INSTRUCTIONS
+    text = format_excerpts(context.topic, chunks, context.course_map, v2=False) + format_concepts(concepts) + REQUOTE_INSTRUCTIONS
     return len(text) // 4
 
 
@@ -128,7 +128,7 @@ async def propose_quotes(topic_id: str) -> RequotePlan:
     raw = await LLMFactory.get_provider().generate_structured(
         [
             LLMMessage(role="system", content=EXTRACTION_SYSTEM_PROMPT),
-            LLMMessage(role="user", content=format_excerpts(context.topic, chunks, context.course_map)),
+            LLMMessage(role="user", content=format_excerpts(context.topic, chunks, context.course_map, v2=False)),
             LLMMessage(role="user", content=format_concepts(plan.concepts) + "\n\n" + REQUOTE_INSTRUCTIONS),
         ],
         ConceptRequote,

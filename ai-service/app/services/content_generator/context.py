@@ -315,9 +315,10 @@ def _pages(chunk: Dict) -> str:
 
 
 def format_source_excerpts(
-    topic_name: str, topic_description: str, chunks: List[Dict], course_map: str = ""
+    topic_name: str, topic_description: str, chunks: List[Dict], course_map: str = "", v2: bool | None = None
 ) -> str:
-    v2 = prompts_v2("generation")
+    """`v2` pins the layout for a caller outside the audit (lesson notes); None follows PROMPTS_V2."""
+    v2 = prompts_v2("generation") if v2 is None else v2
     parts = [
         f"Topic: {topic_name}",
         f"Description: {topic_description or 'n/a'}",
@@ -376,15 +377,16 @@ def content_messages(
     instructions: str,
     cache_excerpts: bool = False,
     course_map: str = "",
+    v2: bool | None = None,
 ) -> List[LLMMessage]:
-    """System prompt, the excerpt block (cacheable when asked), then the task instructions."""
+    """System prompt, the excerpt block (cacheable when asked), then the task instructions. `v2` pins the prompt
+    revision for a caller outside the audit (lesson notes); None follows PROMPTS_V2."""
+    v2 = prompts_v2("generation") if v2 is None else v2
     return [
-        LLMMessage(
-            role="system", content=CONTENT_SYSTEM_PROMPT_V2 if prompts_v2("generation") else CONTENT_SYSTEM_PROMPT
-        ),
+        LLMMessage(role="system", content=CONTENT_SYSTEM_PROMPT_V2 if v2 else CONTENT_SYSTEM_PROMPT),
         LLMMessage(
             role="user",
-            content=format_source_excerpts(topic_name, topic_description, chunks, course_map),
+            content=format_source_excerpts(topic_name, topic_description, chunks, course_map, v2=v2),
             cache=cache_excerpts,
         ),
         LLMMessage(role="user", content=instructions),

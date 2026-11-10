@@ -2,6 +2,7 @@
 
 With the flag off the requests are the v1 ones (the other test files pin those strings); with it on
 they carry the 2026-11-09 audit's changes."""
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -401,3 +402,33 @@ def test_v2_support_check_accepts_keys_that_follow_from_a_stated_rule(monkeypatc
     assert "Set supported to false when a listed wrong option is also correct according to the excerpts." in user
     assert "<excerpts>" in user and "<items>" in user
     assert "Return one verdict per item, using the item's id." in user
+
+
+async def test_lesson_notes_and_requote_stay_on_v1_with_every_area_switched_on(monkeypatch):
+    """Review of PR #90: lesson notes and concept re-quoting were not audited but shared helpers that follow the flag,
+    so with generation or ingest on they sent a v2 system prompt and excerpt layout around v1 instructions and a v1
+    cap (a long lesson could be cut off). Both stay wholly on their earlier prompts until they are audited."""
+    from app.services.concepts import requote
+    from app.services.content_generator.notes import NotesGenerator
+    from app.services.llm.schemas import ConceptRequote
+    from tests.context_stub import topic_context
+
+    monkeypatch.setattr(settings, "PROMPTS_V2", "all")
+    llm = MagicMock()
+    llm.generate_text = AsyncMock(return_value=SimpleNamespace(content="# Stats\n\n" + "word " * 100))
+    with stub_topic_context(CHUNKS, course_map="Course map: x"), patch(
+        "app.services.llm.factory.LLMFactory.get_provider", return_value=llm
+    ):
+        await NotesGenerator().generate_notes("t1", "Stats", "d", {"focus": "means"})
+    system, excerpts, instructions = (m.content for m in llm.generate_text.call_args.args[0])
+    assert system == CONTENT_SYSTEM_PROMPT
+    assert "<course_map>" not in excerpts and "<student_focus>" not in instructions
+
+    llm.generate_structured = AsyncMock(return_value=ConceptRequote(claims=[]))
+    concept = {"id": "k1", "name": "Mean", "summary": "The average."}
+    with patch.object(requote, "concepts_without_claims", AsyncMock(return_value=[concept])), patch.object(
+        requote, "fetch_topic_context", AsyncMock(return_value=topic_context(CHUNKS, "Course map: x"))
+    ), patch("app.services.llm.factory.LLMFactory.get_provider", return_value=llm):
+        await requote.propose_quotes("t1")
+    excerpts = llm.generate_structured.call_args.args[0][1].content
+    assert "<topic>" not in excerpts and "<course_map>" not in excerpts

@@ -48,7 +48,7 @@ OUTPUT_CAPS: Dict[str, Cap] = {
     "concept_extraction": Cap("ingest", 24000),
     "concept_links": Cap("ingest", 16000),
     "upload_check": Cap("ingest", 4000),
-    # Voice: the drill set (the turn's cap is VOICE_MAX_TOKENS, sent by the web app's turn engine).
+    # Voice: the drill set (the turn takes the AI service's own VOICE_MAX_TOKENS in routes/voice.py).
     "voice_drill": Cap("voice", 12000),
 }
 

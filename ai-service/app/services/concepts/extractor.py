@@ -110,9 +110,12 @@ class ExtractionSummary:
         }
 
 
-def format_excerpts(topic: Dict[str, Any], chunks: List[Dict[str, Any]], course_map: str) -> str:
-    """The user message with the topic, the course map and the excerpts, each with its chunk id."""
-    if prompts_v2("ingest"):
+def format_excerpts(
+    topic: Dict[str, Any], chunks: List[Dict[str, Any]], course_map: str, v2: bool | None = None
+) -> str:
+    """The user message with the topic, the course map and the excerpts, each with its chunk id. `v2` pins the layout
+    for a caller outside the audit (re-quoting); None follows PROMPTS_V2."""
+    if prompts_v2("ingest") if v2 is None else v2:
         # The name and description are planner output built from the student's files, and the course
         # map holds other topics' names: tag them as data like the excerpts.
         v2 = True
