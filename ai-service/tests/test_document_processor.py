@@ -417,7 +417,9 @@ class TestParseLimits:
 
     async def test_child_past_its_wall_clock_is_killed(self, monkeypatch, tmp_path):
         monkeypatch.setattr(settings, "PARSE_WALL_SECONDS", 1)
-        path = many_page_pdf(tmp_path / "course.pdf", 200, text=True)
+        # As many pages as a PDF may have: their markdown read takes a few seconds, well past the 1 s wall on any
+        # machine (200 pages took about 0.75 s plus the child's start-up, and a fast CI runner finished inside it).
+        path = many_page_pdf(tmp_path / "course.pdf", settings.PARSE_MAX_PDF_PAGES, text=True)
 
         started = time.perf_counter()
         with pytest.raises(ParseRefused) as refused:
