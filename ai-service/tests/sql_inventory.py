@@ -13,7 +13,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1] / "app"
-SQL_START = re.compile(r"^\s*(SELECT|INSERT|UPDATE|DELETE|WITH)\b", re.IGNORECASE)
+# WITH only as a CTE (`WITH name AS (`, `WITH RECURSIVE name (cols) AS (`): prompt text such as "with a type: ..." is
+# not SQL.
+SQL_START = re.compile(
+    r"^\s*((SELECT|INSERT|UPDATE|DELETE)\b|WITH\s+(RECURSIVE\s+)?\w+\s*(\([^)]*\)\s*)?AS\s*(NOT\s+)?(MATERIALIZED\s*)?\()",
+    re.IGNORECASE,
+)
 
 
 @dataclass
