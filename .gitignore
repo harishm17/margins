@@ -40,6 +40,7 @@ htmlcov/
 # Documentation (ignore .md files except README.md and docs/)
 *.md
 !README.md
+!/CLAUDE.md
 !docs/**/*.md
 
 # Misc
