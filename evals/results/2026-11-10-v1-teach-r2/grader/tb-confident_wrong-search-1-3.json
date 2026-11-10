@@ -1,0 +1,7 @@
+{
+  "status": "graded",
+  "verdicts": {
+    "search-c0-k0": "incorrect",
+    "search-c0-k1": "missing"
+  }
+}

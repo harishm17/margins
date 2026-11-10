@@ -1,0 +1,7 @@
+{
+  "status": "graded",
+  "verdicts": {
+    "search-c0-k0": "covered",
+    "search-c0-k1": "covered"
+  }
+}
