@@ -1,3 +1,4 @@
+import { ownedExam } from '@/server/owned'
 import { areRecordIds } from '@/lib/ids'
 import { prisma } from '@/lib/db/prisma'
 import { gradeExamTarget } from '@/lib/jobs/active-jobs'
@@ -141,10 +142,11 @@ export async function getExamLobby(userId: string, courseId: string, examId: str
       projectId: true,
     },
   })
-  if (!exam) return null
+  const checked = await ownedExam(userId, examId)
+  if (!exam || !checked) return null
 
   // An attempt whose time ran out while the student was away is submitted here, as saved.
-  const state = await loadAttemptState(userId, { id: exam.id, projectId: exam.projectId, durationMinutes: exam.durationMinutes })
+  const state = await loadAttemptState(userId, checked)
 
   const [counts, submissions] = await Promise.all([
     questionCounts([exam.id]),
@@ -224,9 +226,10 @@ export async function getTakeState(userId: string, courseId: string, examId: str
     where: { id: examId, projectId: courseId, project: { userId } },
     select: { id: true, name: true, createdAt: true, durationMinutes: true, questions: true, projectId: true },
   })
-  if (!exam) return { kind: 'missing' }
+  const checked = await ownedExam(userId, examId)
+  if (!exam || !checked) return { kind: 'missing' }
 
-  const state = await loadAttemptState(userId, { id: exam.id, projectId: exam.projectId, durationMinutes: exam.durationMinutes })
+  const state = await loadAttemptState(userId, checked)
   if (state.kind === 'none') return { kind: 'none' }
   if (state.kind === 'finalized') return { kind: 'finalized', submissionId: state.submissionId }
   const titles = await getExamTitles(userId, courseId)

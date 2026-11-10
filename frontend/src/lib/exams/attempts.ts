@@ -7,6 +7,7 @@
  * partial unique index, so starting twice returns the same attempt.
  */
 
+import type { OwnedExam } from '@/server/owned'
 import type { ExamSubmission } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { createJobOrFindActive, gradeExamTarget, isUniqueViolation } from '@/lib/jobs/active-jobs'
@@ -22,7 +23,7 @@ import {
 export const ATTEMPT_IN_PROGRESS = 'in_progress'
 export const ATTEMPT_SUBMITTED = 'submitted'
 
-export type ExamRef = { id: string; projectId: string; durationMinutes: number }
+export type ExamRef = OwnedExam
 
 /** What the browser needs to run (or resume) an attempt. */
 export type AttemptView = {
@@ -54,20 +55,12 @@ export function toAttemptView(attempt: ExamSubmission, now: Date): AttemptView {
   }
 }
 
-/** The exam if it belongs to the user's project. */
-export async function findExamForUser(userId: string, examId: string): Promise<ExamRef | null> {
-  return prisma.sampleExam.findFirst({
-    where: { id: examId, project: { userId } },
-    select: { id: true, projectId: true, durationMinutes: true },
-  })
-}
-
 /** How many questions the exam has, read in SQL so autosave does not load them all. */
-export async function countQuestions(examId: string): Promise<number> {
+export async function countQuestions(exam: OwnedExam): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ count: number }>>`
     SELECT CASE WHEN jsonb_typeof(questions) = 'array' THEN jsonb_array_length(questions) ELSE 0 END::int AS count
     FROM sample_exams
-    WHERE id = ${examId}
+    WHERE id = ${exam.id}
   `
   return rows[0]?.count ?? 0
 }
@@ -110,7 +103,7 @@ export async function startAttempt(userId: string, exam: ExamRef, now = new Date
  */
 export async function startGrading(
   userId: string,
-  exam: Pick<ExamRef, 'id' | 'projectId'>,
+  exam: ExamRef,
   submissionId: string
 ): Promise<GradingStart> {
   const { job, created } = await createJobOrFindActive({

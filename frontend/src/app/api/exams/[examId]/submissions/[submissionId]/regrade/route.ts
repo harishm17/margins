@@ -6,6 +6,7 @@
  * already running is returned instead of starting another.
  */
 
+import { ownedExam } from '@/server/owned'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -16,7 +17,7 @@ import {
   apiUpstream,
   isUnauthorizedError,
 } from '@/lib/api/errors'
-import { ATTEMPT_SUBMITTED, findExamForUser, startGrading } from '@/lib/exams/attempts'
+import { ATTEMPT_SUBMITTED, startGrading } from '@/lib/exams/attempts'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,7 @@ export async function POST(
     const session = await requireAuth()
     const { examId, submissionId } = await params
 
-    const exam = await findExamForUser(session.user.id, examId)
+    const exam = await ownedExam(session.user.id, examId)
     if (!exam) return apiNotFound('Exam not found')
 
     const submission = await prisma.examSubmission.findFirst({
