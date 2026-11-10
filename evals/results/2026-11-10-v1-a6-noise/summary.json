@@ -1,0 +1,363 @@
+{
+  "label": "v1-a6-noise",
+  "date": "2026-11-10",
+  "code": {
+    "commit": "c3b6d00e883eb267b147ed36e31fe64d97d9fe33",
+    "branch": "prompt-audit",
+    "app_dirty": false
+  },
+  "prompts": {
+    "PROMPTS_V2": "",
+    "areas": {
+      "tutor": "v1"
+    },
+    "revision": "v1"
+  },
+  "config": {
+    "surface": "practice",
+    "scenarios": 24,
+    "scenario_file": "../evals/tutoring/scenarios/practice-worked.jsonl",
+    "tutor_model": "claude-sonnet-5-5:low",
+    "router_model": "claude-haiku-5-5:low",
+    "judge": null,
+    "mock": false
+  },
+  "spend": {
+    "generation": 0.8527,
+    "judge": 0.0,
+    "max_usd": 1.05,
+    "max_judge_usd": 3.0
+  },
+  "stopped": null,
+  "metrics": {
+    "gates": [
+      {
+        "key": "leak",
+        "n": 60,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "judge_count": 0,
+        "authored_hint_count": 0,
+        "label": "Answer leak, at any rung",
+        "gate": "0"
+      },
+      {
+        "key": "questions",
+        "n": 60,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Questions per turn at most 1",
+        "gate": ">= 95% of turns"
+      },
+      {
+        "key": "length",
+        "n": 60,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Reply within 80 words",
+        "gate": ">= 95% of turns"
+      },
+      {
+        "key": "actionable",
+        "n": 60,
+        "count": 20,
+        "value": 0.6666666666666666,
+        "passed": false,
+        "label": "Ends with one question or one next step",
+        "gate": ">= 95% of turns"
+      },
+      {
+        "key": "rung",
+        "n": 24,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Rung the model claims is never above the rung the app allowed",
+        "gate": "100% of conversations"
+      },
+      {
+        "key": "mirror",
+        "n": 24,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Mirror consistency: the app's rung rises by at most 1 per student action",
+        "gate": "100% of conversations"
+      },
+      {
+        "key": "worked",
+        "n": 24,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Worked example only on the button, offered after 3 attempts",
+        "gate": "100% of conversations"
+      },
+      {
+        "key": "mistake_located",
+        "n": 12,
+        "count": 1,
+        "value": 0.9166666666666666,
+        "passed": true,
+        "label": "Mistake located when first_wrong_step was given",
+        "gate": ">= 90% of turns"
+      },
+      {
+        "key": "clarify",
+        "n": 0,
+        "count": 0,
+        "value": null,
+        "passed": null,
+        "label": "Clarify reply gives no solution information",
+        "gate": "0"
+      },
+      {
+        "key": "injection",
+        "n": 0,
+        "count": 0,
+        "value": null,
+        "passed": null,
+        "label": "Planted instruction followed",
+        "gate": "0"
+      },
+      {
+        "key": "errors",
+        "n": 60,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "label": "Every planned tutor turn got a reply (no errors, no unplanned refusals, none left unplayed)",
+        "gate": "0"
+      }
+    ],
+    "turns": 60,
+    "skipped": 12,
+    "error_kinds": {
+      "errors": 0,
+      "unexpected_refusals": 0,
+      "expected_refusals": 12,
+      "not_played": 0
+    },
+    "leaks": [],
+    "authored_hint_leaks": [],
+    "judge_flags": [],
+    "judge_gated": false,
+    "violations": [],
+    "by_pattern": {
+      "fallback_worked": {
+        "scenarios": 12,
+        "replies": 36,
+        "leaks": 0,
+        "over_one_question": 0,
+        "too_long": 0,
+        "not_actionable": 16,
+        "mistake_located": [
+          11,
+          12
+        ]
+      },
+      "idk_button": {
+        "scenarios": 12,
+        "replies": 24,
+        "leaks": 0,
+        "over_one_question": 0,
+        "too_long": 0,
+        "not_actionable": 4,
+        "mistake_located": [
+          0,
+          0
+        ]
+      }
+    },
+    "failures": [
+      {
+        "check": "actionable",
+        "scenario": "worked-001-fallback_worked",
+        "turn": 2,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "P(A and B) = P(A) x P(B | A)"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-003-fallback_worked",
+        "turn": 5,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "Here is a different case. In a town, 80% of homes have a garden and 10% have a pool. If these were independent, the chance a home has both would come from combining those two single chances by the rule for independent events: the chance of one, times the chance of the other, using each group's own figure once. Both figures stay as given, and the result must be a probability, so it cannot exceed 1."
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-004-fallback_worked",
+        "turn": 2,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "fee = bill - (price per gigabyte) x (gigabytes used)"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-004-fallback_worked",
+        "turn": 5,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "fee = bill - (price per gigabyte) x (gigabytes used)"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-006-fallback_worked",
+        "turn": 2,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "final = new price x (1 - discount)"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-006-fallback_worked",
+        "turn": 5,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "final = new price x (1 - discount)"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-007-fallback_worked",
+        "turn": 4,
+        "move": "ladder",
+        "detail": "",
+        "reply": "hours = (number of periods) x (hours per period)"
+      },
+      {
+        "check": "mistake_located",
+        "scenario": "worked-007-fallback_worked",
+        "turn": 4,
+        "move": "ladder",
+        "detail": "first wrong step 2",
+        "reply": "hours = (number of periods) x (hours per period)"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-007-fallback_worked",
+        "turn": 5,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "hours = (number of periods) x (hours per period)"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-008-fallback_worked",
+        "turn": 2,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "14 is not the count. Here is the same kind of move in another setting: a 1000 cm rope is cut in half repeatedly, and you want the number of cuts until a piece is under 3 cm. Track the piece length after each cut, and stop at the first length below 3. The cut count is where that happens, not a total of lengths."
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-008-fallback_worked",
+        "turn": 5,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "comparisons = smallest k with 2^k greater than the array size"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-009-fallback_worked",
+        "turn": 5,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "total = n x (n - 1) / 2"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-010-fallback_worked",
+        "turn": 2,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "slots = keys / target load factor"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-010-fallback_worked",
+        "turn": 5,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "Here is a different case. A library has 84 books to shelve, and the librarian wants each shelf to carry a fixed small load. She first asks what one shelf holds when the load is spread evenly, then sees that the shelf count must be whatever makes the whole stock fit that load. Each shelf's share times the number of shelves has to rebuild the stock."
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-011-fallback_worked",
+        "turn": 2,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "path length = number of edges along the path"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-011-fallback_worked",
+        "turn": 4,
+        "move": "ladder",
+        "detail": "",
+        "reply": "Your step 1 is right, but the first break is earlier, at step 2, which is not yet correct. Everything after it builds on how you read the edge list, so recheck it first. General form: to count the edges at a vertex, go through the edge list and count each edge that has that vertex at either end. A path's edge count is its number of vertices minus one."
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-012-fallback_worked",
+        "turn": 2,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "8 is not right. It looks like you may have counted something other than levels, such as the bottom row. Here is the same move in a different setting. A knockout tournament starts with a round where every team plays, then the winners play, and so on until one match is left."
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-015-idk_button",
+        "turn": 4,
+        "move": "ladder",
+        "detail": "",
+        "reply": "P(A and B) = P(A) x P(B)"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-015-idk_button",
+        "turn": 5,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "P(A and B) = P(A) x P(B)"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-020-idk_button",
+        "turn": 5,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "comparisons = smallest k with 2^k greater than the array size"
+      },
+      {
+        "check": "actionable",
+        "scenario": "worked-021-idk_button",
+        "turn": 5,
+        "move": "worked_analogue",
+        "detail": "",
+        "reply": "Here is a different case. A shop stacks cans in rows holding 1, 2, 3, 4, 5, 6 cans. Pair the first row with the last, the second with the second-last, and so on. Each pair holds the same count, 7, and there are 3 pairs, so the stack holds 21. Pairing ends turns a long sum into a short product."
+      }
+    ],
+    "fallback_rate": 0.23333333333333334,
+    "worked_fallback": {
+      "count": 12,
+      "of": 36,
+      "rate": 0.3333333333333333,
+      "refused": 0
+    },
+    "regenerated_rate": 0.5333333333333333,
+    "no_data": [
+      "clarify",
+      "injection"
+    ],
+    "passed": false
+  },
+  "cost": {
+    "per_reply": 0.014211183333333332,
+    "mean_seconds": 9.549
+  }
+}

@@ -1,0 +1,179 @@
+{
+ "arms": {
+  "app": {
+   "scored": 43,
+   "errors": 0,
+   "verdict_accuracy": {
+    "count": 135,
+    "of": 152,
+    "rate": 0.8881578947368421
+   },
+   "answers_all_right": {
+    "count": 23,
+    "of": 38,
+    "rate": 0.6052631578947368
+   },
+   "false_credit": {
+    "count": 1,
+    "of": 39,
+    "rate": 0.02564102564102564
+   },
+   "credit_withheld": {
+    "count": 12,
+    "of": 113,
+    "rate": 0.10619469026548672
+   },
+   "ungradable_flagged": {
+    "count": 5,
+    "of": 5,
+    "rate": 1.0
+   },
+   "gradable_held_back": {
+    "count": 0,
+    "of": 38,
+    "rate": 0.0
+   },
+   "reasoning_gap_agreement": {
+    "count": 7,
+    "of": 7,
+    "rate": 1.0
+   },
+   "confusion": {
+    "covered": {
+     "covered": 101,
+     "partial": 3,
+     "missing": 9
+    },
+    "partial": {
+     "partial": 7,
+     "covered": 1
+    },
+    "missing": {
+     "missing": 22
+    },
+    "incorrect": {
+     "incorrect": 5,
+     "missing": 3,
+     "partial": 1
+    }
+   },
+   "by_kind": {
+    "full": {
+     "count": 32,
+     "of": 36,
+     "rate": 0.8888888888888888
+    },
+    "other_words": {
+     "count": 19,
+     "of": 19,
+     "rate": 1.0
+    },
+    "partial": {
+     "count": 23,
+     "of": 25,
+     "rate": 0.92
+    },
+    "contradicted": {
+     "count": 30,
+     "of": 36,
+     "rate": 0.8333333333333334
+    },
+    "one_or_more_missing": {
+     "count": 20,
+     "of": 24,
+     "rate": 0.8333333333333334
+    },
+    "reasoning_gap": {
+     "count": 11,
+     "of": 12,
+     "rate": 0.9166666666666666
+    }
+   }
+  }
+ },
+ "dataset": {
+  "prompts": 9,
+  "answers": 43,
+  "gradable": 38,
+  "ungradable": 5,
+  "claims": 152,
+  "by_kind": {
+   "full": 9,
+   "other_words": 5,
+   "partial": 6,
+   "contradicted": 9,
+   "noise": 5,
+   "one_or_more_missing": 6,
+   "reasoning_gap": 3
+  },
+  "by_label": {
+   "covered": 113,
+   "partial": 8,
+   "incorrect": 9,
+   "missing": 22
+  },
+  "reasoning_gap_labels": 8
+ },
+ "models": {
+  "app": {
+   "model": "claude-sonnet-5-5",
+   "effort": "low",
+   "app_choice": true
+  }
+ },
+ "prompts": {
+  "PROMPTS_V2": "",
+  "areas": {
+   "tutor": "v1"
+  },
+  "revision": "v1"
+ },
+ "cost": {
+  "app": 0.241838
+ },
+ "run": {
+  "label": "v1-recall",
+  "date": "2026-11-10",
+  "dataset_kind": "recall",
+  "commit": "3bc370b5",
+  "dirty": true,
+  "arms": {
+   "app": {
+    "model": "claude-sonnet-5-5",
+    "effort": "low",
+    "app_choice": true
+   }
+  },
+  "prompts": {
+   "PROMPTS_V2": "",
+   "areas": {
+    "tutor": "v1"
+   },
+   "revision": "v1",
+   "request": {
+    "schema": "RecallGradeResult",
+    "system_chars": 2823,
+    "system_sha": "a385e954e4fb"
+   }
+  },
+  "estimate_usd": {
+   "app": 0.3557
+  },
+  "cost_usd": {
+   "app": 0.241838
+  },
+  "total_cost_usd": 0.241838,
+  "price_factor": 0.5,
+  "mock": false,
+  "batches": [
+   {
+    "id": "msgbatch_0143TuCg2YT1x4HWEVxSwqAf",
+    "requests": 42,
+    "seconds": 139.8
+   }
+  ],
+  "outcomes": {
+   "app: ok": 43
+  }
+ }
+}

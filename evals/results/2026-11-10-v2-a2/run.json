@@ -1,0 +1,93 @@
+{
+  "label": "v2-a2",
+  "date": "2026-11-10",
+  "code": {
+    "commit": "21c1efba60c14f15b2eeb1f08faf939a95e69cf1",
+    "branch": "prompt-audit",
+    "app_dirty": false
+  },
+  "prompts": {
+    "PROMPTS_V2": "generation,support",
+    "areas": {
+      "generation": "v2",
+      "support": "v2"
+    },
+    "revision": "v2"
+  },
+  "kinds": [
+    "warmup",
+    "quiz",
+    "review",
+    "solved",
+    "interactive",
+    "exam"
+  ],
+  "topics": 10,
+  "topic_counts": {
+    "mit-18.05": 6,
+    "mit-6.006": 4
+  },
+  "params": {
+    "questions": 10,
+    "examples": 3,
+    "exam_questions": 20,
+    "difficulty": "medium"
+  },
+  "judge": "opus:medium",
+  "batch": true,
+  "batches": [
+    {
+      "id": "msgbatch_01M2z8Lr72svHZctsfK89BJ5",
+      "requests": 10,
+      "seconds": 124.5
+    },
+    {
+      "id": "msgbatch_01PmzcAn71K6MF3Sto4Vksx3",
+      "requests": 10,
+      "seconds": 186.2
+    },
+    {
+      "id": "msgbatch_01QuCvsyP5bqHUSHC62GobTR",
+      "requests": 10,
+      "seconds": 109.9
+    },
+    {
+      "id": "msgbatch_013wuTEnQxXAXzUnkeTq3MWt",
+      "requests": 48,
+      "seconds": 247.4
+    },
+    {
+      "id": "msgbatch_01EZDGiY9iMpAj4bSEGr1KGD",
+      "requests": 28,
+      "seconds": 186.1
+    },
+    {
+      "id": "msgbatch_01VqYrDRJQ8omxv7d8z3Pv87",
+      "requests": 2,
+      "seconds": 124.3
+    },
+    {
+      "id": "msgbatch_013uD4fwux368RNizc5JJh96",
+      "requests": 2,
+      "seconds": 93.8
+    },
+    {
+      "id": "msgbatch_01NbWR6PJ8b6HyFz5khootrj",
+      "requests": 6,
+      "seconds": 108.9
+    },
+    {
+      "id": "msgbatch_01N3Tq36nsAe2EEwz8RRvxzv",
+      "requests": 4,
+      "seconds": 78.3
+    }
+  ],
+  "mock": false,
+  "max_usd": 8.9,
+  "max_judge_usd": 1.2,
+  "spend": {
+    "generation": 5.33,
+    "judge": 0.6261
+  },
+  "stopped": null
+}

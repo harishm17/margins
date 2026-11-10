@@ -1,0 +1,26 @@
+{
+  "label": "v2-a3-r2",
+  "date": "2026-11-10",
+  "today": 12,
+  "pairs": 38,
+  "commit": "21c1efba",
+  "dirty": true,
+  "ks": [
+    8,
+    12,
+    20
+  ],
+  "answer_ks": [
+    12
+  ],
+  "answer_model": "claude-opus-5-5",
+  "mock": false,
+  "prompts": {
+    "PROMPTS_V2": "ask",
+    "areas": {
+      "ask": "v2"
+    },
+    "revision": "v2"
+  },
+  "cost_usd": 2.6584
+}
