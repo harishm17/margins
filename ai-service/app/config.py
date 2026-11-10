@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     DB_POOL_MAX_SIZE: int = 20
     DB_COMMAND_TIMEOUT_SECONDS: float = 60.0
+    # How long a query waits for a free pooled connection before failing, instead of queueing for ever.
+    DB_ACQUIRE_TIMEOUT_SECONDS: float = 10.0
+    # How long a lock on one topic (app/services/locks.py) is waited for, in seconds, before the job fails and retries.
+    TOPIC_LOCK_WAIT_SECONDS: float = 600.0
+    # On shutdown, running jobs get this long to finish before they are cancelled and their leases released.
+    JOB_SHUTDOWN_GRACE_SECONDS: float = 20.0
+    # Queued file deletions (pending_file_deletions) that failed this many times raise a watchdog alert.
+    FILE_DELETION_ALERT_ATTEMPTS: int = 5
 
     # LLM: Claude for all text generation and grading.
     # "mock" returns schema-valid placeholder output with no API calls (local dev, e2e runs).
@@ -43,6 +51,9 @@ class Settings(BaseSettings):
     LLM_MAX_RETRIES: int = 4
     # Model calls running at once, across every job and chat answer in this process.
     LLM_MAX_CONCURRENCY: int = 4
+    # Background jobs hold at most LLM_MAX_CONCURRENCY - 1 of those slots; a student-facing call waits this long for a
+    # slot, then fails with LLM_BUSY (app/services/llm/limiter.py).
+    LLM_INTERACTIVE_WAIT_SECONDS: float = 20.0
     # The mock provider (LLM_PROVIDER=mock) takes this long per call, to look like a model.
     MOCK_LLM_LATENCY_SECONDS: float = 0.0
 
@@ -193,6 +204,13 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY_ID: str = ""
     S3_SECRET_ACCESS_KEY: str = ""
     S3_FORCE_PATH_STYLE: bool = False
+    # The weekly sweep of bucket files no material points to (watchdog.py). It ignores files younger than an hour and
+    # refuses to delete when the orphans are more than STORAGE_SWEEP_MAX_SHARE of the bucket, or more than
+    # STORAGE_SWEEP_MAX_FILES files: it alerts instead. While STORAGE_SWEEP_DRY_RUN is true it only reports; the
+    # operator turns it off in .railway/railway.ts after reading a few reports.
+    STORAGE_SWEEP_DRY_RUN: bool = True
+    STORAGE_SWEEP_MAX_SHARE: float = 0.05
+    STORAGE_SWEEP_MAX_FILES: int = 200
 
     # Where the frontend writes uploads when it has no S3 bucket (`local://` material paths).
     LOCAL_UPLOADS_DIR: str = "/data/uploads"
@@ -237,6 +255,10 @@ class Settings(BaseSettings):
         provider = self.LLM_PROVIDER.strip().lower()
         if self.ENVIRONMENT == "production" and provider in ("mock", "replay"):
             raise ValueError(f"LLM_PROVIDER={provider} is not allowed when ENVIRONMENT=production")
+        # Without a bucket the services fall back to the container's disk, which a deploy wipes: uploads would vanish
+        # without an error. Refuse to start rather than lose students' files.
+        if self.ENVIRONMENT == "production" and not self.S3_BUCKET.strip():
+            raise ValueError("S3_BUCKET must be set when ENVIRONMENT=production (uploads would go to local disk)")
         if provider == "replay" and not self.LLM_CASSETTE_DIR.strip():
             raise ValueError("LLM_PROVIDER=replay needs LLM_CASSETTE_DIR (the folder of recordings)")
         return self

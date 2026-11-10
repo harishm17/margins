@@ -164,29 +164,61 @@ async def test_vectors_from_another_embedding_model(db, posts):
     assert settings.EMBEDDING_MODEL in posts[0][1]
 
 
-@pytest.mark.asyncio
-async def test_orphaned_files_are_found_once_a_day(db, posts, monkeypatch, caplog):
+async def seed_bucket(db, monkeypatch, *, kept=30, lost=("u/p/lost.pdf",)):
+    """A bucket with `kept` files that have materials, the `lost` ones that don't, a fresh upload and a non-material file."""
     from app.services.document_processor import storage
 
     monkeypatch.setattr(settings, "S3_BUCKET", "uploads")
     project_id = await seed_project(db, await seed_user(db))
-    await seed_material(db, project_id, gcs_path="s3://uploads/u/p/kept.pdf")
     old = NOW - timedelta(days=2)
-    listed = [("u/p/kept.pdf", old), ("u/p/lost.pdf", old), ("u/p/new.pdf", NOW), ("ops/deletions/u.json", old)]
+    listed = [("ops/deletions/u.json", old), ("u/p/new.pdf", NOW)]
+    for i in range(kept):
+        await seed_material(db, project_id, gcs_path=f"s3://uploads/u/p/kept{i}.pdf")
+        listed.append((f"u/p/kept{i}.pdf", old))
+    listed += [(key, old) for key in lost]
+    deleted: list[str] = []
 
     async def list_objects():
         return listed
 
+    async def delete_objects(keys):
+        deleted.extend(keys)
+
     monkeypatch.setattr(storage, "list_bucket_objects", list_objects)
+    monkeypatch.setattr(storage, "delete_bucket_objects", delete_objects)
+    return deleted
+
+
+@pytest.mark.asyncio
+async def test_orphaned_files_are_found_once_a_week_and_only_reported_on_a_dry_run(db, posts, monkeypatch, caplog):
+    deleted = await seed_bucket(db, monkeypatch)
+    assert settings.STORAGE_SWEEP_DRY_RUN is True
     assert await kinds_after_two_runs(posts) == {"storage_orphans"}
-    assert "1 files" in posts[0][1] and "u/p/lost.pdf" not in posts[0][1]
-    assert "u/p/lost.pdf" in caplog.text
+    # The fresh upload, the file with a material and the non-material prefix are never counted.
+    assert "1 files" in posts[0][1] and "dry run" in posts[0][1]
+    assert "u/p/lost.pdf" in caplog.text and "new.pdf" not in caplog.text
+    assert deleted == []
 
-    # Not scanned again within the day, even with the alert's cooldown cleared.
+    # Not scanned again within the week, even with the alert's cooldown cleared.
     await db.execute("DELETE FROM ops_alerts")
-    assert await watchdog.run_watchdog(NOW + timedelta(hours=2)) == []
+    assert await watchdog.run_watchdog(NOW + timedelta(days=3)) == []
 
 
+@pytest.mark.asyncio
+async def test_the_sweep_deletes_orphans_once_the_dry_run_is_off(db, posts, monkeypatch):
+    deleted = await seed_bucket(db, monkeypatch)
+    monkeypatch.setattr(settings, "STORAGE_SWEEP_DRY_RUN", False)
+    await watchdog.run_watchdog(NOW)
+    assert deleted == ["u/p/lost.pdf"]
+
+
+@pytest.mark.asyncio
+async def test_the_sweep_refuses_to_delete_a_large_share_of_the_bucket(db, posts, monkeypatch):
+    """A listing that does not match the materials table (a wrong bucket, an empty table) must not wipe the bucket."""
+    deleted = await seed_bucket(db, monkeypatch, kept=3, lost=[f"u/p/lost{i}.pdf" for i in range(10)])
+    monkeypatch.setattr(settings, "STORAGE_SWEEP_DRY_RUN", False)
+    assert {f.kind for f in await watchdog.run_watchdog(NOW)} == {"storage_sweep_refused"}
+    assert deleted == []
 @pytest.mark.asyncio
 async def test_handled_failures_counted_where_they_happen(db, posts, caplog):
     await ops.note("ledger_write_failed", "grade_quiz $0.0100 not in the ledger")

@@ -110,7 +110,8 @@ export function describeTurnFailure(failure: TurnFailure): TurnFailureView {
       }
     }
     case 'LLM_RATE_LIMITED':
-    case 'LLM_UNAVAILABLE': {
+    case 'LLM_UNAVAILABLE':
+    case 'LLM_BUSY': {
       const message = aiMessage(failure.code)
       return {
         fate: 'continue',

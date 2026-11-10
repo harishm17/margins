@@ -1,5 +1,6 @@
 """Voice coach: drill filtering."""
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.api.routes import voice
@@ -28,6 +29,6 @@ async def test_drill_tops_up_after_filtering():
     llm = MagicMock()
     llm.generate_structured = AsyncMock(return_value=DrillQuestionSet(questions=questions))
     with patch.object(voice.LLMFactory, "get_provider", return_value=llm):
-        result = await voice.generate_concept_drill(DrillGenerateRequest(user_id="u1", project_id="p1", notes="n", count=3))
+        result = await voice.generate_concept_drill(DrillGenerateRequest(user_id="u1", project_id="p1", notes="n", count=3), SimpleNamespace(is_disconnected=AsyncMock(return_value=False)))
     assert result["total"] == 3
 

@@ -1,4 +1,5 @@
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { callSignal } from '@/lib/ai-service/client-signal'
 import type { MissKind } from '@/lib/tutor/state'
 
 /** The body of POST /tutor/practice (ai-service PracticeTutorRequest). */
@@ -66,7 +67,7 @@ export async function postTutor<T>(path: string, request: unknown): Promise<T> {
       method: 'POST',
       headers: aiServiceHeaders(),
       body: JSON.stringify(request),
-      signal: AbortSignal.timeout(TUTOR_TIMEOUT_MS),
+      signal: callSignal(TUTOR_TIMEOUT_MS),
     })
   } catch (error) {
     console.error('Tutor request failed:', error)

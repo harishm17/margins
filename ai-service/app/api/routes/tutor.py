@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.api.disconnect import run_unless_disconnected
 from app.services import ai_status
 from app.services.billing import billed
 from app.services.llm.schemas import PracticeTutorReply, PracticeTutorRequest, ReaderCheckReply, ReaderTutorRequest
@@ -38,7 +39,7 @@ async def practice(payload: PracticeTutorRequest, request: Request) -> Union[Pra
     if unavailable is not None:
         raise unavailable  # typed 502/503 by the LLMError handler in main.py
     async with billed(payload.user_id, payload.project_id, "tutor", payload.session_id):
-        reply = await tutor_reply(payload)
+        reply = await run_unless_disconnected(request, tutor_reply(payload))
     if request.headers.get(EVAL_HEADER) == "1":
         # The tutoring eval reads the rung the model claimed, which the reply clamps, and the drafts held back.
         return JSONResponse(
@@ -69,7 +70,7 @@ class ReaderCheckAnswer(BaseModel):
 
 
 @router.post("/reader", response_model=Union[ReaderCheckAnswer, ReaderReply])
-async def reader(payload: ReaderTutorRequest) -> Union[ReaderCheckAnswer, ReaderReply, JSONResponse]:
+async def reader(payload: ReaderTutorRequest, request: Request) -> Union[ReaderCheckAnswer, ReaderReply, JSONResponse]:
     """One reply about one passage after the student's own take, with one check question.
 
     A question the passage's source claims answer is held to the leak check (see app/services/tutor/reader.py).
@@ -80,7 +81,7 @@ async def reader(payload: ReaderTutorRequest) -> Union[ReaderCheckAnswer, Reader
     if unavailable is not None:
         raise unavailable
     async with billed(payload.user_id, payload.project_id, "tutor", payload.session_id):
-        out = await reader_reply(payload)
+        out = await run_unless_disconnected(request, reader_reply(payload))
     if isinstance(out, ReaderCheckReply):
         return ReaderCheckAnswer(verdict=out.verdict, reply=out.reply, follow_up_question=out.follow_up_question, from_fallback=out.from_fallback)
     return ReaderReply(reply=out.reply, check_question=out.check_question)

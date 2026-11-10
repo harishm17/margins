@@ -9,6 +9,7 @@
  * concept, in reading order. The reader opened for an idea (`?focus=`) marks them "Focus here" and scrolls to the first.
  */
 
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -21,7 +22,7 @@ export const dynamic = 'force-dynamic'
 
 const bodySchema = z.object({ claimId: z.string().min(1).max(100), grade: z.enum(['got_it', 'partly', 'missed']) })
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
     const { topicId } = await params
@@ -55,3 +56,5 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return apiInternal('Failed to load the source')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

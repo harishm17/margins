@@ -10,6 +10,7 @@
  * a quiz attempt.
  */
 
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -25,7 +26,7 @@ export const dynamic = 'force-dynamic'
 
 const startLimiter = createRateLimiter({ limit: 20, windowMs: 60_000 })
 
-export async function POST(_request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
+async function handlePOST(_request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
   try {
     const auth = await requireAuth()
     const { projectId } = await params
@@ -63,3 +64,5 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     return apiInternal('Failed to start the short session')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

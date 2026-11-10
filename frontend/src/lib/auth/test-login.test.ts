@@ -19,7 +19,7 @@ test('off unless ENABLE_TEST_LOGIN is exactly "true"', () => {
 })
 
 test('never on for the live site: the server refuses to start, with or without Google', () => {
-  const live = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: 'spend-key-secret-for-tests-only', NEXTAUTH_URL: 'https://studymargins.com', ...GOOGLE }
+  const live = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: 'spend-key-secret-for-tests-only', NEXTAUTH_URL: 'https://studymargins.com', S3_BUCKET: 'uploads', ...GOOGLE }
   for (const value of ['true', 'TRUE']) {
     assert.throws(() => checkAuthStartup({ ...live, ENABLE_TEST_LOGIN: value }), /ENABLE_TEST_LOGIN is set/, value)
   }

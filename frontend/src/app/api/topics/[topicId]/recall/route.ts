@@ -12,6 +12,7 @@
  *   and level 3 on their concepts.
  */
 
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -48,7 +49,7 @@ const submitSchema = z.object({
 
 const revealSchema = z.object({ attemptId: z.string().min(1).max(100) })
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
     const { topicId } = await params
@@ -115,3 +116,5 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return apiInternal('Could not show what you missed')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

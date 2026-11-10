@@ -11,6 +11,7 @@
  * says why.
  */
 
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -49,7 +50,7 @@ const bodySchema = z.union([answerSchema, explainSchema])
 
 const LIMIT_MESSAGE = 'You have had four replies on this passage today. Read it again, and come back to ask more tomorrow.'
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
     const { topicId } = await params
@@ -96,3 +97,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return apiInternal('The tutor could not answer')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

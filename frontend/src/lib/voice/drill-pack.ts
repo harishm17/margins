@@ -8,6 +8,7 @@ import {
   VoiceQuestion,
 } from '@/lib/voice/concept'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { callSignal } from '@/lib/ai-service/client-signal'
 import type { VoiceQuizStatus } from '@/features/voice/quiz-status'
 
 import { SPRINT_MAX_QUESTIONS, SPRINT_QUESTIONS_PER_TOPIC, SPRINT_TOPICS } from './sprint-size'
@@ -37,7 +38,7 @@ const buildConceptQuestionsFromNotes = async (
 ): Promise<VoiceQuestion[]> => {
   const response = await fetch(`${AI_SERVICE_URL}/voice/generate-drill`, {
     method: 'POST',
-    signal: AbortSignal.timeout(20000),
+    signal: callSignal(20000),
     headers: aiServiceHeaders(),
     body: JSON.stringify({
       user_id: billing.userId,

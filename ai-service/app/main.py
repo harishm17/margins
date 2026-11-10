@@ -81,6 +81,9 @@ async def lifespan(_: FastAPI):
     from app.services.watchdog import install_error_counter
 
     install_error_counter()
+    from app.services.job_runner import drain_jobs, start_accepting
+
+    start_accepting()
     warm = asyncio.create_task(_warm_exam_guard())
     reaper = None
     if settings.JOB_REAPER_INTERVAL_SECONDS > 0:
@@ -100,6 +103,12 @@ async def lifespan(_: FastAPI):
             reaper.cancel()
         if retention is not None:
             retention.cancel()
+        # Jobs first: no new claims, a grace window for running handlers, then cancel the rest and release their
+        # leases, all while the database pool is still open.
+        try:
+            await drain_jobs()
+        except Exception:
+            logger.exception("Draining jobs on shutdown failed")
         await _run_shutdown()
 
 

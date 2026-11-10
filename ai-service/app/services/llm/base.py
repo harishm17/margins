@@ -92,6 +92,13 @@ class LLMUnavailableError(LLMError):
     retryable = True
 
 
+class LLMBusyError(LLMError):
+    """Every model slot stayed taken for LLM_INTERACTIVE_WAIT_SECONDS (see limiter.py): try again in a moment."""
+
+    code = "LLM_BUSY"
+    retryable = True
+
+
 class LLMOutputError(LLMError):
     """The model answered, but the output was empty, cut off or failed validation."""
 

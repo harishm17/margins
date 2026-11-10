@@ -55,6 +55,12 @@ export default defineRailway(() => {
       // lists what each alert means. The nightly backup's age is checked from the first run on.
       OPS_ALERT_WEBHOOK_URL: preserve(),
       BACKUPS_EXPECTED: "true",
+      // The weekly sweep of bucket files no material points to only reports while this is "true". Turn it off after
+      // a few reports (docs/deployment/RAILWAY.md, "orphaned files") look right.
+      STORAGE_SWEEP_DRY_RUN: "true",
+      // On a deploy Railway sends SIGTERM; running jobs get JOB_SHUTDOWN_GRACE_SECONDS (20, start.sh) to finish, then are
+      // cancelled and their leases released. Keep the drain time longer than that plus the pool close.
+      RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "30",
       DATABASE_URL: Postgres.env.DATABASE_URL,
       PORT: "8000",
       AI_SERVICE_URL: aiServiceUrl,

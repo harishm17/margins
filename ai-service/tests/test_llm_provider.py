@@ -189,6 +189,15 @@ class TestFactory:
         from app.config import Settings
 
         with pytest.raises(ValidationError, match="LLM_PROVIDER=mock"):
-            Settings(ENVIRONMENT="production", LLM_PROVIDER="Mock")
+            Settings(ENVIRONMENT="production", LLM_PROVIDER="Mock", S3_BUCKET="uploads")
         assert Settings(ENVIRONMENT="development", LLM_PROVIDER="mock").LLM_PROVIDER == "mock"
-        assert Settings(ENVIRONMENT="production", LLM_PROVIDER="anthropic").is_production
+        assert Settings(ENVIRONMENT="production", LLM_PROVIDER="anthropic", S3_BUCKET="uploads").is_production
+
+    def test_the_service_does_not_start_in_production_without_a_bucket(self):
+        from pydantic import ValidationError
+
+        from app.config import Settings
+
+        with pytest.raises(ValidationError, match="S3_BUCKET"):
+            Settings(ENVIRONMENT="production", LLM_PROVIDER="anthropic")
+        assert Settings(ENVIRONMENT="development", LLM_PROVIDER="anthropic").S3_BUCKET == ""

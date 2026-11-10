@@ -213,6 +213,60 @@ class TestFailureHandling:
 
         assert json.loads((await get_job(db, job_id))["result_data"]) == {"winner": True}
 
+class TestLostLeaseAndShutdown:
+    async def test_a_handler_whose_lease_was_taken_over_is_stopped_before_it_writes_again(self, db, user_id):
+        job_id = await seed_job(db, user_id)
+        wrote_after = []
+
+        async def body(payload, job):
+            # Another worker took the job over; this attempt must be cancelled by its heartbeat, not left running.
+            await db.execute("UPDATE processing_jobs SET attempt_count = 2 WHERE id = $1", job_id)
+            await asyncio.sleep(5)
+            wrote_after.append(True)
+            return JobOutcome()
+
+        async with asyncio.timeout(4):
+            result = await make_handler(body, lease_seconds=0.3)(payload(job_id))
+
+        assert result["status"] == "skipped" and wrote_after == []
+        job = await get_job(db, job_id)
+        assert (job["status"], job["attempt_count"]) == ("processing", 2)  # the new owner's row is untouched
+
+    async def test_shutdown_waits_for_a_short_job_and_hands_back_a_long_one(self, db, user_id):
+        from app.services import job_runner
+
+        short_id = await seed_job(db, user_id)
+        long_id = await seed_job(db, user_id)
+        started = asyncio.Event()
+
+        async def short(payload, job):
+            started.set()
+            await asyncio.sleep(0.2)
+            return JobOutcome()
+
+        async def long(payload, job):
+            started.set()
+            await asyncio.sleep(30)
+            return JobOutcome()
+
+        job_runner.start_accepting()
+        try:
+            tasks = [asyncio.create_task(make_handler(short)(payload(short_id)))]
+            await started.wait()
+            started.clear()
+            tasks.append(asyncio.create_task(make_handler(long)(payload(long_id))))
+            await started.wait()
+            await job_runner.drain_jobs(grace_seconds=1)
+            await asyncio.gather(*tasks, return_exceptions=True)
+        finally:
+            job_runner.start_accepting()
+
+        assert (await get_job(db, short_id))["status"] == "completed"
+        handed_back = await get_job(db, long_id)
+        # Still processing, but the lease is released so the reaper picks it up now rather than after the lease.
+        assert handed_back["status"] == "processing"
+        assert handed_back["lease_until"] <= datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=1)
+
 class TestFollowUp:
     async def test_follow_up_work_runs_after_completion_and_cannot_fail_the_job(self, db, user_id):
         job_id = await seed_job(db, user_id)

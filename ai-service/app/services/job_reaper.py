@@ -23,6 +23,8 @@ On a failed job, `retryable` says whether starting the same work again may help,
 to a dead worker or a dispatch that never arrived is retryable: the student can start it again.
 
 The reaper is the only owner of both cases; the frontend does not close stuck jobs itself.
+
+Each run also drains the queue of stored files to delete (app/services/file_deletions.py).
 """
 import asyncio
 import json
@@ -34,6 +36,7 @@ from app.config import settings
 from app.db.connection import UTC_NOW, execute_query
 from app.services import ai_status, ops
 from app.services.dispatch import JOB_ENDPOINTS, enqueue_job
+from app.services.file_deletions import drain_pending_deletions
 from app.services.job_runner import WAITING_FOR_AI
 
 logger = logging.getLogger(__name__)
@@ -242,6 +245,11 @@ async def reaper_loop() -> None:
         except Exception as exc:
             logger.exception("Job reaper run failed")
             await ops.note("reaper_failed", repr(exc))
+        try:
+            await drain_pending_deletions()
+        except Exception as exc:
+            logger.exception("File deletion queue run failed")
+            await ops.note("file_deletion_queue_failed", repr(exc))
         if settings.WATCHDOG_INTERVAL_SECONDS > 0 and time.monotonic() >= watchdog_due:
             watchdog_due = time.monotonic() + settings.WATCHDOG_INTERVAL_SECONDS
             await run_watchdog()

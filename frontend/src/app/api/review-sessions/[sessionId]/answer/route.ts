@@ -6,6 +6,7 @@
  * for the student: nothing moves on until the next question is asked for.
  */
 
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -44,7 +45,7 @@ const bodySchema = z.object({
 // A short answer costs a model call.
 const answerLimiter = createRateLimiter({ limit: 40, windowMs: 60_000 })
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
     const auth = await requireAuth()
     const { sessionId } = await params
@@ -85,3 +86,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return apiInternal('Failed to save the answer')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

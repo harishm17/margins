@@ -106,6 +106,13 @@ export async function GET(request: Request) {
             message: 'S3_BUCKET is set but S3_ACCESS_KEY_ID or S3_SECRET_ACCESS_KEY is missing.',
           }
     )
+  } else if (isDeploymentProduction) {
+    // Local disk is lost on a deploy: writable is not enough, production needs the bucket.
+    checks.push({
+      name: 's3_config',
+      status: 'fail',
+      message: 'S3_BUCKET is not set: uploads would go to local disk, which a deploy wipes.',
+    })
   } else {
     const primaryWritable = canWriteDir(localUploadsDir)
     const fallbackWritable = canWriteDir('/tmp/margins-uploads')

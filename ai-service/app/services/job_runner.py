@@ -47,7 +47,8 @@ from app.services.budget import DailyBudgetExceeded, allowance_today
 from app.services.content_generator.context import NoSourceMaterialError
 from app.services.document_processor.chunker import NoContentError
 from app.services.document_processor.storage import StorageError
-from app.services.llm.base import LLMError, LLMRateLimitError, LLMUnavailableError
+from app.services.llm.base import LLMBusyError, LLMError, LLMRateLimitError, LLMUnavailableError
+from app.services.llm.limiter import background_lane
 from app.services.llm.usage import ledger_figures, summarize_usage, track_llm_usage
 from app.validation_errors import describe_validation_error
 
@@ -164,7 +165,7 @@ def classify_failure(exc: Exception, default_code: str) -> tuple[str, bool, int]
     """
     if isinstance(exc, (PermanentJobError, DailyBudgetExceeded)):
         return exc.code, False, 400
-    if isinstance(exc, (LLMRateLimitError, LLMUnavailableError)):
+    if isinstance(exc, (LLMRateLimitError, LLMUnavailableError, LLMBusyError)):
         return exc.code, True, 503
     if isinstance(exc, LLMError):
         return exc.code, exc.retryable, 500 if exc.retryable else 400
@@ -178,7 +179,7 @@ def classify_failure(exc: Exception, default_code: str) -> tuple[str, bool, int]
 
 
 # How long the dispatcher is asked to wait before it retries, when the API did not say.
-_DEFAULT_RETRY_AFTER_SECONDS = {LLMRateLimitError: 20, LLMUnavailableError: 10}
+_DEFAULT_RETRY_AFTER_SECONDS = {LLMRateLimitError: 20, LLMUnavailableError: 10, LLMBusyError: 5}
 
 
 def retry_after(exc: Exception) -> Optional[int]:
@@ -246,8 +247,116 @@ async def _skip_reason(job_id: str) -> str:
     return f"Job is {row['status']}"
 
 
-async def _heartbeat(job: JobContext) -> None:
-    """Push the lease forward while the handler runs."""
+@dataclass
+class _Running:
+    """A handler running in this process: its task, and why it was cancelled (None if it was not by us)."""
+
+    job: JobContext
+    task: "asyncio.Task[Any]"
+    cancel_reason: Optional[str] = None
+
+
+LEASE_LOST = "lease_lost"
+SHUTDOWN = "shutdown"
+
+# Handlers running in this process, by job id: the heartbeat cancels one that lost its lease, and shutdown
+# cancels the ones still running after the grace window.
+_running: Dict[str, _Running] = {}
+# False once shutdown has begun: no new job is claimed.
+_accepting = True
+
+
+def start_accepting() -> None:
+    global _accepting
+    _accepting = True
+
+
+def _cancel_running(running: _Running, reason: str) -> None:
+    running.cancel_reason = reason
+    running.task.cancel()
+
+
+def _cancel_if_running(job_id: str, reason: str) -> None:
+    running = _running.get(job_id)
+    if running is not None:
+        _cancel_running(running, reason)
+
+
+class _LeaseLost(BaseException):
+    """The handler was stopped because another worker took the job over. A BaseException on purpose: the failure
+    handling (`except Exception`) must not record it as a failure of this attempt."""
+
+
+async def _run_handler(coroutine: Awaitable[Any], job: JobContext) -> Any:
+    """Run the handler as its own task, in the background lane, registered so that the heartbeat (lease lost) and
+    shutdown can cancel it. Cancellation unwinds the handler like any other exception, so its open transaction rolls
+    back and no further write happens; `CancelledError` propagates (it is not a failure of the job)."""
+    with background_lane():  # the task copies this context
+        task = asyncio.ensure_future(coroutine)
+    running = _Running(job, task)
+    _running[job.id] = running
+    try:
+        return await task
+    except asyncio.CancelledError:
+        if running.cancel_reason == LEASE_LOST:
+            raise _LeaseLost() from None
+        # Shutdown, or the request itself was cancelled: stop the handler, then let the reaper take the job over.
+        task.cancel()
+        try:
+            await asyncio.shield(release_lease(job))
+        except asyncio.CancelledError:
+            pass
+        raise
+    finally:
+        _running.pop(job.id, None)
+
+
+async def release_lease(job: JobContext) -> None:
+    """Make a job this process was running claimable at once (the reaper re-dispatches it), if it still holds the claim."""
+    try:
+        await execute_one(
+            f"""
+            UPDATE processing_jobs SET lease_until = {UTC_NOW}
+            WHERE id = $1 AND attempt_count = $2 AND status = 'processing'
+            RETURNING id
+            """,
+            job.id,
+            job.attempt,
+        )
+    except Exception as exc:
+        logger.warning("Could not release the lease of job %s: %s", job.id, exc)
+        await ops.note("lease_release_failed", f"job {job.id}: {exc!r}")
+
+
+async def drain_jobs(grace_seconds: Optional[float] = None) -> None:
+    """Shutdown: stop claiming jobs, give running handlers `grace_seconds` (JOB_SHUTDOWN_GRACE_SECONDS) to finish,
+    then cancel the rest and release their leases so the reaper re-dispatches them at once instead of after the
+    lease runs out. Direct dispatches still in flight are waited for within the same window."""
+    global _accepting
+    _accepting = False
+    grace = settings.JOB_SHUTDOWN_GRACE_SECONDS if grace_seconds is None else grace_seconds
+    from app.services import dispatch
+
+    try:
+        async with asyncio.timeout(grace):
+            while pending := [entry.task for entry in list(_running.values()) if not entry.task.done()]:
+                await asyncio.wait(pending)
+            await dispatch.wait_for_background_tasks()
+    except TimeoutError:
+        pass
+    leftover = list(_running.values())
+    for entry in leftover:
+        _cancel_running(entry, SHUTDOWN)
+    if leftover:
+        await asyncio.gather(*(entry.task for entry in leftover), return_exceptions=True)
+        for entry in leftover:
+            await release_lease(entry.job)
+        logger.warning("Shutdown cancelled %d running job(s); their leases are released", len(leftover))
+
+
+async def _heartbeat(job: JobContext, on_lost: Optional[Callable[[], None]] = None) -> None:
+    """Push the lease forward while the handler runs. When another worker has taken the job over, `on_lost`
+    stops the handler: it must not go on writing."""
     interval = max(job.lease_seconds / 3, 0.05)
     while True:
         await asyncio.sleep(interval)
@@ -268,7 +377,9 @@ async def _heartbeat(job: JobContext) -> None:
             await ops.note("lease_renewal_failed", f"job {job.id}: {exc!r}")
             continue
         if row is None:
-            logger.warning("Job %s lost its lease; another worker may have taken it", job.id)
+            logger.warning("Job %s lost its lease; another worker has taken it, stopping the handler", job.id)
+            if on_lost is not None:
+                on_lost()
             return
 
 
@@ -451,6 +562,8 @@ def job_handler(
         @functools.wraps(handler)
         async def wrapper(payload: JobPayload):
             lease = lease_seconds if lease_seconds is not None else LEASE_SECONDS[job_type]
+            if not _accepting:
+                raise HTTPException(status_code=503, detail="The AI service is shutting down", headers={"Retry-After": "5"})
             row = await claim_job(payload.jobId, lease, stage)
             if row is None:
                 reason = await _skip_reason(payload.jobId)
@@ -467,13 +580,13 @@ def job_handler(
                 lease_seconds=lease,
             )
             logger.info("Starting %s job %s (attempt %d)", job_type, job.id, job.attempt)
-            heartbeat = asyncio.create_task(_heartbeat(job))
+            heartbeat = asyncio.create_task(_heartbeat(job, on_lost=lambda: _cancel_if_running(job.id, LEASE_LOST)))
             try:
                 async with _job_scope(job) as usages:
                     try:
                         if uses_llm:
                             await _enforce_ai_ready(job)
-                        outcome = await handler(payload, job)
+                        outcome = await _run_handler(handler(payload, job), job)
                     except Exception as exc:
                         if wait_for_ai and waits_for_ai(exc) and await _defer(job, exc, usages):
                             logger.warning("%s job %s is waiting for the AI: %s", label, job.id, exc)
@@ -494,6 +607,8 @@ def job_handler(
                             headers={"Retry-After": str(wait)} if wait else None,
                         ) from exc
                     await _complete(job, outcome, usages)
+            except _LeaseLost:
+                return {"status": "skipped", "jobId": job.id, "reason": "Job lost its lease"}
             finally:
                 heartbeat.cancel()
 
