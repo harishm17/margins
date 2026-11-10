@@ -1607,6 +1607,10 @@ class PracticeConfusable(BaseModel):
     summary: str = Field(default="", max_length=1000)
 
 
+# The highest rung of the hint ladder (structure). Rung 5 is the worked analogue, a move of its own.
+HIGHEST_LADDER_RUNG = 4
+
+
 class PracticeTutorRequest(BaseModel):
     """What the app knows when the student asks the tutor for something (spec 6.1)."""
 
@@ -1642,6 +1646,16 @@ class PracticeTutorRequest(BaseModel):
             raise ValueError("step_index is outside the steps")
         if self.first_wrong_step is not None and self.first_wrong_step >= len(self.steps):
             raise ValueError("first_wrong_step is outside the steps")
+        return self
+
+    @model_validator(mode="after")
+    def _rung_fits_the_move(self) -> "PracticeTutorRequest":
+        # Rung 5 is the worked analogue, which only the worked_analogue move gives. The app keeps the rung at 5 once the
+        # student has opened a worked example, so the next ladder reply was told "rung allowed: 5", a rung the ladder
+        # does not have (and one the audited prompt says belongs to another move). Every other move is held to
+        # structure (rung 4) at most, here, so the prompt, the rung reported back and the authored fallback agree.
+        if self.move != "worked_analogue" and self.rung_allowed > HIGHEST_LADDER_RUNG:
+            self.rung_allowed = HIGHEST_LADDER_RUNG
         return self
 
 
