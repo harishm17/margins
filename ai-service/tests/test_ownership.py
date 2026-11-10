@@ -92,6 +92,7 @@ def jobs(w):
         ("/jobs/extract-topics", "extract_topics", {"projectId": w.project}),
         ("/jobs/generate-content", "generate_content", {"topicId": w.topic, "contentType": "notes"}),
         ("/jobs/extract-concepts", "extract_concepts", {"topicId": w.topic}),
+        ("/jobs/requote-concepts", "requote_concepts", {"topicId": w.topic, "projectId": w.project}),
         ("/jobs/link-concepts", "link_concepts", {"unitId": w.unit}),
         ("/jobs/generate-review-items", "generate_review_items", {"topicId": w.topic, "requests": []}),
         ("/jobs/gap-explainer", "gap_explainer", {"attemptId": w.attempt}),
@@ -135,7 +136,7 @@ async def test_a_route_answers_not_found_to_another_users_ids(db, world, monkeyp
     assert await db.fetchval("SELECT count(*) FROM llm_usage_events") == before
 
 
-@pytest.mark.parametrize("index", range(13))
+@pytest.mark.parametrize("index", range(14))
 async def test_a_job_of_another_user_fails_for_good_and_touches_nothing(db, world, index):
     path, job_type, data = jobs(world)[index]
     job_id = await seed_job(db, world.b, job_type, input_data=data)

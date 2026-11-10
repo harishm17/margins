@@ -15,6 +15,7 @@ from app.errors import describe_exception, public_message
 from app.models.jobs import (
     ConceptExtractionInput,
     ConceptLinkingInput,
+    ConceptRequoteInput,
     ContentGenerationInput,
     ExamGenerationInput,
     GapExplainerInput,
@@ -35,6 +36,7 @@ from app.services.embeddings.generator import embedding_text, generate_embedding
 from app.services.course_planner import NoPlannableMaterialError, StalePlanError, plan_course, write_plan
 from app.services.concepts.extractor import extract_concepts
 from app.services.concepts.linker import link_unit
+from app.services.concepts.requote import requote_concepts
 from app.services.content_generator import NotesGenerator, ExamplesGenerator, QuizGenerator
 from app.services.content_generator.context import NoSourceMaterialError
 from app.services.content_generator.examples import ExampleType
@@ -66,6 +68,7 @@ from app.services.generation_chain import (
 from app.services.job_reaper import reap_expired_jobs
 from app.services.llm.base import LLMRefusalError
 from app.services.locks import topic_lock
+from app.services.ownership import NotOwnedError, assert_owns
 from app.services import ai_status
 from app.services.job_runner import (
     JobContext,
@@ -951,6 +954,35 @@ async def extract_concepts_job(payload: JobPayload, job: JobContext) -> JobOutco
     async with topic_lock(f"topic:{topic['id']}", exclusive=True):
         summary = await extract_concepts(topic["id"])
     logger.info("Extracted concepts for topic %s: %s", topic["id"], summary.as_result())
+    return JobOutcome(result=summary.as_result())
+
+
+@router.post("/jobs/requote-concepts")
+@job_handler(
+    job_type="requote_concepts",
+    label="Concept re-quoting",
+    default_error_code="CONCEPT_EXTRACTION_FAILED",
+    stage="generating",
+    uses_llm=True,
+)
+async def requote_concepts_job(payload: JobPayload, job: JobContext) -> JobOutcome:
+    """Give the concepts of one topic that lost all their claims (a file was deleted) new claims from the topic's
+    remaining files, keeping their ids. It holds the topic lock exclusive, like the extraction. With CLAIM_REQUOTE off
+    it completes without a model call."""
+    input_data = parse_input(ConceptRequoteInput, payload.data)
+
+    topic = await execute_one("SELECT id, project_id FROM topics WHERE id = $1", input_data.topicId)
+    # The ids in a snake_case payload are not seen by the generic ownership check (camelCase keys): check them here.
+    try:
+        await assert_owns(job.user_id, project_id=input_data.projectId, topic_id=input_data.topicId)
+    except NotOwnedError as exc:
+        raise PermanentJobError("not found", code="NOT_FOUND") from exc
+    if not topic or topic["project_id"] != input_data.projectId:
+        raise PermanentJobError("Topic not found", code="NOT_FOUND")
+
+    async with topic_lock(f"topic:{topic['id']}", exclusive=True):
+        summary = await requote_concepts(topic["id"])
+    logger.info("Re-quoted concepts for topic %s: %s", topic["id"], summary.as_result())
     return JobOutcome(result=summary.as_result())
 
 

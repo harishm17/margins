@@ -1306,6 +1306,36 @@ class RecallPrompt(BaseModel):
     prompt: str = Field(description="An open prompt such as 'Explain ...' or 'Why does ...'")
 
 
+class ConceptRequote(BaseModel):
+    """New claims for concepts that already exist (their `concept_key` is the concept's id)."""
+
+    claims: List[ExtractedClaim] = Field(
+        description="2-5 claims per concept the excerpts support; none for a concept they do not support"
+    )
+
+    @classmethod
+    def example(cls) -> "ConceptRequote":
+        return cls(claims=[])
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "ConceptRequote":
+        """One claim per concept of the prompt, quoting the opening words of its first excerpt (the mock provider's answer)."""
+        excerpt = re.search(r'<excerpt chunk_id="([^"]+)"[^>]*>\n(.*?)\n</excerpt>', prompt, re.DOTALL)
+        ids = re.findall(r'<concept id="([^"]+)"', prompt)
+        if not excerpt or not ids:
+            return cls.example()
+        text = re.sub(r"\s+", " ", excerpt.group(2)).strip()
+        quote = text[:60]
+        if len(text) > 60 and " " in quote:
+            quote = quote.rsplit(" ", 1)[0]
+        return cls(
+            claims=[
+                ExtractedClaim(concept_key=concept_id, text="Mock claim. (mock)", quote=quote, chunk_id=excerpt.group(1))
+                for concept_id in ids
+            ]
+        )
+
+
 class ConceptExtraction(BaseModel):
     concepts: List[ExtractedConcept] = Field(description="3-8 concepts")
     claims: List[ExtractedClaim] = Field(description="2-5 claims per concept")

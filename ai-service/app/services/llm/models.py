@@ -14,6 +14,7 @@ belongs to which setting:
     extract_topics          MODEL_TOPICS       course planner (units, topics, sources)
     extract_concepts        MODEL_CONCEPTS     concept graph of one topic (MODEL_TOPICS when empty)
     link_concepts           MODEL_CONCEPTS     cross-topic links of one unit (same setting)
+    requote_concepts        MODEL_CONCEPTS     new claims for concepts that lost theirs (same setting)
     warmup                  MODEL_WARMUP       warm-up (pretest) questions (MODEL_QUIZ when empty)
     gap_explainer           MODEL_GAP_EXPLAINER  explanations of what a recall answer missed (MODEL_NOTES when empty)
     review_items            MODEL_QUIZ         new items for review sessions
@@ -68,6 +69,7 @@ PURPOSES = {
     "grade_short_answer": PurposeConfig("MODEL_GRADING", "fast"),
     "extract_topics": PurposeConfig("MODEL_TOPICS", "fast"),
     "extract_concepts": PurposeConfig("MODEL_CONCEPTS", "fast", inherits="MODEL_TOPICS"),
+    "requote_concepts": PurposeConfig("MODEL_CONCEPTS", "fast", inherits="MODEL_TOPICS"),
     "link_concepts": PurposeConfig("MODEL_CONCEPTS", "fast", inherits="MODEL_TOPICS"),
     "warmup": PurposeConfig("MODEL_WARMUP", "main", inherits="MODEL_QUIZ"),
     "gap_explainer": PurposeConfig("MODEL_GAP_EXPLAINER", "main", inherits="MODEL_NOTES"),
