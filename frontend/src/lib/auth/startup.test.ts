@@ -10,7 +10,14 @@ const GOOGLE = {
   GOOGLE_OAUTH_CLIENT_SECRET: 'GOCSPX-abcdefghijklmnopqrstuvwx',
 }
 const SPEND = 'spend-key-secret-for-tests-only'
-const LIVE = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: SPEND, NEXTAUTH_URL: 'https://studymargins.com' }
+const LIVE = {
+  NODE_ENV: 'production',
+  ENVIRONMENT: 'production',
+  AI_INTERNAL_TOKEN: 'a-shared-token-for-tests-only',
+  NEXTAUTH_SECRET: SECRET,
+  SPEND_KEY_SECRET: SPEND,
+  NEXTAUTH_URL: 'https://studymargins.com',
+}
 
 test('missing, empty and placeholder Google settings count as missing', () => {
   const cases = [
@@ -44,7 +51,7 @@ test('a deployed production server will not start without S3_BUCKET', () => {
 })
 
 test('Railway, or a missing NEXTAUTH_URL, counts as deployed even on a localhost URL', () => {
-  const local = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: SPEND, NEXTAUTH_URL: 'http://localhost:3000' }
+  const local = { NODE_ENV: 'production', ENVIRONMENT: 'production', AI_INTERNAL_TOKEN: 'tok', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: SPEND, NEXTAUTH_URL: 'http://localhost:3000' }
   assert.equal(isDeployed(local), false)
   assert.equal(isDeployed({ ...local, RAILWAY_ENVIRONMENT_NAME: 'production' }), true)
   assert.equal(isDeployed({ ...local, NEXTAUTH_URL: undefined }), true)
@@ -53,13 +60,13 @@ test('Railway, or a missing NEXTAUTH_URL, counts as deployed even on a localhost
 
 test('a local production build (e2e, the image check, docker compose) and development start without Google', () => {
   for (const url of ['http://localhost:3104', 'http://127.0.0.1:3000', 'http://[::1]:3000']) {
-    assert.doesNotThrow(() => checkAuthStartup({ NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: SPEND, NEXTAUTH_URL: url }))
+    assert.doesNotThrow(() => checkAuthStartup({ NODE_ENV: 'production', ENVIRONMENT: 'development', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: SPEND, NEXTAUTH_URL: url }))
   }
   assert.doesNotThrow(() => checkAuthStartup({ NODE_ENV: 'development' }))
 })
 
 test('production still needs NEXTAUTH_SECRET', () => {
-  assert.throws(() => checkAuthStartup({ NODE_ENV: 'production', NEXTAUTH_URL: 'http://localhost:3000' }), /NEXTAUTH_SECRET/)
+  assert.throws(() => checkAuthStartup({ NODE_ENV: 'production', ENVIRONMENT: 'development', NEXTAUTH_URL: 'http://localhost:3000' }), /NEXTAUTH_SECRET/)
 })
 
 test('next build is never stopped: the checks run when the server starts', () => {
@@ -69,8 +76,27 @@ test('next build is never stopped: the checks run when the server starts', () =>
 })
 
 test('production will not start without SPEND_KEY_SECRET: a changed key resets every daily allowance', () => {
-  const local = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, NEXTAUTH_URL: 'http://localhost:3000' }
+  const local = { NODE_ENV: 'production', ENVIRONMENT: 'development', NEXTAUTH_SECRET: SECRET, NEXTAUTH_URL: 'http://localhost:3000' }
   assert.throws(() => checkAuthStartup(local), /SPEND_KEY_SECRET/)
   assert.doesNotThrow(() => checkAuthStartup({ ...local, SPEND_KEY_SECRET: SPEND }))
   assert.doesNotThrow(() => checkAuthStartup({ NODE_ENV: 'development' }))
+})
+
+test('a production server will not start with ENVIRONMENT missing or misspelt: no setting means development', () => {
+  const base = { ...LIVE, ...GOOGLE, S3_BUCKET: 'uploads' }
+  assert.doesNotThrow(() => checkAuthStartup(base))
+  for (const environment of [undefined, '', 'Production', 'prod', 'productoin']) {
+    assert.throws(() => checkAuthStartup({ ...base, ENVIRONMENT: environment }), /ENVIRONMENT/, String(environment))
+  }
+})
+
+test('a deployed server must say production, and anything but development needs AI_INTERNAL_TOKEN', () => {
+  const base = { ...LIVE, ...GOOGLE, S3_BUCKET: 'uploads' }
+  assert.throws(() => checkAuthStartup({ ...base, ENVIRONMENT: 'development' }), /ENVIRONMENT=production/)
+  for (const token of [undefined, '', '  ']) {
+    assert.throws(() => checkAuthStartup({ ...base, AI_INTERNAL_TOKEN: token }), /AI_INTERNAL_TOKEN/)
+  }
+  const local = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: SPEND, NEXTAUTH_URL: 'http://localhost:3000' }
+  assert.doesNotThrow(() => checkAuthStartup({ ...local, ENVIRONMENT: 'development' }))
+  assert.throws(() => checkAuthStartup({ ...local, ENVIRONMENT: 'test' }), /AI_INTERNAL_TOKEN/)
 })

@@ -49,7 +49,7 @@ export async function GET(request: Request) {
   const checks: RuntimeCheck[] = []
 
   const nodeEnv = process.env.NODE_ENV || 'development'
-  const appEnv = process.env.ENVIRONMENT || 'development'
+  const appEnv = process.env.ENVIRONMENT || 'unset'
   const isDeploymentProduction = appEnv === 'production'
   const aiServiceUrl = process.env.AI_SERVICE_URL || ''
   const s3Bucket = process.env.S3_BUCKET || ''

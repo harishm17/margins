@@ -22,6 +22,8 @@ def pytest_configure():
     for name in _settings_names():
         os.environ.pop(name, None)
     os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost:5432/margins"
+    # No default for ENVIRONMENT (SEC-L2): the suite says it runs as development, where no internal token is needed.
+    os.environ["ENVIRONMENT"] = "development"
     # Always a fake key, even when ai-service/.env holds a real one: tests never call the API.
     os.environ["ANTHROPIC_API_KEY"] = "test-key"
     os.environ["LLM_PROVIDER"] = "anthropic"

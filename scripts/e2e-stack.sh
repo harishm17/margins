@@ -79,6 +79,7 @@ start() {
       exec setsid env \
         AI_SERVICE_URL="http://127.0.0.1:$AI_PORT" \
         AI_INTERNAL_TOKEN="$TOKEN" \
+        ENVIRONMENT=development \
         NEXTAUTH_URL="http://localhost:$WEB_PORT" \
         NEXTAUTH_SECRET="e2e-secret-e2e-secret-e2e-secret-32" \
         SPEND_KEY_SECRET="e2e-spend-key-secret-e2e-spend-key" \

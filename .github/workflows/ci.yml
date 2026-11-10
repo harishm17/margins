@@ -95,6 +95,8 @@ jobs:
       DATABASE_URL: postgresql://dev:devpass@localhost:5432/margins
       TEST_DB_ADMIN_URL: postgresql://dev:devpass@localhost:5432/postgres
       ANTHROPIC_API_KEY: test-key
+      # No default for ENVIRONMENT: the suites say they run as development (the evals import the settings too).
+      ENVIRONMENT: development
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
@@ -209,7 +211,7 @@ jobs:
           # Railway's pre-deploy command runs `prisma migrate deploy` in this image.
           docker run --rm --network none --entrypoint prisma margins-frontend --version
           docker run -d --name web -p 3000:3000 \
-            -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db \
+            -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ENVIRONMENT=development \
             -e NEXTAUTH_SECRET=ci-secret -e NEXTAUTH_URL=http://127.0.0.1:3000 \
             margins-frontend
           for _ in $(seq 1 30); do
@@ -222,7 +224,8 @@ jobs:
         run: |
           refuses() {
             if out="$(timeout 60 docker run --rm \
-                -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e NEXTAUTH_SECRET=ci-secret \
+                -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ENVIRONMENT=production -e AI_INTERNAL_TOKEN=ci-token \
+                -e NEXTAUTH_SECRET=ci-secret \
                 -e NEXTAUTH_URL=https://studymargins.com "$@" margins-frontend 2>&1)"; then
               echo "started, but should have refused: $*"; echo "$out"; exit 1
             fi
@@ -253,7 +256,7 @@ jobs:
         run: docker run --rm --network none --entrypoint catdoc margins-ai -V
       - name: Uploads are read by the limited child process as the image's user
         run: |
-          docker run --rm --network none -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key \
+          docker run --rm --network none -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key -e ENVIRONMENT=development \
             --entrypoint python margins-ai -c "
           import asyncio, docx
           from app.services.document_processor.sandbox import parse_document
@@ -265,7 +268,7 @@ jobs:
       - name: Image starts; /health stays unready without its database
         run: |
           docker run -d --name ai -p 8000:8000 \
-            -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key \
+            -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key -e ENVIRONMENT=development \
             margins-ai
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8000/; then
