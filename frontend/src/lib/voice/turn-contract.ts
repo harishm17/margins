@@ -30,6 +30,8 @@ export interface VoiceTurnExtras {
     /** What turned the student's speech into text for this turn (spec 19.12): cloud, on-device, or the browser's service. */
     recognizer?: 'cloud' | 'device' | 'browser'
   }
+  /** The same words again, after a turn that failed before the coach said or did anything: the server keeps them once. */
+  retry?: boolean
 }
 
 /** Stream events the route adds in v3.2 (alongside the existing ones). */

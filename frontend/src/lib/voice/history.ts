@@ -96,6 +96,20 @@ export function toStoredHistory(messages: readonly VoiceMessage[], max = MAX_HIS
   return v2 ? trimHistorySteps(cleaned) : trimHistory(cleaned, max)
 }
 
+/** Ends a reply that stopped before it was finished (the call broke, or the student left or spoke over it), for the model only. */
+export const CUT_OFF_NOTE = '[This reply was cut off here.]'
+
+/**
+ * The conversation with a reply that was streamed to the student but never finished added as the coach's last message,
+ * marked as cut off. Without it the turn would be missing from the conversation, and "what the student heard" sent with
+ * the next turn would be written over the reply before it.
+ */
+export function appendCutOffReply(messages: readonly VoiceMessage[], cutOff: string): VoiceMessage[] {
+  const text = cutOff.trim()
+  if (!text) return [...messages]
+  return [...messages, { role: 'assistant', content: [{ type: 'text', text: `${text} ${CUT_OFF_NOTE}` }] }]
+}
+
 /** Said in the stored turn after what the student heard (draft copy, for the model only). */
 export const INTERRUPTED_NOTE = '[The student interrupted here and did not hear the rest.]'
 const NOTHING_HEARD_NOTE = '[The student interrupted before hearing any of this reply.]'

@@ -175,16 +175,19 @@ export async function saveState(sessionId: string, state: CoachState): Promise<v
 /**
  * Called by the turn route when the student's words arrive: the turn count goes up by one and the words are kept with
  * it. The row is locked for the read and write, so two turns cannot take the same number. Returns the turn's number.
- * An empty `utterance` (the start of a session, "carry on") is a turn with no words.
+ * An empty `utterance` (the start of a session, "carry on") is a turn with no words. With `retry` the same words sent
+ * again after a failed turn move to this turn instead of being kept twice (a grader would read the answer doubled).
  */
-export async function beginVoiceTurn(sessionId: string, utterance: string): Promise<number> {
+export async function beginVoiceTurn(sessionId: string, utterance: string, options: { retry?: boolean } = {}): Promise<number> {
   return prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM voice_drill_sessions WHERE id = ${sessionId} FOR UPDATE`
     const row = await tx.voiceDrillSession.findUniqueOrThrow({ where: { id: sessionId }, select: { coachState: true } })
     const state = readCoachState(row.coachState)
     state.turn += 1
     const text = utterance.trim().slice(0, MAX_UTTERANCE_CHARS)
-    if (text) state.said = [...state.said, { turn: state.turn, text }].slice(-SAID_KEPT)
+    const last = state.said[state.said.length - 1]
+    const again = options.retry === true && !!last && last.text === text
+    if (text) state.said = [...(again ? state.said.slice(0, -1) : state.said), { turn: state.turn, text }].slice(-SAID_KEPT)
     await tx.voiceDrillSession.update({ where: { id: sessionId }, data: { coachState: state as unknown as Prisma.InputJsonValue } })
     return state.turn
   })

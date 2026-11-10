@@ -44,7 +44,7 @@ import {
 import { courseTermsForTopics, sessionTopicIds } from '@/lib/voice/course-terms'
 import { extractTextFromNotes } from '@/lib/voice/concept'
 import { voiceErrorMessage } from '@/lib/voice/errors'
-import { MAX_HEARD_CHARS, appendUserText, markInterrupted, parseHistory, toStoredHistory, type VoiceMessage } from '@/lib/voice/history'
+import { MAX_HEARD_CHARS, appendCutOffReply, appendUserText, markInterrupted, parseHistory, toStoredHistory, type VoiceMessage } from '@/lib/voice/history'
 import { listenForSession } from '@/lib/voice/listen'
 import { attachClientTiming, clientTimingSchema, recordTurnTiming } from '@/lib/voice/turn-timing'
 import { planPreRunForSession, startWithPreRun } from '@/lib/voice/pre-run-server'
@@ -73,6 +73,8 @@ const bodySchema = z.object({
   interruptedHeard: z.string().max(MAX_HEARD_CHARS).optional(),
   // What the browser measured for the previous turn (spec 19.10).
   timing: clientTimingSchema.optional(),
+  // The same words again after a turn that failed before the coach said or did anything: they are not counted twice.
+  retry: z.boolean().optional(),
 })
 
 /** A JSON error in the B shape, with the friendly message for `code` and the code in details. */
@@ -147,7 +149,7 @@ async function handlePost(request: NextRequest) {
 
   const parsed = await readJson(request, bodySchema)
   if (!parsed.ok) return parsed.response
-  const { sessionId, utterance, interruptedHeard, timing } = parsed.data
+  const { sessionId, utterance, interruptedHeard, timing, retry } = parsed.data
 
   const session = await prisma.voiceDrillSession.findFirst({ where: { id: sessionId, userId } })
   if (!session) return apiNotFound('Session not found')
@@ -197,11 +199,19 @@ async function handlePost(request: NextRequest) {
     // An interrupted reply is stored as what the student heard and a note, so the model does not take the rest as said.
     const stored = parseHistory(session.history)
     const history = interruptedHeard !== undefined ? markInterrupted(stored, interruptedHeard) : stored
+    // Kept at once: the browser reports an interruption one time, and a turn that fails before anything is said stores
+    // nothing, which would lose the mark and leave the model thinking the whole reply was heard.
+    if (interruptedHeard !== undefined) {
+      await prisma.voiceDrillSession.update({
+        where: { id: session.id },
+        data: { history: toStoredHistory(history) as unknown as Prisma.InputJsonValue },
+      })
+    }
     // With PROMPTS_V2 the student's words cannot pass for an app_result (prompt audit L3).
     const spoken = promptsV2('voice') ? neutralizeAppResultTags(utterance) : utterance
     const userText = spoken || (history.length === 0 ? startMessage(style, context.topicName) : CONTINUE_MESSAGE)
     // The server keeps what the student said, with this turn's number: the tools take an answer from there, not from the model.
-    const turn = await beginVoiceTurn(session.id, utterance)
+    const turn = await beginVoiceTurn(session.id, utterance, { retry: retry === true })
     if (timing) void attachClientTiming(session.id, turn, timing)
     let startMessages: VoiceMessage[] = appendUserText(history, userText)
     // The step the session is waiting for runs before the model speaks (spec 19.1), in the stream below so the browser can be
@@ -301,15 +311,17 @@ async function handlePost(request: NextRequest) {
               ok: outcome.ok,
             })
 
-            // Keep the conversation when the turn worked, or when it failed after tools had
-            // already recorded something (a retry must not record it twice).
+            // Keep the conversation when the turn worked, when it failed after tools had already recorded something (a
+            // retry must not record it twice), and when it failed or was interrupted after the coach had started to
+            // speak: the student heard that, so it is part of the conversation. A reply that did not finish is stored
+            // as cut off, where the next turn's "what the student heard" finds it.
             let saved = true
-            if (outcome.ok || outcome.toolsRan || preRan) {
+            if (outcome.ok || outcome.toolsRan || preRan || outcome.text) {
               try {
                 await prisma.voiceDrillSession.update({
                   where: { id: session.id },
                   data: {
-                    history: toStoredHistory(outcome.messages) as unknown as Prisma.InputJsonValue,
+                    history: toStoredHistory(appendCutOffReply(outcome.messages, outcome.cutOff)) as unknown as Prisma.InputJsonValue,
                     lastSeenAt: new Date(),
                   },
                 })
@@ -317,7 +329,7 @@ async function handlePost(request: NextRequest) {
                 logServerError('Voice: Could not store the conversation', error)
                 saved = false
               }
-            } else if (!outcome.text) {
+            } else {
               await releaseClaim()
             }
 

@@ -42,6 +42,8 @@ export type TurnOutcome = {
   messages: VoiceMessage[]
   /** Everything the coach said this turn. */
   text: string
+  /** The text of a reply that was streamed to the student but did not finish (the model call broke or the browser left). It is not in `messages`. */
+  cutOff: string
   ok: boolean
   error: { code: string; retryable: boolean } | null
   /** At least one tool ran, so the conversation must be kept even though the turn failed. */
@@ -72,12 +74,15 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
   let toolsRan = false
   let sessionComplete = false
 
-  const fail = (code: string, retryable?: boolean): TurnOutcome => {
+  /** `cutOff` is what the unfinished model call had streamed: the student may have heard it, so it counts as said. */
+  const fail = (code: string, retryable?: boolean, cutOff = ''): TurnOutcome => {
     const info = voiceErrorMessage(code)
     deps.emit({ type: 'error', code, message: info.message, retryable: retryable ?? info.retryable })
+    if (cutOff.trim()) spoken.push(cutOff.trim())
     return {
       messages,
       text: spoken.join(' '),
+      cutOff: cutOff.trim(),
       ok: false,
       error: { code, retryable: retryable ?? info.retryable },
       toolsRan,
@@ -148,22 +153,17 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
         } else if (event.type === 'error') {
           log(`The AI service reported ${event.code}: ${event.message}`)
           timed()
-          if (segment.trim()) spoken.push(segment.trim())
-          return fail(event.code, event.retryable)
+          return fail(event.code, event.retryable, segment)
         }
         // tool_use events are only a preview: the blocks in `done` are what counts.
       }
     } catch (error) {
       log(`The AI service stream broke (call ${call})`, error)
       timed()
-      if (segment.trim()) spoken.push(segment.trim())
-      return fail('VOICE_INTERRUPTED')
+      return fail('VOICE_INTERRUPTED', undefined, segment)
     }
     timed()
-    if (!done) {
-      if (segment.trim()) spoken.push(segment.trim())
-      return fail('VOICE_INTERRUPTED')
-    }
+    if (!done) return fail('VOICE_INTERRUPTED', undefined, segment)
     if (deps.retryCutOff && done.stopReason === 'max_tokens') {
       // The reply was cut off: its text is not kept, spoken further or stored, and any tool call in it is incomplete. The coach
       // answers again from the same conversation, if the call limit leaves a call; otherwise the turn fails.
@@ -187,7 +187,7 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
         const results = await runTools(toolCalls)
         messages = [...messages, { role: 'user', content: results }]
       }
-      return { messages, text: spoken.join(' '), ok: true, error: null, toolsRan, sessionComplete, calls, toolMs }
+      return { messages, text: spoken.join(' '), cutOff: '', ok: true, error: null, toolsRan, sessionComplete, calls, toolMs }
     }
 
     const results = await runTools(toolCalls)

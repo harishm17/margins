@@ -138,6 +138,78 @@ test('ending a call stops it counting as live at once, and a heartbeat already o
   await response.text()
 })
 
+/** A model reply that says `text` and then stays open until the caller gives up (the browser left). */
+function saysThenHangs(text: string, signal: AbortSignal | null | undefined): Response {
+  const encoder = new TextEncoder()
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(JSON.stringify({ type: 'text', delta: text }) + '\n'))
+        signal?.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')))
+      },
+    }),
+    { status: 200 }
+  )
+}
+
+type Stored = Array<{ role: string; content: string | Array<{ type: string; text?: string }> }>
+const textsOf = (history: unknown, role: string) =>
+  (history as Stored)
+    .filter((message) => message.role === role)
+    .map((message) => (typeof message.content === 'string' ? message.content : message.content.map((block) => block.text ?? '').join('')))
+
+async function turnOver(sessionId: string) {
+  for (let i = 0; i < 100; i += 1) {
+    const row = await prisma.voiceDrillSession.findUniqueOrThrow({ where: { id: sessionId } })
+    if (!row.turnStartedAt) return row
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+  throw new Error('the turn did not end')
+}
+
+test('speaking over a reply that is still streaming marks that reply as interrupted, not the one before it', async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const { user, project } = await student()
+  const session = await conversation(user.id, project.id)
+
+  modelReply = () => says('First reply, heard in full.')
+  await (await sayTo(session.id, 'one')).text()
+
+  // The second reply is still streaming when the student speaks: the browser drops the request.
+  modelReply = (_body, signal) => saysThenHangs('Second reply, which goes on for a while', signal)
+  const streaming = await sayTo(session.id, 'two')
+  const reader = streaming.body!.getReader()
+  await reader.read()
+  await reader.cancel()
+  const afterCut = await turnOver(session.id)
+  // The cut-off turn is in the conversation: the student's words, and what the coach had begun to say.
+  assert.deepEqual(textsOf(afterCut.history, 'user'), ['one', 'two'])
+  assert.match(textsOf(afterCut.history, 'assistant')[1], /^Second reply, which goes on for a while \[This reply was cut off here\.\]$/)
+
+  modelReply = () => says('Third reply.')
+  await (await sayTo(session.id, 'three', { interruptedHeard: 'Second reply' })).text()
+  const after = await turnOver(session.id)
+  const coach = textsOf(after.history, 'assistant')
+  assert.equal(coach[0], 'First reply, heard in full.', 'the reply before the interrupted one is untouched')
+  assert.match(coach[1], /^Second reply \[The student interrupted here/)
+  assert.equal(coach[2], 'Third reply.')
+})
+
+test('the same words sent again after a turn that failed before the coach spoke are kept once', async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const { user, project } = await student()
+  const session = await conversation(user.id, project.id)
+
+  modelReply = () => new Response(JSON.stringify({ error_code: 'VOICE_UNAVAILABLE', retryable: true }), { status: 503 })
+  assert.equal((await sayTo(session.id, 'entropy never decreases')).ok, false)
+  modelReply = () => says('Go on.')
+  await (await sayTo(session.id, 'entropy never decreases', { retry: true })).text()
+
+  const after = await turnOver(session.id)
+  const said = (after.coachState as { said: Array<{ text: string }> }).said
+  assert.deepEqual(said.map((entry) => entry.text), ['entropy never decreases'], 'a grader reads what was said since its question: once')
+})
+
 test('two interruptions reported at once are both counted', async (t) => {
   if (!available) return t.skip('no migrated test database')
   const { user, project } = await student()

@@ -856,7 +856,9 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       finish(failure.code === 'SESSION_ENDED' || failure.code === 'NOT_FOUND' ? 'ended' : 'error', view.alert, view.limitReached)
       return
     }
-    ctx.retry = view.alert.action === 'retry' ? { utterance: ctx.toolRan ? '' : utterance } : null
+    // The server kept this turn when a step ran or the coach had started to speak: "try again" then carries on from
+    // there. Otherwise nothing was kept and the same words go again.
+    ctx.retry = view.alert.action === 'retry' ? { utterance: ctx.toolRan || ctx.spokenText.trim() ? '' : utterance } : null
     dispatch({ type: 'turn-failed', alert: view.alert })
   }
 
@@ -900,6 +902,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     for (let attempt = 0; attempt <= TURN_IN_PROGRESS_RETRIES; attempt += 1) {
       try {
         response = await openVoiceTurn(sessionId, utterance, controller.signal, ctx.pending)
+        // The server has taken what went with the request (it keeps an interruption mark before it answers).
         ctx.pending = {}
         break
       } catch (error) {
@@ -1065,6 +1068,8 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     if (ctx.ended) return
 
     ctx.retry = null
+    // New words: a retry mark left by a "try again" that never reached the server does not apply to them.
+    if (ctx.pending.retry) ctx.pending = { ...ctx.pending, retry: undefined }
     ctx.lastRecognizer = options.via === 'voice' ? (ctx.cloud ? 'cloud' : ctx.onDevice ? 'device' : 'browser') : undefined
     ctx.endpointWaitMs = options.waitedMs ?? null
     ctx.turnEndedAt = performance.now()
@@ -1245,6 +1250,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       if (ctx.ended || !ctx.retry || ctx.turnActive) return
       const { utterance } = ctx.retry
       ctx.retry = null
+      if (utterance) ctx.pending = { ...ctx.pending, retry: true }
       dispatch({ type: 'dismiss-alert' })
       queueTurn(utterance)
     },
