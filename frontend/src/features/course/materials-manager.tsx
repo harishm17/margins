@@ -57,6 +57,7 @@ import { cn } from '@/lib/utils'
 import type { MaterialRow } from '@/server/queries/course'
 import { useRefreshSoon } from './use-refresh-soon'
 import { splitDuplicates, type KnownFile } from './duplicate-files'
+import { fetchDeleteImpact, impactSentences, useDeleteImpact } from './delete-impact'
 import {
   ACCEPT_ATTRIBUTE,
   CATEGORY_LABELS,
@@ -373,6 +374,7 @@ function ServerRow({
   const role = picked && picked.base === row.role ? picked.value : row.role
   const { job: live } = useJob(row.job?.id ?? null, { timeoutMs: 600_000, onSettled: refreshSoon })
   const [confirmOpen, setConfirmOpen] = React.useState(false)
+  const impact = useDeleteImpact([row.id], confirmOpen)
 
   const stage = live?.stage ?? row.job?.stage ?? null
   const queued = live?.status === 'queued'
@@ -504,11 +506,16 @@ function ServerRow({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`Delete ${row.filename}?`}
-        description="Existing topic content stays. Links to this file from Ask answers and notes will stop opening."
+        description="Existing topic content stays. Links to this file from Ask answers and generated content will stop opening."
         confirmLabel="Delete file"
         destructive
         onConfirm={onDelete}
       >
+        {impactSentences(impact).length > 0 ? (
+          <p className="mb-3 text-small text-fg-2" data-testid="delete-impact">
+            {impactSentences(impact).join(' ')}
+          </p>
+        ) : null}
         {row.topics.length > 0 ? (
           // Optional: look before deleting. The topics open in the course's topic list; nothing here is a required step.
           <details className="group text-small text-fg-2">
@@ -663,6 +670,11 @@ export function MaterialsManager({
   // Files that match one already in the course wait here for the student's choice (cancel, replace, keep both).
   const [duplicates, setDuplicates] = React.useState<{ file: File; matches: KnownFile[] }[] | null>(null)
   const [removeFailedOpen, setRemoveFailedOpen] = React.useState(false)
+  // What replacing the repeated files would do to the student's work on the earlier copies.
+  const duplicateImpact = useDeleteImpact(
+    (duplicates ?? []).flatMap((item) => item.matches.map((match) => match.id)).filter((id) => !id.startsWith(LOCAL_PREFIX)),
+    duplicates !== null
+  )
 
   /** Starts one file; the promise says whether it reached the server (for the count of files uploaded). */
   function startUpload(file: File, category: Category = chosenCategory): Promise<boolean> {
@@ -732,17 +744,24 @@ export function MaterialsManager({
 
   /** "Replace this file instead": the new copy is uploaded in the old one's role, and the old one goes once the new one has arrived. */
   function replaceFile(target: MaterialRow, file: File) {
+    // The old file's counts are read before it goes (its notes lose their link when it does) and stated in the notice.
+    const impact = fetchDeleteImpact(target.id)
     uploadAll(
       [file],
       (_, arrived) => {
         if (!arrived) return
-        void removeKnown(target.id)
-        const builtTopics = target.topics.length > 0
-        setNotice({
-          text: builtTopics
-            ? `Replaced ${target.filename} with ${file.name}. Topics built from the old file keep their content, but their links to it no longer open.`
-            : `Replaced ${target.filename} with ${file.name}.`,
-          reviewTopics: builtTopics,
+        void impact.then((counts) => {
+          void removeKnown(target.id)
+          const builtTopics = target.topics.length > 0
+          const kept = impactSentences(counts).join(' ')
+          setNotice({
+            text: `${
+              builtTopics
+                ? `Replaced ${target.filename} with ${file.name}. Topics built from the old file keep their content, but their links to it no longer open.`
+                : `Replaced ${target.filename} with ${file.name}.`
+            }${kept ? ` ${kept}` : ''}`,
+            reviewTopics: builtTopics,
+          })
         })
       },
       // A file that was used keeps its kind in the new copy. One that was refused or unread was never used, so the new file
@@ -771,6 +790,8 @@ export function MaterialsManager({
             // Only once the new copy has reached the server, so a failed upload never leaves the course with neither.
             if (!arrived) return
             for (const match of waiting.find((item) => item.file === file)?.matches ?? []) void removeKnown(match.id)
+            const kept = impactSentences(duplicateImpact).join(' ')
+            setNotice({ text: `Replaced the earlier copy of ${file.name}.${kept ? ` ${kept}` : ''}` })
           }
         : undefined
     )
@@ -1048,6 +1069,11 @@ export function MaterialsManager({
               The name and size match a file in this course. Adding it again would read it a second time and ask for another topic review.
             </DialogDescription>
           </DialogHeader>
+          {impactSentences(duplicateImpact).length > 0 ? (
+            <p className="mt-3 text-small text-fg-2" data-testid="duplicate-impact">
+              Replace removes the earlier copy. {impactSentences(duplicateImpact).join(' ')}
+            </p>
+          ) : null}
           <ul className="mt-4 flex flex-col gap-1 text-small text-fg" data-testid="duplicate-files">
             {(duplicates ?? []).map((item, index) => (
               <li key={`${item.file.name}-${index}`} className="flex min-w-0 items-center gap-2">

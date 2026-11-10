@@ -51,6 +51,7 @@ PUBLIC_MESSAGES: dict[str, str] = {
     "TOPIC_EXTRACTION_FAILED": "We could not find the topics in your files.",
     "CONTENT_GENERATION_FAILED": "The study content could not be written.",
     "CONCEPT_EXTRACTION_FAILED": "We could not find the concepts in this topic.",
+    "CONCEPT_REQUOTE_FAILED": "We could not find some ideas again in your remaining files.",
     "CONCEPT_LINKING_FAILED": "We could not link the concepts in this topic.",
     "REVIEW_ITEMS_FAILED": "The review items could not be written.",
     "GAP_EXPLAINER_FAILED": "The explanation could not be written.",

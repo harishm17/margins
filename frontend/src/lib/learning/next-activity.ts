@@ -211,7 +211,8 @@ export function nextActivity(s: TopicLearningState, ctx: NextActivityContext): N
   // 1. Instruction: a concept whose latest retrieval failed, with nothing shown since. It goes to the gap explainer when a
   // ready one covers the concept, and otherwise to the reader at its first claim, which needs no AI. The most recent
   // fail leads.
-  const needing = s.concepts.filter((c) => c.needsInstruction).sort((a, b) => (b.lastFailAt?.getTime() ?? 0) - (a.lastFailAt?.getTime() ?? 0))
+  // An idea with no claim left (its file was deleted) has no page to read again, so it leads only through a ready explanation.
+  const needing = s.concepts.filter((c) => c.needsInstruction && (c.firstClaim !== null || s.gapExplainerReadyFor.includes(c.id))).sort((a, b) => (b.lastFailAt?.getTime() ?? 0) - (a.lastFailAt?.getTime() ?? 0))
   if (needing.length > 0) {
     const lead = needing[0]
     const via = s.gapExplainerReadyFor.includes(lead.id) ? 'explainer' : 'reread'

@@ -3,10 +3,11 @@ import { notFound, redirect } from 'next/navigation'
 import { Page } from '@/components/shell/page'
 import { courseSummary, reviewTiming } from '@/features/course/summary'
 import { TopicEditor } from '@/features/course/topic-editor'
+import { RemovedTopicNotes } from '@/features/course/removed-topic-notes'
 import { TopicsList } from '@/features/course/topics-list'
 import { newTopicsLabel } from '@/lib/course-setup'
 import { countMasteryLevels, masteryLevel } from '@/lib/mastery'
-import { getTopicsData } from '@/server/queries/course'
+import { getRemovedTopicNotes, getTopicsData } from '@/server/queries/course'
 import { getCourseShell } from '@/server/queries/courses'
 import { topicPaths } from '@/server/queries/topic-activity'
 import { requireUser } from '@/server/session'
@@ -33,6 +34,7 @@ export default async function TopicsPage({
 
   const data = await getTopicsData(user.id, courseId)
   if (!data) notFound()
+  const removedNotes = await getRemovedTopicNotes(user.id, courseId)
 
   if (edit === '1') {
     return (
@@ -56,6 +58,7 @@ export default async function TopicsPage({
           filesProcessing={data.materialsProcessing}
           topicList={data.setup.topics}
         />
+        <RemovedTopicNotes courseId={courseId} notes={removedNotes} />
       </Page>
     )
   }
@@ -92,6 +95,7 @@ export default async function TopicsPage({
           path: { ...paths[topic.id], quizScore: topic.progress.quizScore },
         }))}
       />
+      <RemovedTopicNotes courseId={courseId} notes={removedNotes} />
     </Page>
   )
 }

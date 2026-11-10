@@ -102,7 +102,7 @@ async function world(label: string, options: { concepts?: boolean } = {}) {
       },
     })
   }
-  return { user, project, topic, material, chunks, concepts }
+  return { user, project, topic, material, chunks, concepts, chunkText: (index: number) => texts[index] }
 }
 
 const skip = { skip: !process.env.DATABASE_URL }
@@ -301,12 +301,71 @@ test('margin notes persist and belong to their owner', skip, async (t) => {
   if (!available) return t.skip('no database')
   const w = await world('rd-notes')
   const other = await world('rd-notes-other')
-  await prisma.marginNote.create({ data: { userId: w.user.id, topicId: w.topic.id, materialId: w.material.id, chunkId: w.chunks[1].id, kind: 'note', text: 'Remember the probe order.' } })
+  await prisma.marginNote.create({ data: { userId: w.user.id, projectId: w.topic.projectId, topicId: w.topic.id, materialId: w.material.id, chunkId: w.chunks[1].id, kind: 'note', text: 'Remember the probe order.' } })
   const mine = await reader.loadMarginNotes(w.user.id, w.topic.id)
   assert.deepEqual(mine.map((n) => [n.chunkId, n.kind, n.text]), [[w.chunks[1].id, 'note', 'Remember the probe order.']])
   assert.deepEqual(await reader.loadMarginNotes(other.user.id, w.topic.id), [])
   const data = await reader.loadReader(w.user.id, w.topic.id)
   assert.equal(data?.notes.length, 1)
+})
+
+test('deleting a file keeps the notes with their quote, removes its claims, and counts match (F7, findings 74 78 89)', skip, async (t) => {
+  if (!available) return t.skip('no database')
+  const { deleteMaterial } = await import('@/lib/materials/references')
+  const { fileDeleteImpact } = await import('@/lib/materials/delete-impact')
+  const { topicsToRequote } = await import('@/lib/materials/requote-jobs')
+  const { needsRereadingWhere } = await import('@/lib/learning/needs-rereading')
+  const w = await world('rd-delete')
+  // A second file backs "Hash function" only; "Collision" and "Resizing" were taken only from the first.
+  const second = await prisma.material.create({
+    data: { projectId: w.project.id, category: 'lecture_notes', filename: 'more.pdf', gcsPath: 'e2e/rd-delete-2.pdf', sizeBytes: BigInt(10), validationStatus: 'valid' },
+  })
+  const secondChunk = await prisma.materialChunk.create({ data: { materialId: second.id, chunkText: 'More on hashing.', chunkIndex: 0 } })
+  await prisma.conceptClaim.create({ data: { conceptId: w.concepts[0].id, text: 'Also here.', quote: 'More on hashing.', materialId: second.id, chunkId: secondChunk.id, orderIndex: 1 } })
+  await prisma.topicChunkMapping.create({ data: { topicId: w.topic.id, chunkId: secondChunk.id, relevanceScore: 1 } })
+  await prisma.topic.update({ where: { id: w.topic.id }, data: { sourceMaterialIds: [w.material.id, second.id] } })
+  const claim = await prisma.conceptClaim.findFirstOrThrow({ where: { materialId: w.material.id } })
+  await prisma.studyDraft.create({
+    data: { userId: w.user.id, projectId: w.project.id, topicId: w.topic.id, surface: 'reader_check', scopeKey: claim.id, payload: {}, expiresAt: new Date(Date.now() + 86_400_000) },
+  })
+  for (const text of ['Remember the probe order.', 'Why does chaining help?']) {
+    await prisma.marginNote.create({
+      data: { userId: w.user.id, projectId: w.project.id, topicId: w.topic.id, materialId: w.material.id, chunkId: w.chunks[1].id, quote: w.chunkText(1), kind: 'note', text },
+    })
+  }
+
+  // The dialog's counts, before the delete.
+  assert.deepEqual(await fileDeleteImpact(prisma, w.material), { notes: 2, ideas: 2 })
+
+  const queued = await prisma.$transaction((tx) => deleteMaterial(tx, w.material))
+  assert.deepEqual(queued, [w.material.gcsPath])
+
+  // The notes stay, with their text and quote, no longer tied to the file or a passage that exists.
+  const notes = await prisma.marginNote.findMany({ where: { userId: w.user.id }, orderBy: { createdAt: 'asc' } })
+  assert.deepEqual(notes.map((n) => [n.text, n.materialId, n.topicId, n.quote === w.chunkText(1)]), [
+    ['Remember the probe order.', null, w.topic.id, true],
+    ['Why does chaining help?', null, w.topic.id, true],
+  ])
+  // The reader lists them as notes from removed files, and shows no passage for them.
+  const data = await reader.loadReader(w.user.id, w.topic.id)
+  assert.deepEqual(data?.detachedNotes.map((n) => [n.text, n.quote === w.chunkText(1)]), [
+    ['Remember the probe order.', true],
+    ['Why does chaining help?', true],
+  ])
+  assert.deepEqual(data?.notes, [])
+  // Claims taken from the file are gone, the other file's claim stays; stored pointers followed their rules.
+  assert.equal(await prisma.conceptClaim.count({ where: { materialId: w.material.id } }), 0)
+  assert.equal(await prisma.conceptClaim.count({ where: { conceptId: w.concepts[0].id } }), 1)
+  assert.deepEqual((await prisma.topic.findUniqueOrThrow({ where: { id: w.topic.id } })).sourceMaterialIds, [second.id])
+  assert.equal(await prisma.studyDraft.count({ where: { scopeKey: claim.id } }), 0)
+  // The two ideas left with no claim need re-reading, and their topic is the one to look in again.
+  const rereading = await prisma.concept.findMany({ where: { projectId: w.project.id, ...needsRereadingWhere }, orderBy: { orderIndex: 'asc' } })
+  assert.deepEqual(rereading.map((c) => c.name), ['Collision', 'Resizing'])
+  assert.deepEqual(await topicsToRequote(w.project.id), [w.topic.id])
+  // Pointers after a miss skip an idea with no claim left instead of pointing at nothing.
+  const { helpAfterMiss } = await import('@/lib/learning/instruction-server')
+  const help = await helpAfterMiss(prisma, { userId: w.user.id, topicId: w.topic.id, conceptIds: w.concepts.map((c) => c.id), surface: 'recall' })
+  assert.deepEqual(help.pointers.map((p) => p.conceptName), ['Hash function'])
 })
 
 test('the focus count is worked out from claims and chunk ids, and matches the reader', skip, async (t) => {
@@ -432,7 +491,7 @@ test('a check answer needs its question, and belongs to its owner; a failed tuto
   assert.equal((await server.answerReaderCheck(other.user.id, w.topic.id, { noteId: question.id, answer: 'x y z w', timeZone: 'UTC' }, never)).status, 'not_found')
   assert.equal((await server.answerReaderCheck(w.user.id, w.topic.id, { noteId: crypto.randomUUID(), answer: 'x y z w', timeZone: 'UTC' }, never)).status, 'not_found')
   // A plain note has no check question; it cannot be answered.
-  const plain = await prisma.marginNote.create({ data: { userId: w.user.id, topicId: w.topic.id, materialId: w.material.id, chunkId: w.chunks[2].id, kind: 'note', text: 'mine' } })
+  const plain = await prisma.marginNote.create({ data: { userId: w.user.id, projectId: w.topic.projectId, topicId: w.topic.id, materialId: w.material.id, chunkId: w.chunks[2].id, kind: 'note', text: 'mine' } })
   assert.equal((await server.answerReaderCheck(w.user.id, w.topic.id, { noteId: plain.id, answer: 'x y z w', timeZone: 'UTC' }, never)).status, 'not_found')
   // An empty answer is neither an answer nor an "I don't know".
   assert.equal((await server.answerReaderCheck(w.user.id, w.topic.id, { noteId: question.id, answer: '   ', timeZone: 'UTC' }, never)).status, 'invalid')

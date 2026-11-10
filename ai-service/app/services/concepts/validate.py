@@ -133,6 +133,32 @@ def _reduce(edges: List[ExtractedEdge]) -> Tuple[List[ExtractedEdge], int]:
     return kept, len(edges) - len(kept)
 
 
+def validate_claims(
+    claims: Sequence[ExtractedClaim], concept_keys: Set[str], normalized_chunks: Dict[str, str]
+) -> Tuple[List[ExtractedClaim], int]:
+    """The claims whose concept is known and whose quote is real, short text from the chunk it names, with text and quote
+    cleaned, and how many were dropped. One claim per (concept, quote). `normalized_chunks` maps chunk id to
+    `normalize`d text. Shared by the extraction and by the re-quoting of concepts that lost their claims."""
+    kept: List[ExtractedClaim] = []
+    seen: Set[Tuple[str, str]] = set()
+    dropped = 0
+    for claim in claims:
+        quote = normalize(claim.quote)
+        chunk_text = normalized_chunks.get(claim.chunk_id)
+        text = claim.text.strip()
+        if (
+            claim.concept_key not in concept_keys
+            or not quote or not text or len(quote) > MAX_QUOTE_CHARS
+            or chunk_text is None or quote not in chunk_text
+            or (claim.concept_key, quote) in seen
+        ):
+            dropped += 1
+            continue
+        seen.add((claim.concept_key, quote))
+        kept.append(claim.model_copy(update={"text": text, "quote": quote}))
+    return kept, dropped
+
+
 def validate_extraction(
     raw: ConceptExtraction,
     chunks: Dict[str, str],
@@ -176,22 +202,8 @@ def validate_extraction(
         unique.append(concept)
 
     # Claims: for a known concept, a real, short quote from the named chunk.
-    claims: List[ExtractedClaim] = []
-    seen_claims: Set[Tuple[str, str]] = set()
-    for claim in raw.claims:
-        quote = normalize(claim.quote)
-        chunk_text = normalized_chunks.get(claim.chunk_id)
-        text = claim.text.strip()
-        if (
-            claim.concept_key not in keys
-            or not quote or not text or len(quote) > MAX_QUOTE_CHARS
-            or chunk_text is None or quote not in chunk_text
-            or (claim.concept_key, quote) in seen_claims
-        ):
-            dropped["claims"] += 1
-            continue
-        seen_claims.add((claim.concept_key, quote))
-        claims.append(claim.model_copy(update={"text": text, "quote": quote}))
+    claims, dropped_claims = validate_claims(raw.claims, keys, normalized_chunks)
+    dropped["claims"] += dropped_claims
 
     # Concepts, second pass: at least one surviving claim, objective indexes in range.
     claimed = {claim.concept_key for claim in claims}

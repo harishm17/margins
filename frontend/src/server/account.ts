@@ -29,6 +29,7 @@ import {
   writeDeletionRecord,
 } from '@/lib/storage/files'
 import { recordOpsEvent } from '@/lib/ops/events'
+import { materialStoragePaths } from '@/lib/materials/references'
 
 export type AccountDetails = {
   email: string
@@ -72,11 +73,7 @@ const store: DeletionStore = {
   },
 
   async storedFilePaths(userId) {
-    const materials = await prisma.material.findMany({
-      where: { project: { userId } },
-      select: { gcsPath: true },
-    })
-    return materials.map((material) => material.gcsPath)
+    return materialStoragePaths(prisma, { userId })
   },
 
   async removeAccount(userId) {

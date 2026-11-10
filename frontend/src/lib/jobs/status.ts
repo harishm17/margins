@@ -34,6 +34,7 @@ const stageByJobType: Record<string, string> = {
   generate_exam: 'generating',
   grade_exam: 'grading',
   grade_quiz: 'grading',
+  requote_concepts: 'generating',
 }
 
 export function serializeJob(job: JobStatusRow) {

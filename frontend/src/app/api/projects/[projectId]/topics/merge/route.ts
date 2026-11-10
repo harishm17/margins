@@ -1,17 +1,23 @@
 /**
  * POST /api/projects/[projectId]/topics/merge
  * Merge one topic (the source) into another (the target). The source is deleted.
+ * The rule for every table that names a topic is in lib/topics/topic-references.ts.
  *
  * What moves to the target:
  *  - chunk mappings (a chunk both topics map to keeps the higher relevance score)
  *  - generated content of a type the target does not have, and all quiz sets
  *  - quiz attempts, learning signals and voice sessions and attempts
+ *  - the student's own work: margin notes, recall attempts, practice progress and unsent drafts (a draft or reader
+ *    tutor state whose key starts with the source's id is renamed; if the target has one at the same key, the target's stays)
+ *  - concepts with their claims, memory and evidence, so concept mastery and review dates survive; the target's
+ *    mastery and review date are then worked out again from them
  *  - progress (checkmarks are OR-ed, the best quiz score is kept) and the review schedule
  *    (the target's own is kept when both have one)
  *  - course structure: the source's sources (topic_sources) go to the target, objectives are
  *    joined (at most 8), the estimated minutes add up, prerequisites are joined, and other topics
  *    that had the source as a prerequisite now point at the target. The target keeps its unit.
- * The target keeps its own generated content, since it may now be out of date against the
+ * Not carried over: the source's voice drill question cache. Practice progress on a practice set the target replaced stays
+ * as history. The target keeps its own generated content, since it may now be out of date against the
  * merged chunks; regenerate it from the topic page if needed.
  */
 
@@ -24,6 +30,8 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { mergeKeywordLists } from '@/lib/topics/ordering'
+import { moveTopicReferences } from '@/lib/topics/topic-references'
+import { recomputeTopicFromConcepts } from '@/lib/learning/mastery'
 import { ownedTopics } from '@/server/owned'
 import { normalizeTopicOrder } from '@/lib/topics/normalize-order'
 import { reachesPrerequisite } from '@/lib/topics/units'
@@ -70,6 +78,8 @@ export async function POST(
     }
 
     const merged = await prisma.$transaction(async (tx) => {
+      const movedConceptIds = (await tx.concept.findMany({ where: { topicId: source.id }, select: { id: true } })).map((concept) => concept.id)
+
       // Chunk mappings.
       const [sourceMappings, targetMappings] = await Promise.all([
         tx.topicChunkMapping.findMany({ where: { topicId: source.id } }),
@@ -106,14 +116,10 @@ export async function POST(
         },
         data: { topicId: target.id },
       })
-      await tx.topicQuiz.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
 
-      // Learning history.
-      await tx.quizAttempt.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
-      await tx.quizSubmission.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
-      await tx.learningSignal.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
-      await tx.voiceDrillSession.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
-      await tx.voiceDrillAttempt.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
+      // Everything else that names the topic and is not handled below (quizzes, learning history, notes, recall,
+      // practice progress, drafts, concepts with their memory and evidence, tutor state): the registry's 'move' rules.
+      await moveTopicReferences({ tx, userId: session.user.id, sourceId: source.id, targetId: target.id })
 
       // Progress: one row per user and topic.
       const sourceProgress = await tx.topicProgress.findMany({ where: { topicId: source.id } })
@@ -152,7 +158,6 @@ export async function POST(
       }
 
       // Course structure: the sections the source was taught from, objectives, minutes.
-      await tx.topicSource.updateMany({ where: { topicId: source.id }, data: { topicId: target.id } })
       const objectives = Array.from(new Set([...(target.objectives ?? []), ...(source.objectives ?? [])])).slice(0, 8)
       const minutes =
         target.estimatedMinutes !== null || source.estimatedMinutes !== null
@@ -199,6 +204,20 @@ export async function POST(
           userConfirmed: target.userConfirmed || source.userConfirmed,
         },
       })
+
+      // The moved concepts are read through the target from now on: when the target had no concepts of its own and the
+      // source's history was converted, the target is converted too. Then its mastery and review date are worked out again.
+      if (!target.evidenceBackfilledAt && source.evidenceBackfilledAt && movedConceptIds.length > 0) {
+        const ownConcepts = await tx.concept.count({ where: { topicId: target.id, status: 'active', id: { notIn: movedConceptIds } } })
+        if (ownConcepts === 0) await tx.topic.update({ where: { id: target.id }, data: { evidenceBackfilledAt: source.evidenceBackfilledAt } })
+      }
+      // The other way round, the source's history (quizzes, practice, voice) moved with it but was never replayed into
+      // evidence, and the conversion only runs for an unconverted topic: the target is unconverted again, so the next view
+      // replays the history it does not have yet (the replay skips rows that already have evidence).
+      if (target.evidenceBackfilledAt && !source.evidenceBackfilledAt && movedConceptIds.length > 0) {
+        await tx.topic.update({ where: { id: target.id }, data: { evidenceBackfilledAt: null } })
+      }
+      await recomputeTopicFromConcepts(tx, session.user.id, target.id)
 
       // What is left on the source (its own progress and schedule rows that lost to the
       // target's) goes with it.

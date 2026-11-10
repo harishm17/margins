@@ -12,8 +12,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { z } from 'zod'
-import { storedFolderPath } from '@/lib/storage/files'
-import { deleteQueuedFilesNow, queueFileDeletions } from '@/lib/storage/pending-deletions'
+import { deleteQueuedFilesNow } from '@/lib/storage/pending-deletions'
+import { deleteCourse } from '@/lib/materials/references'
 import { dailyMinutesSchema, examDateColumn, examDateSchema } from '@/lib/learning/plan-settings'
 
 const updateProjectSchema = z.object({
@@ -152,22 +152,9 @@ export async function DELETE(
       )
     }
 
-    // Note the stored files before the rows that point to them are gone.
-    const materials = await prisma.material.findMany({
-      where: { projectId },
-      select: { gcsPath: true },
-    })
-
-    // Delete the project (cascade will handle all related records) and queue its files and its folder in the same
-    // transaction, so the database is either fully deleted with the files promised for removal, or untouched.
-    const queued = await prisma.$transaction(async (tx) => {
-      await tx.project.delete({ where: { id: projectId } })
-      return queueFileDeletions(
-        tx,
-        [...materials.map((material) => material.gcsPath), storedFolderPath(`${session.user.id}/${projectId}/`)],
-        'project_deleted'
-      )
-    })
+    // The course, its files' rows and the queue of their stored files go in one transaction (lib/materials/references.ts),
+    // so the database is either fully deleted with the files promised for removal, or untouched.
+    const queued = await prisma.$transaction((tx) => deleteCourse(tx, { id: projectId, userId: session.user.id }))
 
     // Then try the files right away; whatever fails stays queued for the AI service's reaper to retry.
     try {

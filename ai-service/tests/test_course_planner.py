@@ -451,6 +451,34 @@ class TestActiveCourse:
         job = await db.fetchrow("SELECT result_data FROM processing_jobs ORDER BY created_at DESC LIMIT 1")
         assert json.loads(job["result_data"])["mode"] == "incremental"
 
+    async def test_an_unconfirmed_topic_with_the_students_notes_recall_or_tutor_chat_is_not_deleted_by_find_again(self, course):
+        db = course.db
+        # Review of PR 1.6: the student's own work on a topic is activity too, or a re-plan deletes the recall attempts
+        # and orphans the reader tutor's state. Each of these topics has one kind of it and nothing else.
+        user_id = await db.fetchval("SELECT user_id FROM projects WHERE id = $1", course.project_id)
+        noted = await seed_topic(db, course.project_id, "Has a margin note")
+        await db.execute(
+            "INSERT INTO margin_notes (id, user_id, project_id, topic_id, chunk_id, kind, text, created_at) "
+            "VALUES (gen_random_uuid()::text, $1, $2, $3, 'chunk-1', 'note', 'mine', NOW())", user_id, course.project_id, noted)
+        recalled = await seed_topic(db, course.project_id, "Has a recall attempt")
+        await db.execute(
+            "INSERT INTO recall_attempts (id, user_id, topic_id, kind, prompt_text, answer_text, mode, result) "
+            "VALUES (gen_random_uuid()::text, $1, $2, 'recall', 'p', 'a', 'text', '{}'::jsonb)", user_id, recalled)
+        tutored = await seed_topic(db, course.project_id, "Has a reader tutor chat")
+        await db.execute(
+            "INSERT INTO tutor_states (id, user_id, scope, scope_key, updated_at) VALUES (gen_random_uuid()::text, $1, 'reader', $2, NOW())",
+            user_id, f"{tutored}:chunk-1")
+
+        loose = await seed_topic(db, course.project_id, "Never opened")
+        await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))
+
+        await run_extract(course)
+
+        ids = {t["id"] for t in await topics_of(db, course.project_id)}
+        assert {noted, recalled, tutored} <= ids
+        assert loose not in ids
+        assert await db.fetchval("SELECT count(*) FROM recall_attempts WHERE topic_id = $1", recalled) == 1
+
     async def test_confirming_while_topics_are_being_found_does_not_duplicate_sections(self, course, monkeypatch):
         db = course.db
         await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))

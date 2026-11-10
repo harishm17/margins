@@ -12,6 +12,8 @@ import { viewerUrl } from '@/lib/chat/citations'
 import { cn } from '@/lib/utils'
 import { demoteHeadings } from '@/lib/reader/passage-text'
 import type { MarginNoteView, ReaderCheckView, ReaderData, ReaderFile, ReaderPassage } from '@/lib/reader/load-reader'
+import type { DetachedNoteView } from '@/lib/reader/detached-notes'
+import { DetachedNotes } from '@/features/notes/detached-notes'
 import { CompletionRow } from './completion-row'
 import { MarginPanel } from './reader-margin'
 import { ReaderCheck } from './reader-check'
@@ -216,6 +218,21 @@ function Passage({ topicId, file, passage, focused, number, notes, check, onAdd,
  * and "Focus here" on the passages the warm-up says to look at. Nothing is hidden: the student reads it all.
  * Text taken from a PDF can lose layout and maths, so each page links to the original.
  */
+/** "Notes from removed files": the topic's notes whose file was deleted, at the end of the topic, each with Delete. */
+export function RemovedFileNotes({ topicId, notes }: { topicId: string; notes: DetachedNoteView[] }) {
+  return (
+    <DetachedNotes
+      heading="Notes from removed files"
+      description="The files these notes were written on are deleted. Your notes and the passages they sat on are kept."
+      notes={notes}
+      idPrefix="notes-from-removed-files"
+      onDelete={async (id) => {
+        await apiFetch(`/api/topics/${topicId}/margin-notes?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      }}
+    />
+  )
+}
+
 export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, focusConceptId = null, noteDismissed = false }: Props) {
   const [notes, setNotes] = React.useState<MarginNoteView[]>(reader.notes)
   const [questionsOpen, setQuestionsOpen] = React.useState(false)
@@ -313,6 +330,8 @@ export function ReaderView({ topicId, reader, completed, nextHref, nextLabel, fo
           ))}
         </section>
       ))}
+
+      <RemovedFileNotes topicId={topicId} notes={reader.detachedNotes} />
 
       <div className="max-w-[680px]">
         <CompletionRow

@@ -32,6 +32,13 @@ class ConceptExtractionInput(BaseModel):
     topicId: str
 
 
+class ConceptRequoteInput(BaseModel):
+    """Input for the requote_concepts job: the topic whose claimless concepts get new claims, and its course."""
+
+    topicId: str
+    projectId: str
+
+
 class ConceptLinkingInput(BaseModel):
     """Input for the concept linking job."""
 

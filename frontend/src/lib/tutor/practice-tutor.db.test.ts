@@ -54,6 +54,9 @@ async function world() {
   const concept = await prisma.concept.create({
     data: { projectId: project.id, topicId: topic.id, name: 'Rates', summary: 'A rate compares two quantities.', kind: 'concept', orderIndex: 0 },
   })
+  // An extracted idea comes with a claim from the file; one with none "needs re-reading" and gets no pointer.
+  const notes = await prisma.material.create({ data: { projectId: project.id, category: 'lecture_notes', filename: 'notes.pdf', gcsPath: 'x', sizeBytes: 1 } })
+  await prisma.conceptClaim.create({ data: { conceptId: concept.id, text: 'A rate divides.', quote: 'rate = a / b', materialId: notes.id, pageStart: 4, orderIndex: 0 } })
   await prisma.topicContent.create({
     data: {
       topicId: topic.id,
@@ -226,7 +229,7 @@ dbTest('the graph adds claims, a weak prerequisite and the confusable concept', 
   const mk = (name: string) => prisma.concept.create({ data: { projectId: w.project.id, topicId: w.topic.id, name, summary: `${name} summary`, kind: 'concept', orderIndex: 5 } })
   const [prereq, other] = [await mk('Ratios'), await mk('Proportions')]
   const material = await prisma.material.create({ data: { projectId: w.project.id, category: 'lecture_notes', filename: 'm.pdf', gcsPath: 'x', sizeBytes: 1 } })
-  await prisma.conceptClaim.create({ data: { conceptId: w.concept.id, text: 'A rate divides.', quote: 'rate = a / b', materialId: material.id, pageStart: 4, orderIndex: 0 } })
+  // Rates has its claim from world(): 'A rate divides.' on p. 4.
   await prisma.conceptClaim.create({ data: { conceptId: prereq.id, text: 'A ratio compares.', quote: 'ratio a:b', materialId: material.id, pageStart: 2, orderIndex: 0 } })
   await prisma.conceptEdge.create({ data: { projectId: w.project.id, sourceId: prereq.id, targetId: w.concept.id, type: 'prerequisite', weight: 1, confidence: 0.9, status: 'confirmed' } })
   const [a, b] = [w.concept.id, other.id].sort()

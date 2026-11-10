@@ -22,6 +22,7 @@ from app.services.content_generator.context import (
     format_concept_block,
     resolve_concept_ids,
 )
+from app.services.content_generator.refill import refill_figures, refill_once
 from app.services.content_generator.support_check import check_support
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
@@ -143,7 +144,7 @@ class QuizGenerator:
         if prerequisite_topic_id and not review:
             logger.info("Quiz for topic %s: prerequisite %s not used", topic_id, prerequisite_topic_id)
 
-        questions, dropped = await self._generate_questions(
+        questions, dropped, refilled = await self._generate_questions(
             topic_name=topic_name,
             topic_description=topic_description,
             chunks=chunks,
@@ -169,6 +170,7 @@ class QuizGenerator:
             'questions': questions,
             'total_questions': len(questions),
             'dropped_unsupported': dropped,
+            **refill_figures(question_count, len(questions), refilled),
             'difficulty_level': difficulty_level,
             'question_types': [qt.value for qt in question_types],
             'generated_at': datetime.now(UTC).isoformat()
@@ -213,34 +215,50 @@ class QuizGenerator:
         already_seen: str = "",
         concepts: str = "",
         review_instructions: str = "",
-    ) -> tuple[List[Dict], int]:
-        """Generate and validate quiz questions; return them and how many the support check dropped."""
+    ) -> tuple[List[Dict], int, int]:
+        """Generate and validate quiz questions; return them, how many the support check dropped and how many a
+        refill (SUPPORT_REFILL) added."""
         guidance = DIFFICULTY_GUIDANCE.get(difficulty_level, DIFFICULTY_GUIDANCE['medium'])
         types_str = ", ".join(qt.value for qt in question_types)
 
-        instructions = f"""Write a {question_count + SUPPORT_SPARE_QUESTIONS}-question quiz on "{topic_name}" from the excerpts above.
+        allowed = {qt.value for qt in question_types}
+
+        async def ask(asked: int, review: str, avoid: str = "") -> tuple[List[Dict], int]:
+            instructions = f"""Write a {asked}-question quiz on "{topic_name}" from the excerpts above.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
 Use only these question types, spread across them: {types_str}.
 
 {APPLICATION_RULES}
-{already_seen}{concepts}{review_instructions}
+{already_seen}{concepts}{review}{avoid}
 {QUESTION_FORMAT_RULES}
 Set difficulty to "{difficulty_level}" and list the concepts each question tests."""
 
-        result = await self.llm.generate_structured(
-            content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map),
-            QuestionSet,
-            max_tokens=16000,
-            purpose="topic_quiz",
-        )
-        allowed = {qt.value for qt in question_types}
-        asked = question_count + SUPPORT_SPARE_QUESTIONS
-        questions = [q for q in result.usable() if q["question_type"] in allowed][:asked]
-        questions, dropped = await check_support(questions, chunks)
+            result = await self.llm.generate_structured(
+                content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map),
+                QuestionSet,
+                max_tokens=16000,
+                purpose="topic_quiz",
+            )
+            usable = [q for q in result.usable() if q["question_type"] in allowed][:asked]
+            return await check_support(usable, chunks)
+
+        questions, dropped = await ask(question_count + SUPPORT_SPARE_QUESTIONS, review_instructions)
         questions = questions[:question_count]
-        if len(questions) < minimum_usable(question_count):
+        floor = minimum_usable(question_count)
+
+        async def regenerate(missing: int) -> List[Dict]:
+            # Finding 102: once, for what the check removed, with one spare. The prerequisite review questions were
+            # asked for the first time; a refill is plain questions on the topic.
+            nonlocal dropped
+            avoid = "\n\nDo not repeat these questions:\n" + "\n".join(f"- {q.get('question_text')}" for q in questions)
+            more, more_dropped = await ask(missing + 1, "", avoid)
+            dropped += more_dropped
+            return more
+
+        questions, refilled = await refill_once(questions, question_count, floor, regenerate)
+        if len(questions) < floor:
             raise LLMOutputError(
                 f"Quiz had {len(questions)} usable questions of {question_count} requested"
             )
-        return questions, dropped
+        return questions, dropped, refilled

@@ -676,7 +676,7 @@ export function TopicEditor({
 
       {merging ? (
         <InlineAlert tone="neutral" className="mb-4" title="Selecting topics to merge">
-          Tick two or more topics, choose the one that stays, then merge. The content and quiz history of the others move into it.
+          Tick two or more topics, choose the one that stays, then merge. Their notes, recall answers, practice progress, quiz history, mastery and review dates move into it.
         </InlineAlert>
       ) : null}
 
@@ -987,7 +987,7 @@ export function TopicEditor({
         open={mergeMany}
         onOpenChange={setMergeMany}
         title={`Merge ${pluralize(picked.length, 'topic')} into ${items.find((item) => item.id === (keepId && picked.includes(keepId) ? keepId : picked[0]))?.name ?? 'one'}?`}
-        description="Content and quiz history of the others move to the topic that stays."
+        description="Your notes, recall answers, practice progress, quiz history, mastery and review dates move to the topic that stays."
         confirmLabel="Merge topics"
         onConfirm={mergePicked}
       />
@@ -995,7 +995,7 @@ export function TopicEditor({
         open={!!mergePair}
         onOpenChange={(open) => !open && setMergePair(null)}
         title={mergePair ? `Merge ${mergePair.source.name} into ${mergePair.target.name}?` : 'Merge topics?'}
-        description={mergePair ? `Content and quiz history move to ${mergePair.target.name}.` : undefined}
+        description={mergePair ? `Your notes, recall answers, practice progress, quiz history, mastery and review dates move to ${mergePair.target.name}.` : undefined}
         confirmLabel="Merge topics"
         onConfirm={mergeTopics}
       />
@@ -1003,7 +1003,7 @@ export function TopicEditor({
         open={!!deleting}
         onOpenChange={(open) => !open && setDeleting(null)}
         title={deleting ? `Delete ${deleting.name}?` : 'Delete topic?'}
-        description="Its notes, quizzes and progress are deleted with it."
+        description="Its quizzes, recall answers and progress are deleted with it. Your margin notes are kept, under Notes from removed topics on the topics page."
         confirmLabel="Delete topic"
         destructive
         onConfirm={deleteTopic}

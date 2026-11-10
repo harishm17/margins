@@ -59,12 +59,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // A note belongs to a passage of this course's files; the chunk id is not a foreign key, so it is checked here.
-    const chunk = await prisma.materialChunk.findFirst({ where: { id: parsed.data.chunkId, material: { projectId: topic.projectId } }, select: { materialId: true } })
+    const chunk = await prisma.materialChunk.findFirst({ where: { id: parsed.data.chunkId, material: { projectId: topic.projectId } }, select: { materialId: true, chunkText: true } })
     if (!chunk) return apiNotFound('Passage not found')
     const note = await prisma.$transaction(async (tx) => {
       await assertQuota(tx, auth.user, 'notes', { topicId })
       return tx.marginNote.create({
-        data: { userId: auth.user.id, topicId, materialId: chunk.materialId, chunkId: parsed.data.chunkId, kind: 'note', text: parsed.data.text },
+        data: {
+          userId: auth.user.id,
+          projectId: topic.projectId,
+          topicId,
+          materialId: chunk.materialId,
+          chunkId: parsed.data.chunkId,
+          quote: chunk.chunkText,
+          kind: 'note',
+          text: parsed.data.text,
+        },
         select: { id: true, chunkId: true, kind: true, text: true, reply: true, createdAt: true },
       })
     })

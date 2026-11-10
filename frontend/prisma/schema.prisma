@@ -104,6 +104,7 @@ model Project {
   conceptMemories ConceptMemory[]
   itemSessions    ItemSession[]
   studyDrafts     StudyDraft[]
+  marginNotes     MarginNote[]
 
   @@index([userId])
   @@index([status])
@@ -1125,21 +1126,29 @@ model RecallAttempt {
 model MarginNote {
   id         String   @id @default(uuid())
   userId     String   @map("user_id")
-  topicId    String   @map("topic_id")
-  materialId String   @map("material_id")
+  projectId  String   @map("project_id")
+  // Both are cleared, not cascaded, when the topic or the file is deleted: the note is the student's own writing and
+  // stays, listed under "Notes from removed topics" or "Notes from removed files" (lib/materials/references.ts).
+  topicId    String?  @map("topic_id")
+  materialId String?  @map("material_id")
   // Not a foreign key: chunks are rewritten when a file is processed again.
   chunkId    String   @map("chunk_id")
+  // The passage the note sits on, copied when the note is written, so a note whose file is gone still shows what it
+  // was about, and a replaced file's note can be re-anchored by its text.
+  quote      String?
   kind       String // note|question|answer (a reader check answer, with reply.parentNoteId)
   text       String
   reply      Json?
   createdAt  DateTime @default(now()) @map("created_at")
 
   // Relations
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  topic    Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  topic    Topic?    @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  material Material? @relation(fields: [materialId], references: [id], onDelete: SetNull)
 
   @@index([userId, topicId, createdAt])
+  @@index([userId, projectId, createdAt])
   @@index([materialId])
   @@map("margin_notes")
 }

@@ -10,7 +10,7 @@ REQUIRED_MIGRATION is always the newest migration in frontend/prisma/migrations:
 """
 from app.db.connection import execute_one
 
-REQUIRED_MIGRATION = "20261208000005_quota_counted_jobs"
+REQUIRED_MIGRATION = "20261210000000_notes_survive_deletes"
 
 _seen = {"ok": False}
 

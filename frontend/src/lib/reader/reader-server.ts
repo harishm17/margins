@@ -117,9 +117,11 @@ export async function explainPassage(
   const note = await prisma.marginNote.create({
     data: {
       userId,
+      projectId: topic.projectId,
       topicId,
       materialId: chunk.materialId,
       chunkId,
+      quote: chunk.chunkText,
       kind: 'question',
       text: take,
       reply: { reply: answer.reply, checkQuestion: answer.check_question, rung },
@@ -247,9 +249,11 @@ export async function answerReaderCheck(
   const note = await prisma.marginNote.create({
     data: {
       userId,
+      projectId: topic.projectId,
       topicId,
       materialId: asked.materialId,
       chunkId: asked.chunkId,
+      quote: chunk.chunkText,
       kind: 'answer',
       text: answerText,
       reply: { reply: result.reply, checkQuestion: followUp, verdict, parentNoteId: asked.id },

@@ -88,6 +88,10 @@ test('instruction goes to the gap explainer when ready, else reread', () => {
   const noChunk = nextActivity(solid({ concepts: [failed('a', { firstClaim: { page: null, chunkId: null } })] }))
   assert.equal(activityHref('instruct', { courseId: 'c1', topicId: 't1', conceptIds: ['a'], target: noChunk.target }), '/courses/c1/topics/t1?view=read&focus=a')
   assert.doesNotMatch(noChunk.reason, /p\./)
+  // An idea whose claims went with a deleted file has nothing to reread, so it does not lead; with a ready explanation it still does.
+  const noClaims = solid({ concepts: [failed('a', { firstClaim: null })] })
+  assert.notEqual(nextActivity(noClaims).kind, 'instruct')
+  assert.equal(nextActivity({ ...noClaims, gapExplainerReadyFor: ['a'] }).kind, 'instruct')
 })
 
 test('prerequisite drill when a prerequisite is weak, else examples', () => {

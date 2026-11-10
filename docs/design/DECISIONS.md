@@ -113,6 +113,10 @@ browser ── Next.js (frontend/) ───────────────
 - **Alternative:** tell the model the rules and trust it to follow them.
 - **Why:** a prompt alone could not sequence the help in the published tutor studies, a client-side rung resets on refresh, and a model told "just tell me" five times slides up the ladder. `nextRung` is a tested pure function. The model is told the rung it may use, and the leak judge checks it stayed there.
 - **Status:** built as decided (`frontend/src/lib/tutor/state.ts`).
+- **Leak check and word forms (finding 99, flag `LEAK_WORD_FORMS_TO_JUDGE`, off by default):** `string_leak` says how it matched. A numeral or the exact answer text is a hard leak and always blocks. A match that exists only because a number word stands for a numeral ("two" for 2) is a word-form match. With the flag on, a word-form match alone goes to the caller's own judge (generation hints to `judge_leak`, the reader tutor to its judge); with it off it blocks as before. The practice tutor's strict `_hint_leaks` is unchanged.
+- **Support check refill (finding 102, flag `SUPPORT_REFILL`, off by default):** when the support check drops items so a warm-up, quiz, exam topic, review batch or example set is under its floor, the missing items are regenerated once, inside the same billing scope. A set still short is served with what it has and the job result carries `refilled` and `short_by`; a set under the floor (warm-up minimum 3) still fails.
+- **Re-quoting (F0, flag `CLAIM_REQUOTE`, off by default):** the `requote_concepts` job (`POST /jobs/requote-concepts`, data `{topicId, projectId}`) gives an active concept with no claims new claims from the topic's remaining files, keeping its id. The quotes are validated like an extraction's. Flag off, the job completes at once, without the topic lock, the AI-ready check or a model call. Flag on, a job that cannot run for an AI outage or the allowance waits for the AI like generation does, and a job that finishes while a later delete orphaned more concepts starts one follow-up for them (concepts it tried and could not quote are not retried). `ai-service/scripts/requote_lost_claims.py` repairs concepts already in that state (estimate first; `--yes` to spend; `--write` to store).
+- **Typed PDF pages (finding 104):** when the markdown read of a page holds under half the alphanumerics of its text layer, the text layer is used, for the validator and the chunker alike. `ai-service/scripts/list_text_layer_pages.py` lists affected files and writes nothing; existing chunks are not re-read.
 
 ### D13. The effort-first core works without AI
 
@@ -143,7 +147,7 @@ browser ── Next.js (frontend/) ───────────────
 - Per-user rate limits use `createRateLimiter`: tutor turns 20 a minute, recall grading 10 a minute, "Explain this" 10 a minute.
 - Every model call goes through the provider's budget check and usage ledger, so the daily allowance covers the new features with no new code.
 - Every new table cascades on user and project deletion, and the account-deletion tests cover the new tables.
-- Margin notes and recall answers are the student's own writing, are deleted with the account and are never used in prompts for anyone else.
+- Margin notes and recall answers are the student's own writing, are deleted with the account and are never used in prompts for anyone else. Deleting a file or a topic does not delete them: the note keeps its text and the passage it sat on and is listed as a note from a removed file or topic (rules per pointer: `frontend/src/lib/materials/references.ts`).
 - **Status:** built as decided.
 
 ### D18. Tutor prompts are gated by the tutoring eval

@@ -26,6 +26,8 @@ export const reviewItemsTarget = (topicId: string) => `review-items:${topicId}`
 export const gapExplainerTarget = (attemptId: string) => `gap-explainer:${attemptId}`
 // One "prepare concepts" chain at a time per course (the chain's first job; later jobs have content targets).
 export const prepareConceptsTarget = (projectId: string) => `concepts:${projectId}`
+// One re-quote job at a time per topic (ideas that lost every quote when a file was deleted; not a student's request).
+export const requoteConceptsTarget = (topicId: string) => `requote:${topicId}`
 // One grading job at a time per exam submission, for the first grading and for "grade again".
 export const gradeExamTarget = (submissionId: string) => `grade:${submissionId}`
 

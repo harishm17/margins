@@ -17,9 +17,11 @@ from app.services.content_generator.context import (
     format_concept_block,
     resolve_concept_ids,
 )
+from app.services.content_generator.refill import refill_figures, refill_wanted
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
-from app.services.llm.schemas import InteractiveExampleSet, SolvedExampleSet
+from app.services.llm.schemas import InteractiveExampleSet, SolvedExampleSet, word_form_hints
+from app.services.tutor.leak import judge_leak
 
 
 class ExampleType(str, Enum):
@@ -81,6 +83,7 @@ class ExamplesGenerator:
         concepts = await fetch_concepts(topic_id)
         concept_block = format_concept_block(concepts)
 
+        self._refilled = 0
         if example_type == ExampleType.SOLVED:
             examples = await self._generate_solved_examples(
                 topic_name, topic_description, chunks, count, difficulty_level, focus, cache_excerpts,
@@ -97,6 +100,7 @@ class ExamplesGenerator:
 
         return {
             'examples': examples,
+            **refill_figures(count, len(examples), self._refilled),
             'example_type': example_type,
             'difficulty_level': difficulty_level,
             'generated_at': datetime.now(UTC).isoformat()
@@ -127,16 +131,26 @@ Difficulty: {difficulty_level}. {guidance}
 - Set difficulty to "{difficulty_level}".
 - List in source_excerpts the index of every excerpt an example is based on."""
 
+        messages = content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map)
         result = await self.llm.generate_structured(
-            content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map),
-            SolvedExampleSet,
-            max_tokens=16000,
-            purpose="solved_examples",
+            messages, SolvedExampleSet, max_tokens=16000, purpose="solved_examples",
         )
         examples = [stored for example in result.examples if (stored := example.stored()) is not None]
+        if refill_wanted(len(examples), 1):
+            examples = await self._refill(messages, SolvedExampleSet, "solved_examples", examples, count, lambda e: e.stored())
         if not examples:
             raise LLMOutputError("No usable solved examples were generated")
         return examples[:count]
+
+    async def _refill(self, messages, schema, purpose, examples, count, store) -> List[Dict]:
+        """Finding 102: the first answer left nothing usable. Ask once more, with the same instructions, and keep what
+        passes the same checks (the model call runs in the job's billing scope like the first)."""
+        result = await self.llm.generate_structured(messages, schema, max_tokens=16000, purpose=purpose)
+        more = [stored for example in result.examples if (stored := store(example)) is not None]
+        if schema is InteractiveExampleSet:
+            more = await _clear_word_form_hints(more)
+        self._refilled = len(more)
+        return (examples + more)[:count]
 
     async def _generate_interactive_examples(
         self,
@@ -165,13 +179,33 @@ Difficulty: {difficulty_level}. {guidance}
 - Set difficulty to "{difficulty_level}".
 - List in source_excerpts the index of every excerpt a problem is based on."""
 
+        messages = content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map)
         result = await self.llm.generate_structured(
-            content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map),
-            InteractiveExampleSet,
-            max_tokens=16000,
-            purpose="interactive_examples",
+            messages, InteractiveExampleSet, max_tokens=16000, purpose="interactive_examples",
         )
         examples = [stored for example in result.examples if (stored := example.stored()) is not None]
+        examples = await _clear_word_form_hints(examples)
+        if refill_wanted(len(examples), 1):
+            examples = await self._refill(
+                messages, InteractiveExampleSet, "interactive_examples", examples, count, lambda e: e.stored()
+            )
         if not examples:
             raise LLMOutputError("No usable practice problems were generated")
         return examples[:count]
+
+
+async def _clear_word_form_hints(examples: List[Dict]) -> List[Dict]:
+    """With LEAK_WORD_FORMS_TO_JUDGE, a problem whose only hint matches are number words ("add the two numbers" for 2)
+    is kept unless the leak judge says the hint gives the answer away (finding 99). Until PR 5's gate reads
+    generated sets, this judge is the only reader of such a hint."""
+    kept: List[Dict] = []
+    for example in examples:
+        leaked = False
+        for hint in word_form_hints(f"{example['title']}\n{example['problem_statement']}", example["steps"]):
+            verdict = await judge_leak(hint["hint"], hint["answers"], problem=hint["problem"], question=hint["question"])
+            if verdict.answer_revealed:
+                leaked = True
+                break
+        if not leaked:
+            kept.append(example)
+    return kept

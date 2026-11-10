@@ -94,7 +94,7 @@ const seeders: Record<QuotaKind, (w: World, n: number) => Promise<void>> = {
   },
   notes: async (w, n) => {
     for (let i = 0; i < n; i++) {
-      await prisma.marginNote.create({ data: { userId: w.user.id, topicId: w.topic.id, materialId: w.material.id, chunkId: `c${i}`, kind: 'note', text: 'n' } })
+      await prisma.marginNote.create({ data: { userId: w.user.id, projectId: w.topic.projectId, topicId: w.topic.id, materialId: w.material.id, chunkId: `c${i}`, kind: 'note', text: 'n' } })
     }
   },
   drafts: async (w, n) => {

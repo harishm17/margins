@@ -10,6 +10,7 @@ import re
 from html import escape
 from typing import List, Optional, Sequence, Set
 
+from app.config import settings
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import LeakVerdict
@@ -37,6 +38,12 @@ _COUNT_OF = re.compile(
 _ORDINARY_WORDS = frozenset(
     "zero one two three four five six seven eight nine ten eleven twelve yes no".split()
 )
+# The number words among those: the word form of a numeral answer. "pick any two items" for an answer of 2 is ordinary
+# prose, so with LEAK_WORD_FORMS_TO_JUDGE a hint or reply that matches only this way goes to a judge instead of being
+# dropped (finding 99). The digit form, and an answer that is itself the word, stay hard leaks.
+_NUMBER_WORDS = _ORDINARY_WORDS - {"yes", "no"}
+HARD_LEAK = "hard"
+WORD_FORM_LEAK = "word_form"
 _NUMERIC_START = re.compile(r"\s*[-−]?\.?\d")
 _SPACE = re.compile(r"\s+")
 _TIGHT = 1e-9
@@ -146,6 +153,7 @@ def answers_stated(
     problem: str = "",
     incidental: bool = False,
     prose_words_to_judge: bool = False,
+    word_forms_to_judge: bool = False,
 ) -> List[str]:
     """The `answers` (the key and its acceptable forms) that `reply` states; empty when none.
 
@@ -158,7 +166,8 @@ def answers_stated(
     excluded: repeating a given is not giving the answer away. Any other answer is stated by its
     normalised text standing as a word or phrase of its own; one that is also in the problem
     statement is excluded the same way. With `prose_words_to_judge`, an answer that is only a number
-    word or yes/no is not matched as text (see `_ORDINARY_WORDS`).
+    word or yes/no is not matched as text (see `_ORDINARY_WORDS`). With `word_forms_to_judge`, only a number word that
+    sits beside a numeral form of the same answer is skipped (the word form of a number).
     """
     tolerance = abs(tolerance) if tolerance is not None else 0.0
     given = numbers_in(problem)
@@ -167,6 +176,9 @@ def answers_stated(
     reply_text = _words(_without_references(reply))
     problem_text = _words(problem)
     stated: List[str] = []
+    has_numeral = any(
+        numbers_in((a or "").strip()) and _NUMERIC_START.match((a or "").strip()) for a in answers
+    )
 
     for answer in answers:
         answer = (answer or "").strip()
@@ -180,6 +192,8 @@ def answers_stated(
         text = _words(answer)
         if prose_words_to_judge and text in _ORDINARY_WORDS:
             continue  # "two sets", "No working is shown": ordinary prose, so the judge reads it in context
+        if word_forms_to_judge and has_numeral and text in _NUMBER_WORDS:
+            continue  # the word form of a number answer: the caller's judge reads it in context
         if _contains_phrase(problem_text, text):
             continue
         if len(text) == 1:
@@ -199,11 +213,24 @@ def string_leak(
     problem: str = "",
     incidental: bool = False,
     prose_words_to_judge: bool = False,
-) -> bool:
-    """True when `reply` states one of `answers`; see `answers_stated`."""
-    return bool(
-        answers_stated(reply, answers, tolerance, problem=problem, incidental=incidental, prose_words_to_judge=prose_words_to_judge)
-    )
+) -> Optional[str]:
+    """How `reply` states one of `answers` (see `answers_stated`), or None when it does not.
+
+    HARD_LEAK: a numeral, the exact answer text or an option letter. WORD_FORM_LEAK: only a number word beside a
+    numeral answer ("two" for 2), which is also ordinary prose. Both are truthy, so a caller that wants every match
+    (the authored hints) can still write `if string_leak(...)`; a caller with a judge behind it uses `blocks_alone`."""
+    kwargs = dict(problem=problem, incidental=incidental, prose_words_to_judge=prose_words_to_judge)
+    if answers_stated(reply, answers, tolerance, word_forms_to_judge=True, **kwargs):
+        return HARD_LEAK
+    if answers_stated(reply, answers, tolerance, **kwargs):
+        return WORD_FORM_LEAK
+    return None
+
+
+def blocks_alone(match: Optional[str]) -> bool:
+    """Whether a `string_leak` result rejects a draft without a judge's reading. A hard match always does. A word-form
+    match does too unless LEAK_WORD_FORMS_TO_JUDGE is on, which hands it to the caller's judge."""
+    return match == HARD_LEAK or (match == WORD_FORM_LEAK and not settings.LEAK_WORD_FORMS_TO_JUDGE)
 
 
 JUDGE_SYSTEM_PROMPT = """You check a tutor's reply to a student for leaks. The student is practising a problem, and the practice only works if they do the work themselves, so a reply must not do it for them. A useful test is whether the student could finish the step by copying or calculating from the reply alone. For example, "compare the two ratios" points at the work and is fine, while "divide 12 by 30" does the work and is a leak.

@@ -100,6 +100,8 @@ dbTest('recordInstruction refuses a topic or concepts that are not the student\'
 dbTest('an instruction after a fail clears needsInstruction and sends the student to fresh retrieval', async () => {
   const w = await world()
   const a = await w.mk('A', 0)
+  // The idea has a claim to reread; one with none is not sent to a reread (see next-activity.test.ts).
+  await prisma.conceptClaim.create({ data: { conceptId: a.id, text: 'c', quote: 'q', materialId: w.material.id, orderIndex: 0 } })
   await prisma.topicProgress.create({ data: { userId: w.user.id, topicId: w.topic.id, readAt: new Date(), recallAt: new Date() } })
   const failedAt = new Date(Date.now() - 3600_000)
   await evidence.recordEvidence([miss(w, a.id, 0, { at: failedAt })], { timeZone: 'UTC' })

@@ -82,6 +82,8 @@ class ParseLimits:
 class ExtractedPage:
     number: Optional[int]  # 1-indexed page or slide; None when the format has no pages
     text: str
+    # A PDF page read from its own text layer because the markdown read of it came back much shorter (finding 104).
+    from_text_layer: bool = False
 
 
 def _alnum_count(text: str) -> int:
