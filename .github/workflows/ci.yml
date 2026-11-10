@@ -219,7 +219,7 @@ jobs:
           docker run --rm --network none --entrypoint prisma margins-frontend --version
           docker run -d --name web -p 3000:3000 \
             -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ENVIRONMENT=development \
-            -e NEXTAUTH_SECRET=ci-secret -e NEXTAUTH_URL=http://127.0.0.1:3000 \
+            -e NEXTAUTH_SECRET=ci-secret -e NEXTAUTH_URL=http://127.0.0.1:3000 -e SPEND_KEY_SECRET=ci-spend-key \
             margins-frontend
           for _ in $(seq 1 30); do
             curl -fsS -o /dev/null http://127.0.0.1:3000/login && exit 0
@@ -227,21 +227,32 @@ jobs:
           done
           docker logs web
           exit 1
-      - name: Image refuses to start on a public URL without Google sign-in, or with the test sign-in on
+      - name: Image refuses to start on a public URL with an unsafe or missing setting
         run: |
+          # Every case starts from a production base that is valid except for the one setting under test, and checks
+          # the refusal names that setting, so a case cannot pass because an earlier check refused first.
+          GOOGLE="-e GOOGLE_OAUTH_CLIENT_ID=1-ci.apps.googleusercontent.com -e GOOGLE_OAUTH_CLIENT_SECRET=ci-not-a-real-google-secret"
           refuses() {
+            local expect="$1"; shift
             if out="$(timeout 60 docker run --rm \
                 -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ENVIRONMENT=production -e AI_INTERNAL_TOKEN=ci-token \
-                -e NEXTAUTH_SECRET=ci-secret \
+                -e NEXTAUTH_SECRET=ci-secret -e SPEND_KEY_SECRET=ci-spend-key -e S3_BUCKET=ci-bucket \
                 -e NEXTAUTH_URL=https://studymargins.com "$@" margins-frontend 2>&1)"; then
               echo "started, but should have refused: $*"; echo "$out"; exit 1
             fi
             grep -q "Refusing to start" <<<"$out" || { echo "no refusal message: $*"; echo "$out"; exit 1; }
+            grep -q "$expect" <<<"$out" || { echo "refused, but not for $expect: $*"; echo "$out"; exit 1; }
           }
-          refuses
-          refuses -e GOOGLE_OAUTH_CLIENT_ID=your-google-client-id -e GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
-          refuses -e GOOGLE_OAUTH_CLIENT_ID=1-ci.apps.googleusercontent.com -e GOOGLE_OAUTH_CLIENT_SECRET=ci-not-a-real-google-secret \
-            -e ENABLE_TEST_LOGIN=true
+          refuses GOOGLE_OAUTH_CLIENT_ID
+          refuses GOOGLE_OAUTH_CLIENT_ID -e GOOGLE_OAUTH_CLIENT_ID=your-google-client-id -e GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
+          # shellcheck disable=SC2086
+          refuses ENABLE_TEST_LOGIN $GOOGLE -e ENABLE_TEST_LOGIN=true
+          # shellcheck disable=SC2086
+          refuses SPEND_KEY_SECRET $GOOGLE -e SPEND_KEY_SECRET=
+          # shellcheck disable=SC2086
+          refuses S3_BUCKET $GOOGLE -e S3_BUCKET=
+          # shellcheck disable=SC2086
+          refuses AI_INTERNAL_TOKEN $GOOGLE -e AI_INTERNAL_TOKEN=
 
   ai-service-image:
     runs-on: ubuntu-latest

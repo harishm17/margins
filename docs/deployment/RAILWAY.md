@@ -79,7 +79,7 @@ non-interactive sessions unless you add `--confirm-destructive`.
 | `ANTHROPIC_API_KEY` | ai | `railway variable set -s ai ANTHROPIC_API_KEY --stdin` |
 | `AI_INTERNAL_TOKEN` | ai (web references it) | `openssl rand -hex 32`, then as above |
 | `NEXTAUTH_SECRET` | web | `openssl rand -base64 48`, then as above |
-| `SPEND_KEY_SECRET` | web | 32 random bytes in hex, then as above. Set once, never rotate: it keys the one-way account key that keeps the daily allowance and voice minutes through account deletion. |
+| `SPEND_KEY_SECRET` | web | 32 random bytes in hex, then as above. Set once, never rotate: it keys the one-way account key that keeps the daily allowance and voice minutes through account deletion. Set it before the first deploy that contains it: the web app refuses to start without it, and by then the migration has already run and the new AI service is live. |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | web | The OAuth client in Google Cloud, as above |
 | `DEEPGRAM_API_KEY` | web | Optional. Cloud speech recognition for voice practice, tried first. A project key with the Member role or above: lower roles cannot mint the browser tokens (`/v1/auth/grant` answers "Insufficient permissions"). |
 | `ASSEMBLYAI_API_KEY` | web | Optional, and unused unless `CLOUD_SPEECH_PROVIDERS` names `assemblyai` (see below). Without a usable cloud provider, voice uses the browser's own recognizer. |
