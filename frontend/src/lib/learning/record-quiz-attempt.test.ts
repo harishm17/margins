@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { STRONG_START_SCORE, strongStartScore } from './record-quiz-attempt'
+import { strongStartScore } from './record-quiz-attempt'
 import type { GradedQuestion } from '@/lib/ai-service/grading'
 import type { QuizAnswer } from './quiz-answers'
 

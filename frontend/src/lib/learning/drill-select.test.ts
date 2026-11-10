@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { pickWeakestPrerequisite, selectDrillItems, DRILL_SIZE } from './drill-select'
+import { pickWeakestPrerequisite, selectDrillItems } from './drill-select'
 import { Rating } from 'ts-fsrs'
 import type { BankItem, DueConcept, Mode } from './review-select'
 

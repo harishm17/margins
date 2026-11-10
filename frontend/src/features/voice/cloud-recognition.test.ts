@@ -10,7 +10,6 @@ import {
   resultsOf,
   rmsOf,
   silenceAfterLastWordMs,
-  toResultEvent,
   type CloudTurn,
   type DeepgramResults,
   type MicCapture,

@@ -3,7 +3,7 @@ import test from 'node:test'
 import { Rating } from 'ts-fsrs'
 import { conceptMastery } from './concept-mastery'
 import type { EventRow } from './evidence-types'
-import { askExplainThreshold, bandInputsFromState, conceptBand, probesBeforeExplaining, quizDifficultyFor, topicBand, type BandInputs } from './level'
+import { bandInputsFromState, conceptBand, topicBand, type BandInputs } from './level'
 import { replayConcept } from './memory'
 import { warmupPriorByConcept } from './warmup-bracket'
 
