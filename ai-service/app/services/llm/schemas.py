@@ -2215,3 +2215,103 @@ class ConceptLinksV2(ConceptLinks):
     @classmethod
     def example_for(cls, prompt: str) -> "ConceptLinksV2":
         return cls.model_validate(ConceptLinks.example_for(prompt).model_dump())
+
+
+# ---------------------------------------------------------------- audited (v2) schema descriptions
+#
+# With PROMPTS_V2 listing an area, its calls use these subclasses: the same fields, parsing and
+# mock examples, with the audited field descriptions in the JSON schema the model sees. The v1
+# classes above stay as they are until the area has run on v2 in production.
+
+_CHIP_HELP = "Short plain-text names of the ideas tested, shown as chips; no LaTeX or markdown"
+_DIFFICULTY_BY_APP_HELP = "Filled in by the app after generation; leave out"
+_CONFUSABLE_V2_HELP = (
+    "Wrong options only: when the wrong idea is a mix-up with a concept of the <concepts> or "
+    "<confusable_concepts> list, that concept's id"
+)
+
+
+def _with_descriptions(base: type, name: str, edits: Sequence[tuple]) -> type:
+    """`base` with field descriptions replaced in its JSON schema. Each edit is
+    (definition name or None for the model itself, field, description). A field that is not
+    in the schema raises, so a renamed field cannot silently lose its description."""
+
+    def model_json_schema(cls, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        schema = super(variant, cls).model_json_schema(*args, **kwargs)
+        for definition, field, text in edits:
+            holder = schema if definition is None else schema["$defs"][definition]
+            holder["properties"][field]["description"] = text
+        return schema
+
+    variant = type(name, (base,), {"model_json_schema": classmethod(model_json_schema), "__module__": __name__})
+    return variant
+
+
+_QUESTION_V2_EDITS = (
+    ("ChoiceOption", "confusable_concept_id", _CONFUSABLE_V2_HELP),
+    ("GeneratedQuestion", "concepts_tested", _CHIP_HELP),
+)
+
+QuestionSetV2 = _with_descriptions(
+    QuestionSet, "QuestionSetV2",
+    (*_QUESTION_V2_EDITS, ("GeneratedQuestion", "difficulty", _DIFFICULTY_BY_APP_HELP)),
+)
+ReviewItemSetV2 = _with_descriptions(
+    ReviewItemSet, "ReviewItemSetV2",
+    (*_QUESTION_V2_EDITS, ("GeneratedQuestion", "difficulty", _DIFFICULTY_BY_APP_HELP)),
+)
+# Warm-up difficulty is the model's: the bank is bracketed on it.
+WarmupSetV2 = _with_descriptions(WarmupSet, "WarmupSetV2", _QUESTION_V2_EDITS)
+
+SolvedExampleSetV2 = _with_descriptions(
+    SolvedExampleSet, "SolvedExampleSetV2",
+    (
+        ("SolutionStep", "description", "One line naming what this step does"),
+        ("SolutionStep", "work", "The math or reasoning that carries out the step"),
+        ("SolutionStep", "explanation", "Why the step is taken"),
+        ("SolvedExample", "final_answer", "2-5 markdown bullets"),
+        ("SolvedExample", "key_concepts", _CHIP_HELP),
+        ("SolvedExample", "difficulty", _DIFFICULTY_BY_APP_HELP),
+    ),
+)
+InteractiveExampleSetV2 = _with_descriptions(
+    InteractiveExampleSet, "InteractiveExampleSetV2",
+    (
+        ("InteractiveExample", "key_concepts", _CHIP_HELP),
+        ("InteractiveExample", "difficulty", _DIFFICULTY_BY_APP_HELP),
+        ("InteractiveExample", "estimated_time_minutes", "Minutes a student needs to work through the problem"),
+    ),
+)
+ExamStyleProfileV2 = _with_descriptions(
+    ExamStyleProfile, "ExamStyleProfileV2",
+    (
+        (
+            None,
+            "example_stems",
+            "Exactly 3 short example question stems in new words about a different situation than the "
+            "exam's, showing the voice and shape of its questions without reproducing its text",
+        ),
+    ),
+)
+ExamTopicMapV2 = _with_descriptions(
+    ExamTopicMap, "ExamTopicMapV2",
+    (
+        (
+            "ExamQuestionTopics",
+            "summary",
+            "What the question tests, in your own words, in 12 words or fewer (summaries are stored, "
+            "so they must not reproduce the exam's wording)",
+        ),
+    ),
+)
+GapExplanationSetV2 = _with_descriptions(
+    GapExplanationSet, "GapExplanationSetV2",
+    (
+        (
+            "GapExplanation",
+            "explanation",
+            "A short paragraph, in plain words, that states the idea as the excerpt does and, if there is "
+            "a misconception, where it goes wrong",
+        ),
+    ),
+)
