@@ -6,6 +6,7 @@
  * The set is taken and graded like any other (POST /quiz-attempts with its quizSetId).
  */
 
+import { ownedTopic } from '@/server/owned'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -21,10 +22,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   try {
     const session = await requireAuth()
     const { topicId } = await params
-    const topic = await prisma.topic.findFirst({
-      where: { id: topicId, project: { userId: session.user.id } },
-      select: { id: true },
-    })
+    const topic = await ownedTopic(session.user.id, topicId)
     if (!topic) return apiNotFound('Topic not found')
 
     // A quiz that waited for the AI and was graded since counts: its misses are what to retry.

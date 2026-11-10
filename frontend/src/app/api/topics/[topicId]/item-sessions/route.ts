@@ -8,6 +8,7 @@
  *   "You'll find this on p. N", the test-out offer, how many passages are marked Focus here) after the last.
  */
 
+import { ownedTopic } from '@/server/owned'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 /** The state of a topic the user owns; null when it is not theirs. */
 async function startable(userId: string, topicId: string): Promise<WarmupState | null> {
-  const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true } })
+  const topic = await ownedTopic(userId, topicId)
   return topic ? loadWarmupState(userId, topicId) : null
 }
 
