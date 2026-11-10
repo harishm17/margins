@@ -1,7 +1,8 @@
 """Collect token usage per job so cost can be stored and capped."""
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Dict, Generator, List, Optional
+from itertools import groupby
+from typing import Dict, Generator, List, Optional, Sequence, TypedDict
 
 from app.services.llm.base import LLMUsage
 
@@ -48,7 +49,40 @@ def estimate_cost_usd(usage: LLMUsage) -> Optional[float]:
 
 
 def summarize_usage(usages: List[LLMUsage]) -> Dict[str, object]:
-    """Totals for a job's result_data."""
+    """Totals for a job's result_data, and the same totals for each purpose (a call with none is "unnamed"), so the
+    calls inside one job (the writing call and its checks, say) can be told apart (A4)."""
+    def purpose(usage: LLMUsage) -> str:
+        return usage.purpose or "unnamed"
+
+    by_purpose = {name: _totals(list(group)) for name, group in groupby(sorted(usages, key=purpose), key=purpose)}
+    return {**_totals(usages), "by_purpose": by_purpose}
+
+
+class LedgerFigures(TypedDict):
+    models: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    cost_usd: float
+
+
+def ledger_figures(usages: Sequence[LLMUsage]) -> LedgerFigures:
+    """The figures of one ledger row (`budget.record_usage_event`) for the calls of one billed piece of work: a job
+    attempt, a tutor or grading reply, a voice turn. Input counts cache reads and writes, as the API bills them; they
+    are also given apart (A4)."""
+    cost = sum(c for c in (estimate_cost_usd(u) for u in usages) if c is not None)
+    return LedgerFigures(
+        models=",".join(sorted({u.model for u in usages})),
+        input_tokens=sum(u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens for u in usages),
+        output_tokens=sum(u.output_tokens for u in usages),
+        cache_read_tokens=sum(u.cache_read_input_tokens for u in usages),
+        cache_write_tokens=sum(u.cache_creation_input_tokens for u in usages),
+        cost_usd=round(cost, 6),
+    )
+
+
+def _totals(usages: Sequence[LLMUsage]) -> Dict[str, object]:
     costs = [estimate_cost_usd(u) for u in usages]
     known_costs = [c for c in costs if c is not None]
     return {

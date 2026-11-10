@@ -37,6 +37,8 @@ export function createChatStorage(db: PrismaClient, context: ChatStorageContext)
     models: usage.model,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadTokens,
+    cacheWriteTokens: usage.cacheWriteTokens,
     costUsd: usage.costUsd.toFixed(6),
     createdAt: new Date(),
   })

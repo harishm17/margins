@@ -756,3 +756,27 @@ test('a retest cap of one serves one closing retest of two misses', async (t) =>
   for (let i = 0; i < 2; i++) view = ((await session.answerItem({ userId: w.user.id, sessionId: id, index: i, answer: { answer: 'false' }, timeZone: ZONE })) as { view: typeof view }).view
   assert.equal(view.items.filter((item) => item.phase === 'retest').length, 1)
 })
+
+test('ideas that tie for a short session are taken in course order, not by their ids', async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const w = await world('tie')
+  // None has a memory, so all four are as weak as each other. Their ids sort the other way round from the course.
+  const run = Math.random().toString(36).slice(2)
+  const concepts = [] as { id: string }[]
+  for (const [n, letter] of ['z', 'y', 'x', 'w'].entries()) {
+    concepts.push(
+      await prisma.concept.create({
+        data: { id: `${letter}-${run}`, projectId: w.project.id, topicId: w.topicA.id, name: `Idea ${n}`, summary: `Idea ${n}.`, kind: 'concept', orderIndex: n, objectiveIndexes: [] },
+      })
+    )
+  }
+  await prisma.topicQuiz.create({ data: { topicId: w.topicA.id, questions: items(concepts.map((c, n) => ({ conceptId: c.id, text: `Tie question ${n}`, difficulty: 'easy' }))) } })
+
+  const started = await start(w, { limit: 2, includeNotDue: true, retestCap: 0, topicIds: [w.topicA.id], short: true })
+  assert.equal(started.status, 'created')
+  const row = await prisma.itemSession.findUniqueOrThrow({ where: { id: (started as { sessionId: string }).sessionId } })
+  assert.deepEqual(
+    (row.items as { conceptIds: string[] }[]).map((item) => item.conceptIds[0]),
+    [concepts[0].id, concepts[1].id]
+  )
+})

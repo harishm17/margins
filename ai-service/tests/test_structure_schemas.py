@@ -1,5 +1,4 @@
 """Schemas added with course structure: practice steps with options, excerpt indexes, the plan."""
-import random
 
 import pytest
 
@@ -58,14 +57,13 @@ class TestPracticeMultipleChoice:
         assert by_id[stored["correct_answer"]] == "choice B"
 
     def test_options_are_shuffled_and_letters_in_the_explanation_follow(self):
-        step = _step(
-            explanation="Option B is right and (C) is not; A is wrong.",
-            feedback_incorrect="Not A. Look at Option B again.",
-        )
         seen = set()
-        for seed in range(30):
-            random.seed(seed)
-            stored = step.normalized()
+        for n in range(30):
+            stored = _step(
+                question=f"Which is faster for large n? ({n})",
+                explanation="Option B is right and (C) is not; A is wrong.",
+                feedback_incorrect="Not A. Look at Option B again.",
+            ).normalized()
             by_id = {o["id"]: o["text"] for o in stored["options"]}
             key = stored["correct_answer"]
             assert by_id[key] == "choice B"

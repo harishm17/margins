@@ -306,8 +306,8 @@ class TestUsage:
         job_id = await seed_job(db, user_id)
 
         async def body(payload, job):
-            record_usage(usage(input_tokens=1_000_000, output_tokens=100_000, cache_read_input_tokens=500))
-            record_usage(usage(input_tokens=200, output_tokens=100))
+            record_usage(usage(input_tokens=1_000_000, output_tokens=100_000, cache_read_input_tokens=500, purpose="topic_quiz"))
+            record_usage(usage(input_tokens=200, output_tokens=100, purpose="support_check"))
             return JobOutcome(result={"done": True})
 
         await make_handler(body)(payload(job_id))
@@ -320,6 +320,10 @@ class TestUsage:
         stored = json.loads(job["result_data"])
         assert stored["usage"]["calls"] == 2
         assert stored["usage"]["output_tokens"] == 100_100
+        assert {p: u["calls"] for p, u in stored["usage"]["by_purpose"].items()} == {"topic_quiz": 1, "support_check": 1}
+        assert stored["usage"]["by_purpose"]["topic_quiz"]["cache_read_input_tokens"] == 500
+        ledger = await db.fetchrow("SELECT input_tokens, cache_read_tokens, cache_write_tokens FROM llm_usage_events WHERE source_id = $1", job_id)
+        assert tuple(ledger) == (1_000_700, 500, 0)
 
     async def test_a_failed_attempt_still_records_what_it_spent_and_attempts_add_up(self, db, user_id):
         job_id = await seed_job(db, user_id)

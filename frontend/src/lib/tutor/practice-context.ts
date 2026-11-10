@@ -11,6 +11,8 @@ import { stateFromMemoryRow } from '@/lib/learning/mastery'
 export const WEAK_RETRIEVABILITY = 0.8
 const MAX_CLAIMS = 4
 const MAX_QUOTE_CHARS = 300
+/** What the tutor reads of a related concept, and where it sits in the course. */
+const CONCEPT_FIELDS = { id: true, name: true, summary: true, kind: true, status: true, orderIndex: true, topic: { select: { orderIndex: true } } } as const
 
 export type PracticeContext = {
   claims: { text: string; quote: string; page?: number }[]
@@ -31,16 +33,21 @@ export async function loadPracticeContext(userId: string, projectId: string, con
     where: { id: { in: conceptIds }, projectId, status: 'active' },
     select: { id: true },
   })
-  const ids = active.map((concept) => concept.id)
+  // In the step's own order of its concepts: the database returns them in no set order, and their ids are random.
+  const activeIds = new Set(active.map((concept) => concept.id))
+  const ids = [...new Set(conceptIds)].filter((id) => activeIds.has(id))
   if (ids.length === 0) return { claims: [] }
+  const place = (conceptId: string) => ids.indexOf(conceptId)
 
   const claimRows = await prisma.conceptClaim.findMany({
     where: { conceptId: { in: ids } },
-    orderBy: [{ conceptId: 'asc' }, { orderIndex: 'asc' }],
-    take: MAX_CLAIMS,
-    select: { text: true, quote: true, pageStart: true },
+    orderBy: { orderIndex: 'asc' },
+    select: { conceptId: true, text: true, quote: true, pageStart: true },
   })
-  const claims = claimRows.map((claim) => ({
+  const claims = claimRows
+    .sort((a, b) => place(a.conceptId) - place(b.conceptId))
+    .slice(0, MAX_CLAIMS)
+    .map((claim) => ({
     text: claim.text,
     quote: claim.quote.slice(0, MAX_QUOTE_CHARS),
     ...(claim.pageStart !== null ? { page: claim.pageStart } : {}),
@@ -55,15 +62,23 @@ export async function loadPracticeContext(userId: string, projectId: string, con
         { type: 'confusable', OR: [{ sourceId: { in: ids } }, { targetId: { in: ids } }] },
       ],
     },
-    orderBy: { confidence: 'desc' },
     select: {
       type: true,
       sourceId: true,
       targetId: true,
-      source: { select: { id: true, name: true, summary: true, kind: true, status: true } },
-      target: { select: { id: true, name: true, summary: true, kind: true, status: true } },
+      confidence: true,
+      source: { select: CONCEPT_FIELDS },
+      target: { select: CONCEPT_FIELDS },
     },
   })
+  // Most confident first; equal confidence in course order of the idea at the other end, so the same course names the same idea.
+  const other = (edge: (typeof edges)[number]) => (ids.includes(edge.sourceId) ? edge.target : edge.source)
+  edges.sort(
+    (a, b) =>
+      b.confidence - a.confidence ||
+      other(a).topic.orderIndex - other(b).topic.orderIndex ||
+      other(a).orderIndex - other(b).orderIndex
+  )
 
   const context: PracticeContext = { claims }
 

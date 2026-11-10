@@ -284,11 +284,16 @@ function deriveFromEvents(sorted: EventRow[], timeZone: string): Partial<Concept
   }
 }
 
+/** Item keys in question order: `quiz:<set>:2` before `quiz:<set>:10`. */
+const ITEM_ORDER = new Intl.Collator('en', { numeric: true })
+
 export function replayConcept(
   events: EventRow[],
   opts: { timeZone: string; now: Date }
 ): ConceptMemoryState {
-  const sorted = [...events].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  // Answers given at one moment (a quiz submitted at once) are taken in question order, the same way every replay:
+  // the first mix-up named in a session is the one kept.
+  const sorted = [...events].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || ITEM_ORDER.compare(a.itemKey ?? '', b.itemKey ?? ''))
   let state = emptyMemoryState()
   const warmups: { value: number; weight: number }[] = []
   const groups = new Map<string, Group>()

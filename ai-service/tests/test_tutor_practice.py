@@ -687,7 +687,7 @@ class TestRoute:
 
         class Billed(Scripted):
             async def generate_structured(self, messages, schema, **kwargs):
-                record_usage(LLMUsage(model="claude-sonnet-5-5", purpose=kwargs["purpose"], input_tokens=1000, output_tokens=100))
+                record_usage(LLMUsage(model="claude-sonnet-5-5", purpose=kwargs["purpose"], input_tokens=1000, output_tokens=100, cache_read_input_tokens=800, cache_creation_input_tokens=200))
                 return await super().generate_structured(messages, schema, **kwargs)
 
         rows = []
@@ -705,7 +705,8 @@ class TestRoute:
         assert response.status_code == 200
         assert len(rows) == 1
         assert rows[0]["source"] == "tutor" and rows[0]["user_id"] == "u1" and rows[0]["source_id"] == "s1"
-        assert rows[0]["input_tokens"] == 2000 and rows[0]["cost_usd"] > 0
+        assert rows[0]["input_tokens"] == 4000 and rows[0]["cost_usd"] > 0
+        assert (rows[0]["cache_read_tokens"], rows[0]["cache_write_tokens"]) == (1600, 400)
 
 
 def test_praise_clause_is_plain_words_without_superlatives():

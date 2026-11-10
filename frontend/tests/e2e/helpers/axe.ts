@@ -40,7 +40,7 @@ async function runAxe(page: Page): Promise<string[]> {
   })
 }
 
-async function axeViolations(page: Page): Promise<string[]> {
+export async function axeViolations(page: Page): Promise<string[]> {
   await waitForToastsToSettle(page)
   const violations = await runAxe(page)
   if (violations.length === 0) return violations

@@ -6,7 +6,8 @@ import { defineConfig, devices } from '@playwright/test'
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'
 
 export default defineConfig({
-  testDir: './tests',
+  // The e2e specs only: the workflow tests in tests/workflows are node:test files, which run as soon as they are loaded.
+  testDir: './tests/e2e',
   globalSetup: './tests/e2e/global-setup.ts',
   timeout: 60_000,
   fullyParallel: false,

@@ -158,8 +158,10 @@ export async function loadReviewContext(input: {
   withBank?: boolean
 }): Promise<ReviewContext> {
   const { userId, projectId, now, timeZone } = input
+  // Course order. Ideas that tie for a review keep the order they are read in, so it has to be the same on every read.
   const concepts = await prisma.concept.findMany({
     where: { projectId, status: 'active', topic: { userConfirmed: true } },
+    orderBy: [{ topic: { orderIndex: 'asc' } }, { orderIndex: 'asc' }, { name: 'asc' }],
     select: { id: true, name: true, topicId: true, kind: true, topic: { select: { name: true } } },
   })
   const conceptMap = new Map<string, ConceptInfo>(concepts.map((c) => [c.id, { id: c.id, name: c.name, topicId: c.topicId, kind: c.kind }]))
@@ -177,10 +179,12 @@ export async function loadReviewContext(input: {
     input.withBank === false ? Promise.resolve({ bank: [], stored: new Map<string, StoredItem>() }) : loadBank(userId, topicIds, new Set(conceptMap.keys())),
   ])
 
+  // In course order, not the order the rows come back in, which changes as rows are rewritten.
+  const rowOf = new Map(rows.map((row) => [row.conceptId, row]))
   const memories = new Map<string, MemorySummary>()
-  for (const row of rows) {
-    const info = conceptMap.get(row.conceptId)
-    if (info) memories.set(row.conceptId, summarise(row, info.kind, now))
+  for (const info of conceptMap.values()) {
+    const row = rowOf.get(info.id)
+    if (row) memories.set(info.id, summarise(row, info.kind, now))
   }
 
   const confusable = new Map<string, string>()

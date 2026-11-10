@@ -88,7 +88,7 @@ describe('relayChatStream', () => {
     assert.equal(calls.saved[0].text, 'Answer.')
     assert.equal(calls.saved[0].sources[0].chunkId, 'c1')
     assert.deepEqual(calls.saved[0].marks, [{ offset: 7, marker: 1 }])
-    assert.deepEqual(calls.saved[0].usage, { model: 'claude-opus-5-5', inputTokens: 2000, outputTokens: 100, costUsd: 0.01 })
+    assert.deepEqual(calls.saved[0].usage, { model: 'claude-opus-5-5', inputTokens: 2000, outputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0.01 })
     assert.deepEqual(calls.failures, [])
   })
 
@@ -137,7 +137,7 @@ describe('relayChatStream', () => {
     assert.equal(error.type, 'error')
     assert.equal(error.code, 'LLM_REFUSED')
     assert.doesNotMatch(String(error.message), /request_id|cyber/)
-    assert.deepEqual(calls.failures, [{ code: 'LLM_REFUSED', usage: { model: 'claude-opus-5-5', inputTokens: 1500, outputTokens: 10, costUsd: 0.006 } }])
+    assert.deepEqual(calls.failures, [{ code: 'LLM_REFUSED', usage: { model: 'claude-opus-5-5', inputTokens: 1500, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0.006 } }])
     assert.equal(calls.saved.length, 0)
   })
 
@@ -203,16 +203,20 @@ describe('relayChatStream', () => {
 
 describe('parseUsage', () => {
   it('reads the AI service usage and tolerates bad numbers', () => {
-    assert.deepEqual(parseUsage({ model: 'm', input_tokens: 10.4, output_tokens: 2, cost_usd: 0.5 }), {
+    assert.deepEqual(parseUsage({ model: 'm', input_tokens: 10.4, output_tokens: 2, cache_read_tokens: 6, cache_write_tokens: 3, cost_usd: 0.5 }), {
       model: 'm',
       inputTokens: 10,
       outputTokens: 2,
+      cacheReadTokens: 6,
+      cacheWriteTokens: 3,
       costUsd: 0.5,
     })
-    assert.deepEqual(parseUsage({ input_tokens: -1, output_tokens: 'x', cost_usd: NaN }), {
+    assert.deepEqual(parseUsage({ input_tokens: -1, output_tokens: 'x', cache_read_tokens: 'y', cost_usd: NaN }), {
       model: '',
       inputTokens: 0,
       outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       costUsd: 0,
     })
     assert.equal(parseUsage(null), null)

@@ -28,8 +28,10 @@ export async function conceptPageLinks(projectId: string, conceptIds: string[], 
   if (conceptIds.length === 0) return []
   const claims = await prisma.conceptClaim.findMany({
     where: { conceptId: { in: conceptIds }, concept: { projectId } },
-    orderBy: [{ conceptId: 'asc' }, { orderIndex: 'asc' }],
-    select: { pageStart: true, pageEnd: true, materialId: true, material: { select: { filename: true } } },
+    orderBy: { orderIndex: 'asc' },
+    select: { conceptId: true, pageStart: true, pageEnd: true, materialId: true, material: { select: { filename: true } } },
   })
-  return pageLinksOf(claims).slice(0, limit)
+  // In the order the question names its concepts: ids are random, so an order by id would differ from one course to the next.
+  const place = (conceptId: string) => conceptIds.indexOf(conceptId)
+  return pageLinksOf(claims.sort((a, b) => place(a.conceptId) - place(b.conceptId))).slice(0, limit)
 }

@@ -84,19 +84,24 @@ const WEAK_PREREQUISITE_RETRIEVABILITY = 0.8
 const WEAK_PREREQUISITE_MASTERY = 0.4
 
 /**
- * The weakest prerequisite of each concept (lowest mastery now, then lowest retrievability), among all
- * its prerequisites whether or not they belong to this topic, and whether it is weak enough for a drill. A
- * prerequisite with no memory counts as 0.
+ * The weakest prerequisite of each concept (lowest mastery now, then lowest retrievability, then the first in
+ * course order), among all its prerequisites whether or not they belong to this topic, and whether it is weak
+ * enough for a drill. A prerequisite with no memory counts as 0.
  */
 async function weakestPrerequisites(userId: string, edges: PrerequisiteEdge[], now: Date): Promise<Map<string, { id: string; weak: boolean }>> {
   const out = new Map<string, { id: string; weak: boolean }>()
   const ids = [...new Set(edges.map((e) => e.sourceId))]
   if (ids.length === 0) return out
   const [concepts, memories] = await Promise.all([
-    prisma.concept.findMany({ where: { id: { in: ids }, status: 'active' }, select: { id: true, kind: true } }),
+    prisma.concept.findMany({
+      where: { id: { in: ids }, status: 'active' },
+      orderBy: [{ topic: { orderIndex: 'asc' } }, { orderIndex: 'asc' }, { name: 'asc' }],
+      select: { id: true, kind: true },
+    }),
     prisma.conceptMemory.findMany({ where: { userId, conceptId: { in: ids } } }),
   ])
   const kindOf = new Map(concepts.map((c) => [c.id, c.kind]))
+  const place = new Map(concepts.map((c, index) => [c.id, index]))
   const memoryOf = new Map(memories.map((m) => [m.conceptId, m]))
   const score = (id: string) => {
     const memory = memoryOf.get(id)
@@ -106,7 +111,7 @@ async function weakestPrerequisites(userId: string, edges: PrerequisiteEdge[], n
   const targets = new Set(edges.map((e) => e.targetId))
   for (const target of targets) {
     const options = edges.filter((e) => e.targetId === target && kindOf.has(e.sourceId)).map((e) => ({ id: e.sourceId, ...score(e.sourceId) }))
-    options.sort((a, b) => a.mastery - b.mastery || a.retrievability - b.retrievability || a.id.localeCompare(b.id))
+    options.sort((a, b) => a.mastery - b.mastery || a.retrievability - b.retrievability || (place.get(a.id) ?? 0) - (place.get(b.id) ?? 0))
     const weakest = options[0]
     if (weakest) out.set(target, { id: weakest.id, weak: weakest.retrievability < WEAK_PREREQUISITE_RETRIEVABILITY || weakest.mastery < WEAK_PREREQUISITE_MASTERY })
   }

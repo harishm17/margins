@@ -213,6 +213,25 @@ class TestHandAddedTopics:
         assert await fetch_topic_chunks(topic)
 
 
+    async def test_mapped_chunks_of_equal_relevance_come_in_course_order(self, db, world):
+        later, (later_chunk,) = await lecture(db, world["project_id"], "later.pdf", 1, vector=unit(1.0))
+        earlier, (earlier_chunk,) = await lecture(
+            db, world["project_id"], "earlier.pdf", 1, vector=unit(1.0), uploaded="SQL:(NOW() AT TIME ZONE 'UTC') - interval '1 day'"
+        )
+        # Ids that sort against course order, so an order that ends on the random id shows.
+        low, high = "00000000000040008000000000000001", "ffffffffffff4fffbfffffffffffffff"
+        await db.execute("UPDATE material_chunks SET id = $1 WHERE id = $2", low, later_chunk)
+        await db.execute("UPDATE material_chunks SET id = $1 WHERE id = $2", high, earlier_chunk)
+        topic = await seed_topic(db, world["project_id"], "Krebs cycle")
+        for chunk_id in (low, high):
+            await db.execute(
+                "INSERT INTO topic_chunk_mappings (id, topic_id, chunk_id, relevance_score, relevance_source, created_at) "
+                "VALUES ($1, $2, $3, 0.02, 'both', (NOW() AT TIME ZONE 'UTC') + interval '1 minute')",
+                new_id(), topic, chunk_id,
+            )
+
+        assert [c["filename"] for c in await fetch_topic_chunks(topic)] == ["earlier.pdf", "later.pdf"]
+
 class TestCourseMap:
     async def test_units_topics_objectives_and_prerequisites_are_in_the_prompt(self, db, world):
         project = world["project_id"]

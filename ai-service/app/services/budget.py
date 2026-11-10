@@ -34,9 +34,12 @@ async def record_usage_event(
     input_tokens: int,
     output_tokens: int,
     cost_usd: float,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
 ) -> None:
     """Append one row to the ledger. `source` is 'job', 'chat', 'voice', 'tutor' or 'recall'; nothing is written for
-    a call that cost nothing. Never raises: a ledger failure must not fail the work that was billed
+    a call that cost nothing. `input_tokens` includes the cache reads and writes, which are also given apart
+    (`usage.ledger_figures` makes all of these from a list of calls). Never raises: a ledger failure must not fail the work that was billed
     (a retry would bill it again), so it is logged loudly instead.
 
     A call that finishes after its account was deleted (a job that was already running) is kept
@@ -50,8 +53,8 @@ async def record_usage_event(
             f"""
             INSERT INTO llm_usage_events
                 (id, user_id, project_id, source, source_id, models,
-                 input_tokens, output_tokens, cost_usd, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, {UTC_NOW})
+                 input_tokens, output_tokens, cost_usd, cache_read_tokens, cache_write_tokens, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, {UTC_NOW})
             """,
             uuid.uuid4().hex,
             user_id,
@@ -62,6 +65,8 @@ async def record_usage_event(
             input_tokens,
             output_tokens,
             cost_usd,
+            cache_read_tokens,
+            cache_write_tokens,
         )
     except Exception:
         logger.exception(

@@ -194,6 +194,8 @@ class TestStreamAnswer:
             "model": "claude-opus-5-5",
             "input_tokens": 2000,
             "output_tokens": 100,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
             "cost_usd": pytest.approx(0.01),
         }
 

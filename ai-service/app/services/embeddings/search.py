@@ -15,7 +15,7 @@ short list (or nothing) instead of 24 loosely related chunks.
 """
 import logging
 import re
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from app.db.connection import execute_in_transaction, execute_query
 from app.services.embeddings.generator import generate_query_embedding
@@ -83,7 +83,8 @@ _CHUNK_COLUMNS = """
     mc.token_count,
     m.id AS material_id,
     m.filename,
-    m.category
+    m.category,
+    m.uploaded_at AS material_uploaded_at
 """
 
 
@@ -131,6 +132,22 @@ def _vector_literal(values: Sequence[float]) -> str:
     return "[" + ",".join(repr(float(v)) for v in values) + "]"
 
 
+def course_place(chunk: Dict) -> Tuple:
+    """A chunk's place in the course: its file's upload order (the file's id after that), then its position in the file.
+    The order the service reads chunks in elsewhere (ORDER BY m.uploaded_at, m.id, mc.chunk_index). Equal scores are
+    broken by it, so the same materials and question give the same excerpts in the same order every time; a chunk's
+    own id, random, comes last."""
+    uploaded = chunk.get("material_uploaded_at")
+    index = chunk.get("chunk_index")
+    return (uploaded is None, uploaded, str(chunk.get("material_id") or ""), index is None, index, str(chunk["id"]))
+
+
+def _rank_key(chunk: Dict) -> Tuple:
+    """Best first: the fused score, then the vector similarity, then course order."""
+    similarity = chunk["similarity"] if chunk.get("similarity") is not None else -1.0
+    return (-chunk["relevance_score"], -similarity, course_place(chunk))
+
+
 def _text_key(chunk: Dict) -> str:
     return re.sub(r"\s+", " ", str(chunk.get("chunk_text") or "")).strip().lower()
 
@@ -176,10 +193,7 @@ def fuse_rankings(
             if entry.get("similarity") is None and row.get("similarity") is not None:
                 entry["similarity"] = row["similarity"]
 
-    ranked = sorted(
-        fused.values(),
-        key=lambda c: (-c["relevance_score"], -(c["similarity"] if c.get("similarity") is not None else -1.0), str(c["id"])),
-    )
+    ranked = sorted(fused.values(), key=_rank_key)
 
     result: List[Dict] = []
     seen_text = set()
@@ -229,7 +243,9 @@ async def _vector_leg(
             pass
         return await conn.fetch(sql, _vector_literal(query_embedding), project_id, pool_size, *filter_args)
 
-    return [dict(row) for row in await execute_in_transaction(run)]
+    # The index scan's order is approximate ("relaxed_order") and has no tie-break: closest first, ties in course order.
+    rows = [dict(row) for row in await execute_in_transaction(run)]
+    return sorted(rows, key=lambda row: (-row["similarity"], course_place(row)))
 
 
 async def _fulltext_leg(
@@ -269,7 +285,7 @@ async def _fulltext_leg(
           AND m.validation_status = 'valid'
           AND mc.search_vector @@ q.query
           {filter_sql}
-        ORDER BY text_rank DESC, mc.id
+        ORDER BY text_rank DESC, m.uploaded_at, m.id, mc.chunk_index
         LIMIT {int(pool_size)}
     """
     rows = await execute_query(sql, *params)
@@ -388,7 +404,7 @@ def boost_chunks(chunks: Sequence[Dict], boosted_ids: Iterable[str], factor: flo
         {**chunk, "relevance_score": chunk["relevance_score"] * (factor if str(chunk["id"]) in boosted else 1.0)}
         for chunk in chunks
     ]
-    return sorted(rescored, key=lambda c: (-c["relevance_score"], str(c["id"])))
+    return sorted(rescored, key=_rank_key)
 
 
 async def search_chunks_for_question(

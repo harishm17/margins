@@ -45,7 +45,7 @@ from app.services.content_generator.context import NoSourceMaterialError
 from app.services.document_processor.chunker import NoContentError
 from app.services.document_processor.storage import StorageError
 from app.services.llm.base import LLMError, LLMRateLimitError, LLMUnavailableError
-from app.services.llm.usage import estimate_cost_usd, summarize_usage, track_llm_usage
+from app.services.llm.usage import ledger_figures, summarize_usage, track_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -281,17 +281,13 @@ async def _enforce_ai_ready(job: JobContext) -> None:
 
 
 def _usage_columns(usages) -> tuple[Dict[str, object], int, int, float]:
-    summary = summarize_usage(usages)
-    cost = sum(c for c in (estimate_cost_usd(u) for u in usages) if c is not None)
-    return (
-        summary,
-        int(summary["input_tokens"]) + int(summary["cache_read_input_tokens"]) + int(summary["cache_creation_input_tokens"]),
-        int(summary["output_tokens"]),
-        round(cost, 6),
-    )
+    """The summary for result_data, and what the job row's columns add: input (cache reads and writes included),
+    output and cost, the same figures as the attempt's ledger row."""
+    figures = ledger_figures(usages)
+    return summarize_usage(usages), figures["input_tokens"], figures["output_tokens"], figures["cost_usd"]
 
 
-async def _record_ledger(job: JobContext, summary, input_tokens: int, output_tokens: int, cost: float) -> None:
+async def _record_ledger(job: JobContext, usages) -> None:
     """Add this attempt's spend to the budget ledger, whether or not the job still holds its claim:
     the model was called and billed either way."""
     await record_usage_event(
@@ -299,16 +295,13 @@ async def _record_ledger(job: JobContext, summary, input_tokens: int, output_tok
         project_id=job.project_id,
         source="job",
         source_id=job.id,
-        models=",".join(summary["models"]),
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        cost_usd=cost,
+        **ledger_figures(usages),
     )
 
 
 async def _complete(job: JobContext, outcome: JobOutcome, usages) -> None:
     summary, input_tokens, output_tokens, cost = _usage_columns(usages)
-    await _record_ledger(job, summary, input_tokens, output_tokens, cost)
+    await _record_ledger(job, usages)
     result = dict(outcome.result)
     if usages:
         result["usage"] = summary
@@ -357,7 +350,7 @@ async def _fail(
     re-dispatch threshold, so the reaper never races a dispatcher that is still retrying.
     """
     summary, input_tokens, output_tokens, cost = _usage_columns(usages)
-    await _record_ledger(job, summary, input_tokens, output_tokens, cost)
+    await _record_ledger(job, usages)
     redispatch_after = float(retry_in or 0) + settings.JOB_PENDING_REDISPATCH_SECONDS
     row = await execute_one(
         f"""
@@ -397,7 +390,7 @@ async def _defer(job: JobContext, exc: Exception, usages) -> bool:
     JOB_AI_WAIT_MAX_SECONDS: then it fails like any other job.
     """
     summary, input_tokens, output_tokens, cost = _usage_columns(usages)
-    await _record_ledger(job, summary, input_tokens, output_tokens, cost)
+    await _record_ledger(job, usages)
     budget = isinstance(exc, DailyBudgetExceeded)
     wait = _seconds_until_reset() + 60 if budget else settings.JOB_AI_WAIT_RECHECK_SECONDS
     code = exc.code if isinstance(exc, (LLMError, PermanentJobError)) else "LLM_UNAVAILABLE"

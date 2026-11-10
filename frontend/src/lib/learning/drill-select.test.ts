@@ -122,3 +122,12 @@ test('the weakest prerequisite is the lowest R below 0.8', () => {
   const weakest = pickWeakestPrerequisite([concept('a', { retrievability: 0.7 }), concept('b', { retrievability: 0.4 }), concept('c', { retrievability: 0.9 })])
   assert.equal(weakest?.conceptId, 'b')
 })
+
+test('items that tie in a drill are taken in bank order, not by their keys', () => {
+  // Item keys carry random ids, so a tie broken by key falls differently on every new course.
+  const bank = ['f0', 'c3', '0a', '9b', '5e'].map((id) => item(`quiz:${id}:0`, ['c1']))
+  assert.deepEqual(
+    drill({ bank }).items.map((i) => i.itemKey),
+    bank.slice(0, drill({ bank }).items.length).map((i) => i.itemKey)
+  )
+})

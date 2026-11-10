@@ -10,7 +10,10 @@ import { createLineSplitter, parseChatEvent } from './events'
 import { chatErrorMessage } from './errors'
 import type { ChatSource, CitationMark } from './citations'
 
-export type UsageInfo = { model: string; inputTokens: number; outputTokens: number; costUsd: number }
+/** `inputTokens` includes the cache reads and writes, which are also given apart (A4). */
+export type UsageInfo = { model: string; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costUsd: number }
+
+const NO_USAGE: UsageInfo = { model: '', inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 }
 
 export type AnswerRecord = {
   text: string
@@ -42,6 +45,8 @@ export function parseUsage(value: unknown): UsageInfo | null {
     model: typeof raw.model === 'string' ? raw.model : '',
     inputTokens: Math.round(number(raw.input_tokens)),
     outputTokens: Math.round(number(raw.output_tokens)),
+    cacheReadTokens: Math.round(number(raw.cache_read_tokens)),
+    cacheWriteTokens: Math.round(number(raw.cache_write_tokens)),
     costUsd: number(raw.cost_usd),
   }
 }
@@ -122,7 +127,7 @@ export function relayChatStream(args: {
 
             if (event.type === 'done') {
               finished = true
-              const usage = parseUsage(raw.usage) ?? { model: '', inputTokens: 0, outputTokens: 0, costUsd: 0 }
+              const usage = parseUsage(raw.usage) ?? NO_USAGE
               let extra: { tutor?: unknown; send?: Json } | undefined
               await safely('preparing the answer', async () => {
                 extra = hooks.onDone?.(raw)

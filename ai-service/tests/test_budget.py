@@ -204,6 +204,20 @@ async def test_record_usage_event_appends_and_skips_free_calls(db):
     assert await spent_today_usd(user_id) == pytest.approx(0.25)
 
 
+async def test_the_ledger_keeps_cache_reads_and_writes_apart_from_the_input_they_are_part_of(db):
+    user_id, project_id = await user_with_project(db)
+    await record_usage_event(
+        user_id=user_id, project_id=project_id, source="tutor", source_id="s", models="m",
+        input_tokens=9000, output_tokens=5, cache_read_tokens=8000, cache_write_tokens=500, cost_usd=0.01,
+    )
+    await record_usage_event(
+        user_id=user_id, project_id=project_id, source="chat", source_id="c", models="m",
+        input_tokens=10, output_tokens=5, cost_usd=0.01,
+    )
+    rows = await db.fetch("SELECT source, input_tokens, cache_read_tokens, cache_write_tokens FROM llm_usage_events ORDER BY source")
+    assert [tuple(r) for r in rows] == [("chat", 10, 0, 0), ("tutor", 9000, 8000, 500)]
+
+
 async def test_spend_after_the_account_was_deleted_is_kept_unlinked(db):
     # A job that was running when its account was deleted: the foreign key refuses the user, so the
     # row is written without one, and the money still counts toward the global cap.

@@ -35,6 +35,22 @@ class LLMFactory:
                 timeout=settings.LLM_TIMEOUT_SECONDS,
                 max_retries=settings.LLM_MAX_RETRIES,
             )
+        if provider_name == "replay":
+            # Settings refuses this at startup; checked again here in case the setting was changed after.
+            if settings.is_production:
+                raise LLMNotConfiguredError("LLM_PROVIDER=replay is not allowed when ENVIRONMENT=production")
+            from app.services.llm.anthropic_provider import AnthropicProvider
+            from app.services.llm.replay_provider import ReplayProvider
+
+            on_miss = settings.LLM_REPLAY_MISS.strip().lower()
+            inner = None
+            if on_miss == "record":
+                inner = AnthropicProvider(
+                    api_key=settings.ANTHROPIC_API_KEY,
+                    timeout=settings.LLM_TIMEOUT_SECONDS,
+                    max_retries=settings.LLM_MAX_RETRIES,
+                )
+            return ReplayProvider(settings.LLM_CASSETTE_DIR, on_miss=on_miss, inner=inner, fault_file=settings.LLM_REPLAY_FAULT_FILE)
         if provider_name == "mock":
             # Settings refuses this at startup; checked again here in case the setting was changed after.
             if settings.is_production:
@@ -42,7 +58,7 @@ class LLMFactory:
             from app.services.llm.mock_provider import MockProvider
 
             return MockProvider()
-        raise LLMNotConfiguredError(f"Unknown LLM_PROVIDER: {provider_name} (use anthropic or mock)")
+        raise LLMNotConfiguredError(f"Unknown LLM_PROVIDER: {provider_name} (use anthropic, mock or replay)")
 
     @classmethod
     def reset(cls):

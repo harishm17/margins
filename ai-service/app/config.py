@@ -15,7 +15,15 @@ class Settings(BaseSettings):
 
     # LLM: Claude for all text generation and grading.
     # "mock" returns schema-valid placeholder output with no API calls (local dev, e2e runs).
-    LLM_PROVIDER: str = "anthropic"  # anthropic or mock
+    LLM_PROVIDER: str = "anthropic"  # anthropic, mock or replay
+    # LLM_PROVIDER=replay (the workflow suite): answers come from recordings in this folder (see
+    # app/services/llm/replay_provider.py). LLM_REPLAY_MISS=record calls the real model for a request
+    # with no recording and stores the answer; "error" fails the call instead.
+    LLM_CASSETTE_DIR: str = ""
+    LLM_REPLAY_MISS: str = "error"
+    # A file the workflow suite writes a provider error code into to stage an outage (WF11); empty or
+    # missing means no outage. Read only by the replay provider.
+    LLM_REPLAY_FAULT_FILE: str = ""
     ANTHROPIC_API_KEY: str = ""
     # The two fallback models. A purpose below with no value of its own uses the main model
     # (notes, examples, practice, quizzes, exams, chat) or the fast one (grading, topics, voice,
@@ -184,10 +192,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _no_mock_model_in_production(self) -> "Settings":
-        # The mock provider answers with canned text and never fails a leak check: in production it would hand
-        # students replies nobody reviewed, so the service refuses to start with it.
-        if self.ENVIRONMENT == "production" and self.LLM_PROVIDER.strip().lower() == "mock":
-            raise ValueError("LLM_PROVIDER=mock is not allowed when ENVIRONMENT=production")
+        # The mock and replay providers answer with canned or recorded text and never fail a leak check: in
+        # production they would hand students replies nobody reviewed, so the service refuses to start with them.
+        provider = self.LLM_PROVIDER.strip().lower()
+        if self.ENVIRONMENT == "production" and provider in ("mock", "replay"):
+            raise ValueError(f"LLM_PROVIDER={provider} is not allowed when ENVIRONMENT=production")
+        if provider == "replay" and not self.LLM_CASSETTE_DIR.strip():
+            raise ValueError("LLM_PROVIDER=replay needs LLM_CASSETTE_DIR (the folder of recordings)")
         return self
 
     @property
@@ -202,9 +213,9 @@ class Settings(BaseSettings):
 
     @property
     def llm_configured(self) -> bool:
-        """Whether text generation can run (a key is set, or the mock provider is on)."""
+        """Whether text generation can run (a key is set, or the mock or replay provider is on)."""
         provider = self.LLM_PROVIDER.lower()
-        return provider == "mock" or (provider == "anthropic" and bool(self.ANTHROPIC_API_KEY))
+        return provider in ("mock", "replay") or (provider == "anthropic" and bool(self.ANTHROPIC_API_KEY))
 
     @property
     def voice_enabled(self) -> bool:

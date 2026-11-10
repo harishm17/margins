@@ -5,6 +5,7 @@ schema cannot express (an MCQ answer must be one of its options, a numerical ans
 must be a number) are checked in code after parsing, per item, so one bad question
 is dropped instead of failing the whole set.
 """
+import hashlib
 import math
 import random
 import re
@@ -270,6 +271,11 @@ def rewrite_option_letters(text: str, mapping: Dict[str, str]) -> str:
     return _MARK.sub(lambda m: mapping[old_letters[int(m.group(1))]], "".join(parts))
 
 
+def content_rng(parts: Sequence[str]) -> random.Random:
+    """A generator fixed by `parts`: shuffles of the same content always come out the same."""
+    return random.Random(int.from_bytes(hashlib.sha256("\n".join(parts).encode()).digest()[:8], "big"))
+
+
 def shuffle_choice_options(
     question: Dict[str, Any],
     rng: Optional[random.Random] = None,
@@ -285,11 +291,18 @@ def shuffle_choice_options(
     question types are returned unchanged. `multiple_choice=True` treats a dict without a
     question_type (a practice step) as multiple choice; `letter_fields` are the text fields whose
     letter references are rewritten.
+
+    Without `rng`, the order comes from the question's own text: the same question is always
+    shuffled the same way (so a course built twice, or a replayed run, stores the same
+    questions), and the answer's slot is still spread across questions.
     """
     options = question.get("options")
     if not options or not (multiple_choice or question.get("question_type") == "multiple_choice"):
         return question
-    rng = rng or random
+    rng = rng or content_rng(
+        [str(question.get("question_text") or question.get("question") or question.get("prompt") or "")]
+        + [str(option.get("text")) for option in options]
+    )
     order = list(range(len(options)))
     rng.shuffle(order)
     labels = [chr(ord("A") + i) for i in range(len(options))]
