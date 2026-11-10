@@ -4,7 +4,6 @@ Only the file's content can make a material invalid. A storage, download or netw
 raises instead (`StorageError` and friends), so the caller fails the job as retryable and
 leaves the material's validation status alone.
 """
-import asyncio
 import logging
 from typing import List, Optional
 from pydantic import BaseModel
@@ -13,13 +12,15 @@ from app.services.llm import LLMFactory
 from app.services.llm.base import LLMError, LLMMessage
 from app.services.llm.schemas import MATERIAL_KINDS, MaterialCheck
 from app.config import settings
-from app.services.document_processor.extractors import (
-    ExtractedDocument,
-    UnreadableDocumentError,
-    extract_document,
-    infer_extension,
+from app.services.document_processor.parse_types import (
     SUPPORTED_EXTENSIONS,
+    ExtractedDocument,
+    ParseRefused,
+    UnreadableDocumentError,
+    infer_extension,
+    refusal_note,
 )
+from app.services.document_processor.sandbox import parse_document
 from app.services.document_processor.storage import local_copy
 
 logger = logging.getLogger(__name__)
@@ -129,12 +130,10 @@ async def validate_material(
 
     async with local_copy(storage_path) as local_path:
         try:
-            extracted = await asyncio.to_thread(
-                extract_document, local_path, filename, markdown=False
-            )
-        except UnreadableDocumentError as exc:
-            logger.info(f"Material {material_id} is unreadable: {exc}")
-            return ValidationResult(status="invalid", notes=str(exc))
+            extracted = await parse_document(local_path, filename, markdown=False)
+        except (UnreadableDocumentError, ParseRefused) as exc:
+            logger.info("Material %s is unreadable: %s", material_id, type(exc).__name__)
+            return ValidationResult(status="invalid", notes=refusal_note(exc))
 
     page_count = extracted.page_count
     if page_count <= 0:

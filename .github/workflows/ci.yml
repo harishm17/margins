@@ -251,6 +251,17 @@ jobs:
             "import tiktoken; print(len(tiktoken.get_encoding('cl100k_base').encode('hello world')))"
       - name: catdoc is available for legacy .doc uploads
         run: docker run --rm --network none --entrypoint catdoc margins-ai -V
+      - name: Uploads are read by the limited child process as the image's user
+        run: |
+          docker run --rm --network none -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key \
+            --entrypoint python margins-ai -c "
+          import asyncio, docx
+          from app.services.document_processor.sandbox import parse_document
+          d = docx.Document(); d.add_paragraph('Hash tables map keys to buckets.'); d.save('/tmp/t.docx')
+          r = asyncio.run(parse_document('/tmp/t.docx', 't.docx', markdown=True))
+          assert 'Hash tables' in r.text, r
+          print('child parse ok', r.page_count)
+          "
       - name: Image starts; /health stays unready without its database
         run: |
           docker run -d --name ai -p 8000:8000 \

@@ -19,10 +19,7 @@ from typing import List, Optional, Sequence, Tuple
 import tiktoken
 from pydantic import BaseModel
 
-from app.services.document_processor.extractors import (
-    ExtractedPage,
-    extract_document,
-)
+from app.services.document_processor.parse_types import ExtractedPage
 
 logger = logging.getLogger(__name__)
 
@@ -312,12 +309,4 @@ def chunk_pages(pages: Sequence[ExtractedPage]) -> List[Chunk]:
             "No chunks were created from the material. The file may be empty or contain "
             "unreadable text."
         )
-    return chunks
-
-
-def chunk_document(file_path: str, filename: str) -> List[Chunk]:
-    """Read a supported file and chunk it. Blocking; call it through `asyncio.to_thread`."""
-    extracted = extract_document(file_path, filename)
-    chunks = chunk_pages(extracted.pages)
-    logger.info("Created %s chunks from %s", len(chunks), filename)
     return chunks

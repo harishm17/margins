@@ -190,6 +190,20 @@ class Settings(BaseSettings):
     # Where the frontend writes uploads when it has no S3 bucket (`local://` material paths).
     LOCAL_UPLOADS_DIR: str = "/data/uploads"
 
+    # Reading uploads: the parsers run in a child process with these limits (see
+    # services/document_processor/sandbox.py). A file over any limit is refused with a fixed note.
+    PARSE_MEMORY_MB: int = 1536  # address space a parse may map beyond loading the parsers
+    PARSE_CPU_SECONDS: int = 120  # CPU time limit of the child
+    PARSE_WALL_SECONDS: int = 180  # wall-clock time before the child is killed
+    PARSE_MAX_OUTPUT_MB: int = 64  # size of the child's result file
+    PARSE_MAX_CONCURRENCY: int = 2  # parses running at once in this process
+    PARSE_MAX_PDF_PAGES: int = 600
+    PARSE_MAX_CHARS: int = 4_000_000  # extracted characters per file
+    PARSE_MAX_CHUNKS: int = 4000  # chunks per file
+    PARSE_MAX_ZIP_MEMBERS: int = 2000  # parts in a DOCX or PPTX
+    PARSE_MAX_XML_MB: int = 300  # total uncompressed XML in a DOCX or PPTX
+    PARSE_MAX_XML_RATIO: int = 200  # one XML part may not expand more than this many times
+
     # Service Configuration
     AI_SERVICE_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:3000"  # Frontend URL for CORS

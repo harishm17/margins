@@ -22,7 +22,13 @@ from app.models.jobs import (
     ReviewItemsInput,
 )
 from app.services.document_processor.validator import material_role, validate_material
-from app.services.document_processor.chunker import chunk_document, NoContentError
+from app.services.document_processor.chunker import chunk_pages, NoContentError
+from app.services.document_processor.parse_types import (
+    ParseRefused,
+    UnreadableDocumentError,
+    refusal_note,
+)
+from app.services.document_processor.sandbox import parse_document
 from app.services.document_processor.storage import local_copy
 from app.services.embeddings.generator import embedding_text, generate_embeddings
 from app.services.course_planner import NoPlannableMaterialError, StalePlanError, plan_course, write_plan
@@ -241,6 +247,25 @@ async def _start_topic_extraction(project_id: str, user_id: str) -> None:
         await mark_undelivered(topic_job_id, str(exc))
 
 
+# Chunks are embedded and inserted in batches, so one big file never holds everything in one call.
+EMBED_BATCH_SIZE = 64
+INSERT_BATCH_SIZE = 500
+
+
+async def _mark_material_invalid(material_id: str, note: str) -> None:
+    await execute_update(
+        f"""
+        UPDATE materials
+        SET validation_status = 'invalid',
+            validation_notes = $1,
+            validated_at = {UTC_NOW}
+        WHERE id = $2
+        """,
+        note,
+        material_id,
+    )
+
+
 @router.post("/jobs/chunk-material")
 @job_handler(
     job_type="chunk_material",
@@ -275,35 +300,37 @@ async def chunk_material_job(payload: JobPayload, job: JobContext) -> JobOutcome
         # The source file is a local copy for the length of the job; downloaded copies are
         # deleted when the block exits.
         async with local_copy(material["gcs_path"]) as local_path:
-            # Parsing is blocking, so it runs in a worker thread.
-            chunks = await asyncio.to_thread(chunk_document, local_path, material["filename"])
-            logger.info(f"Created {len(chunks)} chunks from {material['filename']}")
+            # The file is read in a limited child process (see sandbox.py).
+            extracted = await parse_document(local_path, material["filename"], markdown=True)
+        chunks = await asyncio.to_thread(chunk_pages, extracted.pages)
+        if len(chunks) > settings.PARSE_MAX_CHUNKS:
+            raise ParseRefused("too_many_chunks")
+        logger.info(f"Created {len(chunks)} chunks from {material['filename']}")
 
-            await job.set_stage("embedding", 40)
-            # An embedding failure fails the job (and it is retried): chunks stored without
-            # vectors would be invisible to semantic search while the job claimed success.
-            # The heading path is embedded with the text; the stored chunk_text is unchanged.
-            embeddings = await generate_embeddings(
-                [embedding_text(chunk.section_hierarchy, chunk.chunk_text) for chunk in chunks]
+        await job.set_stage("embedding", 40)
+        # An embedding failure fails the job (and it is retried): chunks stored without
+        # vectors would be invisible to semantic search while the job claimed success.
+        # The heading path is embedded with the text; the stored chunk_text is unchanged.
+        texts = [embedding_text(chunk.section_hierarchy, chunk.chunk_text) for chunk in chunks]
+        embeddings: list = []
+        for start in range(0, len(texts), EMBED_BATCH_SIZE):
+            embeddings.extend(await generate_embeddings(texts[start : start + EMBED_BATCH_SIZE]))
+        if len(embeddings) != len(chunks):
+            raise RuntimeError(
+                f"Embedding returned {len(embeddings)} vectors for {len(chunks)} chunks"
             )
-            if len(embeddings) != len(chunks):
-                raise RuntimeError(
-                    f"Embedding returned {len(embeddings)} vectors for {len(chunks)} chunks"
-                )
-            logger.info(f"Generated {len(embeddings)} embeddings")
+        logger.info(f"Generated {len(embeddings)} embeddings")
+    except (ParseRefused, UnreadableDocumentError) as exc:
+        # A refused or unreadable file is a content problem: retrying cannot help, and the
+        # student sees a fixed note, never the parser's words.
+        note = refusal_note(exc)
+        await _mark_material_invalid(input_data.materialId, note)
+        raise PermanentJobError(note, "MATERIAL_UNREADABLE") from exc
     except NoContentError:
         # A file with no text to chunk is a content problem: retrying cannot help, and the
         # material must not stay "valid" with zero chunks.
-        await execute_update(
-            f"""
-            UPDATE materials
-            SET validation_status = 'invalid',
-                validation_notes = $1,
-                validated_at = {UTC_NOW}
-            WHERE id = $2
-            """,
-            "No readable text could be extracted from this file.",
-            input_data.materialId,
+        await _mark_material_invalid(
+            input_data.materialId, "No readable text could be extracted from this file."
         )
         raise
 
@@ -329,15 +356,16 @@ async def chunk_material_job(payload: JobPayload, job: JobContext) -> JobOutcome
             "DELETE FROM material_chunks WHERE material_id = $1",
             input_data.materialId,
         )
-        await conn.executemany(
-            f"""
-            INSERT INTO material_chunks
-            (id, material_id, chunk_text, chunk_embedding, section_hierarchy,
-             page_start, page_end, chunk_index, token_count, created_at)
-            VALUES (gen_random_uuid()::text, $1, $2, $3::vector, $4, $5, $6, $7, $8, {UTC_NOW})
-            """,
-            records,
-        )
+        for start in range(0, len(records), INSERT_BATCH_SIZE):
+            await conn.executemany(
+                f"""
+                INSERT INTO material_chunks
+                (id, material_id, chunk_text, chunk_embedding, section_hierarchy,
+                 page_start, page_end, chunk_index, token_count, created_at)
+                VALUES (gen_random_uuid()::text, $1, $2, $3::vector, $4, $5, $6, $7, $8, {UTC_NOW})
+                """,
+                records[start : start + INSERT_BATCH_SIZE],
+            )
         return len(records)
 
     chunks_created = await execute_in_transaction(replace_chunks_transaction)
