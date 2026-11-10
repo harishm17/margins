@@ -169,6 +169,23 @@ def test_each_task_gets_its_own_calls_and_the_batch_price_is_half():
     assert halved[0]["cost_usd"] == pytest.approx(full / 2)
 
 
+def test_a_call_record_names_the_schema_and_system_prompt_that_were_sent():
+    from app.services.llm.schemas import QuestionSet, QuestionSetV2
+
+    tracker = SpendTracker(1.0, 1.0, adapters.estimate_cost)
+    provider = adapters.MeteredProvider(FakeProvider(), adapters.parse_model_spec("haiku:low"), tracker, GENERATION)
+    messages = [LLMMessage(role="system", content="rules"), LLMMessage(role="user", content="go")]
+    schemas = {}
+    for schema in (QuestionSet, QuestionSetV2):
+        with adapters.call_sink() as calls:
+            try:
+                asyncio.run(provider.generate_structured(messages, schema, purpose="quiz"))
+            except Exception:  # FakeProvider need not support structured output; the request is recorded either way
+                pass
+        schemas[schema.__name__] = calls[0]["request"]["schema"]
+    assert schemas == {"QuestionSet": "QuestionSet", "QuestionSetV2": "QuestionSetV2"}
+
+
 # ---------------------------------------------------------------- the item judge
 
 import item_judge  # noqa: E402

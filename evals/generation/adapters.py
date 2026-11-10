@@ -17,6 +17,7 @@ from `app`.
 import json
 import os
 import re
+import sys
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -29,6 +30,9 @@ from app.services.llm import anthropic_provider
 from app.services.llm.base import LLMMessage, LLMProvider, LLMUsage
 from app.services.llm.models import resolve_model as app_resolve_model
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from common.revision import request_summary  # noqa: E402
 from spend import SpendTracker, estimate_prompt_tokens
 
 MODEL_ALIASES = {
@@ -251,7 +255,8 @@ class MeteredProvider(LLMProvider):
                 "cache_read_input_tokens": sum(u.cache_read_input_tokens for u in usages),
                 "cache_creation_input_tokens": sum(u.cache_creation_input_tokens for u in usages),
                 "response_models": sorted({u.model for u in usages}),
-                "error": f"{type(error).__name__}: {error}" if error else None,
+                "request": request_summary(messages, schema),
+                "error":f"{type(error).__name__}: {error}" if error else None,
                 "raw_output": raw_of(result) if error is None else None,
             }
         )

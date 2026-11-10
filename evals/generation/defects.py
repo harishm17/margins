@@ -63,6 +63,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(EVALS_DIR))
 
 from common.ingest import check_db_name, git, prepare_app_environment  # noqa: E402
+from common.revision import prompt_revision  # noqa: E402
 
 
 def log(message: str = "") -> None:
@@ -222,6 +223,7 @@ def render_report(summary: Dict[str, Any]) -> str:
     lines = [
         f"# A2: generated-item defects ({run['date']}, {run['label']})",
         "",
+        f"Prompts {run.get('prompts', {}).get('revision', 'v1 (not recorded)')} (PROMPTS_V2={run.get('prompts', {}).get('PROMPTS_V2', '')!r}). "
         f"Code {run['code']['commit'][:8]} on {run['code']['branch']}{' (app has uncommitted changes)' if run['code']['app_dirty'] else ''}. "
         f"{run['topics']} topics ({', '.join(f'{c} {n}' for c, n in run['topic_counts'].items())}); the app's own models; "
         f"{'Message Batches API (half price)' if run['batch'] else 'direct calls'}{'; MOCK provider' if run['mock'] else ''}. "
@@ -474,7 +476,11 @@ async def run(args: argparse.Namespace) -> int:
         counts = {c: len(rows) for c, rows in topics.items()}
 
         per_kind = estimate(args, tracker, counts)
+        revision = prompt_revision("generation", "support")
+        if previous.get("prompts") and previous["prompts"].get("areas") != revision["areas"]:
+            raise SystemExit(f"--resume: this folder ran with {previous['prompts']['areas']}, PROMPTS_V2 now gives {revision['areas']}. Resume with the same PROMPTS_V2.")
         log("Plan")
+        log(f"  prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> {revision['areas']}")
         log(f"  topics: {counts} (positions {', '.join(c + ' ' + ','.join(t['key'] for t in rows) for c, rows in topics.items())})")
         log(f"  generators: {', '.join(args.kind_list)}; judge: {args.judge or 'none'}; {'direct calls' if price == 1.0 else 'Message Batches API, half price'}")
         for kind, usd in per_kind.items():
@@ -529,6 +535,7 @@ async def run(args: argparse.Namespace) -> int:
                 "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
                 "app_dirty": bool(git("status", "--porcelain", "--", "ai-service/app")),
             },
+            "prompts": revision,
             "kinds": args.kind_list,
             "topics": sum(counts.values()),
             "topic_counts": counts,
