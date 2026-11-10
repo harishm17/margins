@@ -60,6 +60,8 @@ jobs:
       - run: npx prisma validate
       - run: npm run lint
       - run: npx tsc --noEmit
+      - name: Dependency audit (high and critical; accepted advisories are listed with reasons in the script)
+        run: node scripts/audit-gate.mjs
       - run: npx prisma migrate deploy
       - name: Tests, with none skipped (the database tests skip when the database is missing)
         run: |
@@ -104,6 +106,11 @@ jobs:
           cache-dependency-glob: ai-service/uv.lock
       - run: uv sync --locked --python 3.14
       - run: uv run python -m compileall -q app
+      - name: Dependency audit (the locked runtime requirements; accepted findings are in audit-ignore.txt)
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-emit-project -o "$RUNNER_TEMP/req.txt" > /dev/null
+          ignores=$(grep -v '^#' audit-ignore.txt | grep . | sed 's/^/--ignore-vuln /' | tr '\n' ' ')
+          uvx pip-audit -r "$RUNNER_TEMP/req.txt" --no-deps --disable-pip $ignores
       - name: Migrations only add, and the AI service names the newest one
         run: python3 ../scripts/check_migrations.py
       - run: uv run pytest -q
