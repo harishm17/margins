@@ -1717,7 +1717,10 @@ class PracticeTutorReplyV2(BaseModel):
     `analysis` scratchpad (thinking replaces it). The word limit is stated once, in the system prompt."""
 
     reply: str = Field(description="What the student reads")
-    rung_used: int = Field(description="The rung (0 to 5) the reply gives; never above the rung allowed")
+    rung_used: int = Field(
+        description="The rung (0 to 5) of the help the reply gives, on the ladder's scale: 1 locate, 2 narrow, 3 name, 4 structure, "
+        "5 only for a worked analogue. Never above the rung allowed, which is a limit, not a target"
+    )
     mistake: TutorMistake
     reveals_answer: bool = Field(
         description="Your own check: true when the reply states the answer, or lets a calculator finish it, or hides it in a question or an option"

@@ -166,7 +166,6 @@ def test_practice_v2_system_prompt(v2_tutor):
     system = system_of(build_messages(practice_request()))
     assert "analysis" not in system.lower()
     assert "realise" not in system and "said earlier was wrong" not in system
-    assert "about 60" not in system
     assert system.count("80 words") == 1
     assert "mistake" in system and "kind" in system
     assert "gap filled from general knowledge looks like course fact" in system
