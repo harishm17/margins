@@ -220,14 +220,34 @@ jobs:
             "import tiktoken; print(len(tiktoken.get_encoding('cl100k_base').encode('hello world')))"
       - name: catdoc is available for legacy .doc uploads
         run: docker run --rm --network none --entrypoint catdoc margins-ai -V
-      - name: Image starts and answers health checks
+      - name: Image starts; /health stays unready without its database
         run: |
           docker run -d --name ai -p 8000:8000 \
             -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key \
             margins-ai
           for i in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:8000/health && exit 0
+            if curl -fsS http://127.0.0.1:8000/; then
+              code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)"
+              echo "/health: $code"
+              test "$code" = "503" && exit 0
+              docker logs ai
+              exit 1
+            fi
             sleep 1
           done
           docker logs ai
           exit 1
+
+  backup-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck backup/backup.sh
+      - run: docker build -t margins-backup backup
+      - name: pg_dump matches production's Postgres 18, rclone is there, the job runs as a non-root user
+        run: |
+          docker run --rm --entrypoint sh margins-backup -c \
+            'pg_dump --version | grep -q "PostgreSQL) 18\." && rclone version >/dev/null && test "$(id -u)" != 0'
+      - name: The job refuses to start without its settings
+        run: |
+          if docker run --rm margins-backup; then exit 1; fi
