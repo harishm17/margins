@@ -14,6 +14,7 @@ from utterance import app_result_text
 
 HERE = Path(__file__).resolve().parent
 PROMPTS = HERE / "fixtures" / "teach_back_prompts.json"
+PROMPTS_V2 = HERE / "fixtures" / "teach_back_prompts_v2.json"  # written by teach-parity-fixture.ts --v2
 
 DEFAULT_BAND = 1
 
@@ -273,6 +274,12 @@ def parity_trace(scenario: Dict[str, Any]) -> List[Dict[str, Any]]:
     return steps
 
 
-def load_prompts() -> Dict[str, Any]:
-    """The coach's system prompt and start message per topic, and its tools, as the real TypeScript renders them."""
-    return json.loads(PROMPTS.read_text())
+def load_prompts(v2: Optional[bool] = None) -> Dict[str, Any]:
+    """The coach's system prompt and start message per topic, and its tools, as the real TypeScript renders them.
+    The audited (v2) prompts are a fixture of their own; with `v2` left out the voice flag (PROMPTS_V2) decides, as it
+    does in the app. Needs `app` importable then (the eval runner and the tests have it on the path)."""
+    if v2 is None:
+        from app.prompt_revision import prompts_v2
+
+        v2 = prompts_v2("voice")
+    return json.loads((PROMPTS_V2 if v2 else PROMPTS).read_text())

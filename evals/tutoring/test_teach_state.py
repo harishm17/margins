@@ -6,6 +6,7 @@ from teach_state import (
     PROBE_FOR_FINDING,
     empty_state,
     find_gaps,
+    load_prompts,
     parity_trace,
     plan_next,
     probe_for,
@@ -99,3 +100,16 @@ def test_tool_results_mark_student_words_and_claims_as_data():
     assert tagged("student_words", None) is None
 
 
+def test_the_prompt_fixture_follows_the_voice_flag(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "PROMPTS_V2", "")
+    v1 = load_prompts()
+    monkeypatch.setattr(settings, "PROMPTS_V2", "voice")
+    v2 = load_prompts()
+    monkeypatch.setattr(settings, "PROMPTS_V2", "generation")  # another area: voice stays on v1
+    assert load_prompts() == v1
+    assert v1 == load_prompts(v2=False) and v2 == load_prompts(v2=True)
+    assert v1 != v2
+    assert {s["topic"] for s in scenarios()} <= set(v2["topics"])
+    assert [tool["name"] for tool in v2["tools"]] == [tool["name"] for tool in v1["tools"]]

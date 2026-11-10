@@ -62,6 +62,7 @@ from common.ingest import (  # noqa: E402
     ingest_documents,
     prepare_app_environment,
 )
+from common.revision import prompt_revision  # noqa: E402
 from corpus import corpus_ids, document_path, load_corpus  # noqa: E402
 
 
@@ -345,6 +346,8 @@ async def run(args: argparse.Namespace) -> int:
         judge_spec = adapters.parse_model_spec(args.judge if ":" in args.judge else f"{args.judge}:medium")
     tracker = SpendTracker(args.max_usd, args.max_judge_usd, adapters.estimate_cost)
 
+    revision = prompt_revision("generation", "support", "ingest")
+    log(f"Prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> {revision['areas']}")
     if args.dry_run:
         counts = {}
         dry_topics_file = args.topics_file or (args.resume / "topics.json" if args.resume else None)
@@ -403,6 +406,7 @@ async def run(args: argparse.Namespace) -> int:
             "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
             "app_dirty": bool(git("status", "--porcelain", "--", "ai-service/app")),
         },
+        "prompts": prompt_revision("generation", "support", "ingest"),
         "corpora": args.corpus_list if not args.no_generate else previous["corpora"],
         "types": args.type_list,
         "models": models_info,

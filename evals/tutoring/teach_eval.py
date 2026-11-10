@@ -418,8 +418,13 @@ def estimate(scenarios: List[Dict[str, Any]], prompts: Dict[str, Any], tracker, 
     return plan
 
 
-def print_plan(args, plan: Dict[str, Any], log) -> None:
+def print_plan(args, plan: Dict[str, Any], log, revision: Optional[Dict[str, Any]] = None, prompts: Optional[Dict[str, Any]] = None) -> None:
     log("Plan")
+    if revision:
+        import hashlib
+
+        shas = sorted({hashlib.sha256(e["system"].encode("utf-8")).hexdigest()[:12] for e in (prompts or {}).get("topics", {}).values()})
+        log(f"  prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> {revision['areas']}; coach system prompt sha {', '.join(shas)}")
     log(f"  surface: teach_back   scenarios: {plan['scenarios']}   model calls: {plan['calls']}")
     log(f"  coach {plan['model']}: about ${plan['usd']:.2f}")
     if plan.get("judge_usd") is not None:
@@ -450,16 +455,20 @@ async def run(args, host) -> int:
     scenario_path = args.scenarios or TEACH_SCENARIOS
     scenarios = host.load_scenarios(scenario_path, args.patterns, args.limit)
     by_id = {s["id"]: s for s in scenarios}
-    prompts = load_prompts()
+    from common.revision import prompt_revision
+
+    revision = prompt_revision("voice")
+    prompts = load_prompts()  # the v2 fixture when PROMPTS_V2 names voice
     missing = {s["topic"] for s in scenarios} - set(prompts["topics"])
     if missing:
-        raise SystemExit(f"fixtures/teach_back_prompts.json has no prompt for {sorted(missing)}; run frontend/scripts/teach-parity-fixture.ts")
+        fixture = "teach_back_prompts_v2.json" if revision["areas"]["voice"] == "v2" else "teach_back_prompts.json"
+        raise SystemExit(f"fixtures/{fixture} has no prompt for {sorted(missing)}; run frontend/scripts/teach-parity-fixture.ts{' --v2' if fixture.endswith('_v2.json') else ''}")
     tracker = spend_module.SpendTracker(args.max_usd, args.max_judge_usd, adapters.estimate_cost)
     judge_spec = adapters.parse_model_spec(args.judge if ":" in args.judge else f"{args.judge}:medium") if args.judge else None
 
     if args.dry_run:
         host.prepare_app_environment()
-        print_plan(args, estimate(scenarios, prompts, tracker, judge_spec), log)
+        print_plan(args, estimate(scenarios, prompts, tracker, judge_spec), log, revision, prompts)
         return 0
 
     date = datetime.date.today().isoformat()
@@ -471,7 +480,9 @@ async def run(args, host) -> int:
         previous = json.loads((run_dir / "run.json").read_text())
         date, args.label = previous["date"], previous["label"]
     (run_dir / "raw").mkdir(parents=True, exist_ok=True)
-    run_info = {"label": args.label, "date": date, "surface": "teach_back", "patterns": args.patterns, "limit": args.limit, "scenarios": str(scenario_path.resolve())}
+    if previous.get("prompts") and previous["prompts"].get("areas") != revision["areas"]:
+        raise SystemExit(f"--resume: this folder ran with {previous['prompts']['areas']}, PROMPTS_V2 now gives {revision['areas']}. Resume with the same PROMPTS_V2.")
+    run_info = {"label": args.label, "date": date, "prompts": revision, "surface": "teach_back", "patterns": args.patterns, "limit": args.limit, "scenarios": str(scenario_path.resolve())}
     if not args.resume:  # written at the start, so a run that dies can be resumed
         (run_dir / "run.json").write_text(json.dumps(run_info, indent=2) + "\n")
     for kind, usd in host.existing_spend(run_dir).items():
@@ -530,6 +541,7 @@ async def run(args, host) -> int:
             "branch": host.git("rev-parse", "--abbrev-ref", "HEAD"),
             "app_dirty": bool(host.git("status", "--porcelain", "--", "ai-service/app", "frontend/src/lib/voice")),
         },
+        "prompts": revision,
         "config": {
             "surface": "teach_back",
             "scenarios": len(scenarios),
