@@ -398,7 +398,10 @@ CONCEPT_TAGGING_RULE = (
 
 async def fetch_concepts(topic_id: str) -> List[Dict[str, Any]]:
     """The topic's active concepts in order, each with the chunk ids its claims quote. Empty when
-    the topic has no concepts yet (extraction failed or has not run)."""
+    the topic has no concepts yet (extraction failed or has not run).
+
+    Reads by topic id alone: the caller passes an id already checked with `assert_owns` (a route) or taken from a job's
+    payload (checked by `assert_job_owns_payload` before the handler runs)."""
     rows = await execute_query(
         """
         SELECT c.id, c.name, c.summary, c.order_index,

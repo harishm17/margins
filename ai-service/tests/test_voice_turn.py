@@ -27,6 +27,7 @@ from app.services.llm.base import (
 )
 from app.services.llm.factory import LLMFactory
 from app.services.llm.mock_provider import MockProvider
+from app.services.ownership import NotOwnedError
 from tests.db_helpers import seed_project, seed_user
 
 TOOLS = [
@@ -163,8 +164,9 @@ def wired(monkeypatch):
     """The route with the database, budget and ledger replaced by stand-ins."""
     state: dict = {"budget": None, "project": {"id": "p1"}, "provider": MockProvider()}
 
-    async def execute_one(sql, *args):
-        return state["project"]
+    async def assert_owns(user_id, **ids):
+        if state["project"] is None:
+            raise NotOwnedError()
 
     async def allowance(user_id):
         state["budget_user"] = user_id
@@ -174,7 +176,7 @@ def wired(monkeypatch):
             refused="user" if refused else None, message=refused,
         )
 
-    monkeypatch.setattr(voice_route, "execute_one", execute_one)
+    monkeypatch.setattr(voice_route, "assert_owns", assert_owns)
     monkeypatch.setattr(voice_route, "allowance_today", allowance)
     monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")
     monkeypatch.setattr(LLMFactory, "get_provider", classmethod(lambda cls: state["provider"]))

@@ -64,7 +64,7 @@ def waiting_handler(body):
 
 
 def payload(job_id):
-    return JobPayload(jobId=job_id, jobType="grade_exam", data={"submissionId": "s1"})
+    return JobPayload(jobId=job_id, jobType="grade_exam", data={})  # the handlers here are stubs: no row is read
 
 
 @pytest.fixture

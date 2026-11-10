@@ -17,10 +17,10 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
 from app.errors import error_body
-from app.db.connection import execute_one
 from app.services import chat as chat_service
 from app.services import ai_status, exam_guard
 from app.services.billing import billed
+from app.services.ownership import NotOwnedError, assert_owns
 from app.services.budget import allowance_today
 from app.services.llm.base import LLMNotConfiguredError
 from app.services.llm.factory import LLMFactory
@@ -79,10 +79,9 @@ async def answer(payload: ChatAnswerRequest) -> Union[StreamingResponse, JSONRes
     if not settings.llm_configured:
         return _fail(503, LLMNotConfiguredError.code)
 
-    project = await execute_one(
-        "SELECT id FROM projects WHERE id = $1 AND user_id = $2", payload.project_id, payload.user_id
-    )
-    if project is None:
+    try:
+        await assert_owns(payload.user_id, project_id=payload.project_id, topic_id=payload.topic_id)
+    except NotOwnedError:
         return _fail(404, "PROJECT_NOT_FOUND")
 
     # Known to be down (out of credit, say): refuse before anything is stored or streamed.

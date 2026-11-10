@@ -217,3 +217,22 @@ def passthrough_support(monkeypatch):
 
     for module in ("content_generator.quiz", "exam_generator", "content_generator.warmup", "content_generator.review_items"):
         monkeypatch.setattr(f"app.services.{module}.check_support", keep_all)
+
+
+@pytest.fixture(autouse=True)
+def routes_own_their_ids(request, monkeypatch):
+    """Route tests that stub the database do not seed the user's rows, so the ownership check is a pass there.
+
+    Tests that mean the real check (tests/test_ownership.py) are marked `real_ownership`; every route is also covered
+    by the cross-user test, which uses the real database and the real check.
+    """
+    if request.node.get_closest_marker("real_ownership"):
+        return
+
+    async def owns(user_id, **ids):
+        return None
+
+    from app.api.routes import chat, grading, tutor, voice
+
+    for module in (chat, grading, tutor, voice):
+        monkeypatch.setattr(module, "assert_owns", owns)

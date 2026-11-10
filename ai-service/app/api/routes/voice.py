@@ -21,6 +21,7 @@ from app.errors import error_body, describe_exception, public_message
 from app.db.connection import execute_one, execute_update
 from app.services import ai_status
 from app.services.billing import billed
+from app.services.ownership import NotOwnedError, assert_owns
 from app.services.budget import DailyBudgetExceeded, allowance_today
 from app.services.chat import usage_payload
 from app.services.content_generator.context import fetch_concepts, format_concept_block, resolve_concept_ids
@@ -208,10 +209,9 @@ async def turn(payload: VoiceTurnRequest) -> Union[StreamingResponse, JSONRespon
     if not settings.llm_configured:
         return _fail(503, LLMNotConfiguredError.code)
 
-    project = await execute_one(
-        "SELECT id FROM projects WHERE id = $1 AND user_id = $2", payload.project_id, payload.user_id
-    )
-    if project is None:
+    try:
+        await assert_owns(payload.user_id, project_id=payload.project_id, session_id=payload.session_id)
+    except NotOwnedError:
         return _fail(404, "PROJECT_NOT_FOUND")
 
     # Known to be down (out of credit, say): refuse before anything is stored or streamed.
@@ -247,6 +247,7 @@ async def generate_concept_drill(
 ):
     """Generate concept-only oral drill questions from notes. With a topic, the set is kept (voice_drill_sets) and the
     next request with the same inputs gets it back without a model call."""
+    await assert_owns(payload.user_id, project_id=payload.project_id, topic_id=payload.topic_id)
     topic_label = payload.topic or "the study topic"
 
     system_prompt = (

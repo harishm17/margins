@@ -44,6 +44,7 @@ from app.errors import describe_exception, public_message
 from app.models.jobs import JobPayload
 from app.services import ai_status, ops
 from app.services.billing import billed
+from app.services.ownership import NotOwnedError, assert_owns
 from app.services.budget import DailyBudgetExceeded, allowance_today
 from app.services.content_generator.context import NoSourceMaterialError
 from app.services.document_processor.chunker import NoContentError
@@ -85,6 +86,48 @@ class PermanentJobError(Exception):
         super().__init__(message)
         if code:
             self.code = code
+
+
+# The ids a job's payload can carry, and the kind of thing each names (see app/services/ownership.py).
+_PAYLOAD_IDS = {
+    "projectId": "project_id",
+    "topicId": "topic_id",
+    "unitId": "unit_id",
+    "materialId": "material_id",
+    "examId": "exam_id",
+    "attemptId": "attempt_id",
+    "submissionId": "submission_id",
+}
+
+
+# What a job says when the row it names is not there for its user. A row that is someone else's gets the same code as
+# one that was deleted, so the job's error does not tell the two apart.
+_NOT_FOUND_CODES = {
+    "validate_material": "MATERIAL_NOT_FOUND",
+    "chunk_material": "MATERIAL_NOT_FOUND",
+    "profile_exam": "MATERIAL_NOT_FOUND",
+    "grade_exam": "SUBMISSION_NOT_FOUND",
+    "grade_quiz": "QUIZ_SUBMISSION_NOT_FOUND",
+}
+
+
+async def assert_job_owns_payload(user_id: str, data: Optional[Dict[str, Any]], job_type: str = "") -> None:
+    """Fail the job for good, with a fixed code, unless its user owns every id in its payload (SEC-L1).
+
+    The web app writes the payload for a user's own request, but a job is also reachable by anyone who holds the
+    internal token, and a wrong id must never read or write another user's rows. Checked by the keys the payload has,
+    so a job type added later is covered without a list to update.
+    """
+    data = data or {}
+    found = {kind: data[key] for key, kind in _PAYLOAD_IDS.items() if isinstance(data.get(key), str) and data[key]}
+    topic_ids = data.get("topicIds")
+    try:
+        if found:
+            await assert_owns(user_id, **found)
+        for topic_id in topic_ids if isinstance(topic_ids, list) else []:
+            await assert_owns(user_id, topic_id=str(topic_id))
+    except NotOwnedError as exc:
+        raise PermanentJobError("not found", code=_NOT_FOUND_CODES.get(job_type, "NOT_FOUND")) from exc
 
 
 # The stage of a job that is waiting for the AI (or the allowance) instead of failing.
@@ -586,6 +629,7 @@ def job_handler(
             try:
                 async with _job_scope(job) as usages:
                     try:
+                        await assert_job_owns_payload(job.user_id, payload.data, job.job_type)
                         if uses_llm:
                             await _enforce_ai_ready(job)
                         outcome = await _run_handler(handler(payload, job), job)
