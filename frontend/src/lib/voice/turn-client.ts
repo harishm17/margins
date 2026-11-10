@@ -149,6 +149,8 @@ export function parseVoiceEvent(line: string): VoiceEvent | null {
     }
     case 'working':
       return raw.step === 'assess' || raw.step === 'record_answer' || raw.step === 'reveal' || raw.step === 'record_check' ? { type: 'working', step: raw.step } : null
+    case 'retract':
+      return { type: 'retract' }
     case 'listen': {
       const wanted: ListenFor[] = ['short_answer', 'prediction', 'explanation', 'none']
       return wanted.includes(raw.for as ListenFor) ? { type: 'listen', for: raw.for as ListenFor } : null

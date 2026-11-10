@@ -6,7 +6,8 @@ import { logServerError } from '@/lib/ops/log'
 import { prisma } from '@/lib/db/prisma'
 import { coachStyleOf } from '@/lib/voice/coach-prompt'
 import type { VoiceBlock, VoiceMessage } from '@/lib/voice/history'
-import { appResultBlock, endsWithAppResult, lastCoachText, planPreRun, withAppResult, type PreRunPlan } from '@/lib/voice/pre-run'
+import { promptsV2 } from '@/lib/prompt-revision'
+import { appResultBlock, appResultStep, endsWithAppResult, lastCoachText, planPreRun, withAppResult, type PreRunPlan } from '@/lib/voice/pre-run'
 import { readCoachState } from '@/lib/voice/teach-tools'
 import { executeVoiceTool, type VoiceToolResult } from '@/lib/voice/tools'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
@@ -53,7 +54,7 @@ export async function runPreRun(
     log(`Pre-run step ${plan.tool} failed`, error)
     result = { output: { error: 'The step failed. Tell the student and carry on.' }, events: [], sessionComplete: false, isError: true }
   }
-  return { result, block: appResultBlock(plan.tool, result.output) }
+  return { result, block: appResultBlock(plan.tool, result.output, appResultStep(plan, promptsV2('voice'))) }
 }
 
 /**

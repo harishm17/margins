@@ -309,7 +309,7 @@ def summarize(scenarios: Dict[str, Dict[str, Any]], records: Sequence[Dict[str, 
         by_pattern.setdefault(pattern, blank())
 
     student_turns = [r for r in records if r.get("turn", 0) > 0 and not r.get("error")]
-    assessed = [r for r in student_turns if any(t["name"] in ("assess_explanation", "record_check") for t in r.get("tools", []))]
+    assessed = [r for r in student_turns if any(t["name"] in ("assess_explanation", "record_check", "record_example_check") for t in r.get("tools", []))]
     explains = [r for r in records if r.get("last_action") in ("explain", "explain_first")]
     errors = [r for r in records if r.get("error")]
     asking_flags = [f for _, f in asking]

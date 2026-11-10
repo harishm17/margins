@@ -523,3 +523,54 @@ dbTest('oral quiz: an answer needs the student to have spoken since the question
   assert.equal(await prisma.voiceDrillAttempt.count({ where: { sessionId: w.session.id } }), 0)
 })
 
+
+// ------------------------------------------------------------------------------------------ v2: the server holds the current item (R5, R6)
+
+/** Runs `run` with PROMPTS_V2=voice, then restores the variable. */
+async function withVoiceV2(run: () => Promise<void>): Promise<void> {
+  const before = process.env.PROMPTS_V2
+  process.env.PROMPTS_V2 = 'voice'
+  try {
+    await run()
+  } finally {
+    if (before === undefined) delete process.env.PROMPTS_V2
+    else process.env.PROMPTS_V2 = before
+  }
+}
+
+dbTest('v2: tools read the current question, concept and claim from the session, and say so when there is none', () =>
+  withVoiceV2(async () => {
+    // Oral quiz: nothing is asked until get_next_question has been called.
+    const quiz = await world('oral_quiz')
+    await prisma.voiceDrillSession.update({
+      where: { id: quiz.session.id },
+      data: { questionSet: [{ question_text: 'What is a collision?', question_type: 'short_answer', key_points: [], sample_answer: '', concept_ids: [] }] },
+    })
+    assert.equal(out(await inTurn(quiz, undefined, 'two keys', 'record_answer', {})).error, 'no_current_question')
+    assert.equal(out(await inTurn(quiz, undefined, '', 'get_hint', {})).error, 'no_current_question')
+    assert.equal(out(await inTurn(quiz, undefined, '', 'get_next_question', {})).question_index, 0)
+    const answered = out(await inTurn(quiz, undefined, 'two keys in one bucket', 'record_answer', { idk: true }))
+    assert.equal(answered.is_correct, false)
+    assert.equal(answered.error, undefined)
+    assert.equal(await prisma.voiceDrillAttempt.count({ where: { sessionId: quiz.session.id, questionIndex: 0 } }), 1)
+
+    // Teach it back: the concept is the one get_concept_to_explain last returned; the check has its own name.
+    const teach = await world('teach_back')
+    const g = grader({ 'Two keys': COVERED, Chaining: COVERED })
+    assert.equal(out(await inTurn(teach, g.grade, 'hi', 'assess_explanation', {})).error, 'no_current_concept')
+    assert.equal(out(await inTurn(teach, g.grade, 'hi', 'record_example_check', { question: 'q' })).error, 'no_current_concept')
+    assert.equal(out(await inTurn(teach, g.grade, '', 'record_check', { question: 'q' })).error, 'no_current_concept')
+    assert.ok(out(await inTurn(teach, g.grade, '', 'get_concept_to_explain', {})).concept_id)
+    const assessed = out(await inTurn(teach, g.grade, 'a bucket holds the keys that hash to it', 'assess_explanation', {}))
+    assert.equal(assessed.error, undefined)
+    assert.ok(assessed.action)
+
+    // Guided reading: no claim is current until next_claim has given one.
+    const guided = await world('guided_reading')
+    assert.equal(out(await inTurn(guided, undefined, 'hi', 'record_claim_check', {})).error, 'no_current_claim')
+    assert.equal(out(await inTurn(guided, undefined, '', 'next_claim', {})).claim_index, 0)
+    await inTurn(guided, undefined, 'about collisions', 'next_claim', { reveal: true, check_question: 'What collides?' })
+    const checked = out(await inTurn(guided, grader({ 'Two keys': COVERED }).grade, 'two keys in one bucket', 'record_claim_check', {}))
+    assert.equal(checked.verdict, 'right')
+  })
+)

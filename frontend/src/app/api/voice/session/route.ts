@@ -13,8 +13,11 @@ import { VoiceQuestion } from '@/lib/voice/concept'
 import { courseTermsForTopics, sessionTopicIds } from '@/lib/voice/course-terms'
 import { normalizeFocus } from '@/lib/voice/coach-prompt'
 import { cloudSpeechConfigured } from '@/lib/voice/cloud-speech'
-import { buildSprintQuestionSet, buildTopicQuestionSet } from '@/lib/voice/drill-pack'
+import { buildSprintQuestionSet, buildTopicQuestionSet, PromptsMismatchError } from '@/lib/voice/drill-pack'
+import { voiceErrorMessage } from '@/lib/voice/errors'
 import {
+  ApiErrorCode,
+  apiError,
   apiInternal,
   apiInvalidInput,
   apiNotFound,
@@ -159,6 +162,11 @@ async function handlePOST(request: NextRequest) {
     const refused = quotaErrorResponse(error)
     if (refused) return refused
     logServerError('Create voice session error', error)
+
+    if (error instanceof PromptsMismatchError) {
+      const info = voiceErrorMessage(error.code)
+      return apiError(ApiErrorCode.UPSTREAM_ERROR, info.message, { code: error.code, retryable: info.retryable }, info.status)
+    }
 
     if (error instanceof z.ZodError) {
       return apiInvalidInput('Invalid input', zodDetails(error))

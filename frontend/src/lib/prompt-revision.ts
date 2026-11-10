@@ -21,3 +21,9 @@ export function promptsV2(area: PromptArea, raw: string | undefined = process.en
   )
   return listed.has('all') || listed.has(area)
 }
+
+/** The areas on v2, in the form the services log at start: `areas=voice,ask` or `areas=none` (R9: compare the two services' lines). */
+export function activePromptAreas(raw: string | undefined = process.env.PROMPTS_V2): string {
+  const on = PROMPT_AREAS.filter((area) => promptsV2(area, raw))
+  return `areas=${on.length > 0 ? on.join(',') : 'none'}`
+}

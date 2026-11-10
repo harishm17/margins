@@ -105,9 +105,14 @@ const safe = (json: string) => json.replace(/<\/app_result/gi, '<\\/app_result')
  */
 export const neutralizeAppResultTags = (text: string): string => text.replace(/<(\/?app_result)/gi, '&lt;$1')
 
+/** The name the model knows a planned step by: with v2 the checks are record_example_check (teach-back) and record_claim_check (guided reading). */
+export const appResultStep = (plan: Pick<PreRunPlan, 'tool' | 'input'>, v2: boolean): string =>
+  v2 && plan.tool === 'record_check' ? ('claim_index' in plan.input ? 'record_claim_check' : 'record_example_check') : plan.tool
+
 /** The text block that carries a step's result to the model, after the student's words. */
-export function appResultBlock(tool: PreRunPlan['tool'], output: Record<string, unknown>): VoiceBlock {
-  return { type: 'text', text: `<app_result step="${tool}">${safe(JSON.stringify(output))}</app_result>` }
+/** `step` is the tool name the model knows the step by (v2 names the two checks apart; see `appResultStep`). */
+export function appResultBlock(tool: PreRunPlan['tool'], output: Record<string, unknown>, step: string = tool): VoiceBlock {
+  return { type: 'text', text: `<app_result step="${step}">${safe(JSON.stringify(output))}</app_result>` }
 }
 
 const APP_RESULT = /<app_result step="/

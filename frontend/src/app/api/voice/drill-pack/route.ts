@@ -5,7 +5,9 @@ import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
-import { buildSprintQuestionSet, buildTopicQuestionSet } from '@/lib/voice/drill-pack'
+import { buildSprintQuestionSet, buildTopicQuestionSet, PromptsMismatchError } from '@/lib/voice/drill-pack'
+import { ApiErrorCode, apiError } from '@/lib/api/errors'
+import { voiceErrorMessage } from '@/lib/voice/errors'
 
 const drillPackSchema = z.object({
   mode: z.enum(['topic_drill', 'sprint']).default('topic_drill'),
@@ -61,6 +63,11 @@ async function handleGET(request: NextRequest) {
     })
   } catch (error) {
     logServerError('Fetch drill pack error', error)
+
+    if (error instanceof PromptsMismatchError) {
+      const info = voiceErrorMessage(error.code)
+      return apiError(ApiErrorCode.UPSTREAM_ERROR, info.message, { code: error.code, retryable: info.retryable }, info.status)
+    }
 
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid query parameters' }, { status: 400 })

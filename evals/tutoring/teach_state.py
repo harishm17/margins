@@ -182,6 +182,13 @@ def findings_output(claims: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def example_check_tool() -> str:
+    """The tool that records the answer to the new example: record_check, or record_example_check under the voice flag (frontend teach-tools.ts)."""
+    from app.prompt_revision import prompts_v2
+
+    return "record_example_check" if prompts_v2("voice") else "record_check"
+
+
 def plan_output(plan: Dict[str, Any], claims: List[Dict[str, Any]], prerequisite: Optional[str]) -> Dict[str, Any]:
     action = plan["action"]
     if action == "probe":
@@ -217,7 +224,7 @@ def plan_output(plan: Dict[str, Any], claims: List[Dict[str, Any]], prerequisite
     if action == "ask_new_example":
         return {
             "action": "ask_new_example",
-            "instruction": "The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.",
+            "instruction": f"The student covered every claim. Ask one small new example or prediction, then call {example_check_tool()} with their answer.",
         }
     return {"action": "wrap_up"}
 
@@ -269,7 +276,7 @@ def parity_trace(scenario: Dict[str, Any]) -> List[Dict[str, Any]]:
             )
         else:
             output, state, _ = example_result(scenario["concept"]["name"], claims, state)
-        tool = "assess_explanation" if turn["kind"] == "explain" else "record_check"
+        tool = "assess_explanation" if turn["kind"] == "explain" else "record_check"  # the v1 name, as the fixture was written
         steps.append({"kind": turn["kind"], "output": output, "state": state, "app_result": app_result_text(tool, output)})
     return steps
 

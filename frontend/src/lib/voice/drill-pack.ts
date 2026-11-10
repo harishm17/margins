@@ -9,12 +9,32 @@ import {
 } from '@/lib/voice/concept'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 import { callSignal } from '@/lib/ai-service/client-signal'
+import { promptsV2 } from '@/lib/prompt-revision'
 import type { VoiceQuizStatus } from '@/features/voice/quiz-status'
 
 import { SPRINT_MAX_QUESTIONS, SPRINT_QUESTIONS_PER_TOPIC, SPRINT_TOPICS } from './sprint-size'
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 const MAX_NOTES_CHARS = 24000
+
+/** The AI service refused the drill because its voice flag differs from the web app's (R9). */
+export const PROMPTS_MISMATCH = 'PROMPTS_MISMATCH'
+export class PromptsMismatchError extends Error {
+  readonly code = PROMPTS_MISMATCH
+  constructor() {
+    super(PROMPTS_MISMATCH)
+    this.name = 'PromptsMismatchError'
+  }
+}
+
+async function errorCodeOf(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { error_code?: unknown }
+    return typeof body.error_code === 'string' ? body.error_code : null
+  } catch {
+    return null
+  }
+}
 
 const dedupeQuestions = (questions: VoiceQuestion[]) => {
   const seen = new Set<string>()
@@ -48,10 +68,14 @@ const buildConceptQuestionsFromNotes = async (
       notes: notesText.slice(0, MAX_NOTES_CHARS),
       count,
       difficulty: 'medium',
+      // R9: refused with 409 PROMPTS_MISMATCH when the AI service's voice flag differs from this one.
+      prompts_v2_voice: promptsV2('voice'),
     }),
   })
 
   if (!response.ok) {
+    // A half-set voice flag is refused, and the student is told to try again shortly; any other failure leaves no questions.
+    if (response.status === 409 && (await errorCodeOf(response)) === PROMPTS_MISMATCH) throw new PromptsMismatchError()
     return []
   }
 

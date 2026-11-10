@@ -112,4 +112,5 @@ def test_the_prompt_fixture_follows_the_voice_flag(monkeypatch):
     assert v1 == load_prompts(v2=False) and v2 == load_prompts(v2=True)
     assert v1 != v2
     assert {s["topic"] for s in scenarios()} <= set(v2["topics"])
-    assert [tool["name"] for tool in v2["tools"]] == [tool["name"] for tool in v1["tools"]]
+    # The audited tools: the same list, with the new-example check renamed (record_check -> record_example_check).
+    assert [tool["name"] for tool in v2["tools"]] == [tool["name"].replace("record_check", "record_example_check") for tool in v1["tools"]]

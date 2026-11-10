@@ -38,6 +38,8 @@ export type VoiceStreamExtra =
   | { type: 'working'; step: 'assess' | 'record_answer' | 'reveal' | 'record_check' }
   /** Sent with the end of each coach turn: what the session waits for next (spec 19.2). */
   | { type: 'listen'; for: ListenFor }
+  /** The call just streamed was cut off at its token limit and is being asked again: drop what has not been spoken of it. */
+  | { type: 'retract' }
 
 /** Sent once when a session starts: the topic's key terms (spec 19.5), at most 100. */
 export interface VoiceSessionTerms {

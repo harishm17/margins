@@ -7,6 +7,9 @@ import { logServerError } from '@/lib/ops/log'
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { activePromptAreas } = await import('./lib/prompt-revision')
+    // Both services log their active prompt areas at start (R9); the voice flag must be the same in both.
+    console.log(`prompts_v2 ${activePromptAreas()}`)
     const { checkAuthStartup } = await import('./lib/auth/startup')
     try {
       checkAuthStartup()

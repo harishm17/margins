@@ -156,5 +156,38 @@ describe('parseModelEvent / readModelEvents', () => {
     assert.equal(parseModelEvent('nope'), null)
   })
 
+  // R7: voice must not speak or store a reply cut off at max_tokens.
+  describe('a reply cut off at max_tokens', () => {
+    const cutOff: ModelEvent[] = [
+      { type: 'text', delta: 'The hash maps a key to a buck' },
+      { type: 'done', stopReason: 'max_tokens', content: [{ type: 'text', text: 'The hash maps a key to a buck' }] },
+    ]
+
+    it('with retryCutOff, is dropped from the spoken and stored text and the coach answers again', async () => {
+      const h = harness([cutOff, say('A hash maps a key to a bucket.')])
+      const outcome = await runTurn({ ...h.deps, retryCutOff: true }, start)
+      assert.equal(outcome.ok, true)
+      assert.equal(outcome.text, 'A hash maps a key to a bucket.')
+      assert.deepEqual(h.sent[1], start, 'the retry is asked from the same conversation, without the cut-off text')
+      assert.deepEqual(outcome.messages, [...start, { role: 'assistant', content: [{ type: 'text', text: 'A hash maps a key to a bucket.' }] }])
+      assert.ok(h.emitted.some((event) => event.type === 'retract'))
+    })
+
+    it('with retryCutOff and no call left, fails the turn with VOICE_TURN_FAILED', async () => {
+      const h = harness([cutOff])
+      const outcome = await runTurn({ ...h.deps, retryCutOff: true, maxModelCalls: 1 }, start)
+      assert.equal(outcome.ok, false)
+      assert.equal(outcome.error?.code, 'VOICE_TURN_FAILED')
+      assert.equal(outcome.text, '')
+      assert.deepEqual(outcome.messages, start)
+    })
+
+    it('without it (v1) is kept as before', async () => {
+      const h = harness([cutOff])
+      const outcome = await runTurn(h.deps, start)
+      assert.equal(outcome.ok, true)
+      assert.equal(outcome.text, 'The hash maps a key to a buck')
+    })
+  })
 })
 

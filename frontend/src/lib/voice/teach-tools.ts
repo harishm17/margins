@@ -47,6 +47,17 @@ import {
   type StoredClaim,
 } from '@/lib/learning/recall-server'
 import { itemKey } from '@/lib/learning/item-key'
+import { promptsV2 } from '@/lib/prompt-revision'
+import { inlineTag } from '@/lib/prompts/untrusted'
+import type {
+  AssessExplanationResult,
+  ClaimCheckResult,
+  ConceptToExplainResult,
+  ExampleCheckResult,
+  FindingsFields,
+  NextClaimResult,
+  PlanFields,
+} from '@/lib/voice/tool-results'
 import type { OwnedTopic } from '@/server/owned'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
 import {
@@ -253,13 +264,18 @@ const isUnavailable = (failure: unknown) => failure instanceof TutorUnavailableE
 const escapeText = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 /**
- * Student words and the pages' claims go into a tool result inside tags, with the angle brackets inside escaped, so the
- * model reads them as data and a sentence that tells it to do something is not one of its instructions (spec 6.5).
+ * Student words and the pages' claims go into a tool result inside tags, so the model reads them as data and a sentence
+ * that tells it to do something is not one of its instructions (spec 6.5). v1 escapes the angle brackets inside; with
+ * PROMPTS_V2 (area voice) only a closing prompt tag is made inert, so maths and code reach the model as written.
  */
-export const tagged = (name: 'student_words' | 'source_claim', text: string | null | undefined): string | null => (text ? `<${name}>${escapeText(text)}</${name}>` : null)
+export const tagged = (name: 'student_words' | 'source_claim', text: string | null | undefined): string | null =>
+  text ? (promptsV2('voice') ? inlineTag(name, text) : `<${name}>${escapeText(text)}</${name}>`) : null
+
+/** The tool that records the answer to the new example: `record_check` in v1, `record_example_check` in v2. */
+const exampleCheckTool = (): string => (promptsV2('voice') ? 'record_example_check' : 'record_check')
 
 /** What the coach is told about the plan: the action, the probe and what it may say. */
-export function planOutput(plan: Plan, claims: AssessedClaim[], prerequisite: string | null): Record<string, unknown> {
+export function planOutput(plan: Plan, claims: AssessedClaim[], prerequisite: string | null): PlanFields {
   switch (plan.action) {
     case 'probe': {
       const claim = claims.find((entry) => entry.claimId === plan.gap.claimId)
@@ -302,7 +318,7 @@ export function planOutput(plan: Plan, claims: AssessedClaim[], prerequisite: st
     case 'ask_new_example':
       return {
         action: 'ask_new_example',
-        instruction: 'The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.',
+        instruction: `The student covered every claim. Ask one small new example or prediction, then call ${exampleCheckTool()} with their answer.`,
       }
     case 'wrap_up':
       return { action: 'wrap_up' }
@@ -313,7 +329,7 @@ export function planOutput(plan: Plan, claims: AssessedClaim[], prerequisite: st
  * What the student said, claim by claim. The text of a claim is never in it: not the one they got wrong, nor one they
  * left out. A claim's text reaches the coach only in the plan's `explain` action, after the probes the rules require.
  */
-export function findingsOutput(claims: AssessedClaim[]): Record<string, unknown> {
+export function findingsOutput(claims: AssessedClaim[]): FindingsFields {
   return {
     covered: claims.filter((c) => c.verdict === 'covered').map((c) => ({ you_said: tagged('student_words', c.studentQuote) })),
     partly: claims.filter((c) => c.verdict === 'partial').map((c) => ({ you_said: tagged('student_words', c.studentQuote) })),
@@ -368,7 +384,7 @@ export async function getConceptToExplain(ctx: TeachToolContext, state: CoachSta
   await saveState(ctx.sessionId, state)
   const prompt = conceptTeachBackPrompt(concept.name)
   return {
-    output: { done: false, concept_id: concept.id, concept_name: concept.name, prompt, ideas_left: open.length },
+    output: { done: false, concept_id: concept.id, concept_name: concept.name, prompt, ideas_left: open.length } satisfies ConceptToExplainResult,
     events: [{ type: 'board', kind: 'concept', text: prompt, idea: { name: concept.name, conceptId: concept.id } }],
   }
 }
@@ -552,7 +568,7 @@ export function assessmentResult(
   before: ConceptState,
   prerequisite: string | null,
   options: { dontKnow?: boolean; band?: Band } = {}
-): { output: Record<string, unknown>; state: ConceptState; plan: Plan } {
+): { output: AssessExplanationResult; state: ConceptState; plan: Plan } {
   const next = planNext(claims, before, { weakPrerequisite: prerequisite, dontKnow: options.dontKnow, band: options.band })
   const lookAgain = Object.keys(next.state.gaps)
     .filter((claimId) => next.state.gaps[claimId].explained)
@@ -573,7 +589,7 @@ export function assessmentResult(
 }
 
 /** What the answer to the new example leads to. Pure, for the same reason. */
-export function exampleResult(conceptName: string, claims: AssessedClaim[], before: ConceptState): { output: Record<string, unknown>; state: ConceptState; passed: boolean } {
+export function exampleResult(conceptName: string, claims: AssessedClaim[], before: ConceptState): { output: ExampleCheckResult; state: ConceptState; passed: boolean } {
   const passed = exampleHeld(claims)
   const next = afterExample(claims, before, passed)
   return {
@@ -848,7 +864,7 @@ export async function nextClaim(
         instruction: ctx.autoCheck
           ? `State the claim in one to three sentences with its page, say how it matched the prediction, then ask the check question and wait. The check question is "${guided.checkQuestion}": reword it if you like and keep its meaning.`
           : 'State the claim in one to three sentences with its page, say how it matched the prediction, then ask your check question and wait.',
-      },
+      } satisfies NextClaimResult,
       events: [{ type: 'board', kind: 'claim', text: claim.text, question: guided.checkQuestion, ...(claim.source ? { source: claim.source } : {}) }],
     }
   }
@@ -876,7 +892,7 @@ export async function nextClaim(
       concept_name: claim.conceptName,
       prediction_prompt: prompt,
       instruction: 'Ask the student to predict what their pages say about this idea. Do not state the claim yet.',
-    },
+    } satisfies NextClaimResult,
     events: [{ type: 'board', kind: 'prediction', text: prompt }],
   }
 }
@@ -914,7 +930,7 @@ async function recordReadingCheck(ctx: TeachToolContext, state: CoachState, args
         claim: { text: tagged('source_claim', claim.text), page: claim.page },
         claims_left: claims.length - guided.index,
         instruction: 'The student did not know. Restate the claim in one sentence from source_claim, with its page, then call next_claim.',
-      },
+      } satisfies ClaimCheckResult,
       events: [{ type: 'evaluation', isCorrect: false, score: 0, comment: '', explanation: '' }],
     }
   }
@@ -971,7 +987,7 @@ async function recordReadingCheck(ctx: TeachToolContext, state: CoachState, args
       claim: { text: tagged('source_claim', claim.text), page: claim.page },
       claims_left: claims.length - guided.index,
       instruction: 'Say in a sentence what was right and the one thing to fix, then call next_claim.',
-    },
+    } satisfies ClaimCheckResult,
     events: [
       {
         type: 'evaluation',

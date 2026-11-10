@@ -30,6 +30,8 @@ export type TurnDeps = {
   /** When model call `call` was started, if that was before the engine was asked for it (the route opens the first one early). */
   callStartedAt?: (call: number) => number | undefined
   log?: (message: string, error?: unknown) => void
+  /** PROMPTS_V2 (area voice, R7): a call that ends at max_tokens is cut off mid-reply; it is dropped and the coach is asked again. */
+  retryCutOff?: boolean
 }
 
 /** One model call: milliseconds to its first token (null when it said and asked for nothing) and in all. */
@@ -161,6 +163,14 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
     if (!done) {
       if (segment.trim()) spoken.push(segment.trim())
       return fail('VOICE_INTERRUPTED')
+    }
+    if (deps.retryCutOff && done.stopReason === 'max_tokens') {
+      // The reply was cut off: its text is not kept, spoken further or stored, and any tool call in it is incomplete. The coach
+      // answers again from the same conversation, if the call limit leaves a call; otherwise the turn fails.
+      log(`Model call ${call} ended at max_tokens`)
+      if (call === max) return fail('VOICE_TURN_FAILED')
+      deps.emit({ type: 'retract' })
+      continue
     }
     if (segment.trim()) spoken.push(segment.trim())
 

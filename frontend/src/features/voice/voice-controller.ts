@@ -933,6 +933,11 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
             dispatch({ type: 'coach-text', delta: event.delta })
             speakSentences(ctx.chunker.push(event.delta))
             break
+          case 'retract':
+            // The reply just streamed was cut off at its token limit and is being asked again: the unspoken tail of it
+            // (what the chunker still holds) is never spoken. Sentences already spoken were whole.
+            ctx.chunker = createSentenceChunker({ minChars: 12 })
+            break
           case 'question':
             ctx.toolRan = true
             dispatch({

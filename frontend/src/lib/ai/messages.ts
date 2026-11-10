@@ -68,6 +68,13 @@ const MESSAGES: Record<string, AiMessage> = {
     retry: true,
   },
   LLM_DAILY_BUDGET: ALLOWANCE,
+  // The voice flag differs between the web app and the AI service for a moment (a deploy in progress): the AI service refuses the call (409).
+  PROMPTS_MISMATCH: {
+    title: 'Voice is being updated',
+    text: 'Voice is being updated. Try again in a few minutes.',
+    tone: 'warning',
+    retry: true,
+  },
 
   // The model answered, but not usefully.
   LLM_BAD_OUTPUT: failed('The AI returned an answer the app could not use. Retrying usually works.'),

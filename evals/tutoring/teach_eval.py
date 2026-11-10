@@ -36,6 +36,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 from utterance import app_result_text, classify_utterance, has_substance
 
+EXAMPLE_CHECK_TOOLS = ("record_check", "record_example_check")  # v1 and v2 (voice flag) names of the new-example check
+
 TEACH_SCENARIOS = Path(__file__).resolve().parent / "scenarios" / "teach-back-original.jsonl"
 MAX_MODEL_CALLS = 4  # as in the app's turn loop (frontend/src/lib/voice/turn-engine.ts)
 # A sentence is complete when a stop follows at least a dozen characters (the app's chunker holds shorter ones back).
@@ -161,15 +163,21 @@ class Session:
         kind = classify_utterance(said)
         if kind not in ("answer", "idk") or not has_substance(said, kind) or not self.started or self.closed():
             return None
+        from app.prompt_revision import prompts_v2
+        from teach_state import example_check_tool
+
+        # Under the voice flag the tools take no concept_id: the app reads it from the session (frontend tools.ts).
+        held = prompts_v2("voice")
         concept_id = self.concept["id"]
         if self.state["exampleAsked"]:
             question = last_coach_text.strip()[:1000]
-            return {"name": "record_check", "input": {"concept_id": concept_id, "question": question}} if question else None
-        return {"name": "assess_explanation", "input": {"concept_id": concept_id}}
+            name = example_check_tool()
+            return {"name": name, "input": {"question": question} if held else {"concept_id": concept_id, "question": question}} if question else None
+        return {"name": "assess_explanation", "input": {} if held else {"concept_id": concept_id}}
 
     def answer_once(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """`answer`, except that a graded step already run for this utterance returns its stored result (tools.ts StepCache)."""
-        key = f"{name}:{args.get('concept_id')}" if name in ("assess_explanation", "record_check") else None
+        key = f"{'record_check' if name in EXAMPLE_CHECK_TOOLS else name}:{args.get('concept_id')}" if name in ("assess_explanation", *EXAMPLE_CHECK_TOOLS) else None
         if key and key in self.steps:
             return self.steps[key]
         output = self.answer(name, args)
@@ -192,8 +200,12 @@ class Session:
                 "prompt": f'Explain "{concept["name"]}" in your own words, as if you were teaching it to a classmate.',
                 "ideas_left": 1,
             }
+        from app.prompt_revision import prompts_v2
+
+        # Under the voice flag the model passes no concept_id: the app takes the one last given (frontend tools.ts).
+        given = concept["id"] if prompts_v2("voice") else args.get("concept_id")
         if name == "assess_explanation":
-            if args.get("concept_id") != concept["id"]:
+            if given != concept["id"]:
                 return {"error": "Concept not found. Call get_concept_to_explain."}
             if self.closed():
                 return {"error": "That idea is finished. Call get_concept_to_explain for the next one."}
@@ -214,8 +226,8 @@ class Session:
             )
             self.note_given(output)
             return output
-        if name == "record_check":
-            if args.get("concept_id") != concept["id"]:
+        if name in EXAMPLE_CHECK_TOOLS:
+            if given != concept["id"]:
                 return {"error": "Concept not found. Call get_concept_to_explain."}
             if self.closed():
                 return {"error": "That idea is finished. Call get_concept_to_explain for the next one."}

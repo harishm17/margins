@@ -285,6 +285,7 @@ async function handlePost(request: NextRequest) {
                 },
                 runTool: (name, input) => executeVoiceTool({ sessionId: session.id, userId, timeZone, turn, steps }, name, input),
                 emit: send,
+                retryCutOff: promptsV2('voice'),
                 callStartedAt: (call) => (call === 1 ? firstCallStarted : undefined),
               },
               startMessages
