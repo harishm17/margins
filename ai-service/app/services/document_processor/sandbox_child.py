@@ -58,7 +58,10 @@ def main(argv: list[str]) -> int:
             "status": "ok",
             "extension": extracted.extension,
             "page_count": extracted.page_count,
-            "pages": [{"number": page.number, "text": page.text} for page in extracted.pages],
+            "pages": [
+                {"number": page.number, "text": page.text, "from_text_layer": page.from_text_layer}
+                for page in extracted.pages
+            ],
         }
     except ParseRefused as refused:
         result = {"status": "refused", "reason": refused.reason_code}

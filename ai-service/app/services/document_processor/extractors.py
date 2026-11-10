@@ -36,12 +36,14 @@ from pptx import Presentation
 from pptx.shapes.group import GroupShape
 
 from app.services.document_processor.parse_types import (
+    EMPTY_PAGE_ALNUM_CHARS,
     SUPPORTED_EXTENSIONS,
     ExtractedDocument,
     ExtractedPage,
     ParseLimits,
     ParseRefused,
     UnreadableDocumentError,
+    _alnum_count,
     infer_extension,
 )
 
@@ -93,6 +95,27 @@ def _markdown_table(rows: List[List[str]]) -> str:
 
 # PDF
 
+# Finding 104: pymupdf4llm sometimes returns almost nothing for a typed page (an OpenStax maths page came back as its
+# footer, though the page's own text layer held 972 characters). A page whose markdown has fewer than this share of
+# the letters and digits of its text layer is read from the text layer instead. The validator reads every page from
+# the text layer (`markdown=False`), so a page is empty for the chunker exactly when it is empty for the validator.
+TEXT_LAYER_SHARE = 0.5
+
+
+def _read_pdf_page(doc, index: int, headers, markdown: bool) -> tuple[str, bool]:
+    """(normalised text of one PDF page, whether it came from the text layer in place of the markdown read)."""
+    layer = _normalize_text(doc[index].get_text())
+    if not markdown:
+        return layer, False
+    text = pymupdf4llm.to_markdown(doc, pages=[index], hdr_info=headers, ignore_images=True)
+    # "mc <sup>2</sup>" -> "mc<sup>2</sup>"
+    text = _normalize_text(re.sub(r"[ \t]+(<su[bp]>)", r"\1", text))
+    layer_chars = _alnum_count(layer)
+    if layer_chars >= EMPTY_PAGE_ALNUM_CHARS and _alnum_count(text) < TEXT_LAYER_SHARE * layer_chars:
+        return layer, True
+    return text, False
+
+
 def _extract_pdf(file_path: str, markdown: bool, limits: ParseLimits) -> ExtractedDocument:
     doc = pymupdf.open(file_path)
     try:
@@ -106,17 +129,9 @@ def _extract_pdf(file_path: str, markdown: bool, limits: ParseLimits) -> Extract
         # Heading levels come from font sizes over the whole document, computed once.
         headers = pymupdf4llm.IdentifyHeaders(doc, body_limit=10) if markdown else None
         for index in range(doc.page_count):
-            if markdown:
-                text = pymupdf4llm.to_markdown(
-                    doc, pages=[index], hdr_info=headers, ignore_images=True
-                )
-                # "mc <sup>2</sup>" -> "mc<sup>2</sup>"
-                text = re.sub(r"[ \t]+(<su[bp]>)", r"\1", text)
-            else:
-                text = doc[index].get_text()
-            text = _normalize_text(text)
+            text, from_layer = _read_pdf_page(doc, index, headers, markdown)
             budget.add(text)
-            pages.append(ExtractedPage(number=index + 1, text=text))
+            pages.append(ExtractedPage(number=index + 1, text=text, from_text_layer=from_layer))
         return ExtractedDocument(pages=pages, extension=".pdf", page_count=doc.page_count)
     finally:
         doc.close()
