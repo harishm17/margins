@@ -172,6 +172,23 @@ test('thin source unlock needs read', async ({ page }) => {
   await expect(page.locator('#main').getByText('Some notes to read.')).toBeVisible()
 })
 
+test('a new topic with concepts and no overview load shows Recall and a locked explainer', async ({ page }) => {
+  await page.setViewportSize(DESKTOP)
+  const { email, topicUrl, topicId } = await world(page, 'ex-fresh')
+  // Concepts have just finished; the course overview has not been opened since, so nothing has converted the topic.
+  await seed(email, topicId('Hash tables'), { backfilled: false })
+  await withPrisma(async (prisma) => expect((await prisma.topic.findUniqueOrThrow({ where: { id: topicId('Hash tables') } })).evidenceBackfilledAt).toBeNull())
+
+  await page.goto(`${topicUrl('Hash tables')}?view=explainer`)
+  await expect(gate(page)).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Topic path' }).getByRole('link', { name: /Recall/ })).toBeVisible()
+  await expect(page.getByText('Some notes to read.')).toHaveCount(0)
+  await withPrisma(async (prisma) => expect((await prisma.topic.findUniqueOrThrow({ where: { id: topicId('Hash tables') } })).evidenceBackfilledAt).not.toBeNull())
+  // Start recall leads to a recall card, not to "Recall isn't ready yet".
+  await page.getByRole('link', { name: 'Start recall' }).click()
+  await expect(page.getByRole('heading', { name: 'Close the book and say what you remember' })).toBeVisible()
+})
+
 test('check block needs an answer before reveal', async ({ page }) => {
   await page.setViewportSize(DESKTOP)
   const { email, topicUrl, topicId } = await world(page, 'ex-check')

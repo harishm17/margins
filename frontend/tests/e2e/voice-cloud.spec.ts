@@ -200,3 +200,49 @@ test('cloud speech: turned off in the lobby, the browser recognizer is used and 
   await page.evaluate(() => window.localStorage.removeItem('margins.voice.prefs.v1'))
 })
 
+test('cloud speech: a microphone that drops mid-session is opened again on the same stream', async ({ page }) => {
+  await installVoiceStubs(page, { speechMs: 200 })
+  await page.addInitScript(FAKE_SOCKET)
+  // Count the microphone openings and keep the last stream, so the spec can end its track as a device change would.
+  await page.addInitScript(() => {
+    const w = window as any
+    w.__mic = { opens: 0, stream: null }
+    const wrap = () => {
+      const devices = navigator.mediaDevices as any
+      if (!devices?.getUserMedia || devices.__wrapped) return
+      const original = devices.getUserMedia.bind(devices)
+      const wrapped = async (constraints: MediaStreamConstraints) => {
+        const stream = await original(constraints)
+        w.__mic.opens += 1
+        w.__mic.stream = stream
+        return stream
+      }
+      Object.defineProperty(navigator, 'mediaDevices', { value: { ...devices, getUserMedia: wrapped, __wrapped: true }, configurable: true })
+    }
+    wrap()
+    document.addEventListener('DOMContentLoaded', wrap)
+  })
+  await offerCloud(page, 'ok')
+  const turns = watchTurns(page)
+
+  await page.goto(voiceUrl())
+  await expect(startButton(page)).toBeEnabled({ timeout: 30_000 })
+  await startButton(page).click()
+  await expect(page.getByTestId('voice-question')).toBeVisible({ timeout: 30_000 })
+  await expect.poll(() => page.evaluate(() => (window as any).__cloud.frames), { timeout: 10_000 }).toBeGreaterThan(5)
+  const opensBefore = await page.evaluate(() => (window as any).__mic.opens)
+
+  await page.evaluate(() => (window as any).__mic.stream.getAudioTracks()[0].dispatchEvent(new Event('ended')))
+  await expect.poll(() => page.evaluate(() => (window as any).__mic.opens), { timeout: 5_000 }).toBeGreaterThan(opensBefore)
+  const framesAfter = await page.evaluate(() => (window as any).__cloud.frames)
+  await expect.poll(() => page.evaluate(() => (window as any).__cloud.frames), { timeout: 5_000 }).toBeGreaterThan(framesAfter + 5)
+  // The same recognizer stream carried on: no new connection, no browser recognizer.
+  expect(await page.evaluate(() => (window as any).__cloud.urls.length)).toBe(1)
+  expect(await page.evaluate(() => (window as any).__voice.starts)).toBe(0)
+
+  const before = turns.length
+  await page.evaluate(() => (window as any).__cloud.say(0, 'A hash function maps keys to buckets.', true))
+  await expect.poll(() => turns.length, { timeout: 8_000 }).toBeGreaterThan(before)
+  await page.getByRole('button', { name: 'End', exact: true }).click()
+})
+
