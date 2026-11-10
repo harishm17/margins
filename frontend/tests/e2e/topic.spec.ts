@@ -3,7 +3,6 @@ import { expect, test, type Page } from '@playwright/test'
 import { signIn } from './helpers/auth'
 import { withPrisma } from './helpers/db'
 import { FIXTURE_PDF } from './helpers/seed-demo'
-import { choice, world } from './helpers/v31-sessions'
 import { chooseConfidence } from './helpers/confidence'
 import { newQuestionsButton } from './helpers/quiz-results'
 

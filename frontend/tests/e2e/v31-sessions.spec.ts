@@ -159,8 +159,6 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     return { ...w, setId }
   }
 
-  const sure = { confidence: 0.75, confidenceLevel: 'fairly' }
-
   test('missed questions show where to look, and a low first score says it is common', async ({ page }) => {
     test.setTimeout(120_000)
     const w = await nineQuestionWorld(page, `s2-help-${stamp}`)
