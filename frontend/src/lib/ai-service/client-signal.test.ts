@@ -63,6 +63,8 @@ const OWN_SIGNAL_OK = new Set([
   'lib/analytics/capture.ts',
   'app/api/health/runtime/route.ts',
   'app/api/health/ready/route.ts',
+  // Chat is the one model call a dropped request does not cancel: its answer is stored and shown after a Stop (chat/stream.ts).
+  'lib/chat/server.ts',
 ])
 
 test('AI-service clients take their signal from callSignal', () => {

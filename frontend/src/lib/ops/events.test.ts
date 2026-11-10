@@ -44,7 +44,8 @@ test('a stored file that cannot be deleted is recorded for the watchdog', async 
   assert.deepEqual(failed, ['s3://materials/u1/p1/materials/m1/a.pdf'])
   assert.equal(events.length, 1)
   assert.equal(events[0][0], 'storage_delete_failed')
-  assert.match(events[0][1] ?? '', /u1\/p1\/materials\/m1\/a\.pdf: Error: bucket down/)
+  // The path and the error's class, never its message (storage errors can carry student text).
+  assert.equal(events[0][1], 's3://materials/u1/p1/materials/m1/a.pdf: Error')
   setS3ClientForTests(null)
   delete process.env.S3_BUCKET
 })
