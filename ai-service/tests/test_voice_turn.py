@@ -3,6 +3,7 @@ script, the NDJSON route, error mapping, the daily budget and the usage ledger."
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any, List
 
@@ -13,6 +14,7 @@ from fastapi.testclient import TestClient
 from app.api.routes import voice as voice_route
 from app.config import settings
 from app.main import app
+from app.services.budget import Allowance
 from app.services.llm.anthropic_provider import AnthropicProvider
 from app.services.llm.base import (
     LLMProvider,
@@ -159,21 +161,21 @@ def client():
 @pytest.fixture
 def wired(monkeypatch):
     """The route with the database, budget and ledger replaced by stand-ins."""
-    state: dict = {"budget": None, "project": {"id": "p1"}, "ledger": [], "provider": MockProvider()}
+    state: dict = {"budget": None, "project": {"id": "p1"}, "provider": MockProvider()}
 
     async def execute_one(sql, *args):
         return state["project"]
 
-    async def over_budget(user_id):
+    async def allowance(user_id):
         state["budget_user"] = user_id
-        return state["budget"]
-
-    async def record(**row):
-        state["ledger"].append(row)
+        refused = state["budget"]
+        return Allowance(
+            limit_usd=3.0, used_usd=3.1 if refused else 0.0, resets_at=datetime.now(timezone.utc),
+            refused="user" if refused else None, message=refused,
+        )
 
     monkeypatch.setattr(voice_route, "execute_one", execute_one)
-    monkeypatch.setattr(voice_route, "over_budget_message", over_budget)
-    monkeypatch.setattr(voice_route, "record_usage_event", record)
+    monkeypatch.setattr(voice_route, "allowance_today", allowance)
     monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")
     monkeypatch.setattr(LLMFactory, "get_provider", classmethod(lambda cls: state["provider"]))
     return state
@@ -217,7 +219,7 @@ class TestRoute:
         body = response.json()
         assert body["error_code"] == "LLM_DAILY_BUDGET" and "$3.10" in body["detail"]
         assert wired["budget_user"] == "u1"
-        assert wired["provider"].calls == [] and wired["ledger"] == []
+        assert wired["provider"].calls == []
 
     def test_unknown_project_is_404(self, client, wired):
         wired["project"] = None
@@ -239,56 +241,3 @@ class TestRoute:
         last = lines(response)[-1]
         assert (last["type"], last["code"], last["retryable"]) == ("error", code, retryable)
         assert last["message"]
-
-    def test_a_billed_refusal_still_writes_a_ledger_row(self, client, wired):
-        error = LLMRefusalError("declined")
-        error.usage = usage()
-        wired["provider"] = ScriptedProvider(error=error)
-        post(client)
-        assert len(wired["ledger"]) == 1
-        assert wired["ledger"][0]["input_tokens"] == 1000
-
-    def test_each_call_writes_one_ledger_row_with_the_session_as_source(self, client, wired):
-        wired["provider"] = ScriptedProvider(
-            [TurnDone(stop_reason="end_turn", content=[{"type": "text", "text": "Hi."}], usage=usage())]
-        )
-        post(client, session_id="sess-9")
-        post(client, session_id="sess-9")
-        assert len(wired["ledger"]) == 2
-        row = wired["ledger"][0]
-        assert (row["user_id"], row["project_id"], row["source"], row["source_id"]) == ("u1", "p1", "voice", "sess-9")
-        assert row["models"] == "claude-haiku-5-5"
-        assert (row["input_tokens"], row["output_tokens"]) == (1000, 100)
-        # 1000 in at $0.10/M + 100 out at $0.50/M
-        assert row["cost_usd"] == pytest.approx(0.00015)
-
-
-class TestLedgerInTheDatabase:
-    async def test_a_turn_adds_a_voice_row_that_counts_toward_the_budget(self, db, monkeypatch):
-        user_id = await seed_user(db)
-        project_id = await seed_project(db, user_id)
-        monkeypatch.setattr(settings, "LLM_PROVIDER", "anthropic")
-        monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "test-key")
-        monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 3.0)
-        provider = ScriptedProvider(
-            [TurnDone(stop_reason="end_turn", content=[{"type": "text", "text": "Hi."}], usage=usage(cache_read_input_tokens=600, cache_creation_input_tokens=100))]
-        )
-        monkeypatch.setattr(LLMFactory, "get_provider", classmethod(lambda cls: provider))
-
-        payload = voice_route.VoiceTurnRequest(
-            user_id=user_id, project_id=project_id, session_id="sess-1", system="s",
-            messages=[{"role": "user", "content": "hi"}], tools=[],
-        )
-        response = await voice_route.turn(payload)
-        body = b"".join([chunk async for chunk in response.body_iterator])
-        assert json.loads(body.splitlines()[-1])["type"] == "done"
-
-        row = await db.fetchrow("SELECT * FROM llm_usage_events WHERE user_id = $1", user_id)
-        assert (row["source"], row["source_id"], row["project_id"]) == ("voice", "sess-1", project_id)
-        assert row["input_tokens"] == 1700 and float(row["cost_usd"]) == pytest.approx(0.000169)
-        assert (row["cache_read_tokens"], row["cache_write_tokens"]) == (600, 100)
-
-        # Once the day's spend reaches the cap, the next turn is refused.
-        monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 0.0001)
-        refused = await voice_route.turn(payload)
-        assert refused.status_code == 429

@@ -48,7 +48,7 @@ async def test_quiz_grading_is_refused_with_the_reason_when_the_model_is_unreach
     llm = MagicMock()
     llm.generate_structured = AsyncMock(side_effect=LLMCreditError("credit"))
     with patch("app.services.exam_grader.LLMFactory.get_provider", return_value=llm):
-        response = await call("POST", "/grade/quiz", json={"questions": [SHORT], "answers": {"0": "x"}})
+        response = await call("POST", "/grade/quiz", json={"user_id": "u1", "project_id": "p1", "questions": [SHORT], "answers": {"0": "x"}})
     # The web app keeps the answers and stores nothing (no 0 score).
     assert response.status_code == 502
     assert response.json()["error_code"] == "LLM_CREDIT_EXHAUSTED"

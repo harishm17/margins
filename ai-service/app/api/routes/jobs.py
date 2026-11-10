@@ -10,7 +10,7 @@ import json
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
-from app.api.routes.grading import GradeQuizRequest
+from app.api.routes.grading import GradeQuizBody
 from app.models.jobs import (
     ConceptExtractionInput,
     ConceptLinkingInput,
@@ -1206,7 +1206,7 @@ async def grade_quiz_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     # The stored snapshot goes through the same model the immediate path (POST /grade/quiz) uses, so
     # a malformed question or answer is refused or normalised the same way in both.
     try:
-        request = GradeQuizRequest.model_validate({
+        request = GradeQuizBody.model_validate({
             "questions": _json_value(submission["questions"]),
             "answers": _json_value(submission["answers"]),
         })

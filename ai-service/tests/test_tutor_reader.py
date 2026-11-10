@@ -22,6 +22,8 @@ CLAIMS = [
 
 def request(**over):
     base = dict(
+        user_id="u1",
+        project_id="p1",
         passage=PASSAGE,
         chunk_id="chunk-1",
         student_take="I think it says a table needs some way to deal with keys that share a spot.",
@@ -246,15 +248,3 @@ class TestTurnsOverHttp:
             )
         assert response.status_code == 200
         assert response.json() == {"verdict": "partly", "reply": "You have half of it.", "follow_up_question": "What does the table do next?", "from_fallback": False}
-
-    def test_a_user_over_budget_gets_a_429_and_no_model_call(self, client):
-        provider = Scripted([reply()])
-
-        async def over(_user_id):
-            return "Daily AI usage limit reached"
-
-        with use(provider), patch("app.api.routes.tutor.over_budget_message", over):
-            response = client.post("/tutor/reader", json=self.body(user_id="u1"))
-        assert response.status_code == 429
-        assert response.json()["error_code"] == "LLM_DAILY_BUDGET"
-        assert provider.calls == []

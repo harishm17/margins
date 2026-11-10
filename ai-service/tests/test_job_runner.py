@@ -24,6 +24,8 @@ from app.services.job_runner import (
 from app.services.llm.base import LLMRateLimitError, LLMUsage
 from app.services.llm.usage import record_usage
 from app.services.budget import spent_today_usd
+from app.services.llm.factory import LLMFactory
+from tests.billing_helpers import UsageProvider, install_billed
 from tests.db_helpers import get_job, seed_job, seed_project, seed_usage, seed_user
 
 
@@ -235,12 +237,16 @@ def usage(model="claude-haiku-5-5", input_tokens=1000, output_tokens=500, **extr
 
 
 class TestUsage:
-    async def test_usage_is_stored_in_the_columns_and_the_result(self, db, user_id):
+    async def test_usage_is_stored_in_the_columns_and_the_result(self, db, user_id, monkeypatch):
         job_id = await seed_job(db, user_id)
+        install_billed(monkeypatch, UsageProvider(
+            usage(input_tokens=1_000_000, output_tokens=100_000, cache_read_input_tokens=500),
+            usage(input_tokens=200, output_tokens=100),
+        ))
 
         async def body(payload, job):
-            record_usage(usage(input_tokens=1_000_000, output_tokens=100_000, cache_read_input_tokens=500, purpose="topic_quiz"))
-            record_usage(usage(input_tokens=200, output_tokens=100, purpose="support_check"))
+            await LLMFactory.get_provider().generate_text([], purpose="topic_quiz")
+            await LLMFactory.get_provider().generate_text([], purpose="support_check")
             return JobOutcome(result={"done": True})
 
         await make_handler(body)(payload(job_id))
@@ -255,15 +261,16 @@ class TestUsage:
         assert stored["usage"]["output_tokens"] == 100_100
         assert {p: u["calls"] for p, u in stored["usage"]["by_purpose"].items()} == {"topic_quiz": 1, "support_check": 1}
         assert stored["usage"]["by_purpose"]["topic_quiz"]["cache_read_input_tokens"] == 500
-        ledger = await db.fetchrow("SELECT input_tokens, cache_read_tokens, cache_write_tokens FROM llm_usage_events WHERE source_id = $1", job_id)
+        ledger = await db.fetchrow("SELECT SUM(input_tokens)::int, SUM(cache_read_tokens)::int, SUM(cache_write_tokens)::int FROM llm_usage_events WHERE source_id = $1", job_id)
         assert tuple(ledger) == (1_000_700, 500, 0)
 
-    async def test_each_attempt_adds_a_ledger_row_that_outlives_the_job(self, db, user_id):
+    async def test_each_attempt_adds_a_ledger_row_that_outlives_the_job(self, db, user_id, monkeypatch):
         project_id = await seed_project(db, user_id)
         job_id = await seed_job(db, user_id, project_id=project_id)
+        install_billed(monkeypatch, UsageProvider(usage(input_tokens=2_000_000, output_tokens=0), usage(input_tokens=2_000_000, output_tokens=0)))
 
         async def body(payload, job):
-            record_usage(usage(input_tokens=2_000_000, output_tokens=0))
+            await LLMFactory.get_provider().generate_text([], purpose="topic_quiz")
             if job.attempt == 1:
                 raise LLMRateLimitError("slow down")
             return JobOutcome()
@@ -284,6 +291,32 @@ class TestUsage:
         await db.execute("DELETE FROM projects WHERE id = $1", project_id)
         assert await db.fetchval("SELECT count(*) FROM processing_jobs WHERE id = $1", job_id) == 0
         assert await spent_today_usd(user_id) == pytest.approx(0.4)
+
+    async def test_a_killed_job_still_leaves_one_ledger_row_for_the_call_it_was_in(self, db, user_id, monkeypatch):
+        # The worker is cancelled (deploy, lease lost) while a model call that already reported usage is open.
+        job_id = await seed_job(db, user_id)
+        started = asyncio.Event()
+
+        class Hangs(UsageProvider):
+            async def generate_text(self, messages, *, purpose, max_tokens=16000):
+                record_usage(usage(input_tokens=1_000_000, output_tokens=0, purpose=purpose))
+                started.set()
+                await asyncio.sleep(60)
+
+        install_billed(monkeypatch, Hangs())
+
+        async def body(payload, job):
+            await LLMFactory.get_provider().generate_text([], purpose="topic_quiz")
+            return JobOutcome()
+
+        task = asyncio.ensure_future(make_handler(body)(payload(job_id)))
+        await asyncio.wait_for(started.wait(), 5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        rows = await db.fetch("SELECT source, source_id, input_tokens FROM llm_usage_events WHERE user_id = $1", user_id)
+        assert [(r["source"], r["source_id"], r["input_tokens"]) for r in rows] == [("job", job_id, 1_000_000)]
+
 
 class TestDailyBudget:
     @pytest.fixture(autouse=True)

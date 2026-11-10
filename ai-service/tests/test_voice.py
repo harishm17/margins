@@ -28,6 +28,6 @@ async def test_drill_tops_up_after_filtering():
     llm = MagicMock()
     llm.generate_structured = AsyncMock(return_value=DrillQuestionSet(questions=questions))
     with patch.object(voice.LLMFactory, "get_provider", return_value=llm):
-        result = await voice.generate_concept_drill(DrillGenerateRequest(notes="n", count=3))
+        result = await voice.generate_concept_drill(DrillGenerateRequest(user_id="u1", project_id="p1", notes="n", count=3))
     assert result["total"] == 3
 

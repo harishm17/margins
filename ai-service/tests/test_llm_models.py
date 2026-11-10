@@ -90,8 +90,8 @@ def test_every_llm_call_site_passes_a_purpose_that_maps_to_a_setting():
 def test_no_llm_call_leaves_out_its_purpose():
     methods = {"generate_text", "generate_structured", "stream_cited_answer", "stream_turn"}
     for path in APP_DIR.rglob("*.py"):
-        if path.parts[-3:-1] == ("services", "llm"):
-            continue  # the providers define these methods
+        if path.parts[-3:-1] == ("services", "llm") or path.name == "billing.py":
+            continue  # the providers define these methods; billing.py forwards its caller's own arguments
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in methods:
                 assert any(kw.arg == "purpose" for kw in node.keywords), f"{path.name}:{node.lineno} has no purpose"

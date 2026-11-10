@@ -53,11 +53,9 @@ class RichAnswer(BaseModel):
     thinking: Optional[str] = Field(default=None, max_length=MAX_THINKING_CHARS)
 
 
-class GradeQuizRequest(BaseModel):
-    # The model-graded items are billed to this user and project (billing.py). A quiz of rule-graded items only never
-    # calls the model, so it stays free whatever the allowance.
-    user_id: str = Field(min_length=1, max_length=100)
-    project_id: str = Field(min_length=1, max_length=100)
+class GradeQuizBody(BaseModel):
+    """What is graded. The grade_quiz job validates its stored snapshot with this; the job's own scope bills it."""
+
     questions: List[GradableQuestion] = Field(min_length=1, max_length=MAX_QUESTIONS)
     answers: Dict[str, Union[AnswerValue, RichAnswer]] = Field(
         default_factory=dict,
@@ -84,6 +82,13 @@ class GradeQuizRequest(BaseModel):
             for key, value in self.answers.items()
             if isinstance(value, RichAnswer) and value.thinking and value.thinking.strip()
         }
+
+
+class GradeQuizRequest(GradeQuizBody):
+    # The model-graded items are billed to this user and project (billing.py). A quiz of rule-graded items only never
+    # calls the model, so it stays free whatever the allowance.
+    user_id: str = Field(min_length=1, max_length=100)
+    project_id: str = Field(min_length=1, max_length=100)
 
 
 class GradeQuizResponse(BaseModel):
