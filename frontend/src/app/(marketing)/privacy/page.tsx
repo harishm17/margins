@@ -64,8 +64,10 @@ export default function PrivacyPage() {
           120 days; if we ever restore a backup, deleted accounts are deleted again before the app reopens. If you can&apos;t sign in or need help, email {CONTACT_EMAIL}.
         </p>
         <p>
-          When you delete a single file, the notes and questions already made from it stay until you regenerate them or
-          delete the course.
+          When you delete a single file, the notes you wrote on it stay, with the passage each one sat on, listed under
+          &ldquo;Notes from removed files&rdquo; until you delete them or the course. The notes, examples, practice and quizzes
+          already made from it stay until you regenerate them or delete the course. The ideas taken from the file leave your
+          recall checks.
         </p>
         <p>
           Server logs are kept by Railway for about a week and hold ids and error types, not your text.

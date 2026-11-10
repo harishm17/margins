@@ -16,6 +16,7 @@ import { focusChunks } from '@/lib/learning/warmup-bracket'
 import { isPdf } from '@/lib/chat/citations'
 import { buildChecks, type CheckGrade, type ReaderClaimRef, type ReaderFocusQuestion } from './checks'
 import { stripOverlap } from './strip-overlap'
+import { toDetachedNoteView, type DetachedNoteView } from './detached-notes'
 import { VERDICT_LABELS, type CheckVerdict } from './take'
 
 /** The reader shows at most this many passages (a topic's sources are a few dozen in practice). */
@@ -68,6 +69,8 @@ export type ReaderData = {
   focusQuestions: ReaderFocusQuestionView[]
   checks: ReaderCheckView[]
   notes: MarginNoteView[]
+  /** Notes whose file was deleted: kept, listed at the end of the topic ("Notes from removed files"). */
+  detachedNotes: DetachedNoteView[]
   /** Passages marked Focus here. */
   focusCount: number
 }
@@ -272,9 +275,20 @@ export function toNoteView(row: { id: string; chunkId: string; kind: string; tex
   }
 }
 
+/** Notes on passages that still exist. A note whose file is gone (material cleared) has no passage; see `loadDetachedNotes`. */
 export async function loadMarginNotes(userId: string, topicId: string): Promise<MarginNoteView[]> {
-  const rows = await prisma.marginNote.findMany({ where: { userId, topicId }, orderBy: { createdAt: 'asc' }, select: { id: true, chunkId: true, kind: true, text: true, reply: true, createdAt: true } })
+  const rows = await prisma.marginNote.findMany({ where: { userId, topicId, materialId: { not: null } }, orderBy: { createdAt: 'asc' }, select: { id: true, chunkId: true, kind: true, text: true, reply: true, createdAt: true } })
   return rows.map(toNoteView)
+}
+
+/** The topic's notes whose file was deleted, oldest first, with the quote they sat on. */
+export async function loadDetachedNotes(userId: string, topicId: string): Promise<DetachedNoteView[]> {
+  const rows = await prisma.marginNote.findMany({
+    where: { userId, topicId, materialId: null },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, kind: true, text: true, quote: true, reply: true, createdAt: true },
+  })
+  return rows.map(toDetachedNoteView)
 }
 
 /** The grade the student gave each of these checks, read back from the evidence it wrote (score 1, 0.5 or 0). */
@@ -300,11 +314,12 @@ async function gradedChecks(userId: string, claimIds: string[]): Promise<Map<str
 export async function loadReader(userId: string, topicId: string): Promise<ReaderData | null> {
   const topic = await ownedTopic(userId, topicId)
   if (!topic) return null
-  const [chunks, claims, focusQuestions, notes, warmup] = await Promise.all([
+  const [chunks, claims, focusQuestions, notes, detachedNotes, warmup] = await Promise.all([
     loadTopicChunks(topic),
     loadClaims(topic),
     loadFocusQuestions(topic),
     loadMarginNotes(userId, topicId),
+    loadDetachedNotes(userId, topicId),
     latestWarmupResults(userId, topicId),
   ])
 
@@ -339,6 +354,7 @@ export async function loadReader(userId: string, topicId: string): Promise<Reade
     focusQuestions: focusQuestions.map((q) => ({ ...q, chunkId: shown.has(resolve(q.chunkId) ?? '') ? resolve(q.chunkId) : null })),
     checks: checks.map((check) => ({ afterChunkId: check.afterChunkId, kind: check.kind, question: check.question, claimId: check.claim.id, graded: graded.get(check.claim.id) ?? null })),
     notes,
+    detachedNotes,
     focusCount: focusIds.size,
   }
 }
