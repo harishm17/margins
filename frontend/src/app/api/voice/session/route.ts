@@ -99,6 +99,11 @@ async function handlePOST(request: NextRequest) {
       }
     }
 
+    // Refuse before building the question set, which can call the model (generate-drill): a student over the day's
+    // sessions spends nothing. The check that holds is the locked one with the insert below.
+    const early = await prisma.$transaction((tx) => quota(tx, session.user, 'voiceSessions'))
+    if (early) return quotaResponse(early)
+
     let questionSet: VoiceQuestion[] = []
 
     if (readsClaims) {

@@ -150,6 +150,7 @@ export async function POST(
           userId: session.user.id,
           projectId,
           jobType: 'generate_exam',
+          quotaCounted: true,
           status: 'pending',
           stage: 'generating',
           inputData: {

@@ -24,7 +24,9 @@ import logging
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Iterator, List, Optional, Type
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Type
+
+from pydantic import BaseModel
 
 from app.services.budget import DailyBudgetExceeded, allowance_today, record_usage_event
 from app.services.llm.base import (
@@ -115,6 +117,19 @@ class _Call:
         self.seen = usage
 
 
+def _text_length(value: Any) -> int:
+    """The characters of text in a call's input: messages, excerpts, history, tool definitions."""
+    if isinstance(value, str):
+        return len(value)
+    if isinstance(value, BaseModel):
+        return _text_length(value.model_dump())
+    if isinstance(value, dict):
+        return sum(_text_length(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return sum(_text_length(item) for item in value)
+    return 0
+
+
 # Ledger writes in flight. A task nobody references can be collected before it finishes.
 _writes: set[asyncio.Task] = set()
 
@@ -165,12 +180,12 @@ class BillingProvider(LLMProvider):
     def model_for(self, purpose: str) -> Optional[str]:
         return self.inner.model_for(purpose)
 
-    def _cut_off(self, call: _Call, messages: List[LLMMessage], purpose: str) -> None:
-        """A call cancelled before it reported usage: bill an estimate of the input it sent (about 4 characters a token).
-        An unknown model id is priced at the highest price (usage.estimate_cost_usd)."""
+    def _cut_off(self, call: _Call, sent: Any, purpose: str) -> None:
+        """A call cancelled (or a stream closed) before it reported usage: bill an estimate of the input it sent, about 4
+        characters a token. An unknown model id is priced at the highest price (usage.estimate_cost_usd)."""
         if call.usages or call.seen is not None:
             return
-        chars = sum(len(message.content) for message in messages)
+        chars = _text_length(sent)
         model = self.inner.model_for(purpose) or "unknown"
         call.partial(LLMUsage(model=model, purpose=purpose, input_tokens=max(1, chars // 4)))
 
@@ -204,9 +219,10 @@ class BillingProvider(LLMProvider):
         finally:
             await _write(scope, call)
 
-    async def _stream(self, events: AsyncIterator[Any]) -> AsyncIterator[Any]:
+    async def _stream(self, events: AsyncIterator[Any], sent: Dict[str, Any], purpose: str) -> AsyncIterator[Any]:
         """Pass a stream through, billing it once when it ends however it ends: finished, failed, cancelled or closed
-        early. The call's usage is reported while the inner stream runs, so the sink is set only while it advances."""
+        early. The call's usage is reported while the inner stream runs, so the sink is set only while it advances. A
+        stream cancelled or closed before its first event (which carries the input tokens) is billed an estimate."""
         begun = await _begin()
         if begun is None:
             async for event in events:
@@ -221,6 +237,9 @@ class BillingProvider(LLMProvider):
                     except StopAsyncIteration:
                         break
                 yield event
+        except (asyncio.CancelledError, GeneratorExit):
+            self._cut_off(call, sent, purpose)
+            raise
         finally:
             try:
                 with billing_sink(call):
@@ -229,7 +248,7 @@ class BillingProvider(LLMProvider):
                 await _write(scope, call)
 
     def stream_cited_answer(self, **kwargs: Any) -> AsyncIterator[AnswerEvent]:
-        return self._stream(self.inner.stream_cited_answer(**kwargs))
+        return self._stream(self.inner.stream_cited_answer(**kwargs), kwargs, kwargs.get("purpose", "chat"))
 
     def stream_turn(self, **kwargs: Any) -> AsyncIterator[TurnEvent]:
-        return self._stream(self.inner.stream_turn(**kwargs))
+        return self._stream(self.inner.stream_turn(**kwargs), kwargs, kwargs.get("purpose", "voice"))

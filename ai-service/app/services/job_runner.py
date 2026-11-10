@@ -347,6 +347,8 @@ async def _run_handler(coroutine: Awaitable[Any], job: JobContext) -> Any:
         # Shutdown, or the request itself was cancelled: stop the handler, then let the reaper take the job over.
         task.cancel()
         try:
+            # Let the handler finish unwinding (roll back, give its lock back) before another worker may take the job.
+            await asyncio.shield(asyncio.wait([task], timeout=10))
             await asyncio.shield(release_lease(job))
         except asyncio.CancelledError:
             pass

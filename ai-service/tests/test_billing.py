@@ -137,9 +137,10 @@ async def test_a_stream_the_reader_drops_is_billed_for_what_it_reported(db, monk
     assert await db.fetchval("SELECT SUM(input_tokens) FROM llm_usage_events WHERE user_id = $1", user_id) == 700
 
 
-async def test_a_call_cancelled_before_it_returns_is_billed_for_its_input(db, monkeypatch):
+@pytest.mark.parametrize("kind", ["structured", "stream"])
+async def test_a_call_cancelled_before_it_returns_is_billed_for_its_input(db, kind):
     """Review of PR 1.8-1.9b: a tutor or drill call cut off by a dropped request wrote no row, so repeated aborts
-    spent money outside the allowance."""
+    spent money outside the allowance. A stream cancelled before its first event (which carries the input tokens) too."""
     user_id = await seed_user(db)
     started = asyncio.Event()
 
@@ -151,11 +152,20 @@ async def test_a_call_cancelled_before_it_returns_is_billed_for_its_input(db, mo
             started.set()
             await asyncio.sleep(60)
 
+        async def stream_turn(self, **kwargs):
+            started.set()
+            await asyncio.sleep(60)
+            yield "never"
+
     provider = BillingProvider(Slow())
 
     async def call():
         async with billed(user_id, None, "drill", "t1"):
-            await provider.generate_structured([LLMMessage(role="user", content="x" * 4000)], object, purpose="drill")
+            if kind == "structured":
+                await provider.generate_structured([LLMMessage(role="user", content="x" * 4000)], object, purpose="drill")
+            else:
+                async for _ in provider.stream_turn(system="", messages=[{"content": "x" * 4000}], tools=[], purpose="voice"):
+                    pass
 
     task = asyncio.create_task(call())
     await started.wait()
@@ -163,7 +173,8 @@ async def test_a_call_cancelled_before_it_returns_is_billed_for_its_input(db, mo
     with pytest.raises(asyncio.CancelledError):
         await task
     row = await db.fetchrow("SELECT input_tokens, cost_usd FROM llm_usage_events WHERE user_id = $1", user_id)
-    assert row["input_tokens"] == 1000 and row["cost_usd"] > 0
+    # About 4 characters a token: the 4000-character input, plus a few short fields (the role, the purpose).
+    assert 1000 <= row["input_tokens"] <= 1005 and row["cost_usd"] > 0
 
 
 # ---- the routes

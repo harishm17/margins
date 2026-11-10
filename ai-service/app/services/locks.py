@@ -9,10 +9,12 @@ graph. Content generation and review items also take it exclusive for now, which
 content job per topic at a time); PR 7's PARALLEL_TOPIC_JOBS moves them to shared. The gap explainer locks
 its own attempt, so it no longer waits behind the topic's generation.
 
-The lock lives on its own pooled connection for as long as the block runs (a session-level advisory lock
-belongs to its connection). It is taken with `pg_try_advisory_lock*` in a loop with a short, jittered sleep
-instead of a blocking call, so a cancelled job or a shutdown stops waiting at once, and it is always released
-in `finally`. If the process dies, the database drops the lock with the connection.
+The lock lives on its own connection for as long as the block runs (a session-level advisory lock belongs to its
+connection). Those connections come from a pool of their own (connection.get_lock_pool), so jobs holding locks never
+take the connections interactive routes, heartbeats and ledger writes need. It is taken with `pg_try_advisory_lock*`
+in a loop with a short, jittered sleep instead of a blocking call, and the connection goes back to the pool between
+tries, so a waiting job holds none; a cancelled job or a shutdown stops waiting at once. It is always released in
+`finally`. If the process dies, the database drops the lock with the connection.
 """
 import asyncio
 import logging
@@ -22,7 +24,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from app.config import settings
-from app.db.connection import get_db_pool
+from app.db.connection import get_lock_pool
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +43,33 @@ class LockWaitTimeout(RuntimeError):
 @asynccontextmanager
 async def topic_lock(key: str, *, exclusive: bool) -> AsyncIterator[None]:
     """Hold the advisory lock for `key` (exclusive, or shared with other shared holders) for the block."""
-    pool = await get_db_pool()
-    async with pool.acquire() as conn:
-        deadline = time.monotonic() + settings.TOPIC_LOCK_WAIT_SECONDS
-        while not await conn.fetchval(_TRY[exclusive], key):
-            if time.monotonic() >= deadline:
-                raise LockWaitTimeout(f"Waited {settings.TOPIC_LOCK_WAIT_SECONDS:g}s for the lock on {key}")
-            await asyncio.sleep(POLL_SECONDS * (0.5 + random.random()))
+    pool = await get_lock_pool()
+    deadline = time.monotonic() + settings.TOPIC_LOCK_WAIT_SECONDS
+    while True:
+        conn = None
         try:
-            yield
+            conn = await pool.acquire(timeout=max(0.1, deadline - time.monotonic()))
+            if await conn.fetchval(_TRY[exclusive], key):
+                break
+        except asyncio.TimeoutError:
+            pass  # every lock connection is held: wait like a taken lock
+        except BaseException:
+            if conn is not None:
+                await pool.release(conn)
+            raise
+        if conn is not None:
+            await pool.release(conn)  # hold no connection while waiting
+        if time.monotonic() >= deadline:
+            raise LockWaitTimeout(f"Waited {settings.TOPIC_LOCK_WAIT_SECONDS:g}s for the lock on {key}")
+        await asyncio.sleep(POLL_SECONDS * (0.5 + random.random()))
+    try:
+        yield
+    finally:
+        try:
+            # Shielded: a cancelled job must still give the lock back before its connection is reused.
+            await asyncio.shield(conn.fetchval(_UNLOCK[exclusive], key))
+        except Exception:
+            logger.warning("Could not release the lock on %s; dropping its connection", key)
+            conn.terminate()
         finally:
-            try:
-                # Shielded: a cancelled job must still give the lock back before its connection is reused.
-                await asyncio.shield(conn.fetchval(_UNLOCK[exclusive], key))
-            except Exception:
-                logger.warning("Could not release the lock on %s; dropping its connection", key)
-                conn.terminate()
+            await asyncio.shield(pool.release(conn))

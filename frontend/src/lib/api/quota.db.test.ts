@@ -110,7 +110,7 @@ const seeders: Record<QuotaKind, (w: World, n: number) => Promise<void>> = {
   generationJobs: async (w, n) => {
     for (let i = 0; i < n; i++) {
       await prisma.processingJob.create({
-        data: { userId: w.user.id, projectId: w.project.id, jobType: 'generate_content', status: 'completed', targetKey: `${tag}:${i}:${Math.random()}`, inputData: {} },
+        data: { userId: w.user.id, projectId: w.project.id, jobType: 'generate_content', status: 'completed', quotaCounted: true, targetKey: `${tag}:${i}:${Math.random()}`, inputData: {} },
       })
     }
   },
@@ -174,6 +174,19 @@ for (const kind of KINDS) {
     }
   })
 }
+
+// Review of PR 88: preparing a course of about 34 topics chained 200+ generate_content rows under the student's id, and
+// every later request was refused for a day. Jobs the AI service chains are not the student's requests.
+test('jobs the AI service chains after a request do not count toward the daily request cap', { skip: !process.env.DATABASE_URL }, async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const w = await world()
+  for (let i = 0; i < CAP * 3; i++) {
+    await prisma.processingJob.create({
+      data: { userId: w.user.id, projectId: w.project.id, jobType: 'generate_content', status: 'completed', targetKey: `${tag}:chain:${i}:${Math.random()}`, inputData: {} },
+    })
+  }
+  assert.equal(await prisma.$transaction((tx) => quotaModule.quota(tx, w.user, 'generationJobs', scopeFor('generationJobs', w))), null)
+})
 
 test('the refusal is a 409 with the code the screens read and the plain text as its message', { skip: !process.env.DATABASE_URL }, async () => {
   const response = quotaModule.quotaResponse({ kind: 'courses', limit: 20, message: 'You can have up to 20 courses. Delete one to add another.' })

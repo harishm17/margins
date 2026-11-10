@@ -112,7 +112,8 @@ async function used(tx: Db, kind: QuotaKind, userId: string, scope: QuotaScope):
     case 'drafts':
       return tx.studyDraft.count({ where: { userId, expiresAt: { gt: scope.now ?? new Date() } } })
     case 'generationJobs':
-      return tx.processingJob.count({ where: { userId, jobType: { in: [...GENERATION_JOB_TYPES] }, createdAt: { gte: since } } })
+      // The student's own requests only: the jobs the AI service chains after one (a topic's other content) are not counted.
+      return tx.processingJob.count({ where: { userId, quotaCounted: true, jobType: { in: [...GENERATION_JOB_TYPES] }, createdAt: { gte: since } } })
   }
 }
 

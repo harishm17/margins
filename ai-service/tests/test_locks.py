@@ -46,3 +46,18 @@ async def test_a_cancelled_holder_releases_the_lock(db, monkeypatch):
     monkeypatch.setattr(settings, "TOPIC_LOCK_WAIT_SECONDS", 2)
     async with topic_lock("topic:c", exclusive=True):
         pass
+
+
+async def test_jobs_holding_locks_leave_the_main_pool_free(db, monkeypatch):
+    """Review of PR 88: each lock held a connection from the main pool for its whole job, so as many locked jobs as
+    the pool's size left interactive routes, heartbeats and ledger writes failing to get a connection."""
+    from contextlib import AsyncExitStack
+
+    from app.db.connection import execute_one
+
+    monkeypatch.setattr(settings, "DB_ACQUIRE_TIMEOUT_SECONDS", 1)
+    async with AsyncExitStack() as held:
+        for i in range(settings.DB_POOL_MAX_SIZE):
+            await held.enter_async_context(topic_lock(f"topic:many-{i}", exclusive=True))
+        async with asyncio.timeout(3):
+            assert (await execute_one("SELECT 1 AS one"))["one"] == 1

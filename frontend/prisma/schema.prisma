@@ -797,6 +797,10 @@ model ProcessingJob {
   // allows one pending/processing job per targetKey.
   targetKey       String?   @map("target_key")
 
+  // A job the web started for a student's request; the daily cap on study-material requests counts only these
+  // (lib/api/quota.ts). Jobs the AI service chains after it stay false.
+  quotaCounted    Boolean   @default(false) @map("quota_counted")
+
   // Summed over every attempt. llmCostUsd feeds the per-user daily budget.
   llmInputTokens  Int       @default(0) @map("llm_input_tokens")
   llmOutputTokens Int       @default(0) @map("llm_output_tokens")

@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     DB_ACQUIRE_TIMEOUT_SECONDS: float = 10.0
     # How long a lock on one topic (app/services/locks.py) is waited for, in seconds, before the job fails and retries.
     TOPIC_LOCK_WAIT_SECONDS: float = 600.0
+    # Connections that only hold those locks, apart from DB_POOL_MAX_SIZE: a lock is held for a whole job (a model call
+    # included), so holders must not take the connections that interactive routes, heartbeats and ledger writes need.
+    # More locked jobs at once than this wait for a free one, inside TOPIC_LOCK_WAIT_SECONDS.
+    DB_LOCK_POOL_MAX_SIZE: int = 20
     # On shutdown, running jobs get this long to finish before they are cancelled and their leases released.
     JOB_SHUTDOWN_GRACE_SECONDS: float = 20.0
     # Queued file deletions (pending_file_deletions) that failed this many times raise a watchdog alert.

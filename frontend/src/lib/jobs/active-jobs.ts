@@ -54,7 +54,7 @@ export async function createJobOrFindActive(
       const job = (GENERATION_JOB_TYPES as readonly string[]).includes(data.jobType)
         ? await prisma.$transaction(async (tx) => {
             await assertQuota(tx, { id: data.userId }, 'generationJobs')
-            return tx.processingJob.create({ data })
+            return tx.processingJob.create({ data: { ...data, quotaCounted: true } })
           })
         : await prisma.processingJob.create({ data })
       return { job, created: true }

@@ -58,9 +58,10 @@ export default defineRailway(() => {
       // The weekly sweep of bucket files no material points to only reports while this is "true". Turn it off after
       // a few reports (docs/deployment/RAILWAY.md, "orphaned files") look right.
       STORAGE_SWEEP_DRY_RUN: "true",
-      // On a deploy Railway sends SIGTERM; running jobs get JOB_SHUTDOWN_GRACE_SECONDS (20, start.sh) to finish, then are
-      // cancelled and their leases released. Keep the drain time longer than that plus the pool close.
-      RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "30",
+      // On a deploy Railway sends SIGTERM. Open requests get uvicorn's graceful window (JOB_SHUTDOWN_GRACE_SECONDS, 20,
+      // start.sh), then running jobs get the same 20 to finish before they are cancelled and their leases released. Keep
+      // the drain time longer than both together plus the pool close, or the kill comes before the leases are released.
+      RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "50",
       DATABASE_URL: Postgres.env.DATABASE_URL,
       PORT: "8000",
       AI_SERVICE_URL: aiServiceUrl,

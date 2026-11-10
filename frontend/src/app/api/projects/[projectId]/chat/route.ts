@@ -217,7 +217,10 @@ async function handlePOST(
     // The same send arrived twice at once and the other one stored it first: no second question, and no empty conversation left behind.
     if (clientRequestId && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       await upstream.cancel().catch(() => {})
-      const taken = await prisma.chatMessage.findFirst({ where: { clientRequestId }, select: { threadId: true } })
+      const taken = await prisma.chatMessage.findFirst({
+        where: { clientRequestId, thread: { projectId, userId } },
+        select: { threadId: true },
+      })
       if (isNewThread && thread && thread.id !== taken?.threadId) await prisma.chatThread.delete({ where: { id: thread.id } }).catch(() => {})
       return NextResponse.json({ duplicate: true, threadId: taken?.threadId ?? null })
     }
