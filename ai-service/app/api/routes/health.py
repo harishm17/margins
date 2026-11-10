@@ -1,108 +1,85 @@
-"""Health check endpoints."""
-from fastapi import APIRouter
+"""Health endpoints (SEC-L4, OPS-L1, OPS-H3).
 
+`/health` is public and says only pass or fail: 200 `{"status": "ok"}` once the database answers and holds the
+migration this code needs (app/db/schema_version.py), 503 `{"status": "unavailable"}` otherwise. Railway's deploy
+healthcheck and the web app's /api/health/ready read it.
+
+`/health/dependencies` is the detail (database, migration, provider status, configuration, watchdog and backup
+facts) and needs the internal token like every other route.
+"""
+import logging
+
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
+
+from app.api.internal_auth import require_internal_token
 from app.config import settings
 from app.db.connection import get_db_pool
+from app.db.schema_version import REQUIRED_MIGRATION, migration_applied
+from app.services import ops
 from app.services.ai_status import get_status as get_ai_status
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+async def ready() -> bool:
+    """The database answers and holds the migration this code needs."""
+    try:
+        pool = await get_db_pool()
+        await pool.fetchval("SELECT 1")
+        return await migration_applied()
+    except Exception as exc:
+        logger.warning("Health check: not ready: %s", exc)
+        return False
 
 
 @router.get("/health")
 async def health_check():
-    """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "service": "margins-ai",
-        "environment": settings.ENVIRONMENT,
-        "llm_provider": settings.LLM_PROVIDER,
-        "voice_enabled": settings.voice_enabled,
-    }
+    if await ready():
+        return {"status": "ok"}
+    return JSONResponse({"status": "unavailable"}, status_code=503)
 
 
-@router.get("/health/dependencies")
+def _check(name: str, ok: bool, good: str, bad: str, severity: str = "warn") -> dict:
+    return {"name": name, "status": "pass" if ok else severity, "message": good if ok else bad}
+
+
+@router.get("/health/dependencies", dependencies=[Depends(require_internal_token)])
 async def dependency_health_check():
-    """Dependency-oriented health checks for deployment validation."""
+    """Every dependency's state, for the operator (needs the internal token)."""
     checks = []
 
-    # Database reachability
     try:
         pool = await get_db_pool()
         await pool.fetchval("SELECT 1")
-        checks.append({"name": "database", "status": "pass", "message": "Database reachable"})
-    except Exception as exc:  # pragma: no cover - surfaced in runtime
-        checks.append({
-            "name": "database",
-            "status": "fail",
-            "message": f"Database connection failed: {exc}",
-        })
+        checks.append(_check("database", True, "Database reachable", ""))
+        checks.append(_check("migration", await migration_applied(), f"{REQUIRED_MIGRATION} applied",
+                             f"Waiting for migration {REQUIRED_MIGRATION}", "fail"))
+        for key in ("watchdog_last_run", "backup_last_success", "voice_retention_last_run", "embedding_model"):
+            value = await ops.get_state(key)
+            checks.append(_check(key, bool(value), value or "", "not recorded"))
+    except Exception as exc:
+        checks.append(_check("database", False, "", f"Database check failed: {exc}", "fail"))
 
-    # Claude key: needed for validation, topics, generation and grading
-    if settings.llm_configured:
-        checks.append({
-            "name": "llm_key",
-            "status": "pass",
-            "message": f"LLM provider {settings.LLM_PROVIDER} configured",
-        })
-    else:
-        checks.append({"name": "llm_key", "status": "fail", "message": "ANTHROPIC_API_KEY missing"})
-
-    # Whether the provider is usable: a key being set says nothing about credit (see
-    # app/services/ai_status.py; the status comes from real calls, not a probe).
+    checks.append(_check("llm_key", settings.llm_configured, f"LLM provider {settings.LLM_PROVIDER} configured",
+                         "ANTHROPIC_API_KEY missing", "fail"))
+    # A key being set says nothing about credit (app/services/ai_status.py; the status comes from real calls).
     status = await get_ai_status()
-    if status.available:
-        checks.append({"name": "llm_status", "status": "pass", "message": "No provider failure on record"})
-    else:
-        checks.append({
-            "name": "llm_status",
-            "status": "warn",
-            "message": f"AI marked unavailable ({status.reason}) since {status.since}",
-        })
-
-    # The voice coach is a Claude conversation: it is on whenever the LLM is configured
-    if settings.voice_enabled:
-        checks.append({"name": "voice", "status": "pass", "message": "Voice coach available (LLM configured)"})
-    else:
-        checks.append({
-            "name": "voice",
-            "status": "warn",
-            "message": "LLM not configured: the voice coach is turned off",
-        })
-
-    # Internal auth token for frontend -> AI bridge
-    if settings.AI_INTERNAL_TOKEN:
-        checks.append({
-            "name": "internal_token",
-            "status": "pass",
-            "message": "AI_INTERNAL_TOKEN configured",
-        })
-    else:
-        checks.append({
-            "name": "internal_token",
-            "status": "warn",
-            "message": "AI_INTERNAL_TOKEN not set (allowed in local/dev, not recommended in production)",
-        })
-
-    # Storage mode sanity
-    if settings.S3_ACCESS_KEY_ID and settings.S3_SECRET_ACCESS_KEY:
-        checks.append({
-            "name": "s3_config",
-            "status": "pass",
-            "message": "S3 credentials configured",
-        })
-    else:
-        checks.append({
-            "name": "s3_config",
-            "status": "warn",
-            "message": "No S3 credentials (local file mode expected if frontend uses local storage)",
-        })
+    checks.append(_check("llm_status", status.available, "No provider failure on record",
+                         f"AI marked unavailable ({status.reason}) since {status.since}"))
+    checks.append(_check("voice", settings.voice_enabled, "Voice coach available", "LLM not configured: voice is off"))
+    checks.append(_check("internal_token", bool(settings.AI_INTERNAL_TOKEN), "AI_INTERNAL_TOKEN configured",
+                         "AI_INTERNAL_TOKEN not set (allowed in local/dev only)"))
+    s3 = bool(settings.S3_ACCESS_KEY_ID and settings.S3_SECRET_ACCESS_KEY)
+    checks.append(_check("s3_config", s3, "S3 credentials configured", "No S3 credentials (local file mode)"))
+    checks.append(_check("alerts", bool(settings.OPS_ALERT_WEBHOOK_URL.strip()), "Alert webhook configured",
+                         "OPS_ALERT_WEBHOOK_URL not set: alerts are only logged"))
 
     has_fail = any(check["status"] == "fail" for check in checks)
     has_warn = any(check["status"] == "warn" for check in checks)
-    status = "unhealthy" if has_fail else ("degraded" if has_warn else "healthy")
-
     return {
-        "status": status,
+        "status": "unhealthy" if has_fail else ("degraded" if has_warn else "healthy"),
         "service": "margins-ai",
         "environment": settings.ENVIRONMENT,
         "checks": checks,
@@ -111,9 +88,4 @@ async def dependency_health_check():
 
 @router.get("/")
 async def root():
-    """Root endpoint."""
-    return {
-        "service": "Margins AI service",
-        "version": "0.1.0",
-        "status": "running",
-    }
+    return {"status": "ok"}

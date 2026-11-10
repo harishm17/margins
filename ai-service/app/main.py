@@ -73,6 +73,9 @@ async def _warm_exam_guard() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await _run_startup_checks()
+    from app.services.watchdog import install_error_counter
+
+    install_error_counter()
     warm = asyncio.create_task(_warm_exam_guard())
     reaper = None
     if settings.JOB_REAPER_INTERVAL_SECONDS > 0:

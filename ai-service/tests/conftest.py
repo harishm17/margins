@@ -116,6 +116,26 @@ MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "frontend" / "prisma" / "
 TEST_DB_ADMIN_URL = os.environ.get("TEST_DB_ADMIN_URL", "postgresql://postgres@127.0.0.1:5544/postgres")
 
 
+async def record_migrations(conn, migrations_dir: Path) -> None:
+    """`_prisma_migrations` as `prisma migrate deploy` leaves it, for migrations applied as plain SQL."""
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS _prisma_migrations (
+            id VARCHAR(36) PRIMARY KEY, checksum VARCHAR(64) NOT NULL, finished_at TIMESTAMPTZ,
+            migration_name VARCHAR(255) NOT NULL, logs TEXT, rolled_back_at TIMESTAMPTZ,
+            started_at TIMESTAMPTZ NOT NULL DEFAULT now(), applied_steps_count INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    for migration in sorted(migrations_dir.glob("*/migration.sql")):
+        await conn.execute(
+            "INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count) "
+            "VALUES (gen_random_uuid()::text, md5($1), now(), $2, 1)",
+            migration.read_text(),
+            migration.parent.name,
+        )
+
+
 def _swap_database(url: str, name: str) -> str:
     return url.rsplit("/", 1)[0] + "/" + name
 
@@ -131,6 +151,7 @@ async def _build_test_database(name: str) -> None:
     try:
         for migration in sorted(MIGRATIONS_DIR.glob("*/migration.sql")):
             await conn.execute(migration.read_text())
+        await record_migrations(conn, MIGRATIONS_DIR)
     finally:
         await conn.close()
 
@@ -172,9 +193,12 @@ async def db(test_database_url, monkeypatch):
         # The shared AI status is not tied to a user: a test that marked it down must not
         # refuse the next test's calls.
         await pool.execute("DELETE FROM ai_status")
-        from app.services import ai_status
+        # Nor are the ops facts, failure counts and alert cooldowns.
+        await pool.execute("DELETE FROM ops_events; DELETE FROM ops_state; DELETE FROM ops_alerts")
+        from app.services import ai_status, ops
 
         ai_status.reset_local_state()
+        ops.reset_local_state()
         await connection.close_db_pool()
 
 

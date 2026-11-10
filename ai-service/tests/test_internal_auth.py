@@ -1,11 +1,11 @@
-"""Every AI-service route except health checks requires the shared internal token."""
+"""Every AI-service route except `/` and `/health` (pass or fail only) requires the shared internal token."""
 import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.main import app
 
-PUBLIC_PATHS = {"/", "/health", "/health/dependencies"}
+PUBLIC_PATHS = {"/", "/health"}
 HEADER = "x-ai-internal-token"
 
 
@@ -45,7 +45,9 @@ def test_wrong_token_is_refused(client, token):
 
 
 # /jobs/reap, /status/ai and /voice/retention take no body, so there is no validation step to stop at.
-BODY_ROUTES = [route for route in PROTECTED if route[1] not in {"/jobs/reap", "/status/ai", "/voice/retention"}]
+BODY_ROUTES = [
+    route for route in PROTECTED if route[1] not in {"/jobs/reap", "/status/ai", "/voice/retention", "/health/dependencies"}
+]
 
 
 @pytest.mark.parametrize("method,path", BODY_ROUTES)
@@ -71,9 +73,19 @@ def test_unset_token_in_development_is_allowed(client, monkeypatch):
     assert resp.status_code == 422
 
 
-def test_health_needs_no_token(client, token):
+def test_health_needs_no_token(client, token, monkeypatch):
+    from app.api.routes import health
+
+    async def ready():
+        return True
+
+    monkeypatch.setattr(health, "ready", ready)
     assert client.get("/health").status_code == 200
     assert client.get("/").status_code == 200
+
+
+def test_health_detail_needs_the_token(client, token):
+    assert client.get("/health/dependencies").status_code == 401
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ import httpx
 from app.api.internal_auth import internal_headers
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_update
+from app.services import ops
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,8 @@ _background_tasks: Set["asyncio.Task[None]"] = set()
 
 async def mark_undelivered(job_id: str, message: str) -> None:
     """The service never answered: fail the job if no handler has touched it. A job that has
-    started and is pending again is waiting for a retry, which the reaper owns."""
+    started and is pending again is waiting for a retry, which the reaper owns. Counted for the watchdog."""
+    await ops.note("dispatch_failed", f"job {job_id}: {message[:300]}")
     try:
         await execute_update(
             f"""
@@ -45,6 +47,7 @@ async def mark_undelivered(job_id: str, message: str) -> None:
         )
     except Exception as exc:
         logger.error("Could not record the dispatch failure of job %s: %s", job_id, exc)
+        await ops.note("job_write_failed", f"dispatch failure of job {job_id}: {exc!r}")
 
 
 def retry_delay_seconds(attempt: int, retry_after_header: Optional[str]) -> float:

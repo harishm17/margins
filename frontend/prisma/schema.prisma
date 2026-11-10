@@ -1223,3 +1223,40 @@ model StudyDraft {
   @@index([topicId])
   @@map("study_drafts")
 }
+
+// ============================================
+// Operations: what the watchdog reads (docs/deployment/RAILWAY.md, "Alerts")
+// ============================================
+
+// Facts the operator's checks need, one row each: when the nightly backup last succeeded, when the
+// watchdog and the voice purge last ran, which embedding model wrote the stored vectors.
+model OpsState {
+  key       String   @id
+  value     String
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("ops_state")
+}
+
+// A failure that was handled and logged where it happened (a ledger write, a storage delete, a
+// dispatch). The watchdog counts them by kind; rows older than 30 days are deleted by it.
+model OpsEvent {
+  id        BigInt   @id @default(autoincrement())
+  kind      String
+  source    String // "ai" or "web"
+  detail    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([kind, createdAt])
+  @@index([createdAt])
+  @@map("ops_events")
+}
+
+// When the watchdog last sent each kind of alert, so every process sends it once per cooldown.
+model OpsAlert {
+  kind        String   @id
+  lastSentAt  DateTime @map("last_sent_at")
+  lastMessage String   @map("last_message")
+
+  @@map("ops_alerts")
+}
