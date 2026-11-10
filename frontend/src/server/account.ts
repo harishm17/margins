@@ -21,7 +21,8 @@
 
 import { prisma } from '@/lib/db/prisma'
 import { deleteAccount, type DeletionResult, type DeletionStore } from '@/lib/account/deletion'
-import { deleteFile, deleteUserFiles } from '@/lib/storage/files'
+import { deleteFile, deleteUserFiles, writeDeletionRecord } from '@/lib/storage/files'
+import { recordOpsEvent } from '@/lib/ops/events'
 
 export type AccountDetails = {
   email: string
@@ -84,5 +85,9 @@ const store: DeletionStore = {
 
 /** Deletes the account and everything it owns. Throws AccountDeletionError when a step fails. */
 export function deleteUserAccount(userId: string): Promise<DeletionResult> {
-  return deleteAccount(userId, { store, files: { deleteFile, deleteUserFiles } })
+  return deleteAccount(userId, {
+    store,
+    files: { deleteFile, deleteUserFiles, recordDeletion: (id) => writeDeletionRecord(id) },
+    note: recordOpsEvent,
+  })
 }

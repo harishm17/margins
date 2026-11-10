@@ -20,6 +20,7 @@ from typing import Optional
 
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_one, execute_update
+from app.services import ops
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +69,12 @@ async def record_usage_event(
             cache_read_tokens,
             cache_write_tokens,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception(
             "Could not record %s usage (user %s, source %s, $%.6f): it will not count toward the daily budget",
             source, user_id, source_id, cost_usd,
         )
+        await ops.note("ledger_write_failed", f"{source} ${cost_usd:.4f} not in the ledger: {exc!r}")
 
 
 async def spent_today_usd(user_id: str) -> float:

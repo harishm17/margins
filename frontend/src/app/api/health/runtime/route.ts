@@ -1,8 +1,23 @@
 import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth/auth-config'
+import { holdsInternalToken, publicHealthBody } from '@/lib/ops/health'
 
 export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
+/** The configuration checks below, in detail, for a signed-in user or a holder of AI_INTERNAL_TOKEN; pass or fail
+ * for anyone else (SEC-L4: the messages name hosts, settings and errors). */
+async function mayReadDetail(request: Request): Promise<boolean> {
+  if (holdsInternalToken(request.headers)) return true
+  try {
+    return Boolean((await getServerSession(authOptions))?.user)
+  } catch {
+    return false
+  }
+}
 
 type CheckStatus = 'pass' | 'warn' | 'fail'
 
@@ -30,7 +45,7 @@ function canWriteDir(baseDir: string): boolean {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const checks: RuntimeCheck[] = []
 
   const nodeEnv = process.env.NODE_ENV || 'development'
@@ -132,6 +147,12 @@ export async function GET() {
   }
 
   const status = statusFromChecks(checks)
+  if (!(await mayReadDetail(request))) {
+    return NextResponse.json(publicHealthBody(status !== 'unhealthy'), {
+      status: status === 'unhealthy' ? 503 : 200,
+      headers: { 'Cache-Control': 'no-store' },
+    })
+  }
   return NextResponse.json({
     status,
     environment: nodeEnv,

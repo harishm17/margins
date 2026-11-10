@@ -27,11 +27,12 @@ The reaper is the only owner of both cases; the frontend does not close stuck jo
 import asyncio
 import json
 import logging
+import time
 from typing import Any, Dict
 
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_query
-from app.services import ai_status
+from app.services import ai_status, ops
 from app.services.dispatch import JOB_ENDPOINTS, enqueue_job
 from app.services.job_runner import WAITING_FOR_AI
 
@@ -64,6 +65,7 @@ async def _redispatch(rows) -> int:
             sent += 1
         except Exception as exc:
             logger.error("Could not re-dispatch job %s: %s", job["id"], exc)
+            await ops.note("dispatch_failed", f"re-dispatch of {job['job_type']} job {job['id']}: {exc!r}")
     return sent
 
 
@@ -227,11 +229,19 @@ async def reap_expired_jobs() -> Dict[str, int]:
 
 
 async def reaper_loop() -> None:
-    """Run the reaper every JOB_REAPER_INTERVAL_SECONDS until cancelled."""
+    """Run the reaper every JOB_REAPER_INTERVAL_SECONDS, and the watchdog every WATCHDOG_INTERVAL_SECONDS, until
+    cancelled. The watchdog's first run is one interval after start."""
+    from app.services.watchdog import run_watchdog
+
     interval = settings.JOB_REAPER_INTERVAL_SECONDS
+    watchdog_due = time.monotonic() + settings.WATCHDOG_INTERVAL_SECONDS
     while True:
         await asyncio.sleep(interval)
         try:
             await reap_expired_jobs()
-        except Exception:
+        except Exception as exc:
             logger.exception("Job reaper run failed")
+            await ops.note("reaper_failed", repr(exc))
+        if settings.WATCHDOG_INTERVAL_SECONDS > 0 and time.monotonic() >= watchdog_due:
+            watchdog_due = time.monotonic() + settings.WATCHDOG_INTERVAL_SECONDS
+            await run_watchdog()

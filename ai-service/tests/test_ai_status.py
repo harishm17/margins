@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from app.config import settings
 from app.main import app
 from app.models.jobs import JobPayload
-from app.services import ai_status
+from app.services import ai_status, ops
 from app.services.job_runner import JobOutcome, job_handler
 from app.services.llm.base import (
     LLMAuthError,
@@ -32,10 +32,10 @@ from tests.db_helpers import get_job, seed_job, seed_project, seed_usage, seed_u
 def alerts(monkeypatch):
     sent = []
 
-    async def post(url, text):
-        sent.append((url, text))
+    async def post(title, text):
+        sent.append((title, text))
 
-    monkeypatch.setattr(ai_status, "_post_alert", post)
+    monkeypatch.setattr(ops, "post", post)
     monkeypatch.setattr(settings, "OPS_ALERT_WEBHOOK_URL", "https://hooks.example.test/x")
     monkeypatch.setattr(settings, "LLM_PROVIDER", "anthropic")
     monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "test-key")
@@ -58,7 +58,7 @@ class TestMarking:
     @pytest.mark.parametrize("error", [LLMCreditError("credit balance is too low"), LLMAuthError("bad key")])
     async def test_a_provider_level_failure_marks_it_down_at_once_and_alerts_once(self, db, alerts, error):
         await ai_status.record_failure(error)
-        await ai_status.wait_for_alerts()
+        await ops.wait_for_alerts()
 
         status = await ai_status.get_status()
         assert (status.available, status.reason) == (False, error.code)
@@ -66,7 +66,7 @@ class TestMarking:
         assert len(alerts) == 1 and error.code in alerts[0][1]
 
         await ai_status.record_failure(error)
-        await ai_status.wait_for_alerts()
+        await ops.wait_for_alerts()
 
         assert len(alerts) == 1  # still down: no second alert
         again = await row(db)
@@ -132,20 +132,26 @@ class TestRecoveryAlert:
 
         await ai_status.record_success()
         await ai_status.record_success()
-        await ai_status.wait_for_alerts()
+        await ops.wait_for_alerts()
 
         assert len(alerts) == 2
         assert "unavailable" in alerts[0][1]
         assert "available again after 2 h 5 min" in alerts[1][1]
         assert "LLM_CREDIT_EXHAUSTED" in alerts[1][1]
 
+    async def test_the_alert_names_the_reason_but_not_the_providers_error_text(self, db, alerts, caplog):
+        await ai_status.record_failure(LLMCreditError("credit balance too low for request req_abc"))
+        await ops.wait_for_alerts()
+        assert "LLM_CREDIT_EXHAUSTED" in alerts[0][1]
+        assert "req_abc" not in alerts[0][1] and "req_abc" in caplog.text
+
     async def test_only_the_process_that_makes_the_change_alerts(self, db, alerts):
         await ai_status.record_failure(LLMCreditError("credit"))
-        await ai_status.wait_for_alerts()
+        await ops.wait_for_alerts()
 
         # Two processes that both last saw it down get a success at the same time.
         await asyncio.gather(ai_status.record_success(), _other_process_success())
-        await ai_status.wait_for_alerts()
+        await ops.wait_for_alerts()
 
         assert len([text for _, text in alerts if "available again" in text]) == 1
 

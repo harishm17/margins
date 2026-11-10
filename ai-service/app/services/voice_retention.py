@@ -15,10 +15,12 @@ run by hand with POST /voice/retention. It is safe to run twice: a row already e
 """
 import asyncio
 import logging
+from datetime import datetime, timezone
 from typing import Dict
 
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_query
+from app.services import ops
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +114,8 @@ async def voice_retention_loop() -> None:
     while True:
         try:
             await purge_voice_transcripts()
-        except Exception:
+            await ops.set_state("voice_retention_last_run", datetime.now(timezone.utc).isoformat())
+        except Exception as exc:
             logger.exception("Voice transcript purge failed")
+            await ops.note("voice_retention_failed", repr(exc))
         await asyncio.sleep(settings.VOICE_RETENTION_INTERVAL_SECONDS)

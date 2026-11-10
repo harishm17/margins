@@ -39,7 +39,7 @@ from pydantic import BaseModel, ValidationError
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_one
 from app.models.jobs import JobPayload
-from app.services import ai_status
+from app.services import ai_status, ops
 from app.services.budget import over_budget_message, record_usage_event
 from app.services.content_generator.context import NoSourceMaterialError
 from app.services.document_processor.chunker import NoContentError
@@ -266,6 +266,7 @@ async def _heartbeat(job: JobContext) -> None:
             )
         except Exception as exc:  # a database blip must not kill the handler
             logger.warning("Lease renewal failed for job %s: %s", job.id, exc)
+            await ops.note("lease_renewal_failed", f"job {job.id}: {exc!r}")
             continue
         if row is None:
             logger.warning("Job %s lost its lease; another worker may have taken it", job.id)

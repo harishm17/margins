@@ -13,6 +13,12 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Every run step under bash with pipefail: without `shell:`, GitHub runs `bash -e`, where a failing command piped into
+# another (npm test | tee) does not fail the step.
+defaults:
+  run:
+    shell: bash
+
 permissions:
   contents: read
 
@@ -22,6 +28,22 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    # Postgres with pgvector: the *.db.test.ts files run against the migrated database and skip without one, so the
+    # test step below fails if any test skipped.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_DB: margins
+          POSTGRES_USER: dev
+          POSTGRES_PASSWORD: devpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dev -d margins"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       DATABASE_URL: postgresql://dev:devpass@localhost:5432/margins
       NEXTAUTH_SECRET: ci-secret
@@ -38,7 +60,11 @@ jobs:
       - run: npx prisma validate
       - run: npm run lint
       - run: npx tsc --noEmit
-      - run: npm test
+      - run: npx prisma migrate deploy
+      - name: Tests, with none skipped (the database tests skip when the database is missing)
+        run: |
+          npm test 2>&1 | tee "$RUNNER_TEMP/test.log"
+          grep -q '^ℹ skipped 0$' "$RUNNER_TEMP/test.log" || { echo "some tests were skipped"; exit 1; }
       - name: Tutoring eval parity (the real tutor logic against the committed fixture)
         run: npx tsx --test src/lib/tutor/eval-parity.test.ts src/lib/ask/eval-parity.test.ts src/lib/voice/eval-parity.test.ts
       - run: npm run build
@@ -48,8 +74,26 @@ jobs:
     defaults:
       run:
         working-directory: ai-service
+    # Postgres with pgvector: the tests that touch the database build a throwaway one from the Prisma migrations
+    # (tests/conftest.py), including the check that every SQL statement matches the migrated schema. Without it
+    # they skip.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_DB: margins
+          POSTGRES_USER: dev
+          POSTGRES_PASSWORD: devpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dev -d margins"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       DATABASE_URL: postgresql://dev:devpass@localhost:5432/margins
+      TEST_DB_ADMIN_URL: postgresql://dev:devpass@localhost:5432/postgres
       ANTHROPIC_API_KEY: test-key
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +104,8 @@ jobs:
           cache-dependency-glob: ai-service/uv.lock
       - run: uv sync --locked --python 3.14
       - run: uv run python -m compileall -q app
+      - name: Migrations only add, and the AI service names the newest one
+        run: python3 ../scripts/check_migrations.py
       - run: uv run pytest -q
       - name: Eval tests (retrieval, generation and tutoring; the tutoring ones replay the parity fixture)
         run: uv run pytest ../evals -q
@@ -73,7 +119,7 @@ jobs:
     timeout-minutes: 40
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_DB: margins
           POSTGRES_USER: dev
@@ -161,7 +207,7 @@ jobs:
             -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db \
             -e NEXTAUTH_SECRET=ci-secret -e NEXTAUTH_URL=http://127.0.0.1:3000 \
             margins-frontend
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             curl -fsS -o /dev/null http://127.0.0.1:3000/login && exit 0
             sleep 1
           done
@@ -175,7 +221,7 @@ jobs:
                 -e NEXTAUTH_URL=https://studymargins.com "$@" margins-frontend 2>&1)"; then
               echo "started, but should have refused: $*"; echo "$out"; exit 1
             fi
-            echo "$out" | grep -q "Refusing to start" || { echo "no refusal message: $*"; echo "$out"; exit 1; }
+            grep -q "Refusing to start" <<<"$out" || { echo "no refusal message: $*"; echo "$out"; exit 1; }
           }
           refuses
           refuses -e GOOGLE_OAUTH_CLIENT_ID=your-google-client-id -e GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
@@ -200,14 +246,34 @@ jobs:
             "import tiktoken; print(len(tiktoken.get_encoding('cl100k_base').encode('hello world')))"
       - name: catdoc is available for legacy .doc uploads
         run: docker run --rm --network none --entrypoint catdoc margins-ai -V
-      - name: Image starts and answers health checks
+      - name: Image starts; /health stays unready without its database
         run: |
           docker run -d --name ai -p 8000:8000 \
             -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key \
             margins-ai
-          for i in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:8000/health && exit 0
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/; then
+              code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)"
+              echo "/health: $code"
+              test "$code" = "503" && exit 0
+              docker logs ai
+              exit 1
+            fi
             sleep 1
           done
           docker logs ai
           exit 1
+
+  backup-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck backup/backup.sh
+      - run: docker build -t margins-backup backup
+      - name: pg_dump matches production's Postgres 18, rclone is there, the job runs as a non-root user
+        run: |
+          docker run --rm --entrypoint sh margins-backup -c \
+            'pg_dump --version | grep -q "PostgreSQL) 18\." && rclone version >/dev/null && test "$(id -u)" != 0'
+      - name: The job refuses to start without its settings
+        run: |
+          if docker run --rm margins-backup; then exit 1; fi

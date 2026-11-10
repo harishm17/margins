@@ -83,6 +83,13 @@ export async function uploadStreamToS3(
   }
 }
 
+/** Write a small object (a few bytes of JSON) to the configured bucket. */
+export async function putS3Object(key: string, body: string, contentType: string): Promise<void> {
+  const { PutObjectCommand } = await import('@aws-sdk/client-s3')
+  const client = await getClient()
+  await client.send(new PutObjectCommand({ Bucket: s3Bucket(), Key: key, Body: body, ContentType: contentType }))
+}
+
 export async function deleteS3Object(bucket: string, key: string): Promise<void> {
   const { DeleteObjectCommand } = await import('@aws-sdk/client-s3')
   const client = await getClient()

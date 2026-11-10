@@ -13,20 +13,18 @@ shared answer in the `ai_status` table (one row, id 'global'; the schema is a Pr
   available: the next real call tests the provider again. There is no paid probe.
 
 The change from available to unavailable, and back, is logged and, when OPS_ALERT_WEBHOOK_URL is
-set, posted to that webhook (Discord, Slack or ntfy) once per change: the row is locked while it is
+set, posted to that webhook (ntfy, Discord or Slack, through app/services/ops.py) once per change: the row is locked while it is
 changed, so only the process that made the change sends the alert. Writing the row is best effort: a database problem
 here never fails the call it describes.
 """
-import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Set
-
-import httpx
+from typing import Optional
 
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_in_transaction, execute_one
+from app.services import ops
 from app.services.llm.base import (
     LLMAuthError,
     LLMCreditError,
@@ -64,7 +62,6 @@ _ENSURE_ROW = f"""
     VALUES ('global', '{AVAILABLE}', {UTC_NOW}, {UTC_NOW})
     ON CONFLICT (id) DO NOTHING
 """
-_background: Set["asyncio.Task[None]"] = set()
 
 
 @dataclass
@@ -103,6 +100,7 @@ async def get_status() -> AiStatus:
         )
     except Exception as exc:
         logger.warning("Could not read the AI status: %s", exc)
+        await ops.note("ai_status_read_failed", repr(exc))
         return AiStatus(True)
     if row is None or row["state"] != UNAVAILABLE:
         _local["state"] = AVAILABLE
@@ -127,8 +125,9 @@ async def record_failure(exc: LLMError) -> None:
                 await _mark_unavailable(exc.code, str(exc))
         else:
             await record_success()
-    except Exception:
+    except Exception as write_exc:
         logger.exception("Could not record the AI status after %s", exc.code)
+        await ops.note("ai_status_write_failed", f"after {exc.code}: {write_exc!r}")
 
 
 async def record_success() -> None:
@@ -152,8 +151,9 @@ async def record_success() -> None:
             RETURNING previous.since AS down_since, previous.reason AS down_reason, ai_status.since AS up_since
             """
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("Could not record that the AI provider is available again")
+        await ops.note("ai_status_write_failed", f"available again: {exc!r}")
         return
     _local["state"] = AVAILABLE
     if row is not None:
@@ -213,38 +213,12 @@ async def _mark_unavailable(reason: str, detail: str) -> None:
         reason, since, changed, detail[:500],
     )
     if changed:
-        _alert(f"Margins: AI is unavailable ({reason}) since {since:%Y-%m-%d %H:%M} UTC. {detail[:300]}")
+        _alert(f"Margins: AI is unavailable ({reason}) since {since:%Y-%m-%d %H:%M} UTC; the AI service log has the error.")
 
 
 def _alert(text: str) -> None:
-    """Post to OPS_ALERT_WEBHOOK_URL in the background, if it is set. Never raises."""
-    url = settings.OPS_ALERT_WEBHOOK_URL.strip()
-    if not url:
-        return
-    task = asyncio.create_task(_post_alert(url, text))
-    _background.add(task)
-    task.add_done_callback(_background.discard)
-
-
-async def _post_alert(url: str, text: str) -> None:
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            if "ntfy" in httpx.URL(url).host:
-                # ntfy publishes the request body as the message.
-                response = await client.post(url, content=text.encode(), headers={"Title": "Margins AI"})
-            else:
-                # Discord reads "content", Slack reads "text"; each ignores the other.
-                response = await client.post(url, json={"content": text, "text": text})
-        if response.status_code >= 400:
-            logger.error("The ops alert webhook answered %s", response.status_code)
-    except Exception as exc:
-        logger.error("Could not post the ops alert: %r", exc)
-
-
-async def wait_for_alerts() -> None:
-    """Wait for alerts in flight (tests)."""
-    while _background:
-        await asyncio.gather(*list(_background), return_exceptions=True)
+    """Post to OPS_ALERT_WEBHOOK_URL in the background (app/services/ops.py). Never raises."""
+    ops.post_in_background("AI", text)
 
 
 def reset_local_state() -> None:

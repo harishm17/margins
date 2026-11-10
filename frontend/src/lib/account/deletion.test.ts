@@ -139,6 +139,71 @@ test('a job-stop failure stops before any file is touched', async () => {
   assert.equal(world.state.exists, true)
 })
 
+function recording(world: ReturnType<typeof fakeWorld>, fail = false) {
+  const notes: string[] = []
+  const files: DeletionFiles = {
+    ...world.files,
+    async recordDeletion(userId) {
+      world.calls.push(`record:${userId}`)
+      if (fail) throw new Error('bucket down')
+    },
+  }
+  const note = async (kind: string, detail: string) => {
+    notes.push(`${kind} ${detail}`)
+  }
+  return { files, note, notes }
+}
+
+test('the deletion is recorded for restores only after the row is gone', async () => {
+  const world = fakeWorld()
+  const { files, note, notes } = recording(world)
+  await deleteAccount('u1', { ...world, files, note })
+  assert.ok(world.calls.indexOf('record:u1') > world.calls.indexOf('remove'))
+  assert.deepEqual(notes, [])
+})
+
+test('a failure before the row delete records nothing and tells the operator', async () => {
+  const world = fakeWorld({ failRemove: 1 })
+  const { files, note, notes } = recording(world)
+  await assert.rejects(deleteAccount('u1', { ...world, files, note }), { step: 'account' })
+  assert.ok(!world.calls.includes('record:u1'))
+  assert.deepEqual(notes, ['account_delete_failed u1: stopped at account'])
+})
+
+test('a deletion record that cannot be written leaves the deletion done and tells the operator', async () => {
+  const world = fakeWorld()
+  const { files, note, notes } = recording(world, true)
+  const result = await deleteAccount('u1', { ...world, files, note })
+  assert.equal(result.outcome, 'deleted')
+  assert.equal(notes.length, 1)
+  assert.match(notes[0], /^deletion_record_failed u1: /)
+})
+
+test('a retry for an account already gone records the deletion again', async () => {
+  const world = fakeWorld()
+  world.state.exists = false
+  const { files, note } = recording(world)
+  await deleteAccount('u1', { ...world, files, note })
+  assert.deepEqual(world.calls, ['exists:u1', 'folder:u1', 'record:u1'])
+})
+
+test('a sweep that fails after the row is gone is noted for the operator', async () => {
+  const world = fakeWorld()
+  const { note, notes } = recording(world)
+  let folderCalls = 0
+  const files: DeletionFiles = {
+    deleteFile: world.files.deleteFile,
+    async deleteUserFiles(userId) {
+      folderCalls += 1
+      if (folderCalls === 2) throw new Error('bucket down')
+      return world.files.deleteUserFiles(userId)
+    },
+  }
+  await deleteAccount('u1', { ...world, files, note })
+  assert.equal(notes.length, 1)
+  assert.match(notes[0], /^storage_delete_failed folder u1\/ after account deletion/)
+})
+
 test('confirmation needs the word DELETE', () => {
   assert.equal(confirmsDeletion('DELETE'), true)
   assert.equal(confirmsDeletion('  DELETE '), true)

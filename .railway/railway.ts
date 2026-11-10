@@ -40,14 +40,21 @@ export default defineRailway(() => {
   const ai = service("ai", {
     ...fromGithub("ai-service"),
     build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile", ...watch("ai-service") },
+    // /health stays 503 until the web app's deploy has applied the migration this code needs (app/db/schema_version.py).
+    // Both services deploy on the same push and the web build plus `prisma migrate deploy` takes several minutes, so
+    // the wait is longer than that.
     healthcheck: "/health",
-    healthcheckTimeout: 120,
+    healthcheckTimeout: 900,
     replicas: { "us-west2": 1 },
     env: {
       ENVIRONMENT: "production",
       LLM_PROVIDER: "anthropic",
       ANTHROPIC_API_KEY: preserve(),
       AI_INTERNAL_TOKEN: preserve(),
+      // Watchdog alerts (app/services/watchdog.py) go to the ntfy topic on Harish's phone; docs/deployment/RAILWAY.md
+      // lists what each alert means. The nightly backup's age is checked from the first run on.
+      OPS_ALERT_WEBHOOK_URL: preserve(),
+      BACKUPS_EXPECTED: "true",
       DATABASE_URL: Postgres.env.DATABASE_URL,
       PORT: "8000",
       AI_SERVICE_URL: aiServiceUrl,
@@ -83,8 +90,26 @@ export default defineRailway(() => {
     },
   });
 
+  // Nightly encrypted backup of the database and the uploads bucket to Cloudflare R2 (backup/backup.sh; restore and
+  // drill in docs/deployment/RESTORE.md). 10:30 UTC is 2:30 or 3:30 at night in California.
+  const backup = service("backup", {
+    ...fromGithub("backup"),
+    build: { builder: "DOCKERFILE", dockerfilePath: "Dockerfile", ...watch("backup") },
+    deploy: { cronSchedule: "30 10 * * *", restartPolicyType: "NEVER" },
+    replicas: { "us-west2": 1 },
+    env: {
+      DATABASE_URL: Postgres.env.DATABASE_URL,
+      ...s3,
+      R2_ENDPOINT: preserve(),
+      R2_BUCKET: preserve(),
+      R2_ACCESS_KEY_ID: preserve(),
+      R2_SECRET_ACCESS_KEY: preserve(),
+      BACKUP_PASSPHRASE: preserve(),
+    },
+  });
+
   return project("study-buddy", {
     variables: { managed: true },
-    resources: [ai, web, Postgres, postgresVolume, uploads],
+    resources: [ai, web, backup, Postgres, postgresVolume, uploads],
   });
 });

@@ -12,7 +12,7 @@ import { Readable } from 'stream'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
-import { uploadStream, generateMaterialPath, deleteFile, recordStoredFile } from '@/lib/storage/files'
+import { uploadStream, generateMaterialPath, deleteFilesBestEffort, recordStoredFile } from '@/lib/storage/files'
 import {
   IncompleteUploadError,
   InvalidSignatureError,
@@ -202,12 +202,8 @@ export async function POST(
         },
       })
 
-      // Best-effort cleanup to avoid keeping unprocessable artifacts.
-      try {
-        await deleteFile(storedPath)
-      } catch (cleanupError) {
-        console.warn('Failed to delete uploaded file after enqueue failure:', cleanupError)
-      }
+      // Best-effort cleanup to avoid keeping unprocessable artifacts (a failure is logged and recorded).
+      await deleteFilesBestEffort([storedPath])
 
       await prisma.material.delete({
         where: { id: material.id },

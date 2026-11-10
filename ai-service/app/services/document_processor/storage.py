@@ -18,6 +18,7 @@ import os
 import shutil
 import tempfile
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import AsyncIterator, List, Optional, Tuple
 
 from app.config import settings
@@ -77,6 +78,20 @@ def _s3_client():
             retries={"max_attempts": 3, "mode": "standard"},
         ),
     )
+
+
+def _list_s3_objects(bucket_name: str) -> List[Tuple[str, datetime]]:
+    paginator = _s3_client().get_paginator("list_objects_v2")
+    return [
+        (item["Key"], item["LastModified"])
+        for page in paginator.paginate(Bucket=bucket_name)
+        for item in page.get("Contents", [])
+    ]
+
+
+async def list_bucket_objects() -> List[Tuple[str, datetime]]:
+    """Every object in S3_BUCKET as (key, last modified), for the watchdog's orphan check."""
+    return await asyncio.to_thread(_list_s3_objects, settings.S3_BUCKET)
 
 
 def _download_from_s3(bucket_name: str, key: str) -> Tuple[str, str]:

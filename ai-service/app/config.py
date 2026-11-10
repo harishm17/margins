@@ -161,11 +161,27 @@ class Settings(BaseSettings):
     # Rate limits or outages in a row (each after the SDK's own retries) that mark the AI
     # unavailable. Credit, key and configuration errors mark it at once.
     AI_STATUS_TRANSIENT_THRESHOLD: int = 3
-    # Optional webhook (Discord, Slack or ntfy) told once when the AI becomes unavailable.
+    # Webhook (ntfy, Discord or Slack) for operator alerts: the AI going down and coming back, and everything the
+    # watchdog finds (app/services/watchdog.py; the alert table is in docs/deployment/RAILWAY.md). Empty: logged only.
     OPS_ALERT_WEBHOOK_URL: str = ""
+    # The same watchdog alert is sent again at most this often while its cause lasts.
+    OPS_ALERT_COOLDOWN_SECONDS: float = 21600.0
+    # Optional URL the watchdog GETs on every run, for an external dead-man check (healthchecks.io and the like).
+    OPS_DEADMAN_URL: str = ""
+    # How often the watchdog runs (from the reaper loop). 0 turns it off.
+    WATCHDOG_INTERVAL_SECONDS: float = 300.0
+    # Failed jobs with one error code in the last hour that make an alert.
+    WATCHDOG_FAILED_JOBS_PER_HOUR: int = 5
+    # Whether a nightly backup is expected (true on Railway): the watchdog then alerts when the newest is older
+    # than BACKUP_MAX_AGE_HOURS, or when none has ever been recorded.
+    BACKUPS_EXPECTED: bool = False
+    BACKUP_MAX_AGE_HOURS: float = 36.0
 
     # S3-compatible bucket (Railway Buckets, AWS S3, R2, MinIO) for `s3://` material paths.
     S3_ENDPOINT: str = ""
+    # The uploads bucket. Materials name their own bucket in their `s3://` path; this one is what the watchdog
+    # lists for files no material points to. Empty: no orphan check.
+    S3_BUCKET: str = ""
     S3_REGION: str = "auto"
     S3_ACCESS_KEY_ID: str = ""
     S3_SECRET_ACCESS_KEY: str = ""
