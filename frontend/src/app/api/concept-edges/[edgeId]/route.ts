@@ -5,6 +5,7 @@
  *   gave this student (lib/learning/concept-edge.ts). Only the owner of the course can answer; anyone else gets a 404.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -20,6 +21,8 @@ const bodySchema = z.object({ status: z.enum(['confirmed', 'rejected']) })
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ edgeId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { edgeId } = await params
     const parsed = await readJson(request, bodySchema)
     if (!parsed.ok) return parsed.response

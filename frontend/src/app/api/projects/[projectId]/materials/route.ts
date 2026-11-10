@@ -8,6 +8,7 @@
  * from Content-Length before any of the body is read.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { Readable } from 'stream'
 import { NextRequest, NextResponse } from 'next/server'
@@ -59,6 +60,8 @@ export async function POST(
   try {
     // 1. Authenticate user
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     // 2. Verify project ownership

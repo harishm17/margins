@@ -3,6 +3,7 @@
  * POST /api/review-sessions/[sessionId]/skip { index } -> the session
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -18,6 +19,8 @@ const bodySchema = z.object({ index: z.number().int().min(0).max(60) })
 export async function POST(request: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { sessionId } = await params
     const parsed = await readJson(request, bodySchema)
     if (!parsed.ok) return parsed.response

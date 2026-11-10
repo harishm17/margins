@@ -1,3 +1,4 @@
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -58,6 +59,8 @@ export async function DELETE(
   const { projectId, threadId } = await params
   const { userId, thread } = await ownedThread(projectId, threadId)
   if (!userId) return apiUnauthorized()
+  const limited = await enforceMutationLimit(userId)
+  if (limited) return limited
   if (!thread) return apiNotFound('Conversation not found')
 
   await prisma.chatThread.delete({ where: { id: threadId } })

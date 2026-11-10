@@ -12,6 +12,7 @@
  * generation job running.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { quotaErrorResponse } from '@/lib/api/quota'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -40,6 +41,8 @@ export async function POST(
 ) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     const project = await prisma.project.findFirst({

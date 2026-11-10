@@ -11,6 +11,7 @@
  * DELETE /api/topics/[topicId] - Delete topic (other topics stop listing it as a prerequisite)
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -40,6 +41,8 @@ export async function PATCH(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId } = await params
 
     // Verify topic ownership through project
@@ -153,6 +156,8 @@ export async function DELETE(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId } = await params
 
     // Verify topic ownership through project

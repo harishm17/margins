@@ -10,6 +10,7 @@
  *   200: { success: true }
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -39,6 +40,8 @@ const ownedUnit = (unitId: string, userId: string) =>
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ unitId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { unitId } = await params
     const unit = await ownedUnit(unitId, session.user.id)
     if (!unit) return apiNotFound('Unit not found')
@@ -85,6 +88,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ unitId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { unitId } = await params
     const unit = await ownedUnit(unitId, session.user.id)
     if (!unit) return apiNotFound('Unit not found')

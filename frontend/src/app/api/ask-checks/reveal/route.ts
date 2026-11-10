@@ -4,6 +4,7 @@
  * answer and explanation. Without an attempt (or one stored earlier) the answer is not returned (spec P1).
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -22,6 +23,8 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const parsed = await readJson(request, bodySchema)
     if (!parsed.ok) return parsed.response
     const revealed = await revealAskCheck({ userId: auth.user.id, messageId: parsed.data.messageId, attempt: parsed.data.attempt, dontKnow: parsed.data.idk === true })

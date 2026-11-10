@@ -6,6 +6,7 @@
  * (a recall was done, or there is no recall to do), changes nothing.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { unlockExplainer } from '@/lib/learning/explainer-server'
@@ -16,6 +17,8 @@ export const dynamic = 'force-dynamic'
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { topicId } = await params
     const result = await unlockExplainer({ userId: auth.user.id, topicId })
     if (result.status === 'not_found') return apiNotFound('Topic not found')

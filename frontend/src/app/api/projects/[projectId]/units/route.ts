@@ -8,6 +8,7 @@
  * Units are read through server queries (course shell, topics data); there is no list route.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -35,6 +36,8 @@ const createUnitSchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     const project = await prisma.project.findFirst({ where: { id: projectId, userId: session.user.id }, select: { id: true } })

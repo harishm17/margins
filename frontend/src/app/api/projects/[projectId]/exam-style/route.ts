@@ -5,6 +5,7 @@
  * yet, and the job that matches past-exam questions to topics (exam_relevance). Refused like any
  * other model work while AI is unavailable or the allowance is used.
  */
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
@@ -18,6 +19,8 @@ export const dynamic = 'force-dynamic'
 export async function POST(_request: Request, { params }: { params: Promise<{ projectId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const userId = session.user.id
     const { projectId } = await params
     const project = await prisma.project.findFirst({ where: { id: projectId, userId }, select: { id: true } })

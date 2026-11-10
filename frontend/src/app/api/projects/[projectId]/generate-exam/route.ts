@@ -1,3 +1,4 @@
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quotaErrorResponse } from '@/lib/api/quota'
 import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
@@ -54,6 +55,8 @@ export async function POST(
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const limited = await enforceMutationLimit(session.user.id);
+    if (limited) return limited;
 
     const { projectId } = await params;
 

@@ -3,6 +3,7 @@
  * POST /api/topics/[topicId]/generate-content
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { quotaErrorResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -50,6 +51,8 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId } = await params
 
     // Verify topic ownership through project

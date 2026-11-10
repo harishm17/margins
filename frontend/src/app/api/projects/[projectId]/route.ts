@@ -5,6 +5,7 @@
  * DELETE /api/projects/[projectId] - Delete project
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -80,6 +81,8 @@ export async function PATCH(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     // Verify ownership
@@ -129,6 +132,8 @@ export async function DELETE(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     // Verify ownership

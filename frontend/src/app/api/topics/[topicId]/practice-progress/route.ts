@@ -8,6 +8,7 @@
  *   writes the evidence of misses left open on an earlier day.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -67,6 +68,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId } = await params
     const topic = await ownedTopic(session.user.id, topicId)
     if (!topic) return apiNotFound('Topic not found')

@@ -3,6 +3,7 @@
  * POST /api/projects/[projectId]/extract-topics
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { quotaErrorResponse } from '@/lib/api/quota'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -27,6 +28,8 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     // Verify project ownership

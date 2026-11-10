@@ -1,3 +1,4 @@
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -68,6 +69,8 @@ export async function POST(
   const { projectId } = await params
   const { userId, project } = await ownedProject(projectId)
   if (!userId) return apiUnauthorized()
+  const limited = await enforceMutationLimit(userId)
+  if (limited) return limited
   if (!project) return apiNotFound('Project not found')
 
   const parsed = await readJson(req, createSchema.default({}))

@@ -1,3 +1,4 @@
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -25,6 +26,8 @@ const metricsSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const parsed = await readJson(request, metricsSchema)
     if (!parsed.ok) return parsed.response
     const payload = parsed.data

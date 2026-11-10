@@ -1,3 +1,4 @@
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
@@ -36,6 +37,8 @@ export async function PATCH(
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const limited = await enforceMutationLimit(session.user.id);
+    if (limited) return limited;
     const { materialId } = await params;
 
     const parsed = await readJson(req, roleSchema);
@@ -92,6 +95,8 @@ export async function DELETE(
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const limited = await enforceMutationLimit(session.user.id);
+    if (limited) return limited;
 
     const { materialId } = await params;
 

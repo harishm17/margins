@@ -15,6 +15,7 @@
  * merged chunks; regenerate it from the topic page if needed.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -46,6 +47,8 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     const parsed = await readJson(request, mergeSchema)

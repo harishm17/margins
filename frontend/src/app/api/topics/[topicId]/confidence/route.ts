@@ -1,3 +1,4 @@
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { NextRequest, NextResponse } from 'next/server'
@@ -23,6 +24,8 @@ export async function POST(
 ) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     await applyPendingQuizResults(auth.user.id)
     const { topicId } = await params
     const parsed = await readJson(request, confidenceSchema)

@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
-import { createRateLimiter } from '@/lib/api/rate-limit'
+import { createRateLimiter, enforceMutationLimit } from '@/lib/api/rate-limit'
 import { loadMarginNotes, toNoteView } from '@/lib/reader/load-reader'
 import {
   apiInternal,
@@ -80,6 +80,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { topicId } = await params
     const id = new URL(request.url).searchParams.get('id')
     if (!id) return apiInvalidInput('id is required')

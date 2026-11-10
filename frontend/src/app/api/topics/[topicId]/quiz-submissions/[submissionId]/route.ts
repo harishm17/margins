@@ -6,6 +6,7 @@
  * look at a graded quiz turns it into the attempt and applies it to mastery and the review date.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -62,6 +63,8 @@ export async function DELETE(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId, submissionId } = await params
     const outcome = await dismissQuizSubmission(session.user.id, topicId, submissionId)
     if (outcome === 'not_found') return apiNotFound('Quiz submission not found')

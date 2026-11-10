@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
-import { createRateLimiter } from '@/lib/api/rate-limit'
+import { createRateLimiter, enforceMutationLimit } from '@/lib/api/rate-limit'
 import { GradingRejectedError, GradingUnavailableError } from '@/lib/ai-service/grading'
 import { answerWarmup, loadWarmupState, startWarmup, type WarmupState } from '@/lib/learning/warmup-session'
 import { withFocusCount } from '@/lib/reader/focus'
@@ -69,6 +69,8 @@ async function startable(userId: string, topicId: string): Promise<WarmupState |
 async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { topicId } = await params
     const parsed = await readJson(request, startSchema)
     if (!parsed.ok) return parsed.response

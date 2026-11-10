@@ -5,6 +5,7 @@
  * POST /api/topics/[topicId]/fresh-review -> the same answer as regenerate-content (a job id to follow).
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -18,6 +19,8 @@ export const dynamic = 'force-dynamic'
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId } = await params
     const topic = await prisma.topic.findFirst({
       where: { id: topicId, project: { userId: session.user.id } },

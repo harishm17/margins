@@ -1,3 +1,4 @@
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
@@ -51,6 +52,8 @@ const patchSchema = z.object({
 async function handlePOST(request: NextRequest) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const parsed = await readJson(request, sessionSchema)
     if (!parsed.ok) return parsed.response
     const payload = parsed.data
@@ -180,6 +183,8 @@ async function handlePOST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const parsed = await readJson(request, patchSchema)
     if (!parsed.ok) return parsed.response
     const payload = parsed.data

@@ -9,6 +9,7 @@
  * concept, in reading order. The reader opened for an idea (`?focus=`) marks them "Focus here" and scrolls to the first.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,6 +27,8 @@ const bodySchema = z.object({ claimId: z.string().min(1).max(100), grade: z.enum
 async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { topicId } = await params
     const parsed = await readJson(request, bodySchema)
     if (!parsed.ok) return parsed.response

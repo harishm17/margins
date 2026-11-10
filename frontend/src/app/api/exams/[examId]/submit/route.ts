@@ -6,6 +6,7 @@
  * grace, the last autosave is what gets graded.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -34,6 +35,8 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { examId } = await params
 
     const exam = await findExamForUser(session.user.id, examId)

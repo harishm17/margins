@@ -6,6 +6,7 @@
  * Not refused while the AI is unavailable: the job waits for it, like the first one.
  */
 
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -20,6 +21,8 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId, submissionId } = await params
 
     const submission = await prisma.quizSubmission.findFirst({
