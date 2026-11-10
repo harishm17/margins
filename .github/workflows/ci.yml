@@ -22,6 +22,22 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    # Postgres with pgvector: the *.db.test.ts files run against the migrated database and skip without one, so the
+    # test step below fails if any test skipped.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: margins
+          POSTGRES_USER: dev
+          POSTGRES_PASSWORD: devpass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dev -d margins"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       DATABASE_URL: postgresql://dev:devpass@localhost:5432/margins
       NEXTAUTH_SECRET: ci-secret
@@ -38,7 +54,11 @@ jobs:
       - run: npx prisma validate
       - run: npm run lint
       - run: npx tsc --noEmit
-      - run: npm test
+      - run: npx prisma migrate deploy
+      - name: Tests, with none skipped (the database tests skip when the database is missing)
+        run: |
+          npm test 2>&1 | tee "$RUNNER_TEMP/test.log"
+          grep -q '^ℹ skipped 0$' "$RUNNER_TEMP/test.log" || { echo "some tests were skipped"; exit 1; }
       - name: Tutoring eval parity (the real tutor logic against the committed fixture)
         run: npx tsx --test src/lib/tutor/eval-parity.test.ts src/lib/ask/eval-parity.test.ts src/lib/voice/eval-parity.test.ts
       - run: npm run build
