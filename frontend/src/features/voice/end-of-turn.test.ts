@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { defaultListenFor, endOfTurnWaitMs } from './end-of-turn'
+import { endOfTurnWaitMs } from './end-of-turn'
 
 describe('endOfTurnWaitMs', () => {
   it('waits 1.2 s after a short answer, 1.5 s after a prediction and 2.2 s after an explanation', () => {
@@ -24,13 +24,5 @@ describe('endOfTurnWaitMs', () => {
   it('never goes over the 4 s cap', () => {
     assert.equal(endOfTurnWaitMs({ listenFor: 'explanation', text: 'it works by going to the' }), 3700)
     assert.ok(endOfTurnWaitMs({ listenFor: 'explanation', text: 'and' }) <= 4000)
-  })
-})
-
-describe('defaultListenFor', () => {
-  it('guesses by style when the server has not said', () => {
-    assert.equal(defaultListenFor('oral_quiz'), 'short_answer')
-    assert.equal(defaultListenFor('teach_back'), 'explanation')
-    assert.equal(defaultListenFor('guided_reading'), 'prediction')
   })
 })

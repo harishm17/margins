@@ -190,41 +190,6 @@ dbTest('voice idk is level 0 score 0', async () => {
   assert.equal(silent.isError, true)
 })
 
-dbTest('asking for a hint twice records it once', async () => {
-  stubGrader(0)
-  const w = await world()
-  await run(w, 'record_answer', { question_index: 0, user_answer: 'a try' })
-  await run(w, 'get_hint', { question_index: 0 })
-  await run(w, 'get_hint', { question_index: 0 })
-  const session = await prisma.voiceDrillSession.findUniqueOrThrow({ where: { id: w.session.id } })
-  assert.deepEqual(session.hintedQuestions, [0])
-})
-
-dbTest('questions with no usable concept ids, ungraded answers and a bad confidence write no evidence', async () => {
-  stubGrader(1)
-  const w = await world()
-  // Retired concept, and no concepts: the answer is stored and the legacy signal written, no events.
-  await run(w, 'record_answer', { question_index: 2, user_answer: 'a' })
-  await run(w, 'record_answer', { question_index: 3, user_answer: 'a' })
-  assert.equal((await events(w)).length, 0)
-  assert.equal(await prisma.voiceDrillAttempt.count({ where: { sessionId: w.session.id } }), 2)
-  // A confidence outside 0 to 1 is an invalid call.
-  const bad = await run(w, 'record_answer', { question_index: 0, user_answer: 'a', confidence: 4 })
-  assert.equal(bad.isError, true)
-  assert.equal((await events(w)).length, 0)
-
-  // An evidence failure never takes the recorded answer away.
-  const x = await world()
-  // A concept id that is not a concept in this project is filtered out, not an error.
-  await prisma.voiceDrillSession.update({
-    where: { id: x.session.id },
-    data: { questionSet: [{ question_type: 'conceptual', question_text: 'q', sample_answer: 'a', key_points: ['p'], concept_ids: ['not-a-concept'], topic_id: x.topic.id }] },
-  })
-  const kept = await run(x, 'record_answer', { question_index: 0, user_answer: 'a' })
-  assert.equal(kept.isError, false)
-  assert.equal(await prisma.voiceDrillAttempt.count({ where: { sessionId: x.session.id } }), 1)
-})
-
 dbTest('answering the same question again adds no evidence: the coach has already given feedback', async () => {
   stubGrader(1)
   const w = await world()

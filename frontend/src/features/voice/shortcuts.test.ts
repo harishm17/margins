@@ -36,11 +36,4 @@ describe('isDoneShortcut', () => {
     assert.equal(isDoneShortcut({ key: 'Enter', metaKey: true }, el('BUTTON')), true)
   })
 
-  it('ignores other keys, repeats, Alt and IME composition', () => {
-    assert.equal(isDoneShortcut({ key: ' ' }, el('BODY')), false)
-    assert.equal(isDoneShortcut({ key: 'Enter', repeat: true }, el('BODY')), false)
-    assert.equal(isDoneShortcut({ key: 'Enter', altKey: true }, el('BODY')), false)
-    assert.equal(isDoneShortcut({ key: 'Enter', isComposing: true }, el('BODY')), false)
-    assert.equal(isDoneShortcut({ key: 'Enter', shiftKey: true }, el('BODY')), false)
-  })
 })

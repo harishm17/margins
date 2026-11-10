@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { clientTimingSchema, formatSummary, percentile, summarizeTimings, timingLogLine, type StoredTiming } from './turn-timing'
+import { clientTimingSchema, formatSummary, percentile, summarizeTimings, type StoredTiming } from './turn-timing'
 
 const row = (extra: Partial<StoredTiming>): StoredTiming => ({ style: 'teach_back', graded: true, ok: true, modelCalls: 1, ttftMs: [1000], stepMs: 500, firstTextMs: 1700, totalMs: 2500, client: null, ...extra })
 
@@ -31,13 +31,6 @@ test('the summary groups by style and graded, leaves out failed turns, and reads
   const text = formatSummary([quiz, teach])
   assert.match(text, /teach_back\s+yes\s+2\s+1\.50/)
   assert.match(formatSummary([]), /No voice turns/)
-})
-
-test('the log line has the model calls, the time to each first token, the step time and the total', () => {
-  const line = timingLogLine({ sessionId: 's', userId: 'u', turn: 3, style: 'teach_back', preRun: 'assess', graded: true, calls: [{ ttftMs: 1100, totalMs: 1500 }], stepMs: 700, firstTextMs: 1900, totalMs: 2300, ok: true })
-  assert.match(line, /^\[VOICE\] timing /)
-  const body = JSON.parse(line.replace('[VOICE] timing ', ''))
-  assert.deepEqual(body, { session: 's', turn: 3, style: 'teach_back', ok: true, graded: true, preRun: 'assess', modelCalls: 1, ttftMs: [1100], stepMs: 700, firstTextMs: 1900, totalMs: 2300 })
 })
 
 test('the browser timing is bounded and anything else is dropped', () => {

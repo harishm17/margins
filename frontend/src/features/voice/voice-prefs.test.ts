@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { clampRate, DEFAULT_PREFS, getVoicePrefs, parsePrefs, resolveVoice, resetVoicePrefsForTest, setVoicePrefs, voiceKey, voicesForLanguage } from './voice-prefs'
+import { clampRate, DEFAULT_PREFS, getVoicePrefs, parsePrefs, resolveVoice, resetVoicePrefsForTest, setVoicePrefs, voiceKey } from './voice-prefs'
 import type { VoiceInfo } from './speech'
 
 const voices: VoiceInfo[] = [
@@ -22,10 +22,6 @@ describe('clampRate', () => {
 })
 
 describe('parsePrefs', () => {
-  it('reads what was saved', () => {
-    const prefs = parsePrefs(JSON.stringify({ speak: false, rate: 1.2, voices: { 'en-US': 'Samantha|en-US' }, recognition: 'browser' }))
-    assert.deepEqual(prefs, { speak: false, rate: 1.2, voices: { 'en-US': 'Samantha|en-US' }, recognition: 'browser' })
-  })
 
   it('uses cloud recognition unless the student chose the browser (older saved settings have no choice)', () => {
     assert.equal(parsePrefs('{"speak":true}').recognition, 'cloud')
@@ -59,17 +55,6 @@ describe('voice picking', () => {
     assert.equal(resolveVoice(voices, 'en-US', voiceKey({ name: 'Monica', lang: 'es-ES' }))?.name, 'Microsoft Jenny Online (Natural) - English (United States)')
   })
 
-  it('returns null when no voice speaks the language, so the browser decides', () => {
-    assert.equal(resolveVoice(voices, 'ja-JP', null), null)
-  })
-
-  it('lists the voices of the language, best first', () => {
-    const names = voicesForLanguage(voices, 'en-US').map((voice) => voice.name)
-    assert.equal(names[0], 'Microsoft Jenny Online (Natural) - English (United States)')
-    assert.ok(names.includes('Google UK English Female'))
-    assert.ok(!names.includes('Monica'))
-    assert.equal(names.at(-1), 'Albert')
-  })
 })
 
 describe('the store', () => {

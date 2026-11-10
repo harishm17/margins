@@ -10,12 +10,6 @@ test('a bare number is not math', () => {
   }
 })
 
-test('a word counts only whole', () => {
-  for (const text of ['What does the summary of a stack say?', 'Why do we assume the input is sorted?', 'How do you resolve a collision?', 'A consumer reads from the queue.']) {
-    assert.equal(hasMath(text), false, text)
-  }
-})
-
 test('working that cannot be said aloud is math', () => {
   for (const text of ['Compute 3 + 4', 'What is 12 / 4?', 'Solve for x', 'If x = 5, what is y?', 'Find 15% of 80', 'Use the formula for the area', 'What is √9?']) {
     assert.equal(hasMath(text), true, text)

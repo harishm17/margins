@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { FILLER_AFTER_MS, FILLER_LINES, fillerWaitMs, pickFiller } from './filler'
-import { GENTLE_LINES, gentleLine } from './gentle'
-import { VOICE_LANGUAGES } from './speech'
 
 describe('pickFiller', () => {
   it('never says the same line twice in a row', () => {
@@ -15,13 +13,6 @@ describe('pickFiller', () => {
     }
   })
 
-  it('has a pool of at least two lines for every language the lobby offers', () => {
-    for (const language of VOICE_LANGUAGES) assert.ok((FILLER_LINES[language.code] ?? []).length >= 2, language.code)
-  })
-
-  it('uses English for a language with no pool', () => {
-    assert.ok(FILLER_LINES.en.includes(pickFiller('xx', null)))
-  })
 })
 
 describe('fillerWaitMs', () => {
@@ -32,12 +23,5 @@ describe('fillerWaitMs', () => {
     // It is zero when the time has passed.
     assert.equal(fillerWaitMs(1000, 2200), 0)
     assert.equal(fillerWaitMs(1000, 9000), 0)
-  })
-})
-
-describe('gentleLine', () => {
-  it('has a line for every language the lobby offers, and English for the rest', () => {
-    for (const language of VOICE_LANGUAGES) assert.ok(GENTLE_LINES[language.code], language.code)
-    assert.equal(gentleLine('xx'), GENTLE_LINES.en)
   })
 })

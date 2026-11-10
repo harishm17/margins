@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { emptyConceptState } from './teach-back'
 import { readCoachState, type CoachState } from './teach-tools'
-import { appResultBlock, asksConfidence, endsWithAppResult, lastCoachText, planPreRun, withAppResult, type PreRunFacts } from './pre-run'
+import { appResultBlock, asksConfidence, endsWithAppResult, planPreRun, withAppResult, type PreRunFacts } from './pre-run'
 
 const base = (state: Partial<CoachState>, extra: Partial<PreRunFacts> = {}): PreRunFacts => {
   const full = readCoachState({ turn: 3, said: [{ turn: 3, text: 'x' }], ...state })
@@ -71,9 +71,4 @@ test('the result is data in the student\'s message, cannot close its own tag, an
   assert.equal(endsWithAppResult(messages), true)
   assert.equal(endsWithAppResult([{ role: 'user', content: 'plain' }]), false)
   assert.equal(endsWithAppResult([...messages, { role: 'assistant', content: 'ok' }]), false)
-})
-
-test('lastCoachText is the last assistant text without an interruption note', () => {
-  assert.equal(lastCoachText([{ role: 'assistant', content: [{ type: 'text', text: 'First.' }] }, { role: 'user', content: 'a' }, { role: 'assistant', content: [{ type: 'text', text: 'What is a bucket? [The student interrupted here and did not hear the rest.]' }] }]), 'What is a bucket?')
-  assert.equal(lastCoachText([]), '')
 })

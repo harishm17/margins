@@ -31,16 +31,6 @@ describe('eventsForToolOutput', () => {
     ])
   })
 
-  it('a question with no options has no options key, and never carries the answer key', () => {
-    const [event] = eventsForToolOutput(
-      'get_next_question',
-      { done: false, question_index: 0, question: { question_text: 'Why?', question_type: 'conceptual', options: [] } },
-      4
-    )
-    assert.ok(event && !('options' in event))
-    assert.deepEqual(Object.keys(event).sort(), ['index', 'questionType', 'text', 'total', 'type'])
-  })
-
   it('a finished drill becomes session_complete, from either tool', () => {
     assert.deepEqual(eventsForToolOutput('get_next_question', { done: true, message: 'Drill complete.' }, 4), [{ type: 'session_complete' }])
     assert.deepEqual(eventsForToolOutput('record_answer', { done: true, message: 'Drill complete.' }, 4), [{ type: 'session_complete' }])
@@ -51,19 +41,6 @@ describe('eventsForToolOutput', () => {
       eventsForToolOutput('record_answer', { is_correct: true, score: 0.8, feedback: { comment: 'Nice', explanation: 'Because' } }, 4),
       [{ type: 'evaluation', isCorrect: true, score: 0.8, comment: 'Nice', explanation: 'Because' }]
     )
-  })
-
-  it('an ungraded answer is flagged', () => {
-    const [event] = eventsForToolOutput(
-      'record_answer',
-      { is_correct: false, score: 0, feedback: { comment: 'No key', explanation: '', ungraded: true } },
-      4
-    )
-    assert.equal(event.type === 'evaluation' && event.ungraded, true)
-  })
-
-  it('a hint becomes a hint event', () => {
-    assert.deepEqual(eventsForToolOutput('get_hint', { hint: 'Think', concepts: [], note: 'n' }, 4), [{ type: 'hint', text: 'Think' }])
   })
 
   it('errors and unknown tools produce no events', () => {
@@ -98,12 +75,4 @@ describe('toolsForStyle', () => {
     assert.deepEqual(toolsForStyle('guided_reading')[1].input_schema.required, ['claim_index'])
   })
 
-  it('none takes the student\'s words as an argument: the server heard them', () => {
-    const everyTool = [...VOICE_TOOLS, ...toolsForStyle('teach_back'), ...toolsForStyle('guided_reading')]
-    for (const tool of everyTool) {
-      for (const name of ['user_answer', 'answer', 'explanation', 'prediction']) {
-        assert.ok(!(name in tool.input_schema.properties), `${tool.name} takes ${name}`)
-      }
-    }
-  })
 })

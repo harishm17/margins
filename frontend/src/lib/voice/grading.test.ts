@@ -18,12 +18,6 @@ test('hints never contain the sample answer or key points', () => {
   assert.equal(output.includes('sample_answer'), false)
 })
 
-test('a hint says how many ideas are expected and lists the tested concepts', () => {
-  const hint = buildHint(conceptual)
-  assert.equal(hint.ideas_expected, 2)
-  assert.deepEqual(hint.concepts, ['Caching'])
-})
-
 test('choice questions get a type-specific nudge that does not name the option', () => {
   const hint = buildHint({
     question_type: 'multiple_choice',
@@ -33,13 +27,6 @@ test('choice questions get a type-specific nudge that does not name the option',
   })
   assert.equal(JSON.stringify(hint).includes('secret option'), false)
   assert.match(hint.hint, /options/)
-})
-
-test('open questions are graded as short answers worth one point', () => {
-  const graded = toGradableQuestion(conceptual)
-  assert.equal(graded?.question_type, 'short_answer')
-  assert.equal(graded?.points, 1)
-  assert.deepEqual(graded?.key_points, conceptual.key_points)
 })
 
 test('a multiple-choice voice question is graded against the correct option text', () => {

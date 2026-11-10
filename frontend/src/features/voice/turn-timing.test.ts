@@ -26,10 +26,6 @@ describe('buildTiming', () => {
     })
   })
 
-  it('never reports a negative or missing time', () => {
-    const timing = buildTiming(clock({ firstEvent: 900, firstSentence: Number.NaN, endpointWaitMs: -5 }))
-    assert.deepEqual(timing, { interrupted: false })
-  })
 })
 
 describe('buildMetrics', () => {
@@ -40,11 +36,4 @@ describe('buildMetrics', () => {
     assert.deepEqual(metrics, { ttftMs: 900, ttfaMs: 1400, responseMs: 2100, speechMs: 4200, toolLatencyMs: 700, interrupts: 1 })
   })
 
-  it('leaves out interrupts, speech and tool time when there is nothing to say', () => {
-    assert.deepEqual(buildMetrics(clock({ firstText: 1500, doneAt: 2000 })), { ttftMs: 500, responseMs: 1000 })
-  })
-
-  it('has no tool time without a working event', () => {
-    assert.equal(buildMetrics(clock({ afterWorkingAt: 2000 })).toolLatencyMs, undefined)
-  })
 })

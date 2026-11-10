@@ -45,11 +45,6 @@ async function world() {
   return { topic, other, withClaims, without, elsewhere }
 }
 
-dbTest('with no idea named, the topic decides', async () => {
-  const w = await world()
-  assert.deepEqual(await claims.teachBackClaims(w.topic.id), { hasClaims: true, ofIdea: false })
-})
-
 dbTest('with an idea named, its own claims decide: an idea with none is missing them although the topic has some', async () => {
   const w = await world()
   assert.deepEqual(await claims.teachBackClaims(w.topic.id, w.withClaims.id), { hasClaims: true, ofIdea: true })

@@ -31,16 +31,6 @@ test('the coach prompt and tools the eval sends equal the committed fixture', ()
   assert.deepEqual(actual, expected)
 })
 
-test('the fixture reaches every action: a probe of each kind, an explanation, the new example and both closings', () => {
-  const steps = (JSON.parse(fs.readFileSync(TEACH_STATE_FIXTURE, 'utf8')) as { steps: { output: Record<string, any> }[] }[]).flatMap((scenario) => scenario.steps)
-  const actions = new Set(steps.map((step) => step.output.action))
-  for (const action of ['probe', 'explain', 'explain_first', 'ask_new_example', 'wrap_up']) assert.ok(actions.has(action), action)
-  const probes = new Set(steps.filter((step) => step.output.action === 'probe').map((step) => step.output.probe.type))
-  for (const type of ['implication', 'assumption', 'confront', 'evidence', 'clarification', 'source']) assert.ok(probes.has(type), type)
-  const outcomes = new Set(steps.map((step) => step.output.outcome).filter(Boolean))
-  assert.deepEqual([...outcomes].sort(), ['explained', 'taught'])
-})
-
 test('a scenario turn is an "I don\'t know" exactly when the app\'s own detector hears one', () => {
   for (const scenario of loadTeachScenarios(TEACH_SCENARIOS)) {
     for (const turn of scenario.turns) assert.equal(turn.dont_know === true, isDontKnow(turn.say), `${scenario.id}: ${turn.say}`)

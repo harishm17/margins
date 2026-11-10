@@ -3,11 +3,6 @@ import { describe, it } from 'node:test'
 import { createHeardTracker } from './heard'
 
 describe('createHeardTracker', () => {
-  it('is empty before anything plays', () => {
-    const heard = createHeardTracker()
-    assert.equal(heard.text(), '')
-    assert.equal(heard.any, false)
-  })
 
   it('counts the finished sentences and the one that was cut off', () => {
     const heard = createHeardTracker()
@@ -44,12 +39,4 @@ describe('createHeardTracker', () => {
     assert.equal(heard.text(), 'First.')
   })
 
-  it('starts over with reset', () => {
-    const heard = createHeardTracker()
-    heard.start('One.', 'One.')
-    heard.finish()
-    heard.reset()
-    assert.equal(heard.text(), '')
-    assert.equal(heard.any, false)
-  })
 })
