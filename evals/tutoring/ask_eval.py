@@ -62,7 +62,7 @@ def make_ask_meter(adapters, stop: Dict[str, str]):
                     # MeteredProvider appends its record right before returning, with no await between.
                     sink.append(self.calls[-1])
 
-        async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat"):
+        async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat", cache_system=False):
             from app.services.llm.base import LLMMessage
             from app.services.llm.usage import track_llm_usage
             from common.revision import request_summary
@@ -80,7 +80,8 @@ def make_ask_meter(adapters, stop: Dict[str, str]):
             with track_llm_usage() as usages:
                 try:
                     async for event in self.inner.stream_cited_answer(
-                        system=system, history=history, question=question, excerpts=excerpts, max_tokens=max_tokens, purpose=purpose
+                        system=system, history=history, question=question, excerpts=excerpts, max_tokens=max_tokens, purpose=purpose,
+                        cache_system=cache_system,
                     ):
                         events.append(event)
                 except Exception as exc:  # recorded, then raised
@@ -95,6 +96,9 @@ def make_ask_meter(adapters, stop: Dict[str, str]):
                 "estimate_usd": round(estimate, 5),
                 "cost_usd": round(cost, 6),
                 "input_tokens": sum(u.input_tokens for u in usages),
+                # Prompt audit R8: Ask v2 caches its fixed system prompt; reads show the breakpoint works.
+                "cache_read_tokens": sum(u.cache_read_input_tokens for u in usages),
+                "cache_write_tokens": sum(u.cache_creation_input_tokens for u in usages),
                 "output_tokens": output_tokens,
                 "max_tokens": max_tokens,
                 "request": request_summary(messages, None),

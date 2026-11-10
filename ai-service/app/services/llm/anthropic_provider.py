@@ -431,6 +431,7 @@ class AnthropicProvider(LLMProvider):
         excerpts: List[Excerpt],
         max_tokens: int = 4000,
         purpose: str = "chat",
+        cache_system: bool = False,
     ) -> AsyncIterator[AnswerEvent]:
         if not excerpts:
             raise LLMRequestError("A cited answer needs at least one excerpt")
@@ -443,7 +444,7 @@ class AnthropicProvider(LLMProvider):
             "messages": _answer_conversation(history, question, excerpts),
         }
         if system:
-            params["system"] = [{"type": "text", "text": system}]
+            params["system"] = [_text_block(system, cache_system)]
         if choice.effort:
             params["output_config"] = {"effort": choice.effort}
         if _supports_server_fallback(model):
@@ -639,7 +640,7 @@ class AnthropicProvider(LLMProvider):
             raise error
 
         content = [param for param in map(_content_block_param, final.content) if param is not None]
-        tool_uses =[block for block in content if block["type"] == "tool_use"]
+        tool_uses = [block for block in content if block["type"] == "tool_use"]
         has_text = any(block["type"] == "text" and block["text"].strip() for block in content)
         if not tool_uses and not has_text:
             error = LLMOutputError(f"Claude returned no text or tool call ({purpose})")

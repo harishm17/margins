@@ -62,7 +62,7 @@ class ScriptedAsk(LLMProvider):
             return RouteDecision(intent=route["intent"], has_attempt=route.get("has_attempt", False), wants_answer=route.get("wants_answer", False), concepts=[])
         return LeakVerdict(answer_revealed=False, reason="")
 
-    async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat"):
+    async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat", cache_system=False):
         self.calls.append({"system": system, "question": question, "history": [m.content for m in history]})
         text = self.reply(system, question)
         yield AnswerText(text=text)

@@ -369,6 +369,7 @@ class ReplayProvider(LLMProvider):
         excerpts: List[Excerpt],
         max_tokens: int = 4000,
         purpose: str = "chat",
+        cache_system: bool = False,
     ) -> AsyncIterator[AnswerEvent]:
         body = {
             "system": system,
@@ -388,7 +389,8 @@ class ReplayProvider(LLMProvider):
             return
         events: List[Dict[str, Any]] = []
         async for event in self._real_model().stream_cited_answer(
-            system=system, history=history, question=question, excerpts=excerpts, max_tokens=max_tokens, purpose=purpose
+            system=system, history=history, question=question, excerpts=excerpts, max_tokens=max_tokens, purpose=purpose,
+            cache_system=cache_system,
         ):
             events.append(event.model_dump(mode="json"))
             yield event

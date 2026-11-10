@@ -51,6 +51,7 @@ from app.services.llm.base import (
     LLMProvider,
     LLMUsage,
 )
+from app.services.llm import untrusted
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import CheckQuestion, RouteDecision
 from app.services.llm.usage import estimate_cost_usd, track_llm_usage
@@ -318,10 +319,14 @@ class RouteResult(BaseModel):
 
 
 def _tag(name: str, text: str) -> str:
+    if prompts_v2("ask"):  # one rule for untrusted text (llm/untrusted.py): maths and code reach the model as written
+        return untrusted.tag(name, text.strip())
     return f"<{name}>\n{escape(text.strip(), quote=False)}\n</{name}>"
 
 
 def _names_block(tag: str, names: Sequence[str]) -> str:
+    if prompts_v2("ask"):
+        return untrusted.tag(tag, "\n".join(f"- {name}" for name in names))
     return f"<{tag}>\n" + "\n".join(f"- {escape(name, quote=False)}" for name in names) + f"\n</{tag}>"
 
 
@@ -906,7 +911,8 @@ async def ask_leak_reason(
         return "reused numbers from the student's problem in the worked example"
     own = student_own_answer(question, history) if tutor.final_allowed else ""
     verdict = await judge_leak(
-        reply, problem=problem, question=question, own_answer=own, no_key=True, passages=_passages_text(chunks)
+        reply, problem=problem, question=question, own_answer=own, no_key=True, passages=_passages_text(chunks),
+        v2=prompts_v2("ask"),
     )
     if verdict.answer_revealed:
         return verdict.reason.strip() or "gave the answer away"
@@ -991,10 +997,10 @@ async def _judged_answer(
     usage: Dict[str, Any] = {}
     leak: Optional[str] = None
     v2 = prompts_v2("ask")
-    excerpts =[to_excerpt(chunk) for chunk in chunks]
+    excerpts = [to_excerpt(chunk) for chunk in chunks]
     for attempt in (1, 2):
         notice = (
-            f"\n\n<leak_notice>\nYour previous reply was held back because it {escape(leak, quote=False)}. "
+            f"\n\n<leak_notice>\nYour previous reply was held back because it {untrusted.neutralise(leak) if v2 else escape(leak, quote=False)}. "
             "Write the reply again for the same situation without that.\n</leak_notice>"
             if leak
             else ""
@@ -1011,6 +1017,7 @@ async def _judged_answer(
                     excerpts=excerpts,
                     max_tokens=chat_max_tokens(),
                     purpose="chat",
+                    cache_system=v2,
                 ),
                 chunks,
                 # These replies carry no card; a block the model adds anyway is cut out of the text.
@@ -1092,7 +1099,7 @@ async def _stream_answer(
         # The student's words, then the turn's situation: lookup and logistics have one too.
         asked = question
         if route is not None:
-            asked = f"<student_message>\n{escape(question, quote=False)}\n</student_message>\n\n{situation_for(route, tutor)}"
+            asked = f"{untrusted.tag('student_message', question)}\n\n{situation_for(route, tutor)}"
     else:
         tutoring = system is not SYSTEM_PROMPT and route is not None
         # The student's words are data in a tag of their own; a plain lookup sends them as it always did.
@@ -1110,6 +1117,8 @@ async def _stream_answer(
                 excerpts=[to_excerpt(chunk) for chunk in chunks],
                 max_tokens=chat_max_tokens(),
                 purpose="chat",
+                # v2's system prompt is fixed, so every turn after the first reads it from the cache (R8).
+                cache_system=prompts_v2("ask"),
             ),
             chunks,
             hold_check=tutoring,

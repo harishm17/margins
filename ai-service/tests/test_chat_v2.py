@@ -113,6 +113,7 @@ class TestSituationInTheUserTurn:
         await ask(provider, route_of("solve"), chat_service.TutorParams(rung=1))
         first, second = provider.calls
         assert first["system"] == second["system"] == chat_service.FROZEN_SYSTEM_PROMPT
+        assert first["cache_system"] is second["cache_system"] is True  # R8: the fixed system prompt is cached
         assert "<leak_notice>" not in first["question"]
         assert "states the final value" in second["question"]
         assert second["question"].index("</student_message>") < second["question"].index("<leak_notice>")
@@ -174,6 +175,7 @@ class TestFlagOff:
         await ask(provider, route_of("lookup"))
         assert provider.calls[0]["system"] == chat_service.SYSTEM_PROMPT
         assert provider.calls[0]["question"] == "Why does the loop stop?"
+        assert provider.calls[0]["cache_system"] is False
 
 
 class TestCheckQuestionLog:

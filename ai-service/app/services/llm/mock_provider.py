@@ -450,6 +450,7 @@ class MockProvider(LLMProvider):
         excerpts: List[Excerpt],
         max_tokens: int = 4000,
         purpose: str = "chat",
+        cache_system: bool = False,
     ) -> AsyncIterator[AnswerEvent]:
         """A fixed-shape answer that quotes the first two excerpts and cites each."""
         if not excerpts:
