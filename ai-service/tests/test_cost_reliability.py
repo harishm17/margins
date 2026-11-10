@@ -350,19 +350,20 @@ class TestConcurrencyLimit:
 
 
 class TestTopicSerialisation:
-    async def test_generation_jobs_for_one_topic_overlap_but_wait_for_an_extraction(self, db, course, generators):
+    async def test_generation_jobs_for_one_topic_run_one_at_a_time_and_wait_for_an_extraction(self, db, course, generators):
         from app.services.locks import topic_lock
 
         generators.delay = 0.05
         topic = course.topics[0]
-        # Generation takes the topic's lock shared: three jobs run side by side.
+        # Generation takes the topic's lock exclusive until PR 7's PARALLEL_TOPIC_JOBS: the quiz never starts before the
+        # notes it builds on, so three jobs for one topic run one at a time.
         await asyncio.gather(
             run_job(db, course, topic, "solved_examples"),
             run_job(db, course, topic, "interactive_examples"),
             run_job(db, course, topic, "topic_quiz"),
         )
         assert len(generators.calls) == 3
-        assert generators.max_active == 3
+        assert generators.max_active == 1
 
         # Concept extraction takes it exclusive: a generation job waits until it is done.
         generators.calls.clear()
