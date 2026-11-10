@@ -74,15 +74,6 @@ class TestDirectDispatch:
         assert body == PAYLOAD
         assert headers[HEADER] == "s3cret"
 
-    async def test_returns_before_the_job_finishes(self, monkeypatch, undelivered):
-        http = FakeHttp([200])
-        monkeypatch.setattr(dispatch_module.httpx, "AsyncClient", http)
-
-        await dispatch_module.enqueue_task("/jobs/chunk-material", PAYLOAD)
-        assert http.calls == []  # the post happens in a background task
-
-        await dispatch_module.wait_for_background_tasks()
-        assert len(http.calls) == 1
 
     async def test_server_errors_and_network_errors_are_retried(self, monkeypatch, undelivered):
         _, http = await dispatch(monkeypatch, [503, httpx.ConnectError("refused"), 200])

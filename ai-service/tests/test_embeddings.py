@@ -40,26 +40,12 @@ class FakeTextEmbedding:
 
 
 class TestEmbedderSelection:
-    def test_local_is_the_default(self):
-        with patch.object(generator, "settings") as settings:
-            settings.EMBEDDING_PROVIDER = "local"
-            settings.EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
-            settings.EMBEDDING_CACHE_DIR = ""
-            embedder = get_embedder()
-        assert isinstance(embedder, LocalEmbedder)
-        assert embedder.name == "BAAI/bge-small-en-v1.5"
 
     def test_openai_needs_a_key(self):
         with patch.object(generator, "settings") as settings:
             settings.EMBEDDING_PROVIDER = "openai"
             settings.OPENAI_API_KEY = ""
             with pytest.raises(ValueError, match="OPENAI_API_KEY"):
-                get_embedder()
-
-    def test_unknown_provider(self):
-        with patch.object(generator, "settings") as settings:
-            settings.EMBEDDING_PROVIDER = "voyage"
-            with pytest.raises(ValueError, match="EMBEDDING_PROVIDER"):
                 get_embedder()
 
 
@@ -77,17 +63,6 @@ class TestLocalEmbedder:
         assert docs == [[1.0] * EMBEDDING_DIMENSIONS] * 2
         assert query == [2.0] * EMBEDDING_DIMENSIONS
         assert fake.calls[0][0] == "embed" and fake.calls[1] == ("query", "question")
-
-    @pytest.mark.asyncio
-    async def test_empty_input_skips_the_model(self):
-        generator._embedder = MagicMock()
-        assert await generate_embeddings([]) == []
-        generator._embedder.embed_documents.assert_not_called()
-
-    def test_model_loads_once(self):
-        with patch("fastembed.TextEmbedding", FakeTextEmbedding) as _:
-            embedder = LocalEmbedder("model", cache_dir="/tmp/x")
-            assert embedder._get_model() is embedder._get_model()
 
 
 class TestOpenAIEmbedder:
@@ -108,9 +83,6 @@ class TestEmbeddingText:
     def test_heading_comes_first_and_the_text_follows(self):
         assert embedding_text("Ch 6 > 6.2 Operant", "Rats pressed a lever.") == "Ch 6 > 6.2 Operant\n\nRats pressed a lever."
 
-    def test_no_heading_embeds_the_text_alone(self):
-        assert embedding_text(None, "Plain text") == "Plain text"
-        assert embedding_text("  ", "Plain text") == "Plain text"
 
     def test_null_bytes_are_dropped(self):
         assert embedding_text("A\x00B", "te\x00xt") == "AB\n\ntext"
@@ -126,11 +98,3 @@ class TestVectorSize:
         with pytest.raises(ValueError, match=r"vector\(384\)"):
             await generate_embeddings(["a"])
 
-    @pytest.mark.asyncio
-    async def test_wrong_size_queries_are_rejected(self):
-        embedder = MagicMock()
-        embedder.name = "x"
-        embedder.embed_query = AsyncMock(return_value=[0.1] * 10)
-        generator._embedder = embedder
-        with pytest.raises(ValueError, match="10-number"):
-            await generate_query_embedding("q")

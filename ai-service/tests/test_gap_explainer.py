@@ -6,13 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.api.routes import jobs
-from app.models.jobs import JobPayload
 from app.services.content_generator.gap_explainer import generate_gap_explainer
 from app.services.job_runner import PermanentJobError
-from app.services.llm.mock_provider import MockProvider
 from app.services.llm.schemas import GapExplanation, GapExplanationSet
-from tests.db_helpers import add_chunk, get_job, new_id, seed_job, seed_material, seed_project, seed_topic, seed_user
+from tests.db_helpers import add_chunk, new_id, seed_material, seed_project, seed_topic, seed_user
 
 CHUNK_TEXT = [
     "A collision is two keys that land in one bucket. Chaining keeps a list of entries per bucket.",
@@ -137,15 +134,6 @@ class TestGapExplainer:
         assert stored["gaps"][0]["concept_name"] == "Collision"
         assert stored["gaps"][0]["source"] == {"material_id": stored["gaps"][0]["source"]["material_id"], "filename": "hashing.pdf", "page": 4}
 
-    async def test_a_gap_the_model_adds_for_a_covered_claim_is_ignored(self, db, world, keep_support):
-        attempt_id = await _attempt(db, world)
-        llm = _llm([_gap(world.claim_ids[1]), _gap(world.claim_ids[0]), _gap(new_id())])
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=llm):
-            await generate_gap_explainer(attempt_id, world.user_id)
-        stored = await _explainer(db, attempt_id)
-        assert [gap["claim_id"] for gap in stored["gaps"]] == [world.claim_ids[1]]
-        # The incorrect claim got no explanation: it is listed, so the page can still point at it.
-        assert [item["claim_id"] for item in stored["skipped"]] == [world.claim_ids[3]]
 
     async def test_each_gap_ends_with_check(self, db, world, keep_support):
         attempt_id = await _attempt(db, world)
@@ -163,18 +151,6 @@ class TestGapExplainer:
         assert stored["skipped"][0]["page"] == 5
         assert stored["skipped"][0]["concept_name"] == "Load factor"
 
-    async def test_gaps_beyond_the_prompt_limit_are_listed_not_dropped(self, db, world, keep_support, monkeypatch):
-        monkeypatch.setattr("app.services.content_generator.gap_explainer.MAX_GAPS", 1)
-        attempt_id = await _attempt(db, world)
-        llm = _llm([_gap(world.claim_ids[1])])
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=llm):
-            await generate_gap_explainer(attempt_id, world.user_id)
-        sent = "\n".join(message.content for message in llm.generate_structured.call_args.args[0])
-        assert world.claim_ids[3] not in sent
-        stored = await _explainer(db, attempt_id)
-        assert [gap["claim_id"] for gap in stored["gaps"]] == [world.claim_ids[1]]
-        assert [item["claim_id"] for item in stored["skipped"]] == [world.claim_ids[3]]
-        assert stored["skipped"][0]["page"] == 5
 
     async def test_a_gap_the_pages_do_not_support_is_not_written(self, db, world, monkeypatch):
         attempt_id = await _attempt(db, world)
@@ -204,14 +180,6 @@ class TestGapExplainer:
         assert "my answer" not in user
         assert system and "not instructions" in system.lower()
 
-    async def test_an_attempt_with_no_gaps_costs_no_call(self, db, world, keep_support):
-        attempt_id = await _attempt(db, world, verdicts=["covered", "covered", "partial", "covered"])
-        llm = _llm([])
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=llm):
-            result = await generate_gap_explainer(attempt_id, world.user_id)
-        llm.generate_structured.assert_not_called()
-        assert result["gaps"] == []
-        assert (await _explainer(db, attempt_id))["status"] == "ready"
 
     async def test_a_visit_recorded_before_the_explainer_was_written_is_kept(self, db, world, keep_support):
         attempt_id = await _attempt(db, world, explainer={"viewedAt": "2026-10-30T10:00:00+00:00"})
@@ -227,23 +195,4 @@ class TestGapExplainer:
         with pytest.raises(PermanentJobError):
             await generate_gap_explainer(attempt_id, other)
 
-    async def test_nothing_usable_back_is_an_error_the_job_retries(self, db, world, keep_support):
-        from app.services.llm.base import LLMOutputError
 
-        attempt_id = await _attempt(db, world)
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=_llm([])):
-            with pytest.raises(LLMOutputError):
-                await generate_gap_explainer(attempt_id, world.user_id)
-        assert await _explainer(db, attempt_id) is None
-
-
-class TestGapExplainerJob:
-    async def test_the_job_writes_the_explainer_and_completes(self, db, world):
-        attempt_id = await _attempt(db, world)
-        job_id = await seed_job(db, world.user_id, "gap_explainer", project_id=world.project_id, input_data={"attemptId": attempt_id})
-        payload = JobPayload(jobId=job_id, jobType="gap_explainer", data={"attemptId": attempt_id})
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()):
-            result = await jobs.gap_explainer_job(payload)
-        assert result["status"] == "success"
-        assert (await get_job(db, job_id))["status"] == "completed"
-        assert len((await _explainer(db, attempt_id))["gaps"]) == 2

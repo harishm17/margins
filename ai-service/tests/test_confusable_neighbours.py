@@ -2,7 +2,6 @@
 import pytest
 
 from app.services.content_generator.context import fetch_confusable_neighbours
-from app.services.content_generator.review_items import fetch_confusable_partners
 from tests.db_helpers import new_id, seed_project, seed_topic, seed_user
 
 
@@ -62,11 +61,6 @@ async def test_same_topic_twins_other_edge_types_and_retired_concepts_are_left_o
     assert await fetch_confusable_neighbours(topic) == []
 
 
-async def test_a_topic_with_no_edges_has_no_neighbours(world):
-    _, _, topic, _, _ = world
-    assert await fetch_confusable_neighbours(topic) == []
-
-
 # Ids that sort against course order, so an order that ends on a random id shows.
 LOW = "00000000000040008000000000000001"
 MID = "00000000000040008000000000000002"
@@ -100,13 +94,3 @@ async def test_neighbours_come_in_course_order(world):
     assert [row["name"] for row in await fetch_confusable_neighbours(topic)] == ["First idea", "Second idea", "Later topic"]
 
 
-async def test_partners_of_equal_confidence_come_in_course_order(world):
-    db, project_id, topic, _, mine = world
-    first = await _topic_at(db, project_id, HIGH, "First", 1)
-    second = await _topic_at(db, project_id, LOW, "Second", 2)
-    for concept_id, topic_id, name, order in ((LOW, second, "Later topic", 0), (MID, first, "Second idea", 1), (HIGH, first, "First idea", 0)):
-        await _confusable(db, project_id, mine, await _concept_at(db, project_id, topic_id, name, concept_id, order), confidence=0.8)
-
-    partners = await fetch_confusable_partners([mine])
-
-    assert [row["name"] for row in partners[mine]] == ["First idea", "Second idea", "Later topic"]

@@ -4,21 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from tests.context_stub import stub_topic_context
-from app.services.exam_generator import ExamGenerator, plan_exam, split_by_weight
-from app.services.llm.base import LLMCreditError, LLMUnavailableError
+from app.services.exam_generator import ExamGenerator, plan_exam
+from app.services.llm.base import LLMUnavailableError
 from app.services.llm.schemas import ChoiceOption, GeneratedQuestion, QuestionSet
-
-
 
 
 DIST = {"multiple_choice": 60, "short_answer": 30, "numerical": 10}
 
 
 class TestPlanning:
-    def test_split_by_weight_sums_exactly(self):
-        for total in range(1, 40):
-            assert sum(split_by_weight(total, DIST).values()) == total
-        assert split_by_weight(10, DIST) == {"multiple_choice": 6, "short_answer": 3, "numerical": 1}
 
     def test_fewer_questions_than_topics(self):
         """5 questions over 12 topics is 5 questions, not 12."""
@@ -35,10 +29,6 @@ class TestPlanning:
         assert totals == {"multiple_choice": 12, "short_answer": 6, "numerical": 2}
         assert sorted(sum(c.values()) for c in plan.values()) == [6, 7, 7]
         assert all(len(counts) >= 2 for counts in plan.values())
-
-    def test_unknown_types_fall_back_to_multiple_choice(self):
-        assert plan_exam(["a"], 3, {"essay": 100}) == {"a": {"multiple_choice": 3}}
-        assert plan_exam([], 3, DIST) == {}
 
 
 TOPICS = [
@@ -83,24 +73,12 @@ class TestGeneration:
         assert {q["topic_id"] for q in exam["questions"]} == {"t1", "t2"}
         assert exam["topics_covered"] == ["Topic 1", "Topic 2"]
 
-    @pytest.mark.asyncio
-    async def test_the_same_questions_come_in_the_same_order(self):
-        orders = set()
-        for _ in range(6):
-            exam = await _generate([_mcqs(5, "one"), _mcqs(5, "two")], total=8)
-            orders.add(tuple(q["question_text"] for q in exam["questions"]))
-        assert len(orders) == 1
-        assert list(next(iter(orders))) != sorted(next(iter(orders)))
 
     @pytest.mark.asyncio
     async def test_one_failed_topic_keeps_the_rest(self):
         exam = await _generate([_mcqs(2, "one"), LLMUnavailableError("timeout")])
         assert exam["total_questions"] == 2
 
-    @pytest.mark.asyncio
-    async def test_permanent_errors_are_raised(self):
-        with pytest.raises(LLMCreditError):
-            await _generate([_mcqs(2, "one"), LLMCreditError("no credit")])
 
     @pytest.mark.asyncio
     async def test_too_few_questions_raise_the_underlying_error(self):

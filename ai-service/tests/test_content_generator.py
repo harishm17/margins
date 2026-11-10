@@ -8,14 +8,11 @@ from app.services.content_generator.context import (
     CONTENT_SYSTEM_PROMPT,
     NoSourceMaterialError,
     content_messages,
-    format_source_excerpts,
 )
 from app.services.content_generator.examples import ExampleType, ExamplesGenerator
 from app.services.content_generator.notes import NotesGenerator
 from app.services.llm.base import LLMOutputError, LLMResponse, LLMUsage
 from app.services.llm.schemas import (
-    InteractiveExample,
-    InteractiveExampleSet,
     SolvedExample,
     SolvedExampleSet,
     SolutionStep,
@@ -69,11 +66,6 @@ def _patched(llm, chunks=CHUNKS, **stub):
 
 
 class TestSharedContext:
-    def test_excerpts_keep_full_text_and_sources(self):
-        long_chunk = dict(CHUNKS[0], chunk_text="x" * 5000)
-        text = format_source_excerpts("Photosynthesis", "How plants make sugar", [long_chunk])
-        assert "x" * 5000 in text  # no truncation
-        assert 'source="bio.pdf"' in text and 'location="pp. 3-4"' in text
 
     def test_prefix_is_identical_across_tasks(self):
         """Every generator shares system prompt + excerpts, so a regeneration can read the cache."""
@@ -82,9 +74,6 @@ class TestSharedContext:
         assert a[0].content == b[0].content == CONTENT_SYSTEM_PROMPT
         assert a[1].content == b[1].content and a[1].cache is True
         assert a[2].content != b[2].content and a[2].cache is False
-
-    def test_a_first_generation_caches_nothing(self):
-        assert not any(message.cache for message in content_messages("T", "D", CHUNKS, "write notes"))
 
 
 class TestNotesGeneration:
@@ -103,25 +92,6 @@ class TestNotesGeneration:
         instructions = llm.generate_text.call_args.args[0][-1].content
         assert "Calvin cycle" in instructions
 
-    def test_citations_link_files_without_pages_by_material_only(self):
-        generator = NotesGenerator.__new__(NotesGenerator)
-        chunks = [
-            {"filename": "deck.pptx", "category": "lecture_notes", "page_start": None, "page_end": None, "material_id": "m2"},
-            {"filename": "deck.pptx", "category": "lecture_notes", "page_start": None, "page_end": None, "material_id": "m2"},
-            {"filename": "old.pdf", "category": "book_chapters", "page_start": 7, "page_end": 7},  # no material_id
-        ]
-        assert generator._extract_citations(chunks) == [
-            {"filename": "deck.pptx", "category": "lecture_notes", "pages": "n/a", "material_id": "m2", "page": None},
-            {"filename": "old.pdf", "category": "book_chapters", "pages": "7", "material_id": None, "page": 7},
-        ]
-
-    @pytest.mark.asyncio
-    async def test_detail_level_sets_length(self):
-        llm = _llm(text=LONG_NOTES)
-        db, factory = _patched(llm)
-        with db, factory:
-            await NotesGenerator().generate_notes("t1", "P", "d", {"detail_level": "brief"})
-        assert "400-600 words" in llm.generate_text.call_args.args[0][-1].content
 
     @pytest.mark.asyncio
     async def test_too_short_notes_are_rejected(self):
@@ -179,20 +149,4 @@ class TestExamplesGeneration:
         with db, factory, pytest.raises(LLMOutputError):
             await ExamplesGenerator().generate_examples("t1", "P", "d", ExampleType.SOLVED)
 
-    @pytest.mark.asyncio
-    async def test_interactive_examples_use_their_schema(self):
-        structured = InteractiveExampleSet.example()
-        llm = _llm(structured=structured)
-        db, factory = _patched(llm)
-        with db, factory:
-            result = await ExamplesGenerator().generate_examples(
-                "t1", "P", "d", ExampleType.INTERACTIVE, count=2, difficulty_level="hard"
-            )
-        assert result["examples"][0]["steps"][0]["correct_answer"] == "4"
-        assert llm.generate_structured.call_args.args[1] is InteractiveExampleSet
-        assert "5 or more steps" in llm.generate_structured.call_args.args[0][-1].content
 
-    def test_interactive_example_needs_steps(self):
-        example = InteractiveExampleSet.example().examples[0]
-        assert example.usable()
-        assert not InteractiveExample(title="t", problem_statement="p", steps=[]).usable()

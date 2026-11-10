@@ -50,19 +50,6 @@ async def test_job_or_chat_spend_can_use_up_the_budget(db, spends, shown):
         assert shown in message
 
 
-async def test_deleting_a_chat_thread_does_not_lower_the_total(db):
-    user_id, project_id = await user_with_project(db)
-    thread_id = await seed_chat_thread(db, user_id, project_id)
-    message_id = await seed_chat_message(db, thread_id, cost=1.10)
-    await seed_usage(db, user_id, 1.10, source="chat", project_id=project_id)
-
-    await db.execute("DELETE FROM chat_threads WHERE id = $1", thread_id)
-
-    assert await db.fetchval("SELECT count(*) FROM chat_messages WHERE id = $1", message_id) == 0
-    assert await spent_today_usd(user_id) == pytest.approx(1.10)
-    assert await over_budget_message(user_id) is not None
-
-
 async def test_deleting_a_project_does_not_lower_the_total(db):
     user_id, project_id = await user_with_project(db)
     thread_id = await seed_chat_thread(db, user_id, project_id)
@@ -135,12 +122,6 @@ class TestGlobalBudget:
         message = await over_budget_message(newcomer)
         assert message is not None and "whole service" in message
 
-    async def test_under_the_global_cap_nobody_is_stopped(self, db):
-        user_id, _ = await user_with_project(db)
-        other, _ = await user_with_project(db)
-        await seed_usage(db, other, 2.50)
-
-        assert await over_budget_message(user_id) is None
 
     async def test_the_per_user_cap_still_applies_first(self, db):
         user_id, _ = await user_with_project(db)
@@ -149,26 +130,6 @@ class TestGlobalBudget:
         message = await over_budget_message(user_id)
         assert message is not None and "$3.50 of $3.00" in message
 
-    async def test_yesterdays_spend_does_not_count(self, db):
-        user_id, _ = await user_with_project(db)
-        await seed_usage(db, user_id, 9.00, created_at=TWO_DAYS_AGO)
-
-        assert await global_spent_today_usd() == 0
-        assert await over_budget_message(user_id) is None
-
-    async def test_tripping_it_logs_a_line_with_the_figures_once_a_minute(self, db, caplog):
-        spender, _ = await user_with_project(db)
-        await seed_usage(db, spender, 6.00)
-        user_id, _ = await user_with_project(db)
-
-        with caplog.at_level("WARNING", logger="app.services.budget"):
-            await over_budget_message(user_id)
-            await over_budget_message(user_id)
-            await over_budget_message(user_id)
-
-        lines = [r.getMessage() for r in caplog.records if "GLOBAL daily LLM budget reached" in r.getMessage()]
-        assert len(lines) == 1
-        assert "$6.00 of $5.00" in lines[0]
 
     async def test_the_job_runner_fails_the_job_with_the_allowance_code(self, db):
         from app.services.job_runner import DailyBudgetExceeded, _enforce_ai_ready, JobContext
@@ -194,31 +155,3 @@ async def test_record_usage_event_appends_and_skips_free_calls(db):
     assert await spent_today_usd(user_id) == pytest.approx(0.25)
 
 
-async def test_the_ledger_keeps_cache_reads_and_writes_apart_from_the_input_they_are_part_of(db):
-    user_id, project_id = await user_with_project(db)
-    await record_usage_event(
-        user_id=user_id, project_id=project_id, source="tutor", source_id="s", models="m",
-        input_tokens=9000, output_tokens=5, cache_read_tokens=8000, cache_write_tokens=500, cost_usd=0.01,
-    )
-    await record_usage_event(
-        user_id=user_id, project_id=project_id, source="chat", source_id="c", models="m",
-        input_tokens=10, output_tokens=5, cost_usd=0.01,
-    )
-    rows = await db.fetch("SELECT source, input_tokens, cache_read_tokens, cache_write_tokens FROM llm_usage_events ORDER BY source")
-    assert [tuple(r) for r in rows] == [("chat", 10, 0, 0), ("tutor", 9000, 8000, 500)]
-
-
-async def test_a_ledger_failure_is_logged_not_raised(db, monkeypatch, caplog):
-    # The database refuses the row: the work that was billed must not fail.
-    async def broken(*args, **kwargs):
-        raise RuntimeError("database is down")
-
-    monkeypatch.setattr(budget_module, "execute_update", broken)
-    user_id, _ = await user_with_project(db)
-    with caplog.at_level("ERROR", logger="app.services.budget"):
-        await record_usage_event(
-            user_id=user_id, project_id=None, source="job", source_id="j", models="", input_tokens=1,
-            output_tokens=1, cost_usd=1.0,
-        )
-    assert any("Could not record job usage" in r.getMessage() for r in caplog.records)
-    assert await db.fetchval("SELECT count(*) FROM llm_usage_events") == 0

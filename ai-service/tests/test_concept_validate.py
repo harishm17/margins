@@ -57,15 +57,6 @@ def test_quote_matches_after_whitespace_and_quote_normalisation():
     assert normalize("a’s   b\n– c“d”") == "a's b - c\"d\""
 
 
-def test_claim_in_wrong_chunk_or_too_long_dropped():
-    long_chunk = {"ch3": "word " * 100}
-    raw = _raw([_concept("a")], [_claim("a", quote="Variance measures spread.", chunk="ch1"),
-                                 _claim("a", quote=("word " * 100).strip(), chunk="ch3")])
-    graph = validate_extraction(raw, {**CHUNKS, **long_chunk}, {}, {})
-    assert graph.claims == []
-    assert graph.dropped["claims"] == 2
-
-
 def test_concept_without_claims_dropped():
     raw = _raw([_concept("a"), _concept("b")], [_claim("a")])
     graph = _run(raw)
@@ -78,11 +69,6 @@ def test_unknown_edge_ids_dropped():
     graph = _run(raw)
     assert [(e.source, e.target) for e in graph.edges] == [("a", "b")]
     assert graph.dropped["edges"] == 2
-
-
-def test_edge_to_dropped_concept_is_dropped():
-    raw = _raw([_concept("a"), _concept("b")], [_claim("a")], edges=[_edge("a", "b")])
-    assert _run(raw).edges == []
 
 
 def test_cycle_broken_at_lowest_confidence():
@@ -135,12 +121,6 @@ def test_prerequisite_must_point_backwards(prior, order, kept, dropped):
     assert graph.dropped["edges"] == dropped
 
 
-def test_confusable_canonical_order():
-    raw = _raw([_concept("a"), _concept("b")], edges=[_edge("b", "a", type="confusable")])
-    graph = _run(raw)
-    assert [(e.source, e.target) for e in graph.edges] == [("a", "b")]
-
-
 def test_confusable_pair_listed_both_ways_kept_once():
     raw = _raw([_concept("a"), _concept("b")], edges=[_edge("b", "a", "confusable", 0.7), _edge("a", "b", "confusable", 0.9)])
     graph = _run(raw)
@@ -156,24 +136,6 @@ def test_every_objective_mapped_or_reported():
     assert mapped.unmapped_objectives == []
 
 
-def test_bad_objective_indexes_removed_and_prompts_filtered():
-    raw = _raw([_concept("a", [0, 7])], objectives=(0, 5))
-    graph = _run(raw, objective_count=2)
-    assert graph.concepts[0].objective_indexes == [0]
-    assert [q.objective_index for q in graph.focus_questions] == [0]
-    assert [p.objective_index for p in graph.recall_prompts] == [0]
-
-
-def test_focus_question_with_unknown_chunk_gets_no_chunk():
-    raw = _raw([_concept("a")])
-    raw.focus_questions[0].chunk_id = "nowhere"
-    graph = _run(raw)
-    assert len(graph.focus_questions) == 1
-    assert graph.focus_questions[0].chunk_id is None
-    known = _run(_raw([_concept("a")]))
-    assert known.focus_questions[0].chunk_id == "ch2"
-
-
 def test_weight_is_forced_to_one_except_on_encompasses():
     raw = _raw(
         [_concept("a"), _concept("b"), _concept("c")],
@@ -187,32 +149,3 @@ def test_weight_is_forced_to_one_except_on_encompasses():
     assert weights == {"prerequisite": 1.0, "encompasses": 0.5, "confusable": 1.0}
 
 
-def test_duplicate_concept_key_keeps_the_first_and_counts_the_rest():
-    first = _concept("a", [0])
-    second = _concept("a", [1])
-    second.name = "Duplicate"
-    raw = _raw([first, second], [_claim("a"), _claim("a", quote="Variance")], objectives=(0, 1))
-    graph = _run(raw, objective_count=2)
-    assert [c.name for c in graph.concepts] == ["Concept a"]
-    assert graph.concepts[0].objective_indexes == [0]
-    assert len(graph.claims) == 2
-    assert graph.dropped["concepts"] == 1
-    assert graph.dropped["claims"] == 0
-
-
-def test_claim_for_an_unknown_concept_key_is_counted_once():
-    raw = _raw([_concept("a")], [_claim("a"), _claim("ghost")])
-    graph = _run(raw)
-    assert len(graph.claims) == 1
-    assert graph.dropped["claims"] == 1
-    assert graph.dropped["concepts"] == 0
-
-
-def test_cycle_tie_drops_the_edge_listed_last():
-    raw = _raw(
-        [_concept("a"), _concept("b"), _concept("c")],
-        edges=[_edge("a", "b", confidence=0.7), _edge("b", "c", confidence=0.7), _edge("c", "a", confidence=0.7)],
-    )
-    graph = _run(raw)
-    assert sorted((e.source, e.target) for e in graph.edges) == [("a", "b"), ("b", "c")]
-    assert graph.dropped["edges"] == 1

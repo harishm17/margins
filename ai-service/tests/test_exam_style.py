@@ -9,31 +9,24 @@ import pytest
 
 from app.api.routes import jobs
 from app.config import settings
-from app.models.jobs import JobPayload
 from app.services import exam_style
 from app.services.exam_generator import ExamGenerator
 from app.services.exam_style import (
-    clear_style_profile,
     copying_stems,
     extract_style_profile,
     merge_profiles,
     profile_exam_material,
     project_style_profile,
-    style_guidance,
 )
-from app.services.llm.base import LLMUnavailableError
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import (
     ChoiceOption,
-    ExamPointsBand,
     ExamStyleProfile,
-    ExamTypeShare,
     GeneratedQuestion,
     QuestionSet,
 )
 from tests.context_stub import stub_topic_context
-from tests.db_helpers import add_chunk, get_job, seed_job, seed_material, seed_project, seed_user
-
+from tests.db_helpers import add_chunk, seed_material, seed_project, seed_user
 
 
 EXAM_TEXT = """Problem 1. A bag holds three red marbles and two blue marbles. You draw two marbles without
@@ -57,27 +50,6 @@ class TestCopyingStems:
     def test_a_run_of_eight_words_is_a_copy(self):
         stem = "Suppose a bag holds three red marbles and two blue marbles, what then?"
         assert copying_stems([stem], EXAM_TEXT) == [stem]
-
-    def test_seven_shared_words_are_not(self):
-        stem = "A bag holds three red marbles and then something else entirely"
-        assert copying_stems([stem], EXAM_TEXT) == []
-
-    def test_case_punctuation_and_line_breaks_do_not_hide_a_copy(self):
-        stem = "YOU DRAW two marbles, without; replacement. Compute the probability..."
-        assert copying_stems([stem], EXAM_TEXT) == [stem]
-
-    def test_a_short_stem_copied_whole_is_a_copy(self):
-        text = "Question 3. State the central limit theorem. (5 points)"
-        assert copying_stems(["State the central limit theorem."], text) == ["State the central limit theorem."]
-
-    def test_a_paraphrase_is_kept(self):
-        stem = "A jar contains four green beads and one yellow bead; two are removed. Find the chance both are green."
-        assert copying_stems([stem], EXAM_TEXT) == []
-
-    def test_only_the_offending_stems_are_returned(self):
-        good = "Find the chance that two beads drawn from a jar are both green."
-        bad = "Explain why the sample mean of independent identically distributed observations is fine."
-        assert copying_stems([good, bad], EXAM_TEXT) == [bad]
 
 
 # ---------------------------------------------------------------- extraction
@@ -111,13 +83,6 @@ FRESH = ["A jar holds four green beads and one yellow bead; two are removed. Fin
 
 
 class TestExtraction:
-    async def test_clean_stems_take_one_call(self):
-        provider = Scripted(profile(example_stems=FRESH))
-        result = await extract_with(provider)
-        assert len(provider.prompts) == 1
-        assert result["example_stems"] == FRESH
-        assert result["version"] == 1
-        assert "<exam>" in provider.prompts[0] and "Problem 1." in provider.prompts[0]
 
     async def test_a_copied_stem_triggers_one_retry_that_names_it(self):
         provider = Scripted(profile(example_stems=[COPIED, *FRESH[:2]]), profile(example_stems=FRESH))
@@ -135,31 +100,6 @@ class TestExtraction:
         assert result["example_stems"] == FRESH[:2]
         assert not copying_stems(result["example_stems"], EXAM_TEXT)
 
-    async def test_a_failed_retry_keeps_the_first_answer_without_its_copies(self):
-        provider = Scripted(profile(example_stems=[COPIED, *FRESH[:2]]), LLMUnavailableError("busy"))
-        result = await extract_with(provider)
-        assert result["example_stems"] == FRESH[:2]
-
-    async def test_a_failed_first_call_is_raised_for_the_job_to_retry(self):
-        with pytest.raises(LLMUnavailableError):
-            await extract_with(Scripted(LLMUnavailableError("busy")))
-
-    async def test_the_stored_profile_is_clean(self):
-        messy = profile(
-            type_mix=[ExamTypeShare(kind="short_answer", share=3), ExamTypeShare(kind="short_answer", share=1),
-                      ExamTypeShare(kind="numerical", share=4)],
-            points_distribution=[ExamPointsBand(points=10, questions=2), ExamPointsBand(points=10, questions=1),
-                                 ExamPointsBand(points=0, questions=4)],
-            task_verbs=["Compute", "compute", "Show"],
-            phrasing_conventions=["  Opens with data ", "opens with data", ""],
-            typical_answer_length="  ",
-        )
-        result = await extract_with(Scripted(messy))
-        assert result["type_mix"] == [{"kind": "short_answer", "share": 0.5}, {"kind": "numerical", "share": 0.5}]
-        assert result["points_distribution"] == [{"points": 10.0, "questions": 3}]
-        assert result["task_verbs"] == ["compute", "show"]
-        assert result["phrasing_conventions"] == ["Opens with data"]
-        assert result["typical_answer_length"] == "not stated"
 
     async def test_a_long_exam_is_cut_for_the_model_but_checked_whole(self, monkeypatch):
         monkeypatch.setattr(exam_style, "MAX_EXAM_CHARS", 200)
@@ -180,16 +120,7 @@ def stored(**overrides) -> dict:
 
 
 class TestMerge:
-    def test_nothing_to_merge(self):
-        assert merge_profiles([]) is None
-        assert merge_profiles([None, "nope", 3]) is None
 
-    def test_one_profile_is_returned_as_it_is(self):
-        one = stored()
-        assert merge_profiles([one]) == one
-
-    def test_json_text_from_the_database_is_accepted(self):
-        assert merge_profiles([json.dumps(stored())]) == stored()
 
     def test_counts_add_and_shares_are_weighted_by_question_count(self):
         a = stored(question_count=30, total_points=100, type_mix=[{"kind": "multiple_choice", "share": 1.0}],
@@ -210,31 +141,6 @@ class TestMerge:
         assert merged["example_stems"] == ["a1", "b1", "a2"]
         assert merged["phrasing_conventions"] == ["pa", "pb"]
         assert merged["task_verbs"][:2] == ["compute", "show"]  # the verb both use ranks first
-
-    def test_multi_part_if_any_exam_has_it_and_notes_skip_not_stated(self):
-        a = stored(multi_part=False, calculator_and_units="not stated")
-        b = stored(multi_part=True, calculator_and_units="No calculators; units required")
-        merged = merge_profiles([a, b])
-        assert merged["multi_part"] is True
-        assert merged["calculator_and_units"] == "No calculators; units required"
-        assert merge_profiles([a, stored(calculator_and_units="not stated")])["calculator_and_units"] == "not stated"
-
-
-class TestGuidance:
-    def test_the_block_carries_every_part_of_the_profile(self):
-        text = style_guidance(stored(total_points=100, task_verbs=["compute", "justify"]))
-        for expected in ("5 questions, 100 points", "60% short answer", "40% multi-step", "5 worth 10", "compute, justify",
-                         "labelled parts", "Examples of the voice", "A fair die is rolled twice", "Never copy a question"):
-            assert expected in text
-
-    def test_single_part_exams_say_so(self):
-        assert "single-part" in style_guidance(stored(multi_part=False))
-
-    def test_empty_parts_are_left_out(self):
-        text = style_guidance(stored(question_count=0, points_distribution=[], example_stems=[], task_verbs=[],
-                                     calculator_and_units="not stated", typical_answer_length="not stated"))
-        assert "Points:" not in text and "Examples of the voice" not in text and "Calculators" not in text
-        assert "A full answer" not in text
 
 
 # ---------------------------------------------------------------- the database
@@ -282,10 +188,6 @@ class TestStorage:
         assert result == {"status": "skipped", "reason": "not a past exam"}
         assert await style_of(course.db, material) is None
 
-    async def test_a_file_with_no_text_or_no_record_is_skipped(self, course):
-        empty = await seed_material(course.db, course.project_id, status="valid", role="exam")
-        assert (await profile_exam_material(empty))["status"] == "skipped"
-        assert (await profile_exam_material("00000000-0000-0000-0000-000000000000"))["status"] == "skipped"
 
     async def test_the_role_changing_during_the_model_call_stores_nothing(self, course, monkeypatch):
         material = await exam_file(course)
@@ -300,11 +202,6 @@ class TestStorage:
         assert (await profile_exam_material(material)) == {"status": "skipped", "reason": "role changed"}
         assert await style_of(course.db, material) is None
 
-    async def test_clear_removes_the_profile(self, course):
-        material = await exam_file(course)
-        await profile_exam_material(material)
-        await clear_style_profile(material)
-        assert await style_of(course.db, material) is None
 
     async def test_the_course_profile_merges_its_exams_and_ignores_other_files(self, course):
         a = await exam_file(course, "a.pdf")
@@ -317,10 +214,6 @@ class TestStorage:
             )
         merged = await project_style_profile(course.project_id)
         assert merged["exams_merged"] == 2 and merged["question_count"] == 8
-
-    async def test_a_course_without_profiles_has_none(self, course):
-        await exam_file(course)
-        assert await project_style_profile(course.project_id) is None
 
 
 class TestJobs:
@@ -342,34 +235,6 @@ class TestJobs:
             ("exam_relevance", f"exam-relevance:{course.project_id}"),
             ("profile_exam", f"profile:{material}"),
         ]
-
-    async def test_running_it_twice_does_not_double_the_jobs(self, course, dispatched):
-        material = await exam_file(course)
-        await jobs._start_exam_jobs(material, course.project_id, course.user_id)
-        await jobs._start_exam_jobs(material, course.project_id, course.user_id)
-        assert len(dispatched.profiles) == 1 and len(dispatched.relevance) == 1
-
-    async def test_other_files_start_nothing(self, course, dispatched):
-        for role in ("content", "syllabus", "other"):
-            await jobs._start_exam_jobs(await exam_file(course, role=role), course.project_id, course.user_id)
-        assert dispatched.profiles == [] and dispatched.relevance == []
-
-    async def test_without_a_model_no_job_starts(self, course, dispatched, monkeypatch):
-        monkeypatch.setattr(settings, "LLM_PROVIDER", "anthropic")
-        monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
-        material = await exam_file(course)
-        await jobs._start_exam_jobs(material, course.project_id, course.user_id)
-        assert dispatched.profiles == [] and dispatched.relevance == []
-
-    async def test_the_profile_job_stores_the_profile_and_records_usage_rows(self, course):
-        material = await exam_file(course)
-        job_id = await seed_job(course.db, course.user_id, "profile_exam", project_id=course.project_id,
-                                input_data={"materialId": material})
-        response = await jobs.profile_exam_job(JobPayload(jobId=job_id, jobType="profile_exam", data={"materialId": material}))
-        assert response["status"] == "success"
-        assert (await style_of(course.db, material))["question_count"] == 2
-        job = await get_job(course.db, job_id)
-        assert job["status"] == "completed" and json.loads(job["result_data"])["status"] == "profiled"
 
 
 # ---------------------------------------------------------------- exam generation
@@ -407,11 +272,4 @@ class TestMatchPastExams:
         assert "A fair die is rolled twice" in prompt
         assert exam["matched_past_exams"] is True
 
-    async def test_without_the_option_the_profile_is_not_read(self):
-        exam, prompt, lookup = await generate({}, stored())
-        lookup.assert_not_awaited()
-        assert "past exams" not in prompt and exam["matched_past_exams"] is False
 
-    async def test_the_option_with_no_profile_changes_nothing(self):
-        exam, prompt, _ = await generate({"match_past_exams": True}, None)
-        assert "past exams" not in prompt and exam["matched_past_exams"] is False

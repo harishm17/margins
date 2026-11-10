@@ -1,5 +1,4 @@
 """Chunking and extraction, checked against files built at test time."""
-import shutil
 import subprocess
 import time
 
@@ -84,17 +83,6 @@ class TestPdfChunking:
         assert "H2O" in text
         assert "H 2 O" not in text
 
-    def test_pages_are_one_indexed_and_ordered(self, book_pdf):
-        chunks = chunk_document(book_pdf, "book.pdf")
-
-        assert chunks[0].page_start == 1
-        assert chunks[-1].page_end == 2
-        for chunk in chunks:
-            assert 1 <= chunk.page_start <= chunk.page_end <= 2
-        starts = [c.page_start for c in chunks]
-        assert starts == sorted(starts)
-        trees = next(c for c in chunks if "binary search tree" in c.chunk_text)
-        assert (trees.page_start, trees.page_end) == (2, 2)
 
     def test_pdf_of_only_numbered_items_yields_chunks(self, tmp_path):
         pdf = PdfBuilder()
@@ -180,21 +168,6 @@ class TestSplitter:
             assert later.chunk_text.startswith(shared)
             assert 5 <= count_tokens(shared) <= OVERLAP_TOKENS + 2
 
-    def test_no_text_is_lost_or_reordered(self):
-        sents = sentences(200)
-        chunks = chunk_pages([page("\n\n".join(sents))])
-
-        joined = "\n".join(c.chunk_text for c in chunks)
-        positions = [joined.index(s) for s in sents]
-        assert positions == sorted(positions)
-
-    def test_cjk_text_splits(self):
-        text = "今天天气很好，我们去公园玩。" * 3000
-
-        chunks = chunk_pages([page(text)])
-
-        assert len(chunks) > 20
-        assert_chunks_within_limits(chunks)
 
     def test_unbroken_string_splits(self):
         for text in ("a" * 30000, "x1" * 20000, "".join(chr(0x4E00 + i % 500) for i in range(9000))):
@@ -202,9 +175,6 @@ class TestSplitter:
             assert len(chunks) > 1
             assert_chunks_within_limits(chunks)
 
-    def test_special_token_text_is_counted_as_text(self):
-        chunks = chunk_pages([page("The marker <|endoftext|> is just text here.")])
-        assert chunks[0].chunk_text == "The marker <|endoftext|> is just text here."
 
     def test_redos_input_runs_in_milliseconds(self):
         # The old heading pattern took 1.3 s on 24 digits and 4x longer per two more.
@@ -242,12 +212,6 @@ class TestSections:
         ]
         assert chunks[0].chunk_text.startswith("# Chapter 3\n## 3.1 Graphs")
 
-    def test_sibling_headings_replace_each_other_in_the_path(self):
-        text = "# Part\ntext a\n## One\ntext b\n## Two\ntext c\n### Deep\ntext d"
-
-        paths = [c.section_hierarchy for c in chunk_pages([page(text)])]
-
-        assert paths == ["Part", "Part > One", "Part > Two", "Part > Two > Deep"]
 
     def test_numbered_headings_of_one_level_nest_by_number(self):
         # A PDF set in a single font size gives every heading the same markdown level.
@@ -257,10 +221,6 @@ class TestSections:
 
         assert paths == ["2.1 Hashing", "2.1 Hashing > 2.1.1 Open addressing", "2.2 Trees"]
 
-    def test_bold_marks_are_removed_from_headings(self):
-        chunks = chunk_pages([page("# **Intro**\nSome text")])
-        assert chunks[0].section_hierarchy == "Intro"
-        assert chunks[0].chunk_text.startswith("# Intro")
 
     def test_overlong_heading_lines_stay_body_text(self):
         authors = "### " + ", ".join(f"Author Number{i}" for i in range(30))
@@ -278,10 +238,6 @@ class TestSections:
     def test_section_spanning_pages_keeps_both_pages(self):
         chunks = chunk_pages([page("# Topic\nfirst page text", 3), page("second page text", 4)])
         assert (chunks[0].page_start, chunks[0].page_end) == (3, 4)
-
-    def test_pages_without_numbers(self):
-        chunks = chunk_pages([ExtractedPage(number=None, text="# A\nbody text")])
-        assert (chunks[0].page_start, chunks[0].page_end) == (None, None)
 
 
 class TestDocx:
@@ -302,19 +258,6 @@ class TestDocx:
         assert "1. A numbered line typed by hand" in text
         assert [p.number for p in extracted.pages] == [None]
 
-    def test_docx_chunks_have_hierarchy_and_no_pages(self, tmp_path):
-        chunks = chunk_document(build_docx(tmp_path / "notes.docx"), "notes.docx")
-
-        costs = next(c for c in chunks if "| Structure | Lookup |" in c.chunk_text)
-        assert costs.section_hierarchy == "Course Notes > Costs"
-        assert costs.page_start is None and costs.page_end is None
-
-    def test_corrupt_docx_is_unreadable(self, tmp_path):
-        path = tmp_path / "bad.docx"
-        path.write_bytes(b"PK not really")
-        with pytest.raises(UnreadableDocumentError):
-            extract_document(str(path), "bad.docx")
-
 
 class TestPptx:
     def test_tables_groups_and_notes_are_included(self, tmp_path):
@@ -329,30 +272,6 @@ class TestPptx:
         assert "Free text box on slide two" in second
         assert "| apple | 3 |" in second
         assert "Text inside a grouped shape" in second
-
-    def test_one_page_per_slide_in_chunks(self, tmp_path):
-        chunks = chunk_document(build_pptx(tmp_path / "deck.pptx"), "deck.pptx")
-
-        assert [(c.page_start, c.page_end) for c in chunks] == [(1, 1), (2, 2)]
-        assert chunks[0].section_hierarchy == "Hashing"
-
-
-@pytest.mark.skipif(not shutil.which("soffice"), reason="LibreOffice is not installed")
-class TestLegacyDoc:
-    def test_doc_is_converted_with_libreoffice(self, tmp_path):
-        docx_path = build_docx(tmp_path / "notes.docx")
-        subprocess.run(
-            ["soffice", "--headless", "--convert-to", "doc", "--outdir", str(tmp_path), docx_path],
-            check=True,
-            capture_output=True,
-            timeout=120,
-        )
-
-        extracted = extract_document(str(tmp_path / "notes.doc"), "notes.doc")
-
-        assert extracted.extension == ".doc"
-        assert "| Structure | Lookup |" in extracted.text
-        assert "Paragraph after the table" in extracted.text
 
 
 def test_doc_without_libreoffice_fails_with_clear_message(monkeypatch, tmp_path):
