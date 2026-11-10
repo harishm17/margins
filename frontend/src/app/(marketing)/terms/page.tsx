@@ -48,8 +48,8 @@ export default function TermsPage() {
       </LegalSection>
       <LegalSection id="accounts" heading="Accounts">
         <p>
-          We may suspend accounts that misuse the service. You can stop using Margins and delete your data at any
-          time.
+          We may suspend accounts that misuse the service. You can stop using Margins and delete your account at any
+          time. Anonymous usage records stay, as the Privacy Policy explains.
         </p>
       </LegalSection>
       <LegalSection id="changes" heading="Changes and questions">

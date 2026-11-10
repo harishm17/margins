@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { allowanceMessage, nextResetUtc, resetPhrase } from './copy'
+import { allowanceMessage, nextResetUtc, refusalNote, resetPhrase } from './copy'
 
 const noon = new Date('2026-10-20T12:00:00Z')
 
@@ -21,4 +21,14 @@ test('a reset on the next calendar day says tomorrow', () => {
   assert.equal(resetPhrase(new Date('2026-10-20T00:00:00Z'), 'Pacific/Auckland'), 'tomorrow at 1:00 PM')
   // Late afternoon in California: midnight UTC is still today there.
   assert.equal(resetPhrase(new Date('2026-10-21T23:00:00Z'), 'America/Los_Angeles'), 'at 5:00 PM')
+})
+
+test('a first-day or reserve refusal says why and when it resets, without any amounts', () => {
+  const first = refusalNote('first_day', 'at 5:00 PM')
+  const reserve = refusalNote('reserve', 'at 5:00 PM')
+  assert.match(first ?? '', /first-day allowance.*resets at 5:00 PM/)
+  assert.match(reserve ?? '', /paused.*resets at 5:00 PM/)
+  assert.doesNotMatch(`${first}${reserve}`, /\$/)
+  assert.equal(refusalNote('user', 'at 5:00 PM'), null)
+  assert.equal(refusalNote(null, 'at 5:00 PM'), null)
 })
