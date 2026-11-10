@@ -1,5 +1,6 @@
 'use client'
 
+import { NEEDS_REREADING_TEXT } from '@/lib/learning/needs-rereading'
 import * as React from 'react'
 import Link from 'next/link'
 import { ArrowLeft, BookOpenText, CaretDown, ChatCircleText, ChatText, Microphone, PencilLine, WarningCircle } from '@phosphor-icons/react/dist/ssr'
@@ -219,7 +220,7 @@ export function NodePanel({
       <div className="mt-6 border-t border-border pt-5">
         <h3 className="text-body-strong text-fg">What your pages say</h3>
         {panel.claims.length === 0 ? (
-          <p className="mt-2 text-small text-fg-3">Nothing from your pages is attached to this idea yet.</p>
+          <p className="mt-2 text-small text-fg-3">{NEEDS_REREADING_TEXT}</p>
         ) : (
           <ul className="mt-2 flex flex-col gap-3">
             {panel.claims.map((claim) => (

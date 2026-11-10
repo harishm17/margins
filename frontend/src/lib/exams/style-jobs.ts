@@ -9,55 +9,17 @@
  * Both are best effort: a student's role change or delete never fails because a job could not start.
  */
 
-import { logServerError } from '@/lib/ops/log'
-import { prisma } from '@/lib/db/prisma'
-import { createJobOrFindActive } from '@/lib/jobs/active-jobs'
-import { enqueueTask } from '@/lib/tasks/dispatch'
+import { startBackgroundJob } from '@/lib/jobs/start-job'
 import { examProfileTarget } from './style-state'
 
-type Started = { jobId: string }
-
-async function start(
+const start = (
   userId: string,
   projectId: string,
   jobType: 'profile_exam' | 'exam_relevance',
   endpoint: string,
   data: Record<string, string>,
   targetKey: string
-): Promise<Started | null> {
-  try {
-    const { job, created } = await createJobOrFindActive({
-      userId,
-      projectId,
-      jobType,
-      status: 'pending',
-      stage: 'extracting',
-      inputData: data,
-      progressPercent: 0,
-      targetKey,
-    })
-    if (!created) return { jobId: job.id }
-    try {
-      await enqueueTask(endpoint, { jobId: job.id, jobType, data })
-    } catch (error) {
-      await prisma.processingJob.update({
-        where: { id: job.id },
-        data: {
-          status: 'failed',
-          errorCode: 'ENQUEUE_FAILED',
-          errorMessage: `Could not start ${jobType}`,
-          retryable: true,
-          completedAt: new Date(),
-        },
-      })
-      throw error
-    }
-    return { jobId: job.id }
-  } catch (error) {
-    logServerError('Could not start a past-exam job', error, { jobType })
-    return null
-  }
-}
+) => startBackgroundJob({ userId, projectId, jobType, endpoint, data, targetKey, stage: 'extracting' })
 
 export { examProfileTarget }
 export const examRelevanceTarget = (projectId: string) => `exam-relevance:${projectId}`

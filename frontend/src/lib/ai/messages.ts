@@ -98,6 +98,7 @@ const MESSAGES: Record<string, AiMessage> = {
   QUIZ_GRADING_FAILED: failed('We could not finish grading it. Grade the quiz again to see your score.'),
   EXAM_PROFILE_FAILED: failed('We could not read the style of your past exams. Try again, or mock exams will use the default style.'),
   EXAM_RELEVANCE_FAILED: failed('We could not match your past exams to your topics. Try again.'),
+  CONCEPT_REQUOTE_FAILED: failed('We could not find some ideas again in your remaining files. They stay out of recall checks until they are read again.'),
   MATERIAL_NOT_FOUND: failed('That file was removed before it could be read.', false),
   // The file itself is the problem (refused, unreadable, or no text): running the same file again cannot help.
   MATERIAL_UNREADABLE: failed('We could not read this file. Try another copy of it, for example one exported again from the original.', false),
@@ -122,6 +123,7 @@ const FALLBACK_BY_JOB_TYPE: Record<string, string> = {
   grade_quiz: 'QUIZ_GRADING_FAILED',
   profile_exam: 'EXAM_PROFILE_FAILED',
   exam_relevance: 'EXAM_RELEVANCE_FAILED',
+  requote_concepts: 'CONCEPT_REQUOTE_FAILED',
 }
 
 export const FALLBACK_MESSAGE: AiMessage = failed('Something went wrong. Try again.')

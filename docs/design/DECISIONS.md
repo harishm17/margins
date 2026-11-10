@@ -143,7 +143,7 @@ browser ── Next.js (frontend/) ───────────────
 - Per-user rate limits use `createRateLimiter`: tutor turns 20 a minute, recall grading 10 a minute, "Explain this" 10 a minute.
 - Every model call goes through the provider's budget check and usage ledger, so the daily allowance covers the new features with no new code.
 - Every new table cascades on user and project deletion, and the account-deletion tests cover the new tables.
-- Margin notes and recall answers are the student's own writing, are deleted with the account and are never used in prompts for anyone else.
+- Margin notes and recall answers are the student's own writing, are deleted with the account and are never used in prompts for anyone else. Deleting a file or a topic does not delete them: the note keeps its text and the passage it sat on and is listed as a note from a removed file or topic (rules per pointer: `frontend/src/lib/materials/references.ts`).
 - **Status:** built as decided.
 
 ### D18. Tutor prompts are gated by the tutoring eval

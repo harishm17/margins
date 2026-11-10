@@ -11,7 +11,7 @@ import { PracticeView } from '@/features/topic/practice-view'
 import { QuizView } from '@/features/topic/quiz-view'
 import { RecallAbandonOnOpen } from '@/features/topic/recall-abandon'
 import { RecallView } from '@/features/topic/recall-view'
-import { ReaderView } from '@/features/topic/reader-view'
+import { ReaderView, RemovedFileNotes } from '@/features/topic/reader-view'
 import { StepPlaceholder } from '@/features/topic/step-placeholder'
 import { parseView } from '@/features/topic/types'
 import { VoiceView } from '@/features/topic/voice-view'
@@ -167,6 +167,15 @@ export default async function TopicPage({ params, searchParams }: { params: Para
           <>
             <RecallAbandonOnOpen topicId={topicId} />
             <ReaderView topicId={topicId} reader={reader} completed={topic.progress.notes || data.pathDone.read} nextHref={afterNotes.href} nextLabel={afterNotes.label} focusConceptId={focusConceptId} noteDismissed={noteDismissed} />
+          </>
+        )
+      }
+      // Every file of the topic may be gone while the student's notes on them stay: the generated notes show, then those notes.
+      if (reader && reader.detachedNotes.length > 0) {
+        return (
+          <>
+            {notesView()}
+            <RemovedFileNotes topicId={topicId} notes={reader.detachedNotes} />
           </>
         )
       }

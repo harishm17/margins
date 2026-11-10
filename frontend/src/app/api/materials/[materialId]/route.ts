@@ -6,7 +6,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
-import { deleteQueuedFilesNow, queueFileDeletions } from '@/lib/storage/pending-deletions';
+import { deleteQueuedFilesNow } from '@/lib/storage/pending-deletions';
+import { deleteMaterial } from '@/lib/materials/references';
+import { startRequoteJobs } from '@/lib/materials/requote-jobs';
 import { canBeTopicSource, isMaterialRole } from '@/lib/materials/role';
 import { startExamProfileJob, startExamRelevanceJob } from '@/lib/exams/style-jobs';
 
@@ -120,13 +122,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Material not found' }, { status: 404 });
     }
 
-    // Delete the database record (cascades to chunks and mappings) and queue its file in the same transaction:
-    // either both happen or neither. The AI service's reaper removes queued files and retries failures.
-    const queued = await prisma.$transaction(async (tx) => {
-      await tx.material.delete({ where: { id: materialId } });
-      return queueFileDeletions(tx, [material.gcsPath], 'material_deleted');
-    });
+    // The rules for everything that points at the file are in lib/materials/references.ts: the row and its queued file go
+    // in one transaction (either both happen or neither; the AI service's reaper removes queued files and retries failures),
+    // the student's notes on it stay, the claims taken from it go.
+    const queued = await prisma.$transaction((tx) => deleteMaterial(tx, material));
     await deleteQueuedFilesNow(queued);
+
+    // Ideas left with no claim are looked for again in the topic's other files. The delete stands whatever happens here.
+    try {
+      await startRequoteJobs(session.user.id, material.projectId);
+    } catch (error) {
+      logServerError('Could not start re-quote jobs after a file delete', error, { projectId: material.projectId });
+    }
 
     // Topics the deleted exam made relevant are no longer.
     if (material.role === 'exam') await startExamRelevanceJob(session.user.id, material.projectId);
