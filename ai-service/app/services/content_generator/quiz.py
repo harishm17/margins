@@ -91,9 +91,15 @@ CHOICE_RULES = f"""- multiple_choice: exactly 4 options with ids A, B, C, D and 
 EXPLANATION_AND_POINTS_RULE = "- Every question has an explanation of the correct answer and points from 1 to 5 by complexity."
 SOURCE_EXCERPTS_RULE = "- List in source_excerpts the index of every excerpt a question is based on."
 
+# P-I1: a key point that names one route ("applies the chain rule") fails a right answer that took another.
+KEY_POINTS_RULE = (
+    "Write each key point as an idea or result a right answer contains, not as one way of reaching it, because the grader "
+    "checks an answer against each key point and a right answer may get there another way."
+)
+
 QUESTION_FORMAT_RULES_V2 = f"""Question rules:
 {CHOICE_RULES}
-- short_answer: answerable in 1-3 sentences; give a sample_answer and 2-4 key_points a grader can check.
+- short_answer: answerable in 1-3 sentences; give a sample_answer and 2-4 key_points a grader can check. {KEY_POINTS_RULE}
 - numerical: correct_answer is a plain number; give an absolute tolerance. Give `unit` only when the quantity has one (m/s, mol/L, dollars). For a probability, a count or a ratio leave `unit` empty: never put the name of the quantity there.
 - true_false: correct_answer is a boolean; the explanation says why.
 {EXPLANATION_AND_POINTS_RULE}

@@ -24,7 +24,14 @@ from app.services.llm.base import LLMMessage
 from app.services.llm import untrusted
 from app.services.llm.factory import LLMFactory
 from app.prompt_revision import prompts_v2
-from app.services.llm.schemas import ClaimVerdict, RecallClaim, RecallGradeRequest, RecallGradeResult, RecallGradeResultV2
+from app.services.llm.schemas import (
+    IN_ANY_WORDING_OR_METHOD,
+    ClaimVerdict,
+    RecallClaim,
+    RecallGradeRequest,
+    RecallGradeResult,
+    RecallGradeResultV2,
+)
 from app.services.tutor.leak import blocks_alone, string_leak
 from app.services.tutor.practice import limit_reply
 from app.services.llm.caps import output_cap
@@ -69,8 +76,13 @@ _ANALYSIS_LINE = (
     "- Before the verdicts, think in the analysis field about what the answer says and how it compares with each claim. "
     "The analysis is never shown.\n"
 )
-assert _POINTER_EXAMPLE in SYSTEM_PROMPT and _ANALYSIS_LINE in SYSTEM_PROMPT
-SYSTEM_PROMPT_V2 = SYSTEM_PROMPT.replace(_POINTER_EXAMPLE, _POINTER_EXAMPLE_V2).replace(_ANALYSIS_LINE, "")
+# P-I1: the same wording as the short-answer grader for what counts as having the idea.
+_COVERED_RULE = "Covered: the answer states the idea, in any words."
+_COVERED_RULE_V2 = f"Covered: the answer states the idea, {IN_ANY_WORDING_OR_METHOD}."
+assert all(SYSTEM_PROMPT.count(text) == 1 for text in (_POINTER_EXAMPLE, _ANALYSIS_LINE, _COVERED_RULE))
+SYSTEM_PROMPT_V2 = (
+    SYSTEM_PROMPT.replace(_POINTER_EXAMPLE, _POINTER_EXAMPLE_V2).replace(_ANALYSIS_LINE, "").replace(_COVERED_RULE, _COVERED_RULE_V2)
+)
 TASK_LINE_V2 = "Grade the answer against each claim above."
 
 # A quote aimed at the grader rather than at the topic: it says nothing about the claim it is offered for.

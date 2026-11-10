@@ -1195,16 +1195,28 @@ class KeyPointCheck(BaseModel):
     )
 
 
-class ShortAnswerGradeV2(BaseModel):
-    """Prompt revision (grading area): the per-point checks come first, so the score is written after
-    the evidence for it. When there is one check per key point the service computes the points from the
-    checks and `points_earned` is only the fallback."""
+# The graders' v2 wording for "the answer has it" (short answers under PROMPTS_V2 "grading", recall under "tutor"). A rubric
+# line or a source claim is written from one way of saying or reaching the idea; an answer that gets there another valid
+# way has it too. One phrase, so the two graders cannot drift apart.
+IN_ANY_WORDING_OR_METHOD = "in any wording or by an equivalent valid method"
 
-    key_point_checks: List[KeyPointCheck] = Field(
-        default_factory=list,
-        description="One entry for each key point, in the order they were listed",
+
+class KeyPointCheckV2(KeyPointCheck):
+    """Prompt revision (grading area): a key point is an idea, met by any wording or valid method that gives it."""
+
+    result: Literal["met", "partly", "not_met"] = Field(
+        description=(
+            f"met: the answer gives the key point's idea, {IN_ANY_WORDING_OR_METHOD}. partly: the idea is touched on or "
+            "incomplete. not_met: it is missing or wrong, also when the answer uses the key point's words in a wrong statement."
+        )
     )
-    points_earned: float = Field(description="Points from 0 to the maximum given; agrees with key_point_checks")
+
+
+class ShortAnswerGradeV2(BaseModel):
+    """Prompt revision (grading area), for a question with no key points: the model gives the score. A question with
+    key points uses ShortAnswerChecksV2."""
+
+    points_earned: float = Field(description="Points from 0 to the maximum given")
     feedback: str = Field(description="2-3 sentences on what was good and what was missing")
     blamed_concept_id: Optional[str] = Field(
         default=None,
@@ -1231,7 +1243,7 @@ class ShortAnswerChecksV2(BaseModel):
     no score. The service computes the points from the checks (met 1, partly 0.5, not met 0), so there is no sum
     for the model to get wrong or to make agree."""
 
-    key_point_checks: List[KeyPointCheck] = Field(
+    key_point_checks: List[KeyPointCheckV2] = Field(
         min_length=1, description="One entry for each key point, in the order they were listed"
     )
     feedback: str = Field(description="2-3 sentences on what was good and what was missing")
@@ -1253,7 +1265,7 @@ class ShortAnswerChecksV2(BaseModel):
     @classmethod
     def example(cls) -> "ShortAnswerChecksV2":
         return cls(
-            key_point_checks=[KeyPointCheck(point="(mock)", result="not_met")],
+            key_point_checks=[KeyPointCheckV2(point="(mock)", result="not_met")],
             feedback="Mock grading: no model call was made.",
         )
 

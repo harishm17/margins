@@ -16,7 +16,7 @@ from app.services.llm.base import LLMBusyError, LLMError, LLMMessage
 from app.services.llm import untrusted
 from app.services.llm.factory import LLMFactory
 from app.prompt_revision import prompts_v2
-from app.services.llm.schemas import ShortAnswerChecksV2, ShortAnswerGrade, ShortAnswerGradeV2
+from app.services.llm.schemas import IN_ANY_WORDING_OR_METHOD, ShortAnswerChecksV2, ShortAnswerGrade, ShortAnswerGradeV2
 from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
@@ -134,17 +134,22 @@ def _short_answer_prompt_v2(
         )
     if key_points:
         # R5: the app computes the points from the checks (met 1, partly 0.5, not met 0), so the model gives no score.
+        # P-I1: a key point was written from the sample answer's own route, and "met when the answer states it" was read to
+        # the letter, so a right answer by another route lost the point. Both directions are named, because a looser reading
+        # alone would pass the right words in a wrong statement.
         task = (
-            "Check the answer against each key point, one entry per key point in the listed order: met when the answer states "
-            "it, partly when it is touched on or incomplete, not_met when it is missing or wrong. The app scores the answer from "
-            "these checks. Accept correct answers worded differently from the sample answer. Judge against this question and "
-            "its key points, not outside knowledge."
+            "Check the answer against each key point, one entry per key point in the listed order. Each key point names an "
+            "idea a right answer contains. It was written from the sample answer's way of getting there, so mark it met when "
+            f"the answer gives that idea {IN_ANY_WORDING_OR_METHOD}, partly when the idea is touched on or incomplete, and "
+            "not_met when it is missing or wrong. An answer that uses a key point's words in a statement that is wrong has "
+            "not met it. The app scores the answer from these checks. Ask for no more than the key points, and give no "
+            "credit for true statements that are beside them."
         )
     else:
         task = (
             f"Award points from 0 to {max_points} for how fully and accurately the answer responds to the question, with partial "
-            "credit for a partly correct answer. Accept correct answers worded differently from the sample answer. Judge against "
-            "this question, not outside knowledge."
+            f"credit for a partly correct answer. Accept a correct answer {IN_ANY_WORDING_OR_METHOD}, and give no credit for "
+            "true statements that do not answer the question."
         )
     task += " If the answer states a specific wrong idea, give it in misconception as the idea itself; a gap or a slip is not a misconception."
     blocks.append(task)
@@ -423,12 +428,8 @@ If the answer states a specific wrong idea, give it in misconception as the idea
                 given = [{'result': check.result} for check in grade.key_point_checks]
                 points = _points_from_criteria(given, max_points) or 0.0
         else:
+            # v1, and v2 for a question with no key points: the model's own score.
             points = _clamp_points(grade.points_earned, max_points)
-            if v2:
-                # One check per key point: the score is computed from them, not taken from the model's own sum.
-                from_checks = _points_from_criteria(criteria, max_points)
-                if from_checks is not None:
-                    points = from_checks
         return {
             'points_earned': points,
             # Derived from the clamped score, not the model's own verdict.

@@ -12,7 +12,8 @@ also has a category: right, right in other words, partly right, wrong, and one t
 wrong quantity or in the wrong unit (right_number_wrong_quantity) or the right keywords in a wrong statement
 (keyword_wrong). Per arm the report gives the agreement of the grader's band with the label (also without the answers
 marked borderline), agreement on pass or fail, the share of wrong answers marked right (not labelled full, graded at 70%
-or more) and of right answers marked wrong, and each category's scores. `pick_model` applies the rule fixed before the
+or more) and of right answers marked wrong, and each category's scores. Both kinds of wrong mark are gated (GATES;
+RECALL_GATES for --recall) and a failed gate makes the exit code 1. `pick_model` applies the rule fixed before the
 run for MODEL_GRADING (M3).
 
 The questions are items the A2 run generated from the CC BY-NC-SA corpora, and the answers are written against them, so
@@ -67,6 +68,18 @@ CATEGORIES = ("right", "other_words", "partly", "wrong", "right_number_wrong_qua
 BAR = 0.05
 AGREEMENT_SLACK = 0.02
 EPS = 1e-9
+# Gates on both kinds of wrong mark, per arm (P-I1). A prompt that reads the rubric more loosely must not pass wrong
+# answers, and one that reads it to the letter must not fail right ones, so neither rate is gated alone. The lines sit one
+# answer above what the v1 prompts scored on these datasets on 2026-11-10 (short answers, Haiku, two runs: 1 of 72 wrong
+# marked right, 0 of 48 right marked wrong; recall: 1 of 39 claims given false credit, 12 of 113 withheld).
+GATES = (
+    ("wrong_marked_right", "Wrong answers marked right", 0.03),
+    ("right_marked_wrong", "Right answers marked wrong", 0.03),
+)
+RECALL_GATES = (
+    ("false_credit", "Claims not covered that were marked covered", 0.06),
+    ("credit_withheld", "Covered claims not marked covered", 0.12),
+)
 
 
 def log(message: str = "") -> None:
@@ -226,6 +239,35 @@ def _mean(values: List[float]) -> Optional[float]:
     return sum(values) / len(values) if values else None
 
 
+def apply_gates(arms: Dict[str, Any], gates: Any) -> Dict[str, Any]:
+    """Each arm against each gate: the rate, the line and whether it passed. A rate with nothing to count does not pass."""
+    return {
+        arm: [
+            {"key": key, "label": label, "at_most": limit, **scores[key], "passed": scores[key]["rate"] is not None and scores[key]["rate"] <= limit + EPS}
+            for key, label, limit in gates
+        ]
+        for arm, scores in arms.items()
+    }
+
+
+def gates_passed(summary: Dict[str, Any]) -> bool:
+    return all(gate["passed"] for gates in summary["gates"].values() for gate in gates)
+
+
+def _gates_section(summary: Dict[str, Any]) -> List[str]:
+    if not summary.get("gates"):  # a summary stored before the gates existed
+        return []
+    names = list(summary["gates"])
+    first = summary["gates"][names[0]]
+    rows = [
+        [gate["label"], f"at most {_pct(gate['at_most'])}"]
+        + [f"{_count(summary['gates'][arm][index])}: {'pass' if summary['gates'][arm][index]['passed'] else 'FAIL'}" for arm in names]
+        for index, gate in enumerate(first)
+    ]
+    verdict = "All gates pass." if gates_passed(summary) else "A gate failed."
+    return ["", "## Gates", "", "Both kinds of wrong mark are gated, so a change cannot buy one with the other.", "", _table(["Gate", "Line"] + names, rows), "", verdict]
+
+
 def _arm_scores(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     scored = [r for r in rows if r["outcome"] == "ok"]
     plain = [r for r in scored if not r["borderline"]]
@@ -258,7 +300,8 @@ def _arm_scores(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
 def aggregate(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Scores per arm. Rows carry labels and grades only; answer text never enters the summary."""
     arms = list(dict.fromkeys(r["arm"] for r in rows))
-    return {"arms": {arm: _arm_scores([r for r in rows if r["arm"] == arm]) for arm in arms}}
+    scores = {arm: _arm_scores([r for r in rows if r["arm"] == arm]) for arm in arms}
+    return {"arms": scores, "gates": apply_gates(scores, GATES)}
 
 
 def pick_model(summary: Dict[str, Any]) -> Tuple[str, str]:
@@ -324,6 +367,7 @@ def render_report(summary: Dict[str, Any], meta: Dict[str, Any]) -> str:
             ],
         )
     )
+    out += _gates_section(summary)
     out += ["", "## By category", "", "Per arm: agreement with the label, share marked right (passed), mean score.", ""]
     categories = list(dict.fromkeys(c for a in names for c in arms[a]["categories"]))
     rows = []
@@ -490,7 +534,8 @@ def _recall_arm_scores(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
 def aggregate_recall(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Scores per arm. Rows carry labels and verdicts only; answer text never enters the summary."""
     arms = list(dict.fromkeys(r["arm"] for r in rows))
-    return {"arms": {arm: _recall_arm_scores([r for r in rows if r["arm"] == arm]) for arm in arms}}
+    scores = {arm: _recall_arm_scores([r for r in rows if r["arm"] == arm]) for arm in arms}
+    return {"arms": scores, "gates": apply_gates(scores, RECALL_GATES)}
 
 
 async def capture_recall_requests(dataset: List[Dict[str, Any]]) -> "_CapturePrompt":
@@ -548,6 +593,7 @@ def render_recall_report(summary: Dict[str, Any], meta: Dict[str, Any]) -> str:
         ["Reasoning gap agrees (covered claims with a gap label)", "reasoning_gap_agreement"],
     ]
     out.append(_table(["Score"] + names, [[label] + [_count(arms[a][key]) for a in names] for label, key in rows]))
+    out += _gates_section(summary)
     out += ["", "## By answer kind", "", "Per-claim verdict agreement, on answers that were graded.", ""]
     kinds = list(dict.fromkeys(k for a in names for k in arms[a]["by_kind"]))
     out.append(_table(["Kind"] + names, [[k] + [_count(arms[a]["by_kind"][k]) if k in arms[a]["by_kind"] else "n/a" for a in names] for k in kinds]))
@@ -653,7 +699,7 @@ async def run_recall(args: argparse.Namespace) -> int:
     report.write_text(render_recall_report(summary, meta))
     log(f"Cost: ${summary['run']['total_cost_usd']:.4f}")
     log(f"Report: {report}")
-    return 0
+    return _gate_exit(summary, args.mock)
 
 
 # ---------------------------------------------------------------------------- the run
@@ -800,7 +846,15 @@ async def run(args: argparse.Namespace) -> int:
     report.write_text(render_report(summary, meta))
     log(f"Cost: ${summary['run']['total_cost_usd']:.4f} ({', '.join(f'{a} ${c:.4f}' for a, c in summary['cost'].items())})")
     log(f"Report: {report}")
-    return 0
+    return _gate_exit(summary, args.mock)
+
+
+def _gate_exit(summary: Dict[str, Any], mock: bool) -> int:
+    """Logs each gate and gives the exit code: 1 when one failed. A mock run grades nothing, so its gates decide nothing."""
+    for arm, gates in summary["gates"].items():
+        for gate in gates:
+            log(f"  {'pass' if gate['passed'] else 'FAIL':<5} {arm}: {gate['label']}: {_count(gate)} (at most {_pct(gate['at_most'])})")
+    return 0 if mock or gates_passed(summary) else 1
 
 
 def main() -> int:

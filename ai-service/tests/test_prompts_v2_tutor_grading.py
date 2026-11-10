@@ -12,7 +12,7 @@ from app.services.exam_grader import ExamGrader
 from app.services.llm.mock_provider import MockProvider
 from app.services.llm.schemas import (
     ClaimVerdict,
-    KeyPointCheck,
+    KeyPointCheckV2,
     LeakVerdict,
     PracticeStep,
     PracticeTutorReply,
@@ -384,16 +384,7 @@ async def grade(reply, question=None, answer="An answer", thinking=None):
 
 
 def checks(*results):
-    return [KeyPointCheck(point=f"p{i}", result=r) for i, r in enumerate(results)]
-
-
-def test_grade_v2_schema_puts_the_checks_before_the_score():
-    order, _ = required_and_order(ShortAnswerGradeV2)
-    assert order.index("key_point_checks") < order.index("points_earned") < order.index("feedback")
-    assert "agrees with key_point_checks" in str(anthropic.transform_schema(ShortAnswerGradeV2))
-    assert list(anthropic.transform_schema(ShortAnswerGrade)["properties"])[0] == "points_earned"
-    # R5: with key points the app computes the score, so the model-facing schema has none.
-    assert "points_earned" not in ShortAnswerChecksV2.model_json_schema()["properties"]
+    return [KeyPointCheckV2(point=f"p{i}", result=r) for i, r in enumerate(results)]
 
 
 @pytest.mark.asyncio
