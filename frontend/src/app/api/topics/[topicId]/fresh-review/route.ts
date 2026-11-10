@@ -7,6 +7,7 @@
 
 import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { ownedTopic } from '@/server/owned'
 import { NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -23,10 +24,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     const limited = await enforceMutationLimit(session.user.id)
     if (limited) return limited
     const { topicId } = await params
-    const topic = await prisma.topic.findFirst({
-      where: { id: topicId, project: { userId: session.user.id } },
-      select: { id: true, projectId: true },
-    })
+    const topic = await ownedTopic(session.user.id, topicId)
     if (!topic) return apiNotFound('Topic not found')
 
     const plan = await planFreshReview(session.user.id, topic)

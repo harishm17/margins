@@ -156,7 +156,7 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
       where: { projectId: courseId, userId, jobType: 'extract_topics' },
       orderBy: { createdAt: 'desc' },
       take: 3,
-      select: { id: true, status: true, stage: true, progressPercent: true, createdAt: true, errorCode: true, errorMessage: true },
+      select: { id: true, status: true, stage: true, progressPercent: true, createdAt: true, errorCode: true },
     }),
     typicalReadSeconds(),
   ])
@@ -247,7 +247,7 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
     extractJob: activeExtract ? toJobRef(activeExtract) : null,
     extractFailure:
       !activeExtract && latestExtract?.status === 'failed'
-        ? describeJobFailure(latestExtract.errorCode, latestExtract.errorMessage, 'extract_topics')
+        ? describeJobFailure(latestExtract.errorCode, 'extract_topics')
         : null,
     typicalReadSeconds: typicalSeconds,
   }
@@ -304,7 +304,7 @@ export async function getGenerationState(userId: string, course: CourseShell): P
       where: { projectId: course.id, userId, jobType: 'generate_content', targetKey: { not: null } },
       orderBy: { createdAt: 'desc' },
       take: 600,
-      select: { id: true, targetKey: true, status: true, errorCode: true, errorMessage: true },
+      select: { id: true, targetKey: true, status: true, errorCode: true },
     }),
   ])
 

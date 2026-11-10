@@ -134,7 +134,7 @@ async def check_support(items: List[Dict[str, Any]], chunks: List[Dict[str, Any]
         if verdict.supported and _quotes_hold(verdict, allowed, chunks):
             kept.append(item)
         else:
-            logger.info("Dropped unsupported item %s: %.80s", item_id, _question_text(item))
+            logger.info("Dropped unsupported item %s", item_id)
     dropped = len(items) - len(kept)
     if dropped:
         logger.info("Support check dropped %s of %s items", dropped, len(items))

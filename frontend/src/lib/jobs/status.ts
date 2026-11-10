@@ -14,7 +14,6 @@ export const JOB_STATUS_SELECT = {
   progressPercent: true,
   retryable: true,
   errorCode: true,
-  errorMessage: true,
   attemptCount: true,
   resultData: true,
   targetKey: true,

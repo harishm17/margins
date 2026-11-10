@@ -21,6 +21,7 @@
  *   level 3 on their concepts.
  */
 
+import { ownedTopic, type OwnedTopic } from '@/server/owned'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { requestRecallGrade, type RecallClaimVerdict, type RecallGradeAnswer, type RecallGradeRequest } from '@/lib/ai-service/recall'
@@ -72,8 +73,8 @@ export type RecallTarget = {
 export type TargetRequest = { kind: 'recall' | 'teach_back'; objectiveIndex?: number | null; conceptId?: string | null }
 
 /** The objectives' prompts as stored with the topic's concepts. */
-export async function loadRecallPrompts(topicId: string): Promise<Map<number, string>> {
-  const row = await prisma.topicContent.findUnique({ where: { topicId_contentType: { topicId, contentType: 'concept_prompts' } }, select: { contentData: true } })
+export async function loadRecallPrompts(topic: OwnedTopic): Promise<Map<number, string>> {
+  const row = await prisma.topicContent.findUnique({ where: { topicId_contentType: { topicId: topic.id, contentType: 'concept_prompts' } }, select: { contentData: true } })
   const list: unknown[] = isRecord(row?.contentData) && Array.isArray(row.contentData.recall_prompts) ? row.contentData.recall_prompts : []
   const prompts = new Map<number, string>()
   for (const entry of list) {
@@ -84,9 +85,9 @@ export async function loadRecallPrompts(topicId: string): Promise<Map<number, st
 }
 
 /** The topic's active concepts that have claims to grade against, in order. A concept with no claims cannot be recalled. */
-export async function loadRecallConcepts(topicId: string): Promise<RecallConcept[]> {
+export async function loadRecallConcepts(topic: OwnedTopic): Promise<RecallConcept[]> {
   const rows = await prisma.concept.findMany({
-    where: { topicId, status: 'active' },
+    where: { topicId: topic.id, status: 'active' },
     orderBy: { orderIndex: 'asc' },
     select: {
       id: true,
@@ -243,7 +244,9 @@ function recallTargets(concepts: RecallConcept[], prompts: Awaited<ReturnType<ty
  * "recalled"), so the path cannot tell from that alone whether the step is finished; this is what it shows.
  */
 export async function loadRecallProgress(userId: string, topicId: string): Promise<{ answered: number; total: number }> {
-  const [concepts, prompts] = await Promise.all([loadRecallConcepts(topicId), loadRecallPrompts(topicId)])
+  const topic = await ownedTopic(userId, topicId)
+  if (!topic) return { answered: 0, total: 0 }
+  const [concepts, prompts] = await Promise.all([loadRecallConcepts(topic), loadRecallPrompts(topic)])
   const targets = recallTargets(concepts, prompts, 'recall', null)
   if (targets.length === 0) return { answered: 0, total: 0 }
   const attempts = await prisma.recallAttempt.findMany({ where: { userId, topicId, kind: 'recall' }, distinct: ['objectiveIndex'], select: { objectiveIndex: true } })
@@ -253,10 +256,10 @@ export async function loadRecallProgress(userId: string, topicId: string): Promi
 
 /** The cards of the recall step. A topic with no concept that has claims has none. */
 export async function loadRecallState(userId: string, topicId: string, options: { mode?: 'recall' | 'teach_back'; conceptId?: string | null } = {}): Promise<RecallState | null> {
-  const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true } })
+  const topic = await ownedTopic(userId, topicId)
   if (!topic) return null
   const mode = options.mode ?? 'recall'
-  const [concepts, prompts] = await Promise.all([loadRecallConcepts(topicId), loadRecallPrompts(topicId)])
+  const [concepts, prompts] = await Promise.all([loadRecallConcepts(topic), loadRecallPrompts(topic)])
   const targets = recallTargets(concepts, prompts, mode, options.conceptId ?? null)
   if (targets.length === 0) return { mode, cards: [] }
 
@@ -360,13 +363,13 @@ async function repeatOf(db: Prisma.TransactionClient, userId: string, topicId: s
 
 export async function submitRecall(input: SubmitInput, grade: (request: RecallGradeRequest) => Promise<RecallGradeAnswer> = requestRecallGrade): Promise<SubmitResult> {
   const { userId, topicId } = input
-  const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true, projectId: true } })
+  const topic = await ownedTopic(userId, topicId)
   if (!topic) return { status: 'not_found' }
   const answer = input.answer.trim()
   if (!answer && input.idk !== true) return { status: 'invalid', message: 'Write what you remember first.' }
   if (answer.length > MAX_RECALL_ANSWER_CHARS) return { status: 'invalid', message: `Keep it under ${MAX_RECALL_ANSWER_CHARS} characters.` }
 
-  const [concepts, prompts] = await Promise.all([loadRecallConcepts(topicId), loadRecallPrompts(topicId)])
+  const [concepts, prompts] = await Promise.all([loadRecallConcepts(topic), loadRecallPrompts(topic)])
   const resolved = resolveTarget(concepts, prompts, input)
   if (!resolved) return { status: 'not_ready' }
   const target = withItemKey(topicId, resolved)
@@ -509,9 +512,10 @@ export async function revealMissed(input: { userId: string; topicId: string; att
     where: { id: attemptId, userId, topicId },
     select: { id: true, kind: true, objectiveIndex: true, result: true, topic: { select: { projectId: true } } },
   })
-  if (!attempt || !isRecord(attempt.result)) return { status: 'not_found' }
+  const topic = attempt ? await ownedTopic(userId, topicId) : null
+  if (!attempt || !topic || !isRecord(attempt.result)) return { status: 'not_found' }
 
-  const concepts = await loadRecallConcepts(topicId)
+  const concepts = await loadRecallConcepts(topic)
   const stored = readStoredClaims(attempt.result)
   const revealed = revealedClaims(stored, claimLookup(concepts))
   const conceptIds = [...new Set(stored.filter((claim) => claim.verdict !== 'covered').map((claim) => claim.concept_id).filter(Boolean))]

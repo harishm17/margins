@@ -20,7 +20,7 @@ from app.services.llm.factory import LLMFactory
 from app.services.llm.mock_provider import MockProvider
 from app.services.llm.usage import record_usage
 from tests.billing_helpers import UsageProvider, install_billed
-from tests.db_helpers import seed_project, seed_usage, seed_user
+from tests.db_helpers import seed_voice_session, seed_project, seed_usage, seed_user
 from tests.test_grading_waits import SHORT
 from tests.test_tutor_practice import request as practice_request
 from tests.test_tutor_reader import request as reader_request
@@ -59,6 +59,7 @@ async def seed_student(db):
     """The user and project the route bodies name."""
     await seed_user(db, "u1")
     await db.execute("INSERT INTO projects (id, user_id, name, updated_at) VALUES ('p1', 'u1', 'P', NOW())")
+    await seed_voice_session(db, "u1", "p1", session_id="s1")
 
 
 async def post(path, body):

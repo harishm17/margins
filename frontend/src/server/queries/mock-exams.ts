@@ -1,3 +1,4 @@
+import { ownedExam } from '@/server/owned'
 import { areRecordIds } from '@/lib/ids'
 import { prisma } from '@/lib/db/prisma'
 import { gradeExamTarget } from '@/lib/jobs/active-jobs'
@@ -141,10 +142,11 @@ export async function getExamLobby(userId: string, courseId: string, examId: str
       projectId: true,
     },
   })
-  if (!exam) return null
+  const checked = await ownedExam(userId, examId)
+  if (!exam || !checked) return null
 
   // An attempt whose time ran out while the student was away is submitted here, as saved.
-  const state = await loadAttemptState(userId, { id: exam.id, projectId: exam.projectId, durationMinutes: exam.durationMinutes })
+  const state = await loadAttemptState(userId, checked)
 
   const [counts, submissions] = await Promise.all([
     questionCounts([exam.id]),
@@ -224,9 +226,10 @@ export async function getTakeState(userId: string, courseId: string, examId: str
     where: { id: examId, projectId: courseId, project: { userId } },
     select: { id: true, name: true, createdAt: true, durationMinutes: true, questions: true, projectId: true },
   })
-  if (!exam) return { kind: 'missing' }
+  const checked = await ownedExam(userId, examId)
+  if (!exam || !checked) return { kind: 'missing' }
 
-  const state = await loadAttemptState(userId, { id: exam.id, projectId: exam.projectId, durationMinutes: exam.durationMinutes })
+  const state = await loadAttemptState(userId, checked)
   if (state.kind === 'none') return { kind: 'none' }
   if (state.kind === 'finalized') return { kind: 'finalized', submissionId: state.submissionId }
   const titles = await getExamTitles(userId, courseId)
@@ -261,7 +264,6 @@ export type ExamResult =
       /** Grading is waiting for the AI to be available again (the answers are saved). */
       waitingForAi: boolean
       errorCode: string | null
-      errorMessage: string | null
     })
   | (ResultBase & {
       status: 'graded'
@@ -318,7 +320,7 @@ export async function getExamResult(
     const job = await prisma.processingJob.findFirst({
       where: { userId, jobType: 'grade_exam', targetKey: gradeExamTarget(submission.id) },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true, stage: true, errorCode: true, errorMessage: true },
+      select: { id: true, status: true, stage: true, errorCode: true },
     })
     // The job can finish, and write the grading, between the read of the submission above and this read of the job (the
     // mock grades in milliseconds): a job that is done and a submission with no grading in it is read again, once, not
@@ -332,7 +334,6 @@ export async function getExamResult(
       jobId: running ? (job?.id ?? null) : null,
       waitingForAi: isWaitingForAi(job),
       errorCode: job?.errorCode ?? null,
-      errorMessage: job?.errorMessage ?? null,
     }
   }
 

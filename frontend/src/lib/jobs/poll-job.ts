@@ -11,6 +11,7 @@
  * so the logic runs under plain Node in tests. The React hook is in hooks/useJobPolling.ts.
  */
 
+import { aiMessage } from '@/lib/ai/messages'
 import { allowanceMessage } from '@/lib/budget/copy'
 
 export type NormalizedJobState = 'queued' | 'processing' | 'completed' | 'failed'
@@ -30,7 +31,6 @@ export type NormalizedJob = {
   status: NormalizedJobState
   progressPercent: number
   stage?: string | null
-  errorMessage?: string | null
   errorCode?: string | null
   retryable?: boolean
   /** Attempts made so far. A queued job with attempts made is waiting for its retry. */
@@ -85,7 +85,6 @@ export const normalizeJob = (data: Record<string, unknown>): NormalizedJob => ({
   status: normalizeStatus(data.status),
   progressPercent: Number(data.progressPercent || 0),
   stage: data.stage ? String(data.stage) : null,
-  errorMessage: data.errorMessage ? String(data.errorMessage) : null,
   errorCode: data.errorCode ? String(data.errorCode) : null,
   retryable: typeof data.retryable === 'boolean' ? data.retryable : undefined,
   attemptCount: typeof data.attemptCount === 'number' ? data.attemptCount : undefined,
@@ -203,7 +202,7 @@ export async function pollJobUntilDone(jobId: string, options: PollOptions = {})
 
       if (job.status === 'completed') return { state: 'completed', job }
       if (job.status === 'failed') {
-        return { state: 'failed', job, error: job.errorMessage || 'Job failed' }
+        return { state: 'failed', job, error: aiMessage(job.errorCode, job.jobType).text }
       }
 
       const progressKey = `${job.status}:${job.stage ?? ''}:${job.progressPercent}`

@@ -40,9 +40,11 @@ from pydantic import BaseModel, ValidationError
 
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_one
+from app.errors import describe_exception, public_message
 from app.models.jobs import JobPayload
 from app.services import ai_status, ops
 from app.services.billing import billed
+from app.services.ownership import NotOwnedError, assert_owns
 from app.services.budget import DailyBudgetExceeded, allowance_today
 from app.services.content_generator.context import NoSourceMaterialError
 from app.services.document_processor.chunker import NoContentError
@@ -84,6 +86,48 @@ class PermanentJobError(Exception):
         super().__init__(message)
         if code:
             self.code = code
+
+
+# The ids a job's payload can carry, and the kind of thing each names (see app/services/ownership.py).
+_PAYLOAD_IDS = {
+    "projectId": "project_id",
+    "topicId": "topic_id",
+    "unitId": "unit_id",
+    "materialId": "material_id",
+    "examId": "exam_id",
+    "attemptId": "attempt_id",
+    "submissionId": "submission_id",
+}
+
+
+# What a job says when the row it names is not there for its user. A row that is someone else's gets the same code as
+# one that was deleted, so the job's error does not tell the two apart.
+_NOT_FOUND_CODES = {
+    "validate_material": "MATERIAL_NOT_FOUND",
+    "chunk_material": "MATERIAL_NOT_FOUND",
+    "profile_exam": "MATERIAL_NOT_FOUND",
+    "grade_exam": "SUBMISSION_NOT_FOUND",
+    "grade_quiz": "QUIZ_SUBMISSION_NOT_FOUND",
+}
+
+
+async def assert_job_owns_payload(user_id: str, data: Optional[Dict[str, Any]], job_type: str = "") -> None:
+    """Fail the job for good, with a fixed code, unless its user owns every id in its payload (SEC-L1).
+
+    The web app writes the payload for a user's own request, but a job is also reachable by anyone who holds the
+    internal token, and a wrong id must never read or write another user's rows. Checked by the keys the payload has,
+    so a job type added later is covered without a list to update.
+    """
+    data = data or {}
+    found = {kind: data[key] for key, kind in _PAYLOAD_IDS.items() if isinstance(data.get(key), str) and data[key]}
+    topic_ids = data.get("topicIds")
+    try:
+        if found:
+            await assert_owns(user_id, **found)
+        for topic_id in topic_ids if isinstance(topic_ids, list) else []:
+            await assert_owns(user_id, topic_id=str(topic_id))
+    except NotOwnedError as exc:
+        raise PermanentJobError("not found", code=_NOT_FOUND_CODES.get(job_type, "NOT_FOUND")) from exc
 
 
 # The stage of a job that is waiting for the AI (or the allowance) instead of failing.
@@ -324,8 +368,8 @@ async def release_lease(job: JobContext) -> None:
             job.attempt,
         )
     except Exception as exc:
-        logger.warning("Could not release the lease of job %s: %s", job.id, exc)
-        await ops.note("lease_release_failed", f"job {job.id}: {exc!r}")
+        logger.warning("Could not release the lease of job %s: %s", job.id, describe_exception(exc))
+        await ops.note("lease_release_failed", f"job {job.id}: {describe_exception(exc)}")
 
 
 async def drain_jobs(grace_seconds: Optional[float] = None) -> None:
@@ -373,8 +417,8 @@ async def _heartbeat(job: JobContext, on_lost: Optional[Callable[[], None]] = No
                 float(job.lease_seconds),
             )
         except Exception as exc:  # a database blip must not kill the handler
-            logger.warning("Lease renewal failed for job %s: %s", job.id, exc)
-            await ops.note("lease_renewal_failed", f"job {job.id}: {exc!r}")
+            logger.warning("Lease renewal failed for job %s: %s", job.id, describe_exception(exc))
+            await ops.note("lease_renewal_failed", f"job {job.id}: {describe_exception(exc)}")
             continue
         if row is None:
             logger.warning("Job %s lost its lease; another worker has taken it, stopping the handler", job.id)
@@ -438,7 +482,6 @@ async def _fail(
     job: JobContext,
     error_code: str,
     retryable: bool,
-    message: str,
     usages,
     retry_in: Optional[float] = None,
 ) -> Optional[str]:
@@ -449,6 +492,8 @@ async def _fail(
     A job back in `pending` gets `lease_until` set to when the reaper should send it again if
     nothing has claimed it by then: after the dispatcher's own wait (`retry_in`) plus the pending
     re-dispatch threshold, so the reaper never races a dispatcher that is still retrying.
+
+    The row keeps the code and that code's public message; the exception's own text is never stored (SEC-L3).
     """
     summary, input_tokens, output_tokens, cost = _usage_columns(usages)
     redispatch_after = float(retry_in or 0) + settings.JOB_PENDING_REDISPATCH_SECONDS
@@ -471,7 +516,7 @@ async def _fail(
         job.id,
         job.attempt,
         error_code,
-        message[:2000],
+        public_message(error_code),
         retryable,
         input_tokens,
         output_tokens,
@@ -515,7 +560,7 @@ async def _defer(job: JobContext, exc: Exception, usages) -> bool:
         job.id,
         job.attempt,
         code,
-        str(exc)[:2000],
+        public_message(code),
         float(wait),
         input_tokens,
         output_tokens,
@@ -584,18 +629,19 @@ def job_handler(
             try:
                 async with _job_scope(job) as usages:
                     try:
+                        await assert_job_owns_payload(job.user_id, payload.data, job.job_type)
                         if uses_llm:
                             await _enforce_ai_ready(job)
                         outcome = await _run_handler(handler(payload, job), job)
                     except Exception as exc:
                         if wait_for_ai and waits_for_ai(exc) and await _defer(job, exc, usages):
-                            logger.warning("%s job %s is waiting for the AI: %s", label, job.id, exc)
+                            logger.warning("%s job %s is waiting for the AI: %s", label, job.id, describe_exception(exc))
                             # 200: nothing for the dispatcher to retry; the reaper sends it later.
                             return {"status": "deferred", "jobId": job.id, "reason": getattr(exc, "code", None)}
-                        logger.error("%s job %s failed: %s", label, job.id, exc)
+                        logger.error("%s job %s failed", label, job.id, exc_info=exc)
                         error_code, retryable, status_code = classify_failure(exc, default_error_code)
                         wait = retry_after(exc)
-                        await _fail(job, error_code, retryable, str(exc), usages, retry_in=wait)
+                        await _fail(job, error_code, retryable, usages, retry_in=wait)
                         if after_failure is not None:
                             try:
                                 await after_failure(payload, job, exc)
@@ -603,7 +649,7 @@ def job_handler(
                                 logger.exception("Follow-up work after failed %s job %s failed", job_type, job.id)
                         raise HTTPException(
                             status_code=status_code,
-                            detail=f"{label} failed: {exc}",
+                            detail=error_code,
                             headers={"Retry-After": str(wait)} if wait else None,
                         ) from exc
                     await _complete(job, outcome, usages)

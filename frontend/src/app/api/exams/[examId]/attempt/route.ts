@@ -11,6 +11,7 @@
 import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
+import { ownedExam } from '@/server/owned'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -27,7 +28,6 @@ import {
   ATTEMPT_IN_PROGRESS,
   countQuestions,
   finalizeAttempt,
-  findExamForUser,
   findInProgressAttempt,
   loadAttemptState,
   startAttempt,
@@ -50,7 +50,7 @@ export async function GET(_request: NextRequest, { params }: Context) {
   try {
     const session = await requireAuth()
     const { examId } = await params
-    const exam = await findExamForUser(session.user.id, examId)
+    const exam = await ownedExam(session.user.id, examId)
     if (!exam) return apiNotFound('Exam not found')
 
     const state = await loadAttemptState(session.user.id, exam)
@@ -73,7 +73,7 @@ export async function POST(_request: NextRequest, { params }: Context) {
     const limited = await enforceMutationLimit(session.user.id)
     if (limited) return limited
     const { examId } = await params
-    const exam = await findExamForUser(session.user.id, examId)
+    const exam = await ownedExam(session.user.id, examId)
     if (!exam) return apiNotFound('Exam not found')
 
     // An attempt that ran out of time while the student was away is submitted first, so
@@ -93,12 +93,12 @@ export async function PUT(request: NextRequest, { params }: Context) {
     const limited = await enforceMutationLimit(session.user.id)
     if (limited) return limited
     const { examId } = await params
-    const exam = await findExamForUser(session.user.id, examId)
+    const exam = await ownedExam(session.user.id, examId)
     if (!exam) return apiNotFound('Exam not found')
 
     const body = await readJson(request, examAnswersSchema, { maxBytes: EXAM_ANSWERS_MAX_BYTES })
     if (!body.ok) return body.response
-    const answers = sanitizeAnswers(body.data.answers, await countQuestions(examId))
+    const answers = sanitizeAnswers(body.data.answers, await countQuestions(exam))
     if (!answers) return apiInvalidInput('answers must be an object')
 
     const attempt = await findInProgressAttempt(session.user.id, examId)

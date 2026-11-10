@@ -168,7 +168,7 @@ class TestFailureHandling:
             await make_handler(body)(payload(job_id))
 
         assert raised.value.status_code == status_code
-        assert raised.value.detail.startswith("Test job failed: ")
+        assert raised.value.detail == code  # the dispatcher is told the code, never the exception's words
         job = await get_job(db, job_id)
         assert (job["error_code"], job["retryable"]) == (code, retryable)
         if retryable:
@@ -395,13 +395,13 @@ class TestDailyBudget:
             await handler(payload(job_id))
 
         assert raised.value.status_code == 400
-        assert "Daily AI usage limit" in raised.value.detail
+        assert raised.value.detail == "LLM_DAILY_BUDGET"
         assert calls == []
         job = await get_job(db, job_id)
         assert (job["status"], job["error_code"], job["retryable"]) == (
             "failed", "LLM_DAILY_BUDGET", False,
         )
-        assert "$1.25 of $1.00" in job["error_message"]
+        assert job["error_message"] == "You've used today's AI allowance."
 
     async def test_other_users_and_earlier_days_do_not_count(self, db, user_id):
         other = await seed_user(db)

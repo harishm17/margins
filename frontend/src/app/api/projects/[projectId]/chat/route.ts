@@ -1,3 +1,4 @@
+import { readSession } from '@/lib/auth/get-session'
 /**
  * POST /api/projects/[projectId]/chat: ask a question about the project's materials.
  *
@@ -19,8 +20,6 @@ import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { ApiErrorCode, apiError, apiNotFound, apiUnauthorized } from '@/lib/api/errors'
 import { createRateLimiter } from '@/lib/api/rate-limit'
@@ -77,7 +76,7 @@ async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ projectId: string }> }
 ) {
-  const session = await getServerSession(authOptions)
+  const session = await readSession()
   const userId = session?.user?.id
   if (!userId) return apiUnauthorized()
 

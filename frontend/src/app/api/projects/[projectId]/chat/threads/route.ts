@@ -1,11 +1,11 @@
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
+import { readSession } from '@/lib/auth/get-session'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { ownedProject as owned } from '@/server/owned'
 import { apiInvalidInput, apiNotFound, apiUnauthorized } from '@/lib/api/errors'
 import { MAX_THREAD_TITLE_CHARS } from '@/lib/chat/server'
 
@@ -14,11 +14,10 @@ export const dynamic = 'force-dynamic'
 const MAX_THREADS = 100
 
 async function ownedProject(projectId: string) {
-  const session = await getServerSession(authOptions)
+  const session = await readSession()
   const userId = session?.user?.id
   if (!userId) return { userId: null, project: null }
-  const project = await prisma.project.findFirst({ where: { id: projectId, userId }, select: { id: true } })
-  return { userId, project }
+  return { userId, project: await owned(userId, projectId) }
 }
 
 // Kept for API clients; the UI reads this through server queries.

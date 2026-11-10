@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.api.routes import chat as chat_route
 from app.config import settings
 from app.main import app
+from app.services.ownership import NotOwnedError
 from app.services.budget import Allowance
 from app.services import chat as chat_service
 from app.services.embeddings import search
@@ -648,8 +649,9 @@ def wired(monkeypatch):
     """The route with the database, retrieval and budget replaced by stand-ins."""
     state = {"chunks": [chunk("a", text="Hashing maps keys to buckets.")], "budget": None, "project": {"id": "p1"}}
 
-    async def execute_one(sql, *args):
-        return state["project"]
+    async def assert_owns(user_id, **ids):
+        if state["project"] is None:
+            raise NotOwnedError()
 
     async def allowance(user_id):
         state["budget_user"] = user_id
@@ -672,7 +674,7 @@ def wired(monkeypatch):
         return route.model_copy(update={"concept_ids": [f"id-{name}" for name in route.concepts]})
 
     state["concepts"] = []
-    monkeypatch.setattr(chat_route, "execute_one", execute_one)
+    monkeypatch.setattr(chat_route, "assert_owns", assert_owns)
     monkeypatch.setattr(chat_route, "allowance_today", allowance)
     monkeypatch.setattr(chat_service, "retrieve", retrieve)
     monkeypatch.setattr(chat_service, "topic_concept_names", concept_names)
@@ -758,7 +760,7 @@ class TestRoute:
         response = post(client)
         assert response.status_code == 429
         assert response.json()["error_code"] == "LLM_DAILY_BUDGET"
-        assert "$3.10" in response.json()["detail"] and response.json()["budget_reason"] == "user"
+        assert "$" not in response.json()["detail"] and response.json()["budget_reason"] == "user"
         assert "retrieve_args" not in wired and wired["provider"].calls == []
 
     def test_nothing_retrieved_short_circuits_without_a_model_call(self, client, wired):

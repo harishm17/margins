@@ -48,7 +48,7 @@ export async function GET(
     const gradingJob = await prisma.processingJob.findFirst({
       where: { userId: session.user.id, jobType: 'grade_exam', targetKey: gradeExamTarget(submission.id) },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true, errorCode: true, errorMessage: true },
+      select: { id: true, status: true, errorCode: true },
     })
     const jobRunning = gradingJob?.status === 'pending' || gradingJob?.status === 'processing'
 

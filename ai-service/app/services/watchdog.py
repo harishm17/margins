@@ -30,6 +30,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from app.errors import describe_exception
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_one, execute_query, execute_update
 from app.services import ops
@@ -379,7 +380,7 @@ async def _run_check(name: str, check: Callable[[], Awaitable[list[Finding]]]) -
     try:
         return await check()
     except Exception as exc:
-        logger.warning("Watchdog check %s failed: %r", name, exc)
+        logger.warning("Watchdog check %s failed: %s", name, exc)
         return [Finding(f"check_failed:{name}", "watchdog check failed",
                         f"The {name} check could not run: {type(exc).__name__}.",
-                        detail=str(exc)[:200])]
+                        detail=describe_exception(exc))]

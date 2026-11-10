@@ -32,6 +32,7 @@ import logging
 import time
 from typing import Any, Dict
 
+from app.errors import describe_exception, public_message
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_query
 from app.services import ai_status, ops
@@ -68,7 +69,7 @@ async def _redispatch(rows) -> int:
             sent += 1
         except Exception as exc:
             logger.error("Could not re-dispatch job %s: %s", job["id"], exc)
-            await ops.note("dispatch_failed", f"re-dispatch of {job['job_type']} job {job['id']}: {exc!r}")
+            await ops.note("dispatch_failed", f"re-dispatch of {job['job_type']} job {job['id']}: {describe_exception(exc)}")
     return sent
 
 
@@ -79,7 +80,7 @@ async def reap_expired_jobs() -> Dict[str, int]:
         UPDATE processing_jobs
         SET status = 'failed',
             error_code = 'JOB_LEASE_EXPIRED',
-            error_message = 'The worker running this job stopped responding.',
+            error_message = $1,
             retryable = TRUE,
             completed_at = {UTC_NOW},
             lease_until = NULL
@@ -87,7 +88,8 @@ async def reap_expired_jobs() -> Dict[str, int]:
           AND (lease_until IS NULL OR lease_until < {UTC_NOW})
           AND attempt_count >= max_attempts
         RETURNING id
-        """
+        """,
+        public_message("JOB_LEASE_EXPIRED"),
     )
     stale = await execute_query(
         f"""
@@ -115,8 +117,7 @@ async def reap_expired_jobs() -> Dict[str, int]:
         UPDATE processing_jobs
         SET status = 'failed',
             error_code = 'JOB_DISPATCH_FAILED',
-            error_message = 'The job could not be started: it was dispatched ' || dispatch_count
-                || ' more times and nothing picked it up.',
+            error_message = $3,
             retryable = TRUE,
             completed_at = {UTC_NOW}
         WHERE {due} AND dispatch_count >= $2
@@ -124,6 +125,7 @@ async def reap_expired_jobs() -> Dict[str, int]:
         """,
         threshold,
         settings.JOB_MAX_REDISPATCHES,
+        public_message("JOB_DISPATCH_FAILED"),
     )
     pending = await execute_query(
         f"""
@@ -244,12 +246,12 @@ async def reaper_loop() -> None:
             await reap_expired_jobs()
         except Exception as exc:
             logger.exception("Job reaper run failed")
-            await ops.note("reaper_failed", repr(exc))
+            await ops.note("reaper_failed", describe_exception(exc))
         try:
             await drain_pending_deletions()
         except Exception as exc:
             logger.exception("File deletion queue run failed")
-            await ops.note("file_deletion_queue_failed", repr(exc))
+            await ops.note("file_deletion_queue_failed", describe_exception(exc))
         if settings.WATCHDOG_INTERVAL_SECONDS > 0 and time.monotonic() >= watchdog_due:
             watchdog_due = time.monotonic() + settings.WATCHDOG_INTERVAL_SECONDS
             await run_watchdog()

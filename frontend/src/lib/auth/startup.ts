@@ -1,5 +1,6 @@
 import { googleOAuthSettings } from './google-config'
 import { resolveSpendKeySecret } from '@/lib/account/spend-key'
+import { resolveEnvironment } from '@/lib/ops/environment'
 import { resolveAuthSecret } from './secret'
 import { isDeployed, type Env } from './site'
 import { testLoginBlocker, testLoginRequested } from './test-login'
@@ -8,7 +9,9 @@ import { testLoginBlocker, testLoginRequested } from './test-login'
  * Checks the sign-in settings when the server starts, and throws if they are unsafe:
  * - production needs NEXTAUTH_SECRET (secret.ts);
  * - a deployed site needs a real Google OAuth client, because Google is the only way to sign in;
- * - the test sign-in may only be turned on for a local site.
+ * - the test sign-in may only be turned on for a local site;
+ * - ENVIRONMENT is stated (there is no default), a deployed site says production, and anything but a development
+ *   server holds the AI_INTERNAL_TOKEN it needs to call the AI service (SEC-L2).
  */
 export function checkAuthStartup(env: Env = process.env): void {
   // `next build` only compiles pages; the checks are for the server that will serve them.
@@ -24,6 +27,19 @@ export function checkAuthStartup(env: Env = process.env): void {
           'only runs on a local site (NEXTAUTH_URL on localhost). Remove ENABLE_TEST_LOGIN.'
       )
     }
+  }
+
+  const environment = resolveEnvironment(env)
+  if (isDeployed(env) && environment !== 'production') {
+    throw new Error(
+      `ENVIRONMENT is ${environment}, but this server can be reached by other people. Set ENVIRONMENT=production.`
+    )
+  }
+  if (environment !== null && environment !== 'development' && !env.AI_INTERNAL_TOKEN?.trim()) {
+    throw new Error(
+      'AI_INTERNAL_TOKEN is not set. The AI service refuses every call without it outside development; set the same ' +
+        'long random value (for example `openssl rand -hex 32`) in both services.'
+    )
   }
 
   if (isDeployed(env) && !googleOAuthSettings(env)) {

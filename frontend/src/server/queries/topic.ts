@@ -208,10 +208,10 @@ export const getTopicPage = cache(async function getTopicPage(
       where: { userId, jobType: 'generate_content', targetKey: { startsWith: `content:${topicId}:` } },
       orderBy: { createdAt: 'desc' },
       take: 20,
-      select: { id: true, targetKey: true, status: true, errorCode: true, errorMessage: true },
+      select: { id: true, targetKey: true, status: true, errorCode: true },
     }),
-    prisma.topic.findUnique({
-      where: { id: topicId },
+    prisma.topic.findFirst({
+      where: { id: topicId, project: { userId } },
       select: { objectives: true, prerequisiteIds: true, estimatedMinutes: true, keywords: true },
     }),
     prisma.topicSource.findMany({

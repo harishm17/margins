@@ -38,6 +38,10 @@ async def test_quiz_job_reports_dropped_unsupported(db, world):
 
 
 async def test_exam_job_reports_dropped_unsupported(db, world):
+    for topic_id in ("t1", "t2"):
+        await db.execute(
+            "INSERT INTO topics (id, project_id, name, order_index) VALUES ($1, $2, $1, 0)", topic_id, world.project_id
+        )
     job_id = await seed_job(db, world.user_id, project_id=world.project_id)
     payload = JobPayload(
         jobId=job_id, jobType="generate_exam",

@@ -1,5 +1,6 @@
 import { logServerError } from '@/lib/ops/log'
 import { prisma } from '@/lib/db/prisma'
+import { ownedTopic, type OwnedTopic } from '@/server/owned'
 import { parsePracticeProblems } from '@/features/topic/content'
 import {
   cleanRungs,
@@ -60,9 +61,9 @@ export type PracticeSaveResult =
   | { status: 'stale' }
 
 /** The practice problems of a topic as the page shows them, with the content row they belong to. */
-export async function currentPractice(topicId: string) {
+export async function currentPractice(topic: OwnedTopic) {
   const row = await prisma.topicContent.findUnique({
-    where: { topicId_contentType: { topicId, contentType: 'interactive_examples' } },
+    where: { topicId_contentType: { topicId: topic.id, contentType: 'interactive_examples' } },
     select: { id: true, contentData: true, updatedAt: true },
   })
   if (!row) return null
@@ -85,10 +86,10 @@ export async function currentPractice(topicId: string) {
  */
 export async function savePracticeProgress(
   userId: string,
-  topic: { id: string; projectId: string },
+  topic: OwnedTopic,
   input: PracticeSaveInput
 ): Promise<PracticeSaveResult> {
-  const practice = await currentPractice(topic.id)
+  const practice = await currentPractice(topic)
   const problem = practice?.problems[input.problemIndex]
   if (!practice || !problem || problem.title !== input.problemTitle) return { status: 'stale' }
   return prisma.$transaction((tx) => saveLocked(tx, userId, topic, practice.contentId, problem, input), { maxWait: 15_000, timeout: 30_000 })
@@ -420,10 +421,10 @@ function helpOf(row: { helpRung: number; hintsOpened: number; maxRung: number })
  * run twice at once: the problem's row says which steps are written. Returns how many steps it wrote.
  */
 export async function settleOpenMisses(userId: string, topicId: string, timeZone: string, now: Date = new Date()): Promise<{ settled: number }> {
-  const practice = await currentPractice(topicId)
-  if (!practice) return { settled: 0 }
-  const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true, projectId: true } })
+  const topic = await ownedTopic(userId, topicId)
   if (!topic) return { settled: 0 }
+  const practice = await currentPractice(topic)
+  if (!practice) return { settled: 0 }
   const rows = await prisma.tutorState.findMany({
     where: { userId, scope: 'practice', scopeKey: { startsWith: `${practice.contentId}:` }, checks: { gte: 1 }, checkedCorrect: false },
   })
@@ -474,7 +475,9 @@ export async function settleOpenMisses(userId: string, topicId: string, timeZone
 
 /** The student's stored progress on the topic's current practice problems (rows of an older practice are left out). Settles the misses left open on an earlier day first. */
 export async function loadPracticeProgress(userId: string, topicId: string, timeZone?: string): Promise<ProblemProgress[]> {
-  const practice = await currentPractice(topicId)
+  const topic = await ownedTopic(userId, topicId)
+  if (!topic) return []
+  const practice = await currentPractice(topic)
   if (!practice) return []
   await settleOpenMisses(userId, topicId, timeZone ?? (await studentTimeZone())).catch((error) => logServerError('Settling open practice misses failed', error))
   const rows = await prisma.practiceProgress.findMany({

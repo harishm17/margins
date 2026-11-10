@@ -1,8 +1,7 @@
+import { readSession } from '@/lib/auth/get-session'
 import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth/auth-config'
 import { holdsInternalToken, publicHealthBody } from '@/lib/ops/health'
 
 export const runtime = 'nodejs'
@@ -13,7 +12,7 @@ export const dynamic = 'force-dynamic'
 async function mayReadDetail(request: Request): Promise<boolean> {
   if (holdsInternalToken(request.headers)) return true
   try {
-    return Boolean((await getServerSession(authOptions))?.user)
+    return Boolean((await readSession())?.user)
   } catch {
     return false
   }
@@ -49,13 +48,28 @@ export async function GET(request: Request) {
   const checks: RuntimeCheck[] = []
 
   const nodeEnv = process.env.NODE_ENV || 'development'
-  const appEnv = process.env.ENVIRONMENT || 'development'
+  const appEnv = process.env.ENVIRONMENT || 'unset'
   const isDeploymentProduction = appEnv === 'production'
   const aiServiceUrl = process.env.AI_SERVICE_URL || ''
   const s3Bucket = process.env.S3_BUCKET || ''
   const s3CredentialsSet = Boolean(process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY)
   const nextAuthSecret = process.env.NEXTAUTH_SECRET || ''
   const localUploadsDir = process.env.LOCAL_UPLOADS_DIR || '/data/uploads'
+
+  if (!['development', 'test', 'production'].includes(process.env.ENVIRONMENT ?? '')) {
+    checks.push({
+      name: 'environment',
+      status: 'fail',
+      message: 'ENVIRONMENT must be development, test or production.',
+    })
+  }
+  if (appEnv !== 'development' && !process.env.AI_INTERNAL_TOKEN) {
+    checks.push({
+      name: 'ai_internal_token',
+      status: 'fail',
+      message: 'AI_INTERNAL_TOKEN is not set.',
+    })
+  }
 
   if (!aiServiceUrl) {
     checks.push({
@@ -91,7 +105,7 @@ export async function GET(request: Request) {
       checks.push({
         name: 'ai_service_health',
         status: 'fail',
-        message: `AI service health check failed: ${String(error)}`,
+        message: 'AI service health check failed.',
       })
     }
   }

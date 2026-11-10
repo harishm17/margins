@@ -30,7 +30,7 @@ export function pickWeakPrerequisite<T extends { retrievability: number | null }
 export async function loadPracticeContext(userId: string, projectId: string, conceptIds: string[], now = new Date()): Promise<PracticeContext> {
   if (conceptIds.length === 0) return { claims: [] }
   const active = await prisma.concept.findMany({
-    where: { id: { in: conceptIds }, projectId, status: 'active' },
+    where: { id: { in: conceptIds }, projectId, status: 'active', project: { userId } },
     select: { id: true },
   })
   // In the step's own order of its concepts: the database returns them in no set order, and their ids are random.
@@ -56,6 +56,7 @@ export async function loadPracticeContext(userId: string, projectId: string, con
   const edges = await prisma.conceptEdge.findMany({
     where: {
       projectId,
+      project: { userId },
       status: { not: 'rejected' },
       OR: [
         { type: 'prerequisite', targetId: { in: ids } },

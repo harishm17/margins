@@ -107,7 +107,7 @@ export async function computeProjectMastery(
  */
 async function conceptMasteryByTopic(db: Db, userId: string, topicIds: string[], now: Date): Promise<Map<string, number>> {
   const concepts = await db.concept.findMany({
-    where: { topicId: { in: topicIds }, status: 'active', topic: { evidenceBackfilledAt: { not: null } } },
+    where: { topicId: { in: topicIds }, status: 'active', project: { userId }, topic: { evidenceBackfilledAt: { not: null } } },
     select: { id: true, topicId: true, kind: true },
   })
   const out = new Map<string, number>()
@@ -134,9 +134,9 @@ function topicMasteryOfConcepts(
 }
 
 /** True when the topic's history is converted to evidence and it has active concepts: its memory is the concepts'. */
-export async function isConverted(topicId: string, db: Db = prisma): Promise<boolean> {
+export async function isConverted(userId: string, topicId: string, db: Db = prisma): Promise<boolean> {
   return (
-    (await db.concept.count({ where: { topicId, status: 'active', topic: { evidenceBackfilledAt: { not: null } } } })) > 0
+    (await db.concept.count({ where: { topicId, status: 'active', project: { userId }, topic: { evidenceBackfilledAt: { not: null } } } })) > 0
   )
 }
 
@@ -153,7 +153,7 @@ export async function upsertReviewSchedule(input: {
   const { userId, projectId, topicId, mastery, wasCorrect = true, confidence, db = prisma } = input
   // A converted topic's schedule is its concepts' (recomputeTopicFromConcepts, on every evidence write); the
   // interval-from-mastery rule below is for topics that have no concept memory yet, and must not overwrite it.
-  if (await isConverted(topicId, db)) {
+  if (await isConverted(userId, topicId, db)) {
     return db.reviewSchedule.findUnique({ where: { userId_topicId: { userId, topicId } } })
   }
   const intervalDays = intervalFromMastery(mastery, { wasCorrect, confidence })
@@ -361,7 +361,7 @@ export async function recomputeTopicFromConcepts(
   now: Date = new Date()
 ): Promise<{ mastery: number; dueAt: Date | null }> {
   const concepts = await tx.concept.findMany({
-    where: { topicId, status: 'active' },
+    where: { topicId, status: 'active', project: { userId } },
     select: { id: true, kind: true, projectId: true },
   })
   const rows = await tx.conceptMemory.findMany({
@@ -370,7 +370,7 @@ export async function recomputeTopicFromConcepts(
   const byConcept = new Map(rows.map((r) => [r.conceptId, r]))
   // The same value the surfaces compute (computeProjectMastery): the concepts' once the topic's history is
   // converted, the legacy blend until then, so the stored schedule and the displayed mastery agree.
-  const topic = await tx.topic.findUnique({ where: { id: topicId }, select: { evidenceBackfilledAt: true, projectId: true } })
+  const topic = await tx.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { evidenceBackfilledAt: true, projectId: true } })
   const converted = topic?.evidenceBackfilledAt
   const mastery =
     converted || !topic
@@ -398,6 +398,6 @@ export async function recomputeTopicFromConcepts(
 }
 
 /** True when the topic has active concepts, so concept mastery replaces the legacy blend. */
-export async function hasConcepts(topicId: string, db: Db = prisma): Promise<boolean> {
-  return (await db.concept.count({ where: { topicId, status: 'active' } })) > 0
+export async function hasConcepts(userId: string, topicId: string, db: Db = prisma): Promise<boolean> {
+  return (await db.concept.count({ where: { topicId, status: 'active', project: { userId } } })) > 0
 }

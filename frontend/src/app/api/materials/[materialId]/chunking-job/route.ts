@@ -54,7 +54,6 @@ export async function GET(
         status: true,
         stage: true,
         progressPercent: true,
-        errorMessage: true,
         errorCode: true,
         retryable: true,
         createdAt: true,

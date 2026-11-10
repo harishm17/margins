@@ -54,3 +54,4 @@ python_files = "test_*.py"
 python_functions = "test_*"
 pythonpath = ["."]
 asyncio_mode = "auto"
+markers = ["real_ownership: the route runs the real ownership check against the database"]

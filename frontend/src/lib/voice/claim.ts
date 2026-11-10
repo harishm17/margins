@@ -58,10 +58,11 @@ export const VOICE_TURN_MAX_MS = 3 * 60_000
  * write would drop the earlier one. The claim is one conditional update on the session row, so it holds across
  * server processes (the in-memory set it replaces only covered one). False when a turn is already running.
  */
-export async function claimVoiceTurn(sessionId: string, now = new Date()): Promise<boolean> {
+export async function claimVoiceTurn(userId: string, sessionId: string, now = new Date()): Promise<boolean> {
   const claimed = await prisma.voiceDrillSession.updateMany({
     where: {
       id: sessionId,
+      userId,
       OR: [{ turnStartedAt: null }, { turnStartedAt: { lt: new Date(now.getTime() - VOICE_TURN_MAX_MS) } }],
     },
     data: { turnStartedAt: now },
@@ -70,8 +71,8 @@ export async function claimVoiceTurn(sessionId: string, now = new Date()): Promi
 }
 
 /** Ends the claim of `claimVoiceTurn`. Never throws: the turn is over either way, and a stale claim expires by itself. */
-export async function releaseVoiceTurn(sessionId: string): Promise<void> {
+export async function releaseVoiceTurn(userId: string, sessionId: string): Promise<void> {
   await prisma.voiceDrillSession
-    .updateMany({ where: { id: sessionId }, data: { turnStartedAt: null } })
+    .updateMany({ where: { id: sessionId, userId }, data: { turnStartedAt: null } })
     .catch((error) => logServerError('Voice: Could not release the turn claim', error))
 }

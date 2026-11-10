@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { ownedTopic } from '@/server/owned'
 import { prisma } from '@/lib/db/prisma'
 import { parsePracticeProblems } from '@/features/topic/content'
 import type { GradedQuestion } from '@/lib/ai-service/grading'
@@ -162,7 +163,10 @@ async function quizRows(userId: string, projectId: string, known: Known, scope?:
   for (const attempt of attempts) {
     if (known.backfilled.has(attempt.id) || known.sessionKeys.has(`quiz:${attempt.id}`)) continue
     if (!readyFor(known, [attempt.topicId])) continue
-    if (!setsByTopic.has(attempt.topicId)) setsByTopic.set(attempt.topicId, await loadAllQuizQuestionSets(attempt.topicId))
+    if (!setsByTopic.has(attempt.topicId)) {
+      const topic = await ownedTopic(userId, attempt.topicId)
+      setsByTopic.set(attempt.topicId, topic ? await loadAllQuizQuestionSets(topic) : new Map())
+    }
     const questions = setsByTopic.get(attempt.topicId)?.get(attempt.quizSetId)
     if (!questions) continue
     const inputs = buildQuizEvidence({

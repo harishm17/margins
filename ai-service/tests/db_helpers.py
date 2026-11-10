@@ -166,3 +166,14 @@ async def seed_usage(pool, user_id: str, cost: float, *, source: str = "job",
         event_id, user_id, project_id, source, new_id(), cost,
     )
     return event_id
+
+
+async def seed_voice_session(pool, user_id: str, project_id: str, *, session_id: str | None = None,
+                             topic_id: str | None = None, mode: str = "topic_drill") -> str:
+    session_id = session_id or new_id()
+    await pool.execute(
+        "INSERT INTO voice_drill_sessions (id, user_id, project_id, topic_id, mode, question_set) "
+        "VALUES ($1, $2, $3, $4, $5, '[]')",
+        session_id, user_id, project_id, topic_id, mode,
+    )
+    return session_id

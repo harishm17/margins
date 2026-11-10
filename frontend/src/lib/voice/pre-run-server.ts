@@ -17,14 +17,15 @@ import type { VoiceStreamExtra } from '@/lib/voice/turn-contract'
  * (not the row the route loaded before the turn began).
  */
 export async function planPreRunForSession(input: {
+  userId: string
   sessionId: string
   language: string
   utterance: string
   history: readonly VoiceMessage[]
 }): Promise<PreRunPlan | null> {
   if (!input.utterance.trim() || endsWithAppResult(input.history)) return null
-  const session = await prisma.voiceDrillSession.findUnique({
-    where: { id: input.sessionId },
+  const session = await prisma.voiceDrillSession.findFirst({
+    where: { id: input.sessionId, userId: input.userId },
     select: { style: true, coachState: true, endedAt: true },
   })
   if (!session || session.endedAt) return null

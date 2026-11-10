@@ -34,10 +34,10 @@ test('only a complete grading is read: no score, no mastery', () => {
 })
 
 test('a quiz whose grading ran out its wait says so in the student words, with a way on', () => {
-  const text = describeJobFailure('LLM_CREDIT_EXHAUSTED', 'credit balance is too low', 'grade_quiz')
+  const text = describeJobFailure('LLM_CREDIT_EXHAUSTED', 'grade_quiz')
   assert.equal(text, aiMessage('LLM_CREDIT_EXHAUSTED').text)
-  assert.match(describeJobFailure(null, null, 'grade_quiz'), /Grade the quiz again/)
-  assert.match(describeJobFailure('QUIZ_SUBMISSION_NOT_FOUND', null, 'grade_quiz'), /quiz attempt/)
+  assert.match(describeJobFailure(null, 'grade_quiz'), /Grade the quiz again/)
+  assert.match(describeJobFailure('QUIZ_SUBMISSION_NOT_FOUND', 'grade_quiz'), /quiz attempt/)
 })
 
 test('multiple choice, true or false and numerical answers are graded by rule; short answers are not', () => {

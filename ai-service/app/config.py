@@ -3,6 +3,10 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# The places this service may run. ENVIRONMENT has no default and must be exactly one of these.
+ENVIRONMENTS = ("development", "test", "production")
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -232,7 +236,11 @@ class Settings(BaseSettings):
     # Service Configuration
     AI_SERVICE_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:3000"  # Frontend URL for CORS
-    ENVIRONMENT: str = "development"
+    # No default: a service that forgot to say where it runs must not start as a development one (SEC-L2). One of
+    # ENVIRONMENTS, spelt exactly; anything else refuses to start.
+    ENVIRONMENT: str
+    # The shared secret between the web app and this service. Required (non-empty) when ENVIRONMENT is test or
+    # production; only development may leave it empty (internal_auth.py then lets local calls through).
     AI_INTERNAL_TOKEN: str = ""
 
     @field_validator(
@@ -247,6 +255,27 @@ class Settings(BaseSettings):
 
         parse_model_spec(value, ModelChoice("placeholder", None))
         return value
+
+    @field_validator("ENVIRONMENT")
+    @classmethod
+    def _known_environment(cls, value: str) -> str:
+        if value not in ENVIRONMENTS:
+            raise ValueError(f"ENVIRONMENT must be one of {', '.join(ENVIRONMENTS)}, spelt exactly")
+        return value
+
+    @model_validator(mode="after")
+    def _fail_closed_outside_development(self) -> "Settings":
+        # SEC-L2: a missing or odd setting must never mean "development". Test and production need the shared
+        # token; production also needs the caps that stop the bill (0 turns a cap off) and the model key.
+        if self.ENVIRONMENT != "development" and not self.AI_INTERNAL_TOKEN.strip():
+            raise ValueError(f"AI_INTERNAL_TOKEN must be set when ENVIRONMENT={self.ENVIRONMENT}")
+        if self.ENVIRONMENT == "production":
+            for name in ("DAILY_LLM_BUDGET_USD", "GLOBAL_DAILY_LLM_BUDGET_USD", "FIRST_DAY_LLM_BUDGET_USD"):
+                if getattr(self, name) <= 0:
+                    raise ValueError(f"{name} must be above 0 when ENVIRONMENT=production (0 turns the cap off)")
+            if not self.ANTHROPIC_API_KEY.strip():
+                raise ValueError("ANTHROPIC_API_KEY must be set when ENVIRONMENT=production")
+        return self
 
     @model_validator(mode="after")
     def _no_mock_model_in_production(self) -> "Settings":

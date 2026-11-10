@@ -7,7 +7,7 @@ PORT=${PORT:-8000}
 HOST=${HOST:-0.0.0.0}
 
 echo "Starting the Margins AI service..."
-echo "Environment: ${ENVIRONMENT:-development}"
+echo "Environment: ${ENVIRONMENT:-not set (the service will refuse to start)}"
 echo "Listening on port: ${PORT}"
 
 # Start uvicorn with the PORT environment variable

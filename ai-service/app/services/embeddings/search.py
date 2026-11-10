@@ -322,7 +322,7 @@ async def hybrid_search_chunks(
 
     If the query cannot be embedded, falls back to the full-text leg alone.
     """
-    logger.info("Searching project %s for topic '%s'", project_id, topic_name)
+    logger.info("Searching project %s for a topic", project_id)
 
     query_embedding: Optional[List[float]] = None
     try:
@@ -330,9 +330,7 @@ async def hybrid_search_chunks(
             topic_query_text(topic_name, topic_description, keywords)
         )
     except Exception as exc:
-        logger.warning(
-            "Could not embed topic '%s' (%s); using full-text search only", topic_name, exc
-        )
+        logger.warning("Could not embed a topic (%s); using full-text search only", exc)
 
     vector_rows: List[Dict] = []
     if query_embedding is not None:
@@ -351,7 +349,7 @@ async def hybrid_search_chunks(
     # Judged only when chunks have vectors: right after a model change, before re-embedding,
     # full text is all there is.
     if vector_rows and not topic_is_covered(vector_rows, fulltext_rows):
-        logger.info("Topic '%s' is not covered by project %s's materials", topic_name, project_id)
+        logger.info("A topic is not covered by project %s's materials", project_id)
         return []
 
     chunks = fuse_rankings(
@@ -362,8 +360,8 @@ async def hybrid_search_chunks(
         min_similarity=MIN_SIMILARITY if query_embedding is not None else None,
     )
     logger.info(
-        "Topic '%s': %s vector and %s full-text candidates, %s chunks kept",
-        topic_name,
+        "Topic search in project %s: %s vector and %s full-text candidates, %s chunks kept",
+        project_id,
         len(vector_rows),
         len(fulltext_rows),
         len(chunks),

@@ -10,12 +10,14 @@ import { TutorUnavailableError } from '@/lib/ai-service/tutor'
 let prisma: typeof import('@/lib/db/prisma').prisma
 let mod: typeof import('./practice-tutor')
 let context: typeof import('./practice-context')
+let ownedTopic: typeof import('@/server/owned').ownedTopic
 let available = false
 const userIds: string[] = []
 
 before(async () => {
   ;({ prisma } = await import('@/lib/db/prisma'))
   mod = await import('./practice-tutor')
+  ;({ ownedTopic } = await import('@/server/owned'))
   context = await import('./practice-context')
   available = await prisma.$queryRaw`SELECT bare_guesses FROM tutor_states LIMIT 1`.then(
     () => true,
@@ -83,8 +85,8 @@ function fakes(answer: typeof reply | Error = reply) {
 }
 
 const base = { problemIndex: 0, problemTitle: 'P1', stepIndex: 1 }
-const run = (w: World, body: Record<string, unknown>, deps = fakes().deps) =>
-  mod.runPracticeTutor(w.user.id, { id: w.topic.id, projectId: w.project.id }, { ...base, ...body } as never, { timeZone: 'UTC' }, deps)
+const run = async (w: World, body: Record<string, unknown>, deps = fakes().deps) =>
+  mod.runPracticeTutor(w.user.id, (await ownedTopic(w.user.id, w.topic.id))!, { ...base, ...body } as never, { timeZone: 'UTC' }, deps)
 const stateOf = async (w: World) => (await prisma.tutorState.findFirst({ where: { userId: w.user.id } }))!
 
 dbTest('a checked answer is one event; a wrong one unlocks the worked example and counts as an attempt', async () => {
@@ -273,11 +275,11 @@ dbTest('the server keeps the check counts, so a reload loses nothing', async () 
   const w = await world()
   await run(w, { event: 'check', answer: '1' })
   await run(w, { event: 'check', answer: '2' })
-  const read = await mod.readPracticeTutorState(w.user.id, w.topic, { problemIndex: 0, problemTitle: 'P1', stepIndex: 1 })
+  const read = await mod.readPracticeTutorState(w.user.id, (await ownedTopic(w.user.id, w.topic.id))!, { problemIndex: 0, problemTitle: 'P1', stepIndex: 1 })
   assert.deepEqual([read?.checks, read?.wrongChecks, read?.checkedCorrect, read?.workedAllowed], [2, 2, false, true])
   await run(w, { event: 'check', answer: '30' })
-  assert.equal((await mod.readPracticeTutorState(w.user.id, w.topic, { problemIndex: 0, problemTitle: 'P1', stepIndex: 1 }))?.checkedCorrect, true)
-  assert.equal(await mod.readPracticeTutorState(w.user.id, w.topic, { problemIndex: 0, problemTitle: 'Other', stepIndex: 1 }), null)
+  assert.equal((await mod.readPracticeTutorState(w.user.id, (await ownedTopic(w.user.id, w.topic.id))!, { problemIndex: 0, problemTitle: 'P1', stepIndex: 1 }))?.checkedCorrect, true)
+  assert.equal(await mod.readPracticeTutorState(w.user.id, (await ownedTopic(w.user.id, w.topic.id))!, { problemIndex: 0, problemTitle: 'Other', stepIndex: 1 }), null)
 })
 
 dbTest('lastWrong and the confirm move come from the server record of the checks', async () => {
@@ -311,8 +313,8 @@ dbTest('requests that are invalid or stale do not use the model budget', async (
     admitted += 1
     return { ok: true } as const
   }
-  const call = (body: Record<string, unknown>) =>
-    mod.runPracticeTutor(w.user.id, { id: w.topic.id, projectId: w.project.id }, { ...base, ...body } as never, { timeZone: 'UTC', admit }, fakes().deps)
+  const call = async (body: Record<string, unknown>) =>
+    mod.runPracticeTutor(w.user.id, (await ownedTopic(w.user.id, w.topic.id))!, { ...base, ...body } as never, { timeZone: 'UTC', admit }, fakes().deps)
   assert.equal((await call({ event: 'clarify', problemTitle: 'Other' })).status, 'stale')
   assert.equal((await call({ event: 'show_worked' })).status, 'attempt_first')
   assert.equal((await call({ event: 'ask', working: 'some reasoning about the ratio here' })).status, 'not_allowed')
@@ -322,7 +324,7 @@ dbTest('requests that are invalid or stale do not use the model budget', async (
   // When the limit says wait, the model is not called and the state does not change.
   const limited = await mod.runPracticeTutor(
     w.user.id,
-    { id: w.topic.id, projectId: w.project.id },
+    (await ownedTopic(w.user.id, w.topic.id))!,
     { ...base, event: 'clarify' } as never,
     { timeZone: 'UTC', admit: () => ({ ok: false, retryAfterSeconds: 7 }) },
     fakes().deps
@@ -415,7 +417,7 @@ dbTest('a miss and an I do not know send back what to read: the pointer for the 
   assert.equal(idk.status === 'ok' && idk.body.help?.pointers.length, 1)
   const right = await run(w, { event: 'check', answer: '30' })
   assert.equal(right.status === 'ok' && right.body.help, undefined)
-  const read = await mod.readPracticeTutorState(w.user.id, { id: w.topic.id }, { problemIndex: 0, problemTitle: 'P1', stepIndex: 1 })
+  const read = await mod.readPracticeTutorState(w.user.id, (await ownedTopic(w.user.id, w.topic.id))!, { problemIndex: 0, problemTitle: 'P1', stepIndex: 1 })
   assert.match(read?.contentId ?? '', /^[0-9a-f-]{36}$/)
 })
 

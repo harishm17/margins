@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from app.api.disconnect import run_unless_disconnected
 from app.services import ai_status
 from app.services.billing import billed
+from app.services.ownership import assert_owns
 from app.services.llm.schemas import PracticeTutorReply, PracticeTutorRequest, ReaderCheckReply, ReaderTutorRequest
 from app.services.tutor.practice import tutor_reply
 from app.services.tutor.reader import reader_reply
@@ -38,6 +39,7 @@ async def practice(payload: PracticeTutorRequest, request: Request) -> Union[Pra
     unavailable = (await ai_status.get_status()).as_error()
     if unavailable is not None:
         raise unavailable  # typed 502/503 by the LLMError handler in main.py
+    await assert_owns(payload.user_id, project_id=payload.project_id)
     async with billed(payload.user_id, payload.project_id, "tutor", payload.session_id):
         reply = await run_unless_disconnected(request, tutor_reply(payload))
     if request.headers.get(EVAL_HEADER) == "1":
@@ -80,6 +82,7 @@ async def reader(payload: ReaderTutorRequest, request: Request) -> Union[ReaderC
     unavailable = (await ai_status.get_status()).as_error()
     if unavailable is not None:
         raise unavailable
+    await assert_owns(payload.user_id, project_id=payload.project_id)
     async with billed(payload.user_id, payload.project_id, "tutor", payload.session_id):
         out = await run_unless_disconnected(request, reader_reply(payload))
     if isinstance(out, ReaderCheckReply):

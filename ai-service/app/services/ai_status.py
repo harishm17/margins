@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from app.errors import describe_exception
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_in_transaction, execute_one
 from app.services import ops
@@ -100,7 +101,7 @@ async def get_status() -> AiStatus:
         )
     except Exception as exc:
         logger.warning("Could not read the AI status: %s", exc)
-        await ops.note("ai_status_read_failed", repr(exc))
+        await ops.note("ai_status_read_failed", describe_exception(exc))
         return AiStatus(True)
     if row is None or row["state"] != UNAVAILABLE:
         _local["state"] = AVAILABLE
@@ -118,16 +119,16 @@ async def record_failure(exc: LLMError) -> None:
     failure (a refusal, unusable output) means the provider answered."""
     try:
         if exc.code in PROVIDER_DOWN_CODES:
-            await _mark_unavailable(exc.code, str(exc))
+            await _mark_unavailable(exc.code, describe_exception(exc))
         elif exc.code in TRANSIENT_CODES:
             _local["transient_failures"] += 1
             if _local["transient_failures"] >= settings.AI_STATUS_TRANSIENT_THRESHOLD:
-                await _mark_unavailable(exc.code, str(exc))
+                await _mark_unavailable(exc.code, describe_exception(exc))
         else:
             await record_success()
     except Exception as write_exc:
         logger.exception("Could not record the AI status after %s", exc.code)
-        await ops.note("ai_status_write_failed", f"after {exc.code}: {write_exc!r}")
+        await ops.note("ai_status_write_failed", f"after {exc.code}: {describe_exception(write_exc)}")
 
 
 async def record_success() -> None:
@@ -153,7 +154,7 @@ async def record_success() -> None:
         )
     except Exception as exc:
         logger.exception("Could not record that the AI provider is available again")
-        await ops.note("ai_status_write_failed", f"available again: {exc!r}")
+        await ops.note("ai_status_write_failed", f"available again: {describe_exception(exc)}")
         return
     _local["state"] = AVAILABLE
     if row is not None:

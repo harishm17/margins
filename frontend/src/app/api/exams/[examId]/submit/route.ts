@@ -9,6 +9,7 @@
 import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
+import { ownedExam } from '@/server/owned'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import {
@@ -23,7 +24,6 @@ import {
 import {
   countQuestions,
   finalizeAttempt,
-  findExamForUser,
   findInProgressAttempt,
 } from '@/lib/exams/attempts'
 import { EXAM_ANSWERS_MAX_BYTES, examAnswersSchema, sanitizeAnswers, type AnswerMap } from '@/lib/exams/attempt-timing'
@@ -40,7 +40,7 @@ export async function POST(
     if (limited) return limited
     const { examId } = await params
 
-    const exam = await findExamForUser(session.user.id, examId)
+    const exam = await ownedExam(session.user.id, examId)
     if (!exam) return apiNotFound('Exam not found')
 
     const attempt = await findInProgressAttempt(session.user.id, examId)
@@ -57,7 +57,7 @@ export async function POST(
     if (!body.ok) return body.response
     let submitted: AnswerMap | null = null
     if (body.data.answers !== undefined) {
-      submitted = sanitizeAnswers(body.data.answers, await countQuestions(examId))
+      submitted = sanitizeAnswers(body.data.answers, await countQuestions(exam))
       if (!submitted) return apiInvalidInput('answers must be an object')
     }
 

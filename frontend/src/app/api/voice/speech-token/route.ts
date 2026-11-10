@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       return apiError(ApiErrorCode.CONFLICT, 'No voice time left today', undefined, 409)
     }
 
-    const terms = await courseTermsForTopics(sessionTopicIds(session))
+    const terms = await courseTermsForTopics(auth.user.id, sessionTopicIds(session))
     const grant = await mintCloudSpeechGrant({
       maxSessionSeconds: usage.remainingSeconds,
       language: session.language,

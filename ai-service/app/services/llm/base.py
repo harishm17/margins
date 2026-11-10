@@ -42,10 +42,22 @@ class LLMResponse(BaseModel):
 
 
 class LLMError(Exception):
-    """Base for every provider failure. `code` is stored on failed jobs."""
+    """Base for every provider failure. `code` is stored on failed jobs.
+
+    Nothing reads `str(exc)` to answer or store anything: the code and its public message (app/errors.py) do that, and
+    the log filter writes the exception as `ClassName(code)`. A provider's own wording, which can echo the request (an
+    answer key, a student's words), goes in `detail` and the exception's text stays the public message.
+    """
 
     code = "LLM_ERROR"
     retryable = True
+    detail: str = ""
+
+    def __init__(self, message: object = "", *, detail: object = "") -> None:
+        from app.errors import public_message
+
+        super().__init__(message or public_message(self.code))
+        self.detail = str(detail) if detail else ""
     # Tokens a failed call still used (a refusal or cut-off answer is billed), so callers can
     # record the cost. None when the call produced no usage.
     usage: Optional["LLMUsage"] = None

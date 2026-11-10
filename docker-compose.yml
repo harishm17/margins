@@ -72,7 +72,8 @@ services:
       - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-25}
       - VOICE_DAILY_MINUTES=${VOICE_DAILY_MINUTES:-30}
       - NODE_ENV=production
-      - ENVIRONMENT=${ENVIRONMENT:-development}
+      # A local stack: stated, not defaulted, so a shell's ENVIRONMENT cannot turn the production checks on or off.
+      - ENVIRONMENT=development
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,7 +107,7 @@ services:
       - LOCAL_UPLOADS_DIR=/data/uploads
       - AI_SERVICE_URL=http://localhost:8000
       - FRONTEND_URL=${NEXTAUTH_URL:-http://localhost:3000}
-      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - ENVIRONMENT=development
       - AI_INTERNAL_TOKEN=${AI_INTERNAL_TOKEN:-dev-internal-token}
       - PORT=8000
       - UVICORN_WORKERS=${UVICORN_WORKERS:-2}

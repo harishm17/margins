@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.api.disconnect import run_unless_disconnected
 from app.services import ai_status
 from app.services.billing import billed
+from app.services.ownership import assert_owns
 from app.services.exam_grader import ExamGrader
 from app.services.llm.schemas import RecallGradeRequest, RecallGradeResult
 from app.services.recall_grader import grade_recall
@@ -107,6 +108,7 @@ class GradeQuizResponse(BaseModel):
 async def grade_quiz(payload: GradeQuizRequest, request: Request) -> GradeQuizResponse:
     """Grade answers against the supplied questions: by rule where possible, Claude for short answers. A quiz with
     short answers over the daily allowance gets a 429 LLM_DAILY_BUDGET (main.py)."""
+    await assert_owns(payload.user_id, project_id=payload.project_id)
     async with billed(payload.user_id, payload.project_id, "quiz"):
         result = await run_unless_disconnected(request, ExamGrader().grade_submission(
             "quiz",
@@ -134,5 +136,6 @@ async def grade_recall_answer(payload: RecallGradeRequest, request: Request) -> 
     unavailable = (await ai_status.get_status()).as_error()
     if unavailable is not None:
         raise unavailable
+    await assert_owns(payload.user_id, project_id=payload.project_id)
     async with billed(payload.user_id, payload.project_id, "recall", payload.session_id):
         return await run_unless_disconnected(request, grade_recall(payload))

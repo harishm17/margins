@@ -6,6 +6,7 @@
  */
 
 import { logServerError } from '@/lib/ops/log'
+import type { OwnedTopic } from '@/server/owned'
 import { prisma } from '@/lib/db/prisma'
 import { checkPracticeAnswer } from '@/features/topic/practice-check'
 import type { PracticeProblem, PracticeStep } from '@/features/topic/types'
@@ -73,10 +74,10 @@ async function helpFor(userId: string, topicId: string, step: PracticeStep): Pro
 /** Where the step's conversation stands, for a page that was just opened; the content row the step belongs to; and the help when it was missed. */
 export async function readPracticeTutorState(
   userId: string,
-  topic: { id: string },
+  topic: OwnedTopic,
   at: { problemIndex: number; problemTitle: string; stepIndex: number }
 ): Promise<(PracticeTutorState & { contentId: string; help?: HelpAfterMiss }) | null> {
-  const practice = await currentPractice(topic.id)
+  const practice = await currentPractice(topic)
   const problem = practice?.problems[at.problemIndex]
   if (!practice || !problem || !problem.steps[at.stepIndex] || problem.title !== at.problemTitle) return null
   const state = await getTutorState(userId, 'practice', practiceScopeKey(practice.contentId, at.problemIndex, at.stepIndex))
@@ -146,12 +147,12 @@ const cleanAttempts = (attempts: string[] | undefined) =>
 
 export async function runPracticeTutor(
   userId: string,
-  topic: { id: string; projectId: string },
+  topic: OwnedTopic,
   body: PracticeTutorBody,
   options: { timeZone: string; admit?: Admit },
   deps: PracticeTutorDeps = defaultDeps
 ): Promise<PracticeTutorResult> {
-  const practice = await currentPractice(topic.id)
+  const practice = await currentPractice(topic)
   const problem = practice?.problems[body.problemIndex]
   const step = problem?.steps[body.stepIndex]
   if (!practice || !problem || !step || problem.title !== body.problemTitle) return { status: 'stale' }
@@ -266,7 +267,7 @@ export async function runPracticeTutor(
 /** Level 3, flagged: the concept is due tomorrow and the closing retest serves the item again in fresh form. */
 async function recordSurrender(
   userId: string,
-  topic: { id: string; projectId: string },
+  topic: OwnedTopic,
   contentId: string,
   body: PracticeTutorBody,
   step: PracticeStep,

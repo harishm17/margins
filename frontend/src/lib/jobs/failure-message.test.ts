@@ -30,7 +30,6 @@ const row = (id: string, targetKey: string, status: string, errorCode: string | 
   targetKey,
   status,
   errorCode,
-  errorMessage: null,
 })
 
 test('a failure is listed when its latest job failed and the content is missing', () => {

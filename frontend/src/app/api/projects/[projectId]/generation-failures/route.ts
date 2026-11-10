@@ -41,7 +41,7 @@ export async function GET(
     const [jobs, topics] = await Promise.all([
       prisma.processingJob.findMany({
         where: { projectId, jobType: 'generate_content', targetKey: { not: null } },
-        select: { id: true, targetKey: true, status: true, errorCode: true, errorMessage: true },
+        select: { id: true, targetKey: true, status: true, errorCode: true },
         orderBy: { createdAt: 'desc' },
         take: RECENT_JOB_LIMIT,
       }),

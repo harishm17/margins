@@ -17,9 +17,11 @@ from pydantic import BaseModel, Field
 
 from app.api.disconnect import run_unless_disconnected
 from app.config import settings
+from app.errors import error_body, describe_exception, public_message
 from app.db.connection import execute_one, execute_update
 from app.services import ai_status
 from app.services.billing import billed
+from app.services.ownership import NotOwnedError, assert_owns
 from app.services.budget import DailyBudgetExceeded, allowance_today
 from app.services.chat import usage_payload
 from app.services.content_generator.context import fetch_concepts, format_concept_block, resolve_concept_ids
@@ -123,12 +125,9 @@ class VoiceTurnRequest(BaseModel):
     tools: List[Dict[str, Any]] = Field(default_factory=list, max_length=10)
 
 
-def _fail(status: int, code: str, message: str, retryable: bool = False, **extra: str) -> JSONResponse:
-    """The same body shape as the LLMError handler in main.py."""
-    return JSONResponse(
-        status_code=status,
-        content={"detail": message, "error_code": code, "retryable": retryable, **extra},
-    )
+def _fail(status: int, code: str, retryable: bool = False, **extra: str) -> JSONResponse:
+    """The same body shape as the LLMError handler in main.py: the code and its public message."""
+    return JSONResponse(status_code=status, content=error_body(code, retryable, **extra))
 
 
 async def stream_voice_turn(provider: LLMProvider, payload: VoiceTurnRequest) -> AsyncIterator[Dict[str, Any]]:
@@ -164,17 +163,17 @@ async def stream_voice_turn(provider: LLMProvider, payload: VoiceTurnRequest) ->
                     "timing": timing,
                 }
     except LLMError as exc:
-        logger.warning("Voice turn failed: %s: %s", exc.code, exc)
-        yield {"type": "error", "code": exc.code, "message": str(exc), "retryable": exc.retryable}
+        logger.warning("Voice turn failed: %s", describe_exception(exc))
+        yield {"type": "error", "code": exc.code, "message": public_message(exc.code), "retryable": exc.retryable}
     except DailyBudgetExceeded as exc:  # the allowance ran out between the route's check and this call
-        logger.info("Voice turn refused: %s", exc)
-        yield {"type": "error", "code": exc.code, "message": str(exc), "retryable": False}
+        logger.info("Voice turn refused: %s", exc.code)
+        yield {"type": "error", "code": exc.code, "message": public_message(exc.code), "retryable": False}
     except Exception as exc:  # the stream has started: report it in-band
         logger.exception("Voice turn crashed")
         yield {
             "type": "error",
             "code": "VOICE_TURN_FAILED",
-            "message": f"The coach could not reply: {exc}",
+            "message": public_message("VOICE_TURN_FAILED"),
             "retryable": True,
         }
 
@@ -208,23 +207,22 @@ async def turn(payload: VoiceTurnRequest) -> Union[StreamingResponse, JSONRespon
     ordinary HTTP errors with an `error_code`, like /chat/answer.
     """
     if not settings.llm_configured:
-        return _fail(503, LLMNotConfiguredError.code, "ANTHROPIC_API_KEY is not configured")
+        return _fail(503, LLMNotConfiguredError.code)
 
-    project = await execute_one(
-        "SELECT id FROM projects WHERE id = $1 AND user_id = $2", payload.project_id, payload.user_id
-    )
-    if project is None:
-        return _fail(404, "PROJECT_NOT_FOUND", "Project not found")
+    try:
+        await assert_owns(payload.user_id, project_id=payload.project_id, session_id=payload.session_id)
+    except NotOwnedError:
+        return _fail(404, "PROJECT_NOT_FOUND")
 
     # Known to be down (out of credit, say): refuse before anything is stored or streamed.
     unavailable = (await ai_status.get_status()).as_error()
     if unavailable is not None:
-        return _fail(503, unavailable.code, str(unavailable), unavailable.retryable)
+        return _fail(503, unavailable.code, unavailable.retryable)
 
     # Refuse before the first byte when the allowance is spent (the scope checks again on every model call).
     allowance = await allowance_today(payload.user_id)
     if allowance.refused:
-        return _fail(429, "LLM_DAILY_BUDGET", allowance.message or "Daily AI usage limit reached", budget_reason=allowance.refused)
+        return _fail(429, "LLM_DAILY_BUDGET", budget_reason=allowance.refused)
 
     return StreamingResponse(
         _ndjson(_billed_turn(payload)),
@@ -249,6 +247,7 @@ async def generate_concept_drill(
 ):
     """Generate concept-only oral drill questions from notes. With a topic, the set is kept (voice_drill_sets) and the
     next request with the same inputs gets it back without a model call."""
+    await assert_owns(payload.user_id, project_id=payload.project_id, topic_id=payload.topic_id)
     topic_label = payload.topic or "the study topic"
 
     system_prompt = (

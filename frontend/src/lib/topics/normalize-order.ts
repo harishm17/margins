@@ -1,5 +1,10 @@
 import type { Prisma } from '@prisma/client'
 import { canonicalTopicOrder } from './units'
+import type { OwnedProject, OwnedTopic, OwnedUnit } from '@/server/owned'
+
+/** The course to reorder: proof that the student owns it (the course itself, or a topic or unit in it). */
+export type OwnedCourse = OwnedProject | OwnedTopic | OwnedUnit
+const courseId = (course: OwnedCourse) => ('projectId' in course ? course.projectId : course.id)
 
 /**
  * Rewrites `Topic.orderIndex` (0, 1, 2, ...) into the canonical course order: units in their
@@ -7,7 +12,8 @@ import { canonicalTopicOrder } from './units'
  * any write that moves a topic between units or changes the order of topics or units. A course
  * with no units keeps the order it has (only gaps close). Returns the topic ids in order.
  */
-export async function normalizeTopicOrder(tx: Prisma.TransactionClient, projectId: string): Promise<string[]> {
+export async function normalizeTopicOrder(tx: Prisma.TransactionClient, course: OwnedCourse): Promise<string[]> {
+  const projectId = courseId(course)
   const [topics, units] = await Promise.all([
     tx.topic.findMany({
       where: { projectId },
@@ -25,7 +31,8 @@ export async function normalizeTopicOrder(tx: Prisma.TransactionClient, projectI
 }
 
 /** Closes gaps in `Unit.orderIndex` (0, 1, 2, ...), keeping the order. */
-export async function compactUnitOrder(tx: Prisma.TransactionClient, projectId: string): Promise<void> {
+export async function compactUnitOrder(tx: Prisma.TransactionClient, course: OwnedCourse): Promise<void> {
+  const projectId = courseId(course)
   const units = await tx.unit.findMany({
     where: { projectId },
     orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],

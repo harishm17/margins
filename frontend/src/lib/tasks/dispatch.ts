@@ -5,9 +5,10 @@
  * one that is delivered but never claimed is picked up by the AI service's reaper.
  */
 
-import { logServerError } from '@/lib/ops/log'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { aiMessage } from '@/lib/ai/messages'
 import { isTestLoginEnabled } from '@/lib/auth/test-login'
+import { logServerError } from '@/lib/ops/log'
 import { retryDelayMs } from './retry-delay'
 import { undeliveredWhere } from './undelivered'
 
@@ -32,6 +33,10 @@ export interface TaskPayload {
   data: Record<string, any>
 }
 
+/**
+ * A job that could not be handed to the AI service. The message is fixed text, never the answer's body or a
+ * fetch error's words (which can carry what the AI service echoed): those are logged by class and code only.
+ */
 export class TaskEnqueueError extends Error {
   retryable: boolean
   status?: number
@@ -45,6 +50,13 @@ export class TaskEnqueueError extends Error {
     this.status = status
     this.retryAfter = retryAfter
   }
+}
+
+/** Any failure of the call as a TaskEnqueueError; one that is not already one is logged by class and code, then fixed text. */
+function toEnqueueError(error: unknown): TaskEnqueueError {
+  if (error instanceof TaskEnqueueError) return error
+  logServerError('ai-service call', error)
+  return new TaskEnqueueError('The AI service could not be reached', true)
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -91,10 +103,9 @@ async function callAiServiceWithRetry(endpoint: string, payload: TaskPayload): P
       })
 
       if (!response.ok) {
-        const message = await response.text()
         const retryable = isTransientTaskFailure(response.status)
         throw new TaskEnqueueError(
-          `[DEV] Task execution failed (${response.status}): ${message}`,
+          `Task execution failed (${response.status})`,
           retryable,
           response.status,
           response.headers.get('retry-after')
@@ -102,9 +113,7 @@ async function callAiServiceWithRetry(endpoint: string, payload: TaskPayload): P
       }
       return
     } catch (error) {
-      const normalized = error instanceof TaskEnqueueError
-        ? error
-        : new TaskEnqueueError(String(error), true)
+      const normalized = toEnqueueError(error)
       lastError = normalized
 
       if (!normalized.retryable || attempt >= DIRECT_TASK_MAX_RETRIES) {
@@ -132,6 +141,7 @@ export async function markJobFailed(
   // reached right now, the job stays pending and never started, and the AI service's reaper sends it
   // once it is back (and fails it, retryable, only after its re-dispatch limit).
   if (payload.jobType === 'grade_quiz' && error.retryable) return
+  const errorCode = error.retryable ? 'ENQUEUE_FAILED' : 'ENQUEUE_PERMANENT'
   try {
     const prisma = store ?? (await import('@/lib/db/prisma')).prisma
     // Only a job no handler has touched (see ./undelivered): a job waiting for its retry, or one
@@ -140,14 +150,15 @@ export async function markJobFailed(
       where: undeliveredWhere(payload.jobId),
       data: {
         status: 'failed',
-        errorCode: error.retryable ? 'ENQUEUE_FAILED' : 'ENQUEUE_PERMANENT',
-        errorMessage: error.message.slice(0, 1000),
+        errorCode,
+        // The code and its public text; the error's own message stays out of the row (SEC-L3).
+        errorMessage: aiMessage(errorCode).text,
         retryable: error.retryable,
         completedAt: new Date(),
       },
     })
   } catch (dbError) {
-    logServerError('Dev: Failed to persist enqueue failure', dbError)
+    logServerError('persist enqueue failure', dbError, { jobId: payload.jobId })
   }
 }
 
@@ -155,10 +166,8 @@ async function dispatchDirectTask(endpoint: string, payload: TaskPayload): Promi
   try {
     await callAiServiceWithRetry(endpoint, payload)
   } catch (error) {
-    const normalized = error instanceof TaskEnqueueError
-      ? error
-      : new TaskEnqueueError(String(error), true)
-    logServerError('Dev: background task dispatch failed', error, { jobId: payload.jobId })
+    const normalized = toEnqueueError(error)
+    logServerError('background task dispatch', normalized, { jobId: payload.jobId, status: normalized.status })
     await markJobFailed(payload, normalized)
   }
 }
@@ -167,9 +176,7 @@ async function runInlineDirectTask(endpoint: string, payload: TaskPayload): Prom
   try {
     await callAiServiceWithRetry(endpoint, payload)
   } catch (error) {
-    const normalized = error instanceof TaskEnqueueError
-      ? error
-      : new TaskEnqueueError(String(error), true)
+    const normalized = toEnqueueError(error)
     await markJobFailed(payload, normalized)
     throw normalized
   }

@@ -8,7 +8,7 @@ const GOOGLE = {
   GOOGLE_OAUTH_CLIENT_ID: '1234567890-abcdefg.apps.googleusercontent.com',
   GOOGLE_OAUTH_CLIENT_SECRET: 'GOCSPX-abcdefghijklmnopqrstuvwx',
 }
-const E2E = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: 'spend-key-secret-for-tests-only', NEXTAUTH_URL: 'http://localhost:3104' }
+const E2E = { NODE_ENV: 'production', ENVIRONMENT: 'development', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: 'spend-key-secret-for-tests-only', NEXTAUTH_URL: 'http://localhost:3104' }
 
 test('off unless ENABLE_TEST_LOGIN is exactly "true"', () => {
   assert.equal(isTestLoginEnabled(E2E), false)
@@ -19,7 +19,7 @@ test('off unless ENABLE_TEST_LOGIN is exactly "true"', () => {
 })
 
 test('never on for the live site: the server refuses to start, with or without Google', () => {
-  const live = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: 'spend-key-secret-for-tests-only', NEXTAUTH_URL: 'https://studymargins.com', S3_BUCKET: 'uploads', ...GOOGLE }
+  const live = { NODE_ENV: 'production', ENVIRONMENT: 'production', AI_INTERNAL_TOKEN: 'tok', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: 'spend-key-secret-for-tests-only', NEXTAUTH_URL: 'https://studymargins.com', S3_BUCKET: 'uploads', ...GOOGLE }
   for (const value of ['true', 'TRUE']) {
     assert.throws(() => checkAuthStartup({ ...live, ENABLE_TEST_LOGIN: value }), /ENABLE_TEST_LOGIN is set/, value)
   }

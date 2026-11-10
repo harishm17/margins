@@ -17,6 +17,7 @@ import httpx
 from app.api.internal_auth import internal_headers
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_update
+from app.errors import describe_exception, public_message
 from app.services import ops
 
 logger = logging.getLogger(__name__)
@@ -27,10 +28,13 @@ DIRECT_TIMEOUT_SECONDS = 600.0
 _background_tasks: Set["asyncio.Task[None]"] = set()
 
 
-async def mark_undelivered(job_id: str, message: str) -> None:
+async def mark_undelivered(job_id: str, cause: str) -> None:
     """The service never answered: fail the job if no handler has touched it. A job that has
-    started and is pending again is waiting for a retry, which the reaper owns. Counted for the watchdog."""
-    await ops.note("dispatch_failed", f"job {job_id}: {message[:300]}")
+    started and is pending again is waiting for a retry, which the reaper owns. Counted for the watchdog.
+
+    `cause` is for the operator's event only: an endpoint and a status, or `describe_exception(exc)`, never a
+    response body or exception text. The job keeps ENQUEUE_FAILED and that code's public message."""
+    await ops.note("dispatch_failed", f"job {job_id}: {cause[:300]}")
     try:
         await execute_update(
             f"""
@@ -43,11 +47,11 @@ async def mark_undelivered(job_id: str, message: str) -> None:
             WHERE id = $1 AND status = 'pending' AND started_at IS NULL
             """,
             job_id,
-            message[:1000],
+            public_message("ENQUEUE_FAILED"),
         )
     except Exception as exc:
-        logger.error("Could not record the dispatch failure of job %s: %s", job_id, exc)
-        await ops.note("job_write_failed", f"dispatch failure of job {job_id}: {exc!r}")
+        logger.error("Could not record the dispatch failure of job %s: %s", job_id, describe_exception(exc))
+        await ops.note("job_write_failed", f"dispatch failure of job {job_id}: {describe_exception(exc)}")
 
 
 def retry_delay_seconds(attempt: int, retry_after_header: Optional[str]) -> float:
@@ -77,15 +81,12 @@ async def _post_with_retries(endpoint: str, payload: Dict[str, Any]) -> None:
                 )
             if response.status_code < 500:
                 if response.status_code >= 400:
-                    logger.error(
-                        "Job %s rejected by %s (%s): %s",
-                        job_id, endpoint, response.status_code, response.text[:500],
-                    )
+                    logger.error("Job %s rejected by %s (%s)", job_id, endpoint, response.status_code)
                 return
-            last_error = f"{endpoint} answered {response.status_code}: {response.text[:500]}"
+            last_error = f"{endpoint} answered {response.status_code}"
             retry_after_header = response.headers.get("retry-after")
         except httpx.HTTPError as exc:
-            last_error = f"{endpoint} unreachable: {exc!r}"
+            last_error = f"{endpoint} unreachable: {describe_exception(exc)}"
         logger.warning("Dispatch of job %s failed (attempt %d): %s", job_id, attempt, last_error)
         if attempt < DIRECT_MAX_ATTEMPTS:
             await asyncio.sleep(retry_delay_seconds(attempt, retry_after_header))

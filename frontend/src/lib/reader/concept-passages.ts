@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/db/prisma'
+import { ownedTopic } from '@/server/owned'
 import { loadTopicChunkRefs, resolveMergedChunks } from './load-reader'
 
 /**
@@ -12,12 +13,14 @@ import { loadTopicChunkRefs, resolveMergedChunks } from './load-reader'
  * concept must be an active concept of this topic, and the topic the student's; otherwise none.
  */
 export async function conceptPassageIds(userId: string, topicId: string, conceptId: string): Promise<string[]> {
+  const topic = await ownedTopic(userId, topicId)
+  if (!topic) return []
   const claims = await prisma.conceptClaim.findMany({
-    where: { conceptId, concept: { topicId, status: 'active', topic: { project: { userId } } }, chunkId: { not: null } },
+    where: { conceptId, concept: { topicId, status: 'active' }, chunkId: { not: null } },
     select: { chunkId: true },
   })
   if (claims.length === 0) return []
-  const refs = await loadTopicChunkRefs(topicId)
+  const refs = await loadTopicChunkRefs(topic)
   const merged = await resolveMergedChunks(refs, claims.flatMap((claim) => (claim.chunkId ? [claim.chunkId] : [])))
   const wanted = new Set(claims.flatMap((claim) => (claim.chunkId ? [merged.get(claim.chunkId) ?? claim.chunkId] : [])))
   return refs.filter((ref) => wanted.has(ref.id)).map((ref) => ref.id)

@@ -8,6 +8,7 @@
 import { logServerError } from '@/lib/ops/log'
 import { assertQuota, quotaErrorResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
+import { ownedTopic } from '@/server/owned'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -30,13 +31,12 @@ const createSchema = z.object({ chunkId: z.string().min(1).max(100), text: z.str
 
 const noteLimiter = createRateLimiter({ name: 'margin-notes', limit: 60, windowMs: 60_000 })
 
-const topicOf = (userId: string, topicId: string) => prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true, projectId: true } })
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
     const { topicId } = await params
-    if (!(await topicOf(auth.user.id, topicId))) return apiNotFound('Topic not found')
+    if (!(await ownedTopic(auth.user.id, topicId))) return apiNotFound('Topic not found')
     return NextResponse.json({ notes: await loadMarginNotes(auth.user.id, topicId) })
   } catch (error) {
     logServerError('Margin notes error', error)
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const auth = await requireAuth()
     const { topicId } = await params
-    const topic = await topicOf(auth.user.id, topicId)
+    const topic = await ownedTopic(auth.user.id, topicId)
     if (!topic) return apiNotFound('Topic not found')
     const parsed = await readJson(request, createSchema)
     if (!parsed.ok) return parsed.response
