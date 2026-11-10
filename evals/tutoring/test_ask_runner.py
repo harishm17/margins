@@ -247,3 +247,16 @@ def test_the_meaning_layer_declines_the_rewording_and_the_translation_after_the_
     assert next(g for g in summary["gates"] if g["key"] == "exam_guard")["passed"] is True
 
 
+@pytest.mark.skipif(os.environ.get("EXAM_GUARD_REAL_MODEL") != "1", reason="set EXAM_GUARD_REAL_MODEL=1 to run with the real model")
+@pytest.mark.parametrize("course_id", ["gears", "interest", "search"])
+def test_the_real_meaning_check_declines_what_the_script_plants(course, course_id):
+    from app.services import exam_guard
+
+    exam_guard.reset_guard_embedder()
+    scenario = first("exam_guard_meaning", course_id)
+    records = _play_with(scenario, ScriptedAsk(scenario, lambda system, question: "What do you think that means?"), course, ask_eval.semantic_guard)
+    summary = ask_metrics.summarize(BY_ID, records)
+    gate = next(g for g in summary["gates"] if g["key"] == "exam_guard")
+    assert gate["passed"] is True, [r for r in records if r.get("expect") and bool(r.get("declined")) != (r["expect"] == "declined")]
+
+

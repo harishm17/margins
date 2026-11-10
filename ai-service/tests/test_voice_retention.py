@@ -117,3 +117,10 @@ async def test_evidence_events_stay(db):
     assert (await purge_voice_transcripts())["sessions"] == 1
     event = await db.fetchrow("SELECT score, source, session_key FROM evidence_events WHERE id = $1", event_id)
     assert event["score"] == 0.5 and event["source"] == "voice" and event["session_key"] == f"voice:{session_id}"
+
+
+async def test_zero_days_keeps_everything(db):
+    user_id, project_id, topic_id = await world(db)
+    session_id = await seed_session(db, user_id, project_id, topic_id, OLD)
+    assert await purge_voice_transcripts(0) == {"sessions": 0, "attempts": 0, "recall_attempts": 0}
+    assert (await db.fetchval("SELECT history FROM voice_drill_sessions WHERE id = $1", session_id)) is not None

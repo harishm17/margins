@@ -211,6 +211,25 @@ class TestFailureHandling:
 
         assert json.loads((await get_job(db, job_id))["result_data"]) == {"winner": True}
 
+class TestFollowUp:
+    async def test_follow_up_work_runs_after_completion_and_cannot_fail_the_job(self, db, user_id):
+        job_id = await seed_job(db, user_id)
+        seen = []
+
+        async def after():
+            seen.append((await get_job(db, job_id))["status"])
+            raise RuntimeError("enqueue failed")
+
+        async def body(payload, job):
+            return JobOutcome(after=after)
+
+        result = await make_handler(body)(payload(job_id))
+
+        assert result["status"] == "success"
+        assert seen == ["completed"]
+        assert (await get_job(db, job_id))["status"] == "completed"
+
+
 def usage(model="claude-haiku-5-5", input_tokens=1000, output_tokens=500, **extra):
     return LLMUsage(model=model, input_tokens=input_tokens, output_tokens=output_tokens, **extra)
 

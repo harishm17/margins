@@ -155,3 +155,19 @@ async def test_record_usage_event_appends_and_skips_free_calls(db):
     assert await spent_today_usd(user_id) == pytest.approx(0.25)
 
 
+
+
+async def test_a_ledger_failure_is_logged_not_raised(db, monkeypatch, caplog):
+    # The database refuses the row: the work that was billed must not fail.
+    async def broken(*args, **kwargs):
+        raise RuntimeError("database is down")
+
+    monkeypatch.setattr(budget_module, "execute_update", broken)
+    user_id, _ = await user_with_project(db)
+    with caplog.at_level("ERROR", logger="app.services.budget"):
+        await record_usage_event(
+            user_id=user_id, project_id=None, source="job", source_id="j", models="", input_tokens=1,
+            output_tokens=1, cost_usd=1.0,
+        )
+    assert any("Could not record job usage" in r.getMessage() for r in caplog.records)
+    assert await db.fetchval("SELECT count(*) FROM llm_usage_events") == 0

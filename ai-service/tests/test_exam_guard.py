@@ -1,5 +1,6 @@
 """The exam guard's meaning check: the logic with a stand-in embedder, and the calibration with the real model."""
-from typing import List
+import os
+from typing import Dict, List
 
 import pytest
 from fastapi.testclient import TestClient
@@ -7,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.main import app
 from app.services import exam_guard
-from app.services.embeddings.generator import Embedder
+from app.services.embeddings.generator import Embedder, LocalEmbedder
 
 EXAM = [
     "A hash table with chaining has 8 buckets and 12 keys inserted uniformly at random. What is the expected length of a chain?",
@@ -79,3 +80,52 @@ class TestRoute:
         assert yes["match"] is True and yes["similarity"] > settings.EXAM_GUARD_SEMANTIC_THRESHOLD
         assert no["match"] is False
 
+
+# ---- the real model, to keep the threshold honest. Needs the model files (about 220 MB): set EXAM_GUARD_REAL_MODEL=1.
+
+REWORDINGS: Dict[str, str] = {
+    "synonyms": "With 12 keys spread evenly over 8 slots in a chained hash table, how long is a typical bucket list on average?",
+    "numbers as words": "A chained hash table has eight buckets and twelve keys placed uniformly at random. Give the mean chain length.",
+    "spanish": "Una tabla hash con encadenamiento tiene 8 cubetas y se insertan 12 claves de forma uniforme al azar. Cual es la longitud esperada de una cadena?",
+    "french": "Une table de hachage avec chainage a 8 alveoles et 12 cles inserees uniformement au hasard. Quelle est la longueur attendue d'une chaine ?",
+    "german": "Eine Hashtabelle mit Verkettung hat 8 Eimer und 12 gleichverteilt eingefuegte Schluessel. Wie lang ist eine Kette im Erwartungswert?",
+    "spanish probability": "Calcula la probabilidad de que dos canicas sacadas sin reemplazo de una bolsa con 3 rojas y 5 azules sean ambas rojas.",
+    "odds": "What are the odds both marbles are red when you pull two from a bag holding three red and five blue ones, without putting any back?",
+    "sorting": "Which sorting method guarantees O(n log n) in the worst case: merge sort, quicksort or bubble sort?",
+}
+CONCEPT_QUESTIONS = [
+    "What is a hash table and how does chaining resolve collisions?",
+    "Explain expected value in plain words.",
+    "How do I compute probability without replacement in general?",
+    "Why is merge sort stable while quicksort is not?",
+    "When is the midterm and what does it cover?",
+    "Explique como funciona el encadenamiento en una tabla hash.",
+    "Comment calcule-t-on une probabilite conditionnelle ?",
+    "Is bubble sort ever a good choice?",
+    "What is the load factor of a hash table?",
+]
+
+real = pytest.mark.skipif(os.environ.get("EXAM_GUARD_REAL_MODEL") != "1", reason="set EXAM_GUARD_REAL_MODEL=1 to run with the real model")
+
+
+@pytest.fixture
+def real_model(monkeypatch):
+    exam_guard.reset_guard_embedder()
+    embedder = LocalEmbedder(settings.EXAM_GUARD_EMBEDDING_MODEL, os.environ.get("EMBEDDING_CACHE_DIR") or settings.EMBEDDING_CACHE_DIR or None)
+    monkeypatch.setattr(exam_guard, "get_guard_embedder", lambda: embedder)
+    yield
+    exam_guard.reset_guard_embedder()
+
+
+@real
+@pytest.mark.parametrize("kind", sorted(REWORDINGS))
+async def test_real_model_recognises_rewordings_and_translations(real_model, kind):
+    similarity = await exam_guard.semantic_similarity(REWORDINGS[kind], [], EXAM)
+    assert similarity >= settings.EXAM_GUARD_SEMANTIC_THRESHOLD, (kind, similarity)
+
+
+@real
+@pytest.mark.parametrize("question", CONCEPT_QUESTIONS)
+async def test_real_model_leaves_concept_questions_alone(real_model, question):
+    similarity = await exam_guard.semantic_similarity(question, [], EXAM)
+    assert similarity < settings.EXAM_GUARD_SEMANTIC_THRESHOLD, (question, similarity)
