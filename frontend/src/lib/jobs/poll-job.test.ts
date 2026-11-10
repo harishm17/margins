@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { aiMessage } from '@/lib/ai/messages'
 import {
   TIMEOUT_MESSAGE,
   pollFailureMessage,
@@ -71,19 +72,19 @@ describe('pollJobUntilDone', () => {
   })
 
   it('returns a failed job with its message', async () => {
-    const { env } = fakeEnv((id) => ({ id, status: 'failed', errorMessage: 'Daily limit', errorCode: 'LLM_DAILY_BUDGET' }))
+    const { env } = fakeEnv((id) => ({ id, status: 'failed', errorCode: 'LLM_DAILY_BUDGET' }))
 
     const result = await pollJobUntilDone('job-1', { env })
 
     assert.equal(result.state, 'failed')
-    assert.equal(result.error, 'Daily limit')
+    assert.equal(result.error, aiMessage('LLM_DAILY_BUDGET').text)
     const message = pollFailureMessage(result, 'fallback')
     assert.match(message, /^You've used today's AI allowance\. It resets (tomorrow )?at /)
-    assert.doesNotMatch(message, /Daily limit|\$/)
+    assert.doesNotMatch(message, /\$/)
   })
 
   it('keeps raw errors of other failures out of the user message', async () => {
-    const { env } = fakeEnv((id) => ({ id, status: 'failed', errorMessage: 'asyncpg.exceptions: boom', errorCode: 'X' }))
+    const { env } = fakeEnv((id) => ({ id, status: 'failed', errorCode: 'X' }))
 
     const result = await pollJobUntilDone('job-1', { env })
 

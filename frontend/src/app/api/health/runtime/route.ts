@@ -57,6 +57,21 @@ export async function GET(request: Request) {
   const nextAuthSecret = process.env.NEXTAUTH_SECRET || ''
   const localUploadsDir = process.env.LOCAL_UPLOADS_DIR || '/data/uploads'
 
+  if (!['development', 'test', 'production'].includes(process.env.ENVIRONMENT ?? '')) {
+    checks.push({
+      name: 'environment',
+      status: 'fail',
+      message: 'ENVIRONMENT must be development, test or production.',
+    })
+  }
+  if (appEnv !== 'development' && !process.env.AI_INTERNAL_TOKEN) {
+    checks.push({
+      name: 'ai_internal_token',
+      status: 'fail',
+      message: 'AI_INTERNAL_TOKEN is not set.',
+    })
+  }
+
   if (!aiServiceUrl) {
     checks.push({
       name: 'ai_service_url',
@@ -91,7 +106,7 @@ export async function GET(request: Request) {
       checks.push({
         name: 'ai_service_health',
         status: 'fail',
-        message: `AI service health check failed: ${String(error)}`,
+        message: 'AI service health check failed.',
       })
     }
   }

@@ -89,7 +89,7 @@ export function GradingFailed({ result }: { result: NotGraded }) {
         title="Grading didn't finish"
         action={<GradeAgainButton courseId={result.courseId} examId={result.examId} submissionId={result.id} size="md" navigate={false} />}
       >
-        Your answers are saved. {describeJobFailure(result.errorCode, result.errorMessage, 'grade_exam')}
+        Your answers are saved. {describeJobFailure(result.errorCode, 'grade_exam')}
       </InlineAlert>
       <div className="mt-5">
         <Button asChild variant="link">

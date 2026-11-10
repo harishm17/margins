@@ -26,7 +26,6 @@ export function jobFailureMessage(errorCode: string | null | undefined, jobType?
 /** The text for a failed job. The job's own error message is never shown (it is written for logs). */
 export function describeJobFailure(
   errorCode: string | null | undefined,
-  _errorMessage?: string | null,
   jobType?: string | null
 ): string {
   return aiMessage(errorCode, jobType).text
@@ -44,7 +43,6 @@ export type GenerationJobRow = {
   targetKey: string | null
   status: string
   errorCode: string | null
-  errorMessage: string | null
   id: string
 }
 
@@ -78,7 +76,7 @@ export function pickGenerationFailures(
       topicId: target.topicId,
       contentType: target.contentType,
       errorCode: row.errorCode,
-      message: describeJobFailure(row.errorCode, row.errorMessage, 'generate_content'),
+      message: describeJobFailure(row.errorCode, 'generate_content'),
     })
   }
   return failures

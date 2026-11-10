@@ -261,7 +261,6 @@ export type ExamResult =
       /** Grading is waiting for the AI to be available again (the answers are saved). */
       waitingForAi: boolean
       errorCode: string | null
-      errorMessage: string | null
     })
   | (ResultBase & {
       status: 'graded'
@@ -318,7 +317,7 @@ export async function getExamResult(
     const job = await prisma.processingJob.findFirst({
       where: { userId, jobType: 'grade_exam', targetKey: gradeExamTarget(submission.id) },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true, stage: true, errorCode: true, errorMessage: true },
+      select: { id: true, status: true, stage: true, errorCode: true },
     })
     // The job can finish, and write the grading, between the read of the submission above and this read of the job (the
     // mock grades in milliseconds): a job that is done and a submission with no grading in it is read again, once, not
@@ -332,7 +331,6 @@ export async function getExamResult(
       jobId: running ? (job?.id ?? null) : null,
       waitingForAi: isWaitingForAi(job),
       errorCode: job?.errorCode ?? null,
-      errorMessage: job?.errorMessage ?? null,
     }
   }
 
