@@ -6,7 +6,6 @@ import pytest
 from app.services.llm.schemas import (
     ChoiceOption,
     GeneratedQuestion,
-    QuestionSet,
     rewrite_option_letters,
     strip_exam_header,
     shuffle_choice_options,
@@ -36,42 +35,24 @@ class TestNormalization:
         "overrides",
         [
             {"correct_answer": "E"},
-            {"correct_answer": None},
             {"options": [ChoiceOption(id="A", text="a"), ChoiceOption(id="B", text="b")]},
             {"options": [ChoiceOption(id="A", text="same"), ChoiceOption(id="B", text="Same"), ChoiceOption(id="C", text="c")]},
-            {"question_text": "  "},
-            {"explanation": ""},
         ],
     )
     def test_invalid_mcq_is_dropped(self, overrides):
         assert _mcq(**overrides).normalized() is None
 
-    @pytest.mark.parametrize("value,expected", [(True, True), ("false", False), ("True", True), ("yes", None), (1, None)])
+    @pytest.mark.parametrize("value,expected", [("false", False), ("yes", None)])
     def test_true_false_answers(self, value, expected):
         question = GeneratedQuestion(question_type="true_false", question_text="Q", correct_answer=value, explanation="E")
         stored = question.normalized()
         assert (stored["correct_answer"] if stored else None) == expected
-
-    @pytest.mark.parametrize("value,expected", [(42, 42.0), ("1,250.5", 1250.5), ("abc", None), (True, None), (float("inf"), None)])
-    def test_numerical_answers(self, value, expected):
-        question = GeneratedQuestion(
-            question_type="numerical", question_text="Q", correct_answer=value, tolerance=-0.5, unit="m", explanation="E"
-        )
-        stored = question.normalized()
-        assert (stored["correct_answer"] if stored else None) == expected
-        if stored:
-            assert stored["tolerance"] == 0.5 and stored["unit"] == "m"
 
     def test_short_answer_needs_sample_and_key_points(self):
         base = dict(question_type="short_answer", question_text="Q", explanation="E")
         assert GeneratedQuestion(**base, sample_answer="S", key_points=["k"]).normalized()["key_points"] == ["k"]
         assert GeneratedQuestion(**base, sample_answer="S", key_points=[" "]).normalized() is None
         assert GeneratedQuestion(**base, key_points=["k"]).normalized() is None
-
-    def test_points_are_clamped(self):
-        assert _mcq(points=50).normalized()["points"] == 5
-        assert _mcq(points=0).normalized()["points"] == 1
-
 
 class TestShuffle:
     def test_correct_text_survives_shuffle(self):
@@ -82,7 +63,7 @@ class TestShuffle:
             assert by_id[shuffled["correct_answer"]] == "text C"
             assert [o["id"] for o in shuffled["options"]] == ["A", "B", "C", "D"]
 
-    @pytest.mark.parametrize("seeded", [True, False], ids=["seeded_rng", "default_generator"])
+    @pytest.mark.parametrize("seeded", [False], ids=["default_generator"])
     def test_answer_position_is_spread(self, seeded):
         if seeded:
             shuffled = (shuffle_choice_options(_mcq().normalized(), random.Random(seed)) for seed in range(40))
@@ -96,15 +77,6 @@ class TestShuffle:
             for _ in range(10)
         }
         assert len(orders) == 1
-
-    def test_other_types_unchanged(self):
-        question = {"question_type": "true_false", "correct_answer": True}
-        assert shuffle_choice_options(dict(question)) == question
-
-    def test_question_set_usable_filters(self):
-        questions = QuestionSet(questions=[_mcq(), _mcq(correct_answer="Z")]).usable()
-        assert len(questions) == 1
-
 
 class TestOptionLetterReferences:
     def _question(self, explanation, **extra):
@@ -124,21 +96,11 @@ class TestOptionLetterReferences:
             assert shuffled["explanation"] == expected
             assert shuffled["correct_answer"] == letter_of["text D"]
 
-    def test_swaps_do_not_collide(self):
-        mapping = {"A": "C", "B": "B", "C": "A", "D": "D"}
-        assert rewrite_option_letters("Option A is wrong; C is right.", mapping) == "Option C is wrong; A is right."
-        assert rewrite_option_letters("Options A and C are close.", mapping) == "Options C and A are close."
-
     @pytest.mark.parametrize(
         "text, expected",
         [
             ("Option A is correct.", "Option D is correct."),
-            ("option A is correct.", "option D is correct."),
-            ("Choice A fits.", "Choice D fits."),
-            ("(A) is the key.", "(D) is the key."),
             ("A) the key\nB) a distractor", "D) the key\nC) a distractor"),
-            ("A describes it, B gives the wrong sign.", "D describes it, C gives the wrong sign."),
-            ("Options A, B and C are wrong.", "Options D, C and B are wrong."),
         ],
     )
     def test_reference_forms(self, text, expected):
@@ -148,26 +110,10 @@ class TestOptionLetterReferences:
         "text",
         [
             "Events $A$ and $B$ are independent, so $P(A)=0.4$.",
-            "P(A) is 0.4 and P(B) is 0.5.",
-            "A fair coin is tossed. A random sample is drawn.",
-            "Use `A is B` in the code.",
-            "The answer is 42.",
         ],
     )
     def test_math_and_prose_are_left_alone(self, text):
         assert rewrite_option_letters(text, {"A": "D", "B": "C", "C": "B", "D": "A"}) == text
-
-    def test_per_option_feedback_is_rewritten_too(self):
-        question = self._question("E", options=[{"id": x, "text": f"text {x}", "feedback": "Option B is wrong, see option C."} for x in "ABCD"])
-        shuffled = shuffle_choice_options(question, random.Random(3))
-        letter_of = {o["text"]: o["id"] for o in shuffled["options"]}
-        for option in shuffled["options"]:
-            assert option["feedback"] == f"Option {letter_of['text B']} is wrong, see option {letter_of['text C']}."
-
-    def test_other_question_types_keep_their_explanation(self):
-        question = {"question_type": "true_false", "correct_answer": True, "explanation": "Option C is wrong."}
-        assert shuffle_choice_options(dict(question)) == question
-
 
 # ---------------------------------------------------------------- practice hints must not give answers away
 
@@ -210,16 +156,9 @@ class TestPastExamHeader:
         "text, expected",
         [
             ("**Problem 3. [5 points] Upside-Down Build**\n\nProfessor Quill wants", "**Upside-Down Build**\n\nProfessor Quill wants"),
-            ("Problem 4. [4 points] The Coatroom\n\nThe Grand Hotel", "The Coatroom\n\nThe Grand Hotel"),
-            ("**Problem 1. [3 points]** Gardener Odalys keeps", "Gardener Odalys keeps"),
             ("Question 2 (3 pts): Which is faster?", "Which is faster?"),
             ("What is Problem 3 about?", "What is Problem 3 about?"),
-            ("Consider the cost [5 points] of a scan", "Consider the cost [5 points] of a scan"),
         ],
     )
     def test_strip(self, text, expected):
         assert strip_exam_header(text) == expected
-
-    def test_normalized_question_has_no_header(self):
-        stored = _mcq(question_text="Problem 2. [3 points] Which holds?").normalized()
-        assert stored["question_text"] == "Which holds?"

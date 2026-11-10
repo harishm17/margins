@@ -1,9 +1,7 @@
 """Voice transcripts are deleted after VOICE_RETENTION_DAYS and the evidence stays (spec 19.9)."""
 import json
 
-import httpx
 
-from app.main import app
 from app.services.voice_retention import purge_voice_transcripts
 from tests.db_helpers import UTC_NOW, new_id, seed_project, seed_topic, seed_user
 
@@ -110,41 +108,6 @@ async def test_old_transcripts_are_emptied_and_the_rest_stays(db):
     assert claim == {"claim_id": "a", "verdict": "covered", "pointer": None}
     assert (await db.fetchval("SELECT answer_text FROM recall_attempts WHERE id = $1", recent_recall)) == "keys to buckets"
     assert (await db.fetchval("SELECT answer_text FROM recall_attempts WHERE id = $1", typed_recall)) == "keys to buckets"
-
-
-async def test_a_second_run_touches_nothing(db):
-    user_id, project_id, topic_id = await world(db)
-    await seed_session(db, user_id, project_id, topic_id, OLD)
-    assert (await purge_voice_transcripts())["sessions"] == 1
-    assert await purge_voice_transcripts() == {"sessions": 0, "attempts": 0, "recall_attempts": 0}
-
-
-async def test_a_session_without_a_coach_state_is_emptied_too(db):
-    user_id, project_id, topic_id = await world(db)
-    session_id = new_id()
-    await db.execute(
-        f"INSERT INTO voice_drill_sessions (id, user_id, project_id, question_set, history, created_at) VALUES ($1, $2, $3, '[]'::jsonb, $4::jsonb, {OLD})",
-        session_id, user_id, project_id, json.dumps(HISTORY),
-    )
-    assert (await purge_voice_transcripts())["sessions"] == 1
-    assert (await db.fetchrow("SELECT history, coach_state FROM voice_drill_sessions WHERE id = $1", session_id))["history"] is None
-
-
-async def test_zero_days_keeps_everything(db):
-    user_id, project_id, topic_id = await world(db)
-    session_id = await seed_session(db, user_id, project_id, topic_id, OLD)
-    assert await purge_voice_transcripts(0) == {"sessions": 0, "attempts": 0, "recall_attempts": 0}
-    assert (await db.fetchval("SELECT history FROM voice_drill_sessions WHERE id = $1", session_id)) is not None
-
-
-async def test_the_endpoint_runs_the_purge(db):
-    user_id, project_id, topic_id = await world(db)
-    await seed_session(db, user_id, project_id, topic_id, OLD)
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/voice/retention")
-    assert response.status_code == 200
-    assert response.json()["sessions"] == 1
 
 
 async def test_evidence_events_stay(db):

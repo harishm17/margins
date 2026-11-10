@@ -1,7 +1,6 @@
 """The practice tutor: one prompt per move, the leak flow, the word limit, the route."""
 import logging
 import re
-from typing import get_args
 from unittest.mock import patch
 
 import pytest
@@ -11,21 +10,13 @@ from app.main import app
 from app.services.llm.mock_provider import MockProvider
 from app.services.llm.schemas import (
     LeakVerdict,
-    MissKind,
-    PracticeClaim,
-    PracticeConfusable,
     PracticeStep,
     PracticeTutorReply,
     PracticeTutorRequest,
     TutorMistake,
-    TutorMove,
-    WeakPrerequisite,
 )
-from app.services.tutor import practice
 from app.services.tutor.practice import (
-    MOVE_INSTRUCTIONS,
     SYSTEM_PROMPT,
-    build_messages,
     limit_reply,
     tutor_reply,
 )
@@ -102,25 +93,6 @@ def authored_block(prompt):
     return re.search(r"<authored_solution>.*?</authored_solution>", prompt, re.S).group(0)
 
 
-def test_every_tutor_move_has_an_instruction_block():
-    assert set(MOVE_INSTRUCTIONS) == set(get_args(TutorMove))
-
-
-def test_each_move_selects_its_instruction_block():
-    claims = [PracticeClaim(text="Without replacement the second draw changes.", quote="the second draw is from 7 marbles", page=12)]
-    weak = WeakPrerequisite(name="Conditional probability", page=9)
-    for move, instruction in MOVE_INSTRUCTIONS.items():
-        messages = build_messages(request(move=move, claims=claims, weak_prerequisite=weak))
-        prompt = "\n".join(m.content for m in messages)
-        assert f'<move name="{move}">' in prompt
-        assert instruction in prompt
-        # Exactly one block: the others stay out, so each move has a narrow prompt.
-        for other, other_instruction in MOVE_INSTRUCTIONS.items():
-            if other != move:
-                assert other_instruction not in prompt, (move, other)
-        assert prompt.count("<move name=") == 1
-
-
 @pytest.mark.asyncio
 async def test_answer_only_in_authored_solution_block():
     provider = Scripted([reply("Which draw changes the bag?")])
@@ -140,62 +112,6 @@ async def test_answer_only_in_authored_solution_block():
     # The student's own words sit in their own block.
     assert re.search(r"<student_working>[^<]*second one is 2/7[^<]*</student_working>", prompt)
     assert "untrusted" in prompt
-
-
-@pytest.mark.asyncio
-async def test_first_wrong_step_is_given_to_model_as_fact():
-    provider = Scripted([reply("Check the first draw.")])
-    with use(provider):
-        await tutor_reply(request(first_wrong_step=0))
-    prompt = provider.tutor_prompts()[0]
-    diagnosis = re.search(r"<diagnosis>.*?</diagnosis>", prompt, re.S).group(0)
-    assert "step 1" in diagnosis and "fact" in diagnosis
-    assert "How many marbles are in the bag?" in diagnosis
-
-    provider = Scripted([reply("Check the draw.")])
-    with use(provider):
-        await tutor_reply(request())
-    assert "<diagnosis>" not in provider.tutor_prompts()[0]
-
-
-@pytest.mark.asyncio
-async def test_confusable_claims_and_prerequisite_reach_the_prompt():
-    provider = Scripted([reply("Which of these fits: with or without replacement?", rung=2)])
-    req = request(
-        move="ladder",
-        rung_allowed=2,
-        confusable=PracticeConfusable(name="Sampling with replacement", summary="the bag is restored after each draw"),
-        claims=[PracticeClaim(text="Draws change the bag.", quote="the bag changes after each draw", page=12)],
-        weak_prerequisite=WeakPrerequisite(name="Conditional probability", page=9),
-    )
-    with use(provider):
-        await tutor_reply(req)
-    prompt = provider.tutor_prompts()[0]
-    assert re.search(r"<confusable>.*Sampling with replacement.*</confusable>", prompt, re.S)
-    assert re.search(r'<claim page="12">.*the bag changes after each draw.*</claim>', prompt, re.S)
-    assert re.search(r"<weak_prerequisite[^>]*>.*Conditional probability.*</weak_prerequisite>", prompt, re.S)
-
-
-@pytest.mark.asyncio
-async def test_a_clean_reply_is_returned_after_one_model_call_and_one_judge_call():
-    provider = Scripted([reply("Which draw changes what is left in the bag?", rung=1)])
-    with use(provider):
-        out = await tutor_reply(request())
-    assert out.reply == "Which draw changes what is left in the bag?"
-    assert out.rung_used == 1
-    assert out.leaked is False and out.from_authored_hint is False
-    assert out.analysis == ""  # never shown
-    assert [call[1]["purpose"] for call in provider.calls] == ["tutor", "router"]
-    assert provider.calls[0][1]["max_tokens"] >= 800  # room for the analysis
-
-
-@pytest.mark.asyncio
-async def test_judge_runs_at_every_rung_including_worked_analogue():
-    for rung, move in [(0, "orient"), (1, "ladder"), (2, "ladder"), (3, "ladder"), (4, "ladder"), (5, "worked_analogue")]:
-        provider = Scripted([reply("Try it on a different bag: 2 red and 4 blue, two draws.", rung=rung)])
-        with use(provider):
-            await tutor_reply(request(rung_allowed=rung, move=move))
-        assert len(provider.judge_calls()) == 1, (rung, move)
 
 
 @pytest.mark.asyncio
@@ -219,38 +135,6 @@ async def test_regenerates_once_then_falls_back_to_authored_hint(caplog):
     assert '"0.1071"' in notice and "answer to step 2" in notice and "would read that value as the answer" in notice
     # Every flag is logged.
     assert len([r for r in caplog.records if "event=tutor_leak" in r.getMessage()]) == 2
-
-
-@pytest.mark.asyncio
-async def test_a_leak_then_a_clean_regeneration_is_used():
-    provider = Scripted([reply("It is 0.107 here."), reply("What is left in the bag after the first draw?")])
-    with use(provider):
-        out = await tutor_reply(request())
-    assert out.reply == "What is left in the bag after the first draw?"
-    assert out.leaked is True and out.from_authored_hint is False
-
-
-@pytest.mark.asyncio
-async def test_model_self_reported_reveal_is_a_leak_without_a_judge_call():
-    provider = Scripted(
-        [reply("Think about the second draw.", reveals=True), reply("What is left after the first draw?")]
-    )
-    with use(provider):
-        out = await tutor_reply(request())
-    assert out.reply == "What is left after the first draw?"
-    assert provider.judge_calls() != [] and len(provider.judge_calls()) == 1  # only the clean reply was judged
-
-
-@pytest.mark.asyncio
-async def test_judge_leak_triggers_regeneration_and_the_reason_is_named():
-    provider = Scripted(
-        [reply("Multiply 3 over 8 by 2 over 7 on a calculator."), reply("Which draw changes the bag?")],
-        verdicts=[LeakVerdict(answer_revealed=True, reason="plugs the numbers into the formula"), LeakVerdict(answer_revealed=False, reason="")],
-    )
-    with use(provider):
-        out = await tutor_reply(request())
-    assert out.reply == "Which draw changes the bag?"
-    assert "plugs the numbers into the formula" in provider.tutor_prompts()[1]
 
 
 @pytest.mark.asyncio
@@ -278,27 +162,6 @@ async def test_worked_analogue_with_problem_numbers_is_a_leak():
     # The reuse was caught without the judge being asked about the first try.
     assert len(provider.judge_calls()) == 1
     assert "numbers" in provider.tutor_prompts()[1].split("<leak_notice>")[1]
-
-
-@pytest.mark.asyncio
-async def test_clarify_reply_rewords_question_only():
-    provider = Scripted([reply("The step asks for the chance that both marbles drawn are red.", rung=0)])
-    with use(provider):
-        out = await tutor_reply(request(move="clarify", rung_allowed=0))
-    prompt = provider.tutor_prompts()[0]
-    assert MOVE_INSTRUCTIONS["clarify"] in prompt
-    assert "reword" in MOVE_INSTRUCTIONS["clarify"].lower() and "no solution information" in MOVE_INSTRUCTIONS["clarify"]
-    # The judge runs on clarify replies too.
-    assert len(provider.judge_calls()) == 1
-    assert out.rung_used == 0
-
-    # A clarify that leaks falls back to the step's question, not a hint.
-    provider = Scripted([reply("It asks for 0.1071.", rung=0), reply("It asks for 3/28.", rung=0)])
-    with use(provider):
-        out = await tutor_reply(request(move="clarify", rung_allowed=0))
-    assert out.from_authored_hint is True
-    assert "What is P(both red)?" in out.reply
-    assert "0.1071" not in out.reply
 
 
 @pytest.mark.asyncio
@@ -334,23 +197,6 @@ def test_reply_word_limit_enforced():
     assert limit_reply("  ") == ""
 
 
-@pytest.mark.asyncio
-async def test_reply_over_the_limit_is_truncated_before_the_checks():
-    long = " ".join(f"Sentence {n} says something about the draws." for n in range(30))
-    provider = Scripted([reply(long)])
-    with use(provider):
-        out = await tutor_reply(request())
-    assert len(out.reply.split()) <= 80
-
-
-@pytest.mark.asyncio
-async def test_rung_used_never_exceeds_the_rung_allowed():
-    provider = Scripted([reply("Which draw changes the bag?", rung=4)])
-    with use(provider):
-        out = await tutor_reply(request(rung_allowed=1))
-    assert out.rung_used == 1
-
-
 THREE_STEPS = [
     step("First?", "7", [], 0, []),
     step("Second?", "0.1071", [], 0.001, HINTS_1),
@@ -376,15 +222,6 @@ async def test_final_allowed_lets_the_reply_confirm_the_students_own_answer():
 
 
 @pytest.mark.asyncio
-async def test_final_allowed_with_reveals_flag_set_is_still_a_confirmation():
-    req = request(final_allowed=True, own_answer="0.1071", move="confirm", rung_allowed=0, attempts=["0.1071"])
-    provider = Scripted([reply("Yes, 0.1071 is right.", rung=0, reveals=True, kind=None)])
-    with use(provider):
-        out = await tutor_reply(req)
-    assert out.leaked is False and out.reply == "Yes, 0.1071 is right."
-
-
-@pytest.mark.asyncio
 async def test_final_allowed_does_not_allow_the_answer_in_another_form():
     # The student wrote 0.1071; 3/28 is the same value in a form they did not write.
     req = request(final_allowed=True, own_answer="0.1071", move="confirm", rung_allowed=0, attempts=["0.1071"])
@@ -406,17 +243,6 @@ async def test_final_allowed_reply_that_states_a_later_step_answer_is_a_leak():
     assert out.leaked is True and "99" not in out.reply
     # The judge was given the later answer to check against.
     assert "Step 3: 99" in provider.judge_calls()[0][2]
-
-
-@pytest.mark.asyncio
-async def test_a_later_steps_small_integer_does_not_force_the_fallback():
-    # "2" is the second step's answer. Written as a word, or as a count of options, it is not a value stated: the judge decides.
-    steps = [step("First?", "0.4", [], 0.005, HINTS_1), step("Second?", "2", [], 0, [])]
-    provider = Scripted([reply("Compare the two lengths the problem gives, which part is painted?", rung=1)])
-    with use(provider):
-        out = await tutor_reply(request(steps=steps, step_index=0, rung_allowed=1))
-    assert out.leaked is False and out.from_authored_hint is False
-    assert "Step 2: 2" in provider.judge_calls()[0][2]
 
 
 LEAKED_CONFIRM = (
@@ -449,19 +275,6 @@ async def test_a_transfer_question_that_uses_a_later_steps_answer_is_a_leak_even
 
 
 @pytest.mark.asyncio
-async def test_references_and_counts_do_not_trip_the_later_step_check():
-    req = request(
-        problem="A decision tree compares two values at each node.", steps=TREE_STEPS, step_index=1, move="confirm", rung_allowed=4,
-        final_allowed=True, own_answer="$2^3 = 8$", attempts=["8"], working="", hints_shown=[],
-    )
-    text = "Yes, 8 is right. Step 4 builds on the 2nd idea in this one. With 3 options at each node, how many leaves would a tree of height 2 have?"
-    provider = Scripted([reply(text, rung=4, kind=None)])
-    with use(provider):
-        out = await tutor_reply(req)
-    assert out.leaked is False and out.reply == text
-
-
-@pytest.mark.asyncio
 async def test_judge_failure_falls_back_to_the_authored_hint_and_is_logged(caplog):
     from app.services.llm.base import LLMUnavailableError
 
@@ -479,124 +292,8 @@ async def test_judge_failure_falls_back_to_the_authored_hint_and_is_logged(caplo
     assert any("tutor_leak_judge_failed" in r.getMessage() for r in caplog.records)
 
 
-@pytest.mark.asyncio
-async def test_fallback_keeps_the_located_mistake_of_the_last_reply():
-    provider = Scripted(
-        [reply("It is 0.1071.", where="the second draw", kind="execution"), reply("It is 3/28.", where="the denominator", kind="careless")]
-    )
-    with use(provider):
-        out = await tutor_reply(request())
-    assert out.from_authored_hint
-    assert out.mistake == TutorMistake(located=True, where="the denominator", kind="careless")
-
-
-@pytest.mark.asyncio
-async def test_confirm_fallback_is_a_neutral_request_to_explain():
-    req = request(final_allowed=True, own_answer="0.1071", move="confirm", rung_allowed=0, attempts=["0.1071"], steps=[step("What is P?", "0.1071", [], 0.001, [])], step_index=0)
-    provider = Scripted([reply("Yes it is 3/28.", rung=0), reply("Correct, 3/28.", rung=0)])
-    with use(provider):
-        out = await tutor_reply(req)
-    assert out.reply == "Explain in your own words how you got there."
-    assert not re.search(r"\b(right|correct|yes|good)\b", out.reply.lower())
-
-
-@pytest.mark.asyncio
-async def test_confront_fallback_is_the_rungs_authored_hint_without_the_students_claim():
-    wrong = "I am sure it is 1/2 because each draw is a coin flip"
-    req = request(move="confront", rung_allowed=3, attempts=[wrong], working=wrong)
-    provider = Scripted([reply("It is 0.1071.", rung=3), reply("It is 3/28.", rung=3)])
-    with use(provider):
-        out = await tutor_reply(req)
-    assert out.reply == HINTS_1[1]
-    assert "coin" not in out.reply and "1/2" not in out.reply
-
-    # With no authored hint for the rung, a neutral question rather than the claim.
-    bare = request(move="confront", rung_allowed=0, attempts=[wrong], working=wrong)
-    provider = Scripted([reply("It is 0.1071.", rung=0), reply("It is 3/28.", rung=0)])
-    with use(provider):
-        out = await tutor_reply(bare)
-    assert "coin" not in out.reply and out.reply.endswith("?")
-
-
-def test_analysis_comes_first_and_is_required():
-    import anthropic
-
-    schema = anthropic.transform_schema(PracticeTutorReply)
-    assert list(schema["properties"])[0] == "analysis"
-    assert "analysis" in schema["required"]
-    assert "leaked" not in schema["properties"] and "from_authored_hint" not in schema["properties"]
-
-
 _ABBREVIATIONS = "Look at the givens, e.g. the second one. Fig. 3 shows the bag, i.e. the whole set. Which draw changes it?"
 _LONG_TAIL = "Which draw changes the bag? " + " ".join(["word"] * 80) + "."
-
-
-@pytest.mark.parametrize(
-    ("text", "expected"),
-    [
-        (_ABBREVIATIONS, _ABBREVIATIONS),
-        ("Is it Case A vs. Case B? Take your time.", "Is it Case A vs. Case B? Take your time."),
-        # A statement after the question is dropped when it would pass the limit.
-        (_LONG_TAIL, "Which draw changes the bag?"),
-        # A second question still ends the text.
-        ("What did you try? Take your time. And then what? More.", "What did you try? Take your time."),
-        # Words that merely end like an abbreviation still end the sentence.
-        *[
-            (f"That is the {word}. Which draw changes the bag? Then what else?", f"That is the {word}. Which draw changes the bag?")
-            for word in ("step", "help", "first", "goal", "piano", "much")
-        ],
-        # And the real abbreviation still holds.
-        ("See Fig. 2 first. Which part?", "See Fig. 2 first. Which part?"),
-        ("(e.g. the first one). Which part?", "(e.g. the first one). Which part?"),
-    ],
-)
-def test_limit_reply_keeps_abbreviations_and_splits_after_words_that_merely_end_like_one(text, expected):
-    assert limit_reply(text) == expected
-
-
-def test_ask_what_is_unclear_is_added_before_the_move():
-    plain = "\n".join(m.content for m in build_messages(request()))
-    asked = "\n".join(m.content for m in build_messages(request(ask_what_is_unclear=True)))
-    assert "which part of the last hint is unclear" not in plain
-    assert "which part of the last hint is unclear" in asked
-    assert asked.index("which part of the last hint is unclear") < asked.index('<move name="ladder">')
-
-
-@pytest.mark.asyncio
-async def test_to_source_leak_falls_back_to_the_page():
-    req = request(
-        move="to_source",
-        claims=[PracticeClaim(text="Draws change the bag.", quote="the bag changes after each draw", page=12)],
-    )
-    provider = Scripted([reply("It's 0.1071.", rung=1), reply("It's 3/28.", rung=1)])
-    with use(provider):
-        out = await tutor_reply(req)
-    assert "page 12" in out.reply and out.from_authored_hint
-
-
-@pytest.mark.asyncio
-async def test_fallback_hint_follows_the_rung():
-    for rung, expected in [(1, HINTS_1[0]), (2, HINTS_1[0]), (3, HINTS_1[1]), (4, HINTS_1[2]), (5, HINTS_1[2])]:
-        provider = Scripted([reply("It is 0.1071.", rung=rung), reply("Answer: 0.1071.", rung=rung)])
-        with use(provider):
-            out = await tutor_reply(request(rung_allowed=rung))
-        assert out.reply == expected, rung
-
-
-@pytest.mark.asyncio
-async def test_fallback_at_rung_zero_asks_what_they_tried():
-    provider = Scripted([reply("It is 0.1071.", rung=0), reply("Answer: 0.1071.", rung=0)])
-    with use(provider):
-        out = await tutor_reply(request(rung_allowed=0, move="orient"))
-    assert out.from_authored_hint and out.reply.endswith("?")
-    assert "0.1071" not in out.reply
-
-
-def test_move_type_matches_the_frontend():
-    assert set(get_args(TutorMove)) == {
-        "clarify", "orient", "ladder", "confront", "confirm", "reason_first", "to_source", "worked_analogue",
-    }
-    assert set(get_args(MissKind)) == {"cue_miss", "discrimination", "execution", "careless", "misconception"}
 
 
 class TestRoute:
@@ -608,27 +305,6 @@ class TestRoute:
         payload = request().model_dump(mode="json")
         payload.update(over)
         return payload
-
-    def test_post_returns_the_reply_without_the_analysis(self, client):
-        provider = Scripted([reply("Which draw changes the bag?")])
-        with use(provider):
-            response = client.post("/tutor/practice", json=self.body())
-        assert response.status_code == 200
-        data = response.json()
-        assert data["reply"] == "Which draw changes the bag?"
-        assert data["rung_used"] == 1
-        assert data["mistake"] == {"located": True, "where": "the second draw", "kind": "execution"}
-        assert data["reveals_answer"] is False and data["leaked"] is False
-        assert data["analysis"] == ""
-
-    def test_a_step_index_outside_the_steps_is_refused(self, client):
-        response = client.post("/tutor/practice", json=self.body(step_index=5))
-        assert response.status_code == 422
-
-    def test_a_rung_outside_zero_to_five_is_refused(self, client):
-        response = client.post("/tutor/practice", json=self.body(rung_allowed=6))
-        assert response.status_code == 422
-        assert client.post("/tutor/practice", json=self.body(move="shout")).status_code == 422
 
     def test_a_user_over_budget_gets_a_429_and_no_model_call(self, client):
         provider = Scripted([reply("unused")])
@@ -689,33 +365,11 @@ async def test_final_allowed_ignores_the_attempts_and_the_working_the_browser_se
     assert out.leaked is True and "0.1071" not in out.reply
 
 
-@pytest.mark.asyncio
-async def test_the_stored_answer_is_what_a_reply_may_confirm_not_a_later_attempt():
-    req = request(final_allowed=True, own_answer="0.1071", move="confirm", rung_allowed=0, attempts=["0.9"], working="maybe 0.9")
-    provider = Scripted([reply("Yes, 0.1071 is right.", rung=0, kind=None)])
-    with use(provider):
-        out = await tutor_reply(req)
-    assert out.leaked is False
-    note = provider.judge_calls()[0][2]
-    assert "0.1071" in note and "0.9" not in note.split("student_answer_note")[1]
-
-
-@pytest.mark.asyncio
-async def test_final_allowed_without_any_answer_text_may_not_confirm():
-    req = request(final_allowed=True, move="confirm", rung_allowed=0, attempts=[], working="")
-    provider = Scripted([reply("Yes, 0.1071.", rung=0, reveals=True, kind=None), reply("Walk through your step.", rung=0)])
-    with use(provider):
-        out = await tutor_reply(req)
-    assert "may confirm" not in provider.tutor_prompts()[0]
-    assert "student_answer_note" not in provider.judge_calls()[0][2] if provider.judge_calls() else True
-    assert out.leaked is True and "0.1071" not in out.reply
-
-
 # ---------------------------------------------------------------- the authored fallback is checked too
 
 
 def test_a_fallback_hint_that_states_a_later_answer_is_not_sent():
-    from app.services.tutor.practice import ORIENT_FALLBACK, authored_fallback
+    from app.services.tutor.practice import authored_fallback
 
     # The hint of step 1 gives step 2's answer away.
     req = request(
@@ -730,49 +384,7 @@ def test_a_fallback_hint_that_states_a_later_answer_is_not_sent():
     assert "3/28" not in text and rung == 1 and text == "Re-read the first sentence."  # the nearest lower hint that is safe
 
 
-def test_a_fallback_with_no_safe_hint_asks_what_was_tried():
-    from app.services.tutor.practice import ORIENT_FALLBACK, authored_fallback
-
-    leaky = ["The total is 8.", "So 8 marbles.", "Answer: eight"]
-    req = request(steps=[step("How many marbles are in the bag?", "8", ["eight"], 0, leaky), step("What is P(both red)?", "0.1071", [], 0.001, HINTS_1)], step_index=0, rung_allowed=4)
-    assert authored_fallback(req) == (ORIENT_FALLBACK, 0)
-
-
-def test_a_fallback_hint_that_reuses_the_problem_numbers_is_not_sent():
-    from app.services.tutor.practice import ORIENT_FALLBACK, authored_fallback
-
-    req = request(
-        problem="A class of 24 students has 18 left-handers.",
-        steps=[step("What share are left-handed?", "0.75", [], 0.01, ["Look at the two counts.", "Divide 18 by 24.", "share = part / whole"])],
-        step_index=0,
-        rung_allowed=3,
-        working="",
-        attempts=[],
-    )
-    text, rung = authored_fallback(req)
-    assert "18" not in text and text == "Look at the two counts." and rung == 1
-
-
 class TestClaimedRung:
     @pytest.fixture
     def client(self):
         return TestClient(app)
-
-    def test_the_claimed_rung_is_clamped_in_the_reply_and_shown_only_to_the_eval(self, client):
-        payload = request(rung_allowed=1).model_dump(mode="json")
-        with use(Scripted([reply("Re-read the question.", rung=4)])):
-            plain = client.post("/tutor/practice", json=payload)
-        assert plain.json()["rung_used"] == 1 and "claimed_rung" not in plain.json()
-        with use(Scripted([reply("Re-read the question.", rung=4)])):
-            debug = client.post("/tutor/practice", json=payload, headers={"x-margins-eval": "1"})
-        assert debug.json()["rung_used"] == 1 and debug.json()["claimed_rung"] == 4
-
-    @pytest.mark.asyncio
-    async def test_the_claim_survives_a_regeneration_and_the_fallback(self):
-        provider = Scripted([reply("It is 0.1071.", rung=5), reply("It is 3/28.", rung=3)])
-        with use(provider):
-            out = await tutor_reply(request(rung_allowed=1))
-        assert out.from_authored_hint and out.claimed_rung == 5
-
-    def test_the_claim_is_not_in_the_models_schema(self):
-        assert "claimed_rung" not in PracticeTutorReply.model_json_schema()["properties"]

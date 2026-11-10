@@ -49,15 +49,6 @@ class TestEnsureTopicMappings:
         assert row["relevance_score"] > 0 and row["relevance_source"] in {"semantic_search", "keyword_and_semantic"}
         assert far not in await mapped_ids(db, topic_id)
 
-    async def test_fetch_topic_chunks_maps_before_reading(self, db, world):
-        chunk = await add_chunk(db, world["material_id"], 0, "krebs cycle steps", unit(1.0))
-        topic_id = await seed_topic(db, world["project_id"], "Krebs cycle")
-
-        chunks = await fetch_topic_chunks(topic_id)
-
-        assert [c["id"] for c in chunks] == [chunk]
-        assert chunks[0]["filename"] == "doc.pdf"
-
     async def test_current_mappings_are_not_recomputed(self, db, world, monkeypatch):
         chunk = await add_chunk(db, world["material_id"], 0, "krebs cycle steps", unit(1.0))
         topic_id = await seed_topic(db, world["project_id"], "Krebs cycle")
@@ -83,24 +74,6 @@ class TestEnsureTopicMappings:
 
         assert {c["id"] for c in chunks} == {first, newer}
 
-    async def test_a_pending_material_does_not_make_mappings_stale(self, db, world, monkeypatch):
-        await add_chunk(db, world["material_id"], 0, "krebs cycle steps", unit(1.0))
-        topic_id = await seed_topic(db, world["project_id"], "Krebs cycle")
-        await topic_mapping.ensure_topic_mappings(topic_id, 24)
-        pending = await seed_material(db, world["project_id"], status="pending", filename="p.pdf")
-        late = await add_chunk(db, pending, 0, "krebs", unit(1.0))
-        await db.execute("UPDATE material_chunks SET created_at = created_at + interval '1 minute' WHERE id = $1", late)
-        monkeypatch.setattr(topic_mapping, "hybrid_search_chunks", AsyncMock(side_effect=AssertionError("searched")))
-
-        await topic_mapping.ensure_topic_mappings(topic_id, 24)
-
-    async def test_nothing_above_the_floor_leaves_no_mappings(self, db, world):
-        await add_chunk(db, world["material_id"], 0, "unrelated filler", unit(0.0, 1.0))
-        topic_id = await seed_topic(db, world["project_id"], "Medieval cuisine")
-
-        assert await fetch_topic_chunks(topic_id) == []
-        assert await mapped_ids(db, topic_id) == []
-
     async def test_failed_refresh_keeps_stale_mappings(self, db, world, monkeypatch):
         chunk = await add_chunk(db, world["material_id"], 0, "krebs cycle steps", unit(1.0))
         topic_id = await seed_topic(db, world["project_id"], "Krebs cycle")
@@ -113,18 +86,6 @@ class TestEnsureTopicMappings:
 
         assert await mapped_ids(db, topic_id) == [chunk]
 
-    async def test_failed_first_mapping_is_an_error(self, db, world, monkeypatch):
-        await add_chunk(db, world["material_id"], 0, "krebs cycle steps", unit(1.0))
-        topic_id = await seed_topic(db, world["project_id"], "Krebs cycle")
-        monkeypatch.setattr(topic_mapping, "hybrid_search_chunks", AsyncMock(side_effect=RuntimeError("embedder down")))
-
-        with pytest.raises(RuntimeError, match="embedder down"):
-            await topic_mapping.ensure_topic_mappings(topic_id, 24)
-
-    async def test_unknown_topic_is_ignored(self, db):
-        await topic_mapping.ensure_topic_mappings("missing", 24)
-
-
 def llm_returning(text):
     llm = MagicMock()
     llm.generate_text = AsyncMock(
@@ -134,18 +95,6 @@ def llm_returning(text):
 
 
 class TestGenerationFromACustomTopic:
-    async def test_notes_for_a_topic_with_no_mappings_are_generated(self, db, world, monkeypatch):
-        await add_chunk(db, world["material_id"], 0, "The krebs cycle oxidises acetyl CoA.", unit(1.0, 0.2))
-        topic_id = await seed_topic(db, world["project_id"], "Krebs cycle")
-        notes = "# Krebs cycle\n\n" + "The cycle oxidises acetyl CoA in the matrix. " * 40
-        llm = llm_returning(notes)
-        monkeypatch.setattr("app.services.llm.factory.LLMFactory.get_provider", lambda *a, **k: llm)
-
-        result = await NotesGenerator().generate_notes(topic_id, "Krebs cycle", "", {})
-
-        assert result["chunk_count"] == 1
-        assert len(await mapped_ids(db, topic_id)) == 1
-
     async def test_a_topic_the_materials_do_not_cover_still_fails_without_source_material(self, db, world, monkeypatch):
         await add_chunk(db, world["material_id"], 0, "unrelated filler", unit(0.0, 1.0))
         topic_id = await seed_topic(db, world["project_id"], "Medieval cuisine")

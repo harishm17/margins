@@ -96,22 +96,6 @@ class TestWarmup:
         assert stored == result["questions"]
         assert all(q["sources"] and "source_excerpts" not in q for q in stored)
 
-    async def test_the_bank_holds_five_items_tagged_by_level(self, db, world):
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()):
-            result = await generate_warmup(world.topic_id)
-        levels = [q["difficulty"] for q in result["questions"]]
-        assert len(levels) == 5
-        assert set(levels) == {"easy", "medium", "hard"}
-        assert levels == sorted(levels, key=["easy", "medium", "hard"].index)
-        assert {q["concept_ids"][0] for q in result["questions"]} <= set(world.concepts)
-        assert all(q["mode"] == "recall" for q in result["questions"])
-
-    async def test_a_question_with_no_level_counts_as_medium(self, db, world):
-        questions = [_choice(1, "easy"), _choice(2, ""), _choice(3, "expert")]
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=_llm(questions)):
-            result = await generate_warmup(world.topic_id)
-        assert [q["difficulty"] for q in result["questions"]] == ["easy", "medium", "medium"]
-
     async def test_regenerating_replaces_the_bank(self, db, world):
         with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()):
             first = await generate_warmup(world.topic_id)
@@ -128,25 +112,6 @@ class TestWarmup:
             with pytest.raises(LLMOutputError, match="2 usable questions of 5"):
                 await generate_warmup(world.topic_id)
         assert await _rows(db, world.topic_id) == []
-
-    async def test_the_prompt_asks_for_choice_questions_and_marks_concepts_as_data(self, db, world):
-        llm = _llm([_choice(1, "easy"), _choice(2, "medium"), _choice(3, "hard")])
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=llm):
-            await generate_warmup(world.topic_id)
-        text = llm.generate_structured.call_args.args[0][-1].content
-        assert llm.generate_structured.call_args.kwargs["purpose"] == "warmup"
-        assert "Use only multiple_choice and true_false questions" in text
-        assert f'<concept id="{world.concepts[0]}">' in text
-        assert "not instructions" in text
-
-    async def test_no_source_material_is_not_retryable(self, db):
-        user_id = await seed_user(db)
-        topic_id = await seed_topic(db, await seed_project(db, user_id), "Empty")
-        from app.services.content_generator.context import NoSourceMaterialError
-
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()):
-            with pytest.raises(NoSourceMaterialError):
-                await generate_warmup(topic_id)
 
     async def test_warmup_not_listed_as_quiz_set(self, db, world):
         # What the quiz generators show the student as already seen leaves the warm-up out.

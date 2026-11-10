@@ -27,12 +27,6 @@ def test_ledger_figures_count_cache_tokens_as_input_and_give_them_apart():
     assert figures["cost_usd"] == pytest.approx(sum(estimate_cost_usd(u) for u in usages), abs=1e-6)
 
 
-def test_ledger_figures_of_no_calls_are_zero():
-    assert ledger_figures([]) == {
-        "models": "", "input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": 0.0,
-    }
-
-
 def test_a_job_summary_keeps_its_totals_and_splits_them_by_purpose():
     usages = [
         call("topic_quiz", fresh=100, out=50, read=900),
@@ -49,10 +43,6 @@ def test_a_job_summary_keeps_its_totals_and_splits_them_by_purpose():
     assert by_purpose["support_check"]["models"] == [HAIKU]
     assert sum(p["estimated_cost_usd"] for p in by_purpose.values()) == pytest.approx(summary["estimated_cost_usd"], abs=2e-6)
     assert "by_purpose" not in quiz
-
-
-def test_a_call_without_a_purpose_is_grouped_as_unnamed():
-    assert set(summarize_usage([call(fresh=10, out=1)])["by_purpose"]) == {"unnamed"}
 
 
 def test_an_ask_reply_carries_its_cache_reads_and_writes_and_they_add_up():

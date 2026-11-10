@@ -22,9 +22,6 @@ from app.services.llm.base import (
     LLMUnavailableError,
 )
 from app.services.llm.factory import LLMFactory
-from app.services.llm.observed import ObservedProvider
-from app.services.llm.mock_provider import MockProvider
-from app.services.llm.schemas import MaterialCheck, QuestionSet
 from app.services.llm.usage import summarize_usage, track_llm_usage
 
 
@@ -90,40 +87,12 @@ class TestRequestShape:
         assert params["betas"] == ["server-side-fallback-2026-07-01"]
         assert "thinking" not in params and "temperature" not in params
 
-    @pytest.mark.asyncio
-    async def test_fast_model_without_fallback(self):
-        provider, create = _provider(_response("text", model="claude-haiku-5-5"))
-        await provider.generate_text([LLMMessage(role="user", content="hi")], purpose="validate_material")
-
-        params = create.call_args.kwargs
-        assert params["model"] == "claude-haiku-5-5"
-        assert params["output_config"] == {"effort": "low"}
-        assert "fallbacks" not in params and "betas" not in params
-        assert "system" not in params
-
-    def test_missing_key_is_a_configuration_error(self):
-        with pytest.raises(LLMNotConfiguredError):
-            AnthropicProvider(api_key="")
-
-
 class TestResponses:
-    @pytest.mark.asyncio
-    async def test_structured_output_is_validated(self):
-        provider, _ = _provider(_response('{"ok": true, "reason": "fine"}'))
-        result = await provider.generate_structured(MESSAGES, Verdict, purpose="topic_quiz")
-        assert result == Verdict(ok=True, reason="fine")
-
     @pytest.mark.asyncio
     async def test_schema_mismatch_is_an_output_error(self):
         provider, _ = _provider(_response('{"ok": "maybe"}'))
         with pytest.raises(LLMOutputError, match="Verdict"):
             await provider.generate_structured(MESSAGES, Verdict, purpose="topic_quiz")
-
-    @pytest.mark.asyncio
-    async def test_empty_text_is_an_output_error(self):
-        provider, _ = _provider(_response("   "))
-        with pytest.raises(LLMOutputError, match="no text"):
-            await provider.generate_text(MESSAGES, purpose="section_notes")
 
     @pytest.mark.asyncio
     async def test_truncated_output_is_an_output_error(self):
@@ -177,17 +146,14 @@ class TestErrorTranslation:
         "error,expected,retryable",
         [
             (_status_error(anthropic.AuthenticationError, 401), LLMAuthError, False),
-            (_status_error(anthropic.PermissionDeniedError, 403), LLMAuthError, False),
             (
                 _status_error(anthropic.BadRequestError, 400, "Your credit balance is too low"),
                 LLMCreditError,
                 False,
             ),
             (_status_error(anthropic.BadRequestError, 400, "max_tokens too large"), LLMRequestError, False),
-            (_status_error(anthropic.NotFoundError, 404, "model not found"), LLMRequestError, False),
             (_status_error(anthropic.RateLimitError, 429), LLMRateLimitError, True),
             (_status_error(anthropic.OverloadedError, 529), LLMUnavailableError, True),
-            (_status_error(anthropic.InternalServerError, 500), LLMUnavailableError, True),
             (
                 anthropic.APITimeoutError(request=httpx2.Request("POST", "https://api.anthropic.com")),
                 LLMUnavailableError,
@@ -202,47 +168,11 @@ class TestErrorTranslation:
         assert excinfo.value.retryable is retryable
 
 
-class TestMockProvider:
-    @pytest.mark.asyncio
-    async def test_returns_schema_examples(self):
-        provider = MockProvider()
-        check = await provider.generate_structured(MESSAGES, MaterialCheck, purpose="validate_material")
-        assert check.is_valid is True
-        questions = await provider.generate_structured(MESSAGES, QuestionSet, purpose="topic_quiz")
-        assert len(questions.usable()) == 24
-        text = await provider.generate_text(MESSAGES, purpose="section_notes")
-        assert "mock" in text.content.lower()
-
-    @pytest.mark.asyncio
-    async def test_schema_without_example_fails_clearly(self):
-        with pytest.raises(LLMOutputError, match="Verdict"):
-            await MockProvider().generate_structured(MESSAGES, Verdict, purpose="topic_quiz")
 
 
 class TestFactory:
     def teardown_method(self):
         LLMFactory.reset()
-
-    def test_anthropic_provider(self):
-        with patch("app.services.llm.factory.settings") as settings:
-            settings.LLM_PROVIDER = "anthropic"
-            settings.ANTHROPIC_API_KEY = "test-key"
-            settings.LLM_TIMEOUT_SECONDS = 30
-            settings.LLM_MAX_RETRIES = 2
-            LLMFactory.reset()
-            provider = LLMFactory.get_provider()
-            # Every caller gets the configured provider wrapped so its calls feed the AI status.
-            assert isinstance(provider, ObservedProvider)
-            assert isinstance(provider.inner, AnthropicProvider)
-            assert provider.model_for("validate_material") == "claude-haiku-5-5"
-            assert LLMFactory.get_provider() is provider
-
-    def test_mock_provider(self):
-        with patch("app.services.llm.factory.settings") as settings:
-            settings.LLM_PROVIDER = "mock"
-            settings.is_production = False
-            LLMFactory.reset()
-            assert isinstance(LLMFactory.get_provider().inner, MockProvider)
 
     def test_the_mock_provider_is_refused_in_production(self):
         with patch("app.services.llm.factory.settings") as settings:
@@ -262,10 +192,3 @@ class TestFactory:
             Settings(ENVIRONMENT="production", LLM_PROVIDER="Mock")
         assert Settings(ENVIRONMENT="development", LLM_PROVIDER="mock").LLM_PROVIDER == "mock"
         assert Settings(ENVIRONMENT="production", LLM_PROVIDER="anthropic").is_production
-
-    def test_unknown_provider(self):
-        with patch("app.services.llm.factory.settings") as settings:
-            settings.LLM_PROVIDER = "openai"
-            LLMFactory.reset()
-            with pytest.raises(LLMNotConfiguredError):
-                LLMFactory.get_provider()

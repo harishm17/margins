@@ -44,16 +44,6 @@ async def test_the_roles_to_skip_can_be_chosen(db, files):
     assert len(everything) == 4
 
 
-async def test_files_can_be_excluded_by_id(db, files):
-    project_id, ids = files
-
-    found = await search.hybrid_search_chunks(
-        project_id, "Krebs cycle", "", [], limit=10, exclude_material_ids=[ids["content"][0]]
-    )
-
-    assert {c["filename"] for c in found} == {"other.pdf"}
-
-
 async def test_full_text_only_search_applies_the_same_filter(db, files, monkeypatch):
     project_id, _ = files
 

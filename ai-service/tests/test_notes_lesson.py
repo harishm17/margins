@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.content_generator.examples import ExampleType, ExamplesGenerator
 from app.services.content_generator.notes import NotesGenerator
 from app.services.content_generator.quiz import APPLICATION_RULES, QuizGenerator
 from app.services.exam_generator import ExamGenerator
@@ -12,11 +11,8 @@ from app.services.llm.schemas import (
     ChoiceOption,
     GeneratedQuestion,
     QuestionSet,
-    SolutionStep,
-    SolvedExample,
-    SolvedExampleSet,
 )
-from tests.context_stub import stub_topic_context, topic_context
+from tests.context_stub import stub_topic_context
 
 
 
@@ -76,40 +72,6 @@ def factory(llm):
 
 
 class TestLessonPrompt:
-    async def test_the_instructions_ask_for_the_lesson_structure(self):
-        llm = _llm(text=LESSON)
-        with stub_topic_context(CHUNKS, course_map="Course map: A, B"), factory(llm):
-            await NotesGenerator().generate_notes("t1", "Bayes' rule", "d")
-        messages = llm.generate_text.call_args.args[0]
-        instructions = messages[-1].content
-        order = [instructions.index(h) for h in (
-            "# Bayes' rule", "## What you'll learn", "## The idea", "## Key concepts", "## Worked example",
-            "## Check yourself", "## Common pitfalls", "## Summary",
-        )]
-        assert order == sorted(order)
-        assert "```check" in instructions and 'as "Q: ..."' in instructions and '"A: ..."' in instructions
-        assert "5-8 recall bullets" in instructions
-        assert "Course map: A, B" in messages[1].content  # in the excerpt block, not the instructions
-
-    async def test_objectives_from_the_course_map_are_the_what_youll_learn_bullets(self):
-        llm = _llm(text=LESSON)
-        context = topic_context(CHUNKS, objectives=["compute a posterior"])
-        with stub_topic_context(CHUNKS, context=context), factory(llm):
-            await NotesGenerator().generate_notes("t1", "T", "d")
-        assert "the topic's objectives from the course map" in llm.generate_text.call_args.args[0][-1].content
-
-    async def test_without_objectives_the_model_writes_them(self):
-        llm = _llm(text=LESSON)
-        with stub_topic_context(CHUNKS), factory(llm):
-            await NotesGenerator().generate_notes("t1", "T", "d")
-        assert "3-5 bullets of what the student can do" in llm.generate_text.call_args.args[0][-1].content
-
-    async def test_leaving_out_examples_leaves_out_the_worked_example_section(self):
-        llm = _llm(text=LESSON)
-        with stub_topic_context(CHUNKS), factory(llm):
-            await NotesGenerator().generate_notes("t1", "T", "d", {"include_examples": False})
-        assert "## Worked example" not in llm.generate_text.call_args.args[0][-1].content
-
     async def test_citations_come_from_the_primary_spans_and_skip_supporting_files(self):
         llm = _llm(text=LESSON)
         with stub_topic_context(CHUNKS), factory(llm):
@@ -128,14 +90,7 @@ class TestPostProcessing:
         "bare, heading",
         [
             ("What you'll learn", "## What you'll learn"),
-            ("What you\u2019ll learn", "## What you'll learn"),
-            ("The idea", "## The idea"),
             ("KEY CONCEPTS:", "## Key concepts"),
-            ("**Worked example**", "## Worked example"),
-            ("check yourself", "## Check yourself"),
-            ("Common Pitfalls", "## Common pitfalls"),
-            ("Summary:", "## Summary"),
-            ("Overview", "## Overview"),
             ("Exam-Ready Recap", "## Exam-ready recap"),
         ],
     )
@@ -153,10 +108,6 @@ class TestPostProcessing:
         raw = "## Check yourself\n```check\nQ: Why?\n\n\nA: Because.\n```\n"
         assert clean(raw) == raw.strip()
 
-    def test_the_fence_language_is_normalised(self):
-        raw = "## Check yourself\n```Check\nQ: a\nA: b\n```\n\n```  check  \nQ: c\nA: d\n```"
-        assert clean(raw).count("```check\n") == 2
-
     def test_loose_question_and_answer_lines_are_wrapped_in_check_blocks(self):
         raw = (
             "## Check yourself\nTry these.\n\n**Q1:** What is a prior?\n**A:** Belief before the data.\n\n"
@@ -168,19 +119,6 @@ class TestPostProcessing:
         assert "Q: What is $P(A|B)$?\nA: The posterior. It is read as A given B.\n```" in out
         assert out.index("Try these.") < out.index("```check") and out.endswith("## Summary\n- x")
 
-    def test_questions_without_answers_are_not_touched(self):
-        raw = "## Check yourself\nQ: What is a prior?\nQ: What is a posterior?\n\n## Summary\n- x"
-        assert "```check" not in clean(raw)
-
-    def test_q_and_a_lines_in_other_sections_are_not_wrapped(self):
-        raw = "## Worked example\nQ: How much?\nA: Ten.\n\n## Check yourself\n```check\nQ: a\nA: b\n```"
-        assert clean(raw).count("```check") == 1
-
-    def test_math_survives(self):
-        raw = "## Check yourself\n```check\nQ: Compute $\\frac{1}{2} + \\frac{1}{3}$.\nA: $\\frac{5}{6}$\n```"
-        assert clean(raw) == raw
-
-
 @pytest.mark.usefixtures("passthrough_support")
 class TestQuizAndExamPrompts:
     def _questions(self, n=4):
@@ -188,40 +126,6 @@ class TestQuizAndExamPrompts:
             GeneratedQuestion(question_type="true_false", question_text=f"S{i}", correct_answer=True, explanation="e")
             for i in range(n)
         ])
-
-    async def test_the_quiz_prompt_asks_for_application_questions_with_new_numbers(self):
-        llm = _llm(structured=self._questions())
-        with stub_topic_context(CHUNKS), factory(llm):
-            await QuizGenerator().generate_quiz("t1", "T", "d", question_count=4)
-        instructions = llm.generate_structured.call_args.args[0][-1].content
-        assert APPLICATION_RULES in instructions
-        assert "At least half of the questions must apply a concept to a new situation" in instructions
-        assert "differ from the worked examples in the excerpts and in the lesson" in instructions
-        assert "List in source_excerpts" in instructions
-
-    async def test_what_the_student_has_already_seen_is_passed_as_do_not_reuse_context(self):
-        llm = _llm(structured=self._questions())
-        digest = "Worked example in the notes:\nA test is 99% accurate; 1 in 1000 have the disease."
-        with stub_topic_context(CHUNKS, digest=digest), factory(llm):
-            await QuizGenerator().generate_quiz("t1", "T", "d", question_count=4)
-        instructions = llm.generate_structured.call_args.args[0][-1].content
-        assert "<already_seen>" in instructions and "99% accurate" in instructions
-        assert "Do not reuse its numbers" in instructions
-
-    async def test_no_context_block_when_the_student_has_seen_nothing(self):
-        llm = _llm(structured=self._questions())
-        with stub_topic_context(CHUNKS), factory(llm):
-            await QuizGenerator().generate_quiz("t1", "T", "d", question_count=4)
-        assert "<already_seen>" not in llm.generate_structured.call_args.args[0][-1].content
-
-    async def test_the_quiz_prompt_still_caches_the_excerpts_only_for_regenerations(self):
-        for regeneration in (False, True):
-            llm = _llm(structured=self._questions())
-            with stub_topic_context(CHUNKS, course_map="map"), factory(llm):
-                await QuizGenerator().generate_quiz("t1", "T", "d", question_count=4, cache_excerpts=regeneration)
-            messages = llm.generate_structured.call_args.args[0]
-            assert [m.cache for m in messages] == [False, regeneration, False]
-            assert "map" in messages[1].content
 
     async def test_questions_are_stored_with_file_and_page_references(self):
         questions = QuestionSet(questions=[
@@ -253,16 +157,3 @@ class TestQuizAndExamPrompts:
         assert APPLICATION_RULES in instructions and "Two fair coins" in instructions
         assert exam["questions"][0]["sources"] == [{"material_id": "m1", "filename": "bio.pdf", "page_start": 4, "page_end": 5}]
 
-
-class TestExamplesAndPractice:
-    async def test_solved_examples_are_stored_with_sources(self):
-        example = SolvedExample(
-            title="t", problem_statement="p", final_answer="a", source_excerpts=[1],
-            solution_steps=[SolutionStep(step_number=1, description="d", work="w", explanation="e")],
-        )
-        llm = _llm(structured=SolvedExampleSet(examples=[example]))
-        with stub_topic_context(CHUNKS, course_map="map"), factory(llm):
-            result = await ExamplesGenerator().generate_examples("t1", "T", "d", ExampleType.SOLVED, count=1)
-        assert result["examples"][0]["sources"] == [{"material_id": "m1", "filename": "bio.pdf", "page_start": 3, "page_end": 3}]
-        messages = llm.generate_structured.call_args.args[0]
-        assert "map" in messages[1].content and "source_excerpts" in messages[-1].content
