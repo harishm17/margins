@@ -20,7 +20,14 @@ from app.services.content_generator.context import (
 from app.services.content_generator.refill import refill_figures, refill_wanted
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
-from app.services.llm.schemas import InteractiveExampleSet, SolvedExampleSet, word_form_hints
+from app.prompt_revision import prompts_v2
+from app.services.llm.schemas import (
+    InteractiveExampleSet,
+    InteractiveExampleSetV2,
+    SolvedExampleSet,
+    SolvedExampleSetV2,
+    word_form_hints,
+)
 from app.services.tutor.leak import judge_leak
 
 
@@ -120,6 +127,8 @@ class ExamplesGenerator:
     ) -> List[Dict]:
         """Fully solved examples with step-by-step solutions."""
         guidance = SOLVED_GUIDANCE.get(difficulty_level, SOLVED_GUIDANCE['medium'])
+        v2 = prompts_v2("generation")
+        difficulty_line = "" if v2 else f'- Set difficulty to "{difficulty_level}".\n'
         instructions = f"""Write {count} distinct solved example problems on "{topic_name}" from the excerpts above.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
@@ -128,18 +137,19 @@ Difficulty: {difficulty_level}. {guidance}
 - Give complete step-by-step solutions. Each step has a one-line description, the work (math or reasoning), and why the step is taken.
 - Name the key principle or formula used in each step.
 - Keep final_answer short: 2-5 markdown bullets.
-- Set difficulty to "{difficulty_level}".
-- List in source_excerpts the index of every excerpt an example is based on."""
+{difficulty_line}- List in source_excerpts the index of every excerpt an example is based on."""
 
         messages = content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map)
-        result = await self.llm.generate_structured(
-            messages, SolvedExampleSet, max_tokens=16000, purpose="solved_examples",
-        )
+        schema = SolvedExampleSetV2 if v2 else SolvedExampleSet
+        result = await self.llm.generate_structured(messages, schema, max_tokens=16000, purpose="solved_examples")
         examples = [stored for example in result.examples if (stored := example.stored()) is not None]
         if refill_wanted(len(examples), 1):
-            examples = await self._refill(messages, SolvedExampleSet, "solved_examples", examples, count, lambda e: e.stored())
+            examples = await self._refill(messages, schema, "solved_examples", examples, count, lambda e: e.stored())
         if not examples:
             raise LLMOutputError("No usable solved examples were generated")
+        if v2:
+            for example in examples:
+                example["difficulty"] = difficulty_level  # the code knows it; the model is not asked
         return examples[:count]
 
     async def _refill(self, messages, schema, purpose, examples, count, store) -> List[Dict]:
@@ -147,7 +157,7 @@ Difficulty: {difficulty_level}. {guidance}
         passes the same checks (the model call runs in the job's billing scope like the first)."""
         result = await self.llm.generate_structured(messages, schema, max_tokens=16000, purpose=purpose)
         more = [stored for example in result.examples if (stored := store(example)) is not None]
-        if schema is InteractiveExampleSet:
+        if purpose == "interactive_examples":
             more = await _clear_word_form_hints(more)
         self._refilled = len(more)
         return (examples + more)[:count]
@@ -166,6 +176,15 @@ Difficulty: {difficulty_level}. {guidance}
     ) -> List[Dict]:
         """Problems the student solves one step at a time."""
         guidance = INTERACTIVE_GUIDANCE.get(difficulty_level, INTERACTIVE_GUIDANCE['medium'])
+        v2 = prompts_v2("generation")
+        difficulty_line = "" if v2 else f'- Set difficulty to "{difficulty_level}".\n'
+        # v2 adds the similar-length rule the other question types have.
+        option_rule = (
+            " Make the options about the same length, form and level of detail: the correct one is not the longest, "
+            "the most specific or the only one with a qualification."
+            if v2
+            else ""
+        )
         instructions = f"""Write {count} interactive practice problems on "{topic_name}" from the excerpts above. The student solves each one step by step.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
@@ -174,23 +193,22 @@ Difficulty: {difficulty_level}. {guidance}
 - Give three hints that get gradually more specific: where to look, which idea applies, then the general form of the step. None of them contains the answer. Put them in `hints`, in that order.
 - Each step builds on the one before.
 - Give an explanation, feedback for a correct answer, and guidance for a wrong one.
-- Answer types. Anything whose answer is a number (a count, a probability, a fraction, the result of arithmetic) is answer_type numeric: correct_answer is the number as a plain decimal or fraction, with no units or words, and tolerance is the accepted absolute difference (for example 0.005 for a probability to 3 decimals; 0 only for exact integers). Use multiple_choice when the student picks from options: put 2 to 5 options (ids A, B, C...) in `options`, never in the question text, and give the option id as correct_answer. Use text only for a short canonical word, term or expression (for example "independent" or "(1-p)^k p"); write it in one standard form. acceptable_answers lists other forms of the same answer, one form per entry; never put several answers in one entry.
+- Answer types. Anything whose answer is a number (a count, a probability, a fraction, the result of arithmetic) is answer_type numeric: correct_answer is the number as a plain decimal or fraction, with no units or words, and tolerance is the accepted absolute difference (for example 0.005 for a probability to 3 decimals; 0 only for exact integers). Use multiple_choice when the student picks from options: put 2 to 5 options (ids A, B, C...) in `options`, never in the question text, and give the option id as correct_answer.{option_rule} Use text only for a short canonical word, term or expression (for example "independent" or "(1-p)^k p"); write it in one standard form. acceptable_answers lists other forms of the same answer, one form per entry; never put several answers in one entry.
 - In explanations and feedback, refer to options by their content, never by letter. The options are shuffled after you write them.
-- Set difficulty to "{difficulty_level}".
-- List in source_excerpts the index of every excerpt a problem is based on."""
+{difficulty_line}- List in source_excerpts the index of every excerpt a problem is based on."""
 
         messages = content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map)
-        result = await self.llm.generate_structured(
-            messages, InteractiveExampleSet, max_tokens=16000, purpose="interactive_examples",
-        )
+        schema = InteractiveExampleSetV2 if v2 else InteractiveExampleSet
+        result = await self.llm.generate_structured(messages, schema, max_tokens=16000, purpose="interactive_examples")
         examples = [stored for example in result.examples if (stored := example.stored()) is not None]
         examples = await _clear_word_form_hints(examples)
         if refill_wanted(len(examples), 1):
-            examples = await self._refill(
-                messages, InteractiveExampleSet, "interactive_examples", examples, count, lambda e: e.stored()
-            )
+            examples = await self._refill(messages, schema, "interactive_examples", examples, count, lambda e: e.stored())
         if not examples:
             raise LLMOutputError("No usable practice problems were generated")
+        if v2:
+            for example in examples:
+                example["difficulty"] = difficulty_level  # the code knows it; the model is not asked
         return examples[:count]
 
 

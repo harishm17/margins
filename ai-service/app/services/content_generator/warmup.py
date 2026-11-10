@@ -21,12 +21,13 @@ from app.services.content_generator.context import (
     format_concept_block,
     resolve_concept_ids,
 )
-from app.services.content_generator.quiz import minimum_usable
+from app.prompt_revision import prompts_v2
+from app.services.content_generator.quiz import CHOICE_RULES, minimum_usable
 from app.services.content_generator.refill import refill_figures, refill_once, refill_wanted
 from app.services.content_generator.support_check import check_support
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
-from app.services.llm.schemas import WarmupSet
+from app.services.llm.schemas import WarmupSet, WarmupSetV2
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,30 @@ WARMUP_INSTRUCTIONS = """Write {count} warm-up questions on "{topic}" from the e
 - Set `mode` to recall on every question.
 - List in source_excerpts the index of every excerpt a question is based on.
 {concepts}"""
+
+# Audited prompt (PROMPTS_V2=generation): the option rules are the shared CHOICE_RULES.
+WARMUP_INSTRUCTIONS_V2 = (
+    """Write {count} warm-up questions on "{topic}" from the excerpts above. The student answers some of them before reading, to find out what they already know and to prime what they are about to read.
+
+- Ask about the objectives of the topic, one idea per question. Use only multiple_choice and true_false questions; no calculations.
+- Tag each question's difficulty as easy, medium or hard. The set has {mix}. Easy questions ask for a definition or a plain fact, medium questions apply an idea to a small case, and hard questions need the idea combined with another or a common mix-up resisted.
+"""
+    + CHOICE_RULES
+    + """
+- true_false: correct_answer is a boolean.
+- The explanation says why the answer is right in one sentence; the student reads the material afterwards, so keep it short.
+- Set `mode` to recall on every question.
+- List in source_excerpts the index of every excerpt a question is based on.
+{concepts}"""
+)
+
+
+def warmup_template() -> str:
+    return WARMUP_INSTRUCTIONS_V2 if prompts_v2("generation") else WARMUP_INSTRUCTIONS
+
+
+def warmup_schema():
+    return WarmupSetV2 if prompts_v2("generation") else WarmupSet
 
 
 def _usable_bank(questions: List[Dict]) -> List[Dict]:
@@ -87,7 +112,7 @@ async def generate_warmup(topic_id: str) -> Dict:
     neighbours = await fetch_confusable_neighbours(topic_id)
 
     async def ask(count: int, mix: str, avoid: str = "") -> tuple[List[Dict], int]:
-        instructions = WARMUP_INSTRUCTIONS.format(
+        instructions = warmup_template().format(
             count=count, topic=context.topic["name"], mix=mix, concepts=format_concept_block(concepts, neighbours)
         )
         result = await LLMFactory.get_provider().generate_structured(
@@ -95,7 +120,7 @@ async def generate_warmup(topic_id: str) -> Dict:
                 context.topic["name"], context.topic.get("description") or "", chunks, instructions + avoid,
                 course_map=context.course_map,
             ),
-            WarmupSet,
+            warmup_schema(),
             max_tokens=8000,
             purpose="warmup",
         )
