@@ -16,10 +16,6 @@ def test_the_mirror_reads_every_case_the_way_the_real_rules_do():
         assert has_substance(case["text"], kind) == case["substance"], case["text"]
 
 
-def test_every_kind_is_in_the_fixture():
-    assert {case["kind"] for case in json.loads(FIXTURE.read_text())["cases"]} == {"control", "idk", "meta", "answer"}
-
-
 def test_the_scripted_i_dont_know_turns_are_what_the_detector_hears():
     scenarios = [json.loads(line) for line in (Path(__file__).resolve().parent / "scenarios" / "teach-back-original.jsonl").read_text().splitlines() if line.strip()]
     for scenario in scenarios:

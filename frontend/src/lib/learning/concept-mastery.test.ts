@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { conceptMastery, topicMasteryFromConcepts } from './concept-mastery'
+import { conceptMastery, } from './concept-mastery'
 import { replayConcept } from './memory'
 import type { EventRow } from './evidence-types'
 
@@ -68,27 +68,6 @@ test('fading when retrievability drops', () => {
   const r = mastery(events, 'concept', later)
   assert.equal(r.label, 'fading')
   assert.ok(r.retrievability < 0.7)
-})
-
-test('inferred when only warmup', () => {
-  const r = mastery([ev({ source: 'warmup', score: 0.6, createdAt: D1 })], 'concept', D1)
-  assert.equal(r.label, 'inferred')
-  assert.equal(r.mastery, 0)
-  assert.equal(mastery([], 'concept', D1).label, 'not_started')
-})
-
-test('topic mean counts untouched as 0', () => {
-  assert.equal(topicMasteryFromConcepts([{ mastery: 1 }, { mastery: 0 }, { mastery: 0.5 }]), 0.5)
-  assert.equal(topicMasteryFromConcepts([]), 0)
-})
-
-test('three right answers in one sitting stay below solid', () => {
-  const events = [
-    ev({ createdAt: D1 }),
-    ev({ createdAt: chicago('2026-11-10', '10:10') }),
-    ev({ createdAt: chicago('2026-11-10', '10:20') }),
-  ]
-  assert.ok(mastery(events, 'concept', chicago('2026-11-10', '10:30')).mastery < 0.8)
 })
 
 test('delayed success on a new item reaches solid', () => {

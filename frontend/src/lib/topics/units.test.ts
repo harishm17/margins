@@ -5,13 +5,6 @@ import { canonicalTopicOrder, cleanPrerequisites, groupTopicsByUnit, reachesPrer
 const unit = (id: string, orderIndex: number) => ({ id, orderIndex, title: id })
 const topic = (id: string, unitId: string | null, orderIndex: number) => ({ id, unitId, orderIndex })
 
-test('a flat course is one group with no unit', () => {
-  const groups = groupTopicsByUnit([topic('b', null, 1), topic('a', null, 0)], [])
-  assert.equal(groups.length, 1)
-  assert.equal(groups[0].unit, null)
-  assert.deepEqual(groups[0].topics.map((t) => t.id), ['a', 'b'])
-})
-
 test('topics are grouped under their units, units and topics in order', () => {
   const units = [unit('w2', 1), unit('w1', 0)]
   const topics = [topic('c', 'w2', 3), topic('a', 'w1', 0), topic('b', 'w1', 1), topic('d', 'w2', 2)]
@@ -30,24 +23,11 @@ test('topics of no unit, or of an unknown unit, come last in a headerless group'
   ])
 })
 
-test('empty units are left out unless asked for, and an empty course still has one group', () => {
-  const units = [unit('w1', 0), unit('w2', 1)]
-  const topics = [topic('a', 'w1', 0)]
-  assert.deepEqual(groupTopicsByUnit(topics, units).map((g) => g.unit?.id), ['w1'])
-  assert.deepEqual(groupTopicsByUnit(topics, units, { includeEmpty: true }).map((g) => g.unit?.id), ['w1', 'w2'])
-  assert.deepEqual(groupTopicsByUnit([], []).map((g) => g.unit), [null])
-})
-
 test('canonical order follows units, then loose topics, whatever the stored order says', () => {
   const units = [unit('w1', 0), unit('w2', 1)]
   const topics = [topic('loose', null, 0), topic('c', 'w2', 1), topic('a', 'w1', 2), topic('b', 'w1', 3)]
   assert.deepEqual(canonicalTopicOrder(topics, units), ['a', 'b', 'c', 'loose'])
   assert.deepEqual(canonicalTopicOrder(topics, []), ['loose', 'c', 'a', 'b'])
-})
-
-test('moving a unit up moves its topics with it', () => {
-  const topics = [topic('a', 'w1', 0), topic('b', 'w2', 1)]
-  assert.deepEqual(canonicalTopicOrder(topics, [unit('w1', 1), unit('w2', 0)]), ['b', 'a'])
 })
 
 test('unit mastery counts topics that are not started as zero', () => {

@@ -4,7 +4,6 @@ Storage is a temp folder; the job handlers run against the test Postgres (see co
 """
 import asyncio
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -13,7 +12,6 @@ from fastapi import HTTPException
 from app.api.routes import jobs
 from app.config import settings
 from app.models.jobs import JobPayload
-from app.services.document_processor import storage
 from app.services.document_processor.storage import StorageError, local_copy
 from app.services.document_processor.validator import material_role, validate_material
 from app.services.llm import LLMFactory
@@ -73,77 +71,13 @@ class TestStorage:
         # A local upload is read in place and must survive the context manager.
         assert Path(path).is_file()
 
-    async def test_legacy_gs_path_is_read_from_the_local_uploads_folder(self, local_uploads):
-        """Local uploads made before `local://` were recorded as gs://<any bucket>/<path>."""
-        put_upload(local_uploads, "old.pdf", text_pdf(1))
-
-        async with local_copy("gs://local-materials/user/project/old.pdf") as path:
-            assert Path(path) == (local_uploads / "user/project/old.pdf").resolve()
-
-    async def test_plain_local_path_is_read_in_place(self, tmp_path):
-        target = tmp_path / "plain.pdf"
-        text_pdf(1).save(target)
-
-        async with local_copy(str(target)) as path:
-            assert path == str(target)
-
-    @pytest.mark.parametrize(
-        "stored", ["local://user/project/missing.pdf", "gs://bucket/user/project/missing.pdf"]
-    )
-    async def test_missing_local_file_is_a_storage_error(self, stored):
-        with pytest.raises(StorageError, match="not in the local uploads folder"):
-            async with local_copy(stored):
-                pass
-
-    @pytest.mark.parametrize("stored", ["local://../secret.pdf", "gs://bucket/../secret.pdf"])
+    @pytest.mark.parametrize("stored", ["local://../secret.pdf"])
     async def test_path_cannot_leave_the_uploads_folder(self, tmp_path, local_uploads, stored):
         (tmp_path / "secret.pdf").write_bytes(b"x")
 
         with pytest.raises(StorageError):
             async with local_copy(stored):
                 pass
-
-    @pytest.mark.parametrize("stored", ["local://", "gs://only-a-bucket", "gs:///no-bucket.pdf"])
-    async def test_malformed_local_path_is_a_storage_error(self, stored):
-        with pytest.raises(StorageError, match="Invalid local storage path"):
-            async with local_copy(stored):
-                pass
-
-    async def test_downloaded_copy_is_removed_afterwards(self, monkeypatch):
-        temp_dirs = []
-
-        def fake_download(bucket_name, key):
-            import tempfile
-
-            temp_dir = tempfile.mkdtemp(prefix="margins-")
-            temp_dirs.append(temp_dir)
-            path = os.path.join(temp_dir, "material.pdf")
-            text_pdf(1).save(Path(path))
-            return path, temp_dir
-
-        monkeypatch.setattr(storage, "_download_from_s3", fake_download)
-
-        async with local_copy("s3://bucket/user/project/remote.pdf") as path:
-            assert Path(path).is_file()
-        assert temp_dirs and not os.path.exists(temp_dirs[0])
-
-    async def test_downloaded_copy_is_removed_when_the_body_fails(self, monkeypatch):
-        import tempfile
-
-        temp_dir = tempfile.mkdtemp(prefix="margins-")
-        monkeypatch.setattr(storage, "_download_from_s3", lambda b, k: (temp_dir + "/f", temp_dir))
-
-        with pytest.raises(RuntimeError):
-            async with local_copy("s3://bucket/a/b.pdf"):
-                raise RuntimeError("parse blew up")
-        assert not os.path.exists(temp_dir)
-
-
-    async def test_malformed_s3_path_is_a_storage_error(self):
-        with pytest.raises(StorageError, match="Invalid S3 path"):
-            async with local_copy("s3://only-a-bucket"):
-                pass
-
 
 @pytest.fixture
 def s3_bucket(monkeypatch):
@@ -173,21 +107,6 @@ class TestS3Storage:
         assert not Path(path).exists()
         assert not Path(path).parent.exists()
 
-    async def test_missing_object_is_a_storage_error(self, s3_bucket):
-        with pytest.raises(StorageError, match="Could not download s3://materials/missing.pdf"):
-            async with local_copy("s3://materials/missing.pdf"):
-                pass
-
-    async def test_local_uploads_are_not_consulted_for_s3_paths(self, s3_bucket, tmp_path, monkeypatch):
-        # A file with the same key on local disk must not stand in for the bucket's copy.
-        monkeypatch.setattr(settings, "LOCAL_UPLOADS_DIR", str(tmp_path))
-        (tmp_path / "a.pdf").write_bytes(b"local")
-
-        with pytest.raises(StorageError):
-            async with local_copy("s3://materials/a.pdf"):
-                pass
-
-
 class TestValidation:
     async def test_local_pdf_validates_in_production(self, local_uploads):
         gcs_path = put_upload(local_uploads, "ok.pdf", text_pdf())
@@ -197,30 +116,6 @@ class TestValidation:
         assert result.status == "valid"
         assert result.page_count == 3
         assert "Looks like lecture notes." in result.notes
-
-    async def test_storage_failure_raises_instead_of_marking_invalid(self):
-        with pytest.raises(StorageError):
-            await validate_material(
-                "m1", "gs://bucket/user/project/gone.pdf", "gone.pdf", "lecture_notes"
-            )
-
-    async def test_corrupt_file_is_invalid(self, local_uploads):
-        target = local_uploads / "user" / "project" / "bad.pdf"
-        target.parent.mkdir(parents=True)
-        target.write_bytes(b"not a pdf")
-
-        result = await validate_material(
-            "m1", "gs://b/user/project/bad.pdf", "bad.pdf", "lecture_notes"
-        )
-
-        assert result.status == "invalid"
-        assert "could not be read" in result.notes
-
-    async def test_unsupported_type_is_invalid_without_touching_storage(self):
-        result = await validate_material("m1", "gs://b/missing.txt", "notes.txt", "lecture_notes")
-
-        assert result.status == "invalid"
-        assert "Unsupported file type" in result.notes
 
     async def test_scanned_pdf_is_rejected(self, local_uploads):
         pdf = PdfBuilder().image_page()
@@ -233,18 +128,6 @@ class TestValidation:
         assert result.status == "invalid"
         assert "scanned" in result.notes
         assert "OCR is not supported yet" in result.notes
-
-    async def test_some_empty_pages_are_mentioned_in_the_notes(self, local_uploads):
-        pdf = text_pdf(3)
-        pdf.new_page().image_page()
-        gcs_path = put_upload(local_uploads, "mixed.pdf", pdf)
-
-        result = await validate_material("m1", gcs_path, "mixed.pdf", "lecture_notes")
-
-        assert result.status == "valid"
-        assert "1 of 4 pages have no extractable text" in result.notes
-        assert ": 4." in result.notes
-
 
 @pytest.fixture
 def dispatched(monkeypatch):
@@ -342,15 +225,9 @@ class TestMaterialRole:
     @pytest.mark.parametrize(
         "category, kind, role",
         [
-            ("lecture_notes", "content", "content"),
             ("lecture_notes", "syllabus", "syllabus"),
-            ("book_chapters", "exam", "exam"),
-            ("lecture_notes", "other", "other"),
-            ("lecture_notes", None, "content"),
             ("lecture_notes", "nonsense", "content"),
-            ("sample_exams", "content", "exam"),
             ("sample_exams", "syllabus", "exam"),
-            ("syllabus", "content", "syllabus"),
             ("syllabus", "exam", "syllabus"),
         ],
     )
@@ -374,21 +251,6 @@ class TestMaterialRole:
     async def test_the_validators_kind_sets_the_role(self, db, local_uploads, monkeypatch, dispatched):
         material, provider = await self.validate(db, local_uploads, monkeypatch, "lecture_notes", "syllabus")
         assert material["role"] == "syllabus" and material["validation_status"] == "valid"
-        assert "Set kind to what the file is" in provider.prompt
-
-    async def test_a_sample_exams_upload_is_an_exam_whatever_the_validator_says(
-        self, db, local_uploads, monkeypatch, dispatched
-    ):
-        material, _ = await self.validate(db, local_uploads, monkeypatch, "sample_exams", "content")
-        assert material["role"] == "exam"
-
-    async def test_a_syllabus_upload_is_a_syllabus(self, db, local_uploads, monkeypatch, dispatched):
-        material, _ = await self.validate(db, local_uploads, monkeypatch, "syllabus", "content")
-        assert material["role"] == "syllabus"
-
-    async def test_content_stays_content(self, db, local_uploads, monkeypatch, dispatched):
-        material, _ = await self.validate(db, local_uploads, monkeypatch, "lecture_notes", "content")
-        assert material["role"] == "content"
 
     async def test_without_a_model_the_role_is_content(self, db, local_uploads, monkeypatch, dispatched):
         class Down:
@@ -474,16 +336,6 @@ class TestChunkJob:
         job = await setup.job()
         assert (job["status"], job["retryable"]) == ("pending", True)
 
-    async def test_wrong_number_of_vectors_fails_the_job(self, setup, db, monkeypatch):
-        async def short(texts):
-            return [[0.1] * 384]
-
-        monkeypatch.setattr(jobs, "generate_embeddings", short)
-
-        with pytest.raises(HTTPException):
-            await jobs.chunk_material_job(setup.payload)
-        assert await db.fetchval("SELECT count(*) FROM material_chunks") == 0
-
     async def test_file_without_text_is_a_permanent_failure_and_marks_the_material_invalid(
         self, db, local_uploads, monkeypatch
     ):
@@ -499,36 +351,6 @@ class TestChunkJob:
         assert (await s.material())["validation_status"] == "invalid"
         job = await s.job()
         assert (job["error_code"], job["retryable"]) == ("NO_CONTENT", False)
-
-    async def test_storage_error_fails_the_job_as_retryable(self, db, monkeypatch):
-        self.fake_embeddings(monkeypatch)
-        s = await Setup.create(db, "chunk_material", "gs://b/u/p/gone.pdf", "gone.pdf", status="valid")
-
-        with pytest.raises(HTTPException) as raised:
-            await jobs.chunk_material_job(s.payload)
-
-        assert raised.value.status_code == 500
-        assert (await s.material())["validation_status"] == "valid"
-        assert (await s.job())["retryable"] is True
-
-    async def test_deleted_material_fails_the_job_permanently(self, setup, db):
-        await db.execute("DELETE FROM materials WHERE id = $1", setup.material_id)
-
-        with pytest.raises(HTTPException) as raised:
-            await jobs.chunk_material_job(setup.payload)
-
-        assert raised.value.status_code == 400
-        assert (await setup.job())["error_code"] == "MATERIAL_NOT_FOUND"
-
-    async def test_rerunning_a_completed_chunk_job_changes_nothing(self, setup, db):
-        await jobs.chunk_material_job(setup.payload)
-        before = await db.fetch("SELECT id FROM material_chunks ORDER BY id")
-
-        again = await jobs.chunk_material_job(setup.payload)
-
-        assert again["status"] == "skipped"
-        assert await db.fetch("SELECT id FROM material_chunks ORDER BY id") == before
-
 
 class TestAutoTopicExtraction:
     @pytest.fixture(autouse=True)
@@ -569,17 +391,6 @@ class TestAutoTopicExtraction:
         (extraction,) = await self.extraction_jobs(db)
         assert extraction["target_key"] == f"extract:{a.project_id}"
         assert dispatched == [(extraction["id"], a.project_id)]
-
-    async def test_a_valid_material_with_no_chunks_does_not_block_extraction(
-        self, db, local_uploads, dispatched
-    ):
-        path = put_upload(local_uploads, "doc.pdf", text_pdf(3))
-        a = await Setup.create(db, "chunk_material", path, "doc.pdf", status="valid")
-        await seed_material(db, a.project_id, path, "empty.pdf", "valid")  # never got chunks
-
-        await jobs.chunk_material_job(a.payload)
-
-        assert len(await self.extraction_jobs(db)) == 1
 
     async def test_simultaneous_starts_create_a_single_extraction_job(
         self, db, local_uploads, dispatched

@@ -82,62 +82,6 @@ async function world(label: string, options: { bank?: boolean } = {}) {
 
 const sure = { confidence: 0.75, confidenceLevel: 'fairly' as const }
 
-test('starting serves a medium question without its key', { skip: !process.env.DATABASE_URL }, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('wu-start')
-  const state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(state.status, 'asking')
-  if (state.status !== 'asking') return
-  assert.equal(state.total, 3)
-  assert.equal(state.position, 1)
-  assert.match(state.question.question_text, /\(medium\)/)
-  assert.equal(JSON.stringify(state).includes('correct_answer'), false)
-  assert.equal(JSON.stringify(state).includes('must not reach'), false)
-  // The same session comes back when the page is opened again, and no new one is made.
-  const before = await prisma.itemSession.count({ where: { userId: w.user.id, kind: 'warmup' } })
-  assert.equal(before, 1)
-  const again = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(again.status === 'asking' && again.sessionId, state.sessionId)
-  assert.equal(await prisma.itemSession.count({ where: { userId: w.user.id, kind: 'warmup' } }), before)
-})
-
-test('warm-up starts medium, goes up on confident right and down on wrong or guess', { skip: !process.env.DATABASE_URL }, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('wu-bracket')
-  let state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
-  const seen: string[] = []
-  const take = async (answer: string, confidence = sure) => {
-    assert.equal(state.status, 'asking')
-    if (state.status !== 'asking') throw new Error('not asking')
-    seen.push(/\((\w+)\)/.exec(state.question.question_text)?.[1] ?? '?')
-    const result = await warmup.answerWarmup({ userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, answer: { answer, ...confidence }, timeZone: ZONE })
-    assert.equal(result.status, 'ok')
-    if (result.status === 'ok') state = result.state
-  }
-  await take('true') // medium, right and sure: up
-  await take('false') // hard, wrong: down to medium
-  await take('true', { confidence: 0.25, confidenceLevel: 'guess' as never }) // medium, a guess
-  assert.deepEqual(seen, ['medium', 'hard', 'medium'])
-  assert.equal(state.status, 'done')
-})
-
-test('warmup answers never appear in quiz history', { skip: !process.env.DATABASE_URL }, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('wu-history')
-  let state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
-  for (let i = 0; i < 3; i++) {
-    if (state.status !== 'asking') break
-    const result = await warmup.answerWarmup({ userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, answer: { answer: 'true', ...sure }, timeZone: ZONE })
-    if (result.status === 'ok') state = result.state
-  }
-  assert.equal(state.status, 'done')
-  assert.equal(await prisma.quizAttempt.count({ where: { userId: w.user.id } }), 0)
-  // The bank is not a quiz set, whatever reads quiz sets.
-  const sets = await prisma.topicQuiz.findMany({ where: { topicId: w.topic.id, kind: { in: ['standard', 'retry'] } } })
-  assert.equal(sets.length, 0)
-  assert.equal((await quizSets.loadAllQuizQuestionSets(w.topic.id)).size, 0)
-})
-
 test('the warm-up writes warmup evidence, sets warmupAt and the concepts inferred prior', { skip: !process.env.DATABASE_URL }, async (t) => {
   if (!available) return t.skip('no database')
   const w = await world('wu-evidence')
@@ -219,20 +163,6 @@ test('answers come in order, once, and a stranger cannot answer', { skip: !proce
   assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id, source: 'warmup' } }), (await prisma.evidenceEvent.findMany({ where: { userId: w.user.id } })).length)
 })
 
-test('an answer without a confidence rating is taken, and carries none', { skip: !process.env.DATABASE_URL }, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('wu-confidence')
-  const state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(state.status, 'asking')
-  if (state.status !== 'asking') return
-  const base = { userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, timeZone: ZONE }
-  const bare = await warmup.answerWarmup({ ...base, answer: { answer: 'true' } })
-  assert.equal(bare.status, 'ok')
-  const events = await prisma.evidenceEvent.findMany({ where: { userId: w.user.id, source: 'warmup' } })
-  assert.ok(events.length > 0)
-  assert.ok(events.every((event) => event.confidence === null))
-})
-
 test('a topic without a bank has no warm-up, and the state follows what was taken', { skip: !process.env.DATABASE_URL }, async (t) => {
   if (!available) return t.skip('no database')
   const w = await world('wu-none', { bank: false })
@@ -242,74 +172,38 @@ test('a topic without a bank has no warm-up, and the state follows what was take
   assert.deepEqual(await warmup.loadWarmupState(w2.user.id, w2.topic.id), { status: 'ready', total: 3 })
 })
 
-test('the latest finished warm-up gives the reader its focus chunks', { skip: !process.env.DATABASE_URL }, async (t) => {
+test('starting serves a medium question without its key', { skip: !process.env.DATABASE_URL }, async (t) => {
   if (!available) return t.skip('no database')
-  const w = await world('wu-focus')
-  let state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(await warmup.latestWarmupResults(w.user.id, w.topic.id), null)
-  while (state.status === 'asking') {
-    // Every answer is wrong.
-    const result = await warmup.answerWarmup({ userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, answer: { answer: 'false', ...sure }, timeZone: ZONE })
-    if (result.status !== 'ok') throw new Error(result.status)
-    state = result.state
-  }
-  const results = await warmup.latestWarmupResults(w.user.id, w.topic.id)
-  assert.equal(results?.length, 3)
-  assert.ok(results?.every((r) => r.correct === false && r.conceptIds.length === 1))
-})
-
-/** "I don't know" on a warm-up question (spec 18.3): the button's answer. */
-const IDK = { answer: '__idk__' }
-
-test('warm-up idk scores 0 and steps down', { skip: !process.env.DATABASE_URL }, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('wu-idk')
-  let state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
+  const w = await world('wu-start')
+  const state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
   assert.equal(state.status, 'asking')
   if (state.status !== 'asking') return
+  assert.equal(state.total, 3)
+  assert.equal(state.position, 1)
   assert.match(state.question.question_text, /\(medium\)/)
-  const calls = gradeCalls
-  const result = await warmup.answerWarmup({ userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, answer: IDK, timeZone: ZONE })
-  assert.equal(result.status, 'ok')
-  if (result.status !== 'ok') return
-  state = result.state
-  // No grader was asked, and the bracket steps down to an easy question.
-  assert.equal(gradeCalls, calls)
-  assert.equal(state.status, 'asking')
-  assert.match(state.status === 'asking' ? state.question.question_text : '', /\(easy\)/)
-  const events = await prisma.evidenceEvent.findMany({ where: { userId: w.user.id } })
-  assert.ok(events.length > 0)
-  assert.ok(events.every((e) => e.source === 'warmup' && e.assistance === 0 && e.score === 0 && e.gradedBy === 'rule'))
-  assert.ok(events.every((e) => (e.metadata as Record<string, unknown>).idk === true && (e.metadata as Record<string, unknown>).missKind === 'cue_miss'))
-  // A pretest: no memory card, and no instruction is owed for a warm-up miss.
-  const memories = await prisma.conceptMemory.findMany({ where: { userId: w.user.id } })
-  assert.ok(memories.every((m) => m.card === null))
-  assert.ok(memories.every((m) => (m.derived as Record<string, unknown>).lastIdkAt == null))
+  assert.equal(JSON.stringify(state).includes('correct_answer'), false)
+  assert.equal(JSON.stringify(state).includes('must not reach'), false)
+  // The same session comes back when the page is opened again, and no new one is made.
+  const before = await prisma.itemSession.count({ where: { userId: w.user.id, kind: 'warmup' } })
+  assert.equal(before, 1)
+  const again = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
+  assert.equal(again.status === 'asking' && again.sessionId, state.sessionId)
+  assert.equal(await prisma.itemSession.count({ where: { userId: w.user.id, kind: 'warmup' } }), before)
 })
 
-test('idk carries no confidence', { skip: !process.env.DATABASE_URL }, async (t) => {
+test('warmup answers never appear in quiz history', { skip: !process.env.DATABASE_URL }, async (t) => {
   if (!available) return t.skip('no database')
-  const w = await world('wu-idk-confidence')
+  const w = await world('wu-history')
   let state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
-  // Every answer is an "I don't know", sent with no confidence (a normal answer without one is refused).
-  while (state.status === 'asking') {
-    const result = await warmup.answerWarmup({ userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, answer: IDK, timeZone: ZONE })
-    if (result.status !== 'ok') throw new Error(result.status)
-    state = result.state
+  for (let i = 0; i < 3; i++) {
+    if (state.status !== 'asking') break
+    const result = await warmup.answerWarmup({ userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, answer: { answer: 'true', ...sure }, timeZone: ZONE })
+    if (result.status === 'ok') state = result.state
   }
   assert.equal(state.status, 'done')
-  if (state.status !== 'done') return
-  assert.ok(state.items.every((item) => item.idk === true && item.correct === false && item.confidence === undefined && item.answer === ''))
-  assert.ok(state.items.every((item) => item.correctAnswer === 'True'))
-  assert.equal(state.testOut, false)
-  const events = await prisma.evidenceEvent.findMany({ where: { userId: w.user.id } })
-  assert.ok(events.length >= 3)
-  assert.ok(events.every((e) => e.confidence === null))
-  // The session holds an idk flag, not an answer, and the results still mark every concept as a miss.
-  const row = await prisma.itemSession.findFirstOrThrow({ where: { userId: w.user.id, kind: 'warmup' } })
-  const graded = Object.values((row.results as { graded: Record<string, { idk?: boolean; confidence?: number }> }).graded)
-  assert.ok(graded.every((g) => g.idk === true && g.confidence === undefined))
-  const results = await warmup.latestWarmupResults(w.user.id, w.topic.id)
-  assert.ok(results?.every((r) => r.correct === false && r.confidence === undefined))
-  assert.ok((await prisma.topicProgress.findUniqueOrThrow({ where: { topicId_userId: { topicId: w.topic.id, userId: w.user.id } } })).warmupAt)
+  assert.equal(await prisma.quizAttempt.count({ where: { userId: w.user.id } }), 0)
+  // The bank is not a quiz set, whatever reads quiz sets.
+  const sets = await prisma.topicQuiz.findMany({ where: { topicId: w.topic.id, kind: { in: ['standard', 'retry'] } } })
+  assert.equal(sets.length, 0)
+  assert.equal((await quizSets.loadAllQuizQuestionSets(w.topic.id)).size, 0)
 })

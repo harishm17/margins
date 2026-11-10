@@ -16,4 +16,7 @@ test('anything the field accepts is accepted by the API schema too, and the reve
   for (const minutes of [9, 10, 45, 600, 601]) {
     assert.equal(dailyMinutesProblem(minutes) === null, dailyMinutesSchema.safeParse(minutes).success, String(minutes))
   }
+  // The schema takes whole numbers between 10 and 600 only.
+  for (const ok of [10, 45, 90, 600]) assert.equal(dailyMinutesSchema.safeParse(ok).success, true, String(ok))
+  for (const bad of [9, 601, 45.5, '45', null]) assert.equal(dailyMinutesSchema.safeParse(bad).success, false, String(bad))
 })

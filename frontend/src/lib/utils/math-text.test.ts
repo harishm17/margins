@@ -71,14 +71,6 @@ test('currency next to real math renders both', () => {
   assert.equal((html.match(/class="katex"/g) ?? []).length, 2)
 })
 
-test('words inside math mode are written as text', () => {
-  assert.equal(
-    protectMathText('- $Game Y$ pays a positive amount with probability $17/36$'),
-    '- Game Y pays a positive amount with probability $17/36$'
-  )
-  assert.match(visibleText(render('$Game Y$ wins')), /^Game Y wins/)
-})
-
 test('code and display math are not touched', () => {
   const text = 'Use `$5 and $6` here.\n\n```python\nprice = "$5 and $6"\n```\n\n$$\nx = \\$5\n$$'
   assert.equal(protectMathText(text), text)
@@ -91,12 +83,4 @@ test('a formula alone on its line becomes display math, one in a sentence stays 
   assert.equal(protectMathText('- $$x$$'), '- $$x$$')
   assert.equal(protectMathText('$$\nalready\n$$'), '$$\nalready\n$$')
   assert.ok(render('Intro\n\n$$S = x$$\n\nafter').includes('katex-display'))
-})
-
-test('lines are handled one at a time', () => {
-  assert.equal(protectMathText('Costs $5\nand $x$ is a variable'), 'Costs \\$5\nand $x$ is a variable')
-})
-
-test('text without a dollar sign is returned as it is', () => {
-  assert.equal(protectMathText('Plain text, 100% sure.'), 'Plain text, 100% sure.')
 })

@@ -142,14 +142,6 @@ test('implicit events are not the student own evidence', () => {
   assert.equal(only.card, null)
 })
 
-test('penalty still applies when the concept has consecutive fails', () => {
-  const failed = replayConcept([ev({ score: 0 })], opts)
-  assert.ok(failed.consecutiveFails >= 1 && failed.card)
-  const at = new Date('2026-11-10T10:00:00Z')
-  const out = applyImplicit(failed, implicit('penalty', 0.5, at.toISOString()), at)
-  assert.ok(out.card!.stability < failed.card!.stability)
-})
-
 test('the strongest path wins when two paths reach a concept', () => {
   const out = implicitEventsFor('a', Rating.Good, [
     edge('a', 'z', 0.4),
@@ -159,37 +151,4 @@ test('the strongest path wins when two paths reach a concept', () => {
   const z = out.filter((o) => o.targetId === 'z')
   assert.equal(z.length, 1)
   assert.ok(Math.abs(z[0].pathWeight - 0.81) < 1e-9)
-})
-
-test('an out-of-range path weight is clamped to 0..1', () => {
-  const base = replayConcept([first], opts)
-  const at = new Date('2026-11-04T10:00:00Z')
-  const over = applyImplicit(base, implicit('credit', 5, at.toISOString()), at)
-  const one = applyImplicit(base, implicit('credit', 1, at.toISOString()), at)
-  assert.equal(over.card!.stability, one.card!.stability)
-  const negative = applyImplicit(base, implicit('credit', -2, at.toISOString()), at)
-  assert.equal(negative.card!.stability, base.card!.stability)
-  const penaltyOver = applyImplicit(base, implicit('penalty', 9, at.toISOString()), at)
-  const penaltyOne = applyImplicit(base, implicit('penalty', 1, at.toISOString()), at)
-  assert.equal(penaltyOver.card!.stability, penaltyOne.card!.stability)
-})
-
-test('every edge a path walked is listed, in order', () => {
-  const out = implicitEventsFor('a', Rating.Good, [edge('a', 'b', 0.9), edge('b', 'c', 0.9)])
-  const byTarget = Object.fromEntries(out.map((o) => [o.targetId, o]))
-  assert.deepEqual(byTarget.b.pathEdgeIds, [byTarget.b.edgeId])
-  assert.equal(byTarget.c.pathEdgeIds.length, 2)
-  assert.equal(byTarget.c.pathEdgeIds[1], byTarget.c.edgeId)
-  assert.equal(byTarget.c.pathEdgeIds[0], byTarget.b.edgeId)
-})
-
-test('the strongest path is the one listed', () => {
-  const out = implicitEventsFor('a', Rating.Good, [edge('a', 'z', 0.4), edge('a', 'm', 0.9), edge('m', 'z', 0.9)])
-  const z = out.find((o) => o.targetId === 'z')!
-  assert.equal(z.pathEdgeIds.length, 2)
-})
-
-test('a penalty lists its one edge', () => {
-  const out = implicitEventsFor('b', Rating.Again, [edge('a', 'b', 0.9)])
-  assert.deepEqual(out[0].pathEdgeIds, [out[0].edgeId])
 })

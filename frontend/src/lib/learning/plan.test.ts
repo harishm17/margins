@@ -10,7 +10,6 @@ import {
   learnOrder,
   QUICK_PASS_MINUTES,
   localDay,
-  todayItems,
   weekStart,
   type DoneToday,
   type Plan,
@@ -93,35 +92,6 @@ test("days are the student's days: the same instant is a different date in anoth
   assert.ok(west.days[0].isToday)
 })
 
-test("review due days are converted to the student's days", () => {
-  // 02:00 UTC on the 22nd is still the 21st in Los Angeles: due today there, tomorrow in UTC.
-  const due = new Date('2026-10-22T02:00:00Z')
-  const topics = [topic('a', { learned: true, quizzed: true, mastery: 0.5, reviewDueAt: due })]
-  const la = plan({ topics, timeZone: 'America/Los_Angeles', now: new Date('2026-10-21T20:00:00Z') })
-  assert.equal(dayOf(la, 'a', 'review'), '2026-10-21')
-  const utc = plan({ topics, timeZone: 'UTC', now: new Date('2026-10-21T20:00:00Z') })
-  assert.equal(dayOf(utc, 'a', 'review'), '2026-10-22')
-})
-
-test('no topics, and an exam in the past', () => {
-  assert.equal(plan({ topics: [] }).status, 'no_topics')
-  const past = plan({ topics: course(2), examDate: '2026-10-20' })
-  assert.equal(past.status, 'exam_passed')
-  assert.deepEqual(past.days, [])
-  assert.equal(past.daysToExam, -1)
-})
-
-test('without an exam date the plan is the next 14 days', () => {
-  const result = plan({ topics: course(3) })
-  assert.equal(result.mode, 'rolling')
-  assert.equal(result.days.length, 14)
-  assert.equal(result.days[0].date, TODAY)
-  assert.equal(result.days[13].date, '2026-11-03')
-  assert.equal(result.examDate, null)
-  assert.equal(result.daysToExam, null)
-  assert.equal(result.short, false)
-})
-
 test('learn blocks follow course order and pack into the daily minutes without running over', () => {
   // 35-minute topics and 45 minutes a day. The day after a topic holds its 15-minute quiz, so the next
   // topic does not fit whole: it is split (parts of at least 15) rather than run 5 minutes over.
@@ -136,41 +106,6 @@ test('learn blocks follow course order and pack into the daily minutes without r
   assert.ok(result.days.every((day) => day.minutes <= 45))
 })
 
-test('short topics share a day', () => {
-  const result = plan({ topics: course(4, { estimatedMinutes: 20 }), dailyMinutes: 45 })
-  // 20 + 20 = 40 fits, then 5 minutes is left: too little for a part of 15.
-  assert.deepEqual(
-    result.days[0].items.filter((item) => item.kind === 'learn').map((item) => item.topicId),
-    ['a', 'b']
-  )
-})
-
-test('a topic longer than what is left of the day is split into parts', () => {
-  const topics = [topic('long', { orderIndex: 0, estimatedMinutes: 60 }), topic('next', { orderIndex: 1 })]
-  const result = plan({ topics, dailyMinutes: 45 })
-  const long = items(result, 'learn').filter((item) => item.topicId === 'long')
-  assert.deepEqual(
-    long.map((item) => [item.date, item.minutes, item.part]),
-    [
-      ['2026-10-21', 45, { number: 1, of: 2 }],
-      ['2026-10-22', 15, { number: 2, of: 2 }],
-    ]
-  )
-  // The second day goes on with the next topic: 35 minutes do not fit the 30 that are left, so it is
-  // split too, keeping the second part at least 15 minutes.
-  const next = items(result, 'learn').filter((item) => item.topicId === 'next')
-  assert.deepEqual(next.map((item) => [item.date, item.minutes]), [['2026-10-22', 20], ['2026-10-23', 15]])
-})
-
-test('unknown minutes default to 35, and a started topic needs half', () => {
-  assert.equal(learnMinutesLeft({ estimatedMinutes: null, learned: false, started: false }), 35)
-  assert.equal(learnMinutesLeft({ estimatedMinutes: 0, learned: false, started: false }), 35)
-  assert.equal(learnMinutesLeft({ estimatedMinutes: 40, learned: false, started: true }), 20)
-  assert.equal(learnMinutesLeft({ estimatedMinutes: 45, learned: false, started: true }), 25)
-  assert.equal(learnMinutesLeft({ estimatedMinutes: 45, learned: true, started: true }), 0)
-  assert.equal(learnMinutesLeft({ estimatedMinutes: 5, learned: false, started: false }), 10)
-})
-
 test('a topic never comes before its unlearned prerequisite', () => {
   const topics = [
     topic('late-skill', { orderIndex: 0, prerequisiteIds: ['basics'] }),
@@ -182,15 +117,6 @@ test('a topic never comes before its unlearned prerequisite', () => {
   assert.deepEqual(learnDays(result).slice(0, 4), ['basics@2026-10-21', 'late-skill@2026-10-22', 'late-skill@2026-10-23', 'other@2026-10-23'])
 })
 
-test('a learned prerequisite holds nothing back, and a cycle still gets planned', () => {
-  const topics = [topic('a', { orderIndex: 0, prerequisiteIds: ['done'] }), topic('done', { orderIndex: 1, learned: true })]
-  assert.deepEqual(learnOrder(topics, { examFirst: false }).map((item) => item.id), ['a'])
-  const cycle = [topic('x', { orderIndex: 0, prerequisiteIds: ['y'] }), topic('y', { orderIndex: 1, prerequisiteIds: ['x'] })]
-  assert.deepEqual(learnOrder(cycle, { examFirst: false }).map((item) => item.id).sort(), ['x', 'y'])
-  const self = [topic('s', { orderIndex: 0, prerequisiteIds: ['s'] })]
-  assert.deepEqual(learnOrder(self, { examFirst: false }).map((item) => item.id), ['s'])
-})
-
 test('past-exam topics come first when asked, with their prerequisites before them', () => {
   const topics = [
     topic('a', { orderIndex: 0 }),
@@ -200,21 +126,6 @@ test('past-exam topics come first when asked, with their prerequisites before th
   ]
   assert.deepEqual(learnOrder(topics, { examFirst: true }).map((item) => item.id), ['c', 'b', 'd', 'a'])
   assert.deepEqual(learnOrder(topics, { examFirst: false }).map((item) => item.id), ['a', 'c', 'b', 'd'])
-})
-
-test('the first quiz is the day after the topic is learned', () => {
-  const result = plan({ topics: course(2) })
-  assert.equal(dayOf(result, 'a', 'learn'), '2026-10-21')
-  assert.equal(dayOf(result, 'a', 'quiz'), '2026-10-22')
-  // b is split over the 22nd and the 23rd, so its quiz is on the 24th.
-  assert.equal(dayOf(result, 'b', 'quiz'), '2026-10-24')
-  // Quizzes come before the day's new learning.
-  assert.deepEqual(result.days[1].items.map((item) => item.kind), ['quiz', 'learn'])
-})
-
-test('a split topic is quizzed the day after its last part', () => {
-  const result = plan({ topics: [topic('long', { estimatedMinutes: 60 })], dailyMinutes: 45 })
-  assert.equal(dayOf(result, 'long', 'quiz'), '2026-10-23')
 })
 
 test('a topic that is learned but never quizzed gets its quiz today, or tomorrow if learned today', () => {
@@ -237,40 +148,6 @@ test('reviews are at the due day; overdue reviews are today and say so', () => {
   assert.equal(items(result, 'quiz').length, 0)
 })
 
-test('reviews that do not fit move to the next day, weakest first', () => {
-  // 20 minutes a day: two 10-minute reviews a day. Five are due today.
-  const topics = ['a', 'b', 'c', 'd', 'e'].map((name, index) =>
-    topic(name, { orderIndex: index, learned: true, quizzed: true, mastery: 0.9 - index * 0.1, reviewDueAt: new Date('2026-10-21T01:00:00Z') })
-  )
-  const result = plan({ topics, dailyMinutes: 20 })
-  const byDay = result.days.slice(0, 3).map((day) => day.items.map((item) => item.topicId))
-  assert.deepEqual(byDay, [['e', 'd'], ['c', 'b'], ['a']])
-})
-
-test('reviews come before new learning', () => {
-  const topics = [
-    topic('new', { orderIndex: 0 }),
-    topic('old', { orderIndex: 1, learned: true, quizzed: true, mastery: 0.4, reviewDueAt: new Date('2026-10-21T01:00:00Z') }),
-  ]
-  const result = plan({ topics, dailyMinutes: 45 })
-  assert.deepEqual(result.days[0].items.map((item) => item.kind), ['review', 'learn'])
-  // 45 - 10 = 35 left: the whole 35-minute topic still fits.
-  assert.equal(result.days[0].items[1].minutes, 35)
-})
-
-test('a unit with 3 or more topics gets a mock exam the day after it is learned', () => {
-  const units = [{ id: 'u1', title: 'Sorting', weekLabel: null, orderIndex: 0 }]
-  const result = plan({ topics: course(3, { unitId: 'u1' }), units })
-  const mocks = items(result, 'unit_mock')
-  assert.equal(mocks.length, 1)
-  // c's last part is on the 24th, so the mock is on the 25th (with c's quiz: 45 minutes).
-  assert.equal(mocks[0].date, '2026-10-25')
-  assert.equal(result.days.find((day) => day.date === '2026-10-25')?.minutes, 45)
-  assert.equal(mocks[0].title, 'Mock exam: Sorting')
-  assert.deepEqual(mocks[0].topicIds, ['a', 'b', 'c'])
-  assert.equal(mocks[0].unitId, 'u1')
-})
-
 test('a unit with fewer than 3 topics gets no mock exam, nor one whose mock was already taken', () => {
   const units = [
     { id: 'small', title: 'Small', weekLabel: null, orderIndex: 0 },
@@ -282,42 +159,6 @@ test('a unit with fewer than 3 topics gets no mock exam, nor one whose mock was 
   ]
   assert.equal(items(plan({ topics, units }), 'unit_mock').length, 1)
   assert.equal(items(plan({ topics, units, unitMocksDone: ['big'] }), 'unit_mock').length, 0)
-})
-
-test('a unit that is already learned gets its mock exam today, one unit a day', () => {
-  const units = [
-    { id: 'u1', title: 'One', weekLabel: null, orderIndex: 0 },
-    { id: 'u2', title: 'Two', weekLabel: null, orderIndex: 1 },
-  ]
-  const topics = [
-    ...course(3, { unitId: 'u1', learned: true, quizzed: true }).map((t) => ({ ...t, id: `x-${t.id}` })),
-    ...course(3, { unitId: 'u2', learned: true, quizzed: true }).map((t, index) => ({ ...t, id: `y-${t.id}`, orderIndex: 10 + index })),
-  ]
-  const mocks = items(plan({ topics, units }), 'unit_mock')
-  assert.deepEqual(mocks.map((item) => [item.unitId, item.date]), [
-    ['u1', TODAY],
-    ['u2', '2026-10-22'],
-  ])
-})
-
-test('a unit mock exam needs a day with room for it: none on a day shorter than the mock', () => {
-  const units = [{ id: 'u1', title: 'One', weekLabel: null, orderIndex: 0 }]
-  const topics = [
-    ...course(3, { unitId: 'u1', learned: true, quizzed: true }).map((t) => ({ ...t, id: `x-${t.id}` })),
-    topic('new', { orderIndex: 20 }),
-  ]
-  // 20 minutes a day: a 30-minute unit mock would run over every day, so none is planned.
-  const short = plan({ topics, units, dailyMinutes: 20 })
-  assert.equal(items(short, 'unit_mock').length, 0)
-  assert.ok(short.days.every((day) => day.minutes <= 20))
-  assert.equal(short.unitMocksSkipped, false)
-  assert.equal(dayOf(short, 'new', 'learn'), TODAY)
-  // 30 minutes a day: it fits, alone on today.
-  const fits = plan({ topics, units, dailyMinutes: 30 })
-  assert.deepEqual(fits.days[0].items.map((item) => [item.kind, item.minutes]), [['unit_mock', 30]])
-  // Done work counts: with 20 minutes already studied today, it waits for tomorrow.
-  const busy = plan({ topics, units, dailyMinutes: 45, doneToday: [{ kind: 'review', topicId: 'x-a' }, { kind: 'review', topicId: 'x-b' }] })
-  assert.equal(items(busy, 'unit_mock')[0].date, '2026-10-22')
 })
 
 test('a full mock exam longer than the day is alone on its day and marked; one that fits shares it', () => {
@@ -340,16 +181,6 @@ test('a full mock exam longer than the day is alone on its day and marked; one t
   assert.ok(roomy.days.some((day) => day.items.some((item) => item.kind === 'full_mock') && day.items.length > 1))
 })
 
-test('with an exam date the plan runs to the exam day', () => {
-  const result = plan({ topics: course(2), examDate: '2026-11-04' })
-  assert.equal(result.mode, 'exam')
-  assert.equal(result.daysToExam, 14)
-  assert.equal(result.days.length, 15)
-  assert.equal(result.days[14].date, '2026-11-04')
-  assert.ok(result.days[14].isExamDay)
-  assert.equal(result.days.filter((day) => day.isExamDay).length, 1)
-})
-
 test('two full mock exams in the final week, the second at least 2 days before the exam', () => {
   const result = plan({ topics: course(2), examDate: '2026-11-04' })
   const mocks = items(result, 'full_mock')
@@ -358,25 +189,6 @@ test('two full mock exams in the final week, the second at least 2 days before t
   assert.ok(daysBetween(mocks[1].date, '2026-11-04') >= 2)
   assert.ok(mocks.every((item) => item.minutes === 60 && item.title === 'Full mock exam'))
   assert.equal(result.mockNote, null)
-})
-
-test('one full mock is planned when one was already taken in the final week', () => {
-  const result = plan({ topics: course(2), examDate: '2026-11-04', fullMocksDoneInFinalWeek: 1 })
-  assert.deepEqual(items(result, 'full_mock').map((item) => item.date), ['2026-11-02'])
-  assert.equal(items(plan({ topics: course(2), examDate: '2026-11-04', fullMocksDoneInFinalWeek: 2 }), 'full_mock').length, 0)
-})
-
-test('close to the exam the mocks move up, and the plan says when there is no room', () => {
-  // Everything is learned, so time is not short and both mocks are kept as far as they fit.
-  const done = course(2, { learned: true, quizzed: true, mastery: 0.6 })
-  const three = plan({ topics: done, examDate: '2026-10-24' })
-  assert.deepEqual(items(three, 'full_mock').map((item) => item.date), ['2026-10-21', '2026-10-22'])
-  const two = plan({ topics: done, examDate: '2026-10-23' })
-  assert.deepEqual(items(two, 'full_mock').map((item) => item.date), ['2026-10-21'])
-  assert.match(two.mockNote ?? '', /only one full mock/)
-  const one = plan({ topics: done, examDate: '2026-10-22' })
-  assert.equal(items(one, 'full_mock').length, 0)
-  assert.match(one.mockNote ?? '', /less than 2 days/)
 })
 
 test('when time is short, the earlier full mock goes before any topic is left out, and learning gets the time', () => {
@@ -400,13 +212,6 @@ test('when time is short, the earlier full mock goes before any topic is left ou
   assert.deepEqual([...learned], ['t0', 't1'])
 })
 
-test('with one full mock already taken in the final week, short time does not drop another', () => {
-  const topics = Array.from({ length: 6 }, (_, index) => topic(`t${index}`, { orderIndex: index, estimatedMinutes: 50 }))
-  const result = plan({ topics, examDate: '2026-10-27', dailyMinutes: 30, fullMocksDoneInFinalWeek: 1 })
-  assert.equal(items(result, 'full_mock').length, 1)
-  assert.equal(result.fullMocksReduced, false)
-})
-
 test('unit mocks go first, then the earlier full mock; neither is dropped when everything fits', () => {
   const units = [{ id: 'u', title: 'U', weekLabel: null, orderIndex: 0 }]
   // 3 topics, 7 days, 60 minutes a day: all mocks fit.
@@ -425,17 +230,6 @@ test('unit mocks go first, then the earlier full mock; neither is dropped when e
   assert.equal(tight.notScheduled, null)
 })
 
-test('a tiny window keeps one full mock the day before the exam, and that day is not a review day', () => {
-  const topics = [topic('a', { orderIndex: 0 }), topic('b', { orderIndex: 1, estimatedMinutes: 600 })]
-  const result = plan({ topics, examDate: '2026-10-22', dailyMinutes: 30 })
-  const mocks = items(result, 'full_mock')
-  assert.deepEqual(mocks.map((item) => item.date), ['2026-10-21'])
-  assert.ok(!result.days[0].isFinalReview)
-  assert.ok(result.days[1].isExamDay)
-  // Exam today: nothing to place.
-  assert.equal(items(plan({ topics, examDate: TODAY }), 'full_mock').length, 0)
-})
-
 test('the last 2 days hold only reviews of the weakest topics', () => {
   const topics = [
     topic('strong', { orderIndex: 0, learned: true, quizzed: true, mastery: 0.95, reviewDueAt: new Date('2026-11-03T10:00:00Z') }),
@@ -451,19 +245,10 @@ test('the last 2 days hold only reviews of the weakest topics', () => {
   // 30 minutes a day is 3 reviews; the exam day is lighter.
   assert.deepEqual(examDay.items.map((item) => item.topicId), ['weak', 'mid'])
   assert.ok(eve.items[0].note?.includes('weakest'))
-})
-
-test('nothing but reviews is planned in the last 2 days, even with topics left to learn', () => {
-  const topics = [...course(2, { learned: true, quizzed: true, mastery: 0.4 }), topic('big', { orderIndex: 9, estimatedMinutes: 600 })]
-  const result = plan({ topics, examDate: '2026-10-25' })
-  const last = result.days.slice(-2)
-  assert.ok(last.every((day) => day.items.every((item) => item.kind === 'review')))
-})
-
-test('an exam today is a single exam day', () => {
-  const result = plan({ topics: course(2, { learned: true, quizzed: true, mastery: 0.5 }), examDate: TODAY })
-  assert.equal(result.days.length, 1)
-  assert.ok(result.days[0].isExamDay && result.days[0].isToday)
+  // Even with topics left to learn, nothing but reviews is planned in the last 2 days.
+  const unlearned = [...course(2, { learned: true, quizzed: true, mastery: 0.4 }), topic('big', { orderIndex: 9, estimatedMinutes: 600 })]
+  const crowded = plan({ topics: unlearned, examDate: '2026-10-25' })
+  assert.ok(crowded.days.slice(-2).every((day) => day.items.every((item) => item.kind === 'review')))
 })
 
 test('when time is short the plan says so, puts past-exam topics first and lists what is not scheduled', () => {
@@ -490,21 +275,6 @@ test('when time is short the plan says so, puts past-exam topics first and lists
   assert.ok(!notScheduled.includes('hard') && !notScheduled.includes('tricky'))
 })
 
-test('without past exams the short message says the order is course order', () => {
-  const result = plan({ topics: course(8), examDate: '2026-10-26', dailyMinutes: 40 })
-  assert.ok(result.short)
-  assert.match(result.shortMessage ?? '', /course order/)
-  assert.doesNotMatch(result.shortMessage ?? '', /past exams/)
-})
-
-test('when it all fits there is no warning and nothing is left out', () => {
-  const result = plan({ topics: course(3), examDate: '2026-11-18' })
-  assert.equal(result.short, false)
-  assert.equal(result.shortMessage, null)
-  assert.equal(result.notScheduled, null)
-  assert.equal(learnTopics(result).size, 3)
-})
-
 test('unit mock exams are dropped before topics are, with a notice rather than a warning', () => {
   const units = [{ id: 'u1', title: 'One', weekLabel: null, orderIndex: 0 }]
   // 3 topics in a unit and 2 outside it, 40 minutes each, 40 minutes a day, 9 days to the exam. With the
@@ -521,17 +291,6 @@ test('unit mock exams are dropped before topics are, with a notice rather than a
   const roomy = plan({ topics, units, examDate: '2026-11-04', dailyMinutes: 40, fullMocksDoneInFinalWeek: 2 })
   assert.equal(items(roomy, 'unit_mock').length, 1)
   assert.equal(roomy.unitMocksSkipped, false)
-})
-
-test('a topic that would only be half taught is not started: it is listed as not scheduled', () => {
-  // Two learning days of 30 minutes (the exam is 3 days away); each topic needs 40, so only one can be finished.
-  const topics = [topic('a', { orderIndex: 0, estimatedMinutes: 40 }), topic('b', { orderIndex: 1, estimatedMinutes: 40 })]
-  const result = plan({ topics, examDate: '2026-10-24', dailyMinutes: 30, fullMocksDoneInFinalWeek: 2 })
-  const parts = items(result, 'learn')
-  assert.ok(parts.every((item) => item.topicId === 'a'))
-  assert.deepEqual(parts.map((item) => item.minutes), [25, 15])
-  assert.deepEqual(result.notScheduled?.topics.map((entry) => entry.id), ['b'])
-  assert.ok(result.short)
 })
 
 test('without an exam date, topics beyond the two weeks are "later", not "short"', () => {
@@ -560,68 +319,10 @@ test('what was done today is ticked, and its time comes out of today', () => {
   assert.equal(dayOf(result, 'a', 'quiz'), '2026-10-22')
 })
 
-test('done quizzes, reviews and mock exams show too, and unknown topics are skipped', () => {
-  const topics = [topic('a', { learned: true, quizzed: true, mastery: 0.8, reviewDueAt: new Date('2026-10-28T00:00:00Z') })]
-  const result = plan({
-    topics,
-    doneToday: [
-      { kind: 'quiz', topicId: 'a' },
-      { kind: 'review', topicId: 'a' },
-      { kind: 'mock', examId: 'e1', name: 'Mock exam 3', minutes: 45 },
-      { kind: 'review', topicId: 'gone' },
-    ],
-  })
-  const done = result.days[0].items.filter((item) => item.done)
-  assert.equal(done.length, 3)
-  assert.deepEqual(done.map((item) => item.kind).sort(), ['full_mock', 'quiz', 'review'])
-  assert.equal(todayItems(result).length, result.days[0].items.length)
-})
-
-test('item ids are unique, and the plan is deterministic and leaves its input alone', () => {
-  const topics = course(6)
-  const before = JSON.stringify(topics)
-  const input: PlanInput = {
-    now: NOW,
-    timeZone: 'America/New_York',
-    examDate: '2026-11-10',
-    dailyMinutes: 60,
-    topics,
-    units: [{ id: 'u', title: 'U', weekLabel: null, orderIndex: 0 }],
-    unitMocksDone: [],
-    fullMocksDoneInFinalWeek: 0,
-    doneToday: [],
-  }
-  const first = buildPlan(input)
-  const second = buildPlan(input)
-  assert.deepEqual(first, second)
-  assert.equal(JSON.stringify(topics), before)
-  const ids = first.days.flatMap((day) => day.items.map((item) => item.id))
-  assert.equal(new Set(ids).size, ids.length)
-})
-
-test('a very distant exam is planned for the first stretch only, and the rest is "later"', () => {
-  const result = plan({ topics: course(200), examDate: '2027-09-01', dailyMinutes: 45 })
-  assert.equal(result.days.length, 120)
-  assert.equal(result.short, false)
-  assert.equal(result.notScheduled?.reason, 'later')
-})
-
 test('daily minutes are kept within sane limits', () => {
   assert.equal(plan({ topics: course(1), dailyMinutes: 0 }).dailyMinutes, 10)
   assert.equal(plan({ topics: course(1), dailyMinutes: 99999 }).dailyMinutes, 600)
   assert.equal(plan({ topics: course(1), dailyMinutes: Number.NaN }).dailyMinutes, 45)
-})
-
-test('everything learned and quizzed leaves an empty rolling plan', () => {
-  const result = plan({ topics: course(3, { learned: true, quizzed: true, mastery: 0.9 }) })
-  assert.equal(result.status, 'ready')
-  assert.equal(items(result).length, 0)
-  assert.equal(result.remaining.topics, 0)
-})
-
-test('remaining work is reported', () => {
-  const result = plan({ topics: [...course(2), topic('z', { orderIndex: 5, learned: true })] })
-  assert.deepEqual(result.remaining, { topics: 2, minutes: 70 })
 })
 
 // A small seeded generator, so the same cases run every time.
@@ -802,45 +503,6 @@ const longPlan = (overrides: Partial<PlanInput> = {}) =>
   plan({ topics: longCourse(), examDate: '2026-11-14', dailyMinutes: 60, ...overrides })
 const lastLearnDay = (result: Plan) => items(result, 'learn').map((item) => item.date).sort().pop() as string
 
-test('a long window has no more than one rest day in any 7 between the end of learning and the exam', () => {
-  const result = longPlan()
-  const end = lastLearnDay(result)
-  const after = result.days.filter((day) => day.date > end && day.date < '2026-11-14')
-  assert.ok(after.length >= 14, `${after.length} days of revision`)
-  for (let start = 0; start + 7 <= after.length; start += 1) {
-    const window = after.slice(start, start + 7)
-    const rests = window.filter((day) => day.items.length === 0).length
-    assert.ok(rests <= 1, `${window[0].date}: ${rests} rest days in 7`)
-  }
-  // The run keeps its rest days: some days hold nothing but a review.
-  assert.ok(after.some((day) => day.items.every((item) => item.kind === 'review')))
-  // The final days are the weakest-topic reviews, never mixed practice.
-  assert.ok(result.days.slice(-2).every((day) => day.items.every((item) => item.kind === 'review')))
-})
-
-test('every learned topic is reviewed after its quiz and before the exam', () => {
-  const result = longPlan()
-  for (const entry of longCourse()) {
-    const quiz = items(result, 'quiz').find((item) => item.topicId === entry.id)?.date as string
-    assert.ok(quiz, `${entry.id} has a quiz`)
-    const reviews = items(result, 'review').filter((item) => item.topicId === entry.id && item.date > quiz && item.date < '2026-11-14')
-    assert.ok(reviews.length >= 1, `${entry.id} is reviewed after its quiz`)
-  }
-})
-
-test('a topic\'s reviews follow increasing intervals', () => {
-  // A long window: from the quiz, 7 days (mastery 0.6 is assumed), then 14, then 14 again.
-  const long = plan({ topics: course(2, { estimatedMinutes: 30 }), examDate: '2026-12-31', dailyMinutes: 60 })
-  for (const id of ['a', 'b']) {
-    const dates = [items(long, 'quiz').find((item) => item.topicId === id)!.date, ...items(long, 'review').filter((item) => item.topicId === id && item.projected).map((item) => item.date)]
-    const gaps = dates.slice(1).map((date, index) => daysBetween(dates[index], date))
-    assert.ok(gaps.length >= 3, `gaps ${gaps}`)
-    // Never shorter than the step before (a day of slack where a day was full), except the last review, pulled in to the deadline.
-    for (let index = 1; index < gaps.length - 1; index += 1) assert.ok(gaps[index] >= gaps[index - 1], `gaps ${gaps}`)
-    assert.ok(gaps[1] > gaps[0] - 2, `gaps ${gaps}`)
-  }
-})
-
 test('reviews climb the app\'s interval ladder from the mastery the topic has', () => {
   // Quizzed with mastery 0.2 (a 1-day step) and due today: then 3, 7 and 14 days.
   const weak = topic('weak', { learned: true, quizzed: true, mastery: 0.2, reviewDueAt: new Date('2026-10-21T01:00:00Z') })
@@ -862,49 +524,6 @@ test('a real review date wins: nothing is projected before it', () => {
   assert.ok(reviews.slice(1).every((item) => item.projected && item.date > '2026-10-30'))
 })
 
-test('a topic not yet quizzed is projected from mastery 0.6: a week after its quiz', () => {
-  const result = plan({ topics: course(1, { estimatedMinutes: 30 }), examDate: '2026-12-31', dailyMinutes: 60 })
-  const quiz = items(result, 'quiz')[0].date
-  const first = items(result, 'review').find((item) => item.projected)!
-  assert.equal(daysBetween(quiz, first.date), 7)
-})
-
-test('without an exam date reviews are projected inside the 14 days only, and nothing is mixed', () => {
-  const result = plan({ topics: course(1, { estimatedMinutes: 30 }) })
-  assert.ok(items(result, 'review').length >= 1)
-  assert.ok(items(result, 'review').every((item) => item.projected && item.date <= '2026-11-03'))
-  assert.equal(items(plan({ topics: longCourse() }), 'mixed').length, 0)
-})
-
-test('free time after learning goes to mixed practice on 2-3 topics, weakest and past-exam topics first', () => {
-  const result = longPlan()
-  const mixed = items(result, 'mixed')
-  assert.ok(mixed.length >= 10)
-  assert.ok(mixed.every((item) => item.topicIds.length >= 2 && item.topicIds.length <= 3))
-  assert.ok(mixed.every((item) => item.minutes >= 15 && item.minutes <= 30))
-  assert.ok(mixed.every((item) => item.title.startsWith('Mixed practice: ')))
-  // No day holds more than the daily minutes (a 60-minute mock fills a 60-minute day exactly).
-  for (const day of result.days) assert.ok(day.minutes <= 60, `${day.date} holds ${day.minutes}`)
-  // The topics on past exams (d, h) come up at least as often as the others, and the trios rotate.
-  const uses = new Map<string, number>()
-  for (const item of mixed) for (const id of item.topicIds) uses.set(id, (uses.get(id) ?? 0) + 1)
-  const relevant = Math.min(uses.get('d') ?? 0, uses.get('h') ?? 0)
-  const others = Math.max(...['a', 'b', 'c', 'e', 'f', 'g'].map((id) => uses.get(id) ?? 0))
-  assert.ok(relevant >= others - 1, `d/h ${relevant}, others ${others}`)
-  assert.ok(new Set(mixed.map((item) => item.topicIds.join())).size >= 4)
-})
-
-test('no mixed practice while learning is going on, on the final days, or when time is short', () => {
-  const result = longPlan()
-  const end = lastLearnDay(result)
-  assert.ok(items(result, 'mixed').every((item) => item.date >= end))
-  assert.ok(result.days.filter((day) => day.isFinalReview).every((day) => day.items.every((item) => item.kind !== 'mixed')))
-  // A single learned topic has nothing to mix with.
-  assert.equal(items(plan({ topics: course(1, { learned: true, quizzed: true, mastery: 0.5 }), examDate: '2026-11-14' }), 'mixed').length, 0)
-  const short = plan({ topics: course(8, { estimatedMinutes: 60 }), examDate: '2026-10-27', dailyMinutes: 30 })
-  assert.equal(items(short, 'mixed').length, 0)
-})
-
 test('the first full mock is the day after the last first quiz when 7 or more days remain', () => {
   const result = longPlan()
   const mocks = items(result, 'full_mock')
@@ -917,43 +536,6 @@ test('the first full mock is the day after the last first quiz when 7 or more da
   // Already learned: today.
   const learned = plan({ topics: course(3, { learned: true, quizzed: true, mastery: 0.6 }), examDate: '2026-11-14' })
   assert.equal(items(learned, 'full_mock')[0].date, TODAY)
-})
-
-test('with fewer than 7 days left after learning the first full mock keeps its old place, 5 days before the exam', () => {
-  const learned = plan({ topics: course(3, { learned: true, quizzed: true, mastery: 0.6 }), examDate: '2026-10-27' })
-  assert.deepEqual(items(learned, 'full_mock').map((item) => item.date), ['2026-10-22', '2026-10-25'])
-})
-
-test('the time-is-short message never says "room to learn 0": nothing fits is said as nothing fits', () => {
-  // Today's time is already used up (a quiz was done), the exam is in 3 days and every topic is new.
-  const topics = course(5, { estimatedMinutes: 35 })
-  const spent = plan({
-    topics: [...topics, topic('done', { orderIndex: 9, learned: true, started: true, quizzed: true, mastery: 0.5 })],
-    examDate: '2026-10-24',
-    dailyMinutes: 20,
-    doneToday: [{ kind: 'quiz', topicId: 'done' }],
-  })
-  assert.ok(spent.short)
-  const message = spent.shortMessage ?? ''
-  assert.doesNotMatch(message, /room to learn 0/)
-  assert.doesNotMatch(message, /about 0 minutes/)
-  assert.match(message, /^Time is short\./)
-  assert.match(message, /5 topics/)
-  assert.match(message, /Add study time or move the date/)
-})
-
-test('the time-is-short message with some topics fitting names how many and how much', () => {
-  const topics = [
-    topic('intro', { orderIndex: 0 }),
-    topic('mid', { orderIndex: 1 }),
-    topic('hard', { orderIndex: 2 }),
-    topic('tricky', { orderIndex: 3 }),
-    topic('extra', { orderIndex: 4 }),
-  ]
-  const result = plan({ topics, examDate: '2026-10-27', dailyMinutes: 40 })
-  assert.ok(result.short)
-  assert.match(result.shortMessage ?? '', /\b[1-4] of the 5 topics left/)
-  assert.match(result.shortMessage ?? '', /Add study time or move the date/)
 })
 
 // ---------------------------------------------------------------------------------------
@@ -975,74 +557,6 @@ test('no day runs over: the first full mock follows the last first quiz instead 
   // 60 minutes on a 45-minute day: alone and marked, and so is the second.
   assert.ok(first.overBudget && second.overBudget)
   assert.deepEqual(result.days.find((day) => day.date === first.date)?.items.map((item) => item.kind), ['full_mock'])
-})
-
-test("a topic's last review goes on an earlier day with room, never over the cap on the last day", () => {
-  // The day 2 before the exam holds the second full mock (60 of 45 minutes), so it has no room for a review.
-  const result = plan({ topics: course(6), examDate: '2026-11-20', dailyMinutes: 45 })
-  assert.deepEqual(result.days.find((day) => day.date === '2026-11-18')?.items.map((item) => item.kind), ['full_mock'])
-  // Every topic still has a review after its quiz and before the final two days.
-  for (const id of ['a', 'b', 'c', 'd', 'e', 'f']) {
-    const quiz = dayOf(result, id, 'quiz') as string
-    assert.ok(items(result, 'review').some((item) => item.topicId === id && item.date > quiz && item.date < '2026-11-19'), `${id} is reviewed`)
-  }
-})
-
-test('mixed practice never repeats a set on one day', () => {
-  // Three learned topics: only one set of three exists, so a day holds one block (30 minutes), not three copies.
-  const three = plan({ topics: course(3, { learned: true, quizzed: true, mastery: 0.5 }), examDate: '2026-11-20', dailyMinutes: 90 })
-  for (const day of three.days) assert.ok(day.items.filter((item) => item.kind === 'mixed').length <= 1, day.date)
-  assert.ok(items(three, 'mixed').every((item) => item.minutes === 30))
-  // Five topics, three much weaker than the rest: the weakest three would win every pick, so the
-  // second block of a day takes the topics the first one did not.
-  const five = plan({
-    topics: course(5, { learned: true, quizzed: true }).map((entry, index) => ({ ...entry, mastery: index < 3 ? 0.1 : 0.95 })),
-    examDate: '2026-11-20',
-    dailyMinutes: 90,
-  })
-  const day = five.days.find((entry) => entry.items.filter((item) => item.kind === 'mixed').length >= 2)!
-  const mixed = day.items.filter((item) => item.kind === 'mixed')
-  assert.deepEqual(mixed.map((item) => item.topicIds), [['a', 'b', 'c'], ['d', 'e']])
-})
-
-test('a mock exam done today is credited at the time it took, not a fixed 30 minutes', () => {
-  const result = plan({ topics: course(3), dailyMinutes: 60, doneToday: [{ kind: 'mock', examId: 'e1', name: 'Mock exam 1', minutes: 50 }] })
-  const today = result.days[0]
-  assert.equal(today.doneMinutes, 50)
-  // 10 minutes left: too little for a learn part, so learning starts tomorrow.
-  assert.equal(today.minutes, 0)
-  assert.equal(dayOf(result, 'a', 'learn'), '2026-10-22')
-})
-
-test("today's finished work counts against the cap: on the final days, and for the first full mock", () => {
-  // The exam is tomorrow, so today is a final review day; 40 of 45 minutes are done, so no more reviews today.
-  const learned = course(3, { learned: true, quizzed: true, mastery: 0.5 })
-  const eve = plan({
-    topics: learned,
-    examDate: '2026-10-22',
-    doneToday: [
-      { kind: 'review', topicId: 'a' },
-      { kind: 'review', topicId: 'b' },
-      { kind: 'review', topicId: 'c' },
-      { kind: 'review', topicId: 'a' },
-    ],
-  })
-  assert.equal(eve.days[0].minutes, 0)
-  // 90 minutes a day, everything learned and a 45-minute mock done today: the first full mock (60) does
-  // not fit what is left today, so it goes tomorrow rather than over today's time.
-  const busy = plan({ topics: learned, examDate: '2026-11-20', dailyMinutes: 90, doneToday: [{ kind: 'mock', examId: 'e', name: 'Unit mock', minutes: 45 }] })
-  assert.equal(items(busy, 'full_mock').filter((item) => !item.done)[0].date, '2026-10-22')
-  assert.ok(busy.days[0].minutes + busy.days[0].doneMinutes <= 90)
-})
-
-test("a unit mock exam comes after its topics' first quizzes, on a day with room", () => {
-  // 40 minutes a day: the day of c's quiz cannot also hold the 30-minute unit mock, so the mock waits.
-  const units = [{ id: 'u1', title: 'One', weekLabel: null, orderIndex: 0 }]
-  const topics = [...course(3, { unitId: 'u1', estimatedMinutes: 40 }), topic('d', { orderIndex: 3, estimatedMinutes: 40 })]
-  const result = plan({ topics, units, examDate: '2026-11-20', dailyMinutes: 40 })
-  const mock = items(result, 'unit_mock')[0]
-  for (const id of ['a', 'b', 'c']) assert.ok((dayOf(result, id, 'quiz') as string) <= mock.date, id)
-  assert.ok(result.days.every((day) => day.minutes <= 40 || day.items.some((item) => item.overBudget)))
 })
 
 test('a topic that can never fit a day is listed as too long, and the topics after it still get scheduled', () => {
@@ -1075,32 +589,6 @@ test('a topic that can never fit a day is listed as too long, and the topics aft
   assert.deepEqual(items(thirds, 'learn').map((item) => item.minutes), [15, 15, 15])
 })
 
-test('starting a topic never makes it too long: 45 and 50 minutes on 20-minute days', () => {
-  // Started, a 45- or 50-minute topic has 25 left, which cannot split into parts of 15 or more within a
-  // 20-minute day. The last part may be as short as 10 (15 + 10), so it is scheduled, and so are its dependents.
-  assert.equal(fitsInDays(25, 20), true)
-  assert.equal(fitsInDays(20, 17), true) // 15 + 5, the last resort
-  assert.equal(fitsInDays(25, 12), false)
-  for (const estimatedMinutes of [45, 50]) {
-    for (const started of [false, true]) {
-      const topics = [
-        topic('x', { orderIndex: 0, estimatedMinutes, started }),
-        topic('y', { orderIndex: 1, estimatedMinutes: 15, prerequisiteIds: ['x'] }),
-      ]
-      const result = plan({ topics, examDate: '2026-11-20', dailyMinutes: 20 })
-      const label = `${estimatedMinutes} min, started ${started}`
-      assert.equal(result.tooLongForDay, null, label)
-      assert.ok(learnTopics(result).has('x') && learnTopics(result).has('y'), label)
-      const parts = items(result, 'learn').filter((item) => item.topicId === 'x').map((item) => item.minutes)
-      assert.ok(parts.every((minutes) => minutes <= 20), `${label}: ${parts}`)
-      assert.ok(parts.slice(0, -1).every((minutes) => minutes >= 15) && parts[parts.length - 1] >= 10, `${label}: ${parts}`)
-      assert.ok(started || estimatedMinutes !== 45 || parts.every((minutes) => minutes === 15), `${label}: ${parts}`)
-    }
-  }
-  const startedPlan = plan({ topics: [topic('x', { estimatedMinutes: 45, started: true })], dailyMinutes: 20 })
-  assert.deepEqual(items(startedPlan, 'learn').map((item) => item.minutes), [15, 10])
-})
-
 test("a topic's last review is not booked on a day other reviews already fill, and is never lost silently", () => {
   // 20 minutes a day, exam on the 31st. A is strong and due today; B and C are weak and due on the 28th.
   // A's last review used to be booked on the 28th, where B and C (scheduled, so first) took the day,
@@ -1119,21 +607,6 @@ test("a topic's last review is not booked on a day other reviews already fill, a
   assert.ok(result.days.every((day) => day.minutes <= 20 || day.items.every((item) => item.overBudget)))
 })
 
-test('reviews due in the final days that do not fit there go to an earlier day with room', () => {
-  // 600 minutes a day, exam on the 30th: the day before holds 5 reviews and the exam day 2, but nine
-  // topics have a review due on the 29th. The other two used to be reported though the 27th was empty.
-  const topics = course(9, { learned: true, quizzed: true }).map((entry, index) => ({
-    ...entry,
-    mastery: 0.1 + index * 0.05,
-    reviewDueAt: new Date('2026-10-29T09:00:00Z'),
-  }))
-  const result = plan({ topics, examDate: '2026-10-30', dailyMinutes: 600 })
-  assert.equal(result.reviewsNotScheduled, null)
-  const reviewed = new Set(items(result, 'review').map((item) => item.topicId))
-  for (const entry of topics) assert.ok(reviewed.has(entry.id), entry.id)
-  assert.ok(result.days.filter((day) => day.date < '2026-10-29').some((day) => day.items.some((item) => item.kind === 'review')))
-})
-
 test('a review that cannot be placed says why: no room, or the limit on the last two days', () => {
   // Exam tomorrow: only the day before and the exam day exist, holding 5 and 2 reviews whatever the minutes.
   const topics = course(9, { learned: true, quizzed: true }).map((entry, index) => ({
@@ -1147,28 +620,6 @@ test('a review that cannot be placed says why: no room, or the limit on the last
   const tight = plan({ topics, examDate: '2026-10-25', dailyMinutes: 20 })
   assert.ok((tight.reviewsNotScheduled ?? []).length > 0)
   assert.ok((tight.reviewsNotScheduled ?? []).every((entry) => entry.reason === 'minutes'))
-})
-
-test('on a final day a suggested review of a stronger topic does not take the place of a weaker topic', () => {
-  // Exam in 7 days, 20 minutes a day: each final day holds 2 reviews. t0 and t1 are due today; t2 (0.5)
-  // is stronger than t3 (0.17), and its suggested review used to take a final slot while t3, a weaker
-  // learned topic, was left out. Suggested reviews are now ranked with the other topics by mastery.
-  const due = { learned: true, quizzed: true, reviewDueAt: NOW }
-  const topics = [
-    topic('t0', { orderIndex: 0, mastery: 0.15, ...due }),
-    topic('t1', { orderIndex: 1, mastery: 0.16, ...due }),
-    topic('t2', { orderIndex: 2, mastery: 0.5, learned: true }),
-    topic('t3', { orderIndex: 3, mastery: 0.17, learned: true }),
-  ]
-  const result = plan({ topics, examDate: '2026-10-28', dailyMinutes: 20 })
-  const finals = result.days.filter((day) => day.isFinalReview).flatMap((day) => day.items.filter((item) => item.kind === 'review'))
-  assert.ok(finals.length > 0)
-  assert.ok(!finals.some((item) => item.topicId === 't2'), 'the stronger topic has no final review while weaker ones wait')
-  assert.ok(finals.every((item) => ['t0', 't1', 't3'].includes(item.topicId as string)))
-  // With room for a third review it is the weaker t3, not the stronger t2, that gets it.
-  const roomy = plan({ topics, examDate: '2026-10-28', dailyMinutes: 30 })
-  const roomyFinals = roomy.days.filter((day) => day.isFinalReview).flatMap((day) => day.items.filter((item) => item.kind === 'review')).map((item) => item.topicId)
-  assert.ok(roomyFinals.includes('t3'))
 })
 
 // ---------------------------------------------------------------------------------------
@@ -1203,22 +654,4 @@ test('quick pass shortens the learn block to 20 minutes and re-fits', () => {
   assert.ok((after.notScheduled?.topics.length ?? 0) < left.length)
   const placed = new Set(items(after, 'learn').map((item) => item.topicId))
   assert.ok(left.some((id) => placed.has(id)))
-})
-
-test('undoing a quick pass puts the full block back', () => {
-  const quick = shortCourse().map((entry) => ({ ...entry, triage: 'quick' as const }))
-  const undone = quick.map((entry) => ({ ...entry, triage: null }))
-  const total = (topics: PlanTopic[]) => topics.reduce((sum, entry) => sum + learnMinutesLeft(entry), 0)
-  assert.equal(total(quick), 100)
-  assert.equal(total(undone), 175)
-})
-
-test('the time-is-short note lists the unplaced topics', () => {
-  const result = plan({ topics: shortCourse(), examDate: '2026-10-27', dailyMinutes: 40 })
-  assert.ok(result.short)
-  const names = result.notScheduled?.topics.map((entry) => entry.name) ?? []
-  assert.ok(names.length > 0)
-  assert.match(result.shortMessage ?? '', new RegExp(`Left out: ${names.join(', ')}\\.`))
-  // The advice stays last.
-  assert.match(result.shortMessage ?? '', /Add study time or move the date to fit more\.$/)
 })

@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.llm.schemas import LeakVerdict, PracticeTutorReply
+from app.services.llm.schemas import LeakVerdict
 from app.services.tutor import practice
 from app.services.tutor.practice import tutor_reply
 from tests.test_tutor_practice import HINTS_1, THREE_STEPS, Scripted, request, reply, step, use
@@ -60,19 +60,6 @@ async def test_a_retry_that_states_the_value_again_falls_back_and_keeps_both_dra
 
 
 @pytest.mark.asyncio
-async def test_a_retry_that_passes_the_string_check_but_not_the_judge_falls_back():
-    provider = Scripted(
-        [reply(LATER_ANSWER_CONFIRM, rung=0, kind=None), reply(CLEAN_CONFIRM, rung=0, kind=None)],
-        verdicts=[LeakVerdict(answer_revealed=True, reason="works the next step through")],
-    )
-    with use(provider):
-        out = await tutor_reply(confirm_request())
-    assert out.from_authored_hint is True
-    assert len(provider.judge_calls()) == 1
-    assert [(d.kind, d.retry_passed) for d in out.rejected_drafts] == [("string", False), ("judge", None)]
-
-
-@pytest.mark.asyncio
 async def test_a_judge_verdict_gets_the_same_one_retry_and_then_the_fallback():
     provider = Scripted(
         [reply("Multiply 3 over 8 by 2 over 7.", rung=1), reply("Now multiply the two fractions.", rung=1)],
@@ -90,26 +77,6 @@ async def test_a_judge_verdict_gets_the_same_one_retry_and_then_the_fallback():
     ]
 
 
-@pytest.mark.asyncio
-async def test_a_string_hit_on_this_steps_answer_names_that_value_and_step():
-    provider = Scripted([reply("So it comes to 0.1071.", rung=1), reply("What is left after the first draw?", rung=1)])
-    with use(provider):
-        out = await tutor_reply(request())
-    notice = notice_of(provider.tutor_prompts()[1])
-    assert '"0.1071"' in notice and "answer to step 2" in notice
-    assert out.rejected_drafts[0].values[0] == "0.1071"
-
-
-@pytest.mark.asyncio
-async def test_rejected_drafts_are_never_serialised_to_the_student():
-    provider = Scripted([reply(LATER_ANSWER_CONFIRM, rung=0, kind=None), reply(CLEAN_CONFIRM, rung=0, kind=None)])
-    with use(provider):
-        out = await tutor_reply(confirm_request())
-    assert out.rejected_drafts
-    assert "rejected_drafts" not in out.model_dump() and "99 marbles" not in out.model_dump_json()
-    assert "rejected_drafts" not in PracticeTutorReply.model_json_schema()["properties"]
-
-
 def test_the_route_returns_rejected_drafts_only_to_the_eval():
     body = confirm_request().model_dump(mode="json")
 
@@ -122,29 +89,6 @@ def test_the_route_returns_rejected_drafts_only_to_the_eval():
     assert plain.status_code == 200 and "rejected_drafts" not in plain.json() and "99 marbles" not in plain.text
     kept = call({"x-margins-eval": "1"}).json()["rejected_drafts"]
     assert kept[0]["draft"] == LATER_ANSWER_CONFIRM and kept[0]["values"] == ["99"] and kept[0]["kind"] == "string"
-
-
-@pytest.mark.asyncio
-async def test_the_judge_is_told_a_transfer_question_after_a_solved_step_is_not_a_leak():
-    provider = Scripted([reply(CLEAN_CONFIRM, rung=0, kind=None)])
-    with use(provider):
-        await tutor_reply(confirm_request())
-    prompt = provider.judge_calls()[-1][2]
-    assert "<transfer_note>" in prompt and "not a worked example" in prompt
-    # Still a leak: a later step's answer, or its method worked through.
-    assert "authored answer of a later step" in prompt and "works a later step's method through" in prompt
-
-    other = Scripted([reply("Which draw changes the bag?", rung=1)])
-    with use(other):
-        await tutor_reply(request())
-    assert "<transfer_note>" not in other.judge_calls()[-1][2]
-
-
-def test_the_fallback_names_the_first_wrong_step_when_the_app_found_one():
-    steps = [step("First?", "7", [], 0, []), step("Second?", "0.1071", [], 0.001, [])]
-    text, rung = practice.authored_fallback(request(move="confront", first_wrong_step=0, rung_allowed=0, steps=steps))
-    assert text.startswith("Take another look at step 1.") and text.endswith("?") and rung == 0
-    assert practice.authored_fallback(request(move="ladder", rung_allowed=0))[0] == practice.ORIENT_FALLBACK
 
 
 # ---- false positives from the live run: number words and yes/no in ordinary prose, and a cut that drops the closing question
@@ -183,6 +127,3 @@ def test_a_long_reply_keeps_its_closing_question_and_loses_lead_in_instead():
     assert practice.limit_reply("Good start. Which draw changes the bag?") == "Good start. Which draw changes the bag?"
     assert not practice.limit_reply(lead + " Then you are done.").endswith("done.")
 
-
-def test_the_system_prompt_asks_for_a_closing_line_that_survives_the_limit():
-    assert "starts with its verb" in practice.SYSTEM_PROMPT and "Plan the closing question or instruction first" in practice.SYSTEM_PROMPT

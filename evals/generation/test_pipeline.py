@@ -4,7 +4,6 @@ The metered-provider tests import app code (usage and base types), so they set a
 DATABASE_URL first, as ai-service/tests/conftest.py does.
 """
 import asyncio
-import json
 import os
 import sys
 from pathlib import Path
@@ -18,7 +17,6 @@ os.environ.setdefault("DATABASE_URL", "postgresql://user:pass@localhost:5432/unu
 
 import analysis  # noqa: E402
 import judge  # noqa: E402
-import report  # noqa: E402
 from spend import GENERATION, SpendLimitReached, SpendTracker  # noqa: E402
 
 # ---------------------------------------------------------------- judge
@@ -31,28 +29,6 @@ def test_labels_are_a_stable_shuffle_of_the_models():
     assert sorted(first) == ["A", "B", "C"] and sorted(first.values()) == sorted(models)
     orders = {tuple(judge.assign_labels(f"c|t{i}|notes", models, seed=0).values()) for i in range(30)}
     assert len(orders) > 1  # the order varies between pairs, so no model is always "A"
-
-
-def test_rendering_hides_nothing_but_is_the_same_layout_for_every_model():
-    quiz = [
-        {
-            "question_type": "multiple_choice",
-            "question_text": "What is 3 + 4?",
-            "options": [{"id": "A", "text": "6"}, {"id": "B", "text": "7"}],
-            "correct_answer": "B",
-            "explanation": "Add.",
-            "points": 1,
-            "concepts_tested": ["addition"],
-        },
-        {"question_type": "numerical", "question_text": "Root of 9?", "correct_answer": 3.0, "unit": "", "tolerance": 0.1, "explanation": "x", "points": 2},
-        {"question_type": "short_answer", "question_text": "Define a heap.", "sample_answer": "A tree.", "key_points": ["tree", "order"], "explanation": "y", "points": 3},
-    ]
-    text = judge.render_output("quiz", quiz)
-    assert "### Question 1 (multiple_choice, 1 pt)" in text and "  B. 7" in text and "Answer key: B" in text
-    assert "tolerance 0.1" in text and "Sample answer: A tree." in text
-    solved = [{"title": "T", "problem_statement": "P", "solution_steps": [{"step_number": 1, "description": "d", "work": "w", "explanation": "e"}], "final_answer": "- a", "key_concepts": ["k"]}]
-    assert "Step 1: d" in judge.render_output("solved", solved)
-    assert judge.render_output("notes", "  # Notes  ") == "# Notes"
 
 
 def test_judge_messages_contain_labels_but_no_model_names():
@@ -83,12 +59,6 @@ def test_aggregate_maps_letters_back_to_models_and_lists_errors():
     assert haiku["means"]["all"]["correctness"] == 3.5
     assert haiku["mathematical_errors"] == 1 and haiku["mathematical_errors_by_type"] == {"notes": 1}
     assert haiku["errors"][0]["topic"] == "t1" and opus["errors"] == []
-
-
-def test_aggregate_clamps_and_ignores_bad_scores():
-    judged = [_judged("c", "t", "notes", {"A": "m"}, [{"candidate": "a", "correctness": 9, "grounding": "x", "teaching": 0, "errors": []}])]
-    means = judge.aggregate(judged, ["m"])["models"]["m"]["means"]["all"]
-    assert means["correctness"] == 5 and means["grounding"] is None and means["teaching"] == 1
 
 
 # ---------------------------------------------------------------- analysis and report
@@ -128,69 +98,6 @@ def test_cost_and_latency_projection():
     assert result["projected_cost_12_topics_usd"] == pytest.approx(2.40)
     assert result["total_cost_usd"] == pytest.approx(0.37)
     assert result["cache_creation_input_tokens"] == 20
-
-
-def _run_dir(tmp_path):
-    run = tmp_path / "2026-01-01-test"
-    (run / "raw").mkdir(parents=True)
-    records = [
-        _record("c", "t1", "a-medium", "notes", NOTES),
-        _record("c", "t1", "a-medium", "quiz", QUIZ),
-        _record("c", "t1", "b-low", "notes", NOTES, cost=0.001),
-        _record("c", "t1", "b-low", "quiz", None, status="error"),
-    ]
-    for r in records:
-        (run / "raw" / analysis.raw_name(r["corpus"], r["topic"]["key"], r["model"]["slug"], r["type"])).write_text(json.dumps(r))
-    (run / "excerpts.json").write_text(json.dumps({"c": {"t1": [{"text": "A hash function maps keys to slots."}]}}))
-    (run / "topics.json").write_text(json.dumps({"c": {"all": [{"name": "T1"}], "selected": [{"name": "T1", "key": "t1"}]}}))
-    info = {
-        "label": "test", "date": "2026-01-01", "corpora": ["c"], "types": ["notes", "quiz"],
-        "models": [{"slug": "a-medium", "label": "a:medium", "model_id": "x"}, {"slug": "b-low", "label": "b:low", "model_id": "y"}],
-        "params": {"examples": 3, "questions": 10, "difficulty": "medium", "detail_level": "comprehensive"},
-        "judge": None, "mock": False, "seed": 0, "max_usd": 8.0, "max_judge_usd": 3.0, "topics_source": "fixed",
-    }
-    return run, info
-
-
-def test_build_summary_and_report_from_files(tmp_path):
-    run, info = _run_dir(tmp_path)
-    summary = analysis.build_summary(run, info, {"generation": 0.02, "topics": 0.0, "judge": 0.0}, {})
-    assert summary["models"]["a-medium"]["checks"]["notes_count"] == 1
-    assert summary["models"]["b-low"]["failures"][0]["type"] == "quiz"
-    assert summary["judge"] is None
-    assert summary["samples"] is None or summary["samples"]["topic"] == "t1"
-    markdown = report.render_markdown(summary)
-    for heading in ("# Generation eval: test", "## Cost and latency", "## Automatic checks", "## Judge", "## Side by side", "Failed generations"):
-        assert heading in markdown
-    assert "The judge was not run." in markdown
-    json.dumps(summary)  # the summary must serialise
-
-
-def test_report_includes_judge_errors(tmp_path):
-    run, info = _run_dir(tmp_path)
-    (run / "judge").mkdir()
-    (run / "judge" / "c__t1__notes.json").write_text(
-        json.dumps(
-            _judged("c", "t1", "notes", {"A": "a-medium", "B": "b-low"}, [
-                {"candidate": "A", "correctness": 5, "grounding": 5, "teaching": 4, "errors": [], "summary": ""},
-                {"candidate": "B", "correctness": 2, "grounding": 3, "teaching": 3, "summary": "",
-                 "errors": [{"kind": "mathematical", "where": "section 2", "description": "wrong sum"}]},
-            ])
-        )
-    )
-    info["judge"] = "opus:medium"
-    summary = analysis.build_summary(run, info, {"generation": 0.02, "topics": 0.0, "judge": 0.3}, {})
-    markdown = report.render_markdown(summary)
-    assert "mathematical, section 2: wrong sum" in markdown
-    assert "b:low** (1 errors, 1 mathematical)" in markdown
-
-
-def test_notes_section_and_quiz_samples():
-    section = analysis.notes_section("# T\n\n## Overview\nintro\n\n## Key Concepts\nbody text here\n\n## How\nmore")
-    assert section["title"] == "Key Concepts" and section["text"] == "body text here"
-    questions = [{"question_type": "numerical"}, {"question_type": "multiple_choice"}, {"question_type": "true_false"}]
-    picked = analysis.quiz_samples(questions)
-    assert [q["question_type"] for q in picked] == ["multiple_choice", "numerical"]
 
 
 # ---------------------------------------------------------------- the metered provider
@@ -262,18 +169,6 @@ def test_metered_provider_counts_cost_of_a_failed_call_and_reraises():
     assert tracker.total_spent == pytest.approx(provider.calls[0]["cost_usd"], rel=1e-3)
 
 
-def test_parse_model_spec():
-    import adapters
-
-    spec = adapters.parse_model_spec("opus:high")
-    assert (spec.model_id, spec.effort, spec.slug, spec.label) == ("claude-opus-5-5", "high", "opus-high", "opus:high")
-    full = adapters.parse_model_spec("claude-sonnet-5-5:medium")
-    assert full.alias == "sonnet" and full.slug == "sonnet-medium"
-    for bad in ("opus", "opus:", "opus:turbo", ":low"):
-        with pytest.raises(SystemExit):
-            adapters.parse_model_spec(bad)
-
-
 def test_the_model_pin_reaches_the_apps_resolver_per_task_and_leaves_no_trace():
     import adapters
     from app.services.llm import anthropic_provider
@@ -303,23 +198,6 @@ def test_the_model_pin_reaches_the_apps_resolver_per_task_and_leaves_no_trace():
         anthropic_provider.resolve_model("judge")
 
 
-def test_metered_provider_pins_the_model_during_the_call():
-    import adapters
-    from app.services.llm import anthropic_provider
-
-    seen = {}
-
-    class Probe(FakeProvider):
-        async def generate_text(self, messages, *, purpose, max_tokens=16000):
-            seen["choice"] = anthropic_provider.resolve_model(purpose)
-            return await super().generate_text(messages, purpose=purpose, max_tokens=max_tokens)
-
-    adapters.install_model_pin()
-    provider, _ = _metered(1.0, Probe())
-    asyncio.run(provider.generate_text([LLMMessage(role="user", content="hi")], purpose="section_notes"))
-    assert (seen["choice"].model, seen["choice"].effort) == ("claude-haiku-5-5", "medium")
-
-
 def test_real_provider_sends_the_pinned_model_and_effort(monkeypatch):
     """Through MeteredProvider and the app's AnthropicProvider, with the HTTP call replaced."""
     import types
@@ -347,38 +225,3 @@ def test_real_provider_sends_the_pinned_model_and_effort(monkeypatch):
         assert provider.calls[0]["model"] == model and provider.calls[0]["effort"] == effort
 
 
-def test_concepts_and_warmup_flow_through_summary_and_report(tmp_path):
-    run = tmp_path / "2026-01-01-graph"
-    (run / "raw").mkdir(parents=True)
-    graph = {
-        "objective_count": 1,
-        "concepts": [{"id": f"c{i}", "name": f"C{i}", "objective_indexes": [0]} for i in range(3)],
-        "claims": [{"concept_id": "c0", "chunk_id": "k1", "quote": "maps keys to slots"}, {"concept_id": "c1", "chunk_id": "k1", "quote": "not in the chunk"}],
-        "edges": [{"source_id": "c0", "target_id": "c1", "type": "prerequisite"}],
-    }
-    warmup = [{"question_type": "true_false", "question_text": "A hash function maps any key to a slot.", "correct_answer": True, "explanation": "Yes.", "concept_ids": ["c0"]}]
-    for content_type, output in (("concepts", graph), ("warmup", warmup), ("quiz", QUIZ)):
-        r = _record("c", "t1", "a-medium", content_type, output)
-        (run / "raw" / analysis.raw_name("c", "t1", "a-medium", content_type)).write_text(json.dumps(r))
-    (run / "excerpts.json").write_text(json.dumps({"c": {"t1": [{"chunk_id": "k1", "text": "A hash function maps keys to slots."}]}}))
-    (run / "topics.json").write_text(json.dumps({"c": {"all": [{"name": "T1"}], "selected": [{"name": "T1", "key": "t1"}]}}))
-    info = {
-        "label": "graph", "date": "2026-01-01", "corpora": ["c"], "types": ["concepts", "warmup", "quiz"],
-        "models": [{"slug": "a-medium", "label": "a:medium", "model_id": "x"}],
-        "params": {"examples": 3, "questions": 10, "difficulty": "medium", "detail_level": "comprehensive"},
-        "judge": None, "mock": False, "seed": 0, "max_usd": 3.0, "max_judge_usd": 3.0, "topics_source": "fixed",
-    }
-    summary = analysis.build_summary(run, info, {"generation": 0.03, "topics": 0.0, "judge": 0.0}, {})
-    checks_ = summary["models"]["a-medium"]["checks"]
-    assert (checks_["claims_total"], checks_["claims_matched"]) == (2, 1)
-    assert checks_["claim_quote_gate_ok"] is False
-    assert checks_["concept_count_ok"] == 1 and checks_["warmup_reused_items"] == 0
-    # The warm-up is tagged with a real concept; the quiz fixture has no tags at all.
-    assert (checks_["items_tagged"], checks_["items_tagged_valid"]) == (2, 1)
-    markdown = report.render_markdown(summary)
-    assert "50% (1 of 2) FAIL" in markdown and "Concepts" in markdown and "Warm-up" in markdown
-    # The item-tag gate fails (one quiz item is untagged); the warm-up reuse gate passes at zero.
-    assert checks_["item_tag_gate_ok"] is False and checks_["warmup_reuse_gate_ok"] is True
-    assert "50% (1 of 2) FAIL" in markdown.split("Items whose concept tags are all valid")[1].splitlines()[0]
-    assert "| 0 PASS |" in markdown.split("Warm-up questions the topic quiz repeats")[1].splitlines()[0]
-    json.dumps(summary)

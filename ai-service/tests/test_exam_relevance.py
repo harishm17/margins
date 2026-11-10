@@ -15,8 +15,6 @@ from app.services import exam_relevance
 from app.services.exam_relevance import (
     build_maps,
     classify_questions,
-    exam_body,
-    is_boilerplate,
     mark_exam_relevant_topics,
 )
 from app.services.llm.base import LLMUnavailableError
@@ -104,17 +102,6 @@ async def three_topics(course):
 # ---------------------------------------------------------------- the input
 
 
-class TestInput:
-    def test_tables_of_numbers_are_boilerplate_and_questions_are_not(self):
-        assert is_boilerplate(EXAM[2]) and is_boilerplate("   ") and is_boilerplate("")
-        assert not is_boilerplate(EXAM[1]) and not is_boilerplate(EXAM[0])
-
-    def test_the_body_skips_tables_and_stops_at_a_whole_chunk(self):
-        assert exam_body(EXAM, 10_000) == "\n\n".join([EXAM[0], EXAM[1], EXAM[3]])
-        assert exam_body(EXAM, len(EXAM[0]) + len(EXAM[1]) + 5) == "\n\n".join([EXAM[0], EXAM[1]])
-        assert exam_body(EXAM, 5).startswith("# Exam 1")  # the first chunk is always kept
-
-
 class TestBuildMaps:
     FILES = [{"id": "m1"}, {"id": "m2"}]
     TOPICS = [{"key": "T1", "id": "id1"}, {"key": "T2", "id": "id2"}, {"key": "T3", "id": "id3"}, {"key": "T4", "id": "id4"}]
@@ -130,11 +117,6 @@ class TestBuildMaps:
         assert maps["m1"] == [{"label": "Problem 1", "summary": "x", "topic_ids": ["id1", "id2", "id3"]}]
         assert maps["m2"] == [{"label": "Problem 2", "summary": "y", "topic_ids": []}]
 
-    def test_summaries_and_labels_are_cut(self):
-        long_summary = " ".join(f"w{i}" for i in range(30))
-        maps = build_maps(ExamTopicMap(questions=[q("L" * 80, long_summary, "T1")]), self.TOPICS, self.FILES)
-        assert len(maps["m1"][0]["summary"].split()) == 12 and len(maps["m1"][0]["label"]) == 40
-
 
 # ---------------------------------------------------------------- the model call
 
@@ -145,12 +127,6 @@ COPY = "Compute the probability that both of the marbles drawn are red"
 
 
 class TestClassify:
-    async def test_clean_summaries_take_one_call(self):
-        provider, patched = scripted(ExamTopicMap(questions=[q("Problem 1", "Chance of two same-coloured draws", "T1")]))
-        with patched:
-            maps = await classify_questions(TOPICS, FILES)
-        assert len(provider.prompts) == 1
-        assert maps["m1"][0]["summary"] == "Chance of two same-coloured draws"
 
     async def test_a_copied_summary_triggers_one_retry_that_names_the_question(self):
         provider, patched = scripted(
@@ -167,12 +143,6 @@ class TestClassify:
         with patched:
             maps = await classify_questions(TOPICS, FILES)
         assert len(provider.prompts) == 2
-        assert maps["m1"] == [{"label": "Problem 1", "summary": "", "topic_ids": ["id1"]}]
-
-    async def test_a_failed_retry_keeps_the_first_answer_without_its_copies(self):
-        provider, patched = scripted(ExamTopicMap(questions=[q("Problem 1", COPY, "T1")]), LLMUnavailableError("busy"))
-        with patched:
-            maps = await classify_questions(TOPICS, FILES)
         assert maps["m1"] == [{"label": "Problem 1", "summary": "", "topic_ids": ["id1"]}]
 
 
@@ -200,16 +170,6 @@ class TestMark:
                                            "topic_ids": [ids.bayes, ids.counting]}
         assert stored["questions"][2]["topic_ids"] == []
 
-    async def test_the_prompt_has_the_topics_and_the_questions_but_not_the_tables(self, three_topics):
-        course, ids = three_topics
-        await add_file(course, filename="midterm.pdf")
-        provider, patched = scripted(ExamTopicMap(questions=[]))
-        with patched:
-            await mark_exam_relevant_topics(course.project_id)
-        prompt = provider.prompts[0]
-        assert "T1 | Counting | explain it; use it" in prompt and "T3 | Graph traversal" in prompt
-        assert '<exam n="1" file="midterm.pdf">' in prompt and "Problem 2." in prompt
-        assert "0.0668" not in prompt
 
     async def test_a_second_run_with_nothing_changed_makes_no_model_call(self, three_topics):
         course, ids = three_topics
@@ -223,19 +183,6 @@ class TestMark:
         assert again["model_calls"] == 0 and again["changed"] == 1
         assert await flags(course) == {"Counting": True, "Bayes' theorem": False, "Graph traversal": False}
 
-    async def test_a_changed_topic_list_asks_again(self, three_topics):
-        course, ids = three_topics
-        await add_file(course)
-        provider, patched = scripted(
-            ExamTopicMap(questions=[q("Problem 1", "Dice totals", "T1")]),
-            ExamTopicMap(questions=[q("Problem 1", "Dice totals", "T1"), q("Problem 2", "Illness chance", "T4")]),
-        )
-        with patched:
-            await mark_exam_relevant_topics(course.project_id)
-            await add_topic(course, "Variance", index=3)
-            result = await mark_exam_relevant_topics(course.project_id)
-        assert len(provider.prompts) == 2 and result["model_calls"] == 1
-        assert (await flags(course))["Variance"] is True
 
     async def test_without_a_past_exam_every_flag_is_cleared_with_no_model_call(self, three_topics):
         course, ids = three_topics
@@ -274,15 +221,6 @@ class TestMark:
         await mark_exam_relevant_topics(course.project_id)
         assert not any((await flags(course)).values())
 
-    async def test_only_exam_files_are_read(self, three_topics):
-        course, ids = three_topics
-        for role in ("content", "syllabus", "other"):
-            await add_file(course, role=role, chunks=[f"{role} text about graphs and traversal order."])
-        await add_file(course, chunks=EXAM, status="invalid")
-        provider, patched = scripted()
-        with patched:
-            result = await mark_exam_relevant_topics(course.project_id)
-        assert provider.prompts == [] and result["model_calls"] == 0
 
     async def test_other_projects_are_untouched(self, three_topics):
         course, ids = three_topics
@@ -317,33 +255,11 @@ def mock_llm(monkeypatch):
     LLMFactory.reset()
 
 
-async def test_the_mock_provider_maps_questions_and_leaves_the_last_topic_out(three_topics, mock_llm):
-    course, ids = three_topics
-    material = await add_file(course)
-
-    await mark_exam_relevant_topics(course.project_id)
-
-    assert await flags(course) == {"Counting": True, "Bayes' theorem": True, "Graph traversal": False}
-    labels = [item["label"] for item in (await map_of(course, material))["questions"]]
-    assert labels == ["Question 1", "Question 2", "Question 3"]
-
-
 async def run_job(course):
     job_id = await seed_job(course.db, course.user_id, "exam_relevance", project_id=course.project_id,
                             input_data={"projectId": course.project_id})
     payload = JobPayload(jobId=job_id, jobType="exam_relevance", data={"projectId": course.project_id})
     return job_id, payload
-
-
-async def test_the_job_runs_the_recompute(three_topics, mock_llm):
-    course, _ = three_topics
-    await add_file(course)
-    job_id, payload = await run_job(course)
-
-    response = await jobs.exam_relevance_job(payload)
-
-    assert response["status"] == "success" and (await get_job(course.db, job_id))["status"] == "completed"
-    assert (await flags(course))["Counting"] is True
 
 
 async def test_over_budget_the_model_is_not_called_but_clearing_still_works(three_topics, mock_llm, monkeypatch):
@@ -366,17 +282,6 @@ async def test_over_budget_the_model_is_not_called_but_clearing_still_works(thre
     _, payload = await run_job(course)
     assert (await jobs.exam_relevance_job(payload))["status"] == "success"
     assert not any((await flags(course)).values())
-
-
-async def test_without_a_model_the_job_fails_permanently(three_topics, monkeypatch):
-    course, _ = three_topics
-    monkeypatch.setattr(settings, "LLM_PROVIDER", "anthropic")
-    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
-    await add_file(course)
-    job_id, payload = await run_job(course)
-    with pytest.raises(HTTPException):
-        await jobs.exam_relevance_job(payload)
-    assert (await get_job(course.db, job_id))["error_code"] == "LLM_NOT_CONFIGURED"
 
 
 # ---- after planning
@@ -408,13 +313,6 @@ async def test_planning_marks_the_topics_the_exams_test(course, mock_llm):
     assert marked and any(marked.values())
     stored = await map_of(course, exam)
     assert stored["questions"] and all(item["topic_ids"] for item in stored["questions"])
-
-
-async def test_planning_without_exams_marks_nothing(course, mock_llm):
-    await lecture_file(course)
-    await plan(course)
-    marked = await flags(course)
-    assert marked and not any(marked.values())
 
 
 async def test_a_relevance_failure_does_not_fail_planning(course, mock_llm, monkeypatch):

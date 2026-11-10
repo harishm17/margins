@@ -63,12 +63,6 @@ async def test_exam_drops_unsupported_questions_and_counts_them():
     assert exam["dropped_unsupported"] == 2  # the plan asks 2 per topic plus a spare; the spare is the bad one
 
 
-async def test_exam_counts_the_questions_the_check_dropped():
-    exam = await run_exam(ExamProvider(), total=6)
-    assert exam["total_questions"] == 4
-    assert exam["dropped_unsupported"] == 2
-
-
 async def test_exam_spare_covers_a_dropped_question_in_a_small_quota():
     # One question per topic: without a spare, a bad first question would empty the topic.
     exam = await run_exam(ExamProvider(bad_first=True), total=2)

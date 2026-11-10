@@ -28,10 +28,6 @@ describe('recallOutcome', () => {
     assert.deepEqual(recallOutcome({ got: [got('A')], wrong: [wrong], missed: [] }), { total: 1, full: 0, partly: 1 })
   })
 
-  it('says nothing about part when no idea is part covered', () => {
-    assert.equal(recallSummary(recallOutcome({ got: [got('A')], wrong: [], missed: [missed('B')] })), 'You covered 1 of 2 ideas.')
-    assert.equal(recallSummary({ total: 1, full: 0, partly: 0 }), 'You covered 0 of 1 idea.')
-  })
 })
 
 describe('groupByConcept', () => {

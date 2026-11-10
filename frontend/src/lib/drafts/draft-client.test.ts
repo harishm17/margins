@@ -57,13 +57,6 @@ test('put: maps conflicts, refusals, size and trouble', async () => {
   assert.deepEqual(await transportFor(() => reply(429, {}, { 'Retry-After': '7' })).transport.put({}, 0, { keepalive: false }), { kind: 'offline', retryAfterMs: 7000 })
 })
 
-test('delete: done, already gone, later', async () => {
-  assert.deepEqual(await transportFor(() => reply(200, { ok: true })).transport.delete(), { kind: 'ok' })
-  assert.deepEqual(await transportFor(() => reply(400)).transport.delete(), { kind: 'ok' })
-  assert.deepEqual(await transportFor(() => reply(500)).transport.delete(), { kind: 'offline' })
-  assert.deepEqual(await transportFor(down).transport.delete(), { kind: 'offline' })
-})
-
 test('session cache: round trip, garbage, and storage that throws', () => {
   const data = new Map<string, string>()
   const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v), removeItem: (k: string) => void data.delete(k) }

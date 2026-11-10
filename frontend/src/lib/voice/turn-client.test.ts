@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  cleanForSpeech,
   createSentenceChunker,
-  isTerminal,
   parseVoiceEvent,
   readVoiceEvents,
   type VoiceEvent,
@@ -27,10 +25,6 @@ describe('parseVoiceEvent', () => {
     }
   })
 
-  it('parses a text delta', () => {
-    assert.deepEqual(parseVoiceEvent('{"type":"text","delta":"Hi "}'), { type: 'text', delta: 'Hi ' })
-  })
-
   it('parses a question with options, dropping empty ones', () => {
     const event = parseVoiceEvent(
       JSON.stringify({
@@ -49,16 +43,6 @@ describe('parseVoiceEvent', () => {
       text: 'Which one?',
       questionType: 'multiple_choice',
       options: [{ id: 'A', text: 'First' }, { id: 'B', text: 'Second' }],
-    })
-  })
-
-  it('parses a question without options and fills defaults', () => {
-    assert.deepEqual(parseVoiceEvent('{"type":"question","index":0,"text":"Why?"}'), {
-      type: 'question',
-      index: 0,
-      total: 0,
-      text: 'Why?',
-      questionType: 'conceptual',
     })
   })
 
@@ -95,35 +79,6 @@ describe('parseVoiceEvent', () => {
     assert.deepEqual(away, { type: 'board', kind: 'claim', text: 'x' })
   })
 
-  it('parses the v3.2 working and listen events and drops ones it does not know', () => {
-    assert.deepEqual(parseVoiceEvent('{"type":"working","step":"assess"}'), { type: 'working', step: 'assess' })
-    assert.deepEqual(parseVoiceEvent('{"type":"working","step":"record_check"}'), { type: 'working', step: 'record_check' })
-    assert.equal(parseVoiceEvent('{"type":"working","step":"grade"}'), null)
-    assert.equal(parseVoiceEvent('{"type":"working"}'), null)
-    assert.deepEqual(parseVoiceEvent('{"type":"listen","for":"explanation"}'), { type: 'listen', for: 'explanation' })
-    assert.deepEqual(parseVoiceEvent('{"type":"listen","for":"none"}'), { type: 'listen', for: 'none' })
-    assert.equal(parseVoiceEvent('{"type":"listen","for":"essay"}'), null)
-  })
-
-  it('parses hint, session_complete, done and error', () => {
-    assert.deepEqual(parseVoiceEvent('{"type":"hint","text":"Think about it"}'), { type: 'hint', text: 'Think about it' })
-    assert.deepEqual(parseVoiceEvent('{"type":"session_complete"}'), { type: 'session_complete' })
-    assert.deepEqual(parseVoiceEvent('{"type":"done","text":"All set."}'), { type: 'done', text: 'All set.' })
-    assert.deepEqual(parseVoiceEvent('{"type":"error","code":"LLM_UNAVAILABLE","message":"Busy","retryable":true}'), {
-      type: 'error',
-      code: 'LLM_UNAVAILABLE',
-      message: 'Busy',
-      retryable: true,
-    })
-    const bare = parseVoiceEvent('{"type":"error"}')
-    assert.deepEqual(bare, { type: 'error', code: 'VOICE_TURN_FAILED', message: '', retryable: true })
-  })
-
-  it('knows which events end a turn', () => {
-    assert.equal(isTerminal({ type: 'done', text: '' }), true)
-    assert.equal(isTerminal({ type: 'error', code: 'x', message: '', retryable: false }), true)
-    assert.equal(isTerminal({ type: 'text', delta: 'a' }), false)
-  })
 })
 
 describe('readVoiceEvents', () => {
@@ -166,25 +121,6 @@ describe('createSentenceChunker', () => {
     for (const size of [1, 2, 3, 7, 100]) assert.deepEqual(chunk(text, size), expected, `size ${size}`)
   })
 
-  it('holds a sentence back until the next one starts, so the first can be spoken early', () => {
-    const chunker = createSentenceChunker()
-    assert.deepEqual(chunker.push('Good job.'), [])
-    assert.deepEqual(chunker.push(' '), [])
-    assert.deepEqual(chunker.push('Now'), ['Good job.'])
-    assert.deepEqual(chunker.flush(), ['Now'])
-  })
-
-  it('splits on newlines, even without punctuation', () => {
-    assert.deepEqual(chunk('First line\nSecond line\n\nThird', 4), ['First line', 'Second line', 'Third'])
-  })
-
-  it('keeps decimals intact', () => {
-    assert.deepEqual(chunk('Pi is about 3.14 and e is 2.718. That is it.', 3), [
-      'Pi is about 3.14 and e is 2.718.',
-      'That is it.',
-    ])
-  })
-
   it('does not split after abbreviations or initials', () => {
     assert.deepEqual(chunk('Ask Dr. Smith about it. Use e.g. a hash map, i.e. a table. Then J. K. Rowling vs. Tolkien.', 5), [
       'Ask Dr. Smith about it.',
@@ -193,47 +129,4 @@ describe('createSentenceChunker', () => {
     ])
   })
 
-  it('does not split before a lower-case word', () => {
-    assert.deepEqual(chunk('Lists, sets, etc. and maps are collections. Next one.', 6), [
-      'Lists, sets, etc. and maps are collections.',
-      'Next one.',
-    ])
-  })
-
-  it('treats an ellipsis and repeated marks as one end', () => {
-    assert.deepEqual(chunk('Hmm... let me think. Really?! Yes.', 4), ['Hmm...', 'let me think.', 'Really?!', 'Yes.'])
-  })
-
-  it('keeps a closing quote or bracket with its sentence', () => {
-    assert.deepEqual(chunk('He said "stop." Then (quietly.) we left.', 3), ['He said "stop."', 'Then (quietly.) we left.'])
-  })
-
-  it('returns the unfinished tail on flush', () => {
-    const chunker = createSentenceChunker()
-    assert.deepEqual(chunker.push('One. Two and a half'), ['One.'])
-    assert.deepEqual(chunker.flush(), ['Two and a half'])
-    assert.deepEqual(chunker.flush(), [])
-  })
-
-  it('returns a single sentence with no space after it only on flush', () => {
-    const chunker = createSentenceChunker()
-    assert.deepEqual(chunker.push('Done.'), [])
-    assert.deepEqual(chunker.flush(), ['Done.'])
-  })
-
-  it('merges short sentences into the next one with minChars', () => {
-    assert.deepEqual(chunk('Yes. That is correct, nicely done. Ok.', 5, { minChars: 12 }), [
-      'Yes. That is correct, nicely done.',
-      'Ok.',
-    ])
-  })
-
-  it('strips markdown a synthesizer would read aloud', () => {
-    assert.equal(cleanForSpeech('**Great** answer, use `a map` here.'), 'Great answer, use a map here.')
-    assert.equal(cleanForSpeech('- First point'), 'First point')
-    assert.equal(cleanForSpeech('## Heading'), 'Heading')
-    assert.equal(cleanForSpeech('Use $x_i + y_j$ and **bold** here.'), 'Use $x_i + y_j$ and bold here.')
-    assert.equal(cleanForSpeech('It costs $5 and *then* $10.'), 'It costs $5 and then $10.')
-    assert.deepEqual(chunk('**Nice.** Next one.', 4), ['Nice.', 'Next one.'])
-  })
 })

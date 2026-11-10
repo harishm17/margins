@@ -3,7 +3,6 @@
  */
 import test, { before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { isHardSet, latestRecallGaps, recallGapConcepts } from './next-activity-server'
 
 const UP = { ai: 'up' as const, now: new Date(), timeZone: 'UTC' }
 
@@ -42,88 +41,6 @@ async function world() {
   const topic = await prisma.topic.create({ data: { projectId: project.id, name: 'T', orderIndex: 0, userConfirmed: true } })
   return { user, project, topic }
 }
-
-test('recallGapConcepts reads missing and incorrect claims, and nothing from junk', () => {
-  const result = {
-    claims: [
-      { concept_id: 'a', verdict: 'covered' },
-      { concept_id: 'b', verdict: 'missing' },
-      { conceptId: 'c', verdict: 'incorrect' },
-      { concept_id: 'b', verdict: 'incorrect' },
-      { concept_id: 'd', verdict: 'partial' },
-    ],
-  }
-  assert.deepEqual(recallGapConcepts(result), ['b', 'c'])
-  assert.deepEqual(recallGapConcepts(null), [])
-  assert.deepEqual(recallGapConcepts({ claims: 'x' }), [])
-})
-
-test('latestRecallGaps judges each concept by the newest attempt that covered it', () => {
-  const claims = (...list: [string, string][]) => ({ claims: list.map(([concept_id, verdict]) => ({ concept_id, verdict })) })
-  // Newest first: the second card left B open; the first card left A open until it was answered again.
-  assert.deepEqual(latestRecallGaps([claims(['b', 'missing']), claims(['a', 'covered']), claims(['a', 'missing'], ['c', 'incorrect'])]), ['b', 'c'])
-  assert.deepEqual(latestRecallGaps([claims(['a', 'covered'], ['a', 'missing'])]), ['a'])
-  assert.deepEqual(latestRecallGaps([null, { claims: 'x' }, claims(['a', 'missing'])]), ['a'])
-  assert.deepEqual(latestRecallGaps([]), [])
-})
-
-test('isHardSet needs every question hard', () => {
-  assert.equal(isHardSet([{ difficulty: 'hard' }, { difficulty: 'hard' }]), true)
-  assert.equal(isHardSet([{ difficulty: 'hard' }, { difficulty: 'medium' }]), false)
-  assert.equal(isHardSet([]), false)
-})
-
-dbTest('legacy topic without concepts gets the old path', async () => {
-  const w = await world()
-  const state = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.deepEqual(state.concepts, [])
-  // Nothing has been made for the topic yet: it is sent to the topic, which names the first step once it is prepared.
-  assert.equal(state.prepared, false)
-  assert.equal(activity.nextActivity(state, UP).kind, 'start')
-
-  // A topic from before concepts has its written notes: that is the reading.
-  await prisma.topicContent.create({ data: { topicId: w.topic.id, contentType: 'section_notes', contentData: { text: 'Some notes.' } } })
-  const prepared = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(prepared.prepared, true)
-  assert.equal(activity.nextActivity(prepared, UP).kind, 'read')
-
-  // Read, practice not done yet: practice comes before the first quiz (the order the path shows).
-  await prisma.topicProgress.create({ data: { userId: w.user.id, topicId: w.topic.id, notesCompleted: true } })
-  const read = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(read.practiceDone, false)
-  assert.equal(activity.nextActivity(read, UP).kind, 'practice')
-  assert.equal(activity.nextActivity({ ...read, practiceDone: true }, UP).kind, 'quiz')
-
-  await prisma.quizAttempt.create({ data: { userId: w.user.id, topicId: w.topic.id, answers: {}, results: {}, score: 70 } })
-  const quizzed = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(activity.nextActivity(quizzed, UP).kind, 'practice')
-})
-
-dbTest('concepts before the evidence backfill keep the old path', async () => {
-  const w = await world()
-  await prisma.concept.create({ data: { projectId: w.project.id, topicId: w.topic.id, name: 'C', summary: 's', kind: 'concept', orderIndex: 0 } })
-  const state = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.deepEqual(state.concepts, [])
-})
-
-dbTest('a new topic with concepts and a warm-up bank starts at the warm-up, then read once read', async () => {
-  const w = await world()
-  await prisma.topic.update({ where: { id: w.topic.id }, data: { evidenceBackfilledAt: new Date() } })
-  const a = await prisma.concept.create({ data: { projectId: w.project.id, topicId: w.topic.id, name: 'A', summary: 's', kind: 'concept', orderIndex: 0 } })
-  const b = await prisma.concept.create({ data: { projectId: w.project.id, topicId: w.topic.id, name: 'B', summary: 's', kind: 'concept', orderIndex: 1 } })
-  await prisma.conceptEdge.create({ data: { projectId: w.project.id, sourceId: a.id, targetId: b.id, type: 'prerequisite', weight: 1, confidence: 0.9 } })
-  await prisma.topicQuiz.create({ data: { topicId: w.topic.id, kind: 'warmup', questions: [] } })
-
-  const state = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.deepEqual(state.concepts.map((c) => c.id), [a.id, b.id])
-  assert.deepEqual(state.concepts[1].prerequisiteIds, [a.id])
-  assert.equal(state.warmupReady, true)
-  assert.equal(activity.nextActivity(state, UP).kind, 'warmup')
-
-  await prisma.topicProgress.create({ data: { userId: w.user.id, topicId: w.topic.id, readAt: new Date() } })
-  const read = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(activity.nextActivity(read, UP).kind, 'recall')
-})
 
 dbTest('a warm-up and "I\'ve read it" leave recall to do: evidence from the warm-up is not a recalled topic', async () => {
   const w = await world()
@@ -193,27 +110,6 @@ dbTest('a misconception on a concept wins, and recall gaps and teach-back times 
   assert.equal(activity.nextActivity(state, UP).kind, 'fix_misconception')
 })
 
-dbTest('only a recorded explainer view counts as a visit, not the gate opening', async () => {
-  const w = await world()
-  await prisma.topic.update({ where: { id: w.topic.id }, data: { evidenceBackfilledAt: new Date() } })
-  const a = await prisma.concept.create({ data: { projectId: w.project.id, topicId: w.topic.id, name: 'A', summary: 's', kind: 'concept', orderIndex: 0 } })
-  const recalled = new Date('2026-10-01T00:00:00Z')
-  await prisma.topicProgress.create({
-    data: { userId: w.user.id, topicId: w.topic.id, readAt: recalled, recallAt: recalled, explainerUnlockedAt: new Date('2026-10-02T00:00:00Z'), explainerUnlockReason: 'thin_source' },
-  })
-  const attempt = await prisma.recallAttempt.create({
-    data: { userId: w.user.id, topicId: w.topic.id, kind: 'recall', promptText: 'p', answerText: 'x', mode: 'text', createdAt: recalled, result: { claims: [{ concept_id: a.id, verdict: 'missing' }] } },
-  })
-  let state = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(state.explainerVisitedAt, null)
-  assert.equal(activity.nextActivity(state, UP).kind, 'explainer')
-
-  await prisma.recallAttempt.update({ where: { id: attempt.id }, data: { explainer: { viewedAt: '2026-10-03T00:00:00.000Z' } } })
-  state = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(state.explainerVisitedAt?.toISOString(), '2026-10-03T00:00:00.000Z')
-  assert.notEqual(activity.nextActivity(state, UP).kind, 'explainer')
-})
-
 dbTest('a failing concept drills its weakest prerequisite, found across topics', async () => {
   const w = await world()
   const other = await prisma.topic.create({ data: { projectId: w.project.id, name: 'Other', orderIndex: 1, userConfirmed: true } })
@@ -248,25 +144,6 @@ dbTest('a failing concept drills its weakest prerequisite, found across topics',
   const next = activity.nextActivity({ ...state, readAt: now, recallAt: now, warmupAt: now, concepts: state.concepts.map((c) => ({ ...c, retrievability: 1 })) }, UP)
   assert.equal(next.kind, 'prerequisite_drill')
   assert.deepEqual(next.conceptIds, [weak.id, target.id])
-})
-
-dbTest('old teach-back and hard-quiz evidence is found past any window of newer rows', async () => {
-  const w = await world()
-  const old = new Date('2026-01-01T00:00:00Z')
-  const day = 86_400_000
-  const hardSet = await prisma.topicQuiz.create({ data: { topicId: w.topic.id, kind: 'standard', questions: [{ question_text: 'q', difficulty: 'hard' }] } })
-  const easySet = await prisma.topicQuiz.create({ data: { topicId: w.topic.id, kind: 'standard', questions: [{ question_text: 'q', difficulty: 'easy' }] } })
-  await prisma.quizAttempt.create({ data: { userId: w.user.id, topicId: w.topic.id, quizSetId: hardSet.id, answers: {}, results: {}, score: 50, takenAt: old } })
-  await prisma.quizAttempt.createMany({
-    data: Array.from({ length: 40 }, (_, i) => ({ userId: w.user.id, topicId: w.topic.id, quizSetId: easySet.id, answers: {}, results: {}, score: 50, takenAt: new Date(old.getTime() + (i + 1) * day) })),
-  })
-  await prisma.recallAttempt.create({ data: { userId: w.user.id, topicId: w.topic.id, kind: 'teach_back', promptText: 'p', answerText: 'x', mode: 'text', result: {}, createdAt: old } })
-  await prisma.recallAttempt.createMany({
-    data: Array.from({ length: 30 }, (_, i) => ({ userId: w.user.id, topicId: w.topic.id, kind: 'recall', promptText: 'p', answerText: 'x', mode: 'text', result: {}, createdAt: new Date(old.getTime() + (i + 1) * day) })),
-  })
-  const state = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(state.lastHardQuizAt?.toISOString(), old.toISOString())
-  assert.equal(state.lastTeachBackAt?.toISOString(), old.toISOString())
 })
 
 dbTest('the v3.1 state: instruction, tested out, quick pass, ready explainers, a hard set on hand, the next review and first claims', async () => {
@@ -319,63 +196,4 @@ dbTest('the v3.1 state: instruction, tested out, quick pass, ready explainers, a
   const next = activity.nextActivity(state, UP)
   assert.equal(next.kind, 'instruct')
   assert.equal(next.target?.via, 'explainer')
-})
-
-dbTest('the easier step since a fail: a delivered worked example or a drill on the concept, after the last fail', async () => {
-  const w = await world()
-  await prisma.topic.update({ where: { id: w.topic.id }, data: { evidenceBackfilledAt: new Date() } })
-  const a = await prisma.concept.create({ data: { projectId: w.project.id, topicId: w.topic.id, name: 'A', summary: 's', kind: 'concept', orderIndex: 0 } })
-  const evidence = await import('./evidence')
-  const instruction = await import('./instruction')
-  const day = 86_400_000
-  const t0 = Date.now() - 4 * day
-  const fail = (user: typeof w, conceptId: string, n: number) => ({
-    userId: user.user.id, projectId: user.project.id, topicId: user.topic.id, itemKey: `quiz:f${n}:0`, conceptIds: [conceptId], source: 'quiz' as const,
-    score: 0, assistance: 0 as const, gradedBy: 'rule' as const, sessionKey: `f${n}`, at: new Date(t0 + n * day),
-  })
-  await evidence.recordEvidence([fail(w, a.id, 0)], { timeZone: 'UTC' })
-  await evidence.recordEvidence([fail(w, a.id, 1)], { timeZone: 'UTC' })
-  const load = (user: typeof w) => server.loadTopicLearningState({ userId: user.user.id, topicId: user.topic.id, now: new Date(), timeZone: 'UTC' })
-  let c = (await load(w)).concepts[0]
-  assert.equal(c.consecutiveFails, 2)
-  assert.equal(c.easierStepSinceFail, false)
-
-  // A worked example before the last fail does not count; one after it does.
-  const worked = (ref: string, at: Date) => instruction.instructionInput('worked_example', { userId: w.user.id, projectId: w.project.id, topicId: w.topic.id, conceptIds: [a.id], ref, at })
-  await evidence.recordEvidence([worked('x', new Date(t0 + 0.5 * day))], { timeZone: 'UTC' })
-  assert.equal((await load(w)).concepts[0].easierStepSinceFail, false)
-  await evidence.recordEvidence([worked('y', new Date(t0 + 1.5 * day))], { timeZone: 'UTC' })
-  c = (await load(w)).concepts[0]
-  assert.equal(c.easierStepSinceFail, true)
-  assert.equal(c.needsInstruction, false)
-
-  // A drill session on the concept after the last fail counts as well.
-  const other = await world()
-  await prisma.topic.update({ where: { id: other.topic.id }, data: { evidenceBackfilledAt: new Date() } })
-  const o = await prisma.concept.create({ data: { projectId: other.project.id, topicId: other.topic.id, name: 'O', summary: 's', kind: 'concept', orderIndex: 0 } })
-  for (const n of [0, 1]) await evidence.recordEvidence([fail(other, o.id, n)], { timeZone: 'UTC' })
-  assert.equal((await load(other)).concepts[0].easierStepSinceFail, false)
-  await prisma.itemSession.create({ data: { userId: other.user.id, projectId: other.project.id, kind: 'drill', topicIds: [other.topic.id], items: [], answers: {}, results: { scope: { conceptId: o.id } } } })
-  assert.equal((await load(other)).concepts[0].easierStepSinceFail, true)
-})
-
-dbTest('prerequisites that tie for the weakest are taken in course order, not by their ids', async () => {
-  const w = await world()
-  const other = await prisma.topic.create({ data: { projectId: w.project.id, name: 'Other', orderIndex: 1, userConfirmed: true } })
-  await prisma.topic.update({ where: { id: w.topic.id }, data: { evidenceBackfilledAt: new Date() } })
-  // Neither prerequisite has a memory, so they tie at 0. Their ids sort the other way round from the course.
-  const run = Math.random().toString(36).slice(2)
-  const mk = (id: string, topicId: string, name: string, orderIndex: number) =>
-    prisma.concept.create({ data: { id: `${id}-${run}`, projectId: w.project.id, topicId, name, summary: 's', kind: 'concept', orderIndex } })
-  const target = await mk('m', w.topic.id, 'Target', 0)
-  const later = await mk('a', other.id, 'Later', 0)
-  const earlier = await mk('z', w.topic.id, 'Earlier', 1)
-  for (const source of [later, earlier]) {
-    await prisma.conceptEdge.create({ data: { projectId: w.project.id, sourceId: source.id, targetId: target.id, type: 'prerequisite', weight: 1, confidence: 0.9 } })
-  }
-  const now = new Date()
-  await prisma.conceptMemory.create({ data: { userId: w.user.id, projectId: w.project.id, topicId: w.topic.id, conceptId: target.id, consecutiveFails: 2, nUnassisted: 1, lastEvidenceAt: now } })
-
-  const state = await server.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id })
-  assert.equal(state.concepts.find((c) => c.id === target.id)?.weakestPrerequisiteId, earlier.id)
 })

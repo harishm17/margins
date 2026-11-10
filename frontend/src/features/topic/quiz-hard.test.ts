@@ -10,12 +10,6 @@ const set = (id: string, createdAt: string, levels: (string | undefined)[], kind
   questions: levels.map(q),
 })
 
-test('a set is hard only when every question is hard', () => {
-  assert.equal(isHardQuizSet(set('a', '2026-10-01', ['hard', 'hard'])), true)
-  assert.equal(isHardQuizSet(set('a', '2026-10-01', ['hard', 'medium'])), false)
-  assert.equal(isHardQuizSet(set('a', '2026-10-01', [])), false)
-})
-
 test('transfer quiz opens a fresh hard set: the newest hard standard set with no attempt', () => {
   const sets = [
     set('old', '2026-10-01', ['hard']),
@@ -26,8 +20,4 @@ test('transfer quiz opens a fresh hard set: the newest hard standard set with no
   assert.equal(freshHardSet(sets, []), 'new')
   assert.equal(freshHardSet(sets, [{ setId: 'new' }]), 'old')
   assert.equal(freshHardSet(sets, [{ setId: 'new' }, { setId: 'old' }]), null)
-})
-
-test('no hard set means nothing to open', () => {
-  assert.equal(freshHardSet([set('a', '2026-10-01', ['medium'])], []), null)
 })

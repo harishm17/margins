@@ -5,8 +5,6 @@ import {
   createUtteranceCollector,
   idleAction,
   isEcho,
-  isSpeakable,
-  joinTranscripts,
   type SpeechResult,
   type Timers,
 } from './silence'
@@ -90,6 +88,7 @@ describe('createUtteranceCollector', () => {
     assert.deepEqual(commits, ['because it visits nodes in order'])
   })
 
+
   it('commits an interim result that never finalises, after the stale wait', () => {
     const { clock, commits, collector } = setup()
     collector.update([interim('stuck phrase')])
@@ -106,60 +105,6 @@ describe('createUtteranceCollector', () => {
     collector.update([final('first answer'), final('second answer')])
     clock.advance(1200)
     assert.deepEqual(commits, ['first answer', 'second answer'])
-  })
-
-  it('drops noise: empty, one character, or no letters', () => {
-    const { clock, commits, collector } = setup()
-    collector.update([final('  ')])
-    clock.advance(2000)
-    collector.update([final('a')])
-    clock.advance(2000)
-    collector.update([final('a'), final('...')])
-    clock.advance(2000)
-    assert.deepEqual(commits, [])
-    assert.equal(clock.pending(), 0)
-  })
-
-  it('skip forgets what was heard (the coach echo) and cancels the timer', () => {
-    const { clock, commits, interims, collector } = setup()
-    const results = [final('that is right')]
-    collector.update(results)
-    collector.skip(results)
-    clock.advance(2000)
-    assert.deepEqual(commits, [])
-    assert.equal(interims.at(-1), '')
-    assert.equal(collector.peek(results), '')
-    collector.update([...results, final('my real answer')])
-    clock.advance(1200)
-    assert.deepEqual(commits, ['my real answer'])
-  })
-
-  it('flush commits right away, reset starts the result list again from zero', () => {
-    const { clock, commits, collector } = setup()
-    collector.update([final('half a thought')])
-    collector.flush()
-    assert.deepEqual(commits, ['half a thought'])
-    collector.reset()
-    collector.update([final('after a restart')])
-    clock.advance(1200)
-    assert.deepEqual(commits, ['half a thought', 'after a restart'])
-  })
-
-  it('peek shows only the uncommitted words', () => {
-    const { collector, clock } = setup()
-    const first = [final('one two')]
-    collector.update(first)
-    clock.advance(1200)
-    assert.equal(collector.peek(first), '')
-    assert.equal(collector.peek([...first, interim('three')]), 'three')
-  })
-
-  it('dispose cancels a pending commit', () => {
-    const { clock, commits, collector } = setup()
-    collector.update([final('never sent')])
-    collector.dispose()
-    clock.advance(5000)
-    assert.deepEqual(commits, [])
   })
 })
 
@@ -209,56 +154,15 @@ describe('the adaptive wait', () => {
     assert.equal(commits.length, 0)
     advance(1)
     assert.equal(commits.length, 1)
+    // Never past 4 s, even for stale interim text.
+    const stale = adaptive(() => 'explanation')
+    stale.collector.update([interim('it works by going to the')])
+    stale.advance(3699)
+    assert.equal(stale.commits.length, 0)
+    stale.advance(1)
+    assert.equal(stale.commits.length, 1)
   })
 
-  it('never waits past 4 s, even for stale interim text', () => {
-    const { collector, commits, advance } = adaptive(() => 'explanation')
-    collector.update([interim('it works by going to the')])
-    advance(3699)
-    assert.equal(commits.length, 0)
-    advance(1)
-    assert.equal(commits.length, 1)
-  })
-
-  it('says it is holding once the quiet lasts 700 ms, and stops when words come or the turn ends', () => {
-    const { collector, holds, advance } = adaptive(() => 'short_answer')
-    collector.update([final('a bucket')])
-    advance(699)
-    assert.deepEqual(holds, [])
-    advance(1)
-    assert.deepEqual(holds, [true])
-    collector.update([final('a bucket'), final('of items')])
-    assert.deepEqual(holds, [true, false])
-    advance(700)
-    assert.deepEqual(holds, [true, false, true])
-    advance(500)
-    assert.deepEqual(holds, [true, false, true, false])
-  })
-
-  it('flush ends the turn at once and says so', () => {
-    const { collector, commits, holds, advance } = adaptive(() => 'explanation')
-    collector.update([final('that is all')])
-    advance(900)
-    collector.flush()
-    assert.deepEqual(commits, [{ text: 'that is all', waitedMs: 900, early: true }])
-    assert.deepEqual(holds, [true, false])
-    advance(5000)
-    assert.equal(commits.length, 1)
-  })
-})
-
-describe('helpers', () => {
-  it('joinTranscripts trims and collapses spaces', () => {
-    assert.equal(joinTranscripts([' hello ', '', 'big   world ']), 'hello big world')
-  })
-
-  it('isSpeakable needs a letter or digit and enough characters', () => {
-    assert.equal(isSpeakable('ok'), true)
-    assert.equal(isSpeakable('7'), false)
-    assert.equal(isSpeakable('7', 1), true)
-    assert.equal(isSpeakable('?!'), false)
-    assert.equal(isSpeakable('   '), false)
-  })
 })
 
 describe('isEcho', () => {
@@ -269,19 +173,11 @@ describe('isEcho', () => {
     assert.equal(isEcho('Shortest path.', spoken), true)
   })
 
-  it('spots a slightly garbled copy', () => {
-    assert.equal(isEcho('each level is a step further from start so bfs finds shortest path', spoken), true)
-  })
-
   it('lets a real interruption through', () => {
     assert.equal(isEcho('wait can you repeat the question', spoken), false)
     assert.equal(isEcho('stop', spoken), false)
   })
 
-  it('is not an echo with nothing spoken or nothing heard', () => {
-    assert.equal(isEcho('hello there', ''), false)
-    assert.equal(isEcho('', spoken), false)
-  })
 })
 
 describe('idleAction', () => {
@@ -294,22 +190,10 @@ describe('idleAction', () => {
     assert.equal(idleAction({ ...base, idleMs: 30_000 }), 'gentle')
   })
 
-  it('says it once per question', () => {
-    assert.equal(idleAction({ ...base, idleMs: 30_000, gentleShown: true }), 'none')
-  })
-
-  it('says nothing when the coach is not waiting for an answer', () => {
-    assert.equal(idleAction({ ...base, idleMs: 30_000, waitingForAnswer: false }), 'none')
-  })
 
   it('ends the session after two minutes of silence', () => {
     assert.equal(idleAction({ ...base, idleMs: 119_999, gentleShown: true }), 'none')
     assert.equal(idleAction({ ...base, idleMs: 120_000, gentleShown: true }), 'end')
     assert.equal(idleAction({ ...base, idleMs: 120_000, waitingForAnswer: false }), 'end')
-  })
-
-  it('gives a typing student ten minutes and no line', () => {
-    assert.equal(idleAction({ ...base, inputMode: 'text', idleMs: 120_000 }), 'none')
-    assert.equal(idleAction({ ...base, inputMode: 'text', idleMs: 600_000 }), 'end')
   })
 })

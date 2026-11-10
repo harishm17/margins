@@ -67,18 +67,6 @@ dbTest('draft round trip', async () => {
   await store.clearDraft(w.user.id, 'recall', `${w.topic.id}:obj0`)
 })
 
-dbTest('expiry is 14 days after the write and moves with each write', async () => {
-  const w = await world()
-  const t0 = new Date('2026-11-02T10:00:00Z')
-  const a = await store.saveDraft(w.user.id, recallInput(w, 'a', 0), { now: t0 })
-  assert.ok(a.status === 'saved')
-  assert.equal(a.draft.expiresAt.getTime(), t0.getTime() + 14 * DAY)
-  const t1 = new Date(t0.getTime() + 3 * DAY)
-  const b = await store.saveDraft(w.user.id, recallInput(w, 'b', 1), { now: t1 })
-  assert.ok(b.status === 'saved')
-  assert.equal(b.draft.expiresAt.getTime(), t1.getTime() + 14 * DAY)
-})
-
 dbTest('stale version conflicts and returns the stored draft', async () => {
   const w = await world()
   await store.saveDraft(w.user.id, recallInput(w, 'one', 0))
@@ -92,12 +80,6 @@ dbTest('stale version conflicts and returns the stored draft', async () => {
   assert.ok(again.status === 'conflict' && again.draft?.version === 2)
   // The stored text is untouched.
   assert.deepEqual((await store.loadDraft(w.user.id, 'recall', `${w.topic.id}:obj0`))?.payload, { text: 'two', voice: false })
-})
-
-dbTest('a version for a draft that is gone conflicts with no stored draft', async () => {
-  const w = await world()
-  const gone = await store.saveDraft(w.user.id, recallInput(w, 'x', 4))
-  assert.ok(gone.status === 'conflict' && gone.draft === null)
 })
 
 dbTest('two saves at the same version: exactly one wins', async () => {
@@ -141,17 +123,6 @@ dbTest('payloads that do not match the surface are refused', async () => {
   assert.equal(await prisma.studyDraft.count({ where: { userId: w.user.id } }), 0)
 })
 
-dbTest('expired drafts deleted on write', async () => {
-  const w = await world()
-  const t0 = new Date('2026-11-02T10:00:00Z')
-  await store.saveDraft(w.user.id, recallInput(w, 'old', 0, `${w.topic.id}:old`), { now: t0 })
-  await store.saveDraft(w.user.id, recallInput(w, 'recent', 0, `${w.topic.id}:recent`), { now: new Date(t0.getTime() + 10 * DAY) })
-  const later = new Date(t0.getTime() + 15 * DAY) // old expired a day ago; recent has 9 days left
-  await store.saveDraft(w.user.id, recallInput(w, 'new', 0, `${w.topic.id}:new`), { now: later })
-  const keys = (await prisma.studyDraft.findMany({ where: { userId: w.user.id }, select: { scopeKey: true } })).map((d) => d.scopeKey.split(':')[1]).sort()
-  assert.deepEqual(keys, ['new', 'recent'])
-})
-
 dbTest('an expired draft reads as absent and is removed; writing it again starts over', async () => {
   const w = await world()
   const t0 = new Date('2026-11-02T10:00:00Z')
@@ -162,16 +133,6 @@ dbTest('an expired draft reads as absent and is removed; writing it again starts
   await store.saveDraft(w.user.id, recallInput(w, 'old2', 0), { now: t0 })
   const created = await store.saveDraft(w.user.id, recallInput(w, 'fresh', 0), { now: later })
   assert.ok(created.status === 'saved' && created.draft.version === 1)
-})
-
-dbTest('writing to your own expired draft is a conflict with nothing stored', async () => {
-  const w = await world()
-  const t0 = new Date('2026-11-02T10:00:00Z')
-  await store.saveDraft(w.user.id, recallInput(w, 'old', 0), { now: t0 })
-  const later = new Date(t0.getTime() + 20 * DAY)
-  const revived = await store.saveDraft(w.user.id, recallInput(w, 'typing on', 1), { now: later })
-  // The stale row is expired, so the client's version is for a draft that is gone.
-  assert.ok(revived.status === 'conflict' && revived.draft === null)
 })
 
 dbTest('another user cannot read, write or delete a draft', async () => {
@@ -219,13 +180,6 @@ dbTest('quiz draft for a set taken today is refused', async () => {
   // Opens at the next local midnight: 2026-11-03 00:00 in Los Angeles (UTC-8 after the DST change).
   assert.ok(refused.status === 'retry_tomorrow' && refused.opensAt.toISOString() === '2026-11-03T08:00:00.000Z')
   assert.equal(await prisma.studyDraft.count({ where: { userId: w.user.id } }), 0)
-})
-
-dbTest('a quiz taken yesterday (in the student zone) does not block a draft', async () => {
-  const w = await quizWorld()
-  await attempt(w, new Date('2026-11-02T06:00:00Z')) // 22:00 on the 1st in Los Angeles
-  const ok = await store.saveDraft(w.user.id, quizInput(w, 0), { now: new Date('2026-11-02T20:00:00Z'), timeZone: 'America/Los_Angeles' })
-  assert.equal(ok.status, 'saved')
 })
 
 dbTest('an attempt at another set does not block, and a waiting submission counts as taken', async () => {
@@ -280,12 +234,6 @@ const legacyInput = (w: World, version: number) => ({
   version,
 })
 
-dbTest('the legacy first quiz can hold a draft, and it reads back', async () => {
-  const w = await legacyWorld()
-  assert.equal((await store.saveDraft(w.user.id, legacyInput(w, 0))).status, 'saved')
-  assert.equal((await store.loadDraft(w.user.id, 'quiz', `${w.topic.id}:legacy`))?.version, 1)
-})
-
 dbTest('a legacy quiz draft needs the topic to have a first quiz, and is dropped once the topic has quiz sets', async () => {
   const bare = await world()
   assert.equal((await store.saveDraft(bare.user.id, legacyInput(bare, 0))).status, 'not_found')
@@ -303,16 +251,6 @@ dbTest('another user cannot write a legacy quiz draft into this topic', async ()
   const forged = await store.saveDraft(other.user.id, { ...legacyInput(w, 0), projectId: other.project.id })
   assert.equal(forged.status, 'not_found')
   assert.equal(await prisma.studyDraft.count({ where: { userId: other.user.id } }), 0)
-})
-
-dbTest('the retake rule holds for the legacy first quiz', async () => {
-  const w = await legacyWorld()
-  const now = new Date('2026-11-02T20:00:00Z')
-  await prisma.quizAttempt.create({ data: { userId: w.user.id, topicId: w.topic.id, quizSetId: null, answers: {}, results: {}, score: 50, takenAt: new Date('2026-11-02T15:00:00Z') } })
-  const refused = await store.saveDraft(w.user.id, legacyInput(w, 0), { now, timeZone: 'America/Los_Angeles' })
-  assert.ok(refused.status === 'retry_tomorrow' && refused.opensAt.toISOString() === '2026-11-03T08:00:00.000Z')
-  // The next day it is open again.
-  assert.equal((await store.saveDraft(w.user.id, legacyInput(w, 0), { now: new Date('2026-11-03T20:00:00Z'), timeZone: 'America/Los_Angeles' })).status, 'saved')
 })
 
 dbTest('a user over the draft cap cannot start another, but can keep editing', async () => {

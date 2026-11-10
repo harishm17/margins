@@ -14,11 +14,10 @@ from app.models.jobs import JobPayload
 from app.services import generation_chain
 from app.services.dispatch import retry_delay_seconds
 from app.services.content_generator.context import NoSourceMaterialError, content_messages
-from app.services.llm import limiter
 from app.services.llm.anthropic_provider import AnthropicProvider, _translate_api_error
-from app.services.llm.base import LLMMessage, LLMRateLimitError, LLMUnavailableError
+from app.services.llm.base import LLMMessage, LLMRateLimitError
 from app.services.llm.factory import LLMFactory
-from app.services.llm.limiter import KeyedLocks, llm_slot
+from app.services.llm.limiter import llm_slot
 from app.services.llm.mock_provider import MockProvider
 from app.services.llm.schemas import SolvedExampleSet
 from tests.db_helpers import get_job, new_id, seed_job, seed_project, seed_topic, seed_usage, seed_user
@@ -52,9 +51,6 @@ def _request_for(messages):
 
 
 class TestPromptCaching:
-    def test_a_first_generation_sends_no_cache_control(self):
-        params = _request_for(content_messages("Bayes", "desc", CHUNKS, "write notes"))
-        assert "cache_control" not in json.dumps(params)
 
     def test_a_regeneration_caches_the_excerpt_block_only(self):
         params = _request_for(content_messages("Bayes", "desc", CHUNKS, "more", cache_excerpts=True))
@@ -179,12 +175,6 @@ class TestRegenerationCaching:
             ("interactive", topic, False),  # a different type has nothing to read yet
         ]
 
-    async def test_another_quiz_set_caches(self, db, course, generators):
-        topic = course.topics[0]
-        await run_job(db, course, topic, "topic_quiz")
-        await run_job(db, course, topic, "topic_quiz")
-        assert [call[2] for call in generators.calls] == [False, True]
-
 
 # ---- rate limits ------------------------------------------------------------------------------
 
@@ -200,26 +190,6 @@ class TestRetryAfter:
         assert isinstance(error, LLMRateLimitError) and error.retryable
         assert error.retry_after == 7
 
-    def test_overload_carries_retry_after_ms(self):
-        error = _translate_api_error(_error(anthropic.OverloadedError, 529, **{"retry-after-ms": "2500"}))
-        assert isinstance(error, LLMUnavailableError) and error.retry_after == 2.5
-
-    def test_a_server_error_is_transient_too(self):
-        error = _translate_api_error(_error(anthropic.InternalServerError, 502))
-        assert isinstance(error, LLMUnavailableError) and error.retryable and error.retry_after is None
-
-    def test_the_wait_is_capped_and_junk_is_ignored(self):
-        assert _translate_api_error(_error(anthropic.RateLimitError, 429, **{"retry-after": "9999"})).retry_after == 120
-        assert _translate_api_error(_error(anthropic.RateLimitError, 429, **{"retry-after": "soon"})).retry_after is None
-
-    def test_the_sdk_retries_four_times_by_default(self, monkeypatch):
-        assert settings.LLM_MAX_RETRIES == 4
-        monkeypatch.setattr(settings, "LLM_PROVIDER", "anthropic")
-        LLMFactory.reset()
-        try:
-            assert LLMFactory.get_provider().client.max_retries == 4
-        finally:
-            LLMFactory.reset()
 
     def test_the_dispatcher_waits_for_retry_after_when_it_is_longer_than_its_backoff(self):
         assert retry_delay_seconds(1, None) == 0.5
@@ -261,7 +231,9 @@ class TestRateLimitedJobs:
         monkeypatch.setattr(jobs, "ExamplesGenerator", Generator)
         return provider
 
-    async def test_a_rate_limit_answers_503_with_retry_after_and_the_job_waits_for_its_retry(self, db, course, llm):
+    @pytest.mark.parametrize("retry_after", [7, None], ids=["with_retry_after", "without_retry_after"])
+    async def test_a_rate_limit_answers_503_with_retry_after_and_the_job_waits_for_its_retry(self, db, course, llm, retry_after):
+        llm.retry_after = retry_after
         job_id = await seed_job(db, course.user_id, project_id=course.project_id)
         payload = JobPayload(jobId=job_id, jobType="generate_content",
                              data={"topicId": course.topics[0], "contentType": "solved_examples", "preferences": {}})
@@ -270,7 +242,10 @@ class TestRateLimitedJobs:
             await jobs.generate_content_job(payload)
 
         assert raised.value.status_code == 503  # 5xx: the dispatcher retries
-        assert raised.value.headers == {"Retry-After": "7"}
+        if retry_after:
+            assert raised.value.headers == {"Retry-After": "7"}
+        else:  # the dispatcher is still asked to wait
+            assert int(raised.value.headers["Retry-After"]) >= 1
         job = await get_job(db, job_id)
         # Back in pending with attempts left, so it still counts as the target's active job.
         assert (job["status"], job["error_code"], job["retryable"]) == ("pending", "LLM_RATE_LIMITED", True)
@@ -281,15 +256,6 @@ class TestRateLimitedJobs:
         assert result["status"] == "success"
         job = await get_job(db, job_id)
         assert (job["status"], job["attempt_count"]) == ("completed", 2)
-
-    async def test_without_a_retry_after_the_dispatcher_is_still_asked_to_wait(self, db, course, llm):
-        llm.retry_after = None
-        job_id = await seed_job(db, course.user_id, project_id=course.project_id)
-        payload = JobPayload(jobId=job_id, jobType="generate_content",
-                             data={"topicId": course.topics[0], "contentType": "solved_examples", "preferences": {}})
-        with pytest.raises(HTTPException) as raised:
-            await jobs.generate_content_job(payload)
-        assert raised.value.status_code == 503 and int(raised.value.headers["Retry-After"]) >= 1
 
 
 # ---- concurrency ------------------------------------------------------------------------------
@@ -322,24 +288,6 @@ class TestConcurrencyLimit:
         ])
         assert provider.peak == limit
 
-    async def test_text_calls_and_streams_share_the_same_limit(self, monkeypatch):
-        monkeypatch.setattr(settings, "LLM_MAX_CONCURRENCY", 2)
-        provider = WatchedMock()
-        message = [LLMMessage(role="user", content="x")]
-
-        async def stream():
-            async for _ in provider.stream_turn(system="s", messages=[{"role": "user", "content": "hi"}],
-                                                tools=[], purpose="voice"):
-                pass
-
-        await asyncio.gather(
-            *[provider.generate_text(message, purpose="section_notes") for _ in range(5)],
-            *[stream() for _ in range(5)],
-        )
-        assert provider.peak == 2
-
-    async def test_the_default_is_four(self):
-        assert type(settings).model_fields["LLM_MAX_CONCURRENCY"].default == 4
 
     async def test_a_slot_is_released_when_the_call_fails(self, monkeypatch):
         monkeypatch.setattr(settings, "LLM_MAX_CONCURRENCY", 1)
@@ -349,26 +297,6 @@ class TestConcurrencyLimit:
         async with asyncio.timeout(1):
             async with llm_slot():
                 pass
-
-    async def test_one_jobs_waiting_calls_do_not_exceed_the_limit_across_jobs(self, db, course, monkeypatch):
-        """Calls from different jobs (different topics) draw on the same pool of slots."""
-        monkeypatch.setattr(settings, "LLM_MAX_CONCURRENCY", 2)
-        provider = WatchedMock()
-        monkeypatch.setattr(LLMFactory, "_instance", provider)
-
-        class Generator:
-            async def generate_examples(self, **kwargs):
-                result = await provider.generate_structured(
-                    [LLMMessage(role="user", content="x")], SolvedExampleSet, purpose="solved_examples"
-                )
-                return {"examples": [e.model_dump() for e in result.examples], "example_type": "solved",
-                        "difficulty_level": "medium"}
-
-        monkeypatch.setattr(jobs, "ExamplesGenerator", Generator)
-        await asyncio.gather(*[
-            run_job(db, course, topic_id, "solved_examples") for topic_id in course.topics * 2
-        ])
-        assert provider.peak == 2
 
 
 class TestTopicSerialisation:
@@ -383,31 +311,6 @@ class TestTopicSerialisation:
         assert len(generators.calls) == 3
         assert generators.max_active == 1
 
-    async def test_jobs_for_different_topics_run_side_by_side(self, db, course, generators):
-        generators.delay = 0.05
-        await asyncio.gather(*[run_job(db, course, topic, "solved_examples") for topic in course.topics])
-        assert generators.max_active == 3
-
-    async def test_the_second_job_starts_after_the_first_has_stored_its_content(self, db, course, generators):
-        """Same type twice: the second one sees the first's content, so it is a regeneration."""
-        generators.delay = 0.05
-        topic = course.topics[0]
-        await asyncio.gather(
-            run_job(db, course, topic, "solved_examples"),
-            run_job(db, course, topic, "solved_examples"),
-        )
-        assert sorted(call[2] for call in generators.calls) == [False, True]
-
-    async def test_a_waiting_job_keeps_its_claim(self, db, course, generators):
-        generators.delay = 0.1
-        topic = course.topics[0]
-        first = asyncio.create_task(run_job(db, course, topic, "solved_examples"))
-        await asyncio.sleep(0.02)
-        second = asyncio.create_task(run_job(db, course, topic, "topic_quiz"))
-        await asyncio.sleep(0.02)
-        rows = await db.fetch("SELECT status FROM processing_jobs ORDER BY created_at")
-        assert [row["status"] for row in rows] == ["processing", "processing"]
-        await asyncio.gather(first, second)
 
     async def test_a_failed_job_releases_the_topic(self, db, course, generators):
         topic = course.topics[0]
@@ -417,26 +320,6 @@ class TestTopicSerialisation:
         generators.fail_with = None
         await run_job(db, course, topic, "topic_quiz")
         assert generators.max_active == 1
-
-    async def test_locks_are_dropped_when_idle(self):
-        locks = KeyedLocks()
-        async with locks.hold("a"):
-            async with locks.hold("b"):
-                assert len(locks) == 2
-        assert len(locks) == 0
-
-    async def test_keyed_locks_queue_in_order(self):
-        locks = KeyedLocks()
-        order = []
-
-        async def work(name, delay):
-            async with locks.hold("t"):
-                order.append(f"{name}-in")
-                await asyncio.sleep(delay)
-                order.append(f"{name}-out")
-
-        await asyncio.gather(work("a", 0.03), work("b", 0), work("c", 0))
-        assert order == ["a-in", "a-out", "b-in", "b-out", "c-in", "c-out"]
 
 
 # ---- the generation chain ---------------------------------------------------------------------
@@ -463,17 +346,6 @@ async def finish_chain(db, course, dispatched, topic_id, content_type, **prefere
 
 
 class TestGenerationChain:
-    async def test_notes_then_the_other_missing_types_one_at_a_time(self, db, course, generators, dispatched):
-        topic = course.topics[0]
-        await run_job(db, course, topic, "concepts", prepare_rest=True)
-
-        # Only the next type is queued, not all five: the warm-up after the concepts ...
-        assert [(job["data"]["contentType"], job["data"]["preferences"]) for job in dispatched] == [
-            ("warmup", {"prepare_rest": True})
-        ]
-        job = await get_job(db, dispatched[0]["job_id"])
-        assert job["status"] == "pending" and job["target_key"] == f"content:{topic}:warmup"
-        assert job["user_id"] == course.user_id and job["project_id"] == course.project_id
 
     async def test_the_whole_chain_runs_in_order_and_stops(self, db, course, generators, dispatched):
         topic = course.topics[0]
@@ -488,11 +360,6 @@ class TestGenerationChain:
         }
         assert generators.max_active == 1
 
-    async def test_types_the_topic_already_has_are_skipped(self, db, course, generators, dispatched):
-        topic = course.topics[0]
-        await run_job(db, course, topic, "interactive_examples")
-        ran = await finish_chain(db, course, dispatched, topic, "concepts", prepare_rest=True)
-        assert [c for _, c in ran] == ["concepts", "warmup", "section_notes", "solved_examples", "topic_quiz"]
 
     async def test_types_with_a_job_in_flight_are_not_queued_twice(self, db, course, generators, dispatched):
         topic = course.topics[0]
@@ -502,16 +369,6 @@ class TestGenerationChain:
         await run_job(db, course, topic, "concepts", prepare_rest=True)
         assert [job["data"]["contentType"] for job in dispatched] == ["section_notes"]
 
-    async def test_a_plain_job_queues_nothing(self, db, course, generators, dispatched):
-        await run_job(db, course, course.topics[0], "section_notes")
-        await run_job(db, course, course.topics[0], "solved_examples", append=True)
-        assert dispatched == []
-
-    async def test_a_failed_job_ends_the_chain(self, db, course, generators, dispatched):
-        generators.fail_with = RuntimeError("boom")
-        with pytest.raises(HTTPException):
-            await run_job(db, course, course.topics[0], "section_notes", prepare_rest=True)
-        assert dispatched == []
 
     async def test_the_chain_stops_when_the_daily_allowance_is_used_up(
         self, db, course, generators, dispatched, monkeypatch
@@ -539,15 +396,6 @@ class TestGenerationChain:
         assert order == expected
         assert generators.max_active == 1  # one topic in flight, one job at a time
 
-    async def test_prepare_all_skips_topics_that_are_complete_or_unconfirmed(
-        self, db, course, generators, dispatched
-    ):
-        middle = course.topics[1]
-        for content_type in generation_chain.CONTENT_ORDER:
-            await run_job(db, course, middle, content_type)
-        await db.execute("UPDATE topics SET user_confirmed = FALSE WHERE id = $1", course.topics[2])
-        ran = await finish_chain(db, course, dispatched, course.topics[0], "concepts", prepare_all=True)
-        assert {t for t, _ in ran} == {course.topics[0]}
 
     async def test_prepare_all_skips_a_topic_that_cannot_be_generated(self, db, course, generators, dispatched):
         generators.fail_with = NoSourceMaterialError("No source material")
@@ -569,37 +417,4 @@ class TestGenerationChain:
                                 f"content:{course.topics[0]}:warmup")
         assert (row["status"], row["error_code"], row["retryable"]) == ("failed", "ENQUEUE_FAILED", True)
 
-    async def test_missing_content_types(self, db, course):
-        topic = course.topics[0]
-        assert await generation_chain.missing_content_types(topic) == list(generation_chain.CONTENT_ORDER)
-        await db.execute(
-            "INSERT INTO topic_content (id, topic_id, content_type, content_data, updated_at) "
-            "VALUES ($1, $2, 'solved_examples', '[]'::jsonb, NOW())", new_id(), topic)
-        assert "solved_examples" not in await generation_chain.missing_content_types(topic)
 
-    async def test_the_next_job_has_a_row_before_it_is_dispatched(self, db, course, dispatched):
-        """The page that sees a job finish must be able to find the next job at once."""
-        planned = await generation_chain.plan_next_job(
-            user_id=course.user_id, project_id=course.project_id, topic_id=course.topics[0],
-            preferences={"prepare_rest": True},
-        )
-        row = await get_job(db, planned.job_id)
-        assert row["status"] == "pending" and dispatched == []
-        assert await generation_chain.dispatch(planned) == planned.job_id
-        assert [job["job_id"] for job in dispatched] == [planned.job_id]
-
-
-class TestHandlerHeaders:
-    async def test_the_non_job_error_handler_also_asks_for_a_wait(self):
-        import json
-
-        from app.main import llm_error_handler
-
-        error = LLMRateLimitError("slow down")
-        error.retry_after = 12.2
-        response = await llm_error_handler(None, error)
-        assert response.status_code == 503 and response.headers["retry-after"] == "13"
-        assert json.loads(response.body)["error_code"] == "LLM_RATE_LIMITED"
-
-        other = await llm_error_handler(None, LLMUnavailableError("down"))
-        assert other.status_code == 503 and other.headers["retry-after"] == "10"

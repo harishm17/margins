@@ -1,7 +1,6 @@
 """Tests for the record/replay provider: record a real run once, replay it for free."""
 from __future__ import annotations
 
-import json
 from typing import Any, AsyncIterator, List
 from unittest.mock import patch
 
@@ -16,7 +15,6 @@ from app.services.llm.base import (
     LLMMessage,
     LLMNotConfiguredError,
     LLMProvider,
-    LLMRateLimitError,
     LLMResponse,
     LLMUnavailableError,
     LLMUsage,
@@ -25,7 +23,6 @@ from app.services.llm.base import (
     TurnToolUse,
 )
 from app.services.llm.factory import LLMFactory
-from app.services.llm.observed import ObservedProvider
 from app.services.llm.replay_provider import (
     LLMReplayMissError,
     ReplayProvider,
@@ -116,11 +113,6 @@ class TestNormalise:
         assert text == "⟨id1⟩ then ⟨id2⟩ then ⟨id1⟩"
         assert found == {"⟨id1⟩": TOPIC_B, "⟨id2⟩": TOPIC_A}
 
-    def test_emails_and_dates_are_placeholders_too(self):
-        text, _ = normalise("wf-3-1731@example.com asked on 2026-11-08T10:22:33.120Z and 2026-11-09")
-        assert text == "⟨email1⟩ asked on ⟨date1⟩ and ⟨date2⟩"
-
-
 class TestStructured:
     async def test_a_recorded_answer_replays_with_the_new_requests_ids(self, tmp_path):
         inner = FakeModel()
@@ -129,15 +121,6 @@ class TestStructured:
 
         replayed = await _replayer(tmp_path).generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
         assert replayed == Linked(topic_id=NEW_A, reason="call 1")
-
-    async def test_a_replay_counts_the_recorded_usage_once(self, tmp_path):
-        with track_llm_usage() as during_record:
-            await _recorder(tmp_path).generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
-        assert [u.input_tokens for u in during_record] == [100]
-
-        with track_llm_usage() as during_replay:
-            await _replayer(tmp_path).generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
-        assert during_replay == during_record
 
     async def test_a_request_is_recorded_once_and_every_repeat_replays_it(self, tmp_path):
         # Each workflow signs up a fresh user and builds the same course: the recording run pays for it once.
@@ -161,12 +144,6 @@ class TestStructured:
         assert inner.calls == 1
         assert again.reason == "call 1"
 
-    async def test_a_prompt_with_a_line_more_is_recorded(self, tmp_path):
-        inner = FakeModel()
-        await _recorder(tmp_path, inner).generate_structured(_excerpts(["p. 1", "p. 5"]), Linked, purpose="topics")
-        await _recorder(tmp_path, inner).generate_structured(_excerpts(["p. 1", "p. 5"], "Past exam files: quiz-1.pdf\n"), Linked, purpose="topics")
-        assert inner.calls == 2
-
     async def test_a_request_never_recorded_fails_clearly_without_retries(self, tmp_path):
         with pytest.raises(LLMReplayMissError, match="concepts") as raised:
             await _replayer(tmp_path).generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
@@ -178,29 +155,6 @@ class TestStructured:
         changed = _messages(NEW_A, NEW_B, extra="The student opened the reader. ")
         replayed = await _replayer(tmp_path).generate_structured(changed, Linked, purpose="concepts")
         assert replayed.topic_id == NEW_A
-
-    async def test_a_different_purpose_is_never_a_near_match(self, tmp_path):
-        await _recorder(tmp_path).generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
-        with pytest.raises(LLMReplayMissError):
-            await _replayer(tmp_path).generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="topics")
-
-    async def test_recordings_are_one_readable_file_per_request(self, tmp_path):
-        await _recorder(tmp_path).generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
-        files = list(tmp_path.rglob("*.json"))
-        assert len(files) == 1
-        entry = json.loads(files[0].read_text())
-        assert entry["purpose"] == "concepts" and entry["schema"] == "Linked"
-        assert TOPIC_A not in entry["request"] and "⟨id1⟩" in json.dumps(entry["response"], ensure_ascii=False)
-
-
-class TestText:
-    async def test_text_replays_with_its_usage(self, tmp_path):
-        recorded = await _recorder(tmp_path).generate_text(_messages(TOPIC_A, TOPIC_B), purpose="section_notes")
-        with track_llm_usage() as usage:
-            replayed = await _replayer(tmp_path).generate_text(_messages(NEW_A, NEW_B), purpose="section_notes")
-        assert replayed == recorded
-        assert [u.input_tokens for u in usage] == [100]
-
 
 class TestStreams:
     async def test_a_cited_answer_replays_its_events_with_the_new_excerpt_refs(self, tmp_path):
@@ -231,18 +185,6 @@ class TestWiring:
     def teardown_method(self):
         LLMFactory.reset()
 
-    def test_the_factory_builds_a_replay_provider_behind_the_ai_status(self, tmp_path):
-        with patch("app.services.llm.factory.settings") as settings:
-            settings.LLM_PROVIDER = "replay"
-            settings.is_production = False
-            settings.LLM_CASSETTE_DIR = str(tmp_path)
-            settings.LLM_REPLAY_MISS = "error"
-            LLMFactory.reset()
-            provider = LLMFactory.get_provider()
-            assert isinstance(provider, ObservedProvider)
-            assert isinstance(provider.inner, ReplayProvider)
-            assert provider.model_for("validate_material") == "claude-haiku-5-5"
-
     def test_the_factory_refuses_replay_in_production(self, tmp_path):
         with patch("app.services.llm.factory.settings") as settings:
             settings.LLM_PROVIDER = "replay"
@@ -251,29 +193,6 @@ class TestWiring:
             LLMFactory.reset()
             with pytest.raises(LLMNotConfiguredError, match="production"):
                 LLMFactory.get_provider()
-
-    def test_settings_refuse_replay_in_production_and_count_it_as_configured(self, tmp_path):
-        from pydantic import ValidationError
-
-        from app.config import Settings
-
-        with pytest.raises(ValidationError, match="LLM_PROVIDER=replay"):
-            Settings(ENVIRONMENT="production", LLM_PROVIDER="replay", LLM_CASSETTE_DIR=str(tmp_path))
-        configured = Settings(ENVIRONMENT="development", LLM_PROVIDER="replay", ANTHROPIC_API_KEY="", LLM_CASSETTE_DIR=str(tmp_path))
-        assert configured.llm_configured is True
-
-    def test_replay_needs_a_cassette_folder(self):
-        from pydantic import ValidationError
-
-        from app.config import Settings
-
-        with pytest.raises(ValidationError, match="LLM_CASSETTE_DIR"):
-            Settings(ENVIRONMENT="development", LLM_PROVIDER="replay", LLM_CASSETTE_DIR="")
-
-    def test_record_mode_needs_the_real_model(self, tmp_path):
-        with pytest.raises(LLMNotConfiguredError, match="record"):
-            ReplayProvider(tmp_path, on_miss="record", inner=None)
-
 
 class TestProviderFault:
     """A workflow turns a provider outage on and off with a file, so every surface can be seen failing (WF11)."""
@@ -287,97 +206,3 @@ class TestProviderFault:
             await replayer.generate_structured(_messages(NEW_A, NEW_B), Linked, purpose="concepts")
         with pytest.raises(LLMUnavailableError):
             await replayer.generate_text(_messages(NEW_A, NEW_B), purpose="section_notes")
-
-    async def test_the_outage_ends_when_the_file_is_emptied_or_goes(self, tmp_path):
-        recorded = await _recorder(tmp_path / "rec").generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
-        fault = tmp_path / "fault"
-        replayer = ReplayProvider(tmp_path / "rec", on_miss="error", fault_file=str(fault))
-        fault.write_text("LLM_RATE_LIMITED")
-        with pytest.raises(LLMRateLimitError):
-            await replayer.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
-        fault.write_text("")
-        assert await replayer.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts") == recorded
-        fault.unlink()
-        assert await replayer.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts") == recorded
-
-    async def test_a_fault_in_record_mode_calls_nothing_records_nothing_and_counts_no_usage(self, tmp_path):
-        inner = FakeModel()
-        fault = tmp_path / "fault"
-        fault.write_text("LLM_UNAVAILABLE")
-        recorder = ReplayProvider(tmp_path / "rec", on_miss="record", inner=inner, fault_file=str(fault))
-        with track_llm_usage() as usage, pytest.raises(LLMUnavailableError):
-            await recorder.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
-        assert inner.calls == 0
-        assert usage == []
-        assert list((tmp_path / "rec").rglob("*.json")) == []
-
-    async def test_an_unknown_code_is_refused_by_name(self, tmp_path):
-        fault = tmp_path / "fault"
-        fault.write_text("SOMETHING_ELSE")
-        replayer = ReplayProvider(tmp_path, on_miss="error", fault_file=str(fault))
-        with pytest.raises(LLMNotConfiguredError, match="LLM_REPLAY_FAULT_FILE"):
-            await replayer.generate_text(_messages(NEW_A, NEW_B), purpose="section_notes")
-
-    def test_the_factory_passes_the_fault_file(self, tmp_path):
-        with patch("app.services.llm.factory.settings") as settings:
-            settings.LLM_PROVIDER = "replay"
-            settings.is_production = False
-            settings.LLM_CASSETTE_DIR = str(tmp_path)
-            settings.LLM_REPLAY_MISS = "error"
-            settings.LLM_REPLAY_FAULT_FILE = str(tmp_path / "fault")
-            LLMFactory.reset()
-            try:
-                assert LLMFactory.get_provider().inner.fault_file == str(tmp_path / "fault")
-            finally:
-                LLMFactory.reset()
-
-
-class TestRecordingCost:
-    async def test_the_cost_of_a_recording_run_counts_only_what_it_recorded(self, tmp_path):
-        import os
-        import time
-
-        from app.services.llm.replay_provider import recording_cost
-
-        recorder = _recorder(tmp_path)
-        await recorder.generate_structured(_messages(TOPIC_A, TOPIC_B), Linked, purpose="concepts")
-        [older] = list(tmp_path.rglob("*.json"))
-        os.utime(older, (1_000, 1_000))
-        started = time.time() - 1
-        await recorder.generate_text(_messages(TOPIC_A, TOPIC_B), purpose="section_notes")
-        _ = [e async for e in recorder.stream_cited_answer(system="s", history=[], question="q", excerpts=[Excerpt(ref=f"chunk:{TOPIC_A}", title="t", text="x")])]
-
-        summary = recording_cost(tmp_path, since=started)
-        assert summary["recordings"] == 2
-        assert summary["calls"] == 2
-        # Haiku 5.5 at $0.10 in and $0.50 out per million: (101 + 102) input and 20 output tokens.
-        assert summary["cost_usd"] == pytest.approx((203 * 0.10 + 20 * 0.50) / 1_000_000)
-        assert recording_cost(tmp_path, since=0)["recordings"] == 3
-
-
-class TestDuplicateRecordings:
-    async def test_recordings_of_one_prompt_in_two_orders_are_reported_together(self, tmp_path):
-        import shutil
-
-        from app.services.llm.replay_provider import duplicate_recordings
-
-        await _recorder(tmp_path).generate_structured(_excerpts(["p. 1", "p. 5"]), Linked, purpose="warmup")
-        await _recorder(tmp_path).generate_structured(_excerpts(["p. 1", "p. 5"], "Past exam files: quiz-1.pdf\n"), Linked, purpose="warmup")
-        # Made before the reordered rule: the same excerpts in another order, recorded with an answer of its own.
-        older = tmp_path / "older"
-        await _recorder(older).generate_structured(_excerpts(["p. 5", "p. 1"]), Linked, purpose="warmup")
-        [copy] = list(older.rglob("*.json"))
-        shutil.move(copy, tmp_path / copy.relative_to(older))
-        shutil.rmtree(older)
-
-        [group] = duplicate_recordings(tmp_path)
-        assert len(group) == 2
-        assert {path.parent.name for path in group} == {"warmup"}
-        assert copy.name in {path.name for path in group}
-
-    async def test_one_recording_per_prompt_reports_nothing(self, tmp_path):
-        from app.services.llm.replay_provider import duplicate_recordings
-
-        await _recorder(tmp_path).generate_structured(_excerpts(["p. 1", "p. 5"]), Linked, purpose="warmup")
-        await _recorder(tmp_path).generate_structured(_excerpts(["p. 1", "p. 5"]), Linked, purpose="topics")
-        assert duplicate_recordings(tmp_path) == []

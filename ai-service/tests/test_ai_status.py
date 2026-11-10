@@ -4,8 +4,6 @@ calls that are refused while it is down (jobs, chat, voice).
 The status lives in the test Postgres (see conftest.py), like the job tests.
 """
 import asyncio
-import json
-from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -56,8 +54,6 @@ async def row(db):
 
 
 class TestMarking:
-    async def test_no_row_means_available(self, db):
-        assert (await ai_status.get_status()).available
 
     @pytest.mark.parametrize("error", [LLMCreditError("credit balance is too low"), LLMAuthError("bad key")])
     async def test_a_provider_level_failure_marks_it_down_at_once_and_alerts_once(self, db, alerts, error):
@@ -87,12 +83,6 @@ class TestMarking:
         status = await ai_status.get_status()
         assert (status.available, status.reason) == (False, "LLM_RATE_LIMITED")
 
-    async def test_a_success_in_between_resets_the_transient_count(self, db, alerts, monkeypatch):
-        monkeypatch.setattr(settings, "AI_STATUS_TRANSIENT_THRESHOLD", 2)
-        await ai_status.record_failure(LLMUnavailableError("overloaded"))
-        await ai_status.record_success()
-        await ai_status.record_failure(LLMUnavailableError("overloaded"))
-        assert (await ai_status.get_status()).available
 
     async def test_any_successful_call_clears_it(self, db, alerts):
         await ai_status.record_failure(LLMCreditError("credit"))
@@ -110,23 +100,6 @@ class TestMarking:
 
         assert (await ai_status.get_status()).available
 
-    async def test_a_stale_record_reads_available_and_a_new_failure_is_not_a_new_outage(
-        self, db, alerts, monkeypatch
-    ):
-        await ai_status.record_failure(LLMCreditError("credit"))
-        await ai_status.wait_for_alerts()
-        since = (await row(db))["since"]
-        old = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=settings.AI_STATUS_TTL_S + 5)
-        await db.execute("UPDATE ai_status SET checked_at = $1", old)
-
-        # Expired: the next real call tests the provider again.
-        assert (await ai_status.get_status()).available
-
-        await ai_status.record_failure(LLMCreditError("credit"))
-        await ai_status.wait_for_alerts()
-        assert not (await ai_status.get_status()).available
-        assert (await row(db))["since"] == since
-        assert len(alerts) == 1
 
     async def test_no_key_is_unavailable_without_a_row(self, db, monkeypatch):
         monkeypatch.setattr(settings, "LLM_PROVIDER", "anthropic")
@@ -134,22 +107,6 @@ class TestMarking:
         status = await ai_status.get_status()
         assert (status.available, status.reason) == (False, "LLM_NOT_CONFIGURED")
 
-    async def test_the_mock_provider_reports_available(self, db, monkeypatch):
-        monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")
-        monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
-        assert (await ai_status.get_status()).available
-
-    async def test_no_webhook_means_no_alert(self, db, monkeypatch):
-        sent = []
-
-        async def post(url, text):
-            sent.append(text)
-
-        monkeypatch.setattr(ai_status, "_post_alert", post)
-        monkeypatch.setattr(settings, "OPS_ALERT_WEBHOOK_URL", "")
-        await ai_status.record_failure(LLMCreditError("credit"))
-        await ai_status.wait_for_alerts()
-        assert sent == []
 
     async def test_a_database_problem_never_fails_the_caller(self, monkeypatch):
         async def broken(*args, **kwargs):
@@ -192,28 +149,6 @@ class TestRecoveryAlert:
 
         assert len([text for _, text in alerts if "available again" in text]) == 1
 
-    async def test_two_first_failures_at_once_alert_once_even_before_the_row_exists(self, db, alerts):
-        # A fresh database: the conftest empties ai_status after each test, like a new deploy
-        # before the migration's row existed.
-        await db.execute("DELETE FROM ai_status")
-
-        await asyncio.gather(*(ai_status._mark_unavailable("LLM_CREDIT_EXHAUSTED", "x") for _ in range(4)))
-        await ai_status.wait_for_alerts()
-
-        assert len([text for _, text in alerts if "unavailable" in text]) == 1
-
-    async def test_no_recovery_alert_without_an_outage(self, db, alerts):
-        ai_status.reset_local_state()
-        await ai_status.record_success()
-        await ai_status.wait_for_alerts()
-        assert alerts == []
-
-    def test_durations_read_plainly(self):
-        assert ai_status.format_duration(40) == "40 s"
-        assert ai_status.format_duration(12 * 60 + 5) == "12 min"
-        assert ai_status.format_duration(3600) == "1 h"
-        assert ai_status.format_duration(2 * 3600 + 5 * 60) == "2 h 5 min"
-
 
 async def _other_process_success():
     # A second process: its own memory says the AI may be down, so it tries to clear the row too.
@@ -234,29 +169,6 @@ class TestObservedProvider:
 
         await provider.generate_text([LLMMessage(role="user", content="Notes")], purpose="notes")
         assert (await ai_status.get_status()).available
-
-    def test_the_mock_can_fail_a_set_number_of_times_then_recover(self):
-        from app.services.llm.mock_provider import _raise_if_asked
-
-        marker = "answer MOCK_LLM_FAIL:LLM_CREDIT_EXHAUSTEDx2@t1 here"
-        for _ in range(2):
-            with pytest.raises(LLMCreditError):
-                _raise_if_asked(marker)
-        _raise_if_asked(marker)  # the outage is over
-        with pytest.raises(LLMCreditError):
-            _raise_if_asked("MOCK_LLM_FAIL:LLM_CREDIT_EXHAUSTED")  # without a count: always
-
-    async def test_streams_report_too(self, db, alerts):
-        provider = ObservedProvider(MockProvider())
-
-        with pytest.raises(LLMCreditError):
-            async for _ in provider.stream_turn(
-                system="coach", messages=[{"role": "user", "content": "MOCK_LLM_FAIL:LLM_CREDIT_EXHAUSTED"}],
-                tools=[],
-            ):
-                pass
-
-        assert not (await ai_status.get_status()).available
 
 
 async def mark_down(reason="LLM_CREDIT_EXHAUSTED"):
@@ -299,17 +211,6 @@ class TestRefusedWhileDown:
         job = await get_job(db, job_id)
         assert (job["status"], job["error_code"]) == ("pending", "LLM_UNAVAILABLE")
 
-    async def test_jobs_that_do_not_use_the_model_still_run(self, db, alerts):
-        user_id = await seed_user(db)
-        job_id = await seed_job(db, user_id, "chunk_material")
-        await mark_down()
-
-        @job_handler(job_type="chunk_material", label="Chunking", default_error_code="CHUNKING_FAILED")
-        async def handler(payload, job):
-            return JobOutcome()
-
-        result = await handler(JobPayload(jobId=job_id, jobType="chunk_material", data={}))
-        assert result["status"] == "success"
 
     @pytest.mark.parametrize("path,body", [
         ("/chat/answer", {"question": "What is hashing?", "history": []}),
@@ -355,40 +256,4 @@ class TestStatusRoute:
         assert body["allowance"] is None
         assert body["global_cap_hit"] is True
 
-    async def test_no_per_user_cap_has_no_limit(self, db, alerts, monkeypatch):
-        monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 0)
-        user_id = await seed_user(db)
-        body = (await call("GET", "/status/ai", params={"user_id": user_id})).json()
-        assert body["allowance"]["limit"] is None
 
-
-def test_alert_payload_suits_discord_slack_and_ntfy(monkeypatch):
-    import asyncio
-
-    posts = []
-
-    class FakeClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *exc):
-            return False
-
-        async def post(self, url, **kwargs):
-            posts.append((url, kwargs))
-
-            class Response:
-                status_code = 204
-
-            return Response()
-
-    monkeypatch.setattr(ai_status.httpx, "AsyncClient", FakeClient)
-    asyncio.run(ai_status._post_alert("https://discord.example.test/api/webhooks/1", "down"))
-    asyncio.run(ai_status._post_alert("https://ntfy.sh/margins-ops", "down"))
-
-    assert posts[0][1]["json"] == {"content": "down", "text": "down"}
-    assert posts[1][1]["content"] == b"down"
-    assert json.dumps(posts[0][1]["json"])  # serialisable

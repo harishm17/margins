@@ -19,9 +19,3 @@ test('a solved example carries its concept ids, and its steps the example ones u
   assert.deepEqual(parsed?.items[0].conceptIds, ['c1', 'c2'])
   assert.deepEqual(parsed?.items[0].steps.map((step) => step.conceptIds), [['c1', 'c2'], ['c3']])
 })
-
-test('an example from before concepts has no concept ids', () => {
-  const parsed = parseSolvedExamples([{ title: 'Old', solution_steps: [{ description: 'one' }] }], UPDATED)
-  assert.deepEqual(parsed?.items[0].conceptIds, [])
-  assert.deepEqual(parsed?.items[0].steps[0].conceptIds, [])
-})

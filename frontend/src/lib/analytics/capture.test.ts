@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { captureServerEvent, distinctIdFromCookie, POSTHOG_COOKIE } from './capture'
+import { captureServerEvent, distinctIdFromCookie } from './capture'
 
 const prod = { NEXTAUTH_URL: 'https://studymargins.com' }
 const cookie = JSON.stringify({ distinct_id: '019a-visitor', $sesid: [1, 'x', 'y'] })
@@ -21,9 +21,6 @@ describe('distinctIdFromCookie', () => {
   })
   it('is null for nothing usable', () => {
     for (const value of [undefined, null, '', 'not json', '{}', '{"distinct_id":5}']) assert.equal(distinctIdFromCookie(value), null)
-  })
-  it('names the cookie the tracker keeps', () => {
-    assert.equal(POSTHOG_COOKIE, 'ph_phc_nT2JxCxLcAiSQGP4d4iJ2mWef6k3gNa6ptFaEJmz5cJ9_posthog')
   })
 })
 

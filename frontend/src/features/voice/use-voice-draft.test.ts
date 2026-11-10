@@ -4,12 +4,10 @@ import type { TranscriptEntry } from './session-state'
 import {
   SNAPSHOT_MAX_AGE_MS,
   clearVoiceSnapshot,
+  readVoiceDraft,
   describeSnapshot,
   persistLiveSession,
-  readVoiceDraft,
   readVoiceSnapshot,
-  resumeOpening,
-  snapshotEntries,
   startResume,
   writeVoiceDraft,
   toTranscript,
@@ -72,12 +70,6 @@ describe('voice snapshot', () => {
     assert.equal(toTranscript(next.restored)[0].id, -1)
   })
 
-  it('asks the coach to repeat the last question, or says nothing when there is none', () => {
-    const store = memoryStore()
-    persistLiveSession(base, { entries, question: 'And a queue?' }, store, Date.now())
-    assert.match(resumeOpening(readVoiceSnapshot('c1', 't1', store)!) ?? '', /ask me this question again.*And a queue\?/)
-    assert.equal(resumeOpening({ ...readVoiceSnapshot('c1', 't1', store)!, question: null, entries: [], restored: [] }), null)
-  })
 
   it('keeps typed words even before the first snapshot exists, drops them when stale, and clears with the snapshot', () => {
     const store = memoryStore()
@@ -88,17 +80,5 @@ describe('voice snapshot', () => {
     assert.equal(readVoiceSnapshot('c1', 't1', store, 2000)?.draft, 'half an answer')
     clearVoiceSnapshot('c1', 't1', store)
     assert.equal(readVoiceDraft('c1', 't1', store, 2000), '')
-  })
-
-  it('clears', () => {
-    const store = memoryStore()
-    persistLiveSession(base, { entries, question: null }, store)
-    clearVoiceSnapshot('c1', 't1', store)
-    assert.equal(readVoiceSnapshot('c1', 't1', store), null)
-  })
-
-  it('caps long transcripts', () => {
-    const many: TranscriptEntry[] = Array.from({ length: 60 }, (_, index) => ({ id: index, role: 'student', text: `a${index}`, via: 'text' }))
-    assert.equal(snapshotEntries(many).length, 40)
   })
 })

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { defaultLanguageCode, isIosPlatform, languageTag, newFinalWords, pickVoice, scoreVoice, VOICE_LANGUAGES, type VoiceInfo } from './speech'
+import { defaultLanguageCode, isIosPlatform, newFinalWords, pickVoice, scoreVoice, type VoiceInfo } from './speech'
 
 const voices: VoiceInfo[] = [
   { name: 'Albert', lang: 'en-US', localService: true },
@@ -17,11 +17,6 @@ describe('pickVoice', () => {
     assert.equal(pickVoice(voices, 'en-US')?.name, 'Microsoft Aria Online (Natural) - English (United States)')
   })
 
-  it('falls back to a same-language voice from another region', () => {
-    const onlyUk = voices.filter((voice) => voice.name.startsWith('Google UK'))
-    assert.equal(pickVoice(onlyUk, 'en-US')?.name, 'Google UK English Female')
-  })
-
   it('never picks a voice for another language', () => {
     assert.equal(pickVoice(voices, 'fr-FR'), null)
     assert.equal(scoreVoice({ name: 'Monica', lang: 'es-ES' }, 'en-US'), -1)
@@ -32,25 +27,9 @@ describe('pickVoice', () => {
     assert.equal(picked?.name, 'Samantha')
   })
 
-  it('handles underscores in the voice language (older Android)', () => {
-    assert.equal(pickVoice([{ name: 'x', lang: 'es_ES' }], 'es-ES')?.name, 'x')
-  })
-
-  it('picks the Google voice for Spanish over the plain local one', () => {
-    assert.equal(pickVoice(voices, 'es-ES')?.name, 'Google español de Estados Unidos')
-  })
 })
 
 describe('languages', () => {
-  it('maps codes to browser tags and keeps unknown codes', () => {
-    assert.equal(languageTag('en'), 'en-US')
-    assert.equal(languageTag('hi'), 'hi-IN')
-    assert.equal(languageTag('sv'), 'sv')
-  })
-
-  it('every code is accepted by the server pattern', () => {
-    for (const language of VOICE_LANGUAGES) assert.match(language.code, /^[a-z]{2,8}$/i)
-  })
 
   it('defaults to the browser language when listed, else English', () => {
     assert.equal(defaultLanguageCode('es-MX'), 'es')

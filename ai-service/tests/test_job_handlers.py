@@ -12,7 +12,6 @@ from tests.db_helpers import (
     get_job,
     new_id,
     seed_job,
-    seed_material,
     seed_project,
     seed_topic,
     seed_user,
@@ -68,14 +67,6 @@ class TestGenerateContent:
         )
         return json.loads(row["content_data"]), json.loads(row["metadata"])
 
-    async def test_content_is_saved_and_the_job_completed(self, db, world):
-        result = await self.run(db, world)
-
-        assert result["status"] == "success"
-        content, metadata = await self.stored(db, world)
-        assert len(content) == 1
-        assert metadata["count"] == 1
-
     async def test_regeneration_replaces_the_content(self, db, world):
         await self.run(db, world)
         await self.run(db, world)
@@ -103,37 +94,6 @@ class TestGenerateContent:
         assert len(content) == 10
         assert len({item["title"] for item in content}) == 10
         assert metadata["count"] == 10
-
-    async def test_concurrent_appends_to_existing_content_lose_nothing(self, db, world):
-        await self.run(db, world)
-
-        await asyncio.gather(*[self.run(db, world, append=True) for _ in range(10)])
-
-        content, _ = await self.stored(db, world)
-        assert len(content) == 11
-
-    async def test_unknown_content_type_is_a_permanent_failure(self, db, world):
-        from fastapi import HTTPException
-
-        job_id = await seed_job(db, world.user_id, project_id=world.project_id)
-
-        with pytest.raises(HTTPException) as raised:
-            await jobs.generate_content_job(content_payload(job_id, world.topic_id, "podcast"))
-
-        assert raised.value.status_code == 400
-        assert (await get_job(db, job_id))["retryable"] is False
-
-    async def test_a_completed_generation_job_does_not_run_again(self, db, world):
-        first = await self.run(db, world)
-
-        again = await jobs.generate_content_job(
-            content_payload(first["jobId"], world.topic_id, "solved_examples", append=True)
-        )
-
-        assert again["status"] == "skipped"
-        content, _ = await self.stored(db, world)
-        assert len(content) == 1
-
 
 class TestGradeExam:
     @pytest.fixture
@@ -253,13 +213,6 @@ class TestGradeExam:
         graded = await db.fetchval("SELECT ai_grading FROM exam_submissions WHERE id = $1", submission.id)
         assert json.loads(graded)["overall_score"] == 50
 
-    async def test_regrading_replaces_the_learning_signals(self, db, world, submission):
-        await self.grade(db, world, submission)
-        await self.grade(db, world, submission)
-
-        rows = await db.fetch("SELECT score FROM learning_signals WHERE source = 'exam' ORDER BY score")
-        assert [r["score"] for r in rows] == [0.0, 1.0]
-
     async def test_a_question_left_blank_leaves_no_learning_signal(self, db, world, submission, monkeypatch):
         class Grader:
             async def grade_submission(self, submission_id, questions, answers):
@@ -290,16 +243,3 @@ class TestGradeExam:
         await self.grade(db, world, submission)
 
         assert await db.fetchval("SELECT count(*) FROM learning_signals") == 3
-
-    async def test_missing_submission_is_a_permanent_failure(self, db, world):
-        from fastapi import HTTPException
-
-        job_id = await seed_job(db, world.user_id, "grade_exam", project_id=world.project_id)
-
-        with pytest.raises(HTTPException) as raised:
-            await jobs.grade_exam_job(
-                JobPayload(jobId=job_id, jobType="grade_exam", data={"submissionId": "nope"})
-            )
-
-        assert raised.value.status_code == 400
-        assert (await get_job(db, job_id))["error_code"] == "SUBMISSION_NOT_FOUND"

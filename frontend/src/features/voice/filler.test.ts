@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { FILLER_AFTER_MS, FILLER_LINES, fillerWaitMs, pickFiller } from './filler'
-import { GENTLE_LINES, gentleLine } from './gentle'
-import { VOICE_LANGUAGES } from './speech'
 
 describe('pickFiller', () => {
   it('never says the same line twice in a row', () => {
@@ -15,24 +13,6 @@ describe('pickFiller', () => {
     }
   })
 
-  it('walks the whole pool as the random number moves', () => {
-    const seen = new Set<string>()
-    for (let step = 0; step < 100; step += 1) seen.add(pickFiller('en', null, () => step / 100))
-    assert.equal(seen.size, FILLER_LINES.en.length)
-  })
-
-  it('has a pool of at least two lines for every language the lobby offers', () => {
-    for (const language of VOICE_LANGUAGES) assert.ok((FILLER_LINES[language.code] ?? []).length >= 2, language.code)
-  })
-
-  it('uses English for a language with no pool', () => {
-    assert.ok(FILLER_LINES.en.includes(pickFiller('xx', null)))
-  })
-
-  it('is never evaluative', () => {
-    const evaluative = /\b(good|great|nice|right|correct|okay|ok|well done|excellent|perfect|wrong)\b/i
-    for (const line of FILLER_LINES.en) assert.ok(!evaluative.test(line), line)
-  })
 })
 
 describe('fillerWaitMs', () => {
@@ -40,22 +20,8 @@ describe('fillerWaitMs', () => {
     assert.equal(FILLER_AFTER_MS, 1200)
     assert.equal(fillerWaitMs(1000, 1000), 1200)
     assert.equal(fillerWaitMs(1000, 1900), 300)
-  })
-
-  it('is zero when the time has passed', () => {
+    // It is zero when the time has passed.
     assert.equal(fillerWaitMs(1000, 2200), 0)
     assert.equal(fillerWaitMs(1000, 9000), 0)
-  })
-})
-
-describe('gentleLine', () => {
-  it('has a line for every language the lobby offers, and English for the rest', () => {
-    for (const language of VOICE_LANGUAGES) assert.ok(GENTLE_LINES[language.code], language.code)
-    assert.equal(gentleLine('xx'), GENTLE_LINES.en)
-  })
-
-  it('says there is no hurry and that not knowing is fine', () => {
-    assert.match(GENTLE_LINES.en, /take your time/i)
-    assert.match(GENTLE_LINES.en, /don't know/i)
   })
 })

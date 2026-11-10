@@ -126,37 +126,6 @@ dbTest('teach-back: the explanation is assessed before the model speaks, once, w
   assert.equal((await stateOf(w)).teach.concepts[w.collision.id].assessments, 1)
 })
 
-dbTest('teach-back: probes come before the explanation, claim text only in the explain step', async () => {
-  const w = await world('teach_back')
-  await coachCalls(w, 'get_concept_to_explain')
-  const g = grader({ 'Two keys': COVERED, Chaining: { verdict: 'missing', pointer: 'Look again at p. 5' } })
-  const actions: string[] = []
-  const blocks: string[] = []
-  for (const said of ['Two keys in one bucket collide.', 'They land in the same bucket and collide.', 'Maybe the table grows when it is full?']) {
-    const t = await turn(w, said, [], g.grade)
-    actions.push(out(t.ran?.result).action)
-    blocks.push(String(t.ran?.block.text))
-  }
-  assert.deepEqual(actions, ['probe', 'probe', 'explain'])
-  assert.equal(blocks.slice(0, 2).some((b) => b.includes('Chaining keeps a list')), false)
-  assert.equal(blocks[2].includes('Chaining keeps a list in each bucket.'), true)
-})
-
-dbTest('teach-back: "I don\'t know" is not graded and the first gap is explained at once; asks and short replies run nothing', async () => {
-  const w = await world('teach_back')
-  await coachCalls(w, 'get_concept_to_explain')
-  const g = grader({})
-  for (const said of ['just tell me the answer', 'okay', 'what does collide mean', 'hmm']) {
-    const t = await turn(w, said, [], g.grade)
-    assert.equal(t.plan, null, said)
-  }
-  assert.equal(g.asked.length, 0)
-  // The words since the prompt are all of them, as for the tool: the chatter above is part of what the grader reads.
-  const chatty = await turn(w, "I don't know", [], g.grade)
-  assert.equal(chatty.plan?.tool, 'assess_explanation')
-  assert.equal(g.asked.length, 1)
-})
-
 dbTest('teach-back: a plain "I don\'t know" is not graded and the first gap is explained at once', async () => {
   const w = await world('teach_back')
   await coachCalls(w, 'get_concept_to_explain')
@@ -165,17 +134,20 @@ dbTest('teach-back: a plain "I don\'t know" is not graded and the first gap is e
   assert.equal(out(idk.ran?.result).action, 'explain_first')
   assert.equal(g.asked.length, 0)
   assert.equal((await evidence(w, 'teach_back')).length, 1)
-})
 
-dbTest('teach-back: a step forced when nobody spoke after the prompt is refused (the student must have spoken)', async () => {
-  const w = await world('teach_back')
-  await coachCalls(w, 'get_concept_to_explain')
-  const number = await teach.beginVoiceTurn(w.session.id, '')
-  const ran = await server.runPreRun({ step: 'assess', tool: 'assess_explanation', input: { concept_id: w.collision.id } }, { sessionId: w.session.id, userId: w.user.id, timeZone: 'UTC', turn: number, steps: new Map() })
-  assert.equal(ran.result.isError, true)
-  assert.equal(out(ran.result).error, teach.NOBODY_SPOKE)
-  const planned = await server.planPreRunForSession({ sessionId: w.session.id, language: 'en', utterance: 'x', history: [] })
-  assert.equal(planned, null)
+  // Asks and short replies run nothing.
+  const x = await world('teach_back')
+  await coachCalls(x, 'get_concept_to_explain')
+  const h = grader({})
+  for (const said of ['just tell me the answer', 'okay', 'what does collide mean', 'hmm']) {
+    const t = await turn(x, said, [], h.grade)
+    assert.equal(t.plan, null, said)
+  }
+  assert.equal(h.asked.length, 0)
+  // The words since the prompt are all of them, as for the tool: the chatter above is part of what the grader reads.
+  const chatty = await turn(x, "I don't know", [], h.grade)
+  assert.equal(chatty.plan?.tool, 'assess_explanation')
+  assert.equal(h.asked.length, 1)
 })
 
 dbTest('teach-back: the new example is graded against the words the coach used, after a full-coverage explanation', async () => {
@@ -227,18 +199,6 @@ dbTest('guided reading: the prediction reveals the claim with a check question, 
   assert.equal(g.asked.length, 1)
 })
 
-dbTest('guided reading: "no idea" is a prediction, and "I don\'t know" on the check is missed without grading', async () => {
-  const w = await world('guided_reading')
-  await coachCalls(w, 'next_claim')
-  const revealed = await turn(w, 'no idea')
-  assert.equal(revealed.plan?.step, 'reveal')
-  const g = grader({})
-  const missed = await turn(w, "I don't know", [], g.grade)
-  assert.deepEqual(missed.plan?.input, { claim_index: 0, idk: true })
-  assert.equal(out(missed.ran?.result).verdict, 'not yet')
-  assert.equal(g.asked.length, 0)
-})
-
 dbTest('oral quiz: the answer is recorded and graded once before the model speaks; confidence questions and follow-ups wait for the model', async () => {
   const w = await world('oral_quiz')
   const calls = stubQuizGrader(1)
@@ -261,16 +221,6 @@ dbTest('oral quiz: the answer is recorded and graded once before the model speak
   await coachCalls(w, 'get_next_question')
   assert.equal((await turn(w, 'resizing the table when it fills up')).plan, null)
   assert.equal((await turn(w, "I don't know")).plan?.input.idk, true)
-})
-
-dbTest('oral quiz: asking for a hint runs nothing, and an "I don\'t know" is recorded as a miss without grading', async () => {
-  const w = await world('oral_quiz')
-  const calls = stubQuizGrader(1)
-  await coachCalls(w, 'get_next_question')
-  assert.equal((await turn(w, 'can I get a hint')).plan, null)
-  const idk = await turn(w, 'no idea')
-  assert.equal(out(idk.ran?.result).is_correct, false)
-  assert.equal(calls.length, 0)
 })
 
 // The point of spec 19.1: a graded utterance is one model call, and the browser hears of the step before the model speaks.

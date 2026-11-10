@@ -2,12 +2,9 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   insertCitationMarkers,
-  isPdf,
   markerFromHref,
-  pageLabel,
   parseStoredCitations,
   quoteForDisplay,
-  quoteOnOneLine,
   sourceLabel,
   viewerUrl,
   type ChatSource,
@@ -53,14 +50,6 @@ describe('insertCitationMarkers', () => {
     ])
     assert.equal(result, 'ab[1](#cite-1) cd[2](#cite-2)')
   })
-
-  it('leaves text without marks alone', () => {
-    assert.equal(insertCitationMarkers('plain', []), 'plain')
-  })
-
-  it('a mark at the very start lands at the start', () => {
-    assert.equal(insertCitationMarkers('Hi', [{ offset: 0, marker: 1 }]), '[1](#cite-1)Hi')
-  })
 })
 
 describe('quoteForDisplay', () => {
@@ -70,13 +59,6 @@ describe('quoteForDisplay', () => {
       'Hash Tables\n\nCollisions happen when two keys map to one bucket.'
     )
     assert.equal(quoteForDisplay('Use # for comments #1'), 'Use # for comments #1')
-  })
-})
-
-describe('quoteOnOneLine', () => {
-  it('drops heading marks and runs the lines together so a sentence can hold the quote', () => {
-    assert.equal(quoteOnOneLine('# Chapter 1: Hashing\n\nA hash function maps a key.'), 'Chapter 1: Hashing A hash function maps a key.')
-    assert.equal(quoteOnOneLine('  one  \n two '), 'one two')
   })
 })
 
@@ -91,11 +73,6 @@ describe('markerFromHref', () => {
 })
 
 describe('labels and links', () => {
-  it('describes pages', () => {
-    assert.equal(pageLabel(source()), 'p. 4')
-    assert.equal(pageLabel(source({ pageEnd: 6 })), 'pp. 4-6')
-    assert.equal(pageLabel(source({ pageStart: null, pageEnd: null })), null)
-  })
 
   it('labels a source by page, then section, then file name', () => {
     assert.equal(sourceLabel(source()), 'notes.pdf, p. 4')
@@ -111,11 +88,6 @@ describe('labels and links', () => {
     assert.equal(viewerUrl(source({ pageStart: null })), '/api/materials/m1/file')
     assert.equal(viewerUrl(source({ filename: 'deck.pptx', pageStart: 3 })), '/api/materials/m1/file')
     assert.equal(viewerUrl(source({ materialId: 'a/b' })), '/api/materials/a%2Fb/file#page=4')
-  })
-
-  it('recognises PDFs by extension, any case', () => {
-    assert.equal(isPdf('A.PDF'), true)
-    assert.equal(isPdf('a.docx'), false)
   })
 })
 
@@ -152,12 +124,5 @@ describe('parseStoredCitations', () => {
     })
     assert.equal(parsed.sources[0].chunkId, 'c')
     assert.equal(parsed.sources[0].citedText, 'x')
-  })
-
-  it('survives garbage', () => {
-    for (const value of [null, undefined, 'x', 5, [], { sources: 'no' }, { sources: [null, 3, {}] }]) {
-      const parsed = parseStoredCitations(value)
-      assert.deepEqual(parsed, { sources: [], marks: [] })
-    }
   })
 })

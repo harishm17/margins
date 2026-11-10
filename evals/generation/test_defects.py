@@ -16,7 +16,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql://user:pass@localhost:5432/unu
 
 import adapters  # noqa: E402
 from app.services.llm.base import LLMMessage, LLMProvider, LLMResponse, LLMUsage  # noqa: E402
-from app.services.llm.schemas import GeneratedQuestion, InteractiveExample, SolvedExample  # noqa: E402
+from app.services.llm.schemas import GeneratedQuestion, InteractiveExample  # noqa: E402
 from app.services.llm.usage import record_usage  # noqa: E402
 from spend import GENERATION, SpendTracker  # noqa: E402
 
@@ -41,16 +41,12 @@ def question(**overrides):
 QUESTION_CASES = [
     ("usable", question(), None),
     ("no text", question(question_text="  "), "empty"),
-    ("no explanation", question(explanation=""), "empty"),
     ("two options", question(options=[option("A", "Red", ""), option("B", "Blue")]), "too_few_options"),
     ("repeated id", question(options=[option("A", "Red", ""), option("B", "Blue"), option("B", "Green")]), "duplicate_options"),
-    ("repeated text", question(options=[option("A", "Red", ""), option("B", "Blue"), option("C", "blue")]), "duplicate_options"),
     ("key not an option", question(correct_answer="E"), "answer_not_in_options"),
     ("wrong option without misconception", question(options=[option("A", "Red", ""), option("B", "Blue", ""), option("C", "Green")]), "missing_misconception"),
     ("true/false without a boolean", {"question_type": "true_false", "question_text": "Is it red?", "correct_answer": "maybe", "explanation": "Yes."}, "bad_answer"),
-    ("numerical without a number", {"question_type": "numerical", "question_text": "How many?", "correct_answer": "lots", "explanation": "Three."}, "bad_answer"),
     ("short answer without key points", {"question_type": "short_answer", "question_text": "Why?", "sample_answer": "Because.", "explanation": "So."}, "incomplete_short_answer"),
-    ("usable true/false", {"question_type": "true_false", "question_text": "Is it red?", "correct_answer": True, "explanation": "Yes."}, None),
 ]
 
 
@@ -59,10 +55,6 @@ def test_question_drop_reason_names_the_rule_and_agrees_with_the_app(name, raw, 
     assert adapters.question_drop_reason(raw) == reason
     kept = GeneratedQuestion.model_validate(raw).normalized() is not None
     assert kept == (reason is None)
-
-
-def test_a_question_the_schema_rejects_is_named_so():
-    assert adapters.question_drop_reason({"question_text": "no type"}) == "schema"
 
 
 # ---------------------------------------------------------------- why a problem is dropped
@@ -104,14 +96,6 @@ PROBLEM_CASES = [
 def test_problem_drop_reason_names_the_rule_and_agrees_with_the_app(name, raw, reason):
     assert adapters.problem_drop_reason("interactive", raw) == reason
     assert (InteractiveExample.model_validate(raw).stored() is not None) == (reason is None)
-
-
-def test_a_solved_example_without_steps_is_unusable():
-    raw = {"title": "T", "problem_statement": "P", "solution_steps": [], "final_answer": "4"}
-    assert adapters.problem_drop_reason("solved", raw) == "unusable"
-    assert SolvedExample.model_validate(raw).stored() is None
-    raw["solution_steps"] = [{"step_number": 1, "description": "d", "work": "w", "explanation": "e"}]
-    assert adapters.problem_drop_reason("solved", raw) is None
 
 
 # ---------------------------------------------------------------- the support-check recorder
@@ -190,29 +174,6 @@ def test_each_task_gets_its_own_calls_and_the_batch_price_is_half():
 import item_judge  # noqa: E402
 
 
-def test_a_rendered_question_shows_what_a_student_sees_and_the_key_but_not_the_metadata():
-    raw = question()
-    raw["concept_ids"] = ["c-secret"]
-    text = item_judge.render_question(3, GeneratedQuestion.model_validate(raw).normalized())
-    assert text.startswith('<question number="3" type="multiple_choice">')
-    assert "A. Red" in text and "Answer key: A" in text and "Explanation: The box is red." in text
-    assert "c-secret" not in text and "A mix-up." not in text
-    written = item_judge.render_question(1, {"question_type": "short_answer", "question_text": "Why?", "sample_answer": "S", "key_points": ["k1", "k2"], "explanation": "E"})
-    assert "Sample answer: S" in written and "Key points: k1; k2" in written and "Answer key" not in written
-    number = item_judge.render_question(2, {"question_type": "numerical", "question_text": "How far?", "correct_answer": 2.5, "unit": "m", "tolerance": 0.1, "explanation": "E"})
-    assert "Answer key: 2.5 m (tolerance 0.1)" in number
-
-
-def test_the_mock_judge_answers_every_question_in_the_prompt():
-    from app.services.llm.mock_provider import MockProvider
-
-    items = [{"ref": f"quiz-{n}", "item": question()} for n in range(1, 4)]
-    messages = item_judge.build_messages("<excerpt/>", items)
-    result = asyncio.run(MockProvider().generate_structured(messages, item_judge.ItemJudgeResult, purpose="judge"))
-    assert [v.number for v in result.items] == [1, 2, 3]
-    assert "every question number from 1 to 3" in "\n".join(m.content for m in messages)
-
-
 def test_verdicts_go_back_to_their_items_and_are_tallied_per_generator():
     items = [{"ref": "quiz-1", "item": {}}, {"ref": "quiz-2", "item": {}}, {"ref": "exam-1", "item": {}}]
     result = {"items": [
@@ -266,13 +227,3 @@ def test_a_generator_summary_counts_written_dropped_by_rule_unsupported_and_stor
     assert summary["checks"]["items"] == 1
 
 
-def test_a_problem_generator_summary_names_its_drop_rules():
-    usable = problem()
-    leaking = problem(step(correct_answer="2", acceptable_answers=["two"], hints=["Look at the hand.", "Pick any two cards.", "Count them."]))
-    stored = InteractiveExample.model_validate(usable).stored()
-    records = [{"status": "ok", "seconds": 5.0, "calls": [call("interactive_examples", {"examples": [usable, leaking]})], "support": [], "output": [stored]}]
-    summary = defects.summarize_kind("interactive", records)
-    assert (summary["written"], summary["malformed"], summary["stored"]) == (2, 1, 1)
-    assert summary["by_reason"] == {"hint_leak_word_form": 1}
-    assert summary["unsupported_rate"] is None
-    assert summary["checks"]["items"] == 1

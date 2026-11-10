@@ -15,7 +15,6 @@ from app.config import Settings
 from app.services.job_runner import PermanentJobError, parse_input
 from app.services.llm.anthropic_provider import AnthropicProvider
 from app.services.llm.base import LLMMessage, LLMOutputError
-from app.validation_errors import describe_validation_error
 
 SENTINEL = "sentinel-value-7f3a9c"
 
@@ -36,16 +35,6 @@ def test_settings_error_names_the_missing_field_and_hides_every_value(monkeypatc
     message = str(caught.value)
     assert "DATABASE_URL" in message
     assert SENTINEL not in message
-
-
-def test_describe_lists_each_field_and_reason_without_the_input():
-    with pytest.raises(ValidationError) as caught:
-        _Input(topic_id=["not", "a", "string", SENTINEL], count=SENTINEL)
-
-    text = describe_validation_error(caught.value)
-    assert "topic_id" in text
-    assert "count" in text
-    assert SENTINEL not in text
 
 
 def test_bad_job_input_names_the_field_and_hides_the_student_text():

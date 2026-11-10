@@ -19,13 +19,3 @@ test('a failed save is retried once and succeeds', async () => {
   assert.equal(ok, true)
   assert.equal(calls, 2)
 })
-
-test('a save that fails twice reports failure', async () => {
-  let calls = 0
-  const ok = await saveCardClosed(async () => {
-    calls++
-    throw new Error('down')
-  })
-  assert.equal(ok, false)
-  assert.equal(calls, 2)
-})

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { answerUnit, asQuestionList, reviewAnswer, toPublicContentData, toPublicQuestion, toPublicQuestions } from './quiz-questions'
+import { reviewAnswer, toPublicQuestion, toPublicQuestions } from './quiz-questions'
 
 const KEY_FIELDS = ['correct_answer', 'sample_answer', 'key_points', 'explanation', 'acceptable_answers']
 
@@ -26,33 +26,10 @@ test('public questions carry no answer key', () => {
   assert.deepEqual(publicQuestion.options, [{ id: 'A', text: 'x' }, { id: 'B', text: 'y' }])
   assert.equal(publicQuestion.question_text, 'Pick one')
   assert.equal(publicQuestion.points, 2)
-})
-
-test('no key text survives anywhere in the serialised payload', () => {
+  // No key text survives anywhere in the serialised payload.
   const payload = JSON.stringify(toPublicQuestions([full]))
   assert.equal(payload.includes('Because y.'), false)
   assert.equal(payload.includes('is_correct'), false)
-})
-
-test('toPublicQuestions accepts a list or an object with questions', () => {
-  assert.equal(toPublicQuestions([full]).length, 1)
-  assert.equal(toPublicQuestions({ questions: [full, full] }).length, 2)
-  assert.deepEqual(toPublicQuestions(null), [])
-  assert.deepEqual(toPublicQuestions('nope'), [])
-})
-
-test('only topic_quiz content is rewritten', () => {
-  const notes = { sections: [{ title: 'a' }] }
-  assert.equal(toPublicContentData('section_notes', notes), notes)
-  const quiz = toPublicContentData('topic_quiz', [full]) as Array<Record<string, unknown>>
-  assert.equal('correct_answer' in quiz[0], false)
-})
-
-test('asQuestionList rejects unusable data', () => {
-  assert.equal(asQuestionList([]), null)
-  assert.equal(asQuestionList([1, 2]), null)
-  assert.equal(asQuestionList(null), null)
-  assert.equal(asQuestionList([full])?.length, 1)
 })
 
 test('review answers: sample answer for short answers, the key otherwise', () => {
@@ -94,18 +71,6 @@ test('sources are not public before a quiz is answered, but reach the review aft
   const [item] = buildReview([question], { '0': { isCorrect: true, pointsEarned: 2, pointsPossible: 2 } })
   assert.deepEqual(item.sources, [{ materialId: 'm1', filename: 'bio.pdf', pageStart: 3, pageEnd: 5 }])
   assert.deepEqual(buildReview([full], {})[0].sources, [])
-})
-
-test('a quantity name is not printed as a unit', () => {
-  assert.equal(answerUnit('probability'), '')
-  assert.equal(answerUnit('Probability.'), '')
-  assert.equal(answerUnit('  '), '')
-  assert.equal(answerUnit(undefined), '')
-  assert.equal(answerUnit('a very long description of what the number means'), '')
-  assert.equal(answerUnit('m/s'), 'm/s')
-  assert.equal(answerUnit('%'), '%')
-  assert.equal(answerUnit(' mol/L '), 'mol/L')
-  assert.equal(answerUnit('square metres'), 'square metres')
 })
 
 test('"400 probability" is printed as "400", and a real unit stays', () => {

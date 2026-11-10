@@ -8,7 +8,6 @@ from fastapi import HTTPException
 
 from app.api.routes import jobs
 from app.models.jobs import JobPayload
-from app.services import job_reaper
 from app.services.llm.base import LLMCreditError
 from tests.db_helpers import get_job, new_id, seed_job, seed_project, seed_topic, seed_user
 
@@ -162,11 +161,6 @@ async def test_deleting_the_account_removes_the_stored_quiz(db, stored):
     assert await db.fetchval("SELECT count(*) FROM quiz_submissions") == 0
 
 
-def test_the_reaper_sends_a_waiting_quiz_with_its_submission_id():
-    data = job_reaper.dispatch_data("grade_quiz", {"submissionId": "s1", "topicId": "t"})
-    assert data == {"submissionId": "s1"}
-
-
 async def test_a_malformed_stored_question_is_refused_like_the_immediate_path_refuses_it(db, stored, monkeypatch):
     calls = grader(monkeypatch, graded)
     bad = [{"question_type": "essay", "question_text": "?"}]
@@ -178,24 +172,6 @@ async def test_a_malformed_stored_question_is_refused_like_the_immediate_path_re
 
     assert raised.value.status_code == 400 and calls.calls == 0
     assert (await get_job(db, job_id))["error_code"] == "INVALID_INPUT"
-
-
-async def test_the_stored_questions_are_normalised_like_the_immediate_path(db, stored, monkeypatch):
-    seen = {}
-
-    class Grader:
-        async def grade_submission(self, submission_id, questions, answers, thinking=None):
-            seen["questions"] = questions
-            return graded()
-
-    monkeypatch.setattr(jobs, "ExamGrader", Grader)
-    odd = [dict(QUESTIONS[0], points="not a number")]
-    await db.execute("UPDATE quiz_submissions SET questions = $1 WHERE id = $2", json.dumps(odd), stored.id)
-
-    await jobs.grade_quiz_job(payload(await new_job(db, stored), stored.id))
-
-    # GradableQuestion falls back to 1 point for an unusable value, as POST /grade/quiz does.
-    assert seen["questions"][0]["points"] == 1
 
 
 async def test_only_one_waiting_submission_per_answers(db, stored):

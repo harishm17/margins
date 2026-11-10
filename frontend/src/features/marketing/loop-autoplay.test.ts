@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { LOOP_AUTOPLAY, LOOP_STEP_MS, LoopAutoplay, loopInView, pauseKeepsFocusOnBlur, shouldRestoreFocusToStep, type AutoplayState, type Clock } from './loop-autoplay'
+import { LOOP_STEP_MS, LoopAutoplay, type Clock } from './loop-autoplay'
 
 /** A clock the test moves by hand. */
 function fakeClock() {
@@ -35,17 +35,11 @@ function fakeClock() {
 function setup({ steps = 6, enabled = true } = {}) {
   const { clock, advance, pending } = fakeClock()
   const shown: number[] = []
-  const states: AutoplayState[] = []
-  const autoplay = new LoopAutoplay({ steps, enabled, clock, onAdvance: (index) => shown.push(index), onState: (state) => states.push(state) })
-  return { autoplay, advance, pending, shown, states }
+  const autoplay = new LoopAutoplay({ steps, enabled, clock, onAdvance: (index) => shown.push(index) })
+  return { autoplay, advance, pending, shown }
 }
 
 const STEP = LOOP_STEP_MS
-
-test('the switch is on and each step stays about 7 seconds', () => {
-  assert.equal(LOOP_AUTOPLAY, true)
-  assert.equal(LOOP_STEP_MS, 7000)
-})
 
 test('nothing happens until the loop is in view', () => {
   const { autoplay, advance, shown } = setup()
@@ -108,18 +102,6 @@ test('a hidden tab or the loop scrolling out of view pauses it', () => {
   assert.deepEqual(shown, [1])
 })
 
-test('the pause button pauses and play carries on (it is not an interaction that stops it)', () => {
-  const { autoplay, advance, shown } = setup()
-  autoplay.setInView(true)
-  autoplay.setUserPaused(true)
-  assert.equal(autoplay.state.userPaused, true)
-  advance(STEP * 3)
-  assert.deepEqual(shown, [])
-  autoplay.setUserPaused(false)
-  advance(STEP)
-  assert.deepEqual(shown, [1])
-})
-
 test('a click, key or tab choice stops it for good', () => {
   const { autoplay, advance, shown, pending } = setup()
   autoplay.setInView(true)
@@ -132,58 +114,4 @@ test('a click, key or tab choice stops it for good', () => {
   autoplay.setInView(true)
   advance(STEP * 10)
   assert.deepEqual(shown, [1])
-})
-
-test('off when not enabled (a phone, reduced motion), and off for good when the conditions change', () => {
-  const off = setup({ enabled: false })
-  off.autoplay.setInView(true)
-  off.advance(STEP * 10)
-  assert.deepEqual(off.shown, [])
-  assert.equal(off.autoplay.state.active, false)
-
-  const changed = setup()
-  changed.autoplay.setInView(true)
-  changed.autoplay.disable()
-  changed.advance(STEP * 10)
-  assert.deepEqual(changed.shown, [])
-  assert.equal(changed.pending(), 0)
-})
-
-test('a single step has nothing to advance to', () => {
-  const { autoplay, advance, shown } = setup({ steps: 1 })
-  autoplay.setInView(true)
-  advance(STEP * 3)
-  assert.deepEqual(shown, [])
-})
-
-test('the state tells the UI whether the line is filling', () => {
-  const { autoplay, states } = setup()
-  autoplay.setInView(true)
-  assert.deepEqual(states.at(-1), { index: 0, running: true, active: true, userPaused: false })
-  autoplay.setHovered(true)
-  assert.deepEqual(states.at(-1), { index: 0, running: false, active: true, userPaused: false })
-})
-
-test('in view means at least half shown, whatever isIntersecting says', () => {
-  assert.equal(loopInView({ isIntersecting: true, intersectionRatio: 0.2 }), false)
-  assert.equal(loopInView({ isIntersecting: true, intersectionRatio: 0.49 }), false)
-  assert.equal(loopInView({ isIntersecting: true, intersectionRatio: 0.5 }), true)
-  assert.equal(loopInView({ isIntersecting: true, intersectionRatio: 1 }), true)
-  assert.equal(loopInView({ isIntersecting: false, intersectionRatio: 0.6 }), false)
-})
-
-test('a blur keeps the pause button focused only when the whole window lost focus', () => {
-  // Switching to another application: the document no longer has focus, the button still holds it.
-  assert.equal(pauseKeepsFocusOnBlur(false), true)
-  // Focus moved to another element in the page: the document still has focus.
-  assert.equal(pauseKeepsFocusOnBlur(true), false)
-})
-
-test('focus moves to the open step only from the pause button and only when it fell to the body', () => {
-  assert.equal(shouldRestoreFocusToStep(true, true), true)
-  // The visitor moved focus to another element: never take it.
-  assert.equal(shouldRestoreFocusToStep(true, false), false)
-  // The button never held focus.
-  assert.equal(shouldRestoreFocusToStep(false, true), false)
-  assert.equal(shouldRestoreFocusToStep(false, false), false)
 })

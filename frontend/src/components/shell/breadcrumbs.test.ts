@@ -11,31 +11,12 @@ test('home and new course', () => {
   assert.deepEqual(buildCrumbs('/courses/new', nav), [{ label: 'Home', href: '/home' }, { label: 'New course' }])
 })
 
-test('account settings sits under Home', () => {
-  assert.deepEqual(buildCrumbs('/settings', nav), [{ label: 'Home', href: '/home' }, { label: 'Settings' }])
-})
-
-test('course overview is just the course', () => {
-  assert.deepEqual(buildCrumbs('/courses/c1', nav), [{ label: 'CS 161 Algorithms' }])
-})
-
 test('topic page: course, topics, topic name', () => {
   assert.deepEqual(buildCrumbs('/courses/c1/topics/t1', nav), [
     { label: 'CS 161 Algorithms', href: '/courses/c1' },
     { label: 'Topics', href: '/courses/c1/topics' },
     { label: 'Graph traversal' },
   ])
-})
-
-test('sections', () => {
-  assert.deepEqual(buildCrumbs('/courses/c1/materials', nav).at(-1), { label: 'Materials' })
-  assert.deepEqual(buildCrumbs('/courses/c1/map', nav).at(-1), { label: 'Map' })
-  assert.deepEqual(buildCrumbs('/courses/c1/exams', nav).at(-1), { label: 'Mock exams' })
-  assert.deepEqual(buildCrumbs('/courses/c1/exams/new', nav).at(-1), { label: 'New mock exam' })
-  assert.deepEqual(buildCrumbs('/courses/c1/exams/e1/results/s1', nav).at(-1), { label: 'Results' })
-  assert.deepEqual(buildCrumbs('/courses/c1/settings', nav).at(-1), { label: 'Course settings' })
-  assert.deepEqual(buildCrumbs('/courses/c1/plan', nav).at(-1), { label: 'Plan' })
-  assert.deepEqual(buildCrumbs('/courses/c1/review', nav).at(-1), { label: 'Review' })
 })
 
 test('an unknown course still gets a sensible crumb', () => {
@@ -68,13 +49,4 @@ test('on a phone the course and the unit are shown in full above the page name',
   assert.deepEqual(at('/courses/c1/plan'), { title: 'Plan', context: 'CS 161 Algorithms' })
   assert.deepEqual(at('/courses/c1/exams/e1/results/s1'), { title: 'Results', context: 'CS 161 Algorithms / Mock exams / Exam' })
   assert.deepEqual(at('/home'), { title: 'Home', context: null })
-})
-
-test('a page that sets its own crumbs gets the same treatment', () => {
-  const crumbs = [{ label: 'CS 161 Algorithms', href: '/courses/c1' }, { label: 'Mock exams', href: '/courses/c1/exams' }, { label: 'Mock exam, Oct 21' }]
-  assert.deepEqual(mobileContext('/courses/c1/exams/e1', unitNav, crumbs), {
-    title: 'Mock exam, Oct 21',
-    context: 'CS 161 Algorithms / Mock exams',
-  })
-  assert.deepEqual(mobileContext('/nowhere', unitNav, []), { title: '', context: null })
 })

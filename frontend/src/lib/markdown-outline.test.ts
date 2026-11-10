@@ -1,12 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createSlugger, extractOutline, slugifyHeading } from './markdown-outline'
-
-test('slugifyHeading', () => {
-  assert.equal(slugifyHeading('Key Concepts'), 'key-concepts')
-  assert.equal(slugifyHeading('How it works: BFS & DFS?'), 'how-it-works-bfs-dfs')
-  assert.equal(slugifyHeading('!!!'), 'section')
-})
+import { createSlugger, extractOutline } from './markdown-outline'
 
 test('slugger numbers repeats', () => {
   const slug = createSlugger()

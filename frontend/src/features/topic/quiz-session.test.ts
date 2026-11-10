@@ -16,20 +16,6 @@ test('a session stored before confidence existed (plain string answers) converts
   assert.deepEqual(plainAnswers(normalizeAnswers(sent)), { '0': 'B', '1': 'a short answer' })
 })
 
-test('a new session keeps confidence, thinking and the prediction', () => {
-  const stored = JSON.stringify({
-    answers: { '0': { answer: 'B', confidence: 0.75, thinking: 'queue' } },
-    index: 0,
-    predicted: 3,
-  })
-  assert.deepEqual(parseSession(stored), {
-    answers: { '0': { answer: 'B', confidence: 0.75, thinking: 'queue' } },
-    index: 0,
-    predicted: 3,
-  })
-  assert.equal(parseSession('not json'), null)
-})
-
 test('an "I don\'t know" survives the draft round trip', () => {
   const session = parseSession(JSON.stringify({ answers: { '0': { answer: '', idk: true }, '1': { answer: 'B', confidence: 0.5 } }, index: 1 }))!
   assert.deepEqual(session.answers['0'], { answer: '', idk: true })

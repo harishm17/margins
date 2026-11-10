@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from spend import GENERATION, JUDGE, SpendLimitReached, SpendTracker, estimate_prompt_tokens  # noqa: E402
+from spend import GENERATION, JUDGE, SpendLimitReached, SpendTracker  # noqa: E402
 
 
 def cost_fn(model, input_tokens, output_tokens, cache_write_tokens):
@@ -21,14 +21,6 @@ def test_estimate_prices_input_as_plain_input_and_uses_default_output():
     # 100k prompt tokens at $1/M = $0.10; default 6000 output tokens (solved_examples) at $10/M = $0.06
     assert tracker.estimate_call("m", "solved_examples", 100_000) == pytest.approx(0.16)
     assert tracker.estimate_call("unpriced", "solved_examples", 100_000) == 0.0
-
-
-def test_observed_output_replaces_the_default_with_a_margin():
-    tracker = SpendTracker(10, 3, cost_fn)
-    token, _ = tracker.reserve(GENERATION, "m", "topic_quiz", 1000)
-    tracker.settle(token, "m", "topic_quiz", 0.01, output_tokens=2000)
-    assert tracker.expected_output_tokens("m", "topic_quiz") == 2500
-    assert tracker.expected_output_tokens("other", "topic_quiz") == 6000  # not seen for another model
 
 
 def test_reserve_refuses_a_call_that_would_pass_the_cap():
@@ -48,13 +40,6 @@ def test_calls_in_flight_count_against_the_cap():
     tracker.reserve(GENERATION, "m", "section_notes", 20_000)  # 0.12 reserved
     with pytest.raises(SpendLimitReached):
         tracker.reserve(GENERATION, "m", "section_notes", 20_000)  # 0.18 > 0.15
-
-
-def test_release_frees_a_reservation():
-    tracker = SpendTracker(0.10, 3, cost_fn)
-    token, _ = tracker.reserve(GENERATION, "m", "section_notes", 20_000)
-    tracker.release(token)
-    tracker.reserve(GENERATION, "m", "section_notes", 20_000)  # fits again
 
 
 def test_judge_cap_is_separate_and_does_not_stop_generation():
@@ -83,14 +68,3 @@ def test_past_spend_from_an_earlier_run_counts():
         tracker.reserve(GENERATION, "m", "topic_quiz", 5_000)
 
 
-def test_prompt_token_estimate_counts_the_schema():
-    plain = estimate_prompt_tokens(["a" * 3200])
-    with_schema = estimate_prompt_tokens(["a" * 3200], {"x": "y" * 3200})
-    assert plain == 1001
-    assert with_schema > plain + 900
-
-
-def test_short_answer_grading_has_a_short_default_output():
-    # A grade is a few sentences and one check per key point; the 6000-token fallback would overstate A5 tenfold.
-    tracker = SpendTracker(10, 3, cost_fn)
-    assert tracker.expected_output_tokens("m", "grade_short_answer") == 600

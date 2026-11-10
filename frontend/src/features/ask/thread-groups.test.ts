@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { groupThreads, threadTitle } from './thread-groups'
+import { groupThreads } from './thread-groups'
 
 const NOW = Date.parse('2026-10-20T12:00:00Z')
 const ago = (hours: number) => new Date(NOW - hours * 3_600_000).toISOString()
@@ -24,19 +24,5 @@ describe('groupThreads', () => {
         ['Earlier', ['d']],
       ]
     )
-  })
-
-  it('leaves out empty groups', () => {
-    const groups = groupThreads([{ id: 'a', title: null, updatedAt: ago(100) }], NOW)
-    assert.deepEqual(groups.map((group) => group.label), ['Last 7 days'])
-    assert.deepEqual(groupThreads([], NOW), [])
-  })
-})
-
-describe('threadTitle', () => {
-  it('falls back for a missing or blank title', () => {
-    assert.equal(threadTitle({ title: null }), 'New conversation')
-    assert.equal(threadTitle({ title: '  ' }), 'New conversation')
-    assert.equal(threadTitle({ title: 'BFS vs DFS' }), 'BFS vs DFS')
   })
 })

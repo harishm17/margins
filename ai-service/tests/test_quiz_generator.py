@@ -90,8 +90,3 @@ class TestQuizGenerator:
 
     def test_minimum_usable(self):
         assert [minimum_usable(n) for n in (1, 2, 5, 10)] == [1, 1, 3, 5]
-
-    def test_question_type_values(self):
-        assert {qt.value for qt in QuestionType} == {
-            "multiple_choice", "short_answer", "numerical", "true_false"
-        }

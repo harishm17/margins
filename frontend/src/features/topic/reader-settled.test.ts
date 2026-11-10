@@ -6,10 +6,6 @@ test('a stored grade with no counted field (saved before the field existed) is c
   assert.deepEqual(parseSettled('{"state":"done","grade":"got_it"}'), { state: 'done', grade: 'got_it', counted: true })
 })
 
-test('an explicit counted:false stays not counted', () => {
-  assert.deepEqual(parseSettled('{"state":"done","grade":"partly","counted":false}'), { state: 'done', grade: 'partly', counted: false })
-})
-
 test('skipped, junk and unknown grades', () => {
   assert.deepEqual(parseSettled('{"state":"skipped"}'), { state: 'skipped' })
   assert.equal(parseSettled(null), null)

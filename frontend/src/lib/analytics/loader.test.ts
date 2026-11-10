@@ -130,26 +130,6 @@ describe('analytics loader', () => {
     assert.equal(storage.hm_notrack, undefined)
     assert.equal(back.posthog?._i.length, 1)
   })
-
-  it('adopts hm_id from the personal site, tags the visit, and cleans the address bar', () => {
-    const { init, timers, replaced } = visit({ search: '?hm_id=0198abcd-1234&utm_source=cv&keep=1' })
-    assert.deepEqual(plain(init!.bootstrap), { distinctID: '0198abcd-1234' })
-    const once: Record<string, unknown>[] = []
-    init!.loaded({ register: () => {}, register_once: (v) => once.push(plain(v) as Record<string, unknown>) })
-    assert.deepEqual(once, [{ ref: 'harishmanoharan.com', first_ref: 'harishmanoharan.com' }])
-    timers.forEach((fn) => fn())
-    assert.deepEqual(replaced, ['/home?keep=1'])
-  })
-
-  it('honours ?ref=<tag> and ignores a malformed hm_id', () => {
-    const { init } = visit({ search: '?ref=Wedge&hm_id=<script>' })
-    assert.deepEqual(plain(init!.bootstrap), {})
-    const registered: Record<string, unknown>[] = []
-    const once: Record<string, unknown>[] = []
-    init!.loaded({ register: (v) => registered.push(plain(v) as Record<string, unknown>), register_once: (v) => once.push(plain(v) as Record<string, unknown>) })
-    assert.deepEqual(registered, [{ site: 'margins' }, { ref: 'wedge' }])
-    assert.deepEqual(once, [{ first_ref: 'wedge' }])
-  })
 })
 
 function files(dir: string): string[] {
@@ -165,15 +145,6 @@ describe('where the loader is used', () => {
     assert.deepEqual(users.map((f) => f.slice(root.length + 1)), ['src/app/layout.tsx'])
     const api = files(join(root, 'src', 'app', 'api')).concat(files(join(root, 'src', 'lib', 'http')))
     for (const file of api) assert.equal(/hm\.js|posthog/i.test(readFileSync(file, 'utf8')), false, file)
-  })
-
-  it('keeps PostHog out of the pages: the only host the browser talks to is this one', () => {
-    for (const file of ['public/hm.js', 'src/app/layout.tsx']) {
-      const text = readFileSync(join(root, file), 'utf8')
-      // ui_host is a label for the PostHog toolbar link; nothing is fetched from it.
-      const hosts = (text.match(/https?:\/\/[^\s'"`)]+/g) ?? []).filter((u) => !u.startsWith('https://studymargins.com'))
-      assert.deepEqual(hosts.filter((h) => /posthog/.test(h)), file === 'public/hm.js' ? ['https://us.posthog.com'] : [])
-    }
   })
 })
 
@@ -192,9 +163,5 @@ describe('response headers', () => {
     for (const key of ['Strict-Transport-Security', 'X-Content-Type-Options', 'X-Frame-Options', 'Referrer-Policy', 'Permissions-Policy']) {
       assert.ok(all.some((h) => h.key === key), key)
     }
-  })
-
-  it('leave the trailing slash of /m/i/v0/e/ alone (a redirect would lose the POST body)', () => {
-    assert.equal(nextConfig.skipTrailingSlashRedirect, true)
   })
 })

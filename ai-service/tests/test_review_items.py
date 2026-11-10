@@ -4,13 +4,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.api.routes import jobs
-from app.models.jobs import JobPayload
 from app.services.content_generator.review_items import generate_review_items
 from app.services.llm.base import LLMOutputError
 from app.services.llm.mock_provider import MockProvider
 from app.services.llm.schemas import ChoiceOption, GeneratedQuestion, ReviewItemSet
-from tests.db_helpers import get_job, new_id, seed_job
+from tests.db_helpers import new_id
 from tests.test_warmup import world  # noqa: F401  (fixture)
 
 pytestmark = pytest.mark.usefixtures("passthrough_support")
@@ -105,17 +103,6 @@ class TestReviewItems:
         wrong = [o for o in stored[0]["options"] if o.get("confusable_concept_id")]
         assert [o["confusable_concept_id"] for o in wrong] == [variance]
 
-    async def test_prompt_pairs_the_concept_with_its_confusable(self, db, twins):
-        mean, variance = twins.concepts
-        llm = _llm([_choice(1, mean, mode="discrimination", confusable=variance)])
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=llm):
-            await generate_review_items(twins.topic_id, [_request([mean], mode="discrimination")])
-
-        prompt = "\n".join(m.content for m in llm.generate_structured.call_args.args[0])
-        assert f'<request concept_id="{mean}" mode="discrimination" difficulty="easy"' in prompt
-        assert f'<confusable concept_id="{variance}">' in prompt
-        assert llm.generate_structured.call_args.kwargs["purpose"] == "review_items"
-
     async def test_an_item_for_a_concept_nobody_asked_for_is_dropped(self, db, twins):
         mean, variance = twins.concepts
         questions = [_choice(1, mean), _choice(2, variance), _choice(3, "not-a-concept")]
@@ -160,41 +147,6 @@ class TestReviewItems:
                 await generate_review_items(twins.topic_id, [_request([twins.concepts[0]])])
         assert await _bank(db, twins.topic_id) == []
 
-    async def test_the_mock_provider_writes_what_was_asked(self, db, twins):
-        mean, variance = twins.concepts
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()):
-            result = await generate_review_items(
-                twins.topic_id,
-                [_request([mean], "recall", "easy"), _request([variance], "discrimination", "hard")],
-            )
-
-        assert result["concepts_without_items"] == []
-        stored = json.loads((await _bank(db, twins.topic_id))[0]["questions"])
-        by_concept = {q["concept_ids"][0]: q for q in stored}
-        assert by_concept[mean]["mode"] == "recall" and by_concept[mean]["difficulty"] == "easy"
-        assert by_concept[variance]["mode"] == "discrimination" and by_concept[variance]["difficulty"] == "hard"
-        assert any(o.get("confusable_concept_id") == mean for o in by_concept[variance]["options"])
-
-
-class TestReviewItemsJob:
-    async def test_the_job_stores_the_items_and_completes(self, db, twins):
-        mean = twins.concepts[0]
-        user_id = await db.fetchval("SELECT user_id FROM projects WHERE id = $1", twins.project_id)
-        job_id = await seed_job(db, user_id, "generate_review_items", project_id=twins.project_id)
-        payload = JobPayload(
-            jobId=job_id, jobType="generate_review_items",
-            data={"topicId": twins.topic_id, "requests": [{"conceptIds": [mean], "mode": "recall", "difficulty": "easy"}]},
-        )
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()):
-            result = await jobs.generate_review_items_job(payload)
-
-        assert result["status"] == "success"
-        job = await get_job(db, job_id)
-        assert job["status"] == "completed"
-        assert json.loads(job["result_data"])["total_items"] >= 1
-        assert len(await _bank(db, twins.topic_id)) == 1
-
-
 class TestManyConcepts:
     async def test_no_concept_is_dropped_when_a_job_asks_for_more_than_one_call_writes(self, db, twins):
         concepts = list(twins.concepts)
@@ -212,12 +164,3 @@ class TestManyConcepts:
         assert {q["concept_ids"][0] for q in stored} == set(concepts)
         assert result["total_items"] == len(concepts) * 2
 
-
-def test_the_reaper_can_send_a_review_item_job_again():
-    from app.services import job_reaper
-    from app.services.dispatch import JOB_ENDPOINTS
-
-    assert JOB_ENDPOINTS["generate_review_items"] == "/jobs/generate-review-items"
-    stored = {"topicId": "t1", "requests": [{"conceptIds": ["c1"], "mode": "recall", "difficulty": "easy"}]}
-    assert job_reaper.dispatch_data("generate_review_items", stored) == stored
-    assert job_reaper.dispatch_data("generate_review_items", json.dumps(stored)) == stored

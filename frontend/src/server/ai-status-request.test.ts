@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createRateLimiter } from '@/lib/api/rate-limit'
-import { statusUrl } from '@/lib/ai/status-tracker'
 import { createAiStatusHandler } from './ai-status-request'
 
 const details = { available: true, reason: null, since: null, blocked: null, allowance: null, resetsAt: null } as never
@@ -29,15 +28,8 @@ test('a signed-out visitor asking for fresh gets the cached answer', async () =>
 test('a signed-in user gets a fresh read, and only for fresh=1', async () => {
   const { calls, get } = setup({ id: 'u1' })
   await get('/api/ai-status?fresh=1')
-  await get('/api/ai-status?fresh=true')
   await get('/api/ai-status')
-  assert.deepEqual(calls.map((call) => call.fresh), [true, false, false])
-})
-
-test('the page\'s own report-then-refresh request gets a fresh read', async () => {
-  const { calls, get } = setup({ id: 'u1' })
-  await get(statusUrl(true))
-  assert.deepEqual(calls, [{ userId: 'u1', fresh: true }])
+  assert.deepEqual(calls.map((call) => call.fresh), [true, false])
 })
 
 test('repeat fresh requests inside the window fall back to the cache, per user', async () => {

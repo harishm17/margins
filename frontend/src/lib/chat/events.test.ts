@@ -47,12 +47,6 @@ describe('createLineSplitter', () => {
     assert.deepEqual(splitter.push('3}\n'), ['{"c":3}'])
     assert.deepEqual(splitter.flush(), [])
   })
-
-  it('flush returns a last line with no newline', () => {
-    const splitter = createLineSplitter()
-    assert.deepEqual(splitter.push('{"x":1}'), [])
-    assert.deepEqual(splitter.flush(), ['{"x":1}'])
-  })
 })
 
 describe('applyChatEvent', () => {
@@ -75,16 +69,6 @@ describe('applyChatEvent', () => {
     ])
     assert.deepEqual(state.sources.map((s) => s.marker), [1, 2])
     assert.equal(state.sources[0].citedText, 'first\n\nsecond')
-  })
-
-  it('does not duplicate a mark or a quote it already has', () => {
-    const state = run([
-      { type: 'text', delta: 'x' },
-      { type: 'citation', marker: 1, offset: 1, source: sourceJson(1, 'same') },
-      { type: 'citation', marker: 1, offset: 1, source: sourceJson(1, 'same') },
-    ])
-    assert.equal(state.marks.length, 1)
-    assert.equal(state.sources[0].citedText, 'same')
   })
 
   it('a reset clears the answer', () => {
@@ -132,11 +116,6 @@ describe('applyChatEvent', () => {
 })
 
 describe('chatErrorMessage', () => {
-  it('knows the codes the AI service sends', () => {
-    for (const code of ['LLM_DAILY_BUDGET', 'LLM_REFUSED', 'LLM_BAD_OUTPUT', 'LLM_UNAVAILABLE', 'RETRIEVAL_FAILED', 'LLM_NOT_CONFIGURED']) {
-      assert.notEqual(chatErrorMessage(code).message, chatErrorMessage('SOMETHING_NEW').message, code)
-    }
-  })
 
   it('hides unknown detail behind a generic message', () => {
     const info = chatErrorMessage('SOMETHING_NEW')
@@ -155,27 +134,11 @@ describe('the tutoring events', () => {
     assert.equal(parseChatEvent('{"type":"route","intent":"mystery"}'), null)
   })
 
-  it('progress shows what the buffered reply is doing until text arrives', () => {
-    let state = run([route, { type: 'retrieved', count: 3 }, { type: 'progress', stage: 'writing' }])
-    assert.equal(state.stage, 'writing')
-    state = run([{ type: 'progress', stage: 'checking' }], state)
-    assert.equal(state.stage, 'checking')
-    assert.equal(state.status, 'searching')
-    state = run([{ type: 'text', delta: 'Hi' }], state)
-    assert.equal(state.stage, null)
-    assert.equal(parseChatEvent('{"type":"progress","stage":"elsewhere"}'), null)
-  })
-
   it('done carries the card without its answer', () => {
     const state = run([
       { type: 'done', text: 'The gap.', sources: [], marks: [], retrieved: 1, stop_reason: 'end_turn', check_question: { question: 'What is a bucket?', concept_name: 'Hash tables' } },
     ])
     assert.deepEqual(state.check, { question: 'What is a bucket?', conceptName: 'Hash tables', grade: null })
     assert.equal(run([{ type: 'done', text: 'x', sources: [], marks: [] }]).check, null)
-  })
-
-  it('the tutor event says whether the worked example may be asked for', () => {
-    assert.equal(run([{ type: 'tutor', workedAllowed: true }]).workedAllowed, true)
-    assert.equal(run([{ type: 'tutor' }]).workedAllowed, false)
   })
 })

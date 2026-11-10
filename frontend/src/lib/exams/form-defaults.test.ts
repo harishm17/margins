@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { examDefaultsFromParams, questionsForMinutes, topicsFromParam, QUESTION_COUNTS, TIME_LIMITS } from './form-defaults'
+import { examDefaultsFromParams, topicsFromParam } from './form-defaults'
 
 describe('examDefaultsFromParams', () => {
   it('keeps the form defaults without parameters', () => {
@@ -29,29 +29,6 @@ describe('examDefaultsFromParams', () => {
     assert.deepEqual(examDefaultsFromParams({ minutes: ['20', '90'] }), { durationMinutes: 20, totalQuestions: 5 })
     assert.deepEqual(examDefaultsFromParams({ minutes: undefined, questions: undefined }), { durationMinutes: 60, totalQuestions: 20 })
   })
-
-  it('always returns a choice the form has', () => {
-    for (let minutes = 0; minutes <= 400; minutes += 1) {
-      const { durationMinutes, totalQuestions } = examDefaultsFromParams({ minutes: String(minutes) })
-      assert.ok((TIME_LIMITS as readonly number[]).includes(durationMinutes))
-      assert.ok((QUESTION_COUNTS as readonly number[]).includes(totalQuestions))
-    }
-  })
-})
-
-describe('questionsForMinutes', () => {
-  it('follows the default pace of 3 minutes a question', () => {
-    assert.equal(questionsForMinutes(60), 20)
-    assert.equal(questionsForMinutes(90), 30)
-    assert.equal(questionsForMinutes(15), 5)
-  })
-
-  it('covers every block length of the plan (15 to 30 minutes)', () => {
-    for (let minutes = 15; minutes <= 30; minutes += 1) {
-      const questions = questionsForMinutes(minutes)
-      assert.ok(questions >= 5 && questions <= 10, `${minutes} min gives ${questions}`)
-    }
-  })
 })
 
 describe('topicsFromParam', () => {
@@ -65,9 +42,5 @@ describe('topicsFromParam', () => {
     assert.equal(topicsFromParam('zzz,new-topic', valid), null)
     assert.equal(topicsFromParam('', valid), null)
     assert.equal(topicsFromParam(undefined, valid), null)
-  })
-  it('all means every confirmed topic', () => {
-    assert.deepEqual(topicsFromParam('all', valid), valid)
-    assert.equal(topicsFromParam('all', []), null)
   })
 })

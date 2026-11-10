@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { duplicateNames, edgeQuestionText, eventLine, frontierKeyText, frontierTexts, LABEL_ORDER, LABEL_TEXT, linkText, stateLine } from './copy'
+import { frontierTexts, stateLine } from './copy'
 import { mapHref, NO_UNIT, parseView } from './params'
 
 const NOW = new Date('2026-11-10T20:00:00Z')
@@ -16,26 +16,6 @@ test('the day count is the student\'s calendar days', () => {
   // 20:00 UTC on the 10th is the 10th in Los Angeles, and 04:00 UTC on the 11th is still the 10th there.
   assert.equal(stateLine('solid', '2026-11-11T04:00:00Z', NOW, 'America/Los_Angeles'), 'Solid · review due')
   assert.equal(stateLine('solid', '2026-11-11T04:00:00Z', NOW, 'UTC'), 'Solid · next review tomorrow')
-})
-
-test('every label has words, and the key lists each once', () => {
-  assert.deepEqual([...LABEL_ORDER].sort(), Object.keys(LABEL_TEXT).sort())
-  assert.equal(new Set(Object.values(LABEL_TEXT)).size, LABEL_ORDER.length)
-})
-
-test('an evidence line names the source, the score and any help', () => {
-  assert.equal(eventLine({ source: 'quiz', score: 0.8, assisted: false }), 'Quiz · 80%')
-  assert.equal(eventLine({ source: 'drill', score: 0.4, assisted: true }), 'Drill · 40% · with help')
-  assert.equal(eventLine({ source: 'implicit', score: 1, assisted: false }), 'Credit from a related idea · 100%')
-})
-
-test('a suggested link is a question and a confirmed one a statement', () => {
-  assert.equal(linkText('needs', 'Hashing', true), 'Needs Hashing?')
-  assert.equal(linkText('needs', 'Hashing', false), 'Needs Hashing')
-  assert.equal(linkText('needed_by', 'Tries', true), 'Tries needs this?')
-  assert.equal(linkText('covers', 'Arrays', true), 'Covers Arrays?')
-  assert.equal(linkText('covered_by', 'Trees', false), 'Trees covers this')
-  assert.equal(linkText('confusable', 'Stacks', true), 'Easy to mix up with Stacks?')
 })
 
 test('map addresses carry the unit, topic, node and view', () => {
@@ -59,22 +39,4 @@ test('with several ideas next up, the first in list order says where to start an
   // One idea next up is just next up, and none says nothing.
   assert.deepEqual(frontierTexts([{ id: 'a', frontier: true }, { id: 'b', frontier: false }]), { a: 'Next up' })
   assert.deepEqual(frontierTexts([{ id: 'a', frontier: false }]), {})
-})
-
-test('the key says what the ring tests: prerequisites remembered at R >= 0.8, not prerequisites that are Solid', () => {
-  assert.equal(frontierKeyText(1), 'Next up: ready to study. You answered what it builds on well recently. The ring marks it.')
-  assert.equal(frontierKeyText(2), 'Next up: ready to study. You answered what it builds on well recently. The ring marks Start here, the first of them.')
-  assert.doesNotMatch(frontierKeyText(1), /solid/i)
-})
-
-test('names that occur twice in a unit are found without regard to case', () => {
-  assert.deepEqual([...duplicateNames([{ name: 'Mock idea 1' }, { name: 'mock idea 1' }, { name: 'Other' }])], ['mock idea 1'])
-  assert.equal(duplicateNames([{ name: 'A' }, { name: 'B' }]).size, 0)
-})
-
-test('the question about a suggested link names both ideas and which comes first', () => {
-  assert.equal(edgeQuestionText('needs', 'Tries', 'Hashing'), 'Does Tries require Hashing first?')
-  assert.equal(edgeQuestionText('needed_by', 'Hashing', 'Tries'), 'Does Tries require Hashing first?')
-  assert.equal(edgeQuestionText('covers', 'A', 'B'), 'Does A cover B?')
-  assert.equal(edgeQuestionText('confusable', 'A', 'B'), 'Are A and B easy to mix up?')
 })

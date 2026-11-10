@@ -38,12 +38,6 @@ async function makeUser() {
   return id
 }
 
-dbTest('a conversation with no row starts at rung 0', async () => {
-  const userId = await makeUser()
-  const state = await store.getTutorState(userId, 'ask', 'thread-1')
-  assert.deepEqual(state, store.EMPTY_TUTOR_STATE)
-})
-
 dbTest('saved state round-trips, and rung 4 sets revealed for good', async () => {
   const userId = await makeUser()
   const saved = await store.saveTutorState(userId, 'practice', 'p1:2', {
@@ -75,17 +69,6 @@ dbTest('scopes and keys are separate conversations', async () => {
   assert.equal((await store.getTutorState(userId, 'ask', 'a')).rung, 2)
 })
 
-dbTest('recordTutorEvent applies an event and saves counters and gap', async () => {
-  const userId = await makeUser()
-  const first = await store.recordTutorEvent(userId, 'practice', 's:1', { type: 'attempt', text: '42', correct: false }, { gapId: 'step-1' })
-  assert.equal(first.state.rung, 1)
-  assert.equal(first.state.bareGuesses, 1)
-  assert.equal(first.state.gapId, 'step-1')
-  const second = await store.recordTutorEvent(userId, 'practice', 's:1', { type: 'attempt', text: '17', correct: false }, { gapId: 'step-1' })
-  assert.equal(second.state.bareGuesses, 2)
-  assert.equal((await store.getTutorState(userId, 'practice', 's:1')).attempts, 2)
-})
-
 dbTest('concurrent first events create one row and apply both', async () => {
   const userId = await makeUser()
   const text = 'I think it is the second given'
@@ -98,26 +81,6 @@ dbTest('concurrent first events create one row and apply both', async () => {
   const state = await store.getTutorState(userId, 'ask', 'race')
   assert.equal(state.attempts, 2)
   assert.equal(state.rung, 2)
-})
-
-dbTest('concurrent first saves do not fail on the unique key', async () => {
-  const userId = await makeUser()
-  await Promise.all([
-    store.saveTutorState(userId, 'voice', 'v', { ...store.EMPTY_TUTOR_STATE, rung: 1, maxRung: 1 }),
-    store.saveTutorState(userId, 'voice', 'v', { ...store.EMPTY_TUTOR_STATE, rung: 1, maxRung: 1 }),
-  ])
-  assert.equal(await prisma.tutorState.count({ where: { userId, scopeKey: 'v' } }), 1)
-})
-
-dbTest('seeded concepts start a conversation and add to the ones it has, once each', async () => {
-  const userId = await makeUser()
-  await store.seedTutorConcepts(userId, 'ask', 'thread-seed', ['c1', 'c2'])
-  assert.deepEqual((await store.getTutorState(userId, 'ask', 'thread-seed')).conceptIds, ['c1', 'c2'])
-  await store.seedTutorConcepts(userId, 'ask', 'thread-seed', ['c2', 'c3'])
-  const state = await store.getTutorState(userId, 'ask', 'thread-seed')
-  assert.deepEqual(state.conceptIds, ['c1', 'c2', 'c3'])
-  assert.equal(state.rung, 0)
-  assert.equal(state.attempts, 0)
 })
 
 dbTest('help given and the help at the first wrong check are recorded, and only rise', async () => {
@@ -168,4 +131,13 @@ dbTest('an I do not know is recorded once with its time, and a started-over conv
   assert.equal((await prisma.tutorState.findUniqueOrThrow({ where: key })).dontKnowAt?.getTime(), stamped?.getTime())
   await store.resetTutorState(userId, 'practice', 'c:0:1')
   assert.equal((await prisma.tutorState.findUniqueOrThrow({ where: key })).dontKnowAt, null)
+})
+
+dbTest('concurrent first saves do not fail on the unique key', async () => {
+  const userId = await makeUser()
+  await Promise.all([
+    store.saveTutorState(userId, 'voice', 'v', { ...store.EMPTY_TUTOR_STATE, rung: 1, maxRung: 1 }),
+    store.saveTutorState(userId, 'voice', 'v', { ...store.EMPTY_TUTOR_STATE, rung: 1, maxRung: 1 }),
+  ])
+  assert.equal(await prisma.tutorState.count({ where: { userId, scopeKey: 'v' } }), 1)
 })

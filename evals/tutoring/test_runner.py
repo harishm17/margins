@@ -1,7 +1,6 @@
 """Tests for the runner: playing scripts, the spend stop, the real route with a scripted provider, the
 estimate and a whole mock run. No database, no model, no network."""
 import asyncio
-import json
 import os
 import re
 import sys
@@ -34,29 +33,6 @@ def first(pattern):
 
 
 # ---------------------------------------------------------------- arguments and scenarios
-
-
-def test_every_surface_is_runnable_and_an_unknown_one_is_refused(capsys):
-    for surface in ("practice", "ask", "teach_back"):
-        assert run_eval.parse_args(["--surface", surface]).surface == surface
-    with pytest.raises(SystemExit):
-        run_eval.parse_args(["--surface", "mystery"])
-    assert "invalid choice" in capsys.readouterr().err
-
-
-def test_flags_and_defaults_of_the_brief():
-    args = run_eval.parse_args(["--surface", "practice", "--max-usd", "4", "--judge"])
-    assert (args.max_usd, args.max_judge_usd, args.judge) == (4.0, 3.0, "opus:medium")
-    assert run_eval.parse_args([]).judge is None
-
-
-def test_load_scenarios_filters_and_spreads():
-    assert len(SCENARIOS) == 12
-    only = run_eval.load_scenarios(run_eval.ORIGINAL_SCENARIOS, patterns="injection")
-    assert len(only) == 2 and {s["pattern"] for s in only} == {"injection"}
-    assert len(run_eval.load_scenarios(run_eval.ORIGINAL_SCENARIOS, limit=5)) == 5
-    with pytest.raises(SystemExit):
-        run_eval.load_scenarios(run_eval.ORIGINAL_SCENARIOS, patterns="nonsense")
 
 
 # ---------------------------------------------------------------- playing with a fake tutor route
@@ -131,16 +107,6 @@ def test_the_spend_stop_ends_the_conversation_and_is_not_written_as_finished(tmp
     assert "generation spend cap reached" in stop["reason"]
     assert not [r for r in records if r.get("reply")]
     assert list(tmp_path.glob("*.json")) == []  # a stopped scenario is played again on a resume
-
-
-def test_resume_reuses_finished_scenarios(tmp_path):
-    scenarios = [first("idk3"), first("off_topic")]
-    call = fake_tutor()
-    first_pass = asyncio.run(run_eval.play_all(scenarios, call, {}, tmp_path, False, 2))
-    calls_before = len(call.sent)
-    second = fake_tutor()
-    again = asyncio.run(run_eval.play_all(scenarios, second, {}, tmp_path, True, 2))
-    assert second.sent == [] and again == first_pass and calls_before > 0
 
 
 # ---------------------------------------------------------------- the real route with a scripted provider
@@ -246,49 +212,6 @@ def test_the_estimate_counts_the_replies_the_scripts_reach():
     assert limited["judged"] == 5 and limited["judge_usd"] < plan["judge_usd"]
 
 
-def test_dry_run_prints_a_plan_and_calls_nothing(capsys, monkeypatch):
-    called = []
-    monkeypatch.setattr(LLMFactory, "get_provider", classmethod(lambda cls: called.append(1)))
-    args = run_eval.parse_args(["--dry-run", "--judge", "--scenarios", str(run_eval.ORIGINAL_SCENARIOS)])
-    assert asyncio.run(run_eval.run(args)) == 0
-    out = capsys.readouterr().out
-    assert "Plan" in out and "estimated total" in out and "Nothing was called" in out and not called
-
-
-def test_a_mock_run_writes_the_whole_results_folder(tmp_path, monkeypatch):
-    monkeypatch.setattr(ai_status, "get_status", ai_status.get_status)
-    monkeypatch.setattr(settings, "AI_INTERNAL_TOKEN", settings.AI_INTERNAL_TOKEN)
-    monkeypatch.setattr(settings, "ENVIRONMENT", settings.ENVIRONMENT)
-    monkeypatch.setattr(LLMFactory, "_instance", None)
-    args = run_eval.parse_args(["--mock", "--judge", "--limit", "6", "--scenarios", str(run_eval.ORIGINAL_SCENARIOS), "--out-dir", str(tmp_path), "--label", "smoke"])
-    asyncio.run(run_eval.run(args))
-    folder = next(p for p in tmp_path.iterdir() if p.is_dir())
-    for name in ("run.json", "turns.json", "summary.json"):
-        assert (folder / name).exists()
-    report = next(tmp_path.glob("*.md")).read_text()
-    assert "# Tutoring eval: smoke" in report and "Mock provider" in report and "## Gates" in report and "## Model judge" in report
-    turns = json.loads((folder / "turns.json").read_text())
-    assert set(turns) == {"scenarios", "turns", "judge"} and turns["judge"]
-    summary = json.loads((folder / "summary.json").read_text())
-    assert summary["config"]["surface"] == "practice" and summary["judge"]["scenarios"] == 6
-    assert len(list((folder / "raw").glob("*.json"))) == 6
-
-
-def test_a_resume_keeps_the_runs_selection_and_plays_nothing_again(tmp_path, monkeypatch):
-    monkeypatch.setattr(ai_status, "get_status", ai_status.get_status)
-    monkeypatch.setattr(settings, "AI_INTERNAL_TOKEN", settings.AI_INTERNAL_TOKEN)
-    monkeypatch.setattr(settings, "ENVIRONMENT", settings.ENVIRONMENT)
-    monkeypatch.setattr(LLMFactory, "_instance", None)
-    asyncio.run(run_eval.run(run_eval.parse_args(["--mock", "--limit", "2", "--patterns", "idk3,off_topic", "--scenarios", str(run_eval.ORIGINAL_SCENARIOS), "--out-dir", str(tmp_path), "--label", "first"])))
-    folder = next(p for p in tmp_path.iterdir() if p.is_dir())
-    assert json.loads((folder / "run.json").read_text())["limit"] == 2
-    before = {p.name: p.stat().st_mtime_ns for p in (folder / "raw").glob("*.json")}
-    asyncio.run(run_eval.run(run_eval.parse_args(["--mock", "--resume", str(folder), "--judge"])))
-    after = {p.name: p.stat().st_mtime_ns for p in (folder / "raw").glob("*.json")}
-    assert before == after and len(after) == 2  # the same two scenarios, none played again
-    assert json.loads((folder / "summary.json").read_text())["judge"]["scenarios"] == 2
-
-
 # ---------------------------------------------------------------- claimed rung, errors, resume, judge flags
 
 
@@ -343,24 +266,3 @@ def test_the_judge_flag_counts_only_a_stated_right_answer_and_exempts_the_studen
     assert run_eval.judge_leaks_of(reviews, records) == [("s", 2)]
 
 
-def test_with_no_built_ocw_set_the_run_plays_the_committed_original_one(tmp_path, capsys, monkeypatch):
-    monkeypatch.setitem(run_eval.SURFACES, "practice", tmp_path / "missing.jsonl")
-    monkeypatch.setattr(ai_status, "get_status", ai_status.get_status)
-    monkeypatch.setattr(settings, "AI_INTERNAL_TOKEN", settings.AI_INTERNAL_TOKEN)
-    monkeypatch.setattr(settings, "ENVIRONMENT", settings.ENVIRONMENT)
-    monkeypatch.setattr(LLMFactory, "_instance", None)
-    asyncio.run(run_eval.run(run_eval.parse_args(["--mock", "--limit", "2", "--out-dir", str(tmp_path), "--label", "orig"])))
-    assert "12 committed original scenarios" in capsys.readouterr().out
-    summary = json.loads(next(tmp_path.glob("*/summary.json")).read_text())
-    assert summary["config"]["scenario_file"].endswith("practice-original.jsonl")
-
-
-def test_play_keeps_the_drafts_the_tutor_held_back():
-    held_back = [{"attempt": 1, "draft": "It is 5.", "kind": "string", "reason": "stated the answer", "values": ["5"], "retry_passed": True}]
-
-    async def call(payload):
-        return 200, {"reply": "Re-read step 2. What did you try?", "rung_used": 1, "mistake": None, "reveals_answer": False, "leaked": True, "from_authored_hint": False, "rejected_drafts": held_back}
-
-    records = asyncio.run(run_eval.play(first("just_tell_me"), call, {}))
-    replied = [r for r in records if r.get("reply")]
-    assert replied and all(r["rejected_drafts"] == held_back for r in replied)

@@ -87,18 +87,6 @@ test('right answers carry no miss kind, and items without concepts or answers wr
   assert.equal(events[0].confidence, undefined)
 })
 
-test('a legacy quiz with no set id keys items under legacy, and unknown concepts are ignored', () => {
-  const events = buildQuizEvidence({
-    ...base,
-    quizSetId: null,
-    knownConceptIds: new Set(['c1']),
-    answers: { '0': { answer: 'A' } },
-    graded: [graded(0, 'multiple_choice', 1)],
-  })
-  assert.equal(events[0].itemKey, 'quiz:legacy:0')
-  assert.deepEqual(events[0].conceptIds, ['c1'])
-})
-
 test('a blamed concept that is not an active concept of the question is dropped', () => {
   const [event] = buildQuizEvidence({
     ...base,
@@ -143,10 +131,8 @@ test('same-day identical submission is level 2', () => {
     assert.equal(event.assistance, 2)
     assert.equal(event.metadata?.repeat, 'same_day')
   }
-})
-
-test('a first attempt is level 0 with no repeat mark', () => {
-  const [event] = buildQuizEvidence({ ...base, answers: { '0': { answer: 'A' } }, graded: [graded(0, 'multiple_choice', 1)] })
-  assert.equal(event.assistance, 0)
-  assert.equal(event.metadata?.repeat, undefined)
+  // As a contrast, a first attempt is level 0 with no repeat mark.
+  const [first] = buildQuizEvidence({ ...base, answers: { '0': { answer: 'A' } }, graded: [graded(0, 'multiple_choice', 1)] })
+  assert.equal(first.assistance, 0)
+  assert.equal(first.metadata?.repeat, undefined)
 })

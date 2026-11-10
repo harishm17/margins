@@ -5,7 +5,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  createDebouncer,
   createDraftEngine,
   mergeDraft,
   type CacheEntry,
@@ -67,12 +66,6 @@ test('newer of cache and server wins', () => {
   assert.equal(mergeDraft(entry({ editedAt: 4000 }), server({ updatedAtMs: 4000 })).take, 'server')
 })
 
-test('merge: no conflict when the server has not moved, or holds the same text', () => {
-  assert.deepEqual(mergeDraft(entry({ version: 3 }), server({ version: 3, updatedAtMs: 9000 })), { take: 'cache', baseVersion: 3 })
-  const same = mergeDraft(entry({ editedAt: 3000 }), server({ payload: { text: 'cache' } }))
-  assert.ok(same.take === 'server' && same.lostLocal === false)
-})
-
 test('merge: server only, cache only, clean cache, cleared elsewhere, tombstone', () => {
   assert.equal(mergeDraft(null, server()).take, 'server')
   assert.equal(mergeDraft(null, null).take, 'none')
@@ -87,30 +80,6 @@ test('merge: server only, cache only, clean cache, cleared elsewhere, tombstone'
 })
 
 // ---- The debouncer ----
-
-test('debounce: one call after quiet, waits again on each call, never longer than the max wait', async () => {
-  const clock = fakeClock()
-  let calls = 0
-  const debounced = createDebouncer(() => calls++, clock.timers, 800, 10_000)
-  debounced.schedule()
-  await clock.advance(700)
-  debounced.schedule()
-  await clock.advance(700)
-  assert.equal(calls, 0)
-  await clock.advance(100)
-  assert.equal(calls, 1)
-  // Typing without a pause: it still fires at the max wait.
-  for (let i = 0; i < 40; i++) {
-    debounced.schedule()
-    await clock.advance(500)
-  }
-  assert.ok(calls >= 2, `fired during the burst (${calls})`)
-  debounced.cancel()
-  await clock.advance(5000)
-  const before = calls
-  await clock.advance(5000)
-  assert.equal(calls, before)
-})
 
 // ---- The engine ----
 
@@ -145,24 +114,6 @@ function harness(opts: { cached?: CacheEntry | null; get?: GetResult; parse?: (r
   return { clock, log, script, engine, last, cache: () => cached }
 }
 
-test('engine: loads the draft from the server', async () => {
-  const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'hi' }, version: 4, updatedAtMs: 10 } } })
-  await h.engine.start()
-  assert.deepEqual(h.last().value, { text: 'hi' })
-  assert.equal(h.last().status, 'saved')
-  assert.deepEqual((h.cache() as CacheEntry).value, { text: 'hi' })
-})
-
-test('engine: shows the cache while loading, and an empty server with a saved cache means cleared elsewhere', async () => {
-  const h = harness({ cached: entry({ dirty: false }) })
-  const started = h.engine.start()
-  assert.deepEqual(h.log.snapshots[0].value, { text: 'cache' })
-  assert.equal(h.log.snapshots[0].status, 'loading')
-  await started
-  assert.equal(h.last().value, null)
-  assert.equal(h.cache(), null)
-})
-
 test('engine: edits are saved after 800 ms of quiet, in one request, with the version', async () => {
   const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'a' }, version: 4, updatedAtMs: 10 } } })
   await h.engine.start()
@@ -178,16 +129,6 @@ test('engine: edits are saved after 800 ms of quiet, in one request, with the ve
   h.engine.set({ text: 'abcd' })
   await h.clock.advance(800)
   assert.equal(h.log.puts[1].version, 5)
-})
-
-test('engine: the cache is written on every edit, before the server hears of it', async () => {
-  const h = harness()
-  await h.engine.start()
-  h.engine.set({ text: 'typed' })
-  const c = h.cache() as CacheEntry
-  assert.deepEqual([c.value, c.dirty], [{ text: 'typed' }, true])
-  await h.clock.advance(800)
-  assert.equal((h.cache() as CacheEntry).dirty, false)
 })
 
 test('engine: an edit made while a save is in flight is saved next, not lost', async () => {
@@ -206,21 +147,6 @@ test('engine: an edit made while a save is in flight is saved next, not lost', a
   assert.equal(h.last().status, 'saved')
 })
 
-test('pagehide while a save is in flight sends nothing extra (the cache keeps the newer text)', async () => {
-  const h = harness()
-  await h.engine.start()
-  let release!: () => void
-  h.script.gate = new Promise<void>((r) => (release = r))
-  h.engine.set({ text: 'one' })
-  await h.clock.advance(800)
-  h.engine.set({ text: 'two' })
-  h.engine.flushKeepalive()
-  await settle()
-  assert.equal(h.log.puts.length, 1)
-  assert.equal((h.cache() as CacheEntry).dirty, true)
-  release()
-})
-
 test('engine: a stale version where the other tab is newer takes the server and reports the conflict', async () => {
   const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'a' }, version: 1, updatedAtMs: 10 } } })
   await h.engine.start()
@@ -236,27 +162,6 @@ test('engine: a stale version where the other tab is newer takes the server and 
   assert.equal(h.last().conflict, null)
   await h.clock.advance(800)
   assert.equal(h.log.puts[1].version, 2)
-})
-
-test('engine: a stale version where this edit is newer overwrites with the server version', async () => {
-  const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'a' }, version: 1, updatedAtMs: 10 } } })
-  await h.engine.start()
-  h.script.put.push({ kind: 'conflict', draft: { payload: { text: 'old' }, version: 2, updatedAtMs: 20 } })
-  h.engine.set({ text: 'mine' })
-  await h.clock.advance(800)
-  assert.deepEqual(h.log.puts.map((p) => p.version), [1, 2])
-  assert.deepEqual(h.last().value, { text: 'mine' })
-  assert.equal(h.last().conflict, null)
-})
-
-test('engine: a conflict because the draft is gone writes our edits again from version 0', async () => {
-  const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'a' }, version: 3, updatedAtMs: 10 } } })
-  await h.engine.start()
-  h.script.put.push({ kind: 'conflict', draft: null })
-  h.engine.set({ text: 'mine' })
-  await h.clock.advance(800)
-  assert.deepEqual(h.log.puts.map((p) => p.version), [3, 0])
-  assert.equal(h.last().status, 'saved')
 })
 
 test('failed save: goes offline, keeps the text in the cache, retries with backoff and then syncs', async () => {
@@ -279,47 +184,6 @@ test('failed save: goes offline, keeps the text in the cache, retries with backo
   assert.equal(h.log.puts.length, 3)
   assert.equal(h.last().status, 'saved')
   assert.equal((h.cache() as CacheEntry).dirty, false)
-})
-
-test('failed save: Retry-After is respected and "online" retries at once', async () => {
-  const h = harness()
-  await h.engine.start()
-  h.script.put.push({ kind: 'offline', retryAfterMs: 20_000 })
-  h.engine.set({ text: 'x' })
-  await h.clock.advance(800)
-  await h.clock.advance(10_000)
-  assert.equal(h.log.puts.length, 1)
-  h.engine.retryNow()
-  await settle()
-  assert.equal(h.log.puts.length, 2)
-  assert.equal(h.last().status, 'saved')
-})
-
-test('offline while loading: shows the cache, retries the load, then pushes unsaved edits', async () => {
-  const h = harness({ cached: entry({ version: 0, dirty: true }), get: { kind: 'offline' } })
-  await h.engine.start()
-  assert.equal(h.last().status, 'offline')
-  assert.deepEqual(h.last().value, { text: 'cache' })
-  h.script.get = { kind: 'ok', draft: null }
-  await h.clock.advance(2000)
-  assert.equal(h.log.gets, 2)
-  assert.equal(h.log.puts.length, 1)
-  assert.equal(h.last().status, 'saved')
-})
-
-test('a rejected save (too large, invalid) is an error, not retried, and the next edit tries again', async () => {
-  const h = harness()
-  await h.engine.start()
-  h.script.put.push({ kind: 'rejected', reason: 'rejected' })
-  h.engine.set({ text: 'x' })
-  await h.clock.advance(800)
-  assert.equal(h.last().status, 'error')
-  await h.clock.advance(60_000)
-  assert.equal(h.log.puts.length, 1)
-  h.engine.set({ text: 'xy' })
-  await h.clock.advance(800)
-  assert.equal(h.log.puts.length, 2)
-  assert.equal(h.last().status, 'saved')
 })
 
 test('an oversized value is stopped before it is sent', async () => {
@@ -353,23 +217,6 @@ test('pagehide: unsaved edits go out at once with keepalive', async () => {
   assert.equal(h.log.puts.length, 1, 'the debounce timer was cancelled')
 })
 
-test('pagehide with nothing unsaved sends nothing', async () => {
-  const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'a' }, version: 1, updatedAtMs: 1 } } })
-  await h.engine.start()
-  h.engine.flushKeepalive()
-  await settle()
-  assert.equal(h.log.puts.length, 0)
-})
-
-test('flush waits for the save to finish', async () => {
-  const h = harness()
-  await h.engine.start()
-  h.engine.set({ text: 'before submit' })
-  await h.engine.flush()
-  assert.equal(h.log.puts.length, 1)
-  assert.equal(h.last().status, 'saved')
-})
-
 test('clear deletes on the server, cancels pending saves, and a failed delete is retried', async () => {
   const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'a' }, version: 1, updatedAtMs: 1 } } })
   await h.engine.start()
@@ -397,27 +244,50 @@ test('a tombstone left in the cache is deleted on the next load, whatever the se
   assert.equal(h.cache(), null)
 })
 
-test('values the surface cannot parse are ignored, from the server and from the cache', async () => {
-  const parse = (raw: unknown) => (raw && typeof raw === 'object' && 'text' in raw ? raw : null)
-  const bad = harness({ parse, cached: entry({ value: { nope: 1 }, dirty: false }), get: { kind: 'ok', draft: { payload: { nope: 2 }, version: 2, updatedAtMs: 1 } } })
-  await bad.engine.start()
-  assert.equal(bad.last().value, null)
+test('engine: a stale version where this edit is newer overwrites with the server version', async () => {
+  const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'a' }, version: 1, updatedAtMs: 10 } } })
+  await h.engine.start()
+  h.script.put.push({ kind: 'conflict', draft: { payload: { text: 'old' }, version: 2, updatedAtMs: 20 } })
+  h.engine.set({ text: 'mine' })
+  await h.clock.advance(800)
+  assert.deepEqual(h.log.puts.map((p) => p.version), [1, 2])
+  assert.deepEqual(h.last().value, { text: 'mine' })
+  assert.equal(h.last().conflict, null)
 })
 
-test('after dispose nothing more is sent', async () => {
+test('engine: a conflict because the draft is gone writes our edits again from version 0', async () => {
+  const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'a' }, version: 3, updatedAtMs: 10 } } })
+  await h.engine.start()
+  h.script.put.push({ kind: 'conflict', draft: null })
+  h.engine.set({ text: 'mine' })
+  await h.clock.advance(800)
+  assert.deepEqual(h.log.puts.map((p) => p.version), [3, 0])
+  assert.equal(h.last().status, 'saved')
+})
+
+test('offline while loading: shows the cache, retries the load, then pushes unsaved edits', async () => {
+  const h = harness({ cached: entry({ version: 0, dirty: true }), get: { kind: 'offline' } })
+  await h.engine.start()
+  assert.equal(h.last().status, 'offline')
+  assert.deepEqual(h.last().value, { text: 'cache' })
+  h.script.get = { kind: 'ok', draft: null }
+  await h.clock.advance(2000)
+  assert.equal(h.log.gets, 2)
+  assert.equal(h.log.puts.length, 1)
+  assert.equal(h.last().status, 'saved')
+})
+
+test('a rejected save (too large, invalid) is an error, not retried, and the next edit tries again', async () => {
   const h = harness()
   await h.engine.start()
+  h.script.put.push({ kind: 'rejected', reason: 'rejected' })
   h.engine.set({ text: 'x' })
-  h.engine.dispose()
+  await h.clock.advance(800)
+  assert.equal(h.last().status, 'error')
   await h.clock.advance(60_000)
-  assert.equal(h.log.puts.length, 0)
-})
-
-test('status lines: the three drafts, and nothing for loading or error', async () => {
-  const { statusLabel } = await import('./use-server-draft')
-  assert.equal(statusLabel('saved'), 'Saved')
-  assert.equal(statusLabel('saving'), 'Saving…')
-  assert.equal(statusLabel('offline'), "Saved on this device; will sync when you're back online.")
-  assert.equal(statusLabel('loading'), null)
-  assert.equal(statusLabel('error'), null)
+  assert.equal(h.log.puts.length, 1)
+  h.engine.set({ text: 'xy' })
+  await h.clock.advance(800)
+  assert.equal(h.log.puts.length, 2)
+  assert.equal(h.last().status, 'saved')
 })

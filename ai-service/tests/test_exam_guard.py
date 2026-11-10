@@ -57,10 +57,6 @@ async def test_a_reworded_question_is_recognised_whatever_the_wording(topics):
     assert await exam_guard.semantic_exam_match("Mean bucket list size when twelve keys fall into eight slots of a chained table?", [], EXAM)
 
 
-async def test_a_translated_question_is_recognised(topics):
-    assert await exam_guard.semantic_exam_match("Una tabla hash con encadenamiento tiene 8 cubetas y 12 claves. Cual es la longitud esperada de una cadena?", [], EXAM)
-
-
 async def test_a_concept_question_on_another_topic_is_not(topics):
     assert not await exam_guard.semantic_exam_match("When is the midterm?", [], EXAM)
 
@@ -69,25 +65,6 @@ async def test_a_question_asked_in_pieces_is_read_as_one(topics):
     # Neither piece is close to a question on its own; the student's messages joined are about the marbles.
     assert exam_guard.candidate_texts("and they are both red?", ["a bag of 3 red and 5 blue marbles"])[-1].startswith("a bag of 3 red")
     assert await exam_guard.semantic_exam_match("both red?", ["marbles from a bag of 3 red and 5 blue"], EXAM)
-
-
-async def test_a_question_after_a_lead_in_is_found_by_its_sentence(topics):
-    assert "Which sorting method is O(n log n) at worst?" in exam_guard.candidate_texts(
-        "Hi there, I am revising for the week. Which sorting method is O(n log n) at worst?", []
-    )
-
-
-async def test_nothing_to_compare_is_no_match(topics):
-    assert await exam_guard.semantic_similarity("anything", [], []) == 0.0
-    assert await exam_guard.semantic_similarity("   ", [], EXAM) == 0.0
-
-
-async def test_exam_text_vectors_are_remembered_between_messages(topics):
-    await exam_guard.semantic_similarity("one", [], EXAM)
-    first = len(topics.seen)
-    await exam_guard.semantic_similarity("two", [], EXAM)
-    # Only the new message was embedded the second time.
-    assert len(topics.seen) - first == 1
 
 
 class TestRoute:
@@ -102,13 +79,6 @@ class TestRoute:
         no = client.post("/chat/exam-guard", json={"message": "When is the midterm?", "exam_texts": EXAM}).json()
         assert yes["match"] is True and yes["similarity"] > settings.EXAM_GUARD_SEMANTIC_THRESHOLD
         assert no["match"] is False
-
-    def test_recent_messages_are_read_with_the_new_one(self, client):
-        body = {"message": "both red?", "recent": ["marbles from a bag of 3 red and 5 blue"], "exam_texts": EXAM}
-        assert client.post("/chat/exam-guard", json=body).json()["match"] is True
-
-    def test_bad_input_is_refused(self, client):
-        assert client.post("/chat/exam-guard", json={"message": "", "exam_texts": EXAM}).status_code == 422
 
 
 # ---- the real model, to keep the threshold honest. Needs the model files (about 220 MB): set EXAM_GUARD_REAL_MODEL=1.

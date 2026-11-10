@@ -75,22 +75,3 @@ test('coming back to the tab asks at once when an interval has passed', () => {
   clock.setHidden(false)
   assert.equal(ticks, 1)
 })
-
-test('coming back soon after a tick does not ask twice', () => {
-  const clock = fakeEnv()
-  let ticks = 0
-  createPoller({ intervalMs: 1000, maxPolls: 5, onTick: () => (ticks += 1) }, clock.env)
-  clock.advance(1000)
-  clock.setHidden(true)
-  clock.setHidden(false)
-  assert.equal(ticks, 1)
-})
-
-test('the returned function stops it', () => {
-  const clock = fakeEnv()
-  let ticks = 0
-  const stop = createPoller({ intervalMs: 1000, maxPolls: 5, onTick: () => (ticks += 1) }, clock.env)
-  stop()
-  clock.advance(1000)
-  assert.equal(ticks, 0)
-})

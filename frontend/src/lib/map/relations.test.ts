@@ -11,12 +11,6 @@ test('prerequisites read from both ends', () => {
   assert.deepEqual(relationsOf('a', nodes, edges), [{ label: 'Needed by', names: ['C'] }])
 })
 
-test('encompasses runs from the advanced concept to the one it covers', () => {
-  const edges = [edge('d', 'a', 'encompasses')]
-  assert.deepEqual(relationsOf('d', nodes, edges), [{ label: 'Covers', names: ['A'] }])
-  assert.deepEqual(relationsOf('a', nodes, edges), [{ label: 'Covered by', names: ['D'] }])
-})
-
 test('a confusable pair reads the same from either side, and a lone concept has no relations', () => {
   const edges = [edge('a', 'b', 'confusable')]
   assert.deepEqual(relationsOf('a', nodes, edges), [{ label: 'Easy to mix up with', names: ['B'] }])

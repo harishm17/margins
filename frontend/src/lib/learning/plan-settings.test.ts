@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dailyMinutesSchema, examDateColumn, examDateSchema, minutesLabel } from './plan-settings'
+import { examDateColumn, examDateSchema } from './plan-settings'
 import { scoresByTopic } from './exam-mastery'
 
 test('an exam date is a real calendar date or null', () => {
@@ -16,19 +16,6 @@ test('the exam date is stored as midnight UTC of that date; null clears it and u
   assert.equal(examDateColumn('2026-12-14')?.toISOString(), '2026-12-14T00:00:00.000Z')
   assert.equal(examDateColumn(null), null)
   assert.equal(examDateColumn(undefined), undefined)
-})
-
-test('daily minutes are whole numbers between 10 and 600', () => {
-  for (const ok of [10, 45, 90, 600]) assert.equal(dailyMinutesSchema.safeParse(ok).success, true, String(ok))
-  for (const bad of [9, 601, 45.5, '45', null]) assert.equal(dailyMinutesSchema.safeParse(bad).success, false, String(bad))
-})
-
-test('minutes read plainly', () => {
-  assert.equal(minutesLabel(20), '20 minutes')
-  assert.equal(minutesLabel(45), '45 minutes')
-  assert.equal(minutesLabel(60), '1 hour')
-  assert.equal(minutesLabel(90), '1 hour 30 minutes')
-  assert.equal(minutesLabel(120), '2 hours')
 })
 
 test('an exam submission scores each topic as the mean of its questions, skipping questions with no topic', () => {

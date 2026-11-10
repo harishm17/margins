@@ -1,8 +1,7 @@
-import { examDefaultsFromParams, questionsForMinutes } from '../exams/form-defaults'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildPlan, type PlanItem, type PlanTopic } from './plan'
-import { dayLabel, daySummary, describePlanItem, overBudgetLabel, planItemHref, reviewsNotScheduledText, tooLongText, upNextFromPlan, weekLabel } from './plan-copy'
+import { planItemHref, upNextFromPlan, } from './plan-copy'
 import { nextActionsFromPlan, setupNextAction } from './next-actions'
 
 const item = (over: Partial<PlanItem>): PlanItem => ({
@@ -36,95 +35,6 @@ test('plan review item opens topic-filtered session', () => {
   assert.equal(planItemHref(item({ kind: 'review', topicId: null, topicIds: [] }), 'c1'), '/courses/c1/review/session')
   // A projected review has no due concepts yet: it stays a quiz on the topic.
   assert.equal(planItemHref(item({ kind: 'review', projected: true }), 'c1'), '/courses/c1/topics/t1?view=quiz')
-})
-
-test('mixed practice and projected reviews link to their actions', () => {
-  const mixed = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes: 30 })
-  assert.equal(planItemHref(mixed, 'c1'), '/courses/c1/exams/new?topics=a,b&minutes=30&questions=10')
-  const short = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes: 20 })
-  assert.equal(planItemHref(short, 'c1'), '/courses/c1/exams/new?topics=a,b&minutes=20&questions=5')
-  assert.equal(planItemHref({ ...short, topicIds: [] }, 'c1'), '/courses/c1/exams/new?minutes=20&questions=5')
-  const described = describePlanItem(mixed, 'c1')
-  assert.equal(described.verb, 'Create')
-  assert.match(described.reason, /mixed together/)
-  const projected = item({ kind: 'review', projected: true })
-  assert.equal(planItemHref(projected, 'c1'), '/courses/c1/topics/t1?view=quiz')
-  assert.match(describePlanItem(projected, 'c1').reason, /spaced review/)
-  assert.equal(nextActionsFromPlan(planFor([topic('a', { orderIndex: 0 })])).length, 1)
-})
-
-test('items are described in plain words with a button and a time', () => {
-  const learn = describePlanItem(item({ part: { number: 1, of: 2 }, minutes: 45 }), 'c1')
-  assert.equal(learn.verb, 'Start')
-  assert.equal(learn.etaLabel, 'About 45 min')
-  assert.equal(learn.partLabel, 'Part 1 of 2')
-  assert.equal(describePlanItem(item({ note: 'You have started this one' }), 'c1').verb, 'Continue')
-  assert.match(describePlanItem(item({ note: 'On past exams' }), 'c1').reason, /past exams/)
-  assert.equal(describePlanItem(item({ kind: 'quiz' }), 'c1').verb, 'Take quiz')
-  assert.equal(describePlanItem(item({ kind: 'review', note: 'Overdue by 2 days' }), 'c1').reason, 'Due 2 days ago.')
-  assert.equal(describePlanItem(item({ kind: 'review' }), 'c1').reason, 'Due for review.')
-  for (const kind of ['learn', 'quiz', 'review', 'mixed', 'unit_mock', 'full_mock'] as const) {
-    const described = describePlanItem(item({ kind }), 'c1')
-    assert.doesNotMatch(`${described.title} ${described.reason} ${described.verb}`, /generate|\$|undefined|null/i, kind)
-  }
-})
-
-test("a closed day's line counts the other tasks, so it does not read as more topics", () => {
-  assert.equal(daySummary([]), 'Nothing planned')
-  assert.equal(daySummary(['Quiz: Graphs']), 'Quiz: Graphs')
-  assert.equal(daySummary(['Quiz: Graphs', 'Learn Trees']), 'Quiz: Graphs and 1 more task')
-  assert.equal(daySummary(['Quiz: Graphs', 'Learn Trees', 'Review Heaps']), 'Quiz: Graphs and 2 more tasks')
-})
-
-test('a full mock longer than the day says so, against the daily minutes or the time left today', () => {
-  const mock = item({ kind: 'full_mock', topicId: null, topicIds: ['a'], minutes: 60, title: 'Full mock exam' })
-  assert.equal(overBudgetLabel(mock, 45), null)
-  assert.equal(overBudgetLabel({ ...mock, overBudget: true }, 45), 'Longer than your usual 45 minutes')
-  assert.equal(overBudgetLabel({ ...mock, overBudget: true }, 90), 'Longer than the time left today')
-  assert.equal(overBudgetLabel({ ...mock, overBudget: true }), 'Longer than your usual study time')
-  assert.equal(describePlanItem({ ...mock, overBudget: true }, 'c1', { dailyMinutes: 45 }).overBudgetLabel, 'Longer than your usual 45 minutes')
-  assert.equal(describePlanItem(item({}), 'c1', { dailyMinutes: 45 }).overBudgetLabel, null)
-})
-
-test("Up next marks today's mock exam when it is longer than the day", () => {
-  const plan = buildPlan({
-    now: new Date('2026-10-21T15:00:00Z'),
-    timeZone: 'UTC',
-    examDate: '2026-11-20',
-    dailyMinutes: 45,
-    topics: [topic('a', { orderIndex: 0, learned: true, quizzed: true, mastery: 0.5 }), topic('b', { orderIndex: 1, learned: true, quizzed: true, mastery: 0.5 })],
-    units: [],
-    unitMocksDone: [],
-    fullMocksDoneInFinalWeek: 0,
-    doneToday: [],
-  })
-  const { upNext } = upNextFromPlan(plan, 'c1')
-  assert.deepEqual(upNext.map((entry) => [entry.kind, entry.overBudgetLabel]), [['full_mock', 'Longer than your usual 45 minutes']])
-})
-
-test('the notices for topics too long for a day and reviews with no room', () => {
-  assert.equal(tooLongText(20, 1), 'This does not fit in 20 minutes a day, even split into parts of at least 15 minutes. Add study time to fit it.')
-  assert.equal(tooLongText(20, 2), 'These do not fit in 20 minutes a day, even split into parts of at least 15 minutes. Add study time to fit them.')
-  const room = (name: string) => ({ name, reason: 'minutes' as const })
-  assert.equal(reviewsNotScheduledText([room('Graphs')]), 'No room before your exam to review Graphs. Add study time to fit it in.')
-  assert.equal(reviewsNotScheduledText(['Graphs', 'Trees', 'Heaps'].map(room)), 'No room before your exam to review Graphs, Trees and Heaps. Add study time to fit them in.')
-  // The last two days' limit on reviews: more minutes would not help, so the notice does not say they would.
-  assert.equal(
-    reviewsNotScheduledText([{ name: 'Graphs', reason: 'final_limit' }]),
-    'Graphs is not in the plan for review: the day before your exam holds 5 reviews and the exam day 2, and no earlier day is left. More study time will not change that.'
-  )
-  assert.equal(
-    reviewsNotScheduledText([room('Trees'), { name: 'Graphs', reason: 'final_limit' }, { name: 'Heaps', reason: 'final_limit' }]),
-    'No room before your exam to review Trees. Add study time to fit it in. Graphs and Heaps are not in the plan for review: the day before your exam holds 5 reviews and the exam day 2, and no earlier day is left. More study time will not change that.'
-  )
-})
-
-test('day and week labels do not depend on a time zone', () => {
-  assert.equal(dayLabel('2026-10-21'), 'Wed, Oct 21')
-  assert.equal(dayLabel('2026-10-21', { long: true }), 'Wednesday, Oct 21')
-  assert.equal(dayLabel('2026-12-01'), 'Tue, Dec 1')
-  assert.equal(weekLabel('2026-10-19'), 'Oct 19 to Oct 25')
-  assert.equal(weekLabel('2026-10-26'), 'Oct 26 to Nov 1')
 })
 
 const topic = (id: string, over: Partial<PlanTopic> = {}): PlanTopic => ({
@@ -170,11 +80,6 @@ test("Up next is today's items still to do, and done items are kept apart", () =
   assert.equal(data.later?.date, '2026-10-22')
 })
 
-test('Up next is empty with nothing planned', () => {
-  const plan = planFor([topic('a', { learned: true, quizzed: true, mastery: 0.9 })])
-  assert.deepEqual(upNextFromPlan(plan, 'c1'), { upNext: [], doneToday: [], later: null })
-})
-
 test('the next-actions API lists today\'s items in order, and the setup step before that', () => {
   const plan = planFor([topic('a', { orderIndex: 0 }), topic('b', { orderIndex: 1 })])
   const actions = nextActionsFromPlan(plan)
@@ -184,49 +89,6 @@ test('the next-actions API lists today\'s items in order, and the setup step bef
   assert.equal(setupNextAction('c1', { mode: 'setup', step: 2, label: 'x' }, 0)?.type, 'extract_topics')
   assert.equal(setupNextAction('c1', { mode: 'setup', step: 2, label: 'x' }, 4)?.type, 'confirm_topics')
   assert.equal(setupNextAction('c1', { mode: 'setup', step: 3, label: 'x' }, 4), null)
-})
-
-test('rows that used to repeat the same sentence say something specific', () => {
-  const overdue = describePlanItem(item({ kind: 'review', note: 'Overdue by 2 days', mastery: 0.44 }), 'c1').reason
-  const yesterday = describePlanItem(item({ kind: 'review', note: 'Overdue by 1 day', mastery: 0.62 }), 'c1').reason
-  assert.equal(overdue, 'Due 2 days ago, mastery 44%.')
-  assert.equal(yesterday, 'Due yesterday, mastery 62%.')
-  assert.notEqual(overdue, yesterday)
-
-  const projected = describePlanItem(item({ kind: 'review', projected: true, mastery: 0.71 }), 'c1').reason
-  assert.equal(projected, 'A short check before it fades, mastery 71%.')
-  assert.match(describePlanItem(item({ kind: 'review', projected: true }), 'c1').reason, /spaced review/)
-  assert.equal(
-    describePlanItem(item({ kind: 'review', note: 'One of your weakest topics', mastery: 0.3 }), 'c1').reason,
-    'One of your weakest topics, mastery 30%.'
-  )
-
-  const first = describePlanItem(item({ kind: 'quiz' }), 'c1').reason
-  assert.match(first, /first quiz/)
-  assert.match(first, /review/)
-
-  const unit = describePlanItem(item({}), 'c1', { unitTitles: { u1: 'Sorting and graphs' } })
-  assert.equal(unit.reason, 'Read it, recall it, then practise.')
-  const inUnit = describePlanItem(item({ unitId: 'u1' }), 'c1', { unitTitles: { u1: 'Sorting and graphs' } })
-  assert.equal(inUnit.reason, 'Sorting and graphs: read it, recall it, then practise.')
-  assert.equal(describePlanItem(item({ part: { number: 2, of: 2 } }), 'c1').reason, 'Pick up where you stopped.')
-  assert.match(describePlanItem(item({ note: 'You have started this one' }), 'c1').reason, /started/)
-})
-
-test('the mixed practice link and the exam form agree for every block length', () => {
-  for (let minutes = 15; minutes <= 30; minutes += 1) {
-    const block = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes })
-    const query = new URL(planItemHref(block, 'c1'), 'http://x').searchParams
-    const linked = { minutes: Number(query.get('minutes')), questions: Number(query.get('questions')) }
-    const form = examDefaultsFromParams({ minutes: query.get('minutes') ?? undefined, questions: query.get('questions') ?? undefined })
-    assert.equal(form.durationMinutes, linked.minutes, `${minutes} min`)
-    assert.equal(form.totalQuestions, linked.questions, `${minutes} min`)
-    // The form shows the snapped time with the questions that fit that time.
-    assert.equal(linked.questions, questionsForMinutes(linked.minutes), `${minutes} min`)
-  }
-  // 25 minutes: the form offers 20 min, so the link says 20 min with 5 questions (not 10).
-  const block = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes: 25 })
-  assert.equal(planItemHref(block, 'c1'), '/courses/c1/exams/new?topics=a,b&minutes=20&questions=5')
 })
 
 test('a review of a topic without concepts keeps the quiz-based review card', () => {

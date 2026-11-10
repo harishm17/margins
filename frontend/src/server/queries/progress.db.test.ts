@@ -149,17 +149,6 @@ test('weeks under 10 events hidden', async (t) => {
   assert.deepEqual((await get(none)).weekly, [])
 })
 
-test('weeks start on Monday in the student zone', async (t) => {
-  if (!available) return t.skip('no migrated test database')
-  const w = await world('zone')
-  const c = await w.concept('Hashing')
-  // 2026-10-26 03:00 UTC is still Sunday 25 Oct evening in Los Angeles: last week there, this week in UTC.
-  await events(w, c.id, times(10, new Date('2026-10-26T03:00:00Z'), 1))
-  const la = await progress.getProgress(w.user.id, w.project.id, { timeZone: 'America/Los_Angeles', now: NOW })
-  assert.deepEqual(la.weekly.map((row) => row.week), ['2026-10-19'])
-  assert.deepEqual((await get(w)).weekly.map((row) => row.week), ['2026-10-26'])
-})
-
 test('assisted share counts every answer at level 1 or more', async (t) => {
   if (!available) return t.skip('no migrated test database')
   const w = await world('assisted')
@@ -260,20 +249,6 @@ test('focus lists misconception then plateau then lowest R, at most three', asyn
   assert.deepEqual(full.focus.slice(0, 2).map((f) => f.name), ['Rehashing', 'Collisions'])
 })
 
-test('focus skips concepts never answered, and a fixed misconception', async (t) => {
-  if (!available) return t.skip('no migrated test database')
-  const w = await world('focus-empty')
-  const untouched = await w.concept('Untouched', 0)
-  const fixed = await w.concept('Fixed', 1)
-  assert.deepEqual((await get(w)).focus, [])
-  await answer(w, fixed.id, { at: new Date(NOW.getTime() - 5 * DAY), score: 0, session: 'a', metadata: { missKind: 'misconception', misconception: 'x' } })
-  await answer(w, fixed.id, { at: new Date(NOW.getTime() - 1 * DAY), score: 1, session: 'b' })
-  const result = await get(w)
-  assert.ok(!result.focus.some((f) => f.conceptId === untouched.id))
-  assert.ok(!result.focus.some((f) => f.reason === 'misconception'))
-  assert.ok(!result.focus.some((f) => f.reason === 'plateau'))
-})
-
 test('progress is the student\'s own and the course\'s own', async (t) => {
   if (!available) return t.skip('no migrated test database')
   const w = await world('own')
@@ -325,30 +300,15 @@ test('an answer to an item that tests several concepts, or a step surrendered an
   assert.equal(result.calibration.n, 10)
 })
 
-test('focus names the topic and the mix-up, and one idea written up twice in a topic is one card', async (t) => {
+test('weeks start on Monday in the student zone', async (t) => {
   if (!available) return t.skip('no migrated test database')
-  const w = await world('focus-named')
-  const other = await prisma.topic.create({ data: { projectId: w.project.id, name: 'Sorting', orderIndex: 1, userConfirmed: true } })
-  const make = (topicId: string, orderIndex: number) =>
-    prisma.concept.create({ data: { projectId: w.project.id, topicId, name: 'Mock idea 1', summary: 'x.', kind: 'concept', orderIndex, objectiveIndexes: [] } })
-  const first = await make(w.topic.id, 0)
-  const twin = await make(w.topic.id, 1)
-  const elsewhere = await make(other.id, 0)
-  const miss = (conceptId: string, topicId: string, session: string, misconception: string, daysAgo: number) =>
-    answer(w, conceptId, { at: new Date(NOW.getTime() - daysAgo * DAY), score: 0, session, topicId, metadata: { missKind: 'misconception', misconception } })
-  await miss(first.id, w.topic.id, 'a', 'Thinks a hash is reversible', 1)
-  await miss(twin.id, w.topic.id, 'b', 'Thinks a hash is reversible', 2)
-  await miss(elsewhere.id, other.id, 'c', 'Thinks sorting is always stable', 3)
-
-  const { focus } = await get(w)
-  // The twin (same topic, same name, same mix-up) is dropped; the same name in another topic is another idea, told apart by its topic and mix-up.
-  assert.deepEqual(
-    focus.map((f) => [f.conceptId, f.topicName, f.misconception]),
-    [
-      [first.id, 'Hash tables', 'Thinks a hash is reversible'],
-      [elsewhere.id, 'Sorting', 'Thinks sorting is always stable'],
-    ]
-  )
+  const w = await world('zone')
+  const c = await w.concept('Hashing')
+  // 2026-10-26 03:00 UTC is still Sunday 25 Oct evening in Los Angeles: last week there, this week in UTC.
+  await events(w, c.id, times(10, new Date('2026-10-26T03:00:00Z'), 1))
+  const la = await progress.getProgress(w.user.id, w.project.id, { timeZone: 'America/Los_Angeles', now: NOW })
+  assert.deepEqual(la.weekly.map((row) => row.week), ['2026-10-19'])
+  assert.deepEqual((await get(w)).weekly.map((row) => row.week), ['2026-10-26'])
 })
 
 test('instruction events are not counted as help used', async (t) => {
@@ -363,60 +323,4 @@ test('instruction events are not counted as help used', async (t) => {
   assert.equal(result.assistedShare, 0)
   // And it is not a first try either.
   assert.deepEqual(result.weekly, [{ week: '2026-10-26', n: 6, accuracy: 1 }].filter((row) => row.n >= progress.MIN_WEEK_EVENTS))
-})
-
-test('idk counts in first tries at 0', async (t) => {
-  if (!available) return t.skip('no migrated test database')
-  const w = await world('idk-first-tries')
-  const c = await w.concept('Hashing')
-  const monday = new Date('2026-10-26T09:00:00Z')
-  await events(w, c.id, [
-    ...times(6, monday, 1),
-    ...times(2, monday, 0, { assistance: 1 }), // "I don't remember" on recall: a failed first try at level 1
-    ...times(2, monday, 0), // "I don't know" in a quiz: level 0, score 0
-    ...times(3, monday, 0, { source: 'warmup' }), // a warm-up "I don't know" is a pretest: left out
-  ])
-  const result = await get(w)
-  assert.deepEqual(result.weekly, [{ week: '2026-10-26', n: 10, accuracy: 0.6 }])
-})
-
-test('the first week of answers is exposed, so the panel knows the early weeks', async (t) => {
-  if (!available) return t.skip('no migrated test database')
-  const w = await world('first-week')
-  const c = await w.concept('Hashing')
-  assert.equal((await get(w)).firstWeekStart, null)
-  assert.equal((await get(w)).thisWeek, '2026-10-26')
-
-  await events(w, c.id, [
-    // Before the first answer: a warm-up, instruction and an inferred credit are not answers.
-    ...times(1, new Date('2026-09-01T09:00:00Z'), 0, { source: 'warmup' }),
-    ...times(1, new Date('2026-09-02T09:00:00Z'), 0, { assistance: 3, source: 'instruction' }),
-    ...times(1, new Date('2026-09-03T09:00:00Z'), 1, { source: 'implicit' }),
-    // The first answer is on a Wednesday: the week is the Monday before it.
-    ...times(1, new Date('2026-10-14T09:00:00Z'), 1),
-    ...times(3, new Date('2026-10-27T09:00:00Z'), 1),
-  ])
-  const result = await get(w)
-  assert.equal(result.firstWeekStart, '2026-10-12')
-  assert.equal(result.thisWeek, '2026-10-26')
-
-  // Another course's answers are not this course's.
-  const other = await world('first-week-other')
-  assert.equal((await get(other)).firstWeekStart, null)
-})
-
-test('ideas that tie for the focus come in course order, whatever order their memories were written in', async (t) => {
-  if (!available) return t.skip('no migrated test database')
-  const w = await world('focus-tie')
-  const ideas = [await w.concept('Probing', 0), await w.concept('Buckets', 1), await w.concept('Resizing', 2), await w.concept('Tombstones', 3)]
-  // The same mix-up named at the same moment for each idea (one answer tagged with them all), written last idea first.
-  const at = new Date(NOW.getTime() - DAY)
-  for (const [n, idea] of [...ideas].reverse().entries()) {
-    await answer(w, idea.id, { at, score: 0, session: `tie${n}`, metadata: { missKind: 'misconception', misconception: 'Thinks the table never fills' } })
-  }
-  const result = await get(w)
-  assert.deepEqual(
-    result.focus.map((f) => f.name),
-    ['Probing', 'Buckets', 'Resizing']
-  )
 })

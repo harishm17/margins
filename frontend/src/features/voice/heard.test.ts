@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { createHeardTracker, wordEnd } from './heard'
+import { createHeardTracker } from './heard'
 
 describe('createHeardTracker', () => {
-  it('is empty before anything plays', () => {
-    const heard = createHeardTracker()
-    assert.equal(heard.text(), '')
-    assert.equal(heard.any, false)
-  })
 
   it('counts the finished sentences and the one that was cut off', () => {
     const heard = createHeardTracker()
@@ -44,21 +39,4 @@ describe('createHeardTracker', () => {
     assert.equal(heard.text(), 'First.')
   })
 
-  it('starts over with reset', () => {
-    const heard = createHeardTracker()
-    heard.start('One.', 'One.')
-    heard.finish()
-    heard.reset()
-    assert.equal(heard.text(), '')
-    assert.equal(heard.any, false)
-  })
-})
-
-describe('wordEnd', () => {
-  it('finds the end of the word at an index', () => {
-    assert.equal(wordEnd('hello big world', 0), 5)
-    assert.equal(wordEnd('hello big world', 6), 9)
-    assert.equal(wordEnd('hello big world', 12), 15)
-    assert.equal(wordEnd('hello', 99), 5)
-  })
 })

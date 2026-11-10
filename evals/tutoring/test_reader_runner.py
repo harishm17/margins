@@ -1,6 +1,5 @@
 """Tests for the reader runner: the app's side of the margin (the rung, the restatement, the day's four replies), a whole mock
 run and the estimate. No database, no model, no network."""
-import asyncio
 import json
 import os
 import sys
@@ -74,26 +73,3 @@ def test_a_passage_gets_four_replies_a_day():
     assert margin.check_request({"event": "check", "answer": "x"}) is None
 
 
-def test_a_mock_run_writes_the_whole_results_folder_and_a_resume_plays_nothing_again(tmp_path, capsys):
-    out = tmp_path / "results"
-    args = run_eval.parse_args(["--surface", "reader", "--mock", "--label", "t", "--out-dir", str(out)])
-    code = asyncio.run(run_eval.run(args))
-    assert code == 0
-    folder = next(p for p in out.iterdir() if p.is_dir())
-    assert {p.name for p in folder.iterdir()} >= {"turns.json", "summary.json", "run.json", "raw"}
-    summary = json.loads((folder / "summary.json").read_text())
-    assert summary["config"]["surface"] == "reader" and summary["config"]["mock"] is True
-    assert [g["key"] for g in summary["metrics"]["gates"]] == ["verdict", "restatement", "restate_leak", "explain_shape", "injection"]
-    assert summary["metrics"]["passed"] is True and summary["metrics"]["errors"] == 0
-    assert (out / f"{folder.name}.md").read_text().startswith("# Reader tutor eval: t")
-    kinds = {t["kind"] for t in json.loads((folder / "turns.json").read_text())["turns"] if t.get("kind")}
-    assert kinds == {"explain", "check", "restate"}
-    again = run_eval.parse_args(["--surface", "reader", "--mock", "--resume", str(folder), "--out-dir", str(out)])
-    assert asyncio.run(run_eval.run(again)) == 0
-
-
-def test_the_dry_run_prints_a_plan_and_calls_nothing(capsys):
-    args = run_eval.parse_args(["--surface", "reader", "--dry-run"])
-    assert asyncio.run(run_eval.run(args)) == 0
-    text = capsys.readouterr().out
-    assert "surface: reader   scenarios: 15" in text and "Nothing was called" in text

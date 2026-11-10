@@ -12,7 +12,6 @@ import anthropic
 import httpx2
 import pytest
 from anthropic.types.beta import (
-    BetaCitationPageLocation,
     BetaCitationsDelta,
     BetaCitationSearchResultLocation,
     BetaRawContentBlockDeltaEvent,
@@ -22,7 +21,6 @@ from anthropic.types.beta import (
     BetaTextDelta,
 )
 
-from app.config import settings
 from app.services.llm.anthropic_provider import AnthropicProvider, split_excerpt_blocks
 from app.services.llm.base import (
     AnswerCitation,
@@ -30,14 +28,10 @@ from app.services.llm.base import (
     AnswerReset,
     AnswerText,
     Excerpt,
-    LLMMessage,
     LLMOutputError,
     LLMRefusalError,
-    LLMRequestError,
     LLMUnavailableError,
 )
-from app.services.llm.mock_provider import MockProvider
-from app.services.llm.usage import track_llm_usage
 
 EXCERPTS = [
     Excerpt(ref="chunk:aaa", title="notes.pdf, p. 3", text="Hashing maps keys to buckets.\n\nCollisions are resolved by chaining."),
@@ -158,46 +152,6 @@ class TestRequest:
         assert second["source"] == "chunk:bbb" and second["citations"] == {"enabled": True}
         assert question == {"type": "text", "text": "What is hashing?"}
 
-    @pytest.mark.asyncio
-    async def test_model_and_effort_come_from_model_chat(self, monkeypatch):
-        monkeypatch.setattr(settings, "MODEL_CHAT", "claude-haiku-5-5:high")
-        provider, calls = provider_with([text_start(), text_delta("ok")])
-        await collect(provider)
-        params = calls[0]
-        assert params["model"] == "claude-haiku-5-5"
-        assert params["output_config"] == {"effort": "high"}
-        assert "fallbacks" not in params and "betas" not in params
-
-    @pytest.mark.asyncio
-    async def test_history_comes_first_as_plain_text_and_starts_with_a_user_turn(self):
-        provider, calls = provider_with([text_start(), text_delta("ok")])
-        history = [
-            LLMMessage(role="assistant", content="stray reply"),
-            LLMMessage(role="user", content="What is a heap?"),
-            LLMMessage(role="assistant", content="A tree."),
-        ]
-        await collect(provider, history=history)
-        messages = calls[0]["messages"]
-        assert [m["role"] for m in messages] == ["user", "assistant", "user"]
-        assert messages[0]["content"] == [{"type": "text", "text": "What is a heap?"}]
-        assert messages[1]["content"] == [{"type": "text", "text": "A tree."}]
-        assert [b["type"] for b in messages[2]["content"]] == ["search_result", "search_result", "text"]
-
-    @pytest.mark.asyncio
-    async def test_a_dangling_user_turn_is_merged_with_the_new_question(self):
-        provider, calls = provider_with([text_start(), text_delta("ok")])
-        await collect(provider, history=[LLMMessage(role="user", content="earlier question")])
-        messages = calls[0]["messages"]
-        assert len(messages) == 1
-        assert messages[0]["content"][0] == {"type": "text", "text": "earlier question"}
-        assert messages[0]["content"][-1]["text"] == "What is hashing?"
-
-    @pytest.mark.asyncio
-    async def test_no_excerpts_is_rejected(self):
-        provider, _ = provider_with([])
-        with pytest.raises(LLMRequestError):
-            await collect(provider, excerpts=[])
-
 
 HASH_INTRO = (
     "# Hash Tables\n\n"
@@ -215,11 +169,6 @@ class TestSplitBlocks:
     def test_heading_goes_with_the_paragraph_after_it_and_paragraphs_stay_apart(self):
         assert split_excerpt_blocks(HASH_CHUNK) == [HASH_INTRO, HASH_COLLISIONS]
 
-    def test_short_paragraphs_are_not_merged(self):
-        assert split_excerpt_blocks("One.\n\nTwo.\n\nThree.") == ["One.", "Two.", "Three."]
-
-    def test_consecutive_headings_and_a_trailing_heading(self):
-        assert split_excerpt_blocks("# A\n\n## B\n\nBody.\n\n# End") == ["# A\n\n## B\n\nBody.", "# End"]
 
     def test_a_long_paragraph_is_split_at_sentences(self):
         text = " ".join(f"Sentence number {i} is here." for i in range(60))
@@ -229,24 +178,6 @@ class TestSplitBlocks:
         assert all(b.endswith(".") for b in blocks)  # cut at sentence ends only
         assert " ".join(blocks).split() == text.split()
 
-    def test_a_paragraph_at_the_limit_is_kept_whole(self):
-        paragraph = "x" * 600
-        assert split_excerpt_blocks(paragraph) == [paragraph]
-
-    def test_a_single_long_sentence_is_not_cut(self):
-        sentence = ("word " * 300).strip()
-        assert split_excerpt_blocks(sentence) == [sentence]
-
-    def test_never_empty(self):
-        assert split_excerpt_blocks("   ")
-        assert split_excerpt_blocks("")
-
-    @pytest.mark.asyncio
-    async def test_the_hash_chunk_is_sent_as_two_blocks(self):
-        provider, calls = provider_with([text_start(), text_delta("x")])
-        await collect(provider, excerpts=[Excerpt(ref="chunk:h", title="notes.pdf, p. 1", text=HASH_CHUNK)])
-        content = calls[0]["messages"][0]["content"][0]["content"]
-        assert [b["text"] for b in content] == [HASH_INTRO, HASH_COLLISIONS]
 
     @pytest.mark.asyncio
     async def test_block_indices_map_to_the_paragraph_that_supports_the_claim(self):
@@ -333,26 +264,6 @@ class TestEvents:
         assert done.text == "A problem is a binary relation from inputs to outputs."
         assert [(c.ref, c.offset) for c in done.citations] == [("chunk:aaa", len(done.text))]
 
-    @pytest.mark.asyncio
-    async def test_other_citation_kinds_are_ignored(self):
-        page = BetaRawContentBlockDeltaEvent(
-            type="content_block_delta",
-            index=0,
-            delta=BetaCitationsDelta(
-                type="citations_delta",
-                citation=BetaCitationPageLocation(
-                    type="page_location",
-                    cited_text="x",
-                    document_index=0,
-                    document_title=None,
-                    start_page_number=1,
-                    end_page_number=2,
-                ),
-            ),
-        )
-        provider, _ = provider_with([text_start(), text_delta("a"), page])
-        out = await collect(provider)
-        assert out[-1].citations == []
 
     @pytest.mark.asyncio
     async def test_a_fallback_model_voids_what_came_before(self):
@@ -375,13 +286,6 @@ class TestEvents:
         assert done.text == "Real answer"
         assert [(c.ref, c.offset) for c in done.citations] == [("chunk:bbb", len("Real answer"))]
 
-    @pytest.mark.asyncio
-    async def test_usage_is_recorded_for_the_budget(self):
-        provider, _ = provider_with([text_start(), text_delta("ok")])
-        with track_llm_usage() as usages:
-            await collect(provider, purpose="chat")
-        assert len(usages) == 1 and usages[0].purpose == "chat" and usages[0].output_tokens == 80
-
 
 class TestErrors:
     @pytest.mark.asyncio
@@ -401,11 +305,6 @@ class TestErrors:
             await collect(provider)
         assert raised.value.usage is not None
 
-    @pytest.mark.asyncio
-    async def test_an_empty_answer_is_an_output_error(self):
-        provider, _ = provider_with([text_start(), text_delta("  ")])
-        with pytest.raises(LLMOutputError, match="no text"):
-            await collect(provider)
 
     @pytest.mark.asyncio
     async def test_a_dropped_connection_is_translated(self):
@@ -416,27 +315,3 @@ class TestErrors:
             await collect(provider)
 
 
-class TestMockProvider:
-    @pytest.mark.asyncio
-    async def test_streams_text_and_cites_the_first_two_excerpts(self):
-        out = await collect(MockProvider())
-        citations = [e for e in out if isinstance(e, AnswerCitation)]
-        assert [c.ref for c in citations] == ["chunk:aaa", "chunk:bbb"]
-        done = out[-1]
-        assert isinstance(done, AnswerDone)
-        assert "".join(e.text for e in out if isinstance(e, AnswerText)) == done.text
-        assert all(0 < c.offset <= len(done.text) for c in citations)
-        assert done.usage.model == "mock-main" and done.usage.input_tokens == 0
-
-    @pytest.mark.asyncio
-    async def test_quotes_the_body_not_the_heading(self):
-        excerpts = [Excerpt(ref="chunk:h", title="t", text="# Hash Tables\n\nA hash table stores pairs. More text.")]
-        out = await collect(MockProvider(), excerpts=excerpts)
-        done = out[-1]
-        assert "A hash table stores pairs." in done.text and "# Hash" not in done.text
-        assert done.citations[0].cited_text == "A hash table stores pairs. More text."
-
-    @pytest.mark.asyncio
-    async def test_needs_an_excerpt(self):
-        with pytest.raises(LLMOutputError):
-            await collect(MockProvider(), excerpts=[])

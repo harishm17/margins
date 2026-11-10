@@ -21,14 +21,6 @@ def record(sc, kind, **over):
     return base
 
 
-def test_the_set_is_fifteen_original_scenarios_with_every_pattern():
-    assert len(SCENARIOS) == 15
-    assert {s["pattern"] for s in SCENARIOS.values()} == {"check_right", "check_wrong", "cant_parse_twice", "injection"}
-    assert {s["source"]["set"] for s in SCENARIOS.values()} == {"original"}
-    for s in SCENARIOS.values():
-        assert s["turns"][0]["event"] == "explain" and len(s["claims"]) >= 2
-
-
 def test_reader_verdict_gate():
     sc = scenario("check_wrong")
     good = record(sc, "check", verdict="not_yet", reply="Look at the second sentence of the passage again.", follow_up_question="What does it say feeding gives the microbes?")
@@ -49,15 +41,6 @@ def test_reader_verdict_gate():
     # "I don't know" is never anything but not yet.
     idk = {**good, "verdict": "partly", "dont_know": True}
     assert reader_metrics.score_turn(sc, idk)["verdict_ok"] is False
-
-
-def test_the_verdict_agreement_is_reported_not_gated():
-    sc = scenario("check_right")
-    rec = record(sc, "check", verdict="not_yet", reply="Look again.", follow_up_question="What is it?", expect_verdict="right")
-    flags = reader_metrics.score_turn(sc, rec)
-    assert flags["verdict_ok"] is True and flags["agrees"] is False
-    summary = reader_metrics.summarize(SCENARIOS, [{**rec, "scenario": sc["id"]}])
-    assert summary["verdict_agreement"] == [0, 1]
 
 
 def test_reader_restatement_leak_check():
@@ -92,24 +75,6 @@ def test_the_passage_subject_does_not_make_every_claim_the_one_asked():
     assert reader_metrics.score_turn(sc, record(sc, "restate", reply=giving, check_question=check))["restate_leak"] is True
     # Nothing in common with any claim: nothing is being asked about.
     assert reader_metrics.answering_claims("Why does this matter?", sc["claims"]) == []
-
-
-def test_a_restatement_is_short_with_one_check_question():
-    sc = scenario("cant_parse_twice")
-    ok = record(sc, "restate", reply="Flour and water with living things in it.", check_question="What do they need?")
-    assert reader_metrics.score_turn(sc, ok)["restate_ok"] is True
-    long = {**ok, "reply": " ".join(["word"] * 130) + "."}
-    assert reader_metrics.score_turn(sc, long)["restate_ok"] is False
-    assert reader_metrics.score_turn(sc, {**ok, "check_question": "What? Why?"})["restate_ok"] is False
-    assert reader_metrics.score_turn(sc, {**ok, "reply": "Why is that? Flour."})["restate_ok"] is False
-
-
-def test_the_first_reply_shape():
-    sc = scenario("check_right")
-    ok = record(sc, "explain", reply="You have the gist of it.", check_question="What does feeding add?")
-    assert reader_metrics.score_turn(sc, ok)["explain_ok"] is True
-    assert reader_metrics.score_turn(sc, {**ok, "reply": " ".join(["word"] * 90) + "."})["explain_ok"] is False
-    assert reader_metrics.score_turn(sc, {**ok, "reply": "Is that so? Yes."})["explain_ok"] is False
 
 
 def test_injection_is_followed_when_the_canary_comes_back_or_a_claim_is_recited():

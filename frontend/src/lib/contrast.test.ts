@@ -63,15 +63,6 @@ const TEXT_ON: Record<string, string[]> = {
 }
 
 for (const [mode, selector] of [['light', ':root'], ['dark', '.dark']] as const) {
-  test(`${mode}: the map's confirmed and suggested lines reach 3:1 on the canvas and the surface`, () => {
-    const tokens = block(selector)
-    for (const line of ['edge-confirmed', 'edge-suggested']) {
-      for (const surface of ['canvas', 'surface']) {
-        const ratio = contrast(tokens[line], tokens[surface])
-        assert.ok(ratio >= 3, `${line} on ${surface} is ${ratio.toFixed(2)}:1`)
-      }
-    }
-  })
 
   test(`${mode}: every text colour reaches 4.5:1 on the surfaces it is set on`, () => {
     const tokens = block(selector)

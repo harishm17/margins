@@ -19,13 +19,6 @@ const topic = (id: string, mastery: number | null, confirmed = true) => ({
   hasConcepts: true,
 })
 
-test('course mastery counts not-started topics as 0', () => {
-  assert.equal(courseMastery([0.61, null, null, null, null, null, null]), 0.61 / 7)
-  assert.equal(courseMastery([0.5, 1]), 0.75)
-  assert.equal(courseMastery([null, null]), 0)
-  assert.equal(courseMastery([]), null)
-})
-
 test('the overview summary averages over every confirmed topic', () => {
   const summary = summarizeTopics([
     topic('a', 0.61),

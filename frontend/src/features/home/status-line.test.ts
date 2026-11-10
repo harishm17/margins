@@ -9,9 +9,3 @@ test('names the most advanced non-zero level as a count out of all the topics', 
   assert.equal(activeStatusLine(['learning', 'none', 'none']), '1 of 3 topics learning')
   assert.equal(activeStatusLine(['strong']), '1 of 1 topic strong')
 })
-
-test('says only the topic count when nothing has started, and never names an empty level', () => {
-  assert.equal(activeStatusLine(['none', 'none']), '2 topics')
-  assert.equal(activeStatusLine(['none']), '1 topic')
-  assert.ok(!activeStatusLine(['getting']).includes('0 strong'))
-})

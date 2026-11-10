@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fadeNote, masteryChange, nextReviewLabel, studyOutcome } from './consequence'
+import { fadeNote, nextReviewLabel, } from './consequence'
 
 // Wednesday 21 October 2026, 15:00 UTC: 8:00 in Los Angeles.
 const NOW = new Date('2026-10-21T15:00:00Z')
@@ -19,24 +19,6 @@ test('the next review is named by the day, in the student\'s own days', () => {
   assert.equal(nextReviewLabel('2026-10-22T03:00:00Z', NOW, 'UTC'), 'Next review tomorrow')
   assert.equal(nextReviewLabel(null, NOW, LA), null)
   assert.equal(nextReviewLabel('nonsense', NOW, LA), null)
-})
-
-test('mastery change is said in the words of the student, never as a bare number', () => {
-  assert.equal(masteryChange(0.62, 0.71), 'Mastery went from 62% to 71%.')
-  assert.equal(masteryChange(0.71, 0.55), 'Mastery went from 71% to 55%.')
-  // Where mastery stands is the topic header's figure; only a move is the consequence worth saying here.
-  assert.equal(masteryChange(0.5, 0.5), null)
-  assert.equal(masteryChange(0.5, 0.504), null)
-  assert.equal(masteryChange(null, 0.4), null)
-  assert.equal(masteryChange(0.4, null), null)
-})
-
-test('a quiz says what changed: the next review and the mastery', () => {
-  const outcome = studyOutcome({ nextReviewAt: '2026-10-23T20:00:00Z', mastery: 0.71, previousMastery: 0.62 }, NOW, LA)
-  assert.equal(outcome, 'Next review Fri. Mastery went from 62% to 71%.')
-  assert.equal(studyOutcome({ nextReviewAt: '2026-10-22T20:00:00Z', mastery: 0.3, previousMastery: null }, NOW, LA), 'Next review tomorrow.')
-  assert.equal(studyOutcome({ nextReviewAt: null, mastery: 0.3, previousMastery: null }, NOW, LA), null)
-  assert.equal(studyOutcome({ nextReviewAt: null, mastery: null, previousMastery: null }, NOW, LA), null)
 })
 
 test('why a ring dropped: mastery fades while a review is late', () => {

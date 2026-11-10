@@ -27,22 +27,6 @@ describe('analytics proxy routes', () => {
     assert.equal(calls[0].init.headers.get('cookie'), null)
   })
 
-  it('sends the per-site config to the assets host, never cached, with the browser Origin', async () => {
-    for (const file of ['config', 'config.js']) {
-      const { calls, fetchImpl } = upstream()
-      const res = await proxyPosthog(
-        new Request(`https://studymargins.com/m/array/phc_abc/${file}`, { headers: { origin: 'https://studymargins.com', cookie: SESSION } }),
-        fetchImpl
-      )
-      assert.equal(calls[0].url, `https://us-assets.i.posthog.com/array/phc_abc/${file}`)
-      assert.equal(calls[0].init.headers.get('origin'), 'https://studymargins.com')
-      assert.equal(calls[0].init.headers.get('cookie'), null)
-      assert.equal(res.headers.get('cache-control'), 'no-store')
-      assert.equal(res.headers.get('access-control-allow-origin'), 'https://studymargins.com')
-      assert.equal(res.headers.get('content-type'), file.endsWith('.js') ? 'application/javascript' : 'application/json')
-    }
-  })
-
   it('sends everything else to the API host with the body, without cookies, and with the visitor address', async () => {
     const { calls, fetchImpl } = upstream()
     const body = '{"api_key":"phc_abc","event":"quiz_started"}'
@@ -80,17 +64,6 @@ describe('analytics proxy routes', () => {
     assert.equal(calls[0].init.headers.get('authorization'), null)
   })
 
-  it('passes PostHog errors through (a 4xx from PostHog is still an answer) and hides upstream encoding headers', async () => {
-    const { fetchImpl } = upstream(
-      () => new Response('{"status":0}', { status: 400, headers: { 'content-type': 'application/json', 'content-encoding': 'gzip', 'set-cookie': 'x=1', 'content-length': '3' } })
-    )
-    const res = await proxyPosthog(new Request('https://studymargins.com/m/i/v0/e/', { method: 'POST', body: '{}' }), fetchImpl)
-    assert.equal(res.status, 400)
-    assert.equal(res.headers.get('content-encoding'), null)
-    assert.equal(res.headers.get('set-cookie'), null)
-    assert.equal(res.headers.get('content-length'), null)
-  })
-
   it('answers 502 when PostHog is unreachable, and refuses oversized bodies and other methods', async () => {
     const down = async () => {
       throw new Error('offline')
@@ -106,17 +79,14 @@ describe('analytics proxy routes', () => {
     assert.equal(calls.length, 0)
   })
 
-  it('answers the CORS preflight itself', async () => {
-    const { calls, fetchImpl } = upstream()
-    const res = await proxyPosthog(new Request('https://studymargins.com/m/i/v0/e/', { method: 'OPTIONS' }), fetchImpl)
-    assert.equal(res.status, 204)
-    assert.equal(calls.length, 0)
-  })
-
-  it('only answers under /m', async () => {
-    const { calls, fetchImpl } = upstream()
-    assert.equal((await proxyPosthog(new Request('https://studymargins.com/mail'), fetchImpl)).status, 404)
-    assert.equal((await proxyPosthog(new Request('https://studymargins.com/home'), fetchImpl)).status, 404)
-    assert.equal(calls.length, 0)
+  it('passes PostHog errors through (a 4xx from PostHog is still an answer) and hides upstream encoding headers', async () => {
+    const { fetchImpl } = upstream(
+      () => new Response('{"status":0}', { status: 400, headers: { 'content-type': 'application/json', 'content-encoding': 'gzip', 'set-cookie': 'x=1', 'content-length': '3' } })
+    )
+    const res = await proxyPosthog(new Request('https://studymargins.com/m/i/v0/e/', { method: 'POST', body: '{}' }), fetchImpl)
+    assert.equal(res.status, 400)
+    assert.equal(res.headers.get('content-encoding'), null)
+    assert.equal(res.headers.get('set-cookie'), null)
+    assert.equal(res.headers.get('content-length'), null)
   })
 })

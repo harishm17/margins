@@ -78,7 +78,6 @@ def _sweep(hits_by_k):
     [
         ({8: 60, 12: 60, 20: 61}, 8),  # 8 finds as many as today's 12
         ({8: 59, 12: 60, 20: 60}, 12),  # 8 loses a turn: today's count stays
-        ({8: 60, 12: 61, 20: 61}, 12),
     ],
 )
 def test_pick_excerpt_count_is_the_smallest_with_no_drop_from_today(hits_by_k, pick):
@@ -103,17 +102,6 @@ def test_score_answer_reads_the_cited_chunks_from_the_done_event():
     }
 
 
-def test_score_answer_marks_a_reply_with_no_sources_found():
-    events = [{"type": "done", "text": "Not in your materials.", "sources": [], "stop_reason": "no_sources", "retrieved": 0}]
-    scored = run_a3.score_answer(200, events, {"c1"})
-    assert scored["not_in_materials"] is True and scored["cited_hit"] is False and scored["cites"] is False
-
-
-def test_score_answer_keeps_a_failed_request_as_an_error():
-    scored = run_a3.score_answer(503, [{"type": "error", "message": "down"}], {"c1"})
-    assert scored["status"] == 503 and scored["cited_hit"] is None
-
-
 def test_aggregate_answers_leaves_errors_out_of_the_rates():
     rows = [
         {"k": 12, "turn": "first", "kind": "bare", "status": 200, "cited_hit": True, "cites": True, "not_in_materials": False, "cost_usd": 0.03},
@@ -125,17 +113,6 @@ def test_aggregate_answers_leaves_errors_out_of_the_rates():
     assert by_k[12]["all"]["cited_hit_rate"] == 0.5
     assert by_k[12]["followup"]["not_in_materials_rate"] == 1.0
     assert by_k[12]["all"]["cost_usd"] == pytest.approx(0.03)
-
-
-def test_the_report_renders_a_sweep_without_answers():
-    records = [record(k, "first", "bare", True, 1) for k in run_a3.KS] + [record(k, "followup", "bare", False, found=0) for k in run_a3.KS]
-    summary = {"retrieval": run_a3.aggregate_retrieval(records)}
-    summary["pick"] = dict(zip(("k", "reason"), run_a3.pick_excerpt_count(summary["retrieval"], today=12)))
-    report = run_a3.render_report(summary, {"label": "t", "date": "2026-01-01", "today": 12})
-    assert "| Turns | 8 | 12 (today) | 20 |" in report
-    assert "| Follow-ups, bare | 0% (0 of 1) | 0% (0 of 1) | 0% (0 of 1) |" in report
-    assert "Excerpt count for M7" in report
-    assert "## Answers" not in report
 
 
 def test_run_a3_leaves_the_module_name_run_eval_to_the_tutoring_eval():

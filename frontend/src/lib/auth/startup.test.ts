@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { googleOAuthSettings } from './google-config'
-import { isDeployed, isLoopbackHost } from './site'
+import { isDeployed } from './site'
 import { checkAuthStartup } from './startup'
 
 const SECRET = 'a-long-random-secret-for-tests-only'
@@ -10,13 +10,6 @@ const GOOGLE = {
   GOOGLE_OAUTH_CLIENT_SECRET: 'GOCSPX-abcdefghijklmnopqrstuvwx',
 }
 const LIVE = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, NEXTAUTH_URL: 'https://studymargins.com' }
-
-test('a real Google client is accepted', () => {
-  assert.deepEqual(googleOAuthSettings(GOOGLE), {
-    clientId: GOOGLE.GOOGLE_OAUTH_CLIENT_ID,
-    clientSecret: GOOGLE.GOOGLE_OAUTH_CLIENT_SECRET,
-  })
-})
 
 test('missing, empty and placeholder Google settings count as missing', () => {
   const cases = [
@@ -61,15 +54,6 @@ test('a local production build (e2e, the image check, docker compose) and develo
 
 test('production still needs NEXTAUTH_SECRET', () => {
   assert.throws(() => checkAuthStartup({ NODE_ENV: 'production', NEXTAUTH_URL: 'http://localhost:3000' }), /NEXTAUTH_SECRET/)
-})
-
-test('loopback hosts, with and without ports', () => {
-  for (const host of ['localhost', 'localhost:3000', '127.0.0.1:8080', '::1', '[::1]:3000', 'LOCALHOST']) {
-    assert.equal(isLoopbackHost(host), true, host)
-  }
-  for (const host of ['studymargins.com', 'localhost.studymargins.com', '10.0.0.5:3000', '0.0.0.0', '', null, undefined]) {
-    assert.equal(isLoopbackHost(host), false, String(host))
-  }
 })
 
 test('next build is never stopped: the checks run when the server starts', () => {

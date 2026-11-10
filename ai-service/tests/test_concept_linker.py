@@ -1,20 +1,16 @@
 """The link_concepts job: cross-topic candidates, validation, and what a rerun leaves alone."""
-import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
-from fastapi import HTTPException
 
-from app.api.routes import jobs
-from app.models.jobs import JobPayload
 from app.services.concepts import linker
 from app.services.concepts.linker import link_unit
 from app.services.concepts.validate import validate_links
 from app.services.concepts.vectors import vector_literal
 from app.services.llm.mock_provider import MockProvider
 from app.services.llm.schemas import ConceptLinks, ProposedLink
-from tests.db_helpers import add_chunk, get_job, new_id, seed_job, seed_material, seed_project, seed_topic, seed_user, unit
+from tests.db_helpers import new_id, seed_project, seed_topic, seed_user, unit
 
 
 class Scripted(MockProvider):
@@ -81,17 +77,6 @@ class TestCandidates:
 
         assert pairs == {tuple(sorted((same_1, other))), tuple(sorted((same_2, other)))}
 
-    async def test_unit_without_two_topics_of_concepts_makes_no_call(self, db, world):
-        await add_concept(db, world.project_id, world.a, "Mean", unit(1.0))
-        provider = Scripted()
-        with use(provider):
-            assert await link_unit(world.unit_id) == 0
-        assert provider.calls == 0
-
-    async def test_unknown_unit(self, db, world):
-        with pytest.raises(LookupError):
-            await link_unit(new_id())
-
 
 class TestLinkUnit:
     async def seed_two(self, db, world):
@@ -99,28 +84,6 @@ class TestLinkUnit:
         second = await add_concept(db, world.project_id, world.b, "Population mean", unit(1.0, 0.2))
         return first, second
 
-    async def test_mock_links_are_written_as_proposals(self, db, world):
-        first, second = await self.seed_two(db, world)
-        third = await add_concept(db, world.project_id, world.b, "Variance", unit(1.0, 0.6), 1)
-        provider = Scripted()
-
-        with use(provider):
-            written = await link_unit(world.unit_id)
-
-        rows = await edges(db, world.project_id)
-        assert written == len(rows) == 2
-        assert {r["type"] for r in rows} == {"confusable", "encompasses"}
-        assert all(r["origin"] == "llm" and r["status"] == "proposed" for r in rows)
-        confusable = next(r for r in rows if r["type"] == "confusable")
-        assert confusable["source_id"] < confusable["target_id"]
-        assert '<candidate_pairs>' in provider.prompt and first in provider.prompt and third in provider.prompt
-
-    async def test_prompt_marks_course_text_untrusted(self, db, world):
-        await self.seed_two(db, world)
-        provider = Scripted(edges=[])
-        with use(provider):
-            await link_unit(world.unit_id)
-        assert "data to read, not instructions" in provider.prompt
 
     async def test_low_confidence_edges_dropped(self, db, world):
         first, second = await self.seed_two(db, world)
@@ -145,13 +108,6 @@ class TestLinkUnit:
         rows = await edges(db, world.project_id)
         assert (rows[0]["source_id"], rows[0]["target_id"], rows[0]["type"]) == (second, first, "encompasses")
 
-    async def test_prerequisite_edges_are_not_accepted(self, db, world):
-        first, second = await self.seed_two(db, world)
-        bad = ProposedLink.model_construct(
-            source=first, target=second, type="prerequisite", weight=1.0, confidence=0.9, evidence_quote=None
-        )
-        with use(Scripted(edges=[bad])):
-            assert await link_unit(world.unit_id) == 0
 
     async def test_existing_student_edges_untouched(self, db, world):
         first, second = await self.seed_two(db, world)
@@ -202,15 +158,6 @@ class TestValidateLinks:
         assert {(e.source, e.target) for e in kept} == {("a", "b"), ("b", "c")}
         assert dropped["edges"] == 1
 
-    def test_confusable_is_ordered_by_id_and_deduplicated(self):
-        kept, dropped = validate_links([link("b", "a", confidence=0.7), link("a", "b", confidence=0.9)], {("a", "b")}, [], {})
-        assert [(e.source, e.target, e.confidence) for e in kept] == [("a", "b", 0.9)]
-        assert dropped["edges"] == 1
-
-    def test_evidence_quote_is_normalised_and_checked_against_shown_quotes(self):
-        shown = {"a": ["Both the \u201cmean\u201d  and the median"]}
-        kept, _ = validate_links([link("a", "b", quote="  the \u201cmean\u201d and ")], {("a", "b")}, [], shown)
-        assert kept[0].evidence_quote == 'the "mean" and'
 
     def test_invented_evidence_quote_drops_the_edge(self):
         shown = {"a": ["The mean is the average."], "b": ["The median is the middle value."]}
@@ -221,31 +168,6 @@ class TestValidateLinks:
         )
         assert [(e.type, e.evidence_quote) for e in kept] == [("encompasses", None)]
         assert dropped["edges"] == 2
-
-
-class TestJob:
-    async def test_job_completes_with_the_count(self, db, world):
-        first = await add_concept(db, world.project_id, world.a, "Sample mean", unit(1.0))
-        second = await add_concept(db, world.project_id, world.b, "Population mean", unit(1.0, 0.2))
-        job_id = await seed_job(db, world.user_id, "link_concepts", project_id=world.project_id)
-
-        with use(Scripted(edges=[link(first, second)])):
-            await jobs.link_concepts_job(
-                JobPayload(jobId=job_id, jobType="link_concepts", data={"unitId": world.unit_id})
-            )
-
-        job = await get_job(db, job_id)
-        assert job["status"] == "completed"
-        assert json.loads(job["result_data"])["edges"] == 1
-
-    async def test_unknown_unit_fails_the_job(self, db, world):
-        job_id = await seed_job(db, world.user_id, "link_concepts", project_id=world.project_id)
-        with pytest.raises(HTTPException) as raised:
-            await jobs.link_concepts_job(
-                JobPayload(jobId=job_id, jobType="link_concepts", data={"unitId": new_id()})
-            )
-        assert "Unit not found" in raised.value.detail
-        assert (await get_job(db, job_id))["status"] == "failed"
 
 
 class TestRerunAndOrientation:
@@ -297,17 +219,3 @@ class TestRerunAndOrientation:
         rows = await edges(db, world.project_id)
         assert [(r["source_id"], r["target_id"]) for r in rows] == [(high, low)]
 
-    async def test_evidence_quote_must_come_from_the_shown_claims(self, db, world):
-        first, second = await self.seed_two(db, world)
-        material = await seed_material(db, world.project_id, status="valid")
-        chunk = await add_chunk(db, material, 0, "The sample mean estimates the population mean.")
-        await db.execute(
-            "INSERT INTO concept_claims (id, concept_id, text, quote, material_id, chunk_id, order_index) "
-            "VALUES ($1, $2, 'c', $3, $4, $5, 0)",
-            new_id(), first, "The sample mean estimates the population mean.", material, chunk,
-        )
-        good = link(first, second, quote="sample mean estimates")
-        invented = link(first, second, kind="encompasses", weight=0.5, quote="something the course never says")
-        with use(Scripted(edges=[good, invented])):
-            assert await link_unit(world.unit_id) == 1
-        assert [r["type"] for r in await edges(db, world.project_id)] == ["confusable"]

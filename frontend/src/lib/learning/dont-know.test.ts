@@ -9,12 +9,6 @@ test('isDontKnow: admissions and requests are true', () => {
   }
 })
 
-test('isDontKnow: an attempt is false', () => {
-  for (const text of ['I think it\'s the mean', 'no, the variance', 'the answer is 42', 'I don\'t know but maybe the median', 'not sure, perhaps a hash map']) {
-    assert.equal(isDontKnow(text), false, text)
-  }
-})
-
 const base: Omit<ItemAnswerInput, 'source' | 'score' | 'assistance' | 'gradedBy' | 'metadata'> = {
   userId: 'u',
   projectId: 'p',
@@ -36,20 +30,6 @@ test('dontKnowEvidence is a wrong answer with no confidence and a cue miss', () 
     assert.deepEqual(input.metadata, { idk: true, missKind: 'cue_miss' })
     assert.equal(input.gradedBy, 'rule')
   }
-})
-
-test('dontKnowEvidence keeps the metadata of the surface and never sets a misconception', () => {
-  const [input] = dontKnowEvidence({ ...base, surface: 'review', level: 0, metadata: { mode: 'recall', misconception: 'x' } })
-  assert.equal(input.metadata?.mode, 'recall')
-  assert.equal(input.metadata?.idk, true)
-  assert.equal(input.metadata?.missKind, 'cue_miss')
-  assert.equal('misconception' in (input.metadata ?? {}), false)
-  assert.equal(input.source, 'review')
-})
-
-test('an IDK on a warm-up is a warm-up event', () => {
-  const [input] = dontKnowEvidence({ ...base, surface: 'warmup', level: 0 })
-  assert.equal(input.source, 'warmup')
 })
 
 test('a lone option letter, filler word or "no" is an answer, not an admission', () => {

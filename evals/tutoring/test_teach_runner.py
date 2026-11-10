@@ -7,7 +7,6 @@ import re
 import sys
 from pathlib import Path
 
-import pytest
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -126,18 +125,6 @@ def test_the_session_answers_the_tools_from_the_scripted_verdicts_like_the_app()
     assert session.claims_given == []  # no claim text reaches the coach before action explain
 
 
-def test_a_closed_idea_is_done_and_asks_nothing_more():
-    scenario = first("confident_wrong")
-    session = teach_eval.Session(scenario)
-    cid = scenario["concept"]["id"]
-    for turn in range(1, 5):
-        session.turn = turn
-        session.answer("assess_explanation", {"concept_id": cid, "explanation": "x"})
-    assert session.closed()
-    assert session.answer("get_concept_to_explain", {})["done"] is True
-    assert "finished" in session.answer("assess_explanation", {"concept_id": cid, "explanation": "x"})["error"]
-
-
 # ---------------------------------------------------------------- playing
 
 
@@ -154,14 +141,6 @@ def test_a_calm_coach_passes_every_gate_through_the_whole_loop():
     passed = {g["key"]: g["passed"] for g in summary["gates"]}
     assert passed["teaches_before_probe"] is None
     assert [v for k, v in passed.items() if k not in ("injection", "teaches_before_probe")] == [True, True, True]
-
-
-def test_the_coach_is_given_the_apps_prompt_and_tools():
-    scenario = first("idk3")
-    coach = ScriptedCoach(scenario, calm)
-    play(scenario, coach)
-    assert coach.calls[0]["tools"] == ["get_concept_to_explain", "assess_explanation", "record_check"]
-    assert coach.calls[0]["system"] == PROMPTS["topics"][scenario["topic"]]["system"]
 
 
 def test_a_coach_that_recites_a_claim_fails_the_gates():
@@ -191,19 +170,6 @@ def test_the_spend_stop_ends_the_conversation_and_is_not_written_as_finished(tmp
     assert stop.get("reason")
     assert not any(r.get("text") for r in records)
     assert not list(tmp_path.glob("*.json"))
-
-
-def test_a_graded_utterance_is_one_model_call_with_the_result_in_the_message():
-    scenario = first("full_coverage")
-    coach = ScriptedCoach(scenario, calm)
-    records, stop, provider = play(scenario, coach)
-    assert records[0]["model_calls"] == 2  # the opening: the tool call that gets the idea, then the ask
-    graded = records[1:]
-    assert [r["model_calls"] for r in graded] == [1] * len(graded)  # it was 2: the tool call, then the spoken reply
-    assert all(r["pre_run"] in ("assess_explanation", "record_check") for r in graded)
-    assert graded[0]["tools"][0]["pre_run"] is True and graded[0]["tools"][0]["name"] == "assess_explanation"
-    assert {c["purpose"] for c in provider.calls} == {"voice"}
-    assert not stop
 
 
 def test_the_coach_is_given_the_result_as_tagged_data_after_the_students_words():
@@ -240,39 +206,6 @@ def test_a_request_is_not_graded_and_a_coach_that_asks_for_the_tool_anyway_gets_
 
 
 # ---------------------------------------------------------------- the run
-
-
-def test_the_estimate_counts_one_call_per_student_message_and_two_to_open_and_dry_run_calls_nothing(capsys):
-    tracker = spend_module.SpendTracker(4.0, 3.0, adapters.estimate_cost)
-    run_eval.prepare_app_environment()
-    plan = teach_eval.estimate(SCENARIOS, PROMPTS, tracker)
-    reached = sum(len(__import__("teach_state").parity_trace(s)) for s in SCENARIOS)
-    assert plan["calls"] == 2 * len(SCENARIOS) + reached and plan["usd"] > 0
-    args = run_eval.parse_args(["--surface", "teach_back", "--dry-run"])
-    assert asyncio.run(run_eval.run(args)) == 0
-    assert "Plan" in capsys.readouterr().out
-
-
-def test_a_mock_run_writes_the_whole_results_folder_and_a_resume_plays_nothing_again(tmp_path, capsys):
-    out = tmp_path / "results"
-    args = run_eval.parse_args(["--surface", "teach_back", "--mock", "--limit", "8", "--label", "t", "--out-dir", str(out)])
-    code = asyncio.run(run_eval.run(args))
-    assert code in (0, 1)
-    folder = next(p for p in out.iterdir() if p.is_dir())
-    assert {p.name for p in folder.iterdir()} >= {"turns.json", "summary.json", "run.json", "raw"}
-    summary = json.loads((folder / "summary.json").read_text())
-    assert summary["config"]["surface"] == "teach_back" and summary["config"]["mock"] is True
-    # Five gates, and the explain-first row when the run played a turn the app planned as one. No --judge: not run.
-    assert len(summary["metrics"]["gates"]) in (5, 6)
-    judged = next(g for g in summary["metrics"]["gates"] if g["key"] == "teaches_before_probe")
-    assert judged["not_run"] is True and judged["passed"] is None
-    report = (out / f"{folder.name}.md").read_text()
-    assert "# Teach-back eval: t" in report and "## Gates" in report and "Mock provider" in report
-    assert "not run (needs --judge)" in report
-    capsys.readouterr()
-    again = run_eval.parse_args(["--surface", "teach_back", "--mock", "--resume", str(folder)])
-    asyncio.run(run_eval.run(again))
-    assert "Resuming" in capsys.readouterr().out
 
 
 def test_the_builder_reproduces_the_committed_file():

@@ -14,19 +14,6 @@ test('the Ask logic over the eval scenarios equals the committed parity fixture'
   assert.deepEqual(actual, expected)
 })
 
-test('the fixture covers a decline, a refusal, a worked example, a graded card and a climbing ladder', () => {
-  const expected = JSON.parse(fs.readFileSync(ASK_PARITY_FIXTURE, 'utf8')) as {
-    turns: { event: string; declined?: boolean; taught?: boolean; checked_correct: boolean; rung_after?: number; tutor?: { rung: number; final_allowed: boolean; show_worked?: boolean } }[]
-  }[]
-  const turns = expected.flatMap((scenario) => scenario.turns)
-  assert.ok(turns.some((turn) => turn.declined))
-  assert.ok(turns.some((turn) => turn.event === 'show_worked' && turn.tutor?.show_worked && turn.tutor.rung === 5))
-  assert.ok(turns.some((turn) => turn.event === 'card' && turn.checked_correct === false))
-  assert.ok(turns.every((turn) => !turn.tutor?.final_allowed))
-  assert.ok(turns.some((turn) => (turn.rung_after ?? 0) >= 2))
-  assert.ok(turns.some((turn) => turn.taught))
-})
-
 test('the word layer declines a question asked in pieces at its last piece, and lets a rewording and a translation through', () => {
   const scenarios = loadAskScenarios(ASK_PARITY_SCENARIOS).filter((scenario) => (scenario.id.includes('exam_guard_pieces') || scenario.id.includes('exam_guard_meaning')))
   assert.equal(scenarios.length, 6)

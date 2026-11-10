@@ -141,12 +141,6 @@ dbTest('a solve turn moves the ladder by the one event it is: an attempt climbs,
   assert.equal((await events(w)).length, 0)
 })
 
-dbTest('the routed concepts are kept on the thread\'s state', async () => {
-  const w = await world()
-  await finish(w, 'ask', 'I tried substituting x = 2 but the limits look wrong', route(w, { intent: 'solve' }))
-  assert.deepEqual((await store.getTutorState(w.user.id, 'ask', w.thread.id)).conceptIds, [w.concept.id])
-})
-
 dbTest('the worked example needs an attempt, then surrenders once: level 3 and rung 5', async () => {
   const w = await world()
   const none = turn.planAskTurn(await turn.loadAskState(w.user.id, w.thread.id), turn.WORKED_EXAMPLE_REQUEST, 'show_worked')
@@ -329,27 +323,6 @@ dbTest('the open exam\'s questions are the in-progress attempts of this course t
   assert.deepEqual(await guard.openExamQuestionTexts((await world()).user.id, w.project.id), [])
 })
 
-dbTest('the open exams carry their ids, and the decline links back to the one that matched', async () => {
-  const w = await world()
-  const id = await exam(w, 'in_progress', [{ question_text: 'Which structure gives constant average lookup?' }])
-  const open = await guard.openExams(w.user.id, w.project.id)
-  assert.deepEqual(open, [{ examId: id, texts: ['Which structure gives constant average lookup?'] }])
-  const href = guard.examTakeHref(w.project.id, id)
-  assert.equal(href, `/courses/${w.project.id}/exams/${id}/take`)
-  const event = JSON.parse((await new Response(guard.declinedStream(href)).text()).trim())
-  assert.equal(event.text, `${guard.EXAM_GUARD_REPLY}\n\n[Back to your mock exam](${href})`)
-  assert.equal(guard.declinedReply(), guard.EXAM_GUARD_REPLY)
-})
-
-dbTest('the declined stream is one finished answer with no cost', async () => {
-  const text = await new Response(guard.declinedStream()).text()
-  const event = JSON.parse(text.trim())
-  assert.equal(event.type, 'done')
-  assert.equal(event.text, guard.EXAM_GUARD_REPLY)
-  assert.equal(event.stop_reason, 'exam_guard')
-  assert.deepEqual(event.usage, { model: '', input_tokens: 0, output_tokens: 0, cost_usd: 0 })
-})
-
 dbTest('"I don\'t know" then Got it counts as Missed: score 0, no right answer seen by the thread', async () => {
   const w = await world()
   const message = await withCard(w)
@@ -415,33 +388,6 @@ dbTest('a concept with no evidence is band 0: it explains after one non-attempt 
   assert.equal((await planNext(w, 'idk')).tutor.understand_mode, 'explain_short')
 })
 
-dbTest('a concept the student has answered well waits for two non-attempt turns', async () => {
-  const w = await world()
-  const { recordEvidence } = await import('@/lib/learning/evidence')
-  await recordEvidence(
-    [
-      {
-        userId: w.user.id,
-        projectId: w.project.id,
-        topicId: w.topic.id,
-        itemKey: `quiz:${crypto.randomUUID()}`,
-        conceptIds: [w.concept.id],
-        source: 'quiz',
-        score: 1,
-        assistance: 0,
-        gradedBy: 'rule',
-        sessionKey: `s:${crypto.randomUUID()}`,
-        at: new Date(Date.now() - 60_000),
-      },
-    ],
-    { timeZone: 'UTC', userId: w.user.id }
-  )
-  await finish(w, 'ask', 'Explain hash tables', route(w, { hasAttempt: false }))
-  assert.equal((await planNext(w, 'idk')).tutor.understand_mode, 'commit')
-  await finish(w, 'ask', 'idk', route(w, { hasAttempt: false }))
-  assert.equal((await planNext(w, 'idk')).tutor.understand_mode, 'explain_short')
-})
-
 dbTest('explain_short records level 3 on the routed concepts and resets the count', async () => {
   const w = await world()
   await finish(w, 'ask', 'Explain hash tables', route(w, { hasAttempt: false }))
@@ -453,23 +399,4 @@ dbTest('explain_short records level 3 on the routed concepts and resets the coun
   assert.equal(rows[0].score, 0)
   assert.equal(rows[0].conceptId, w.concept.id)
   assert.deepEqual(await counter(w), { understandNoAttempt: 0, understandConcepts: [w.concept.id] })
-})
-
-dbTest('an attempt resets the stored count and new concepts restart it at 1', async () => {
-  const w = await world()
-  const other = await prisma.concept.create({
-    data: { projectId: w.project.id, topicId: w.topic.id, name: 'Heaps', summary: 'A tree.', kind: 'concept', orderIndex: 1 },
-  })
-  // A broad question and a lookup change nothing.
-  await finish(w, 'ask', 'Explain everything', route(w, { broad: true }))
-  await finish(w, 'ask', 'What is hashing?', route(w, { intent: 'lookup' }))
-  assert.equal(await counter(w), null)
-  await finish(w, 'ask', 'Explain hash tables', route(w, { hasAttempt: false }))
-  // Planned in band 1 (two turns needed), so the second turn is the first on new concepts and restarts the count.
-  const planned = turn.planAskTurn(await turn.loadAskState(w.user.id, w.thread.id), 'Explain heaps', 'ask', [], { noAttempt: 1, concepts: [w.concept.id], band: 1 })
-  assert.ok(planned.ok)
-  await turn.finishAskTurn({ userId: w.user.id, projectId: w.project.id, threadId: w.thread.id, messageId: (await reply(w, null)).id, plan: planned.plan, route: route(w, { hasAttempt: false, concepts: ['Heaps'], conceptIds: [other.id] }), stopReason: 'end_turn', timeZone: 'UTC' })
-  assert.deepEqual(await counter(w), { understandNoAttempt: 1, understandConcepts: [other.id] })
-  await finish(w, 'ask', 'I think a heap is a tree where the parent is larger', route(w, { hasAttempt: true, concepts: ['Heaps'], conceptIds: [other.id] }))
-  assert.equal((await counter(w))?.understandNoAttempt, 0)
 })

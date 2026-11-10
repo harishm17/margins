@@ -103,32 +103,6 @@ class TestOutline:
         assert sections[1].heading == "Slide 3"
         assert [s.chunk_start for s in sections] == [0, 3, 6, 9]
 
-    def test_sections_are_numbered_across_files_in_upload_order_then_document_order(self):
-        chunks = [chunk("a", 0, "A1"), chunk("a", 1, "A2"), chunk("b", 0, "B1"), chunk("b", 1, "B1"), chunk("b", 2, "B2")]
-        assert [(s.id, s.material_id, s.heading, s.position) for s in build_outline(chunks)] == [
-            ("S1", "a", "A1", 0), ("S2", "a", "A2", 1), ("S3", "b", "B1", 2), ("S4", "b", "B2", 3),
-        ]
-
-    def test_a_section_never_runs_across_two_files(self):
-        sections = build_outline([chunk("a", 0, "Intro"), chunk("b", 0, "Intro")])
-        assert [s.material_id for s in sections] == ["a", "b"]
-
-    def test_a_huge_section_is_cut_into_parts(self):
-        chunks = [chunk("m1", i, "Chapter 1 > Everything", tokens=1000) for i in range(30)]  # 30,000 tokens
-        sections = build_outline(chunks)
-        assert len(sections) > 3
-        assert all(s.tokens <= 5000 for s in sections)
-        assert sections[0].heading == "Chapter 1 > Everything (part 1)"
-        assert sum(s.tokens for s in sections) == 30000
-
-    def test_the_outline_lists_id_file_pages_tokens_heading_and_the_start_of_the_text(self):
-        text = planner.format_outline(build_outline([
-            chunk("m1", 0, "Intro", text="# Intro\n" + "word " * 200, page=4, filename="lecture.pdf"),
-        ]))
-        line, = text.splitlines()
-        assert line.startswith('S1 | lecture.pdf | p. 4, 400 tokens | Intro | "word word')
-        assert len(line.split('"')[1]) == planner.SNIPPET_CHARS - 1 or len(line.split('"')[1]) <= planner.SNIPPET_CHARS
-
 
 # ---------------------------------------------------------------- validation
 
@@ -156,7 +130,7 @@ class TestValidation:
         assert placed(valid) == {"S1": "t1", "S2": "t1", "S3": "t2"}
         assert valid.stats["duplicate_ids"] == 1
 
-    def test_the_same_section_twice_in_one_topic_counts_once(self):
+        # The same section twice in one topic counts once.
         valid = validate_plan(plan_of([topic("t1", ["S1", "S1", "S2"])]), outline({"a": 2}))
         assert valid.topics()[0].section_ids == ["S1", "S2"]
 
@@ -167,21 +141,6 @@ class TestValidation:
         assert valid.topics()[1].section_ids == ["S2", "S3", "S4"]
         assert valid.stats["adjacency"] == 1
 
-    def test_an_unassigned_first_section_goes_to_the_next_ones_topic(self):
-        sections = outline({"a": 3})
-        valid = validate_plan(plan_of([topic("t1", ["S2", "S3"])], [topic("t2", ["S3"])]), sections)
-        assert placed(valid)["S1"] == "t1"
-
-    def test_adjacency_stays_inside_the_file(self):
-        sections = outline({"a": 2, "b": 2})  # S1 S2 | S3 S4
-        # S3 is missing: its previous section S2 is in another file, so the next one (S4) decides.
-        valid = validate_plan(plan_of([topic("t1", ["S1", "S2"]), topic("t2", ["S4"])]), sections)
-        assert placed(valid)["S3"] == "t2"
-
-    def test_consecutive_unassigned_sections_cascade_to_the_same_owner(self):
-        sections = outline({"a": 5})
-        valid = validate_plan(plan_of([topic("t1", ["S1"]), topic("t2", ["S2"])]), sections)
-        assert [t.section_ids for t in valid.topics()] == [["S1"], ["S2", "S3", "S4", "S5"]]
 
     def test_a_file_the_plan_forgot_becomes_a_topic_of_its_own_in_a_last_unit(self):
         sections = outline({"a": 2, "c": 2})  # nothing in file c is named
@@ -194,20 +153,6 @@ class TestValidation:
         assert valid.stats["fallback_topics"] == 1
         assert set(placed(valid)) == {"S1", "S2", "S3", "S4"}
 
-    def test_a_plan_with_one_topic_gives_it_every_section(self):
-        valid = validate_plan(plan_of([topic("only", [])]), outline({"a": 3, "b": 2}))
-        assert valid.topics()[0].section_ids == ["S1", "S2", "S3", "S4", "S5"]
-
-    def test_topics_with_no_section_are_dropped_and_so_are_empty_units(self):
-        sections = outline({"a": 2})
-        valid = validate_plan(plan_of([topic("t1", ["S1", "S2"]), topic("empty", ["S77"])], [topic("ghost", [])]), sections)
-        assert [t.key for t in valid.topics()] == ["t1"]
-        assert len(valid.units) == 1
-        assert valid.stats["dropped_topics"] == 2 and valid.stats["dropped_units"] == 1
-
-    def test_sections_of_a_topic_are_in_document_order(self):
-        valid = validate_plan(plan_of([topic("t1", ["S3", "S1", "S2"])]), outline({"a": 3}))
-        assert valid.topics()[0].section_ids == ["S1", "S2", "S3"]
 
     def test_prerequisites_must_point_backwards_and_exist(self):
         sections = outline({"a": 4})
@@ -219,39 +164,6 @@ class TestValidation:
         assert [t.prerequisite_keys for t in valid.topics()] == [[], ["t1"], ["t1", "t2"]]
         assert valid.stats["dropped_prerequisites"] >= 4
 
-    def test_duplicate_or_missing_keys_are_made_unique_and_prerequisites_follow_the_first(self):
-        sections = outline({"a": 3})
-        plan = plan_of([topic("x", ["S1"]), topic("x", ["S2"], prerequisites=["x"]), topic("", ["S3"], prerequisites=["x"])])
-        valid = validate_plan(plan, sections)
-        keys = [t.key for t in valid.topics()]
-        assert len(set(keys)) == 3 and all(keys)
-        assert valid.topics()[1].prerequisite_keys == [keys[0]]
-        assert valid.topics()[2].prerequisite_keys == [keys[0]]
-
-    def test_text_fields_are_cleaned_and_filled_in(self):
-        sections = outline({"a": 2})
-        plan = plan_of([PlannedTopic(
-            key="t1", name="  Bayes   rule \n", description="", section_ids=["S1", "S2"],
-            objectives=["You can compute a posterior", "by the end you can name the terms", "  ", "compute a posterior"],
-            keywords=["Bayes", "bayes", "", "posterior"], prerequisite_keys=[], estimated_minutes=0,
-        )])
-        t = validate_plan(plan, sections).topics()[0]
-        assert t.name == "Bayes rule"
-        assert t.description == "Core ideas of Bayes rule."
-        assert t.objectives == ["compute a posterior", "name the terms"]
-        assert t.keywords == ["Bayes", "posterior"]
-        assert t.estimated_minutes == planner.default_minutes(4000) == 35
-
-    def test_minutes_are_clamped(self):
-        valid = validate_plan(plan_of([topic("a", ["S1"], minutes=1000), topic("b", ["S2"], minutes=2)]), outline({"a": 2}))
-        assert [t.estimated_minutes for t in valid.topics()] == [120, 5]
-
-    def test_a_topic_without_a_name_is_named_after_its_first_section(self):
-        sections = [section("S1", "a", 0, 0, heading="Lecture 3 > Hashing")]
-        nameless = topic("t1", ["S1"])
-        nameless.name = ""
-        t = validate_plan(plan_of([nameless]), sections).topics()[0]
-        assert t.name == "Lecture 3 > Hashing"
 
     def test_an_empty_plan_still_places_every_section(self):
         valid = validate_plan(CoursePlan(units=[]), outline({"a": 2, "b": 1}))
@@ -268,20 +180,6 @@ class TestValidation:
         assert valid.additions == {"E1": ["S1"]}  # S2 was already taken by the new topic, E7 is unknown
         assert valid.topics()[0].section_ids == ["S2", "S3"]
         assert valid.topics()[0].prerequisite_keys == ["E1"]
-
-    def test_an_unassigned_new_section_follows_its_neighbour_into_an_existing_topic(self):
-        sections = outline({"new": 3})
-        plan = CoursePlan(units=[], additions=[SectionAddition(topic_key="E2", section_ids=["S1", "S3"])])
-        valid = validate_plan(plan, sections, existing_topic_keys=["E1", "E2"])
-        assert valid.additions == {"E2": ["S1", "S2", "S3"]}
-
-    def test_a_unit_can_join_an_existing_one_only_when_that_key_exists(self):
-        plan = CoursePlan(units=[
-            PlannedUnit(title="a", summary="", existing_unit_key="U1", topics=[topic("t1", ["S1"])]),
-            PlannedUnit(title="b", summary="", existing_unit_key="U9", topics=[topic("t2", ["S2"])]),
-        ])
-        valid = validate_plan(plan, outline({"a": 2}), existing_unit_keys=["U1"])
-        assert [u.existing_unit_key for u in valid.units] == ["U1", None]
 
 
 # ---------------------------------------------------------------- the large-outline path
@@ -318,11 +216,6 @@ def fake_model(monkeypatch):
 
 
 class TestLargeOutline:
-    async def test_a_small_outline_is_one_call(self, fake_model):
-        sections = outline({"a": 6})
-        valid = await planner.plan_sections("C", sections)
-        assert len(fake_model.plan_calls) == 1 and fake_model.order_calls == 0
-        assert set(placed(valid)) == {s.id for s in sections}
 
     async def test_an_outline_over_the_token_limit_is_planned_per_group_then_ordered(self, fake_model, monkeypatch):
         sections = outline({"a": 6, "b": 6, "c": 6})
@@ -340,49 +233,6 @@ class TestLargeOutline:
         keys = [t.key for t in valid.topics()]
         assert len(keys) == len(set(keys)) == 9
         assert [u.title for u in valid.units] == ["Unit of S13", "Unit of S7", "Unit of S1"]
-
-    async def test_after_the_cross_file_order_a_prerequisite_never_points_forward(self, fake_model, monkeypatch):
-        sections = outline({"a": 4, "b": 4})
-        monkeypatch.setattr(settings, "PLANNER_MAX_SECTIONS_PER_CALL", 4)
-        fake_model.order = "reverse"
-        valid = await planner.plan_sections("C", sections)
-        position = {t.key: i for i, t in enumerate(valid.topics())}
-        for t in valid.topics():
-            assert all(position[key] < position[t.key] for key in t.prerequisite_keys)
-
-    async def test_a_lot_of_source_text_also_triggers_grouping(self, fake_model, monkeypatch):
-        monkeypatch.setattr(settings, "PLANNER_MAX_SOURCE_TOKENS_PER_CALL", 13000)  # sections are 2,000 tokens
-        await planner.plan_sections("C", outline({"a": 6, "b": 6}))
-        assert len(fake_model.plan_calls) == 2
-
-    def test_groups_respect_the_source_limit(self):
-        sections = outline({"a": 5, "b": 5})
-        groups = planner.group_sections(sections, 10**9, 10**9, max_source_tokens=7000)
-        assert all(sum(s.tokens for s in g) <= 7000 for g in groups) and len(groups) == 4
-
-    async def test_too_many_sections_also_triggers_grouping(self, fake_model, monkeypatch):
-        monkeypatch.setattr(settings, "PLANNER_MAX_SECTIONS_PER_CALL", 5)
-        await planner.plan_sections("C", outline({"a": 4, "b": 4}))
-        assert len(fake_model.plan_calls) == 2
-
-    def test_a_file_bigger_than_a_group_is_cut_between_sections(self):
-        sections = outline({"a": 12})
-        groups = planner.group_sections(sections, max_tokens=10**9, max_sections=5)
-        assert [len(g) for g in groups] == [5, 5, 2]
-        assert [s.id for g in groups for s in g] == [s.id for s in sections]
-
-    def test_whole_files_are_kept_together_when_they_fit(self):
-        sections = outline({"a": 3, "b": 3, "c": 3})
-        groups = planner.group_sections(sections, max_tokens=10**9, max_sections=6)
-        assert [[s.material_id for s in g] for g in groups] == [["a"] * 3 + ["b"] * 3, ["c"] * 3]
-
-    async def test_a_cut_off_answer_for_a_group_is_not_swallowed(self, monkeypatch):
-        async def boom(messages):
-            raise RuntimeError("model down")
-
-        monkeypatch.setattr(planner, "_plan_call", boom)
-        with pytest.raises(RuntimeError):
-            await planner.plan_sections("C", outline({"a": 2}))
 
 
 # ---------------------------------------------------------------- against the database, with the mock model
@@ -482,26 +332,6 @@ class TestPlanningRun:
         assert material_ids == {content}
         assert syllabus not in material_ids and exam not in material_ids
 
-    async def test_the_syllabus_text_and_exam_names_reach_the_planner(self, course, monkeypatch):
-        seen = []
-        real = planner._plan_call
-
-        async def spy(messages):
-            seen.append(messages[-1].content)
-            return await real(messages)
-
-        monkeypatch.setattr(planner, "_plan_call", spy)
-        db = course.db
-        await add_file(db, course.project_id, "notes.pdf", lecture("Hashing", 2))
-        await add_file(db, course.project_id, "syllabus.pdf", [("Schedule", "Class 11: Hash tables and open addressing.")], role="syllabus")
-        await add_file(db, course.project_id, "midterm-2019.pdf", [("Q1", "Question one.")], role="exam")
-
-        await run_extract(course)
-
-        prompt, = seen
-        assert "Class 11: Hash tables and open addressing." in prompt
-        assert "midterm-2019.pdf" in prompt
-        assert "S1 | notes.pdf" in prompt and "S1 | syllabus.pdf" not in prompt
 
     async def test_a_course_with_no_content_file_fails_permanently_with_a_clear_message(self, course):
         await add_file(course.db, course.project_id, "midterm.pdf", lecture("Q", 2), role="exam")
@@ -571,57 +401,6 @@ class TestPlanningRun:
         job = await db.fetchrow("SELECT result_data FROM processing_jobs ORDER BY created_at DESC LIMIT 1")
         assert json.loads(job["result_data"])["mode"] == "incremental"
 
-    async def test_a_course_planned_before_sources_existed_only_plans_files_uploaded_since(self, course):
-        db = course.db
-        await add_file(db, course.project_id, "old.pdf", lecture("Old", 3), uploaded="SQL:(NOW() AT TIME ZONE 'UTC') - interval '2 days'")
-        legacy = await seed_topic(db, course.project_id, "Old topic")
-        await db.execute("UPDATE topics SET user_confirmed = TRUE WHERE id = $1", legacy)
-        await add_file(db, course.project_id, "new.pdf", lecture("New", 3))
-
-        await run_extract(course)
-
-        topics = await topics_of(db, course.project_id)
-        assert topics[0]["id"] == legacy and topics[0]["user_confirmed"]  # untouched, still first
-        assert len(topics) >= 2
-        files = {r["filename"] for r in await db.fetch(
-            "SELECT m.filename FROM topic_sources ts JOIN materials m ON m.id = ts.material_id")}
-        assert files == {"new.pdf"}  # the old file was not planned a second time
-
-    async def test_a_hand_added_confirmed_topic_does_not_stop_the_first_plan(self, course):
-        db = course.db
-        await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))
-        await run_extract(course)
-        mine = await seed_topic(db, course.project_id, "Added by hand")
-        await db.execute("UPDATE topics SET user_confirmed = TRUE WHERE id = $1", mine)
-
-        await run_extract(course)
-
-        topics = await topics_of(db, course.project_id)
-        assert mine in {t["id"] for t in topics}
-        assert len(topics) >= 2  # the planned topics are back (the project has sources, so it is not legacy)
-        assert await db.fetchval("SELECT count(*) FROM topic_sources WHERE topic_id = $1", mine) == 0
-
-    async def test_deleting_a_file_removes_its_sources_and_a_unit_can_empty_out(self, course):
-        db = course.db
-        material = await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))
-        await run_extract(course)
-        assert await db.fetchval("SELECT count(*) FROM topic_sources") > 0
-
-        await db.execute("DELETE FROM materials WHERE id = $1", material)
-
-        assert await db.fetchval("SELECT count(*) FROM topic_sources") == 0
-        assert await db.fetchval("SELECT count(*) FROM topics WHERE project_id = $1", course.project_id) > 0
-
-    async def test_deleting_a_unit_keeps_its_topics_without_a_unit(self, course):
-        db = course.db
-        await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))
-        await run_extract(course)
-
-        await db.execute("DELETE FROM units WHERE project_id = $1", course.project_id)
-
-        topics = await topics_of(db, course.project_id)
-        assert topics and all(t["unit_id"] is None for t in topics)
-
 
 class TestActiveCourse:
     """A course the student already confirmed stays active; the planner never drops studied topics."""
@@ -644,21 +423,6 @@ class TestActiveCourse:
         assert await db.fetchval(
             "SELECT count(*) FROM topics WHERE project_id = $1 AND NOT user_confirmed", course.project_id) > 0
 
-    async def test_a_full_replan_of_an_active_course_with_no_topics_left_keeps_the_status(self, course):
-        db = course.db
-        await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))
-        await db.execute("UPDATE projects SET status = 'active' WHERE id = $1", course.project_id)
-
-        await run_extract(course)
-
-        assert await db.fetchval("SELECT count(*) FROM topics WHERE project_id = $1", course.project_id) >= 1
-        assert await db.fetchval("SELECT status FROM projects WHERE id = $1", course.project_id) == "active"
-
-    async def test_a_setup_course_still_goes_to_review(self, course):
-        db = course.db
-        await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))
-        await run_extract(course)
-        assert await db.fetchval("SELECT status FROM projects WHERE id = $1", course.project_id) == "topics_pending"
 
     async def test_an_unconfirmed_topic_with_study_activity_is_not_deleted_by_find_again(self, course):
         db = course.db

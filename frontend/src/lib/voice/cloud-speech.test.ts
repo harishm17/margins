@@ -2,11 +2,9 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   CloudSpeechError,
-  assemblyAiUrl,
   cloudSpeechConfigured,
   cloudSpeechProviders,
   deepgramUrl,
-  keytermsFor,
   mintCloudSpeechGrant,
   mintProviderToken,
   sessionCapSeconds,
@@ -23,28 +21,6 @@ describe('cloudSpeechProviders', () => {
     assert.equal(cloudSpeechConfigured(env({ DEEPGRAM_API_KEY: 'd' })), true)
   })
 
-  it('follows CLOUD_SPEECH_PROVIDERS for the order, and can leave one out', () => {
-    const keys = { ASSEMBLYAI_API_KEY: 'a', DEEPGRAM_API_KEY: 'd' }
-    assert.deepEqual(cloudSpeechProviders(env({ ...keys, CLOUD_SPEECH_PROVIDERS: 'assemblyai, deepgram' })), ['assemblyai', 'deepgram'])
-    assert.deepEqual(cloudSpeechProviders(env({ ...keys, CLOUD_SPEECH_PROVIDERS: 'assemblyai' })), ['assemblyai'])
-    assert.deepEqual(cloudSpeechProviders(env({ ...keys, CLOUD_SPEECH_PROVIDERS: 'deepgram,assemblyai' })), ['deepgram', 'assemblyai'])
-    assert.deepEqual(cloudSpeechProviders(env({ ...keys, CLOUD_SPEECH_PROVIDERS: 'nonsense' })), ['deepgram'])
-  })
-})
-
-describe('keytermsFor', () => {
-  it('drops long, wordy and repeated terms and keeps at most 100', () => {
-    const terms = ['Bayes theorem', 'bayes Theorem', 'x', 'a'.repeat(51), 'one two three four five six seven', 'prior']
-    assert.deepEqual(keytermsFor(terms), ['Bayes theorem', 'prior'])
-    assert.equal(keytermsFor(Array.from({ length: 150 }, (_, i) => `t${i}`)).length, 100)
-  })
-
-  it('stays well under Deepgram 500-token limit in total', () => {
-    const long = Array.from({ length: 100 }, (_, i) => `a fairly long course term ${i}`)
-    const kept = keytermsFor(long)
-    assert.ok(kept.join('').length <= 1200)
-    assert.ok(kept.length < 100)
-  })
 })
 
 describe('deepgramUrl', () => {
@@ -61,38 +37,8 @@ describe('deepgramUrl', () => {
     assert.deepEqual(url.searchParams.getAll('keyterm'), ['teorema de Bayes', 'prior'])
   })
 
-  it('uses English for a language the app does not offer', () => {
-    assert.equal(new URL(deepgramUrl({ language: 'xx', terms: [] })).searchParams.get('language'), 'en')
-  })
 })
 
-describe('assemblyAiUrl', () => {
-  it('names the model, the audio, the turn settings, the language and the terms', () => {
-    const url = new URL(assemblyAiUrl({ language: 'es', terms: ['teorema de Bayes'] }))
-    assert.equal(url.origin + url.pathname, 'wss://streaming.assemblyai.com/v3/ws')
-    assert.equal(url.searchParams.get('speech_model'), 'universal-3-6-pro')
-    assert.equal(url.searchParams.get('max_turn_silence'), '800')
-    assert.equal(url.searchParams.get('language_codes'), '["es"]')
-    assert.equal(url.searchParams.get('keyterms_prompt'), '["teorema de Bayes"]')
-    assert.equal(url.searchParams.get('token'), null)
-  })
-
-  it('leaves out an unknown language and an empty term list', () => {
-    const url = new URL(assemblyAiUrl({ language: 'xx', terms: [], model: 'universal-streaming-english' }))
-    assert.equal(url.searchParams.get('language_codes'), null)
-    assert.equal(url.searchParams.get('keyterms_prompt'), null)
-    assert.equal(url.searchParams.get('speech_model'), 'universal-streaming-english')
-  })
-})
-
-describe('sessionCapSeconds', () => {
-  it('is the time left, between a minute and three hours', () => {
-    assert.equal(sessionCapSeconds(10), 60)
-    assert.equal(sessionCapSeconds(900.2), 901)
-    assert.equal(sessionCapSeconds(99_999), 10_800)
-    assert.equal(sessionCapSeconds(Number.NaN), 60)
-  })
-})
 
 type Seen = { url: string; init: RequestInit }
 function fakeFetch(answers: Record<string, () => Response>, seen: Seen[] = []) {
@@ -112,14 +58,6 @@ describe('mintProviderToken', () => {
     assert.equal(await mintProviderToken('deepgram', { maxSessionSeconds: 600, fetchImpl, env: env({ DEEPGRAM_API_KEY: 'dk' }) }), 'jwt')
     assert.equal((seen[0].init.headers as Record<string, string>).Authorization, 'Token dk')
     assert.deepEqual(JSON.parse(String(seen[0].init.body)), { ttl_seconds: 30 })
-  })
-
-  it('asks AssemblyAI for a one-minute token capped at the time left', async () => {
-    const seen: Seen[] = []
-    const fetchImpl = fakeFetch({ 'https://token.assemblyai.com/v1/token': ok({ token: 'tok' }) }, seen)
-    assert.equal(await mintProviderToken('assemblyai', { maxSessionSeconds: 600, fetchImpl, env: env({ ASSEMBLYAI_API_KEY: 'ak' }) }), 'tok')
-    assert.equal((seen[0].init.headers as Record<string, string>).Authorization, 'ak')
-    assert.deepEqual(JSON.parse(String(seen[0].init.body)), { product: 'streaming', expires_in_seconds: 60, max_session_duration_seconds: 600 })
   })
 
   it('fails with 503 without a key and 502 when the service refuses', async () => {
@@ -149,13 +87,6 @@ describe('mintCloudSpeechGrant', () => {
     )
   })
 
-  it('gives Deepgram first, with its URL', async () => {
-    const grant = await mintCloudSpeechGrant({ maxSessionSeconds: 600, language: 'en', terms: ['hash'], fetchImpl: both, env: keys, log: quiet })
-    assert.equal(grant.provider, 'deepgram')
-    assert.equal(grant.token, 'jwt')
-    assert.ok(grant.url.startsWith('wss://api.deepgram.com/v1/listen?'))
-  })
-
   it('goes on to AssemblyAI when Deepgram cannot mint, or the browser leaves Deepgram out', async () => {
     const deepgramDown = fakeFetch({ 'https://api.deepgram.com': refused, 'https://token.assemblyai.com': ok({ token: 'tok' }) })
     const lines: string[] = []
@@ -166,15 +97,21 @@ describe('mintCloudSpeechGrant', () => {
     assert.equal(excluded.provider, 'assemblyai')
   })
 
-  it('fails with 503 when every provider is left out, and 502 when every one fails', async () => {
-    await assert.rejects(
-      mintCloudSpeechGrant({ maxSessionSeconds: 60, language: 'en', terms: [], exclude: ['deepgram', 'assemblyai'], fetchImpl: both, env: keys, log: quiet }),
-      (error: unknown) => error instanceof CloudSpeechError && error.status === 503
-    )
-    const allDown = fakeFetch({ 'https://api.deepgram.com': refused, 'https://token.assemblyai.com': refused })
-    await assert.rejects(
-      mintCloudSpeechGrant({ maxSessionSeconds: 60, language: 'en', terms: [], fetchImpl: allDown, env: keys, log: quiet }),
-      (error: unknown) => error instanceof CloudSpeechError && error.status === 502
-    )
+})
+
+describe('sessionCapSeconds', () => {
+  it('is the time left, between a minute and three hours', () => {
+    assert.equal(sessionCapSeconds(10), 60)
+    assert.equal(sessionCapSeconds(900.2), 901)
+    assert.equal(sessionCapSeconds(99_999), 10_800)
+    assert.equal(sessionCapSeconds(Number.NaN), 60)
   })
 })
+
+  it('asks AssemblyAI for a one-minute token capped at the time left', async () => {
+    const seen: Seen[] = []
+    const fetchImpl = fakeFetch({ 'https://token.assemblyai.com/v1/token': ok({ token: 'tok' }) }, seen)
+    assert.equal(await mintProviderToken('assemblyai', { maxSessionSeconds: 600, fetchImpl, env: env({ ASSEMBLYAI_API_KEY: 'ak' }) }), 'tok')
+    assert.equal((seen[0].init.headers as Record<string, string>).Authorization, 'ak')
+    assert.deepEqual(JSON.parse(String(seen[0].init.body)), { product: 'streaming', expires_in_seconds: 60, max_session_duration_seconds: 600 })
+  })

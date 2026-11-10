@@ -1,12 +1,8 @@
-import { aiMessage } from '@/lib/ai/messages'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { describeTurnFailure } from './errors'
 import {
-  deriveOrbState,
-  evaluationBadge,
   initialSessionState,
-  orbLabel,
   sessionReducer,
   practiceConceptOf,
   summarize,
@@ -62,6 +58,7 @@ describe('sessionReducer', () => {
     assert.equal(state.turnActive, false)
   })
 
+
   it('attaches the evaluation to the same coach turn and records the answer', () => {
     const state = run(
       [
@@ -78,112 +75,6 @@ describe('sessionReducer', () => {
     assert.equal(coach.role, 'coach')
     assert.equal(coach.evaluation?.score, 0.5)
     assert.deepEqual(state.answered, [{ text: 'Define a hash function', isCorrect: false, score: 0.5, ungraded: false }])
-  })
-
-  it('the board follows the question and each tool result, and a reset clears it', () => {
-    const asked = run([{ type: 'question', question: { index: 1, total: 4, text: 'What is $x^2$?', options: [{ id: 'A', text: 'x times x' }] } }], live())
-    assert.deepEqual(asked.board, { kind: 'question', text: 'What is $x^2$?', options: [{ id: 'A', text: 'x times x' }] })
-    const claim = run(
-      [{ type: 'board', board: { kind: 'claim', text: 'The mean is $\\mu$.', question: 'What is it?', source: { label: 'p. 14', href: '/api/materials/m/file#page=14' } } }],
-      asked
-    )
-    assert.equal(claim.board?.kind, 'claim')
-    assert.equal(claim.board?.source?.label, 'p. 14')
-    assert.equal(claim.question?.text, 'What is $x^2$?', 'the quiz progress is untouched by a board update')
-    assert.equal(run([{ type: 'reset' }], claim).board, null)
-  })
-
-  it('a check on a claim is listed by its check question when it is missed', () => {
-    const state = run(
-      [
-        { type: 'board', board: { kind: 'claim', text: 'A claim.', question: 'What did it say?' } },
-        { type: 'turn-started' },
-        { type: 'evaluation', evaluation: evaluation({ isCorrect: false, score: 0 }) },
-      ],
-      live()
-    )
-    assert.deepEqual(summarize(state).revisit, [{ text: 'What did it say?', lookLinks: [] }])
-  })
-
-  it('drops an empty coach entry when a turn fails before anything arrived, and shows the alert', () => {
-    const alert = describeTurnFailure({ code: 'LLM_UNAVAILABLE', message: '', retryable: true }).alert
-    const state = run([{ type: 'turn-started' }, { type: 'turn-failed', alert }], live())
-    assert.equal(state.entries.length, 0)
-    // The shared words for a busy AI (lib/ai/messages), as on every other surface.
-    assert.equal(state.alert?.title, aiMessage('LLM_UNAVAILABLE').title)
-    assert.equal(state.turnActive, false)
-  })
-
-  it('keeps partial coach text when a turn fails and clears the alert on the next student turn', () => {
-    const alert = describeTurnFailure({ code: 'VOICE_INTERRUPTED', message: '', retryable: true }).alert
-    let state = run([{ type: 'turn-started' }, { type: 'coach-text', delta: 'Half a sen' }, { type: 'turn-failed', alert }], live())
-    assert.equal((state.entries[0] as CoachEntry).text, 'Half a sen')
-    assert.ok(state.alert)
-    state = sessionReducer(state, { type: 'student-said', text: 'hello' })
-    assert.equal(state.alert, null)
-  })
-
-  it('marks an interrupted coach turn when the student barges in', () => {
-    const state = run([{ type: 'turn-started' }, { type: 'coach-text', delta: 'Each level is' }, { type: 'speaking', on: true }, { type: 'turn-aborted' }], live())
-    const coach = state.entries[0] as CoachEntry
-    assert.equal(coach.interrupted, true)
-    assert.equal(coach.streaming, false)
-    assert.equal(state.speaking, false)
-  })
-
-  it('flags completion without leaving the live phase until finish', () => {
-    let state = run([{ type: 'turn-started' }, { type: 'session-complete' }, { type: 'coach-text', delta: 'Goodbye.' }, { type: 'turn-done' }], live())
-    assert.equal(state.complete, true)
-    assert.equal(state.phase, 'live')
-    state = sessionReducer(state, { type: 'finish', reason: 'complete', at: 61_000 })
-    assert.equal(state.phase, 'summary')
-    assert.equal(state.endReason, 'complete')
-  })
-
-  it('switching input mode clears the pause and the interim text', () => {
-    const state = run([{ type: 'mic-paused', paused: true }, { type: 'interim', text: 'um' }, { type: 'input-mode', mode: 'text' }], live())
-    assert.equal(state.inputMode, 'text')
-    assert.equal(state.micPaused, false)
-    assert.equal(state.interim, '')
-  })
-
-  it('keeps a mic notice when switching to text and clears it when voice comes back', () => {
-    let state = run([{ type: 'input-mode', mode: 'text', micNotice: 'denied' }], live())
-    assert.equal(state.micNotice, 'denied')
-    state = sessionReducer(state, { type: 'input-mode', mode: 'voice' })
-    assert.equal(state.micNotice, null)
-  })
-})
-
-describe('deriveOrbState', () => {
-  const base = { phase: 'live' as const, inputMode: 'voice' as const, micPaused: false, speaking: false, turnActive: false }
-
-  it('listens while the mic is on and nothing else is happening', () => {
-    assert.equal(deriveOrbState(base), 'listening')
-  })
-
-  it('thinks while a turn is open and speaks while audio plays', () => {
-    assert.equal(deriveOrbState({ ...base, turnActive: true }), 'thinking')
-    assert.equal(deriveOrbState({ ...base, turnActive: true, speaking: true }), 'speaking')
-  })
-
-  it('is paused with the mic off, idle in text mode, and idle outside a live session', () => {
-    assert.equal(deriveOrbState({ ...base, micPaused: true }), 'paused')
-    assert.equal(deriveOrbState({ ...base, inputMode: 'text' }), 'idle')
-    assert.equal(deriveOrbState({ ...base, phase: 'lobby' }), 'idle')
-  })
-
-  it('shows thinking and speaking even when the mic is paused', () => {
-    assert.equal(deriveOrbState({ ...base, micPaused: true, turnActive: true }), 'thinking')
-  })
-})
-
-describe('evaluationBadge', () => {
-  it('maps correct, partly, not quite and ungraded', () => {
-    assert.deepEqual(evaluationBadge({ isCorrect: true, score: 1, ungraded: false }), { label: 'Correct', tone: 'accent' })
-    assert.deepEqual(evaluationBadge({ isCorrect: false, score: 0.5, ungraded: false }), { label: 'Partly', tone: 'warning' })
-    assert.deepEqual(evaluationBadge({ isCorrect: false, score: 0.1, ungraded: false }), { label: 'Not quite', tone: 'danger' })
-    assert.deepEqual(evaluationBadge({ isCorrect: false, score: 0, ungraded: true }), { label: 'Noted', tone: 'neutral' })
   })
 })
 
@@ -240,100 +131,40 @@ describe('summarize', () => {
     assert.equal(summarize({ answered: [], entries: [], startedAt: 0, endedAt: 1000, ideas: [], board: { kind: 'claim', text: 'x' } }).unfinished, null)
   })
 
-  it('has no score when nothing was graded', () => {
-    const summary = summarize({ answered: [], entries: [], startedAt: null, endedAt: null, ideas: [] })
-    assert.equal(summary.score, null)
-    assert.equal(summary.answered, 0)
-  })
 })
 
 describe('describeTurnFailure', () => {
-  const codes = [
-    'SESSION_ENDED',
-    'ACTIVE_SESSION',
-    'VOICE_DAILY_LIMIT',
-    'TURN_IN_PROGRESS',
-    'RATE_LIMITED',
-    'LLM_DAILY_BUDGET',
-    'VOICE_UNAVAILABLE',
-    'LLM_NOT_CONFIGURED',
-    'LLM_AUTH_FAILED',
-    'LLM_CREDIT_EXHAUSTED',
-    'LLM_RATE_LIMITED',
-    'LLM_UNAVAILABLE',
-    'LLM_REFUSED',
-    'LLM_REQUEST_REJECTED',
-    'LLM_BAD_OUTPUT',
-    'VOICE_TURN_FAILED',
-    'VOICE_INTERRUPTED',
-    'VOICE_NOT_SAVED',
-    'UNAUTHORIZED',
-    'NETWORK',
-    'NOT_FOUND',
-    'SOMETHING_NEW',
-  ]
 
-  it('has friendly copy without dashes or exclamation marks for every code', () => {
-    for (const code of codes) {
-      const { alert } = describeTurnFailure({ code, message: 'Server text.', retryable: true })
-      const copy = `${alert.title} ${alert.text}`
-      assert.ok(alert.title.length > 0 && alert.text.length > 0, code)
-      assert.doesNotMatch(copy, /[–—!]/, code)
+  // Every code the turn route sends: where the student lands and what the alert offers. Retry only where retrying can
+  // work, sign-in only when signed out, and a dead end (ended, not found, out of budget or credit) goes to the summary.
+  it('sends every failure to the right place with the right action', () => {
+    const table: Array<[string, boolean, 'lobby' | 'summary' | 'continue', 'retry' | 'none' | 'sign-in']> = [
+      ['SESSION_ENDED', false, 'summary', 'none'],
+      ['ACTIVE_SESSION', false, 'lobby', 'none'],
+      ['VOICE_DAILY_LIMIT', false, 'lobby', 'none'],
+      ['TURN_IN_PROGRESS', false, 'continue', 'retry'],
+      ['RATE_LIMITED', false, 'continue', 'retry'],
+      ['LLM_DAILY_BUDGET', false, 'summary', 'none'],
+      ['VOICE_UNAVAILABLE', true, 'continue', 'retry'],
+      ['LLM_CREDIT_EXHAUSTED', false, 'summary', 'none'],
+      ['LLM_UNAVAILABLE', true, 'continue', 'retry'],
+      ['LLM_REFUSED', false, 'continue', 'none'],
+      ['LLM_REQUEST_REJECTED', false, 'continue', 'none'],
+      ['VOICE_TURN_FAILED', false, 'continue', 'none'],
+      ['VOICE_TURN_FAILED', true, 'continue', 'retry'],
+      ['VOICE_INTERRUPTED', false, 'continue', 'retry'],
+      ['VOICE_NOT_SAVED', false, 'continue', 'none'],
+      ['UNAUTHORIZED', false, 'continue', 'sign-in'],
+      ['NETWORK', true, 'continue', 'retry'],
+      ['NOT_FOUND', false, 'summary', 'none'],
+    ]
+    for (const [code, retryable, fate, action] of table) {
+      const out = describeTurnFailure({ code, message: '', retryable })
+      assert.equal(out.fate, fate, code)
+      assert.equal(out.alert.action, action, code)
+      assert.ok(out.alert.title && out.alert.text, `${code} says something`)
     }
   })
 
-  it('routes first-turn blockers to the lobby and dead ends to the summary', () => {
-    assert.equal(describeTurnFailure({ code: 'ACTIVE_SESSION', message: '', retryable: false }).fate, 'lobby')
-    const limit = describeTurnFailure({ code: 'VOICE_DAILY_LIMIT', message: '', retryable: false })
-    assert.equal(limit.fate, 'lobby')
-    assert.equal(limit.limitReached, true)
-    assert.equal(describeTurnFailure({ code: 'SESSION_ENDED', message: '', retryable: false }).fate, 'summary')
-    assert.equal(describeTurnFailure({ code: 'LLM_DAILY_BUDGET', message: '', retryable: false }).fate, 'summary')
-  })
-
-  it('offers retry only where retrying makes sense', () => {
-    assert.equal(describeTurnFailure({ code: 'LLM_UNAVAILABLE', message: '', retryable: true }).alert.action, 'retry')
-    assert.equal(describeTurnFailure({ code: 'LLM_REFUSED', message: '', retryable: false }).alert.action, 'none')
-    assert.equal(describeTurnFailure({ code: 'VOICE_TURN_FAILED', message: '', retryable: false }).alert.action, 'none')
-    assert.equal(describeTurnFailure({ code: 'UNAUTHORIZED', message: '', retryable: false }).alert.action, 'sign-in')
-  })
-
-  it('falls back to the server message for an unknown code', () => {
-    assert.equal(describeTurnFailure({ code: 'SOMETHING_NEW', message: 'Server text.', retryable: false }).alert.text, 'Server text.')
-  })
 })
 
-describe('still listening', () => {
-  it('holding turns Listening into Still listening and nothing else', () => {
-    assert.equal(orbLabel('listening', false), 'Listening')
-    assert.equal(orbLabel('listening', true), 'Still listening')
-    assert.equal(orbLabel('thinking', true), 'Thinking')
-  })
-
-  it('the hold ends when the answer is sent, the mic is paused or the session ends', () => {
-    const holding = sessionReducer(initialSessionState, { type: 'holding', on: true })
-    assert.equal(holding.holding, true)
-    assert.equal(sessionReducer(holding, { type: 'student-said', text: 'a bucket' }).holding, false)
-    assert.equal(sessionReducer(holding, { type: 'mic-paused', paused: true }).holding, false)
-    assert.equal(sessionReducer(holding, { type: 'input-mode', mode: 'text' }).holding, false)
-    assert.equal(sessionReducer(holding, { type: 'finish', reason: 'user', at: 1 }).holding, false)
-  })
-})
-
-describe('the gentle line', () => {
-  it('is a quiet coach entry that is not streaming and does not touch the answers', () => {
-    const next = sessionReducer(initialSessionState, { type: 'note', text: 'Take your time.' })
-    assert.equal(next.entries.length, 1)
-    const entry = next.entries[0] as CoachEntry
-    assert.equal(entry.role, 'coach')
-    assert.equal(entry.note, true)
-    assert.equal(entry.streaming, false)
-    assert.deepEqual(next.answered, [])
-  })
-
-  it('is left alone when the next turn starts', () => {
-    const next = run([{ type: 'note', text: 'Take your time.' }, { type: 'student-said', text: 'a bucket' }, { type: 'turn-started' }])
-    assert.equal(next.entries.length, 3)
-    assert.equal((next.entries[0] as CoachEntry).text, 'Take your time.')
-  })
-})

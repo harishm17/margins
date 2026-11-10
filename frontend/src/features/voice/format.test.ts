@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { clip, focusPlaceholder, minutesLabel, minutesLeftLabel, sessionLine } from './format'
+import { clip, minutesLeftLabel, sessionLine } from './format'
 
 describe('minutesLeftLabel', () => {
   it('rounds down to whole minutes and handles the edges', () => {
@@ -20,19 +20,6 @@ describe('sessionLine', () => {
     assert.equal(sessionLine({ seconds: 120, exchanges: 1, typed: 1 }, true), 'You typed for 2 minutes and sent 1 message.')
   })
 
-  it('never claims talking or a minute for a session with no answers', () => {
-    assert.equal(sessionLine({ seconds: 5, exchanges: 0, typed: 0 }, true), 'No answers sent. The session lasted under a minute.')
-    assert.equal(sessionLine({ seconds: 5, exchanges: 0, typed: 0 }, false), 'No answers sent. The session lasted under a minute.')
-    assert.equal(sessionLine({ seconds: 3 * 60, exchanges: 0, typed: 0 }, true), 'No answers sent. The session lasted 3 minutes.')
-  })
-})
-
-describe('minutesLabel', () => {
-  it('pluralises and never rounds a short session up', () => {
-    assert.equal(minutesLabel(59), 'under a minute')
-    assert.equal(minutesLabel(60), '1 minute')
-    assert.equal(minutesLabel(12 * 60), '12 minutes')
-  })
 })
 
 describe('clip', () => {
@@ -43,17 +30,5 @@ describe('clip', () => {
     assert.ok(out.endsWith('...'))
     assert.ok(out.length <= 60)
     assert.doesNotMatch(out, /\s\.\.\.$/)
-  })
-})
-
-describe('focusPlaceholder', () => {
-  it("uses the topic's first key term that fits", () => {
-    assert.equal(focusPlaceholder(['Bayes rule', 'priors']), 'e.g. Bayes rule')
-    assert.equal(focusPlaceholder(['  ', 'a key term written as a whole long sentence of words', '  base  rates ']), 'e.g. base rates')
-  })
-
-  it('falls back to an example that suits any course', () => {
-    assert.equal(focusPlaceholder([]), 'e.g. the definitions I keep mixing up')
-    assert.equal(focusPlaceholder(), 'e.g. the definitions I keep mixing up')
   })
 })

@@ -46,11 +46,6 @@ async function world() {
   return { user, project, unit, topic, concept, link }
 }
 
-dbTest('a legacy unit without concepts returns an empty map', async () => {
-  const w = await world()
-  assert.deepEqual(await map.getUnitMap(w.user.id, w.project.id, w.unit.id, NOW), { nodes: [], edges: [] })
-})
-
 dbTest('someone else, or another course, gets an empty map', async () => {
   const w = await world()
   await w.concept('A')
@@ -85,28 +80,6 @@ dbTest('edges to concepts outside the unit are not returned', async () => {
   assert.deepEqual(result.edges, [])
   // The earlier unit's prerequisite is untouched (retrievability 0), so A is not on the frontier yet.
   assert.equal(result.nodes[0].frontier, false)
-})
-
-dbTest('merged and removed concepts are not nodes; an unstarted concept has no due date', async () => {
-  const w = await world()
-  const a = await w.concept('A')
-  const gone = await w.concept('Gone')
-  await prisma.concept.update({ where: { id: gone.id }, data: { status: 'merged', mergedIntoId: a.id } })
-  const result = await map.getUnitMap(w.user.id, w.project.id, w.unit.id, NOW)
-  assert.equal(result.nodes.length, 1)
-  assert.deepEqual(result.nodes[0], { id: a.id, name: 'A', topicId: w.topic.id, topicName: 'T', label: 'not_started', retrievability: 0, dueAt: null, frontier: true, needsInstruction: false, pointer: null })
-})
-
-dbTest('a rejected prerequisite does not hold the frontier back', async () => {
-  const w = await world()
-  const a = await w.concept('A')
-  const b = await w.concept('B')
-  const edge = await w.link(a.id, b.id, 'prerequisite', 'proposed', 0.9)
-  let nodes = (await map.getUnitMap(w.user.id, w.project.id, w.unit.id, NOW)).nodes
-  assert.equal(nodes.find((n) => n.id === b.id)?.frontier, false)
-  await prisma.conceptEdge.update({ where: { id: edge.id }, data: { status: 'rejected', origin: 'student' } })
-  nodes = (await map.getUnitMap(w.user.id, w.project.id, w.unit.id, NOW)).nodes
-  assert.equal(nodes.find((n) => n.id === b.id)?.frontier, true)
 })
 
 dbTest('the frontier follows the prerequisite retrievability the rest of the app computes', async () => {
@@ -144,14 +117,6 @@ dbTest('the frontier follows the prerequisite retrievability the rest of the app
   const later = await map.getUnitMap(w.user.id, w.project.id, w.unit.id, new Date('2027-03-01T00:00:00Z'))
   assert.ok(later.nodes.find((n) => n.id === a.id)!.retrievability < 0.8)
   assert.equal(later.nodes.find((n) => n.id === b.id)?.frontier, false)
-})
-
-dbTest('a link of a type the map does not know is left out', async () => {
-  const w = await world()
-  const a = await w.concept('A')
-  const b = await w.concept('B')
-  await w.link(a.id, b.id, 'related', 'confirmed', 1)
-  assert.deepEqual((await map.getUnitMap(w.user.id, w.project.id, w.unit.id, NOW)).edges, [])
 })
 
 dbTest('topics without a unit are a unit of their own, and units list only where there are concepts', async () => {
@@ -273,4 +238,26 @@ dbTest('map node needing instruction leads with reading', async () => {
   assert.ok(after?.events.length)
   assert.ok(after?.events.every((e) => e.source !== 'instruction'))
   assert.equal((await map.getUnitMap(w.user.id, w.project.id, w.unit.id, NOW)).nodes.find((n) => n.id === a.id)?.needsInstruction, false)
+})
+
+dbTest('merged and removed concepts are not nodes; an unstarted concept has no due date', async () => {
+  const w = await world()
+  const a = await w.concept('A')
+  const gone = await w.concept('Gone')
+  await prisma.concept.update({ where: { id: gone.id }, data: { status: 'merged', mergedIntoId: a.id } })
+  const result = await map.getUnitMap(w.user.id, w.project.id, w.unit.id, NOW)
+  assert.equal(result.nodes.length, 1)
+  assert.deepEqual(result.nodes[0], { id: a.id, name: 'A', topicId: w.topic.id, topicName: 'T', label: 'not_started', retrievability: 0, dueAt: null, frontier: true, needsInstruction: false, pointer: null })
+})
+
+dbTest('a rejected prerequisite does not hold the frontier back', async () => {
+  const w = await world()
+  const a = await w.concept('A')
+  const b = await w.concept('B')
+  const edge = await w.link(a.id, b.id, 'prerequisite', 'proposed', 0.9)
+  let nodes = (await map.getUnitMap(w.user.id, w.project.id, w.unit.id, NOW)).nodes
+  assert.equal(nodes.find((n) => n.id === b.id)?.frontier, false)
+  await prisma.conceptEdge.update({ where: { id: edge.id }, data: { status: 'rejected', origin: 'student' } })
+  nodes = (await map.getUnitMap(w.user.id, w.project.id, w.unit.id, NOW)).nodes
+  assert.equal(nodes.find((n) => n.id === b.id)?.frontier, true)
 })

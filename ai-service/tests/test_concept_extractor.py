@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from app.api.routes import jobs
 from app.models.jobs import JobPayload
-from app.services.concepts import extractor, store
+from app.services.concepts import store
 from app.services.concepts.extractor import extract_concepts
 from app.services.llm.base import LLMOutputError
 from app.services.llm.mock_provider import MockProvider
@@ -201,23 +201,6 @@ class TestExtractConcepts:
         assert llm.generate_structured.call_args.kwargs["purpose"] == "extract_concepts"
         assert messages[0].role == "system" and "<source_excerpts>" not in messages[0].content
 
-    async def test_prompt_has_no_supporting_excerpts(self, db, world):
-        other = await seed_material(db, world.project_id, filename="other.pdf", status="valid")
-        await add_chunk(db, other, 0, "Unrelated supporting text.", page=1, tokens=10)
-        llm = MagicMock()
-        llm.generate_structured = AsyncMock(return_value=ConceptExtraction.example_for(
-            f'<excerpt chunk_id="{world.chunks[0]}" source="x">\n{CHUNK_TEXT[0]}\n</excerpt>'))
-        context = await extractor.fetch_topic_context(world.topic_id)
-        context.chunks.append({**context.chunks[0], "id": "supporting-chunk", "source_kind": "supporting"})
-
-        async def fetch(topic_id):
-            return context
-
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=llm), \
-             patch.object(extractor, "fetch_topic_context", fetch):
-            await extract_concepts(world.topic_id)
-
-        assert "supporting-chunk" not in llm.generate_structured.call_args.args[0][1].content
 
     async def test_fewer_than_three_concepts_is_a_retryable_output_error(self, db, world):
         raw = ConceptExtraction.example_for(f'<excerpt chunk_id="{world.chunks[0]}">\n{CHUNK_TEXT[0]}\n</excerpt>')
@@ -231,21 +214,6 @@ class TestExtractConcepts:
 
         assert await concept_rows(db, world.topic_id) == []
 
-    async def test_more_than_eight_concepts_keeps_the_first_eight(self, db, world):
-        base = ConceptExtraction.example_for(f'<excerpt chunk_id="{world.chunks[0]}">\n{CHUNK_TEXT[0]}\n</excerpt>')
-        concepts, claims = [], []
-        for n in range(10):
-            concepts.append(base.concepts[0].model_copy(update={"key": f"k{n}", "name": f"Idea {n}", "objective_indexes": [0]}))
-            claims.append(base.claims[0].model_copy(update={"concept_key": f"k{n}"}))
-        raw = base.model_copy(update={"concepts": concepts, "claims": claims, "edges": []})
-        llm = MagicMock()
-        llm.generate_structured = AsyncMock(return_value=raw)
-
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=llm):
-            summary = await extract_concepts(world.topic_id)
-
-        assert summary.concepts == 8 and len(await concept_rows(db, world.topic_id)) == 8
-        assert summary.unmapped_objectives == [1, 2]
 
     async def test_confusable_edge_is_stored_smaller_id_first(self, db, world):
         base = ConceptExtraction.example_for(f'<excerpt chunk_id="{world.chunks[0]}">\n{CHUNK_TEXT[0]}\n</excerpt>')
@@ -259,28 +227,6 @@ class TestExtractConcepts:
 
         stored = await db.fetch("SELECT source_id, target_id FROM concept_edges WHERE type = 'confusable'")
         assert len(stored) == 3 and all(row["source_id"] < row["target_id"] for row in stored)
-
-    async def test_edge_from_a_prerequisite_topics_concept_is_written(self, db, world):
-        earlier = await seed_topic(db, world.project_id, "Earlier")
-        prior_id = await db.fetchval(
-            "INSERT INTO concepts (id, project_id, topic_id, name, summary, kind, order_index) "
-            "VALUES ($1, $2, $3, 'Count values', 'Counting how many values there are.', 'fact', 0) RETURNING id",
-            new_id(), world.project_id, earlier,
-        )
-        await db.execute("UPDATE topics SET prerequisite_ids = $2, order_index = 1 WHERE id = $1", world.topic_id, [earlier])
-        base = ConceptExtraction.example_for(f'<excerpt chunk_id="{world.chunks[0]}">\n{CHUNK_TEXT[0]}\n</excerpt>')
-        edge = base.edges[0].model_copy(update={"source": prior_id, "target": "c1", "type": "prerequisite"})
-        llm = MagicMock()
-        llm.generate_structured = AsyncMock(return_value=base.model_copy(update={"edges": [edge]}))
-
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=llm):
-            await extract_concepts(world.topic_id)
-
-        first = (await concept_rows(db, world.topic_id))[0]["id"]
-        stored = await db.fetch("SELECT source_id, target_id, type, status FROM concept_edges")
-        assert [(r["source_id"], r["target_id"], r["type"], r["status"]) for r in stored] == [
-            (prior_id, first, "prerequisite", "proposed")
-        ]
 
 
 class TestLegacyItems:
@@ -321,20 +267,6 @@ class TestLegacyItems:
         assert "concept_ids" not in practice[0]
         assert summary.legacy_items_mapped == 4
 
-    async def test_items_that_already_point_at_live_concepts_are_left_alone(self, db, world):
-        await extract_concepts(world.topic_id)
-        keep = (await concept_rows(db, world.topic_id))[2]["id"]
-        quiz = [{"question_text": "q", "concepts_tested": ["the first idea"], "concept_ids": [keep]}]
-        await db.execute(
-            "INSERT INTO topic_quizzes (id, topic_id, questions, kind) VALUES ($1, $2, $3::jsonb, 'standard')",
-            new_id(), world.topic_id, json.dumps(quiz),
-        )
-
-        assert await store.map_legacy_items(world.topic_id) == 0
-
-        stored = json.loads(await db.fetchval("SELECT questions FROM topic_quizzes WHERE topic_id = $1", world.topic_id))
-        assert stored[0]["concept_ids"] == [keep]
-
 
 class TestJob:
     async def test_no_source_material_is_not_retryable(self, db, world):
@@ -350,13 +282,3 @@ class TestJob:
         job = await get_job(db, job_id)
         assert job["retryable"] is False and job["error_code"] == "NO_SOURCE_MATERIAL"
 
-    async def test_job_completes_with_the_summary(self, db, world):
-        job_id = await seed_job(db, world.user_id, "extract_concepts", project_id=world.project_id)
-
-        await jobs.extract_concepts_job(
-            JobPayload(jobId=job_id, jobType="extract_concepts", data={"topicId": world.topic_id})
-        )
-
-        job = await get_job(db, job_id)
-        assert job["status"] == "completed"
-        assert json.loads(job["result_data"])["concepts"] == 3

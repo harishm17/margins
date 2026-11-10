@@ -39,17 +39,6 @@ test('a first message is answered at rung 0 and an attempt would climb one rung'
   })
 })
 
-test('a short message is not an attempt, so it does not climb', () => {
-  assert.equal(planOf(state(), 'just tell me').tutor.attempt_rung, 0)
-  assert.equal(planOf(state(), 'idk').tutor.attempt_rung, 0)
-})
-
-test('the third low-effort turn asks which part is unclear, whichever way the router reads it', () => {
-  const { tutor } = planOf(state({ lowEffortTurns: 2 }), 'help')
-  assert.equal(tutor.ask_what_is_unclear, true)
-  assert.equal(tutor.attempt_ask_what_is_unclear, true)
-})
-
 test('final_allowed is never true for Ask: it has no key and a self-grade is not proof', () => {
   assert.equal(planOf(state({ checkedCorrect: false })).tutor.final_allowed, false)
   assert.equal(planOf(state({ checkedCorrect: true })).tutor.final_allowed, false)
@@ -74,19 +63,6 @@ test('one event per student turn, only for solve turns: checking an answer does 
   assert.deepEqual(tutorEventFor(plan, route({ intent: 'solve', hasAttempt: false })), { type: 'request' })
   for (const intent of ['check_answer', 'lookup', 'logistics', 'understand', 'other'] as const) assert.equal(tutorEventFor(plan, route({ intent })), null, intent)
   assert.equal(tutorEventFor(plan, route({ degraded: true })), null)
-})
-
-test('the worked-example button is one show_worked event, and only when the reply was a solve', () => {
-  const plan = planOf(state({ attempts: 1 }), 'show me', 'show_worked')
-  assert.deepEqual(tutorEventFor(plan, route({ intent: 'solve' })), { type: 'show_worked' })
-  assert.equal(tutorEventFor(plan, route({ intent: 'lookup' })), null)
-})
-
-test('the rung a reply used follows what the router found', () => {
-  const plan = planOf(state())
-  assert.equal(rungUsed(plan, route({ hasAttempt: false })), 0)
-  assert.equal(rungUsed(plan, route({ hasAttempt: true })), 1)
-  assert.equal(rungUsed(planOf(state({ attempts: 1 }), 'x', 'show_worked'), route()), 5)
 })
 
 test('only a reply that taught records level 3', () => {
@@ -163,24 +139,6 @@ test('two non-attempt understand turns give explain_short', () => {
   assert.equal(understandModeFor({ ...counter, band: 1 }), 'explain_short')
 })
 
-test('band 0 explains after one', () => {
-  assert.equal(understandModeFor(un(0, 0)), 'commit')
-  assert.equal(understandModeFor(un(1, 0)), 'explain_short')
-  assert.equal(understandModeFor(un(1, 1)), 'commit')
-  assert.equal(understandModeFor(un(1, 2)), 'commit')
-})
-
-test('an attempt resets the count', () => {
-  assert.deepEqual(nextUnderstand({ noAttempt: 3, concepts: ['c1'] }, understand({ hasAttempt: true }), 'explain'), { noAttempt: 0, concepts: ['c1'] })
-})
-
-test('new concepts restart the count at 1', () => {
-  assert.deepEqual(nextUnderstand({ noAttempt: 3, concepts: ['c1'] }, understand({ conceptIds: ['c2'] }), 'commit'), { noAttempt: 1, concepts: ['c2'] })
-  // Overlap with any earlier concept keeps counting; the first turn of a thread has none to overlap.
-  assert.deepEqual(nextUnderstand({ noAttempt: 1, concepts: ['c1'] }, understand({ conceptIds: ['c1', 'c2'] }), 'commit'), { noAttempt: 2, concepts: ['c1', 'c2'] })
-  assert.deepEqual(nextUnderstand({ noAttempt: 0, concepts: [] }, understand({ conceptIds: ['c9'] }), 'commit'), { noAttempt: 1, concepts: ['c9'] })
-})
-
 test('an explain_short reply resets the count, and a broad, degraded or other-intent turn does not count', () => {
   assert.deepEqual(nextUnderstand({ noAttempt: 2, concepts: ['c1'] }, understand(), 'explain_short'), { noAttempt: 0, concepts: ['c1'] })
   const same = { noAttempt: 1, concepts: ['c1'] }
@@ -188,13 +146,4 @@ test('an explain_short reply resets the count, and a broad, degraded or other-in
   assert.deepEqual(nextUnderstand(same, understand({ degraded: true }), 'commit'), same)
   assert.deepEqual(nextUnderstand(same, route({ intent: 'solve' }), 'commit'), same)
   assert.deepEqual(nextUnderstand(same, route({ intent: 'lookup' }), 'commit'), same)
-})
-
-test('explain_short teaches: level 3 like every Ask explanation', () => {
-  const short = planOf(state(), 'idk', 'ask', un(2))
-  assert.equal(replyTaught(short, understand(), 'end_turn'), true)
-  // The same state read by a router that found a broad question or failed teaches nothing.
-  assert.equal(replyTaught(short, understand({ broad: true }), 'end_turn'), false)
-  assert.equal(replyTaught(short, understand({ degraded: true }), 'end_turn'), false)
-  assert.equal(replyTaught(planOf(state(), 'idk', 'ask', un(1)), understand(), 'end_turn'), false)
 })

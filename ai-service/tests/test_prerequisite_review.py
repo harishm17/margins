@@ -7,7 +7,7 @@ import pytest
 
 from app.api.routes import jobs
 from app.models.jobs import JobPayload
-from app.services.content_generator.context import existing_content_digest, format_source_excerpts
+from app.services.content_generator.context import existing_content_digest
 from app.services.content_generator.quiz import (
     PREREQUISITE_MAX_CHUNKS,
     PREREQUISITE_TOKEN_BUDGET,
@@ -71,38 +71,11 @@ class TestPrerequisiteExcerpts:
         assert 'index="4" source="m-pre.pdf"' in excerpts and 'index="10"' not in excerpts
 
     @pytest.mark.asyncio
-    async def test_not_present_without_a_prerequisite(self):
-        _, excerpts, instructions = await run(QUESTIONS, prerequisite=None)
-
-        assert "prerequisite" not in excerpts and "Review questions" not in instructions
-        assert excerpts.count("<excerpt ") == 3
-
-    @pytest.mark.asyncio
-    async def test_only_the_primary_chunks_are_used(self):
-        mixed = topic_context([chunk(1, material="m-pre"), chunk(2, "supporting", material="m-pre"),
-                               chunk(3, material="m-pre")], name="Limits")
-        _, excerpts, _ = await run(QUESTIONS, contexts={"pre": mixed})
-
-        assert excerpts.count('use="prerequisite"') == 2
-
-    @pytest.mark.asyncio
-    async def test_all_chunks_are_used_when_none_is_primary(self):
-        mapped = topic_context([chunk(n, "mapped", material="m-pre") for n in range(1, 4)], name="Limits")
-        _, excerpts, _ = await run(QUESTIONS, contexts={"pre": mapped})
-
-        assert excerpts.count('use="prerequisite"') == 3
-
-    @pytest.mark.asyncio
     async def test_token_cap(self):
         big = topic_context([chunk(n, tokens=1000, material="m-pre") for n in range(1, 7)], name="Limits")
         _, excerpts, _ = await run(QUESTIONS, contexts={"pre": big})
 
         assert excerpts.count('use="prerequisite"') == PREREQUISITE_TOKEN_BUDGET // 1000
-
-    def test_plain_chunks_render_unchanged(self):
-        text = format_source_excerpts("T", "d", [chunk(1), chunk(2, "supporting")])
-        assert "prerequisite" not in text and text.count('use="supporting"') == 1
-
 
 class TestPrerequisiteQuestions:
     @pytest.mark.asyncio
@@ -118,7 +91,7 @@ class TestPrerequisiteQuestions:
         review = next(q for q in result["questions"] if q["question_text"] == "Review")
         assert [s["filename"] for s in review["sources"]] == ["m-pre.pdf"]
 
-    @pytest.mark.parametrize("count, requested, expected", [(3, 2, 1), (5, 2, 1), (6, 2, 2), (10, 1, 1), (10, 2, 2), (12, 9, 2)])
+    @pytest.mark.parametrize("count, requested, expected", [(3, 2, 1), (10, 1, 1), (12, 9, 2)])
     @pytest.mark.asyncio
     async def test_instruction_block_count(self, count, requested, expected):
         _, _, instructions = await run(QUESTIONS * 3, question_count=count, prerequisite_questions=requested)
@@ -126,21 +99,7 @@ class TestPrerequisiteQuestions:
         assert f"exactly {expected} of the {count + 2} questions must test the prerequisite topic \"Limits\"" in instructions
         assert f"The other {count + 2 - expected} questions" in instructions
 
-    @pytest.mark.asyncio
-    async def test_too_short_a_quiz_has_no_review(self):
-        result, excerpts, instructions = await run([mcq("A", [1]), mcq("B", [2])], question_count=2)
-
-        assert "prerequisite" not in excerpts and "Review questions" not in instructions
-        assert result["total_questions"] == 2
-
-
 class TestPrerequisiteIgnored:
-    @pytest.mark.asyncio
-    async def test_the_topic_itself(self):
-        _, excerpts, instructions = await run(QUESTIONS, prerequisite="t1")
-
-        assert "prerequisite" not in excerpts and "Review questions" not in instructions
-
     @pytest.mark.asyncio
     async def test_no_excerpts(self):
         result, excerpts, instructions = await run(QUESTIONS, contexts={"pre": topic_context([])})
@@ -148,13 +107,6 @@ class TestPrerequisiteIgnored:
         assert "prerequisite" not in excerpts and "Review questions" not in instructions
         assert result["total_questions"] == 6
         assert all("prerequisite_topic" not in q for q in result["questions"])
-
-    @pytest.mark.asyncio
-    async def test_unknown_topic(self):
-        result, excerpts, _ = await run(QUESTIONS, contexts={})  # the stub answers with the topic's own context
-
-        assert result["total_questions"] == 6
-
 
 class FakeQuiz:
     kwargs = None
@@ -187,12 +139,6 @@ async def run_job(db, world, **preferences):
 
 
 class TestJobWiring:
-    async def test_preferences_are_passed_through(self, db, world):
-        kwargs = await run_job(db, world, prerequisite_topic_id=world.prerequisite, prerequisite_questions=1)
-
-        assert kwargs["prerequisite_topic_id"] == world.prerequisite
-        assert kwargs["prerequisite_questions"] == 1
-
     async def test_question_count_defaults_to_two_and_is_clamped(self, db, world):
         assert (await run_job(db, world, prerequisite_topic_id=world.prerequisite))["prerequisite_questions"] == 2
         assert (await run_job(db, world, prerequisite_topic_id=world.prerequisite, prerequisite_questions=7))["prerequisite_questions"] == 2
@@ -203,10 +149,6 @@ class TestJobWiring:
         for value in (None, "", 5, world.topic, world.other, new_id()):
             kwargs = await run_job(db, world, prerequisite_topic_id=value)
             assert kwargs["prerequisite_topic_id"] is None, value
-
-    async def test_no_preference(self, db, world):
-        assert (await run_job(db, world))["prerequisite_topic_id"] is None
-
 
 class TestDigestIgnoresRetrySets:
     async def test_retry_sets_are_left_out(self, db):

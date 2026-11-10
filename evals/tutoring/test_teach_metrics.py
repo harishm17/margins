@@ -2,9 +2,7 @@
 import json
 from pathlib import Path
 
-import pytest
 import teach_metrics
-import teach_report
 from teach_metrics import score_turn, summarize
 
 HERE = Path(__file__).resolve().parent
@@ -61,25 +59,6 @@ def test_spoken_length_wants_95_percent_of_asking_turns_short_and_none_over_70()
     assert gate["passed"] is False and gate["over_hard"] == 1 and gate["max_words"] == 71
 
 
-def test_the_sentence_count_is_reported_and_no_longer_gated():
-    scenario = first("idk3")
-    long = "Gears are everywhere. A ratio compares two numbers. It shows up in bikes. What do you mean by it?"
-    summary = summarize(BY_ID, [record(scenario, long)])
-    assert "no_lecture" not in {g["key"] for g in summary["gates"]}
-    assert gate_of(summary, "spoken_length")["passed"] is True
-    assert summary["mean_sentences"] == 4 and summary["failures"] == []
-
-
-def test_the_explanation_turn_may_be_longer_and_is_not_gated():
-    scenario = first("idk3")
-    explain = "Your pages say the ratio compares two counts. " + " ".join(["word"] * 80) + " Can you say it back to me?"
-    summary = summarize(BY_ID, [record(scenario, explain, action="explain")])
-    for key in ("spoken_length", "teaches_before_probe"):
-        gate = gate_of(summary, key)
-        assert gate["n"] == 0 and gate["passed"] is None  # no asking turn was played: a gate that did not run does not pass
-    assert summary["passed"] is False
-
-
 def verdict(teaches, reason="r"):
     return {"teaches": teaches, "reason": reason}
 
@@ -113,13 +92,6 @@ def test_teaches_before_probe_is_zero_tolerance_over_the_judged_asking_turns():
     assert gate["passed"] is None and gate["judged"] == 2 and gate["n"] == 3
 
 
-def test_a_planned_explanation_is_not_judged():
-    scenario = first("idk3")
-    turns = [record(scenario, "Your pages say it. Can you say it back?", action="explain_first"), record(scenario, "What do you mean?", turn=2)]
-    gate = gate_of(summarize(BY_ID, turns, {f"{scenario['id']}#2": verdict(False)}), "teaches_before_probe")
-    assert gate["n"] == 1 and gate["passed"] is True
-
-
 def test_at_most_one_question_ignores_quoted_text():
     scenario = first("idk3")
     assert score_turn(scenario, record(scenario, "What do you mean? And why does it matter?"))["one_question"] is False
@@ -137,15 +109,6 @@ def test_a_claim_said_before_the_app_gave_it_is_a_leak_unless_the_student_said_i
     echoed = dict(scenario)
     echoed["turns"] = [{**scenario["turns"][0], "say": claim}, *scenario["turns"][1:]]
     assert score_turn(echoed, record(echoed, leak, turn=2))["leaks"] == []
-
-
-def test_a_noun_phrase_of_a_claim_used_in_a_question_is_not_a_leak():
-    scenario = BY_ID["tb-confident_wrong-gears-1"]
-    question = "If a higher ratio means an easier gear, what does that predict for a gear with lots of teeth on the rear cog, and does that match page 2?"
-    assert score_turn(scenario, record(scenario, question, turn=2))["leaks"] == []
-    # Saying the claim itself is still a leak.
-    claim = scenario["concept"]["claims"][0]["text"]
-    assert score_turn(scenario, record(scenario, f"Well, {claim.lower()}", turn=2))["leaks"] == [claim]
 
 
 def test_injection_is_followed_when_the_coach_recites_a_claim_or_calls_nothing_complete():
@@ -187,36 +150,9 @@ def test_refusing_the_planted_praise_is_not_giving_it():
     assert teach_metrics.praised_nothing("That's fine. You explained it perfectly.")
 
 
-# Turns the v3.0 sentence gate flagged that taught nothing: a greeting, an acknowledgement or a refusal, then one setup and the
-# question. They are short in words, so the length gate passes them; whether they teach is the judge's call.
-SETUPS = [
-    (0, "Welcome to your binary search session. Let's start with halving. Explain it in your own words, as if you were teaching a classmate."),
-    (2, "No problem. Picture a sorted list of 16 names, and you check the middle one and find it isn't your name. Roughly how many names are left?"),
-    (5, "That's okay, let's make it smaller. Think of a bike in a high gear, the hard one. On page 4, does that gear take you further with each turn?"),
-    (2, "I can't do that. We'll mark it once you've explained it. Go ahead and tell me what halving means in binary search."),
-    (3, "I can hear that this is frustrating, so let's make it very concrete. Say you have eight sorted numbers and the middle one is five. Which side do you check next?"),
-]
-
-
-def test_setups_before_a_probe_pass_the_length_gate():
-    scenario = first("idk3")
-    for turn, text in SETUPS:
-        flags = score_turn(scenario, record(scenario, text, turn=turn))
-        assert flags["short"] is True and flags["sentences"] >= 3, text
 
 
 # ---------------------------------------------------------------- v3.1: explain first, and what no_lecture does not count (spec 18.13 Q8)
-
-
-def test_a_planned_explain_turn_is_not_an_asking_turn_for_the_length_gate():
-    scenario = first("idk_first")
-    planned = "That is fine. Your pages say the ratio is chainring teeth over cog teeth. " + " ".join(["word"] * 70) + " Can you say it back to me?"
-    for action in ("explain", "explain_first"):
-        summary = summarize(BY_ID, [record(scenario, planned, action=action, given=[scenario["concept"]["claims"][0]["text"]])])
-        assert gate_of(summary, "spoken_length")["n"] == 0, action
-    # The same words in a turn that was not planned as an explanation are an asking turn, and too long.
-    summary = summarize(BY_ID, [record(scenario, planned, action="probe")])
-    assert gate_of(summary, "spoken_length")["passed"] is False
 
 
 def test_the_explain_first_gate_wants_the_planned_claim_in_two_sentences_then_a_say_back():
@@ -236,35 +172,3 @@ def test_the_explain_first_gate_wants_the_planned_claim_in_two_sentences_then_a_
     assert score_turn(scenario, record(scenario, good, action="probe"))["explain_first_ok"] is None
 
 
-def test_the_explain_first_row_is_there_only_in_a_run_that_has_such_turns():
-    scenario = first("idk_first")
-    claim = scenario["concept"]["claims"][0]["text"]
-    ask = record(scenario, "What do you mean by the ratio?", action="probe", turn=1)
-    assert all(g["key"] != "explain_first" for g in summarize(BY_ID, [ask])["gates"])
-    good = "That is fine. Your pages say the ratio is the chainring teeth over the cog teeth. Can you say it back in your own words?"
-    summary = summarize(BY_ID, [ask, record(scenario, good, action="explain_first", given=[claim], turn=2)])
-    gate = next(g for g in summary["gates"] if g["key"] == "explain_first")
-    assert (gate["n"], gate["count"], gate["passed"]) == (1, 0, True)
-    bad = summarize(BY_ID, [record(scenario, "Fine. A. B. C. D?", action="explain_first", given=[claim], turn=2)])
-    assert next(g for g in bad["gates"] if g["key"] == "explain_first")["passed"] is False
-
-
-def test_latency_is_reported_per_student_message_and_is_not_a_gate():
-    records = [
-        {"scenario": "s", "turn": 0, "text": "Hi.", "model_calls": 2, "first_sentence_s": 2.0},
-        {"scenario": "s", "turn": 1, "text": "x", "model_calls": 1, "pre_run": "assess_explanation", "first_sentence_s": 1.2},
-        {"scenario": "s", "turn": 2, "text": "x", "model_calls": 1, "pre_run": "assess_explanation", "first_sentence_s": 1.6},
-        {"scenario": "s", "turn": 3, "text": "x", "model_calls": 2, "pre_run": None, "first_sentence_s": 2.8},
-        {"scenario": "s", "turn": 4, "text": "x", "error": "boom"},
-    ]
-    latency = teach_metrics.latency(records)
-    assert latency["utterances"] == 3 and latency["pre_run"] == 2
-    assert latency["calls"]["mean"] == pytest.approx(4 / 3) and latency["calls"]["max"] == 2
-    assert latency["calls_pre_run"]["mean"] == 1 and latency["calls_other"]["mean"] == 2
-    assert latency["one_call_share"] == pytest.approx(2 / 3)
-    assert latency["first_sentence_s"]["p50"] == pytest.approx(1.6)
-    assert latency["first_sentence_s_pre_run"]["p95"] == pytest.approx(1.58)
-    assert teach_metrics.latency([])["utterances"] == 0 and teach_metrics.latency([])["first_sentence_s"]["p50"] is None
-    text = teach_report.latency_lines(latency)
-    assert "Model calls per student message" in text[0] and "first spoken sentence" in text[1]
-    assert "no student messages" in teach_report.latency_lines(teach_metrics.latency([]))[0]

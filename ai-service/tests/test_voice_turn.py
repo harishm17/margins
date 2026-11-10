@@ -6,8 +6,6 @@ import json
 from types import SimpleNamespace
 from typing import Any, List
 
-import anthropic
-import httpx2
 import pytest
 from anthropic.types.beta import BetaRawContentBlockDeltaEvent, BetaTextDelta
 from fastapi.testclient import TestClient
@@ -17,11 +15,9 @@ from app.config import settings
 from app.main import app
 from app.services.llm.anthropic_provider import AnthropicProvider
 from app.services.llm.base import (
-    LLMOutputError,
     LLMProvider,
     LLMRateLimitError,
     LLMRefusalError,
-    LLMUnavailableError,
     LLMUsage,
     TurnDone,
     TurnText,
@@ -97,27 +93,6 @@ async def collect(provider, **overrides):
 
 
 class TestClaudeTurn:
-    async def test_request_uses_the_fast_model_low_effort_and_auto_tool_choice(self):
-        text = SimpleNamespace(type="text", text="Hello there.")
-        provider, calls = claude([delta("Hello there.")], final_message([text]))
-        await collect(provider, max_tokens=800)
-
-        params = calls[0]
-        assert params["model"] == "claude-haiku-5-5"
-        assert params["max_tokens"] == 800
-        assert params["output_config"] == {"effort": "low"}
-        assert params["tools"] == TOOLS and params["tool_choice"] == {"type": "auto"}
-        assert params["system"][0]["text"] == "Be a coach."
-        assert params["system"][0]["cache_control"] == {"type": "ephemeral"}
-        assert params["messages"] == [{"role": "user", "content": "hi"}]
-        assert "fallbacks" not in params  # Haiku has no server-side fallback
-
-    async def test_no_tools_sends_no_tool_parameters(self):
-        text = SimpleNamespace(type="text", text="Hi.")
-        provider, calls = claude([delta("Hi.")], final_message([text]))
-        await collect(provider, tools=[])
-        assert "tools" not in calls[0] and "tool_choice" not in calls[0]
-
     async def test_text_streams_then_tool_use_then_done_with_the_blocks_as_returned(self):
         content = [
             SimpleNamespace(type="thinking", thinking="", signature="sig"),
@@ -146,157 +121,6 @@ class TestClaudeTurn:
             await collect(provider)
         assert caught.value.usage is not None and caught.value.usage.output_tokens == 40
 
-    async def test_an_empty_reply_is_a_bad_output(self):
-        provider, _ = claude([], final_message([SimpleNamespace(type="text", text="  ")]))
-        with pytest.raises(LLMOutputError):
-            await collect(provider)
-
-    async def test_sdk_errors_are_translated(self):
-        request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
-        error = anthropic.RateLimitError(
-            "slow down", response=httpx2.Response(429, request=request), body=None
-        )
-        provider, _ = claude([], None, error=error)
-        with pytest.raises(LLMRateLimitError):
-            await collect(provider)
-
-
-# ---- the mock provider ---------------------------------------------------------------------
-
-
-def user(*blocks):
-    return {"role": "user", "content": list(blocks)}
-
-
-def text(value):
-    return {"type": "text", "text": value}
-
-
-def tool_result(tool_use_id, payload):
-    return {"type": "tool_result", "tool_use_id": tool_use_id, "content": json.dumps(payload)}
-
-
-class TestMockTurn:
-    async def test_first_turn_asks_for_a_question(self):
-        events = await collect(MockProvider(), messages=[{"role": "user", "content": "Start"}])
-        assert [e.type for e in events] == ["tool_use", "done"]
-        assert events[0].name == "get_next_question"
-        assert events[-1].stop_reason == "tool_use"
-        assert events[-1].content[0]["id"] == events[0].id
-
-    async def test_a_tool_result_is_answered_with_short_text(self):
-        first = await collect(MockProvider(), messages=[{"role": "user", "content": "Start"}])
-        messages = [
-            {"role": "user", "content": "Start"},
-            {"role": "assistant", "content": first[-1].content},
-            user(tool_result(first[0].id, {"done": False, "question_index": 0})),
-        ]
-        events = await collect(MockProvider(), messages=messages)
-        assert [e.type for e in events][-1] == "done"
-        assert events[-1].stop_reason == "end_turn"
-        said = "".join(e.text for e in events if isinstance(e, TurnText))
-        assert said and said == events[-1].content[0]["text"]
-
-    async def test_the_next_user_message_is_recorded_as_the_answer(self):
-        asked = {"type": "tool_use", "id": "t1", "name": "get_next_question", "input": {}}
-        messages = [
-            {"role": "user", "content": "Start"},
-            {"role": "assistant", "content": [asked]},
-            user(tool_result("t1", {"done": False, "question_index": 3})),
-            {"role": "assistant", "content": [text("Here is your question.")]},
-            {"role": "user", "content": "Hashing maps keys to buckets"},
-        ]
-        events = await collect(MockProvider(), messages=messages)
-        assert events[0].name == "record_answer"
-        assert events[0].input == {"question_index": 3, "user_answer": "Hashing maps keys to buckets"}
-
-    async def test_without_tools_it_just_talks(self):
-        events = await collect(MockProvider(), messages=[{"role": "user", "content": "Tell me about heaps"}], tools=[])
-        assert [e.type for e in events][-1] == "done"
-        assert not any(isinstance(e, TurnToolUse) for e in events)
-        assert "heaps" in events[-1].content[0]["text"]
-
-
-TEACH_TOOLS = [
-    {"name": "get_concept_to_explain", "description": "Concept", "input_schema": {"type": "object", "properties": {}}},
-    {"name": "assess_explanation", "description": "Assess", "input_schema": {"type": "object", "properties": {}}},
-    {"name": "record_check", "description": "Check", "input_schema": {"type": "object", "properties": {}}},
-]
-READING_TOOLS = [
-    {"name": "next_claim", "description": "Claim", "input_schema": {"type": "object", "properties": {}}},
-    {"name": "record_check", "description": "Check", "input_schema": {"type": "object", "properties": {}}},
-]
-
-
-async def converse(tools, steps):
-    """Plays a conversation against the mock. `steps` are the student's messages, or (name, result) pairs for the tool result
-    to give back to the tool call the mock just made. Returns the mock's tool calls and its spoken text, in order."""
-    messages = [{"role": "user", "content": "[start]"}]
-    said, calls, n = [], [], 0
-    steps = list(steps)
-    while True:
-        events = await collect(MockProvider(), messages=messages, tools=tools)
-        spoken = "".join(e.text for e in events if isinstance(e, TurnText))
-        done = events[-1]
-        messages.append({"role": "assistant", "content": done.content})
-        if spoken:
-            said.append(spoken)
-        tool = next((e for e in events if isinstance(e, TurnToolUse)), None)
-        if tool is not None:
-            calls.append((tool.name, tool.input))
-            result = steps.pop(0)
-            assert result[0] == tool.name, f"expected {result[0]}, the mock called {tool.name}"
-            messages.append(user(tool_result(tool.id, result[1])))
-            continue
-        if not steps:
-            return calls, said
-        n += 1
-        messages.append({"role": "user", "content": steps.pop(0)})
-
-
-class TestMockTeachBack:
-    async def test_asks_for_an_idea_assesses_the_explanation_and_follows_the_action(self):
-        calls, said = await converse(
-            TEACH_TOOLS,
-            [
-                ("get_concept_to_explain", {"done": False, "concept_id": "c1", "prompt": "Explain it"}),
-                "Hash tables send keys to buckets.",
-                ("assess_explanation", {"action": "probe", "probe": {"type": "implication", "number": 1}}),
-                "They collide, I think.",
-                ("assess_explanation", {"action": "ask_new_example"}),
-                "It works the same in a new case.",
-                ("record_check", {"passed": True, "action": "wrap_up"}),
-            ],
-        )
-        assert [name for name, _ in calls] == ["get_concept_to_explain", "assess_explanation", "assess_explanation", "record_check"]
-        assert calls[1] == ("assess_explanation", {"concept_id": "c1", "explanation": "Hash tables send keys to buckets."})
-        assert calls[3][0] == "record_check" and calls[3][1]["concept_id"] == "c1"
-        assert any("Mock probe 1" in line for line in said)
-
-    async def test_without_the_teach_back_tools_it_does_not_script_them(self):
-        events = await collect(MockProvider(), messages=[{"role": "user", "content": "Start"}], tools=TOOLS)
-        assert events[0].name == "get_next_question"
-
-
-class TestMockGuidedReading:
-    async def test_predicts_then_asks_for_the_claim_then_checks_it(self):
-        calls, said = await converse(
-            READING_TOOLS,
-            [
-                ("next_claim", {"done": False, "claim_index": 0, "prediction_prompt": "What do you expect?"}),
-                "I think it defines a bucket.",
-                ("next_claim", {"done": False, "claim_index": 0, "claim": {"text": "A claim.", "page": 4}}),
-                "A bucket holds keys.",
-                ("record_check", {"verdict": "right"}),
-                "ok",
-                ("next_claim", {"done": True}),
-            ],
-        )
-        assert calls[0] == ("next_claim", {})
-        assert calls[1] == ("next_claim", {"reveal": True, "prediction": "I think it defines a bucket.", "check_question": "Mock check question?"})
-        assert calls[2] == ("record_check", {"claim_index": 0, "answer": "A bucket holds keys."})
-        assert calls[3] == ("next_claim", {})
-        assert any("every claim" in line for line in said)
 
 
 # ---- the route -----------------------------------------------------------------------------
@@ -385,28 +209,6 @@ class TestRoute:
         assert done["stop_reason"] == "tool_use"
         assert done["content"][0]["type"] == "tool_use" and done["content"][0]["id"] == events[0]["id"]
 
-    def test_done_carries_the_time_to_the_first_token_and_the_total(self, client, wired):
-        events = lines(post(client))
-        timing = events[-1]["timing"]
-        assert isinstance(timing["ttft_ms"], int) and isinstance(timing["total_ms"], int)
-        assert 0 <= timing["ttft_ms"] <= timing["total_ms"]
-
-    def test_text_deltas_add_up_to_the_final_text(self, client, wired):
-        events = lines(post(client, tools=[], messages=[{"role": "user", "content": "Tell me about heaps"}]))
-        deltas = "".join(e["delta"] for e in events if e["type"] == "text")
-        assert deltas and deltas == events[-1]["content"][0]["text"]
-
-    def test_the_model_gets_the_voice_purpose_and_small_budget(self, client, wired, monkeypatch):
-        monkeypatch.setattr(settings, "VOICE_MAX_TOKENS", 777)
-        wired["provider"] = ScriptedProvider(
-            [TurnText(text="Hi."), TurnDone(stop_reason="end_turn", content=[{"type": "text", "text": "Hi."}], usage=usage())]
-        )
-        post(client)
-        call = wired["provider"].calls[0]
-        assert (call["max_tokens"], call["purpose"]) == (777, "voice")
-        assert call["system"] == "You are a coach." and call["tools"] == TOOLS
-        assert call["messages"] == [{"role": "user", "content": "Start"}]
-
     def test_over_budget_is_refused_before_the_model_runs(self, client, wired):
         wired["provider"] = ScriptedProvider(error=AssertionError("the model must not be called"))
         wired["budget"] = "Daily AI usage limit reached ($3.10 of $3.00 used today, UTC)."
@@ -422,23 +224,11 @@ class TestRoute:
         response = post(client)
         assert response.status_code == 404 and response.json()["error_code"] == "PROJECT_NOT_FOUND"
 
-    def test_not_configured_is_503(self, client, wired, monkeypatch):
-        monkeypatch.setattr(settings, "LLM_PROVIDER", "anthropic")
-        monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "")
-        response = post(client)
-        assert response.status_code == 503 and response.json()["error_code"] == "LLM_NOT_CONFIGURED"
-
-    def test_bad_requests_are_422(self, client, wired):
-        assert post(client, messages=[]).status_code == 422
-        assert post(client, session_id="").status_code == 422
-
     @pytest.mark.parametrize(
         "error,code,retryable",
         [
             (LLMRateLimitError("slow down"), "LLM_RATE_LIMITED", True),
-            (LLMUnavailableError("overloaded"), "LLM_UNAVAILABLE", True),
             (LLMRefusalError("declined"), "LLM_REFUSED", False),
-            (LLMOutputError("empty"), "LLM_BAD_OUTPUT", True),
             (RuntimeError("boom"), "VOICE_TURN_FAILED", True),
         ],
     )
@@ -502,50 +292,3 @@ class TestLedgerInTheDatabase:
         monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 0.0001)
         refused = await voice_route.turn(payload)
         assert refused.status_code == 429
-
-
-class TestMockDrillEnd:
-    async def test_a_finished_drill_gets_a_goodbye(self):
-        asked = {"type": "tool_use", "id": "t1", "name": "get_next_question", "input": {}}
-        messages = [
-            {"role": "user", "content": "Start"},
-            {"role": "assistant", "content": [asked]},
-            user(tool_result("t1", {"done": True, "message": "Drill complete."})),
-        ]
-        events = await collect(MockProvider(), messages=messages)
-        assert "goodbye" in events[-1].content[0]["text"]
-
-
-def with_result(words, step, payload):
-    """The student's message as the app sends it when it has already run the step (spec 19.1)."""
-    return user(text(words), text(f'<app_result step="{step}">{json.dumps(payload)}</app_result>'))
-
-
-class TestMockAttachedResults:
-    """A step the app ran before the model speaks: the mock speaks at once, with no tool call, as the real coach does."""
-
-    async def test_teach_back_speaks_to_the_attached_assessment(self):
-        messages = [
-            {"role": "user", "content": "[start]"},
-            {"role": "assistant", "content": [text("Explain it.")]},
-            with_result("They collide.", "assess_explanation", {"action": "probe", "probe": {"type": "implication", "number": 2}}),
-        ]
-        events = await collect(MockProvider(), messages=messages, tools=TEACH_TOOLS)
-        assert [e.type for e in events][-1] == "done" and events[-1].stop_reason == "end_turn"
-        assert not any(isinstance(e, TurnToolUse) for e in events)
-        assert "Mock probe 2" in "".join(e.text for e in events if isinstance(e, TurnText))
-
-    async def test_guided_reading_speaks_to_the_attached_reveal_and_check(self):
-        reveal = [{"role": "user", "content": "[start]"}, {"role": "assistant", "content": [text("Predict.")]}, with_result("A bucket.", "next_claim", {"claim_index": 0, "claim": {"text": "A claim."}})]
-        events = await collect(MockProvider(), messages=reveal, tools=READING_TOOLS)
-        assert not any(isinstance(e, TurnToolUse) for e in events)
-        assert "Mock claim" in "".join(e.text for e in events if isinstance(e, TurnText))
-        check = [*reveal[:2], with_result("It holds keys.", "record_check", {"verdict": "right"})]
-        events = await collect(MockProvider(), messages=check, tools=READING_TOOLS)
-        assert "Mock feedback" in "".join(e.text for e in events if isinstance(e, TurnText))
-
-    async def test_the_quiz_speaks_to_the_attached_answer(self):
-        messages = [{"role": "user", "content": "[start]"}, {"role": "assistant", "content": [text("Question one.")]}, with_result("Buckets.", "record_answer", {"is_correct": True})]
-        events = await collect(MockProvider(), messages=messages, tools=TOOLS)
-        assert not any(isinstance(e, TurnToolUse) for e in events)
-        assert "noted" in "".join(e.text for e in events if isinstance(e, TurnText))

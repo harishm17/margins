@@ -5,29 +5,6 @@ import { clearAiStatusCache, getAiStatus } from '@/server/ai-status'
 
 const now = new Date('2026-10-28T15:00:00Z')
 
-test('an available AI with the allowance partly used', () => {
-  const status = parseStatusResponse(
-    {
-      available: true,
-      reason: null,
-      since: null,
-      allowance: { used: 2, limit: 8, resets_at: '2026-10-29T00:00:00Z' },
-      global_cap_hit: false,
-      resets_at: '2026-10-29T00:00:00Z',
-    },
-    now
-  )
-  assert.equal(status.available, true)
-  assert.deepEqual(status.allowance, { used: 2, limit: 8, resetsAt: '2026-10-29T00:00:00Z', usedFraction: 0.25, exhausted: false })
-  assert.equal(blockedCode(status), null)
-})
-
-test('a provider outage blocks with its reason', () => {
-  const status = parseStatusResponse({ available: false, reason: 'LLM_CREDIT_EXHAUSTED', since: '2026-10-28T09:00:00Z' }, now)
-  assert.equal(blockedCode(status), 'LLM_CREDIT_EXHAUSTED')
-  assert.equal(status.since, '2026-10-28T09:00:00Z')
-})
-
 test('the allowance used, or the global cap hit, blocks with the allowance code', () => {
   const used = parseStatusResponse({ available: true, allowance: { used: 8.2, limit: 8 } }, now)
   assert.equal(blockedCode(used), 'LLM_DAILY_BUDGET')

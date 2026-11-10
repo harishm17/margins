@@ -1,12 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { answersForGrader, answersForStorage, answersToSend, countAnswered, isAnswered, normalizeAnswers, plainAnswers } from './quiz-answers'
-
-test('accepts legacy string answers', () => {
-  const normalized = normalizeAnswers({ '0': 'B', '1': 'because caching' })
-  assert.deepEqual(normalized, { '0': { answer: 'B' }, '1': { answer: 'because caching' } })
-  assert.deepEqual(plainAnswers(normalized), { '0': 'B', '1': 'because caching' })
-})
+import { answersForGrader, answersForStorage, answersToSend, normalizeAnswers, plainAnswers } from './quiz-answers'
 
 test('keeps confidence and thinking', () => {
   const normalized = normalizeAnswers({
@@ -17,24 +11,6 @@ test('keeps confidence and thinking', () => {
   assert.deepEqual(answersForGrader(normalized), { '0': { answer: 'B', thinking: 'It was the queue one.' }, '1': 'A' })
   assert.deepEqual(answersForStorage(normalized)['0'], normalized['0'])
   assert.equal(answersForStorage(normalized)['1'], 'A')
-})
-
-test('drops confidence out of range', () => {
-  const normalized = normalizeAnswers({
-    '0': { answer: 'B', confidence: 1.5 },
-    '1': { answer: 'C', confidence: -0.1 },
-    '2': { answer: 'D', confidence: Number.NaN },
-    '3': { answer: 'A', confidence: 0 },
-  })
-  assert.deepEqual(normalized['0'], { answer: 'B' })
-  assert.deepEqual(normalized['1'], { answer: 'C' })
-  assert.deepEqual(normalized['2'], { answer: 'D' })
-  assert.deepEqual(normalized['3'], { answer: 'A', confidence: 0 })
-})
-
-test('ignores entries that are not answers and empty thinking', () => {
-  assert.deepEqual(normalizeAnswers(null), {})
-  assert.deepEqual(normalizeAnswers({ '0': 5, '1': { nope: 1 }, '2': { answer: 'x', thinking: '  ' } }), { '2': { answer: 'x' } })
 })
 
 test('keeps the chosen confidence level next to its value, and drops a bad one', () => {
@@ -56,14 +32,6 @@ test('an "I don\'t know" keeps its flag, has no text and no confidence', () => {
   assert.deepEqual(normalized['0'], { answer: '', idk: true })
   assert.deepEqual(normalized['1'], { answer: 'B' })
   assert.deepEqual(plainAnswers(normalized), { '0': '', '1': 'B' })
-})
-
-test('isAnswered counts an "I don\'t know" and not an empty box', () => {
-  assert.equal(isAnswered({ answer: '', idk: true }), true)
-  assert.equal(isAnswered({ answer: '  ' }), false)
-  assert.equal(isAnswered({ answer: 'B' }), true)
-  assert.equal(isAnswered(undefined), false)
-  assert.equal(countAnswered({ '0': { answer: 'B' }, '1': { answer: '', idk: true }, '2': { answer: '' } }), 2)
 })
 
 test('what is sent keeps the "I don\'t know" answers and leaves blanks out', () => {

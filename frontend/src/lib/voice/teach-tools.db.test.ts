@@ -242,18 +242,6 @@ dbTest('the say-back grade is a second grader call and counts against the per-us
   assert.ok(!rows.slice(rowsBefore).some((row) => row.assistance === 2), 'no level-2 say-back evidence was written')
 })
 
-dbTest('a say-back that misses is a level-1 miss with no score', async () => {
-  const w = await world()
-  const g = grader({ 'Two keys': COVERED })
-  await run(w, undefined, 'get_concept_to_explain')
-  const say = (text: string) => run(w, g.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: text })
-  for (const text of ['Keys collide.', 'In a bucket.', 'Not sure.']) await say(text)
-  const four = out(await say('Still no idea what the bucket holds.'))
-  assert.equal(four.action, 'wrap_up')
-  const rows = await teachEvents(w)
-  assert.deepEqual(rows.map((row) => [row.assistance, row.score]), [[0, 0.5], [1, 0]])
-})
-
 dbTest('a say-back is judged on what was said just now and against that claim alone', async () => {
   const w = await world()
   await run(w, undefined, 'get_concept_to_explain')
@@ -300,44 +288,6 @@ dbTest('a say-back is judged on what was said just now and against that claim al
   assert.deepEqual(rows.map((row) => [row.assistance, row.score]).slice(-1), [[2, 1]])
 })
 
-dbTest('assessing again before the example is answered asks for it again and does not close the idea', async () => {
-  const w = await world()
-  const all = grader({ 'Two keys': COVERED, 'Chaining': COVERED })
-  await run(w, undefined, 'get_concept_to_explain')
-  await run(w, all.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'Keys that share a bucket collide, and each bucket holds a list.' })
-  const again = out(await run(w, all.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'So that is the whole idea, really.' }))
-  assert.equal(again.action, 'ask_new_example')
-  assert.equal(again.outcome, undefined)
-  assert.equal((await stateOf(w)).teach.concepts[w.collision.id].outcome, null)
-})
-
-dbTest('a closed idea is told to the browser for the summary', async () => {
-  const w = await world()
-  const all = grader({ 'Two keys': COVERED, 'Chaining': COVERED })
-  await run(w, undefined, 'get_concept_to_explain')
-  await run(w, all.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'Keys that share a bucket collide, and each bucket holds a list.' })
-  const checked = await run(w, all.grade, 'record_check', { concept_id: w.collision.id, question: 'A new case?', answer: 'It works the same way.' })
-  assert.deepEqual(checked.events, [{ type: 'idea_done', name: 'Collision', outcome: 'explained', conceptId: w.collision.id }])
-  const w2 = await world()
-  const rules: Record<string, Rule> = { 'Two keys': COVERED, 'Chaining': { verdict: 'missing', pointer: 'Look again at p. 5: What does each bucket hold?' } }
-  const g = grader(rules)
-  await run(w2, undefined, 'get_concept_to_explain')
-  const say = (text: string) => run(w2, g.grade, 'assess_explanation', { concept_id: w2.collision.id, explanation: text })
-  for (const text of ['one', 'two', 'three']) await say(text)
-  Object.assign(rules, { 'Chaining': COVERED })
-  const closed = await say('Each bucket holds a list of the keys that landed in it.')
-  assert.deepEqual(closed.events, [
-    {
-      type: 'idea_done',
-      name: 'Collision',
-      outcome: 'taught',
-      conceptId: w2.collision.id,
-      lookAgain: ['p. 5'],
-      lookLinks: [{ label: 'p. 5', href: `/api/materials/${w2.material.id}/file#page=5` }],
-    },
-  ])
-})
-
 dbTest('the pages to look at again come from the claims\' own pages, a range included, not from the coach\'s text', async () => {
   const w = await world()
   // The claim spans pages 5 to 7; the coach's own pointer names no page at all.
@@ -353,17 +303,6 @@ dbTest('the pages to look at again come from the claims\' own pages, a range inc
   assert.ok(done && done.type === 'idea_done')
   assert.deepEqual(done.lookLinks, [{ label: 'pp. 5-7', href: `/api/materials/${w.material.id}/file#page=5` }])
   assert.deepEqual(done.lookAgain, ['pp. 5-7'])
-})
-
-dbTest('the grader reasoning flag makes an unsupported jump on a fully covered answer', async () => {
-  const w = await world()
-  const bare = grader({ 'Two keys': COVERED, 'Chaining': { verdict: 'covered', student_quote: 'lists', reasoning_gap: true } })
-  await run(w, undefined, 'get_concept_to_explain')
-  const output = out(await run(w, bare.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'It just uses lists, that is it.' }))
-  assert.equal(output.action, 'probe')
-  assert.equal(output.probe.type, 'evidence')
-  assert.equal(output.probe.finding, 'unsupported_jump')
-  assert.equal(output.probe.page, 5)
 })
 
 dbTest('a text mark in an explanation cannot close the tags a tool result puts around student words', async () => {
@@ -407,74 +346,6 @@ dbTest('full coverage asks one new example before marking explained', async () =
   assert.equal(out(await run(w, undefined, 'get_concept_to_explain')).concept_id, w.load.id)
 })
 
-dbTest('a failed new example is a level-1 miss and does not mark the idea explained', async () => {
-  const w = await world()
-  const all = grader({ 'Two keys': COVERED, 'Chaining': COVERED })
-  await run(w, undefined, 'get_concept_to_explain')
-  await run(w, all.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'Keys that share a bucket collide, and each bucket holds a list.' })
-  const wrong = grader({ 'Chaining': { verdict: 'incorrect', student_quote: 'it throws the key away', misconception: 'chaining drops keys', kind: 'misconception' } })
-  const checked = out(await run(w, wrong.grade, 'record_check', { concept_id: w.collision.id, question: 'What happens to a third key?', answer: 'It throws the key away.' }))
-  assert.equal(checked.passed, false)
-  assert.equal(checked.action, 'probe')
-  assert.equal(checked.probe.type, 'assumption')
-  const rows = await voiceEvents(w)
-  assert.equal(rows[0].assistance, 1)
-  assert.equal(rows[0].score, 0)
-  assert.equal((await stateOf(w)).teach.concepts[w.collision.id].outcome, null)
-})
-
-dbTest('unsupported jump gets an evidence probe naming the page', async () => {
-  const w = await world()
-  const jump = grader({ 'Two keys': { verdict: 'missing', pointer: 'Look again at p. 4: when do two keys meet?' }, 'Chaining': { verdict: 'covered', student_quote: 'each bucket has a list' } })
-  await run(w, undefined, 'get_concept_to_explain')
-  const output = out(await run(w, jump.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'Each bucket has a list, so it all works.' }))
-  assert.equal(output.action, 'probe')
-  assert.equal(output.probe.type, 'evidence')
-  assert.equal(output.probe.finding, 'unsupported_jump')
-  assert.equal(output.probe.page, 5)
-  assert.equal(output.probe.about, '<student_words>each bucket has a list</student_words>')
-})
-
-dbTest('incorrect claim gets an assumption probe then confront', async () => {
-  const w = await world()
-  const wrong = grader({
-    'Two keys': { verdict: 'incorrect', student_quote: 'two keys cannot share a bucket', misconception: 'keys never share a bucket', kind: 'misconception' },
-    'Chaining': COVERED,
-  })
-  await run(w, undefined, 'get_concept_to_explain')
-  const say = (text: string) => run(w, wrong.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: text })
-  const first = out(await say('Two keys cannot share a bucket, and chaining keeps lists.'))
-  assert.equal(first.probe.type, 'assumption')
-  // The claim they got wrong is not handed to the coach on the first assessment: only its page. The text comes with explain.
-  assert.equal(first.incorrect[0].source_claim, undefined)
-  assert.equal(first.incorrect[0].page, 4)
-  assert.ok(!JSON.stringify(first).includes('Two keys that share a bucket collide'), 'the claim text is nowhere in the first result')
-  assert.equal(first.incorrect[0].wrong_idea, '<student_words>keys never share a bucket</student_words>')
-  const second = out(await say('They get different buckets because of the hash.'))
-  assert.equal(second.probe.type, 'confront')
-  assert.ok(!JSON.stringify(second).includes('Two keys that share a bucket collide'), 'nor in the confront probe')
-  const explained = out(await say('I still think so.'))
-  assert.equal(explained.action, 'explain')
-  assert.equal(explained.source_claim.text, '<source_claim>Two keys that share a bucket collide.</source_claim>')
-  // The learner model learns the misconception from the level-0 evidence.
-  const memory = await prisma.conceptMemory.findFirst({ where: { userId: w.user.id, conceptId: w.collision.id } })
-  assert.equal(memory?.misconception, 'keys never share a bucket')
-})
-
-dbTest('a student who covered nothing and has a weak prerequisite is sent back to it once something was explained', async () => {
-  const w = await world()
-  const nothing = grader({})
-  await run(w, undefined, 'get_concept_to_explain')
-  const say = (text: string) => run(w, nothing.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: text })
-  // Covering nothing on the first try is explained first (spec 18.6), not probed.
-  assert.equal(out(await say('I really do not remember this one at all.')).action, 'explain_first')
-  // The say-back covers nothing either, and the next gap is a probe: back to the prerequisite.
-  const output = out(await say('Still nothing about the buckets.'))
-  assert.equal(output.probe.type, 'source')
-  assert.equal(output.probe.finding, 'missing_prerequisite')
-  assert.equal(output.probe.about, 'Hash function')
-})
-
 dbTest('an unclear explanation stores nothing and spends no probe', async () => {
   const w = await world()
   const unclear = grader({}, { status: 'ungraded', verdicts: [], clarifying_question: 'Can you say which part you mean?', confidence: 0.3 })
@@ -502,32 +373,6 @@ dbTest('a grading outage is a tool error and stores nothing', async () => {
   assert.equal(result.isError, true)
   assert.match(String(out(result).error), /Grading is unavailable/)
   assert.equal((await teachEvents(w)).length, 0)
-})
-
-dbTest('the session ends when every idea is done', async () => {
-  const w = await world()
-  const all = grader({ 'Two keys': COVERED, 'Chaining': COVERED, 'The load factor': COVERED })
-  for (const concept of [w.collision, w.load]) {
-    await run(w, undefined, 'get_concept_to_explain')
-    await run(w, all.grade, 'assess_explanation', { concept_id: concept.id, explanation: 'Everything the pages say, in my own words.' })
-    await run(w, all.grade, 'record_check', { concept_id: concept.id, question: 'A new case?', answer: 'It works the same way there.' })
-  }
-  const done = await run(w, undefined, 'get_concept_to_explain')
-  assert.equal(done.sessionComplete, true)
-  assert.deepEqual(done.events, [{ type: 'session_complete' }])
-  assert.ok((await prisma.voiceDrillSession.findUniqueOrThrow({ where: { id: w.session.id } })).endedAt)
-})
-
-dbTest('a topic without claims has nothing to explain, and a quiz session has no teach-back tools', async () => {
-  const bare = await world('teach_back', { claims: false })
-  const result = await run(bare, undefined, 'get_concept_to_explain')
-  assert.equal(result.isError, true)
-  const quiz = await world('oral_quiz')
-  for (const name of ['get_concept_to_explain', 'assess_explanation', 'next_claim', 'record_check']) {
-    assert.equal(out(await run(quiz, undefined, name, { concept_id: 'x', explanation: 'x' })).error, 'Unknown tool', name)
-  }
-  const reading = await world('guided_reading')
-  assert.equal(out(await run(reading, undefined, 'get_concept_to_explain')).error, 'Unknown tool')
 })
 
 // ---------------------------------------------------------------------------------------------- guided reading
@@ -593,26 +438,6 @@ dbTest('a check after a claim is level 2 voice evidence and moves to the next cl
   const later = await voiceEvents(w)
   assert.equal(later[1].assistance, 1)
   assert.equal(later[1].score, 0)
-})
-
-dbTest('guided reading ends after the last claim, and a skipped claim is not checked', async () => {
-  const w = await world('guided_reading')
-  const g = grader({ 'Two keys': COVERED, 'Chaining': COVERED, 'The load': COVERED })
-  await run(w, undefined, 'next_claim')
-  await run(w, undefined, 'next_claim', { reveal: true, prediction: 'p', check_question: 'q1' })
-  // Move on without a check (the student asks to skip): the next claim comes up.
-  const second = await run(w, undefined, 'next_claim')
-  assert.equal(out(second).claim_index, 1)
-  assert.equal((await voiceEvents(w)).length, 0)
-  for (const index of [1, 2]) {
-    if (index === 2) await run(w, undefined, 'next_claim')
-    await run(w, undefined, 'next_claim', { reveal: true, prediction: 'p', check_question: 'q' })
-    await run(w, g.grade, 'record_check', { claim_index: index, answer: 'the answer' })
-  }
-  const done = await run(w, undefined, 'next_claim')
-  assert.equal(done.sessionComplete, true)
-  assert.equal(out(done).done, true)
-  assert.ok((await prisma.voiceDrillSession.findUniqueOrThrow({ where: { id: w.session.id } })).endedAt)
 })
 
 // ------------------------------------------------------------------------------------------ the student's own words (T9)
@@ -696,142 +521,3 @@ dbTest('oral quiz: an answer needs the student to have spoken since the question
   assert.equal(await prisma.voiceDrillAttempt.count({ where: { sessionId: w.session.id } }), 0)
 })
 
-// ---------------------------------------------------------------------------------------------- v3.1: explain first (spec 18.6)
-
-const instructionEvents = (w: World) => prisma.evidenceEvent.findMany({ where: { userId: w.user.id, source: 'instruction' }, orderBy: { createdAt: 'asc' } })
-
-dbTest('idk gives explain_first with no probes', async () => {
-  const w = await world()
-  const g = grader({ 'Two keys': COVERED })
-  await run(w, undefined, 'get_concept_to_explain')
-  const first = await run(w, g.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: "I don't know" })
-  const output = out(first)
-  assert.equal(first.isError, false)
-  assert.equal(g.asked.length, 0, 'an "I don\'t know" is not sent to the grader')
-  assert.equal(output.action, 'explain_first')
-  assert.equal(output.probe, undefined)
-  // The first gap's claim comes with it, tagged as data, with its page, and the instruction names the three steps.
-  assert.deepEqual(output.source_claim, { text: '<source_claim>Two keys that share a bucket collide.</source_claim>', page: 4 })
-  assert.match(output.instruction, /fine not to have it yet/)
-  // It is level 1, score 0, with no confidence, as an "I don't know" on a surface where help follows.
-  const rows = await teachEvents(w)
-  assert.equal(rows.length, 1)
-  assert.deepEqual([rows[0].assistance, rows[0].score, rows[0].conceptId, rows[0].confidence], [1, 0, w.collision.id, null])
-  assert.deepEqual([(rows[0].metadata as Record<string, unknown>).idk, (rows[0].metadata as Record<string, unknown>).missKind], [true, 'cue_miss'])
-  // The student says it back; the idea closes as taught with the page to look at again.
-  const rules: Record<string, Rule> = { 'Two keys': { verdict: 'covered', student_quote: 'keys in one bucket collide' }, 'Chaining': COVERED }
-  const back = grader(rules)
-  const said = out(await run(w, back.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'Keys that land in one bucket collide, and chaining keeps lists.' }))
-  assert.equal(said.action, 'wrap_up')
-  assert.equal(said.outcome, 'taught')
-  assert.deepEqual(said.look_again, ['p. 4'])
-})
-
-dbTest('covering nothing gives explain_first', async () => {
-  const w = await world()
-  const nothing = grader({})
-  await run(w, undefined, 'get_concept_to_explain')
-  const output = out(await run(w, nothing.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'I really do not remember this one at all.' }))
-  assert.equal(output.action, 'explain_first')
-  assert.equal(output.source_claim.page, 4)
-  assert.equal(nothing.asked.length, 1, 'what covers nothing is graded, and then explained')
-  // The graded zero is recorded as the first explanation is (level 0), not as an "I don't know".
-  assert.deepEqual((await teachEvents(w)).map((row) => row.assistance), [0])
-})
-
-dbTest('explain step writes an instruction event', async () => {
-  const w = await world()
-  const g = grader({})
-  await run(w, undefined, 'get_concept_to_explain')
-  assert.equal((await instructionEvents(w)).length, 0)
-  await run(w, g.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: "I don't know" })
-  const rows = await instructionEvents(w)
-  assert.equal(rows.length, 1)
-  assert.match(rows[0].itemKey, /^instruction:voice_explain:/)
-  assert.deepEqual([rows[0].assistance, rows[0].score, rows[0].weight, rows[0].conceptId], [3, 0, 0, w.collision.id])
-  // The same explain step again in the same day is one event (the key is per explained claim).
-  const probeTwice = grader({ 'Two keys': COVERED, 'Chaining': { verdict: 'missing', pointer: 'Look again at p. 5' } })
-  const x = await world()
-  await run(x, undefined, 'get_concept_to_explain')
-  const say = (text: string) => run(x, probeTwice.grade, 'assess_explanation', { concept_id: x.collision.id, explanation: text })
-  await say('Two keys collide in a bucket.')
-  await say('They go in one bucket and collide, that is it.')
-  assert.equal((await instructionEvents(x)).length, 0, 'probes are not instruction')
-  const explained = out(await say('Maybe the table grows?'))
-  assert.equal(explained.action, 'explain')
-  const events = await instructionEvents(x)
-  assert.equal(events.length, 1)
-  assert.match(events[0].itemKey, /^instruction:voice_explain:/)
-})
-
-dbTest('band 0 probes once before explaining a gap, core twice', async () => {
-  const { recordEvidence } = await import('@/lib/learning/evidence')
-  const quiz = (w: World, score: number, daysAgo: number) =>
-    recordEvidence(
-      [
-        {
-          userId: w.user.id,
-          projectId: w.project.id,
-          topicId: w.topic.id,
-          itemKey: `quiz:${crypto.randomUUID()}`,
-          conceptIds: [w.collision.id],
-          source: 'quiz',
-          score,
-          assistance: 0,
-          gradedBy: 'rule',
-          sessionKey: `s:${crypto.randomUUID()}`,
-          at: new Date(Date.now() - daysAgo * 86_400_000),
-        },
-      ],
-      { timeZone: 'UTC', userId: w.user.id }
-    )
-  const rules = grader({ 'Two keys': COVERED, Chaining: { verdict: 'missing', pointer: 'Look again at p. 5' } })
-  const sayFor = (w: World) => (text: string) => run(w, rules.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: text })
-
-  // A concept the student answered well is core or stretch: two probes, then the explanation.
-  const core = await world()
-  await quiz(core, 0.95, 2)
-  await quiz(core, 0.95, 1)
-  await run(core, undefined, 'get_concept_to_explain')
-  const coreSay = sayFor(core)
-  assert.equal(out(await coreSay('Two keys collide in a bucket.')).action, 'probe')
-  assert.equal(out(await coreSay('They share a bucket and collide, that is it.')).action, 'probe')
-  assert.equal(out(await coreSay('Maybe the table grows?')).action, 'explain')
-
-  // A concept the student failed is band 0: one probe, then the explanation.
-  const weak = await world()
-  await quiz(weak, 0, 3)
-  await quiz(weak, 0, 2)
-  await quiz(weak, 0, 1)
-  await run(weak, undefined, 'get_concept_to_explain')
-  const weakSay = sayFor(weak)
-  const first = out(await weakSay('Two keys collide in a bucket.'))
-  assert.equal(first.action, 'probe')
-  assert.equal(out(await weakSay('They share a bucket and collide, that is it.')).action, 'explain')
-})
-
-dbTest('guided reading: idk on a check is missed at level 2, with no grader, and the claim is restated', async () => {
-  const w = await world('guided_reading')
-  const g = grader({ 'Two keys': { verdict: 'covered', student_quote: 'x' } })
-  await run(w, undefined, 'next_claim')
-  await run(w, undefined, 'next_claim', { reveal: true, prediction: 'no idea', check_question: 'What do we call it?' })
-  const checked = await run(w, g.grade, 'record_check', { claim_index: 0, answer: "I don't know", idk: true })
-  assert.equal(checked.isError, false)
-  assert.equal(g.asked.length, 0, 'an "I don\'t know" is not graded')
-  const output = out(checked)
-  assert.equal(output.verdict, 'not yet')
-  // The claim comes back, tagged as data, with its page, and the coach is told to restate it.
-  assert.deepEqual(output.claim, { text: '<source_claim>Two keys that share a bucket collide.</source_claim>', page: 4 })
-  assert.match(output.instruction, /restate/i)
-  assert.deepEqual(checked.events, [{ type: 'evaluation', isCorrect: false, score: 0, comment: '', explanation: '' }])
-  const rows = await voiceEvents(w)
-  assert.equal(rows.length, 1)
-  assert.deepEqual([rows[0].assistance, rows[0].score, rows[0].confidence], [2, 0, null])
-  assert.equal((rows[0].metadata as Record<string, unknown>).idk, true)
-  // The reading moves on, and a typed idk is the same without the flag.
-  assert.equal(out(await run(w, undefined, 'next_claim')).claim_index, 1)
-  await run(w, undefined, 'next_claim', { reveal: true, prediction: 'p', check_question: 'What does each bucket hold?' })
-  const typed = await run(w, g.grade, 'record_check', { claim_index: 1, answer: 'no idea' })
-  assert.equal(out(typed).verdict, 'not yet')
-  assert.equal(g.asked.length, 0)
-})

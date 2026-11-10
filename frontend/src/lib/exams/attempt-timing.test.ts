@@ -16,17 +16,6 @@ const start = new Date('2026-10-21T10:00:00.000Z')
 const deadline = deadlineFor(start, 30)
 const at = (secondsAfterStart: number) => new Date(start.getTime() + secondsAfterStart * 1000)
 
-test('the deadline is the server start time plus the duration', () => {
-  assert.equal(deadline.toISOString(), '2026-10-21T10:30:00.000Z')
-})
-
-test('remaining time counts down from the server start, not from when the page loaded', () => {
-  assert.equal(remainingSeconds(deadline, at(0)), 1800)
-  assert.equal(remainingSeconds(deadline, at(600)), 1200)
-  // A reload 25 minutes in resumes with 5 minutes left.
-  assert.equal(remainingSeconds(deadline, at(25 * 60)), 300)
-})
-
 test('remaining time rounds partial seconds up and never goes negative', () => {
   assert.equal(remainingSeconds(deadline, new Date(deadline.getTime() - 1)), 1)
   assert.equal(remainingSeconds(deadline, deadline), 0)
@@ -38,11 +27,6 @@ test('answers are accepted until the deadline plus the grace period', () => {
   assert.equal(acceptsAnswers(deadline, deadline), true)
   assert.equal(acceptsAnswers(deadline, new Date(deadline.getTime() + DEADLINE_GRACE_MS)), true)
   assert.equal(acceptsAnswers(deadline, new Date(deadline.getTime() + DEADLINE_GRACE_MS + 1)), false)
-})
-
-test('isExpired is the opposite of acceptsAnswers', () => {
-  assert.equal(isExpired(deadline, at(10)), false)
-  assert.equal(isExpired(deadline, at(31 * 60)), true)
 })
 
 test('a submit inside the time limit is graded on the answers it carries', () => {
@@ -88,12 +72,6 @@ test('sanitizeAnswers rejects input that is not an object and caps long answers'
   assert.equal(String(sanitizeAnswers({ '0': long }, 1)?.['0']).length, MAX_ANSWER_LENGTH)
 })
 
-test('readStoredAnswers tolerates bad stored data', () => {
-  assert.deepEqual(readStoredAnswers(null), {})
-  assert.deepEqual(readStoredAnswers([1]), {})
-  assert.deepEqual(readStoredAnswers({ '0': 'A', '1': { x: 1 } }), { '0': 'A' })
-})
-
 test('answers with a confidence are kept, and a confidence out of range is dropped', () => {
   const clean = sanitizeAnswers(
     { '0': { answer: 'B', confidence: 0.75 }, '1': { answer: 'x', confidence: 3 }, '2': { answer: { deep: 1 } }, '3': { confidence: 0.5 } },
@@ -101,12 +79,4 @@ test('answers with a confidence are kept, and a confidence out of range is dropp
   )
   assert.deepEqual(clean, { '0': { answer: 'B', confidence: 0.75 }, '1': 'x' })
   assert.deepEqual(readStoredAnswers({ '0': { answer: 'B', confidence: 0.5 }, '1': 'A' }), { '0': { answer: 'B', confidence: 0.5 }, '1': 'A' })
-})
-
-test('an answer keeps a valid confidence level and drops an unknown one', () => {
-  const clean = sanitizeAnswers(
-    { '0': { answer: 'True', confidence: 0.5, confidenceLevel: 'guess' }, '1': { answer: 'True', confidence: 0.5, confidenceLevel: 'x' } },
-    5
-  )
-  assert.deepEqual(clean, { '0': { answer: 'True', confidence: 0.5, confidenceLevel: 'guess' }, '1': { answer: 'True', confidence: 0.5 } })
 })

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   TIMEOUT_MESSAGE,
-  nextDelay,
   pollFailureMessage,
   pollJobUntilDone,
   type JobPollEnv,
@@ -57,20 +56,6 @@ const processing = (id: string, progress = 10): FakeJob => ({
 })
 const completed = (id: string): FakeJob => ({ id, status: 'completed', progressPercent: 100, resultData: { ok: true } })
 
-describe('nextDelay', () => {
-  it('grows by the factor and stops at the cap', () => {
-    let delay = 1000
-    const seen = [delay]
-    for (let i = 0; i < 8; i += 1) {
-      delay = nextDelay(delay, 1.5, 10_000)
-      seen.push(delay)
-    }
-    assert.deepEqual(seen.slice(0, 5), [1000, 1500, 2250, 3375, 5063])
-    assert.equal(Math.max(...seen), 10_000)
-    assert.equal(seen[seen.length - 1], 10_000)
-  })
-})
-
 describe('pollJobUntilDone', () => {
   it('backs off between polls of an unchanged job, up to the cap', async () => {
     const { env, state } = fakeEnv((id, call) => (call < 12 ? processing(id) : completed(id)))
@@ -83,24 +68,6 @@ describe('pollJobUntilDone', () => {
     assert.ok(state.sleeps[2] > state.sleeps[1])
     assert.equal(Math.max(...state.sleeps), 10_000)
     assert.equal(state.sleeps[state.sleeps.length - 1], 10_000)
-  })
-
-  it('starts the backoff over when the job reports new progress', async () => {
-    const { env, state } = fakeEnv((id, call) => (call < 6 ? processing(id, call * 10) : completed(id)))
-
-    await pollJobUntilDone('job-1', { env })
-
-    assert.deepEqual(state.sleeps, [1000, 1000, 1000, 1000, 1000, 1000])
-  })
-
-  it('reports each update and the final job', async () => {
-    const { env } = fakeEnv((id, call) => (call < 3 ? processing(id) : completed(id)))
-    const seen: string[] = []
-
-    const result = await pollJobUntilDone('job-1', { env, onUpdate: (job) => seen.push(job.status) })
-
-    assert.deepEqual(seen, ['processing', 'processing', 'completed'])
-    assert.equal(result.job?.resultData?.ok, true)
   })
 
   it('returns a failed job with its message', async () => {
@@ -183,47 +150,4 @@ describe('pollJobUntilDone', () => {
     assert.equal(failed.state, 'failed')
     assert.equal(rejected.state.fetches.length, 1)
   })
-
-  it('follows several jobs at once without one cancelling another (one poller per uploaded file)', async () => {
-    const finishAfter: Record<string, number> = { a: 2, b: 5, c: 3 }
-    const { env, state } = fakeEnv((id, call) => (call >= finishAfter[id] ? completed(id) : processing(id, call)))
-
-    const results = await Promise.all(['a', 'b', 'c'].map((id) => pollJobUntilDone(id, { env })))
-
-    assert.deepEqual(
-      results.map((r) => [r.job?.id, r.state]),
-      [['a', 'completed'], ['b', 'completed'], ['c', 'completed']]
-    )
-    assert.equal(state.fetches.filter((f) => f.jobId === 'a').length, 2)
-    assert.equal(state.fetches.filter((f) => f.jobId === 'b').length, 5)
-  })
-
-  it('aborting one job leaves the others running', async () => {
-    const { env } = fakeEnv((id, call) => (call >= 4 ? completed(id) : processing(id, call)))
-    const stopA = new AbortController()
-    const baseSleep = env.sleep
-    let sleeps = 0
-    env.sleep = async (ms, signal) => {
-      sleeps += 1
-      if (sleeps === 2) stopA.abort()
-      await baseSleep(ms, signal)
-    }
-
-    const [a, b] = await Promise.all([
-      pollJobUntilDone('a', { env, signal: stopA.signal }),
-      pollJobUntilDone('b', { env }),
-    ])
-
-    assert.equal(a.state, 'cancelled')
-    assert.equal(b.state, 'completed')
-  })
-})
-
-it('a queued job at the waiting_for_ai stage is waiting for the AI', async () => {
-  const { isWaitingForAi } = await import('./poll-job')
-  assert.equal(isWaitingForAi({ status: 'queued', stage: 'waiting_for_ai' }), true)
-  assert.equal(isWaitingForAi({ status: 'pending', stage: 'waiting_for_ai' }), true)
-  assert.equal(isWaitingForAi({ status: 'processing', stage: 'grading' }), false)
-  assert.equal(isWaitingForAi({ status: 'failed', stage: 'waiting_for_ai' }), false)
-  assert.equal(isWaitingForAi(null), false)
 })

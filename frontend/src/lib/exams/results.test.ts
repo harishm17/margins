@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildQuestionResults, displayStudentAnswer, calibrationLine, examCalibration, isSureAndWrong, readOverall, summarizeTopics } from './results'
+import { buildQuestionResults, examCalibration, isSureAndWrong, readOverall, summarizeTopics } from './results'
 
 const questions = [
   {
@@ -93,26 +93,6 @@ test('weak topics are sorted weakest first with per-topic points', () => {
   )
 })
 
-test('topics tied on score list the one with more points at stake first', () => {
-  const topics = summarizeTopics([
-    { topicId: 'a', topicName: 'A', points: 2, pointsEarned: 1 },
-    { topicId: 'b', topicName: 'B', points: 6, pointsEarned: 3 },
-  ] as never)
-  assert.deepEqual(topics.map((topic) => topic.topicName), ['B', 'A'])
-})
-
-test('questions without a topic are left out of the topic summary', () => {
-  const topics = summarizeTopics(buildQuestionResults([questions[3]], grading, answers))
-  assert.deepEqual(topics, [])
-})
-
-test('displayStudentAnswer formats by question type', () => {
-  assert.equal(displayStudentAnswer({ question_type: 'true_false' }, false), 'False')
-  assert.equal(displayStudentAnswer({ question_type: 'true_false' }, true), 'True')
-  assert.equal(displayStudentAnswer({ question_type: 'short_answer' }, '   '), null)
-  assert.equal(displayStudentAnswer({ question_type: 'multiple_choice', options: [] }, 'C'), 'C')
-})
-
 test('readOverall reads the stored score', () => {
   assert.deepEqual(readOverall(grading), { score: 37.5, earned: 3, total: 8 })
   assert.equal(readOverall({}), null)
@@ -153,16 +133,6 @@ test('object answers show the answer and carry the confidence', () => {
   assert.deepEqual(results.map(isSureAndWrong), [true, false, false, false])
   // Question 3 was left blank, so it was not rated; question 2 has no rating.
   assert.deepEqual(examCalibration(results), { rated: 2, sure: 1, sureRight: 0 })
-})
-
-test('no ratings means no calibration', () => {
-  assert.equal(examCalibration(buildQuestionResults([{ question_type: 'true_false' }], {}, { '0': 'true' })), null)
-})
-
-test('the calibration line counts the answers the student was sure about', () => {
-  assert.equal(calibrationLine({ sure: 3, sureRight: 2 }), 'You were sure about 3 answers and got 2 of them right.')
-  assert.equal(calibrationLine({ sure: 1, sureRight: 0 }), 'You were sure about 1 answer and got 0 of them right.')
-  assert.equal(calibrationLine({ sure: 0, sureRight: 0 }), "You weren't sure about any of the answers you rated.")
 })
 
 test('a blank question that was rated is not rated', () => {

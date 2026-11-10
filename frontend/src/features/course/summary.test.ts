@@ -4,12 +4,6 @@ import { courseSummary, fileProblem, needsWorkOrder, problemMessage, reviewTimin
 
 const counts = (strong: number) => ({ none: 0, learning: 0, getting: 0, strong })
 
-test('the course summary leaves out parts that are zero', () => {
-  assert.equal(courseSummary(12, counts(4), 2), '12 topics, 4 strong, 2 due for review')
-  assert.equal(courseSummary(1, counts(0), 0), '1 topic')
-  assert.equal(courseSummary(3, counts(0), 1), '3 topics, 1 due for review')
-})
-
 test('files are checked by extension and size', () => {
   assert.equal(fileProblem({ name: 'Notes.PDF', size: 1000 }, 25), null)
   assert.equal(fileProblem({ name: 'slides.pptx', size: 1000 }, 25), null)

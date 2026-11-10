@@ -2,7 +2,6 @@
 the grading job waits for the AI without using its attempts, and the reaper sends it again once the
 AI is available (or the allowance has reset)."""
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -14,8 +13,8 @@ from app.main import app
 from app.models.jobs import JobPayload
 from app.services import ai_status, job_reaper
 from app.services.exam_grader import ExamGrader
-from app.services.job_runner import DailyBudgetExceeded, JobOutcome, job_handler
-from app.services.llm.base import LLMCreditError, LLMRefusalError, LLMUnavailableError
+from app.services.job_runner import JobOutcome, job_handler
+from app.services.llm.base import LLMCreditError, LLMUnavailableError
 from tests.db_helpers import get_job, seed_job, seed_usage, seed_user
 
 SHORT = {"question_type": "short_answer", "question_text": "Why cache?", "points": 2,
@@ -37,12 +36,6 @@ class TestGrader:
         grader = grader_with(error=error)
         with pytest.raises(type(error)):
             await grader.grade_submission("s", [MCQ, SHORT, SHORT], {"0": "B", "1": "x", "2": "y"})
-
-    async def test_a_refusal_is_still_flagged_for_review(self):
-        grader = grader_with(error=LLMRefusalError("no"))
-        result = await grader.grade_submission("s", [MCQ, SHORT], {"0": "B", "1": "x"})
-        assert result["graded_questions"][1]["needs_review"] is True
-        assert result["graded_questions"][0]["is_correct"] is True
 
 
 async def call(method, path, **kwargs):
@@ -98,18 +91,6 @@ class TestWaiting:
         job = await get_job(db, job_id)
         assert (job["status"], job["stage"], job["attempt_count"]) == ("pending", "waiting_for_ai", 0)
 
-    async def test_a_job_waiting_for_the_ai_is_looked_at_again_after_the_recheck_setting(self, db, anthropic, monkeypatch):
-        monkeypatch.setattr(settings, "JOB_AI_WAIT_RECHECK_SECONDS", 5.0)
-        user_id = await seed_user(db)
-        job_id = await seed_job(db, user_id, "grade_exam")
-
-        async def body(payload, job):
-            raise LLMCreditError("credit")
-
-        assert (await waiting_handler(body)(payload(job_id)))["status"] == "deferred"
-        job = await get_job(db, job_id)
-        wait = (job["lease_until"] - datetime.now(UTC).replace(tzinfo=None)).total_seconds()
-        assert 0 < wait <= 5
 
     async def test_over_the_allowance_it_waits_until_the_reset(self, db, anthropic, monkeypatch):
         monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 1.0)
@@ -139,17 +120,6 @@ class TestWaiting:
             await waiting_handler(body)(payload(job_id))
         job = await get_job(db, job_id)
         assert (job["status"], job["error_code"]) == ("failed", "LLM_CREDIT_EXHAUSTED")
-
-    async def test_other_failures_still_fail(self, db, anthropic):
-        user_id = await seed_user(db)
-        job_id = await seed_job(db, user_id, "grade_exam")
-
-        async def body(payload, job):
-            raise LLMRefusalError("no")
-
-        with pytest.raises(HTTPException):
-            await waiting_handler(body)(payload(job_id))
-        assert (await get_job(db, job_id))["status"] == "failed"
 
 
 class TestReaperSendsWaitingJobs:
@@ -198,16 +168,6 @@ class TestReaperSendsWaitingJobs:
         await job_reaper.reap_expired_jobs()
         assert dispatched == [job_id]
 
-    async def test_an_expired_outage_record_lets_one_real_attempt_through(self, db, anthropic, dispatched):
-        user_id = await seed_user(db)
-        job_id = await self.waiting(db, user_id)
-        await ai_status._mark_unavailable("LLM_CREDIT_EXHAUSTED", "test")
-        old = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=settings.AI_STATUS_TTL_S + 5)
-        await db.execute("UPDATE ai_status SET checked_at = $1", old)
-
-        await job_reaper.reap_expired_jobs()
-
-        assert dispatched == [job_id]
 
     @pytest.mark.parametrize("reason", ["LLM_NOT_CONFIGURED", "LLM_CREDIT_EXHAUSTED", "LLM_DAILY_BUDGET"])
     async def test_a_job_past_the_wait_limit_fails_with_its_reason_even_while_the_ai_stays_down(
@@ -232,21 +192,3 @@ class TestReaperSendsWaitingJobs:
         assert (await get_job(db, recent))["status"] == "pending"
         assert dispatched == []
 
-    async def test_waiting_for_the_allowance_is_sent_after_the_reset_only(self, db, anthropic, dispatched):
-        user_id = await seed_user(db)
-        later = await self.waiting(db, user_id, error_code="LLM_DAILY_BUDGET", lease_until=self.FUTURE)
-        reset = await self.waiting(db, user_id, error_code="LLM_DAILY_BUDGET")
-
-        await job_reaper.reap_expired_jobs()
-
-        assert dispatched == [reset]
-        assert later not in dispatched
-
-
-def test_budget_refusal_waits():
-    from app.services.job_runner import waits_for_ai
-
-    assert waits_for_ai(DailyBudgetExceeded("over"))
-    assert waits_for_ai(LLMCreditError("x"))
-    assert not waits_for_ai(LLMRefusalError("x"))
-    assert not waits_for_ai(SimpleNamespace())

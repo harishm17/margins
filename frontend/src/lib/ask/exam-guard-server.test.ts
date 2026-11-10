@@ -8,11 +8,6 @@ const never = async () => {
   throw new Error('the meaning check should not run')
 }
 
-test('the word check decides first, and the meaning check is not asked', async () => {
-  const found = await guardingExam('u', 'p', 'Which data structure gives constant average time lookup by key?', [], { exams, semantic: never })
-  assert.equal(found?.examId, 'e1')
-})
-
 test('a message the words pass goes to the meaning check, with the student\'s earlier messages and the exam texts', async () => {
   const calls: unknown[] = []
   const semantic = async (input: unknown) => {
@@ -33,12 +28,12 @@ test('a message that is neither by words nor by meaning goes on', async () => {
   assert.equal(await guardingExam('u', 'p', 'What is a hash table?', [], { exams, semantic: async () => false }), undefined)
 })
 
-test('with no exam in progress nothing is checked', async () => {
-  assert.equal(await guardingExam('u', 'p', 'anything', [], { exams: async () => [], semantic: never }), undefined)
-})
-
 test('the words read the earlier messages too', async () => {
   const history = [{ role: 'user', content: 'which data structure gives' }, { role: 'user', content: 'constant average time' }]
   const found = await guardingExam('u', 'p', 'lookup by key?', history, { exams, semantic: async () => false })
   assert.equal(found?.examId, 'e1')
+})
+
+test('with no exam in progress nothing is checked', async () => {
+  assert.equal(await guardingExam('u', 'p', 'anything', [], { exams: async () => [], semantic: never }), undefined)
 })

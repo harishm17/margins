@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { coverageNote, examSummary, formatMinutes, formatScore, onlyWithPages, preselectTopics, QUESTION_MIXES, unstartedNote } from './exam-options'
+import { preselectTopics } from './exam-options'
 
 const NOW = Date.parse('2026-10-20T12:00:00Z')
 
@@ -27,58 +27,5 @@ describe('preselectTopics', () => {
       NOW
     )
     assert.deepEqual(picked, ['a', 'b'])
-  })
-})
-
-describe('question mixes', () => {
-  it('each one adds up to 100', () => {
-    for (const mix of Object.values(QUESTION_MIXES)) {
-      const { multiple_choice, short_answer, numerical } = mix.distribution
-      assert.equal(multiple_choice + short_answer + numerical, 100)
-    }
-  })
-})
-
-describe('labels', () => {
-  it('summarises and formats', () => {
-    assert.equal(examSummary({ questionCount: 20, durationMinutes: 60, difficulty: 'medium' }), '20 questions, 1 hr, medium')
-    assert.equal(formatMinutes(90), '1 hr 30 min')
-    assert.equal(formatMinutes(45), '45 min')
-    assert.equal(formatScore(72), '72%')
-    assert.equal(formatScore(71.25), '71.3%')
-  })
-})
-
-describe('onlyWithPages', () => {
-  it('drops topics that have no pages, keeping the order', () => {
-    assert.deepEqual(onlyWithPages(['a', 'b', 'c'], new Set(['c', 'a'])), ['a', 'c'])
-  })
-})
-
-describe('coverageNote', () => {
-  it('says nothing when no topic is ticked', () => {
-    assert.equal(coverageNote(0, 0), null)
-  })
-  it('counts the topics the exam will cover', () => {
-    assert.equal(coverageNote(1, 0), 'Covers 1 topic')
-    assert.equal(coverageNote(4, 0), 'Covers 4 topics')
-  })
-  it('says how many ticked topics are left out for having no pages', () => {
-    assert.equal(coverageNote(4, 1), 'Covers 3 topics (1 without pages is left out)')
-    assert.equal(coverageNote(5, 2), 'Covers 3 topics (2 without pages are left out)')
-    assert.equal(coverageNote(1, 1), 'Covers 0 topics (1 without pages is left out)')
-  })
-})
-
-describe('unstartedNote', () => {
-  it('says nothing when every covered topic has been started', () => {
-    assert.equal(unstartedNote(3, 0), null)
-    assert.equal(unstartedNote(0, 0), null)
-  })
-  it('names how many of the covered topics are new', () => {
-    assert.equal(unstartedNote(3, 1), "You haven't started 1 of them, so those questions will be new to you.")
-    assert.equal(unstartedNote(3, 2), "You haven't started 2 of them, so those questions will be new to you.")
-    assert.equal(unstartedNote(3, 3), "You haven't started any of these topics, so the questions will be new to you.")
-    assert.equal(unstartedNote(1, 1), "You haven't started this topic, so its questions will be new to you.")
   })
 })

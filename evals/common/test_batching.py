@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace as NS
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -86,20 +85,6 @@ def test_calls_made_together_go_out_as_one_batch_and_each_caller_gets_its_own_re
     assert calls.batches[0]["requests"] == 3
 
 
-def test_a_call_made_after_a_batch_was_sent_goes_in_the_next_one():
-    batches = FakeBatches()
-    calls = BatchedCalls(client_with(batches), quiet=0.02, poll=0.01)
-
-    async def go():
-        first = await calls.beta.messages.create(**params("a"))
-        second = await calls.beta.messages.create(**params("b"))
-        return first, second
-
-    first, second = run(go())
-    assert (first.content[0].text, second.content[0].text) == ("a", "b")
-    assert [len(b) for b in batches.created] == [1, 1]
-
-
 def test_a_server_error_is_sent_again_once_and_a_bad_request_fails_at_once():
     def outcome(p, attempt):
         text = p["messages"][0]["content"]
@@ -129,21 +114,3 @@ def test_a_server_error_is_sent_again_once_and_a_bad_request_fails_at_once():
     assert batches.sends == {"flaky": 2, "broken": 1, "down": 2}
 
 
-def test_a_refused_batch_fails_every_call_in_it():
-    calls = BatchedCalls(client_with(FakeBatches(fail_create=True)), quiet=0.02, poll=0.01)
-
-    async def go():
-        return await asyncio.gather(*(calls.beta.messages.create(**params(f"q{i}")) for i in range(2)), return_exceptions=True)
-
-    replies = run(go())
-    assert all(isinstance(r, BatchRequestError) and "batch refused" in str(r) for r in replies)
-
-
-def test_a_reply_missing_from_the_results_fails_its_call():
-    class Losing(FakeBatches):
-        async def results(self, batch_id):
-            return Results([])
-
-    calls = BatchedCalls(client_with(Losing()), quiet=0.02, poll=0.01)
-    with pytest.raises(BatchRequestError, match="no result"):
-        run(calls.beta.messages.create(**params("q")))

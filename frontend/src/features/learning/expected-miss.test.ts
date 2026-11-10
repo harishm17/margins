@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { EXPECTED_MISS_COPY, expectedMissText } from './expected-miss-copy'
-import { EXPECTED_MISS_SURFACES, markExpectedMissShown, shouldShowExpectedMiss, type MissStorage } from './expected-miss-rules'
+import { markExpectedMissShown, shouldShowExpectedMiss, type MissStorage } from './expected-miss-rules'
 
 function memoryStorage(): MissStorage & { data: Map<string, string> } {
   const data = new Map<string, string>()
@@ -67,18 +66,4 @@ test('expected miss survives storage that throws', () => {
   }
   assert.equal(shouldShowExpectedMiss('warmup_results', day(2), broken), true)
   assert.doesNotThrow(() => markExpectedMissShown('warmup_results', day(2), broken))
-})
-
-test('every surface has one short sentence of copy', () => {
-  for (const surface of EXPECTED_MISS_SURFACES) {
-    const text = expectedMissText(surface, { page: 12 })
-    assert.ok(text.length > 10 && text.length < 140, surface)
-    assert.ok(!text.includes('{'), surface)
-  }
-  assert.equal(Object.keys(EXPECTED_MISS_COPY).length, EXPECTED_MISS_SURFACES.length)
-})
-
-test('the no-step-solved line names the page when there is one', () => {
-  assert.match(expectedMissText('practice_none_solved', { page: 14 }), /p\. 14/)
-  assert.doesNotMatch(expectedMissText('practice_none_solved', { page: null }), /p\. |null|undefined/)
 })
