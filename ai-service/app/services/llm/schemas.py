@@ -10,7 +10,7 @@ import math
 import random
 import re
 from html import unescape
-from typing import Any, Dict, List, Literal, Optional, Sequence, Union
+from typing import Any, Dict, List, Literal, Optional, Sequence, Type, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -1194,6 +1194,33 @@ class KeyPointCheck(BaseModel):
     )
 
 
+class ShortAnswerGradeV2(BaseModel):
+    """Prompt revision (grading area): the per-point checks come first, so the score is written after
+    the evidence for it. When there is one check per key point the service computes the points from the
+    checks and `points_earned` is only the fallback."""
+
+    key_point_checks: List[KeyPointCheck] = Field(
+        default_factory=list,
+        description="One entry for each key point, in the order they were listed",
+    )
+    points_earned: float = Field(description="Points from 0 to the maximum given; agrees with key_point_checks")
+    feedback: str = Field(description="2-3 sentences on what was good and what was missing")
+    blamed_concept_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "When the answer falls short and the gap is clearly in one concept of the "
+            "<concepts> list, that concept's id; otherwise leave out"
+        ),
+    )
+    misconception: Optional[str] = Field(
+        default=None,
+        description=(
+            "Only when the answer states a specific wrong idea: that idea, in one sentence, "
+            "written as the idea itself. Leave out for gaps and slips"
+        ),
+    )
+
+
 class ShortAnswerGrade(BaseModel):
     points_earned: float
     feedback: str = Field(description="2-3 sentences on what was good and what was missing")
@@ -1648,6 +1675,33 @@ class PracticeTutorReply(BaseModel):
         )
 
 
+class PracticeTutorReplyV2(BaseModel):
+    """Prompt revision (tutor area): the model-written fields of PracticeTutorReply, without the
+    `analysis` scratchpad (thinking replaces it). The word limit is stated once, in the system prompt."""
+
+    reply: str = Field(description="What the student reads")
+    rung_used: int = Field(description="The rung (0 to 5) the reply gives; never above the rung allowed")
+    mistake: TutorMistake
+    reveals_answer: bool = Field(
+        description="Your own check: true when the reply states the answer, or lets a calculator finish it, or hides it in a question or an option"
+    )
+
+    @classmethod
+    def example(cls) -> "PracticeTutorReplyV2":
+        return cls.model_validate(PracticeTutorReply.example().model_dump(exclude={"analysis"}))
+
+
+V1ReplyT = TypeVar("V1ReplyT", bound=BaseModel)
+
+
+def as_v1_reply(out: BaseModel, v1_class: Type[V1ReplyT]) -> V1ReplyT:
+    """A reply of a v1 class, from the v1 or the v2 (no `analysis`) class the model was asked for, so the code
+    after the model call is the same for both."""
+    if isinstance(out, v1_class):
+        return out
+    return v1_class(analysis="", **out.model_dump())
+
+
 class LeakVerdict(BaseModel):
     answer_revealed: bool = Field(description="True when the reply is any of the four kinds of leak")
     reason: str = Field(description="One short clause naming which kind and where; empty when nothing is revealed")
@@ -1801,6 +1855,24 @@ class ReaderTutorReply(BaseModel):
         )
 
 
+class ReaderTutorReplyV2(BaseModel):
+    """Prompt revision (tutor area): ReaderTutorReply without `analysis`. The word limit is stated once, in the system prompt."""
+
+    reply: str = Field(description="What the student reads: statements only, no question")
+    check_question: str = Field(description="Exactly one short question the student can answer from the passage; it ends the reply")
+    reveals_answer: bool = Field(
+        description="Your own check: true when the reply states what a source claim answers to the student's question, in any form"
+    )
+
+    @classmethod
+    def example(cls) -> "ReaderTutorReplyV2":
+        return cls.model_validate(ReaderTutorReply.example().model_dump(exclude={"analysis", "from_fallback"}))
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "ReaderTutorReplyV2":
+        return cls.model_validate(ReaderTutorReply.example_for(prompt).model_dump(exclude={"analysis", "from_fallback"}))
+
+
 ReaderVerdict = Literal["right", "partly", "not_yet"]
 
 
@@ -1842,6 +1914,23 @@ class ReaderCheckReply(BaseModel):
         if shared == 1:
             return cls(analysis="", verdict="partly", reply="Part of that is in the passage; the second sentence adds the rest. (mock)", follow_up_question="What does the second sentence add?", reveals_answer=False)
         return cls(analysis="", verdict="right", reply="Your answer uses the passage's own idea. (mock)", follow_up_question="", reveals_answer=False)
+
+
+class ReaderCheckReplyV2(BaseModel):
+    """Prompt revision (tutor area): ReaderCheckReply without `analysis`. The word limit is stated once, in the system prompt."""
+
+    verdict: ReaderVerdict = Field(description="right: the answer holds the idea. partly: it holds some of it. not_yet: it does not")
+    reply: str = Field(description="What the student reads: statements only. One line on what made the answer right, or the sentence of the passage to look at")
+    follow_up_question: str = Field(description="One short question the student can answer from the passage; empty when the verdict is right")
+    reveals_answer: bool = Field(description="Your own check: true when the reply states the idea the check question asks for and the student did not")
+
+    @classmethod
+    def example(cls) -> "ReaderCheckReplyV2":
+        return cls.model_validate(ReaderCheckReply.example().model_dump(exclude={"analysis", "from_fallback"}))
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "ReaderCheckReplyV2":
+        return cls.model_validate(ReaderCheckReply.example_for(prompt).model_dump(exclude={"analysis", "from_fallback"}))
 
 
 # ---------------------------------------------------------------- recall grader (spec 5.3)
@@ -1898,6 +1987,26 @@ class ClaimVerdict(BaseModel):
         default=None,
         description="For covered only. true when the answer states the idea as a bare conclusion, without the support or reason the source gives for it; false when the reason is there. Leave out for other verdicts",
     )
+
+
+class RecallGradeResultV2(BaseModel):
+    """Prompt revision (tutor area): the model-written fields of RecallGradeResult, without `analysis`."""
+
+    confidence: float = Field(
+        description="0 to 1: how sure you are that you understood the answer well enough to grade it. Under 0.8 when it is too short, in a language you cannot grade, noise, or unclear"
+    )
+    clarifying_question: Optional[str] = Field(
+        default=None, description="When your confidence is under 0.8: one short question that would make the answer gradable"
+    )
+    verdicts: List[ClaimVerdict] = Field(description="One per claim given; empty when your confidence is under 0.8")
+
+    @classmethod
+    def example(cls) -> "RecallGradeResultV2":
+        return cls.model_validate(RecallGradeResult.example().model_dump(exclude={"analysis", "status"}))
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "RecallGradeResultV2":
+        return cls.model_validate(RecallGradeResult.example_for(prompt).model_dump(exclude={"analysis", "status"}))
 
 
 def _without_recall_service_fields(schema: Dict[str, Any]) -> None:
