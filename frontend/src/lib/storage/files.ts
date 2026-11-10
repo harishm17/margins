@@ -9,7 +9,7 @@
  *   never used for them, so they are read and deleted exactly like `local://path`.
  */
 
-import { logServerError } from '@/lib/ops/log'
+import { describeErrorForOps, logServerError } from '@/lib/ops/log'
 import type { Readable, Transform } from 'stream'
 import {
   deleteS3Object,
@@ -209,7 +209,7 @@ export async function recordStoredFile<T>(
       await remove(storedPath)
     } catch (cleanupError) {
       logServerError('Storage: could not delete a file after its record failed; remove it by hand', cleanupError)
-      await recordOpsEvent('storage_delete_failed', `${storedPath} (after its record failed): ${String(cleanupError)}`)
+      await recordOpsEvent('storage_delete_failed', `${storedPath} (after its record failed): ${describeErrorForOps(cleanupError)}`)
       await queueDeletionAfterFailure(storedPath, 'record_failed')
     }
     throw error
@@ -231,7 +231,7 @@ export async function deleteFilesBestEffort(storagePaths: string[]): Promise<str
     } catch (error) {
       failed.push(storagePath)
       logServerError('Storage: could not delete a file; remove it by hand', error)
-      await recordOpsEvent('storage_delete_failed', `${storagePath}: ${String(error)}`)
+      await recordOpsEvent('storage_delete_failed', `${storagePath}: ${describeErrorForOps(error)}`)
     }
   }
   return failed
@@ -253,7 +253,7 @@ export async function deleteProjectFolder(userId: string, projectId: string): Pr
     return true
   } catch (error) {
     logServerError('Storage: could not delete a folder; remove it by hand', error)
-    await recordOpsEvent('storage_delete_failed', `folder ${folder}: ${String(error)}`)
+    await recordOpsEvent('storage_delete_failed', `folder ${folder}: ${describeErrorForOps(error)}`)
     return false
   }
 }

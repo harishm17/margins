@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { confirmsDeletion, AccountDeletionError } from '@/lib/account/deletion'
 import { deleteUserAccount } from '@/server/account'
 import { getSessionUser } from '@/server/session'
+import { logServerError } from '@/lib/ops/log'
 
 export type DeleteAccountResult = { ok: true } | { ok: false; error: 'signed_out' | 'not_confirmed' | 'failed' }
 
@@ -23,7 +24,7 @@ export async function deleteAccountAction(confirmation: string): Promise<DeleteA
   try {
     await deleteUserAccount(user.id)
   } catch (error) {
-    if (!(error instanceof AccountDeletionError)) console.error(`[ACCOUNT] Deleting account ${user.id} failed:`, error)
+    if (!(error instanceof AccountDeletionError)) logServerError('Account: deleting the account failed', error, { userId: user.id })
     return { ok: false, error: 'failed' }
   }
 

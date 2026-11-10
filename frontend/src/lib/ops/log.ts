@@ -22,6 +22,12 @@ export function describeError(error: unknown): { name: string; code?: string; fr
   return { name: error.name || error.constructor?.name || 'Error', code, frames }
 }
 
+/** An error as stored text (ops events): `Name(code)` or `Name`, never its message. The AI service's describe_exception. */
+export function describeErrorForOps(error: unknown): string {
+  const { name, code } = describeError(error)
+  return code ? `${name}(${code})` : name
+}
+
 export function logServerError(label: string, error?: unknown, context: LogContext = {}): void {
   const { name, code, frames } = describeError(error)
   const parts = [`[${label}]`, error === undefined ? '' : code ? `${name}(${code})` : name]

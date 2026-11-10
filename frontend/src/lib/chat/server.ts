@@ -1,6 +1,5 @@
 /** Server-side pieces of the chat routes that do not need a request or a database. */
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
-import { callSignal } from '@/lib/ai-service/client-signal'
 
 export const MAX_QUESTION_CHARS = 2000
 export const MAX_THREAD_TITLE_CHARS = 80
@@ -55,7 +54,8 @@ export function requestChatAnswer(request: ChatAnswerRequest, signal?: AbortSign
       ...(request.threadId ? { thread_id: request.threadId } : {}),
       ...(request.tutor ? { tutor: request.tutor } : {}),
     }),
-    signal: signal ?? callSignal(CHAT_TIMEOUT_MS),
+    // A timeout only, not the browser's disconnect: the answer is stored even when the student stops or leaves (stream.ts).
+    signal: signal ?? AbortSignal.timeout(CHAT_TIMEOUT_MS),
   })
 }
 

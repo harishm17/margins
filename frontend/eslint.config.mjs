@@ -14,8 +14,9 @@ export default defineConfig([
   },
   {
     // Server code logs errors through logServerError (src/lib/ops/log.ts), which keeps an error's message (it can
-    // carry student text) out of the logs. Browser-only components under src/features and src/components may keep console.
-    files: ['src/app/**/*.{ts,tsx}', 'src/server/**/*.{ts,tsx}', 'src/lib/**/*.{ts,tsx}', 'src/instrumentation.ts'],
+    // carry student text) out of the logs. Browser-only components under src/features and src/components may keep console;
+    // the server actions there ('use server', named actions.ts) are server code.
+    files: ['src/app/**/*.{ts,tsx}', 'src/server/**/*.{ts,tsx}', 'src/lib/**/*.{ts,tsx}', 'src/features/**/actions.ts', 'src/instrumentation.ts'],
     ignores: ['**/*.test.{ts,tsx}', 'src/lib/ops/log.ts'],
     rules: {
       'no-restricted-syntax': [

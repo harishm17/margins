@@ -7,6 +7,7 @@
 
 import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { quotaErrorResponse } from '@/lib/api/quota'
 import { ownedTopic } from '@/server/owned'
 import { NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -36,6 +37,8 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       preferences: onDemandQuizPreferences(freshReviewPreferences(plan), band),
     })
   } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
     logServerError('Fresh review error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to start the fresh review')
