@@ -4,8 +4,11 @@ import pytest
 
 from app.config import settings
 from app.services.content_generator.context import (
+    SOURCES_CUT,
+    SOURCES_CUT_NOTICE,
     fetch_topic_chunks,
     fetch_topic_context,
+    format_source_excerpts,
     resolve_sources,
 )
 from app.services.embeddings import search
@@ -71,6 +74,13 @@ class TestPrimarySources:
         # small one after it are left out and the topic keeps one unbroken stretch from the start.
         assert [c["id"] for c in context.chunks] == [ids[0], ids[1]]
         assert context.dropped_sections == 2
+
+        # The audited prompt tells the model the sources were cut, so it does not write as if it saw the whole topic.
+        # A topic that fits says nothing, and neither does v1.
+        whole = [{key: value for key, value in chunk.items() if key != SOURCES_CUT} for chunk in context.chunks]
+        cut_block, whole_block = (format_source_excerpts("T", "", chunks, v2=True) for chunks in (context.chunks, whole))
+        assert SOURCES_CUT_NOTICE in cut_block and SOURCES_CUT_NOTICE not in whole_block
+        assert SOURCES_CUT_NOTICE not in format_source_excerpts("T", "", context.chunks, v2=False)
 
     async def test_a_source_in_a_file_that_became_an_exam_is_ignored(self, db, world):
         material, _ = await lecture(db, world["project_id"], "a.pdf", 3)

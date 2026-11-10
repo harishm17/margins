@@ -26,6 +26,7 @@ from app.services.content_generator.context import (
     fetch_confusable_neighbours,
     fetch_topic_context,
     format_concept_block,
+    name_in_instructions,
     resolve_concept_ids,
 )
 from app.services.content_generator.quiz import (
@@ -301,7 +302,7 @@ async def generate_review_items(topic_id: str, requests: Sequence[Dict[str, Any]
         for start in range(0, len(requests), BATCH_SIZE):
             batch = requests[start:start + BATCH_SIZE]
             instructions = review_template().format(
-                topic=context.topic["name"],
+                topic=name_in_instructions(context.topic["name"]),
                 count=ITEMS_PER_CONCEPT,
                 requests=_format_requests(batch, known, partners),
                 concepts=format_concept_block(concepts, neighbours),

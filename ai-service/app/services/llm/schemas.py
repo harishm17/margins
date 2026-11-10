@@ -2285,18 +2285,21 @@ class ConceptLinksV2(ConceptLinks):
 # classes above stay as they are until the area has run on v2 in production.
 
 _CHIP_HELP = "Short plain-text names of the ideas tested, shown as chips; no LaTeX or markdown"
-_DIFFICULTY_BY_APP_HELP = "Filled in by the app after generation; leave out"
 _CONFUSABLE_V2_HELP = (
     "Wrong options only: when the wrong idea is a mix-up with a concept of the <concepts> or "
     "<confusable_concepts> list, that concept's id"
 )
 
 
-def _with_descriptions(base: type, name: str, edits: Sequence[tuple], hidden: Sequence[tuple] = ()) -> type:
+def _with_descriptions(
+    base: type, name: str, edits: Sequence[tuple], hidden: Sequence[tuple] = (), moved: Sequence[tuple] = ()
+) -> type:
     """`base` with field descriptions replaced in its JSON schema. Each edit is
     (definition name or None for the model itself, field, description). A field that is not
     in the schema raises, so a renamed field cannot silently lose its description. Each `hidden`
-    (definition, field) is left out of the schema the model fills; the field must have a default."""
+    (definition, field) is left out of the schema the model fills; the field must have a default.
+    Each `moved` (definition, field, after) puts the field right after another one: the model writes
+    the fields in the schema's order, so this decides what it has written before what."""
 
     def model_json_schema(cls, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         schema = super(variant, cls).model_json_schema(*args, **kwargs)
@@ -2308,6 +2311,17 @@ def _with_descriptions(base: type, name: str, edits: Sequence[tuple], hidden: Se
             del holder["properties"][field]
             if field in holder.get("required", []):
                 holder["required"].remove(field)
+        for definition, field, after in moved:
+            holder = schema if definition is None else schema["$defs"][definition]
+            properties = dict(holder["properties"])
+            value = properties.pop(field)
+            if after not in properties:
+                raise KeyError(after)
+            holder["properties"] = {
+                key: item
+                for existing, prop in properties.items()
+                for key, item in ((existing, prop), *(((field, value),) if existing == after else ()))
+            }
         return schema
 
     variant = type(name, (base,), {"model_json_schema": classmethod(model_json_schema), "__module__": __name__})
@@ -2319,16 +2333,21 @@ _QUESTION_V2_EDITS = (
     ("GeneratedQuestion", "concepts_tested", _CHIP_HELP),
 )
 
+# The excerpts an item rests on are named before its answer is written, so the answer is written from them and
+# the list is not filled in afterwards to fit.
+_QUESTION_SOURCES_FIRST = (("GeneratedQuestion", "source_excerpts", "question_text"),)
+# The app sets the difficulty of a quiz, exam or review question and of an example after generation (the request
+# names it), so the model is not shown the field: "leave out" on a field it can see was asking for it to be filled.
+_QUESTION_DIFFICULTY_BY_APP = (("GeneratedQuestion", "difficulty"),)
+
 QuestionSetV2 = _with_descriptions(
-    QuestionSet, "QuestionSetV2",
-    (*_QUESTION_V2_EDITS, ("GeneratedQuestion", "difficulty", _DIFFICULTY_BY_APP_HELP)),
+    QuestionSet, "QuestionSetV2", _QUESTION_V2_EDITS, hidden=_QUESTION_DIFFICULTY_BY_APP, moved=_QUESTION_SOURCES_FIRST
 )
 ReviewItemSetV2 = _with_descriptions(
-    ReviewItemSet, "ReviewItemSetV2",
-    (*_QUESTION_V2_EDITS, ("GeneratedQuestion", "difficulty", _DIFFICULTY_BY_APP_HELP)),
+    ReviewItemSet, "ReviewItemSetV2", _QUESTION_V2_EDITS, hidden=_QUESTION_DIFFICULTY_BY_APP, moved=_QUESTION_SOURCES_FIRST
 )
 # Warm-up difficulty is the model's: the bank is bracketed on it.
-WarmupSetV2 = _with_descriptions(WarmupSet, "WarmupSetV2", _QUESTION_V2_EDITS)
+WarmupSetV2 = _with_descriptions(WarmupSet, "WarmupSetV2", _QUESTION_V2_EDITS, moved=_QUESTION_SOURCES_FIRST)
 
 SolvedExampleSetV2 = _with_descriptions(
     SolvedExampleSet, "SolvedExampleSetV2",
@@ -2338,17 +2357,18 @@ SolvedExampleSetV2 = _with_descriptions(
         ("SolutionStep", "explanation", "Why the step is taken"),
         ("SolvedExample", "final_answer", "2-5 markdown bullets"),
         ("SolvedExample", "key_concepts", _CHIP_HELP),
-        ("SolvedExample", "difficulty", _DIFFICULTY_BY_APP_HELP),
     ),
+    hidden=(("SolvedExample", "difficulty"),),
+    moved=(("SolvedExample", "source_excerpts", "problem_statement"),),
 )
 InteractiveExampleSetV2 = _with_descriptions(
     InteractiveExampleSet, "InteractiveExampleSetV2",
     (
         ("InteractiveExample", "key_concepts", _CHIP_HELP),
-        ("InteractiveExample", "difficulty", _DIFFICULTY_BY_APP_HELP),
     ),
     # R5: the minutes are computed by the app from the step count (examples.py), not asked of the model.
-    hidden=(("InteractiveExample", "estimated_time_minutes"),),
+    hidden=(("InteractiveExample", "estimated_time_minutes"), ("InteractiveExample", "difficulty")),
+    moved=(("InteractiveExample", "source_excerpts", "problem_statement"),),
 )
 ExamStyleProfileV2 = _with_descriptions(
     ExamStyleProfile, "ExamStyleProfileV2",

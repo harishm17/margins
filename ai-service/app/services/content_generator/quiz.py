@@ -13,6 +13,7 @@ from app.services.content_generator.context import (
     _tokens,
     attach_sources,
     content_messages,
+    do_not_repeat_block,
     do_not_reuse_block,
     existing_content_digest,
     fetch_concepts,
@@ -20,6 +21,7 @@ from app.services.content_generator.context import (
     fetch_topic_context,
     focus_line,
     format_concept_block,
+    name_in_instructions,
     resolve_concept_ids,
 )
 from app.services.content_generator.refill import refill_figures, refill_once
@@ -107,8 +109,12 @@ QUESTION_FORMAT_RULES_V2 = f"""Question rules:
 {SOURCE_EXCERPTS_RULE}"""
 
 # One source for the application rule: quiz, exam, review and warm-up all send it, because the later
-# support check quotes the rule the key was computed with.
-RULE_IN_EXCERPTS = "For a new situation, the rule or method it applies has to be in the excerpts, because a later support check quotes it."
+# support check quotes the rule the key was computed with. The prompt gives the reason in the student's terms: the
+# model knows nothing of a "support check".
+RULE_IN_EXCERPTS = (
+    "For a new situation, the rule or method it applies has to be stated in the excerpts, because every answer has to be "
+    "traceable to a passage in the student's files."
+)
 
 APPLICATION_RULES_V2 = f"""Question design:
 - At least half of the questions must apply a concept to a new situation (a fresh scenario, new numbers, a case the course materials do not show) rather than recall a definition or repeat an example.
@@ -130,6 +136,7 @@ def question_set_schema():
 
 
 def prerequisite_instructions(name: str, topic_name: str, review: int, question_count: int) -> str:
+    name, topic_name = name_in_instructions(name), name_in_instructions(topic_name)
     return f"""
 Review questions: exactly {review} of the {question_count} questions must test the prerequisite topic "{name}". Base them only on the excerpts marked use="prerequisite", list only those excerpt indexes in source_excerpts, and pitch them at a level a student who already learned "{name}" could answer. The other {question_count - review} questions are about "{topic_name}" as described above and never use the prerequisite excerpts.
 """
@@ -290,7 +297,7 @@ class QuizGenerator:
         allowed = {qt.value for qt in question_types}
 
         async def ask(asked: int, review: str, avoid: str = "") -> tuple[List[Dict], int]:
-            instructions = f"""Write a {asked}-question quiz on "{topic_name}" from the excerpts above.
+            instructions = f"""Write a {asked}-question quiz on "{name_in_instructions(topic_name)}" from the excerpts above.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
 Use only these question types, spread across them: {types_str}.
@@ -320,8 +327,7 @@ Use only these question types, spread across them: {types_str}.
             # Finding 102: once, for what the check removed, with one spare. The prerequisite review questions were
             # asked for the first time; a refill is plain questions on the topic.
             nonlocal dropped
-            avoid = "\n\nDo not repeat these questions:\n" + "\n".join(f"- {q.get('question_text')}" for q in questions)
-            more, more_dropped = await ask(missing + 1, "", avoid)
+            more, more_dropped = await ask(missing + 1, "", do_not_repeat_block(questions))
             dropped += more_dropped
             return more
 
