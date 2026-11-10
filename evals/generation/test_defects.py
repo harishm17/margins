@@ -106,6 +106,11 @@ def fake_module():
     module = types.ModuleType("fake_generator")
 
     async def check_support(items, chunks):
+        from app.services.content_generator import support_check
+
+        sink = support_check._DROP_SINK.get()
+        if sink is not None:  # the app's check reports why it dropped an item; the last one here has no reason
+            sink.append((items[1], support_check.REASON_QUOTE_MISSING))
         return items[:1], len(items) - 1
 
     module.check_support = check_support
@@ -125,7 +130,7 @@ def test_the_support_recorder_keeps_what_each_check_sent_and_dropped():
 
     kept, dropped, records = asyncio.run(go())
     assert (kept, dropped) == ([items[0]], 2)
-    assert records == [{"sent": 3, "kept": 1, "dropped": [items[1], items[2]]}]
+    assert records == [{"sent": 3, "kept": 1, "dropped": [items[1], items[2]], "reasons": ["a quote is not in the excerpt it names", ""]}]
     # Outside a sink the check runs as before and nothing is kept.
     assert asyncio.run(module.check_support(items, [])) == ([items[0]], 2)
 
@@ -255,7 +260,7 @@ def test_a_generator_summary_counts_written_dropped_by_rule_unsupported_and_stor
             "status": "ok",
             "seconds": 10.0,
             "calls": [call("topic_quiz", {"questions": [good, question(correct_answer="E"), good, good]}, 0.10), call("router", {"items": []}, 0.01)],
-            "support": [{"sent": 3, "kept": 2, "dropped": [stored_good]}],
+            "support": [{"sent": 3, "kept": 2, "dropped": [stored_good], "reasons": ["a quote is not in the excerpt it names"]}],
             "output": [stored_good],
         },
         {   # a run that failed after writing 2 questions with no misconception: nothing stored
@@ -273,6 +278,7 @@ def test_a_generator_summary_counts_written_dropped_by_rule_unsupported_and_stor
     assert summary["by_reason"] == {"answer_not_in_options": 1, "missing_misconception": 2}
     assert summary["drop_rate"] == pytest.approx(5 / 6)
     assert summary["unsupported_rate"] == pytest.approx(1 / 3)
+    assert summary["unsupported_by_reason"] == {"a quote is not in the excerpt it names": 1}
     assert summary["cost_usd"] == pytest.approx(0.16)
     assert summary["checks"]["items"] == 1
 

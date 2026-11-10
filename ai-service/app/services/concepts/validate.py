@@ -5,6 +5,7 @@ exist, the prerequisite graph must be acyclic, minimal and point backwards in th
 pieces are dropped and counted so one bad claim does not fail the topic.
 """
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Protocol, Sequence, Set, Tuple, TypeVar
 
@@ -35,8 +36,49 @@ _SPACE = re.compile(r"\s+")
 
 
 def normalize(text: str) -> str:
-    """Collapse whitespace and map curly quotes and dashes to ASCII, for quote matching."""
+    """Collapse whitespace and map curly quotes and dashes to ASCII: how a quote is stored."""
     return _SPACE.sub(" ", (text or "").translate(_QUOTE_MARKS)).strip()
+
+
+# What a PDF turned into markdown carries and a model leaves out, or adds, when it copies a passage.
+_MARKUP_TAG = re.compile(r"</?(?:sup|sub|br|b|i|em|strong|u)\s*/?>", re.IGNORECASE)
+_MARKUP_CHARS = str.maketrans("", "", "*_`")
+_ELLIPSIS = re.compile(r"\.{3,}|…")
+# Each part of a quote that leaves words out must be this long, so a few stray letters do not pass as a quote.
+MIN_ELIDED_PART_CHARS = 12
+
+
+def normalize_for_match(text: str) -> str:
+    """The text as it is compared when a quote is looked for in a chunk.
+
+    On top of `normalize`: emphasis marks (`**`, `_`, backticks) and <sup>/<sub> tags are dropped, compatibility
+    forms are folded (maths italic letters, ligatures, superscript digits), and whitespace is removed, so
+    `_O_ ( _n_ )` in a chunk and `O(n)` in a quote are the same text. Only for comparing: what is stored is `normalize`.
+    """
+    folded = unicodedata.normalize("NFKC", _MARKUP_TAG.sub("", text or "")).translate(_QUOTE_MARKS)
+    return _SPACE.sub("", folded.translate(_MARKUP_CHARS))
+
+
+def quote_in(quote: str, prepared_text: str) -> bool:
+    """True when `quote` is text of the chunk whose `normalize_for_match` form is `prepared_text`.
+
+    Every place that checks a model's quote against course text uses this one rule. A quote that leaves words out
+    with an ellipsis holds when each part is in the chunk, in order."""
+    whole = normalize_for_match(quote)
+    if not whole:
+        return False
+    if whole in prepared_text:
+        return True
+    parts = [part for part in (normalize_for_match(piece) for piece in _ELLIPSIS.split(quote or "")) if part]
+    if len(parts) < 2 or any(len(part) < MIN_ELIDED_PART_CHARS for part in parts):
+        return False
+    at = 0
+    for part in parts:
+        found = prepared_text.find(part, at)
+        if found < 0:
+            return False
+        at = found + len(part)
+    return True
 
 
 @dataclass
@@ -134,22 +176,23 @@ def _reduce(edges: List[ExtractedEdge]) -> Tuple[List[ExtractedEdge], int]:
 
 
 def validate_claims(
-    claims: Sequence[ExtractedClaim], concept_keys: Set[str], normalized_chunks: Dict[str, str]
+    claims: Sequence[ExtractedClaim], concept_keys: Set[str], chunks: Dict[str, str]
 ) -> Tuple[List[ExtractedClaim], int]:
     """The claims whose concept is known and whose quote is real, short text from the chunk it names, with text and quote
-    cleaned, and how many were dropped. One claim per (concept, quote). `normalized_chunks` maps chunk id to
-    `normalize`d text. Shared by the extraction and by the re-quoting of concepts that lost their claims."""
+    cleaned, and how many were dropped. One claim per (concept, quote). `chunks` maps chunk id to its text; a quote is
+    looked for with `quote_in`. Shared by the extraction and by the re-quoting of concepts that lost their claims."""
     kept: List[ExtractedClaim] = []
     seen: Set[Tuple[str, str]] = set()
     dropped = 0
+    prepared = {chunk_id: normalize_for_match(text) for chunk_id, text in chunks.items()}
     for claim in claims:
         quote = normalize(claim.quote)
-        chunk_text = normalized_chunks.get(claim.chunk_id)
+        chunk_text = prepared.get(claim.chunk_id)
         text = claim.text.strip()
         if (
             claim.concept_key not in concept_keys
             or not quote or not text or len(quote) > MAX_QUOTE_CHARS
-            or chunk_text is None or quote not in chunk_text
+            or chunk_text is None or not quote_in(quote, chunk_text)
             or (claim.concept_key, quote) in seen
         ):
             dropped += 1
@@ -176,7 +219,6 @@ def validate_extraction(
     number of the topic's objectives; without it the highest index mentioned stands in.
     """
     dropped = {"concepts": 0, "claims": 0, "edges": 0, "focus_questions": 0, "recall_prompts": 0}
-    normalized_chunks = {chunk_id: normalize(text) for chunk_id, text in chunks.items()}
 
     if objective_count is None:
         mentioned = [
@@ -202,7 +244,7 @@ def validate_extraction(
         unique.append(concept)
 
     # Claims: for a known concept, a real, short quote from the named chunk.
-    claims, dropped_claims = validate_claims(raw.claims, keys, normalized_chunks)
+    claims, dropped_claims = validate_claims(raw.claims, keys, chunks)
     dropped["claims"] += dropped_claims
 
     # Concepts, second pass: at least one surviving claim, objective indexes in range.
@@ -310,7 +352,7 @@ def validate_links(
     ordered by id. `encompasses` cycles are broken by dropping the lowest-confidence edge, as in
     validate_extraction; edges already stored count as part of the graph and are never the one
     dropped. An edge that carries an evidence_quote is dropped unless the quote is a substring of
-    one of the quotes `shown_quotes` holds for its two concepts (after `normalize`), the way a
+    one of the quotes `shown_quotes` holds for its two concepts (by `quote_in`), the way a
     claim is in validate_extraction; an edge with no quote is kept. Returns the surviving edges
     and a count of what was dropped."""
     dropped = {"edges": 0}
@@ -327,7 +369,9 @@ def validate_links(
             dropped["edges"] += 1
             continue
         quote = normalize(edge.evidence_quote) if edge.evidence_quote else None
-        if quote and not any(quote in normalize(shown) for end in (source, target) for shown in shown_quotes.get(end, [])):
+        if quote and not any(
+            quote_in(quote, normalize_for_match(shown)) for end in (source, target) for shown in shown_quotes.get(end, [])
+        ):
             dropped["edges"] += 1
             continue
         if edge.type == "confusable" and source > target:

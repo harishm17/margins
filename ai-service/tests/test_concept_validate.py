@@ -57,6 +57,16 @@ def test_quote_matches_after_whitespace_and_quote_normalisation():
     assert normalize("a’s   b\n– c“d”") == "a's b - c\"d\""
 
 
+def test_a_quote_copied_without_the_chunks_markdown_is_still_a_quote_and_is_stored_as_the_model_wrote_it():
+    # Bug: a PDF chunk carries markdown (`**`, `_x_`) and maths italics; the model quotes the plain words and the
+    # claim was dropped as "not in the chunk".
+    chunks = {"ch1": "Insertion appends _x_ to the end in amortized _O_ (1) time, then **swaps** up."}
+    quote = "Insertion appends x to the end in amortized O(1) time"
+    graph = validate_extraction(_raw([_concept("a")], [_claim("a", quote=quote, chunk="ch1")]), chunks, {}, {})
+    assert [c.quote for c in graph.claims] == [quote]
+    assert graph.dropped["claims"] == 0
+
+
 def test_concept_without_claims_dropped():
     raw = _raw([_concept("a"), _concept("b")], [_claim("a")])
     graph = _run(raw)

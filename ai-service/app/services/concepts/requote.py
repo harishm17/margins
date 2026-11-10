@@ -18,7 +18,7 @@ from app.config import settings
 from app.db.connection import execute_query
 from app.services.concepts.extractor import EXTRACTION_SYSTEM_PROMPT, format_excerpts
 from app.services.concepts.store import store_requoted_claims
-from app.services.concepts.validate import normalize, validate_claims
+from app.services.concepts.validate import validate_claims
 from app.services.content_generator.context import NoSourceMaterialError, fetch_topic_context
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import LLMFactory
@@ -138,7 +138,7 @@ async def propose_quotes(topic_id: str) -> RequotePlan:
     plan.claims, plan.dropped_claims = validate_claims(
         raw.claims,
         {concept["id"] for concept in plan.concepts},
-        {chunk["id"]: normalize(str(chunk.get("chunk_text") or "")) for chunk in chunks},
+        {chunk["id"]: str(chunk.get("chunk_text") or "") for chunk in chunks},
     )
     return plan
 
