@@ -2,6 +2,7 @@
 No database, no network; app code is imported as in test_pipeline.py.
 """
 import asyncio
+import json
 import os
 import sys
 import types
@@ -203,6 +204,38 @@ def test_verdicts_go_back_to_their_items_and_are_tallied_per_generator():
     assert (kinds["quiz"]["judged"], kinds["quiz"]["flagged"], kinds["quiz"]["rate"]) == (1, 1, 1.0)
     assert kinds["quiz"]["by_defect"]["wrong_key"] == 1 and kinds["quiz"]["by_defect"]["other"] == 1
     assert (kinds["exam"]["judged"], kinds["exam"]["flagged"]) == (1, 0)
+
+
+def test_a_resumed_run_judges_a_topic_again_when_it_has_items_the_judge_did_not_see(tmp_path):
+    # PR 1.7 A2: the first run stored only warm-up items; the resume stored the rest, but each topic's judge file
+    # already held a result, so the judge never saw them.
+    class Judge:
+        spec = types.SimpleNamespace(label="judge:test")
+
+        def __init__(self):
+            self.seen = []
+
+        async def generate_structured(self, messages, schema, **kwargs):
+            self.seen.append(messages[-2].content.count("<question "))
+            return schema(items=[])
+
+    warmup = {"ref": "warmup-1", "item": {"question_text": "Q1"}}
+    quiz = {"ref": "quiz-1", "item": {"question_text": "Q2"}}
+    (tmp_path / "t1.json").write_text(json.dumps({"group": "t1", "refs": ["warmup-1"], "result": {"items": []}, "calls": [{"cost_usd": 0.1}]}))
+    judge = Judge()
+
+    def run(items):
+        return asyncio.run(item_judge.judge_topics(
+            provider=judge, groups={"t1": {"excerpts": "", "items": items}}, judge_dir=tmp_path, log=lambda _: None
+        ))
+
+    run([warmup])
+    assert judge.seen == []  # the same items: kept
+    run([warmup, quiz])
+    assert judge.seen == [2]
+    record = json.loads((tmp_path / "t1.json").read_text())
+    assert record["refs"] == ["warmup-1", "quiz-1"]
+    assert record["calls"][0] == {"cost_usd": 0.1}  # the earlier judgment's spend still counts
 
 
 # ---------------------------------------------------------------- what each generator wrote, dropped and stored

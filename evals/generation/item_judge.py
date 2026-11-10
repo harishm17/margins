@@ -145,11 +145,15 @@ async def judge_topics(*, provider, groups: Dict[str, Dict[str, Any]], judge_dir
 
     async def one(key: str, group: Dict[str, Any]) -> None:
         path = judge_dir / f"{key}.json"
-        if path.exists() and json.loads(path.read_text()).get("result") is not None:
+        refs = [entry["ref"] for entry in group["items"]]
+        earlier = json.loads(path.read_text()) if path.exists() else {}
+        # A resumed run can store more of a topic's items after the topic was judged (the PR 1.7 A2 resume judged only
+        # warm-up): the topic is judged again whenever its items differ from the ones the record judged.
+        if earlier.get("result") is not None and earlier.get("refs") == refs:
             return
         if not group["items"]:
             return
-        record: Dict[str, Any] = {"group": key, "refs": [entry["ref"] for entry in group["items"]], "judge_model": provider.spec.label}
+        record: Dict[str, Any] = {"group": key, "refs": refs, "judge_model": provider.spec.label}
         with call_sink() as calls:
             try:
                 result = await provider.generate_structured(
@@ -165,7 +169,8 @@ async def judge_topics(*, provider, groups: Dict[str, Dict[str, Any]], judge_dir
                 record["error"] = f"{type(exc).__name__}: {exc}"
                 failed.append(key)
                 log(f"  judge failed for {key}: {record['error'][:160]}")
-        record["calls"] = calls
+        # The earlier judgment's calls stay in the record: they were spent, and a resumed run's budget counts them.
+        record["calls"] = (earlier.get("calls") or []) + calls
         path.write_text(json.dumps(record, indent=2) + "\n")
         if "error" not in record:
             log(f"  judged {key}: {len(group['items'])} questions")
