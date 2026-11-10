@@ -34,7 +34,12 @@ test('a deployed production server will not start without a real Google client',
     () => checkAuthStartup({ ...LIVE, GOOGLE_OAUTH_CLIENT_ID: 'your-google-client-id', GOOGLE_OAUTH_CLIENT_SECRET: 'your-google-client-secret' }),
     /placeholders/
   )
-  assert.doesNotThrow(() => checkAuthStartup({ ...LIVE, ...GOOGLE }))
+  assert.doesNotThrow(() => checkAuthStartup({ ...LIVE, ...GOOGLE, S3_BUCKET: 'uploads' }))
+})
+
+test('a deployed production server will not start without S3_BUCKET', () => {
+  assert.throws(() => checkAuthStartup({ ...LIVE, ...GOOGLE }), /S3_BUCKET/)
+  assert.throws(() => checkAuthStartup({ ...LIVE, ...GOOGLE, S3_BUCKET: '  ' }), /S3_BUCKET/)
 })
 
 test('Railway, or a missing NEXTAUTH_URL, counts as deployed even on a localhost URL', () => {

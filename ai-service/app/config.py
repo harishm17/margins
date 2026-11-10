@@ -234,6 +234,10 @@ class Settings(BaseSettings):
         provider = self.LLM_PROVIDER.strip().lower()
         if self.ENVIRONMENT == "production" and provider in ("mock", "replay"):
             raise ValueError(f"LLM_PROVIDER={provider} is not allowed when ENVIRONMENT=production")
+        # Without a bucket the services fall back to the container's disk, which a deploy wipes: uploads would vanish
+        # without an error. Refuse to start rather than lose students' files.
+        if self.ENVIRONMENT == "production" and not self.S3_BUCKET.strip():
+            raise ValueError("S3_BUCKET must be set when ENVIRONMENT=production (uploads would go to local disk)")
         if provider == "replay" and not self.LLM_CASSETTE_DIR.strip():
             raise ValueError("LLM_PROVIDER=replay needs LLM_CASSETTE_DIR (the folder of recordings)")
         return self

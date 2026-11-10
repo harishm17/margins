@@ -30,4 +30,13 @@ export function checkAuthStartup(env: Env = process.env): void {
         'way to sign in, so set them to a real OAuth client before starting in production.'
     )
   }
+
+  // Without a bucket the app writes uploads to the container's disk, which a deploy wipes: students would lose
+  // their files with no error. The AI service refuses to start without it too (ai-service/app/config.py).
+  if (isDeployed(env) && !env.S3_BUCKET?.trim()) {
+    throw new Error(
+      'S3_BUCKET is not set. A deployed site stores uploads in the bucket; without it they would go to a disk that ' +
+        'is lost on every deploy. Set S3_BUCKET (and the S3_* credentials) before starting in production.'
+    )
+  }
 }
