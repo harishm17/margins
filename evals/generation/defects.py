@@ -547,7 +547,7 @@ async def run(args: argparse.Namespace) -> int:
             "max_usd": args.max_usd,
             "max_judge_usd": args.max_judge_usd,
             "spend": {"generation": round(tracker.spent[GENERATION], 4), "judge": round(tracker.spent[JUDGE], 4)},
-            "stopped": state.get("stopped") or previous.get("stopped"),
+            "stopped": state.get("stopped") or _stop_still_standing(previous.get("stopped"), args),
         }
         (run_dir / "run.json").write_text(json.dumps(run_info, indent=2) + "\n")
         summary = build_summary(run_dir, run_info)
@@ -565,6 +565,15 @@ def adapters_dir() -> Path:
     from common.ingest import AI_SERVICE_DIR
 
     return AI_SERVICE_DIR
+
+
+def _stop_still_standing(previous_stop: Optional[str], args: argparse.Namespace) -> Optional[str]:
+    """An earlier run's stop note, unless this run redid that part: the judge runs again on every resume that has one,
+    and generation runs again unless --no-generate. (A resume that finished the judge reported it as stopped.)"""
+    if not previous_stop:
+        return None
+    redone = (args.judge and previous_stop.startswith("judge:")) or (not args.no_generate and not previous_stop.startswith("judge:"))
+    return None if redone else previous_stop
 
 
 def item_judge_excerpts(excerpts: List[Dict[str, Any]]) -> str:
