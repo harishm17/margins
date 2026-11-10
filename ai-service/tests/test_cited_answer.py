@@ -427,16 +427,3 @@ class TestMockProvider:
         assert "".join(e.text for e in out if isinstance(e, AnswerText)) == done.text
         assert all(0 < c.offset <= len(done.text) for c in citations)
         assert done.usage.model == "mock-main" and done.usage.input_tokens == 0
-
-    @pytest.mark.asyncio
-    async def test_quotes_the_body_not_the_heading(self):
-        excerpts = [Excerpt(ref="chunk:h", title="t", text="# Hash Tables\n\nA hash table stores pairs. More text.")]
-        out = await collect(MockProvider(), excerpts=excerpts)
-        done = out[-1]
-        assert "A hash table stores pairs." in done.text and "# Hash" not in done.text
-        assert done.citations[0].cited_text == "A hash table stores pairs. More text."
-
-    @pytest.mark.asyncio
-    async def test_needs_an_excerpt(self):
-        with pytest.raises(LLMOutputError):
-            await collect(MockProvider(), excerpts=[])

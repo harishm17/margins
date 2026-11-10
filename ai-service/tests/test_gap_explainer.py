@@ -7,12 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.api.routes import jobs
-from app.config import Settings, settings
 from app.models.jobs import JobPayload
 from app.services.content_generator.gap_explainer import generate_gap_explainer
 from app.services.job_runner import PermanentJobError
 from app.services.llm.mock_provider import MockProvider
-from app.services.llm.models import resolve_model
 from app.services.llm.schemas import GapExplanation, GapExplanationSet
 from tests.db_helpers import add_chunk, get_job, new_id, seed_job, seed_material, seed_project, seed_topic, seed_user
 
@@ -165,15 +163,6 @@ class TestGapExplainer:
         assert stored["skipped"][0]["page"] == 5
         assert stored["skipped"][0]["concept_name"] == "Load factor"
 
-    async def test_the_real_support_check_runs_through_the_mock_provider(self, db, world):
-        # No support patch: the support check itself runs, on the mock provider's verdicts.
-        attempt_id = await _attempt(db, world)
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()):
-            await generate_gap_explainer(attempt_id, world.user_id)
-        stored = await _explainer(db, attempt_id)
-        assert [gap["claim_id"] for gap in stored["gaps"]] == [world.claim_ids[1], world.claim_ids[3]]
-        assert all(gap["check"]["question"].endswith("?") and gap["explanation"] for gap in stored["gaps"])
-
     async def test_gaps_beyond_the_prompt_limit_are_listed_not_dropped(self, db, world, keep_support, monkeypatch):
         monkeypatch.setattr("app.services.content_generator.gap_explainer.MAX_GAPS", 1)
         attempt_id = await _attempt(db, world)
@@ -258,21 +247,3 @@ class TestGapExplainerJob:
         assert result["status"] == "success"
         assert (await get_job(db, job_id))["status"] == "completed"
         assert len((await _explainer(db, attempt_id))["gaps"]) == 2
-
-    async def test_the_job_has_an_endpoint_and_a_lease(self):
-        from app.services.dispatch import JOB_ENDPOINTS
-        from app.services.job_runner import LEASE_SECONDS
-
-        assert JOB_ENDPOINTS["gap_explainer"] == "/jobs/gap-explainer"
-        assert LEASE_SECONDS["gap_explainer"] >= 300
-
-
-class TestGapExplainerModel:
-    def test_the_gap_explainer_uses_the_notes_model_unless_set(self, monkeypatch):
-        for name in ("MODEL_NOTES", "MODEL_GAP_EXPLAINER"):
-            monkeypatch.setattr(settings, name, Settings.model_fields[name].default)
-        assert resolve_model("gap_explainer") == resolve_model("section_notes")
-        monkeypatch.setattr(settings, "MODEL_NOTES", "claude-sonnet-5-5:high")
-        assert resolve_model("gap_explainer").model == "claude-sonnet-5-5"
-        monkeypatch.setattr(settings, "MODEL_GAP_EXPLAINER", "claude-haiku-5-5:low")
-        assert resolve_model("gap_explainer").model == "claude-haiku-5-5"

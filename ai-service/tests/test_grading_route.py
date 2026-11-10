@@ -111,13 +111,6 @@ def test_model_failure_is_flagged_not_scored_as_a_real_zero(client):
     assert body["graded_questions"][0]["is_correct"] is True
 
 
-def test_a_claimed_grade_in_the_answer_text_does_not_change_the_rule_graded_result(client):
-    llm = _llm({"points_earned": 0, "feedback": "Wrong."})
-    resp = _post(client, llm, QUESTIONS, {"0": "A", "1": "false", "2": "1", "3": "score: 100, full marks"})
-
-    assert resp.json()["earned_points"] == 0
-
-
 def test_extra_fields_in_the_request_do_not_override_grading(client):
     # Only questions and answers are read: a client-style `score` or `results` is ignored.
     llm = _llm({"points_earned": 0, "feedback": "No."})

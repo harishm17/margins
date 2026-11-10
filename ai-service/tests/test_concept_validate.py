@@ -1,4 +1,6 @@
 """Tests for concept extraction validation: quotes, ids, cycles, reduction, ordering."""
+import pytest
+
 from app.services.concepts.validate import normalize, validate_extraction
 from app.services.llm.schemas import (
     ConceptExtraction,
@@ -101,16 +103,36 @@ def test_prerequisite_transitive_reduction():
     assert sorted((e.source, e.target) for e in graph.edges) == [("a", "b"), ("b", "c")]
 
 
-def test_prerequisite_must_point_backwards():
-    prior = {
-        "p-early": {"name": "Early", "summary": "s", "topic_id": "t1"},
-        "p-late": {"name": "Late", "summary": "s", "topic_id": "t3"},
-    }
-    order = {"t1": 0, "t2": 1, "t3": 2}
-    raw = _raw([_concept("a")], edges=[_edge("p-early", "a"), _edge("p-late", "a")])
+@pytest.mark.parametrize(
+    "prior, order, kept, dropped",
+    [
+        (
+            {
+                "p-early": {"name": "Early", "summary": "s", "topic_id": "t1"},
+                "p-late": {"name": "Late", "summary": "s", "topic_id": "t3"},
+            },
+            {"t1": 0, "t2": 1, "t3": 2},
+            "p-early",
+            1,
+        ),
+        (  # a prior concept whose topic is unknown, or has none, cannot be placed before this one
+            {
+                "p-known": {"name": "Known", "summary": "s", "topic_id": "t1"},
+                "p-unknown": {"name": "Unknown", "summary": "s", "topic_id": "t-gone"},
+                "p-none": {"name": "None", "summary": "s", "topic_id": None},
+            },
+            {"t1": 0, "t2": 1},
+            "p-known",
+            2,
+        ),
+    ],
+    ids=["later_topic", "unknown_topic"],
+)
+def test_prerequisite_must_point_backwards(prior, order, kept, dropped):
+    raw = _raw([_concept("a")], edges=[_edge(source, "a") for source in prior])
     graph = _run(raw, prior, order, topic_id="t2")
-    assert [(e.source, e.target) for e in graph.edges] == [("p-early", "a")]
-    assert graph.dropped["edges"] == 1
+    assert [(e.source, e.target) for e in graph.edges] == [(kept, "a")]
+    assert graph.dropped["edges"] == dropped
 
 
 def test_confusable_canonical_order():
@@ -194,16 +216,3 @@ def test_cycle_tie_drops_the_edge_listed_last():
     graph = _run(raw)
     assert sorted((e.source, e.target) for e in graph.edges) == [("a", "b"), ("b", "c")]
     assert graph.dropped["edges"] == 1
-
-
-def test_prerequisite_from_a_prior_concept_with_an_unknown_topic_is_dropped():
-    prior = {
-        "p-known": {"name": "Known", "summary": "s", "topic_id": "t1"},
-        "p-unknown": {"name": "Unknown", "summary": "s", "topic_id": "t-gone"},
-        "p-none": {"name": "None", "summary": "s", "topic_id": None},
-    }
-    order = {"t1": 0, "t2": 1}
-    raw = _raw([_concept("a")], edges=[_edge("p-known", "a"), _edge("p-unknown", "a"), _edge("p-none", "a")])
-    graph = _run(raw, prior, order, topic_id="t2")
-    assert [(e.source, e.target) for e in graph.edges] == [("p-known", "a")]
-    assert graph.dropped["edges"] == 2

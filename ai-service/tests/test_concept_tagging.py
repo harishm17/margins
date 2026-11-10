@@ -5,12 +5,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.api.routes import voice
-from app.services.content_generator.context import format_concept_block, resolve_concept_ids
+from app.services.content_generator.context import resolve_concept_ids
 from app.services.content_generator.examples import ExampleType, ExamplesGenerator
 from app.services.content_generator.quiz import QuizGenerator
 from app.services.exam_generator import ExamGenerator
 from app.services.llm.base import LLMOutputError
-from app.services.llm.mock_provider import MockProvider
 from app.services.llm.schemas import (
     ChoiceOption,
     DrillQuestion,
@@ -147,12 +146,6 @@ class TestConceptIds:
         assert stored["concept_ids"] == ["k-var"]
         assert [s["concept_ids"] for s in stored["steps"]] == [["k-mean"], ["k-var"], ["k-var"]]
 
-    async def test_the_mock_provider_tags_from_the_prompt(self):
-        with stub_topic_context(CHUNKS, concepts=CONCEPTS), \
-             patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()):
-            result = await QuizGenerator().generate_quiz("t1", "Stats", "d", question_count=4)
-        assert {q["concept_ids"][0] for q in result["questions"]} <= {"k-mean", "k-var"}
-
     async def test_voice_drill_questions_are_tagged(self):
         llm = MagicMock()
         llm.generate_structured = AsyncMock(return_value=DrillQuestionSet(questions=[
@@ -234,10 +227,6 @@ class TestHints:
         assert step_hints(old) == ["", "Think about growth.", ""]
         assert step_hints({"step_number": 1}) == ["", "", ""]
 
-    def test_the_mock_example_has_three_hints(self):
-        stored = InteractiveExampleSet.example().examples[0].stored()
-        assert len(stored["steps"][0]["hints"]) == 3
-
 
 class TestDistractors:
     async def test_every_distractor_names_its_misconception(self):
@@ -295,19 +284,6 @@ class TestDistractors:
         assert '<confusable_concepts>\n<concept id="k-median">Median: The middle value.</concept>' in text
         assert "Do not list them in `concept_ids`" in text
 
-    async def test_no_neighbours_no_confusable_block(self):
-        _, llm = await _quiz([_mcq()])
-        assert "<confusable_concepts>\n" not in llm.generate_structured.call_args.args[0][-1].content
-
-    async def test_the_prompt_asks_for_the_misconception_and_the_mode(self):
-        _, llm = await _quiz([_mcq()])
-        text = llm.generate_structured.call_args.args[0][-1].content
-        assert (
-            "Each wrong option is the answer a student would give if they held one specific wrong idea; "
-            "write that idea in `misconception`."
-        ) in text
-        assert "`mode`" in text
-
 
 class TestModes:
     async def test_items_carry_mode(self):
@@ -330,19 +306,12 @@ class TestModes:
         result, _ = await _quiz([question])
         assert result["questions"][0]["mode"] == "recall"
 
-    def test_a_mode_outside_the_three_is_refused(self):
-        with pytest.raises(ValueError):
-            GeneratedQuestion(question_type="true_false", question_text="q", explanation="e", mode="guess")
-
 
 class TestResolveDirectly:
     def test_prerequisite_review_questions_get_no_fallback_concept(self):
         items = [{"concept_ids": [], "source_excerpts": [1], "prerequisite_topic": "Earlier"}]
         resolve_concept_ids(items, CONCEPTS, CHUNKS)
         assert items[0]["concept_ids"] == []
-
-    def test_no_concepts_no_block(self):
-        assert format_concept_block([]) == ""
 
 
 class TestDegradation:

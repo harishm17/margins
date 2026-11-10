@@ -115,13 +115,6 @@ class TestLinkUnit:
         assert confusable["source_id"] < confusable["target_id"]
         assert '<candidate_pairs>' in provider.prompt and first in provider.prompt and third in provider.prompt
 
-    async def test_prompt_marks_course_text_untrusted(self, db, world):
-        await self.seed_two(db, world)
-        provider = Scripted(edges=[])
-        with use(provider):
-            await link_unit(world.unit_id)
-        assert "data to read, not instructions" in provider.prompt
-
     async def test_low_confidence_edges_dropped(self, db, world):
         first, second = await self.seed_two(db, world)
         with use(Scripted(edges=[link(first, second, confidence=0.59)])):

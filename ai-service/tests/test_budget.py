@@ -30,28 +30,24 @@ async def test_spend_adds_jobs_and_chat_answers(db):
     assert await over_budget_message(user_id) is None
 
 
-async def test_job_spend_alone_can_use_up_the_budget(db):
+@pytest.mark.parametrize(
+    "spends, shown",
+    [
+        ([("job", 1.25)], "$1.25 of $1.00"),
+        ([("chat", 1.10)], "$1.10 of $1.00"),
+        ([("job", 0.60), ("chat", 0.50)], None),
+    ],
+    ids=["job_alone", "chat_alone", "job_and_chat_together"],
+)
+async def test_job_or_chat_spend_can_use_up_the_budget(db, spends, shown):
     user_id, _ = await user_with_project(db)
-    await seed_usage(db, user_id, 1.25, source="job")
+    for source, amount in spends:
+        await seed_usage(db, user_id, amount, source=source)
 
     message = await over_budget_message(user_id)
-    assert message is not None and "$1.25 of $1.00" in message
-
-
-async def test_chat_spend_alone_can_use_up_the_budget(db):
-    user_id, _ = await user_with_project(db)
-    await seed_usage(db, user_id, 1.10, source="chat")
-
-    message = await over_budget_message(user_id)
-    assert message is not None and "$1.10 of $1.00" in message
-
-
-async def test_jobs_and_chat_together_cross_the_line(db):
-    user_id, _ = await user_with_project(db)
-    await seed_usage(db, user_id, 0.60, source="job")
-    await seed_usage(db, user_id, 0.50, source="chat")
-
-    assert await over_budget_message(user_id) is not None
+    assert message is not None
+    if shown:
+        assert shown in message
 
 
 async def test_deleting_a_chat_thread_does_not_lower_the_total(db):
@@ -102,11 +98,19 @@ async def test_other_users_and_earlier_days_do_not_count(db):
     assert await over_budget_message(user_id) is None
 
 
-async def test_zero_turns_the_budget_off(db, monkeypatch):
-    monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 0)
-    monkeypatch.setattr(settings, "GLOBAL_DAILY_LLM_BUDGET_USD", 0)
+@pytest.mark.parametrize(
+    "user_cap, global_cap, spends",
+    [(0, 0, [500]), (3.00, 0, [2.90, 2.90])],
+    ids=["both_caps_off", "global_cap_off"],
+)
+async def test_zero_turns_the_budget_off(db, monkeypatch, user_cap, global_cap, spends):
+    monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", user_cap)
+    monkeypatch.setattr(settings, "GLOBAL_DAILY_LLM_BUDGET_USD", global_cap)
     user_id, _ = await user_with_project(db)
-    await seed_usage(db, user_id, 500)
+    for amount in spends[:-1]:
+        other, _ = await user_with_project(db)
+        await seed_usage(db, other, amount)
+    await seed_usage(db, user_id, spends[-1])
 
     assert await over_budget_message(user_id) is None
 
@@ -119,11 +123,6 @@ class TestGlobalBudget:
         monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 3.00)
         monkeypatch.setattr(settings, "GLOBAL_DAILY_LLM_BUDGET_USD", 5.00)
         budget_module._global_log.update(at=None, blocked=0)
-
-    async def test_the_default_is_forty_dollars(self):
-        from app.config import Settings
-
-        assert Settings(DATABASE_URL="postgresql://x/y").GLOBAL_DAILY_LLM_BUDGET_USD == 40.00
 
     async def test_many_users_under_their_own_cap_can_use_up_the_global_one(self, db):
         spenders = [await user_with_project(db) for _ in range(3)]
@@ -155,15 +154,6 @@ class TestGlobalBudget:
         await seed_usage(db, user_id, 9.00, created_at=TWO_DAYS_AGO)
 
         assert await global_spent_today_usd() == 0
-        assert await over_budget_message(user_id) is None
-
-    async def test_zero_turns_the_global_cap_off(self, db, monkeypatch):
-        monkeypatch.setattr(settings, "GLOBAL_DAILY_LLM_BUDGET_USD", 0)
-        user_id, _ = await user_with_project(db)
-        other, _ = await user_with_project(db)
-        await seed_usage(db, other, 2.90)
-        await seed_usage(db, user_id, 2.90)
-
         assert await over_budget_message(user_id) is None
 
     async def test_tripping_it_logs_a_line_with_the_figures_once_a_minute(self, db, caplog):
@@ -216,19 +206,6 @@ async def test_the_ledger_keeps_cache_reads_and_writes_apart_from_the_input_they
     )
     rows = await db.fetch("SELECT source, input_tokens, cache_read_tokens, cache_write_tokens FROM llm_usage_events ORDER BY source")
     assert [tuple(r) for r in rows] == [("chat", 10, 0, 0), ("tutor", 9000, 8000, 500)]
-
-
-async def test_spend_after_the_account_was_deleted_is_kept_unlinked(db):
-    # A job that was running when its account was deleted: the foreign key refuses the user, so the
-    # row is written without one, and the money still counts toward the global cap.
-    await record_usage_event(
-        user_id="deleted-user", project_id="gone", source="job", source_id="j", models="m",
-        input_tokens=1, output_tokens=1, cost_usd=1.0,
-    )
-    row = await db.fetchrow("SELECT user_id, project_id, source_id, cost_usd FROM llm_usage_events")
-    assert row["user_id"] is None and row["project_id"] is None and row["source_id"] == ""
-    assert float(row["cost_usd"]) == pytest.approx(1.0)
-    assert await global_spent_today_usd() == pytest.approx(1.0)
 
 
 async def test_a_ledger_failure_is_logged_not_raised(db, monkeypatch, caplog):

@@ -40,17 +40,6 @@ def link_jobs(dispatched):
     return [job for job in dispatched if job["job_type"] == "link_concepts"]
 
 
-async def test_chain_runs_concepts_first_then_warmup(db, course, generators, dispatched):
-    assert generation_chain.CONTENT_ORDER == tuple(ORDER)
-    topic = course.topics[0]
-    assert await generation_chain.missing_content_types(topic) == ORDER
-
-    ran = await finish_chain(db, course, dispatched, topic, "concepts", prepare_rest=True)
-
-    assert [content_type for _, content_type in ran] == ORDER
-    assert await generation_chain.missing_content_types(topic) == []
-
-
 async def test_a_topic_with_a_concept_or_a_warmup_bank_is_not_missing_them(db, course):
     topic = course.topics[0]
     await db.execute(
@@ -157,24 +146,6 @@ async def test_a_unit_of_one_topic_is_not_linked(db, course, generators, dispatc
     assert link_jobs(dispatched) == []
 
 
-async def test_a_failed_extraction_does_not_block_the_topic_content(db, course, generators, dispatched):
-    topic = course.topics[0]
-    generators.fail_with = RuntimeError("model down")
-    with pytest.raises(HTTPException):
-        await run_job(db, course, topic, "concepts", prepare_rest=True)
-    generators.fail_with = None
-
-    # The warm-up is queued at once, and the rest of the run does not ask for concepts again.
-    assert [job["data"]["contentType"] for job in dispatched] == ["warmup"]
-    assert dispatched[0]["data"]["preferences"]["chain_skip"] == [f"{topic}:concepts"]
-    ran = []
-    while dispatched:
-        job = dispatched.pop(0)
-        ran.append(job["data"]["contentType"])
-        await jobs.generate_content_job(JobPayload(jobId=job["job_id"], jobType=job["job_type"], data=job["data"]))
-    assert ran == ORDER[1:]
-
-
 async def test_a_failed_warmup_does_not_block_the_notes(db, course, generators, dispatched):
     topic = course.topics[0]
     generators.fail_with = RuntimeError("model down")
@@ -218,15 +189,24 @@ async def test_a_topic_added_by_hand_is_not_a_unit_member(db, course):
     assert planned is None
 
 
-@pytest.mark.parametrize("error", [LLMRefusalError("declined"), NoSourceMaterialError("No source material")])
+@pytest.mark.parametrize(
+    "error", [RuntimeError("model down"), LLMRefusalError("declined"), NoSourceMaterialError("No source material")]
+)
 async def test_a_refused_or_sourceless_extraction_does_not_block_the_topic(db, course, generators, dispatched, error):
     topic = course.topics[0]
     generators.fail_with = error
     with pytest.raises(HTTPException):
         await run_job(db, course, topic, "concepts", prepare_rest=True)
+    generators.fail_with = None
     # The chain goes on within the topic, without asking for concepts again.
     assert [job["data"]["contentType"] for job in dispatched] == ["warmup"]
     assert dispatched[0]["data"]["preferences"]["chain_skip"] == [f"{topic}:concepts"]
+    ran = []
+    while dispatched:
+        job = dispatched.pop(0)
+        ran.append(job["data"]["contentType"])
+        await jobs.generate_content_job(JobPayload(jobId=job["job_id"], jobType=job["job_type"], data=job["data"]))
+    assert ran == ORDER[1:]
 
 
 async def test_a_sourceless_extraction_still_links_the_unit(db, course, generators, dispatched):

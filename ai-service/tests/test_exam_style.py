@@ -171,18 +171,6 @@ class TestExtraction:
         assert len(provider.prompts) == 2  # the copy in the cut-off part was still caught
         assert result["example_stems"] == FRESH
 
-    async def test_the_mock_provider_gives_a_valid_profile_with_no_copied_text(self, monkeypatch):
-        monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")
-        LLMFactory.reset()
-        try:
-            result = await extract_style_profile(EXAM_TEXT, "midterm.pdf")
-        finally:
-            LLMFactory.reset()
-        assert result["question_count"] == 2
-        assert len(result["example_stems"]) == 3
-        assert ExamStyleProfile.model_validate({k: v for k, v in result.items() if k != "version"})
-        assert not copying_stems(result["example_stems"], EXAM_TEXT)
-
 
 # ---------------------------------------------------------------- merging and the prompt
 

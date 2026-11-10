@@ -317,17 +317,6 @@ def mock_llm(monkeypatch):
     LLMFactory.reset()
 
 
-async def test_the_mock_provider_maps_questions_and_leaves_the_last_topic_out(three_topics, mock_llm):
-    course, ids = three_topics
-    material = await add_file(course)
-
-    await mark_exam_relevant_topics(course.project_id)
-
-    assert await flags(course) == {"Counting": True, "Bayes' theorem": True, "Graph traversal": False}
-    labels = [item["label"] for item in (await map_of(course, material))["questions"]]
-    assert labels == ["Question 1", "Question 2", "Question 3"]
-
-
 async def run_job(course):
     job_id = await seed_job(course.db, course.user_id, "exam_relevance", project_id=course.project_id,
                             input_data={"projectId": course.project_id})

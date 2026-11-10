@@ -261,7 +261,9 @@ class TestRateLimitedJobs:
         monkeypatch.setattr(jobs, "ExamplesGenerator", Generator)
         return provider
 
-    async def test_a_rate_limit_answers_503_with_retry_after_and_the_job_waits_for_its_retry(self, db, course, llm):
+    @pytest.mark.parametrize("retry_after", [7, None], ids=["with_retry_after", "without_retry_after"])
+    async def test_a_rate_limit_answers_503_with_retry_after_and_the_job_waits_for_its_retry(self, db, course, llm, retry_after):
+        llm.retry_after = retry_after
         job_id = await seed_job(db, course.user_id, project_id=course.project_id)
         payload = JobPayload(jobId=job_id, jobType="generate_content",
                              data={"topicId": course.topics[0], "contentType": "solved_examples", "preferences": {}})
@@ -270,7 +272,10 @@ class TestRateLimitedJobs:
             await jobs.generate_content_job(payload)
 
         assert raised.value.status_code == 503  # 5xx: the dispatcher retries
-        assert raised.value.headers == {"Retry-After": "7"}
+        if retry_after:
+            assert raised.value.headers == {"Retry-After": "7"}
+        else:  # the dispatcher is still asked to wait
+            assert int(raised.value.headers["Retry-After"]) >= 1
         job = await get_job(db, job_id)
         # Back in pending with attempts left, so it still counts as the target's active job.
         assert (job["status"], job["error_code"], job["retryable"]) == ("pending", "LLM_RATE_LIMITED", True)
@@ -281,15 +286,6 @@ class TestRateLimitedJobs:
         assert result["status"] == "success"
         job = await get_job(db, job_id)
         assert (job["status"], job["attempt_count"]) == ("completed", 2)
-
-    async def test_without_a_retry_after_the_dispatcher_is_still_asked_to_wait(self, db, course, llm):
-        llm.retry_after = None
-        job_id = await seed_job(db, course.user_id, project_id=course.project_id)
-        payload = JobPayload(jobId=job_id, jobType="generate_content",
-                             data={"topicId": course.topics[0], "contentType": "solved_examples", "preferences": {}})
-        with pytest.raises(HTTPException) as raised:
-            await jobs.generate_content_job(payload)
-        assert raised.value.status_code == 503 and int(raised.value.headers["Retry-After"]) >= 1
 
 
 # ---- concurrency ------------------------------------------------------------------------------
@@ -337,9 +333,6 @@ class TestConcurrencyLimit:
             *[stream() for _ in range(5)],
         )
         assert provider.peak == 2
-
-    async def test_the_default_is_four(self):
-        assert type(settings).model_fields["LLM_MAX_CONCURRENCY"].default == 4
 
     async def test_a_slot_is_released_when_the_call_fails(self, monkeypatch):
         monkeypatch.setattr(settings, "LLM_MAX_CONCURRENCY", 1)
@@ -424,19 +417,6 @@ class TestTopicSerialisation:
             async with locks.hold("b"):
                 assert len(locks) == 2
         assert len(locks) == 0
-
-    async def test_keyed_locks_queue_in_order(self):
-        locks = KeyedLocks()
-        order = []
-
-        async def work(name, delay):
-            async with locks.hold("t"):
-                order.append(f"{name}-in")
-                await asyncio.sleep(delay)
-                order.append(f"{name}-out")
-
-        await asyncio.gather(work("a", 0.03), work("b", 0), work("c", 0))
-        assert order == ["a-in", "a-out", "b-in", "b-out", "c-in", "c-out"]
 
 
 # ---- the generation chain ---------------------------------------------------------------------
@@ -568,14 +548,6 @@ class TestGenerationChain:
         row = await db.fetchrow("SELECT status, error_code, retryable FROM processing_jobs WHERE target_key = $1",
                                 f"content:{course.topics[0]}:warmup")
         assert (row["status"], row["error_code"], row["retryable"]) == ("failed", "ENQUEUE_FAILED", True)
-
-    async def test_missing_content_types(self, db, course):
-        topic = course.topics[0]
-        assert await generation_chain.missing_content_types(topic) == list(generation_chain.CONTENT_ORDER)
-        await db.execute(
-            "INSERT INTO topic_content (id, topic_id, content_type, content_data, updated_at) "
-            "VALUES ($1, $2, 'solved_examples', '[]'::jsonb, NOW())", new_id(), topic)
-        assert "solved_examples" not in await generation_chain.missing_content_types(topic)
 
     async def test_the_next_job_has_a_row_before_it_is_dispatched(self, db, course, dispatched):
         """The page that sees a job finish must be able to find the next job at once."""

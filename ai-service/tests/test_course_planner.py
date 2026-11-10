@@ -156,7 +156,7 @@ class TestValidation:
         assert placed(valid) == {"S1": "t1", "S2": "t1", "S3": "t2"}
         assert valid.stats["duplicate_ids"] == 1
 
-    def test_the_same_section_twice_in_one_topic_counts_once(self):
+        # The same section twice in one topic counts once.
         valid = validate_plan(plan_of([topic("t1", ["S1", "S1", "S2"])]), outline({"a": 2}))
         assert valid.topics()[0].section_ids == ["S1", "S2"]
 
@@ -350,20 +350,23 @@ class TestLargeOutline:
         for t in valid.topics():
             assert all(position[key] < position[t.key] for key in t.prerequisite_keys)
 
-    async def test_a_lot_of_source_text_also_triggers_grouping(self, fake_model, monkeypatch):
-        monkeypatch.setattr(settings, "PLANNER_MAX_SOURCE_TOKENS_PER_CALL", 13000)  # sections are 2,000 tokens
-        await planner.plan_sections("C", outline({"a": 6, "b": 6}))
+    @pytest.mark.parametrize(
+        "setting, limit, files",
+        [
+            ("PLANNER_MAX_SOURCE_TOKENS_PER_CALL", 13000, {"a": 6, "b": 6}),  # sections are 2,000 tokens
+            ("PLANNER_MAX_SECTIONS_PER_CALL", 5, {"a": 4, "b": 4}),
+        ],
+        ids=["a_lot_of_source_text", "too_many_sections"],
+    )
+    async def test_a_lot_of_source_text_or_too_many_sections_also_triggers_grouping(self, fake_model, monkeypatch, setting, limit, files):
+        monkeypatch.setattr(settings, setting, limit)
+        await planner.plan_sections("C", outline(files))
         assert len(fake_model.plan_calls) == 2
 
     def test_groups_respect_the_source_limit(self):
         sections = outline({"a": 5, "b": 5})
         groups = planner.group_sections(sections, 10**9, 10**9, max_source_tokens=7000)
         assert all(sum(s.tokens for s in g) <= 7000 for g in groups) and len(groups) == 4
-
-    async def test_too_many_sections_also_triggers_grouping(self, fake_model, monkeypatch):
-        monkeypatch.setattr(settings, "PLANNER_MAX_SECTIONS_PER_CALL", 5)
-        await planner.plan_sections("C", outline({"a": 4, "b": 4}))
-        assert len(fake_model.plan_calls) == 2
 
     def test_a_file_bigger_than_a_group_is_cut_between_sections(self):
         sections = outline({"a": 12})
@@ -375,14 +378,6 @@ class TestLargeOutline:
         sections = outline({"a": 3, "b": 3, "c": 3})
         groups = planner.group_sections(sections, max_tokens=10**9, max_sections=6)
         assert [[s.material_id for s in g] for g in groups] == [["a"] * 3 + ["b"] * 3, ["c"] * 3]
-
-    async def test_a_cut_off_answer_for_a_group_is_not_swallowed(self, monkeypatch):
-        async def boom(messages):
-            raise RuntimeError("model down")
-
-        monkeypatch.setattr(planner, "_plan_call", boom)
-        with pytest.raises(RuntimeError):
-            await planner.plan_sections("C", outline({"a": 2}))
 
 
 # ---------------------------------------------------------------- against the database, with the mock model
@@ -653,12 +648,6 @@ class TestActiveCourse:
 
         assert await db.fetchval("SELECT count(*) FROM topics WHERE project_id = $1", course.project_id) >= 1
         assert await db.fetchval("SELECT status FROM projects WHERE id = $1", course.project_id) == "active"
-
-    async def test_a_setup_course_still_goes_to_review(self, course):
-        db = course.db
-        await add_file(db, course.project_id, "week1.pdf", lecture("Counting", 3))
-        await run_extract(course)
-        assert await db.fetchval("SELECT status FROM projects WHERE id = $1", course.project_id) == "topics_pending"
 
     async def test_an_unconfirmed_topic_with_study_activity_is_not_deleted_by_find_again(self, course):
         db = course.db

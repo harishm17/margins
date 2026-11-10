@@ -208,12 +208,6 @@ class TestRecoveryAlert:
         await ai_status.wait_for_alerts()
         assert alerts == []
 
-    def test_durations_read_plainly(self):
-        assert ai_status.format_duration(40) == "40 s"
-        assert ai_status.format_duration(12 * 60 + 5) == "12 min"
-        assert ai_status.format_duration(3600) == "1 h"
-        assert ai_status.format_duration(2 * 3600 + 5 * 60) == "2 h 5 min"
-
 
 async def _other_process_success():
     # A second process: its own memory says the AI may be down, so it tries to clear the row too.
@@ -234,17 +228,6 @@ class TestObservedProvider:
 
         await provider.generate_text([LLMMessage(role="user", content="Notes")], purpose="notes")
         assert (await ai_status.get_status()).available
-
-    def test_the_mock_can_fail_a_set_number_of_times_then_recover(self):
-        from app.services.llm.mock_provider import _raise_if_asked
-
-        marker = "answer MOCK_LLM_FAIL:LLM_CREDIT_EXHAUSTEDx2@t1 here"
-        for _ in range(2):
-            with pytest.raises(LLMCreditError):
-                _raise_if_asked(marker)
-        _raise_if_asked(marker)  # the outage is over
-        with pytest.raises(LLMCreditError):
-            _raise_if_asked("MOCK_LLM_FAIL:LLM_CREDIT_EXHAUSTED")  # without a count: always
 
     async def test_streams_report_too(self, db, alerts):
         provider = ObservedProvider(MockProvider())

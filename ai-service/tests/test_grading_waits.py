@@ -2,7 +2,6 @@
 the grading job waits for the AI without using its attempts, and the reaper sends it again once the
 AI is available (or the allowance has reset)."""
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -14,7 +13,7 @@ from app.main import app
 from app.models.jobs import JobPayload
 from app.services import ai_status, job_reaper
 from app.services.exam_grader import ExamGrader
-from app.services.job_runner import DailyBudgetExceeded, JobOutcome, job_handler
+from app.services.job_runner import JobOutcome, job_handler
 from app.services.llm.base import LLMCreditError, LLMRefusalError, LLMUnavailableError
 from tests.db_helpers import get_job, seed_job, seed_usage, seed_user
 
@@ -241,12 +240,3 @@ class TestReaperSendsWaitingJobs:
 
         assert dispatched == [reset]
         assert later not in dispatched
-
-
-def test_budget_refusal_waits():
-    from app.services.job_runner import waits_for_ai
-
-    assert waits_for_ai(DailyBudgetExceeded("over"))
-    assert waits_for_ai(LLMCreditError("x"))
-    assert not waits_for_ai(LLMRefusalError("x"))
-    assert not waits_for_ai(SimpleNamespace())

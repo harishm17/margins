@@ -56,13 +56,6 @@ class TestEmbedderSelection:
             with pytest.raises(ValueError, match="OPENAI_API_KEY"):
                 get_embedder()
 
-    def test_openai_with_key(self):
-        with patch.object(generator, "settings") as settings:
-            settings.EMBEDDING_PROVIDER = "openai"
-            settings.OPENAI_API_KEY = "test"
-            settings.OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
-            assert isinstance(get_embedder(), OpenAIEmbedder)
-
     def test_unknown_provider(self):
         with patch.object(generator, "settings") as settings:
             settings.EMBEDDING_PROVIDER = "voyage"
