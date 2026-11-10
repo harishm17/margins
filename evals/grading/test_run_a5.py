@@ -142,3 +142,62 @@ def test_the_captured_request_follows_the_grading_flag(monkeypatch, flag, schema
     capture = asyncio.run(run_a5.capture_requests(dataset))
     assert capture.schemas[0].__name__ == schema
     assert capture.messages[0][0].content == (GRADER_SYSTEM_PROMPT_V2 if grader_prompt == "v2" else GRADER_SYSTEM_PROMPT)
+
+
+# ---------------------------------------------------------------------------- the recall grader arm
+
+RECALL_ENTRY = {
+    "pid": "p1",
+    "prompt": "Why does a metal spoon feel colder than a wooden one?",
+    "claims": [
+        {"id": "c1", "concept_name": "Heat", "text": "Metal conducts heat away from the hand faster than wood does.", "quote": "", "page": 3},
+        {"id": "c2", "concept_name": "Heat", "text": "Both spoons are at the same temperature.", "quote": "", "page": 3},
+    ],
+}
+RECALL_ANSWER = {
+    "n": 0,
+    "kind": "full",
+    "gradable": True,
+    "text": "The metal pulls heat out of your hand much faster than the wood does.",
+    "labels": {"c1": "covered", "c2": "missing"},
+    "reasoning_gap": {},
+}
+
+
+@pytest.mark.parametrize("flag, schema", [("", "RecallGradeResult"), ("tutor", "RecallGradeResultV2")])
+def test_the_captured_recall_requests_follow_the_flag_and_skip_unreadable_answers(monkeypatch, flag, schema):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "PROMPTS_V2", flag)
+    unreadable = dict(RECALL_ANSWER, n=1, gradable=False, labels={}, text="idk")
+    dataset = [dict(RECALL_ENTRY, answers=[RECALL_ANSWER, unreadable])]
+    capture = asyncio.run(run_a5.capture_recall_requests(dataset))
+    assert [s.__name__ for s in capture.schemas] == [schema]
+
+
+def recall_row_for(kind, gradable, status, claims):
+    return {"arm": "app", "pid": "p1", "n": 0, "kind": kind, "gradable": gradable, "outcome": "ok", "status": status, "claims": claims}
+
+
+def claim(expected, verdict, gap_expected=None, gap_got=None):
+    return {"expected": expected, "verdict": verdict, "gap_expected": gap_expected, "gap_got": gap_got}
+
+
+def test_recall_aggregate_counts_agreement_confusion_and_flagged_answers():
+    rows = [
+        recall_row_for("full", True, "graded", [claim("covered", "covered", True, True), claim("covered", "covered", False, True)]),
+        recall_row_for("contradicted", True, "graded", [claim("incorrect", "covered"), claim("covered", "missing")]),
+        recall_row_for("full", True, "ungraded", [claim("covered", None), claim("covered", None)]),
+        recall_row_for("noise", False, "ungraded", []),
+        recall_row_for("noise", False, "graded", []),
+    ]
+    arm = run_a5.aggregate_recall(rows)["arms"]["app"]
+    assert arm["verdict_accuracy"] == {"count": 2, "of": 4, "rate": pytest.approx(0.5)}
+    assert (arm["answers_all_right"]["count"], arm["answers_all_right"]["of"]) == (1, 2)
+    assert (arm["false_credit"]["count"], arm["false_credit"]["of"]) == (1, 1)
+    assert (arm["credit_withheld"]["count"], arm["credit_withheld"]["of"]) == (1, 3)
+    assert arm["ungradable_flagged"] == {"count": 1, "of": 2, "rate": pytest.approx(0.5)}
+    assert arm["gradable_held_back"] == {"count": 1, "of": 3, "rate": pytest.approx(1 / 3)}
+    assert arm["reasoning_gap_agreement"] == {"count": 1, "of": 2, "rate": pytest.approx(0.5)}
+    assert arm["confusion"]["incorrect"] == {"covered": 1}
+    assert arm["by_kind"]["full"]["of"] == 2
