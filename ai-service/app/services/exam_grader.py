@@ -7,13 +7,13 @@ import asyncio
 import logging
 import math
 import re
-from html import escape
 from typing import Any, Dict, List, Optional
 from datetime import UTC, datetime
 
 from app.services.ai_status import PROVIDER_DOWN_CODES, TRANSIENT_CODES
 from app.services.budget import DailyBudgetExceeded
 from app.services.llm.base import LLMBusyError, LLMError, LLMMessage
+from app.services.llm import untrusted
 from app.services.llm.factory import LLMFactory
 from app.prompt_revision import prompts_v2
 from app.services.llm.schemas import ShortAnswerGrade, ShortAnswerGradeV2
@@ -109,29 +109,26 @@ def _points_from_criteria(criteria: List[Dict[str, str]], max_points: float) -> 
     return round(mean * max_points, 2)
 
 
-def _escape_block(text: Any) -> str:
-    """Authored text placed in a tag: markup escaped so nothing in it can close the tag."""
-    return escape(str(text).strip(), quote=False)
-
-
 def _short_answer_prompt_v2(
     question: Dict, sample_answer: Any, key_points: List[str], max_points: Any, student_answer: str,
     student_thinking: Optional[str], concept_ids: List[str],
 ) -> str:
-    blocks = [f"<question>\n{_escape_block(question['question_text'])}\n</question>"]
+    # One rule for untrusted text (llm/untrusted.py): maths in keys and answers stays as written (the earlier `&lt;`
+    # escape damaged it), and nothing inside can close a block.
+    blocks = [untrusted.tag("question", str(question["question_text"]).strip())]
     blocks.append(
-        f"<sample_answer>\n{_escape_block(sample_answer)}\n</sample_answer>\nThe sample answer is one acceptable answer, not the only one."
+        untrusted.tag("sample_answer", str(sample_answer).strip())
+        + "\nThe sample answer is one acceptable answer, not the only one."
     )
     if key_points:
-        listed = "\n".join(f"- {_escape_block(point)}" for point in key_points)
-        blocks.append(f"<key_points>\n{listed}\n</key_points>")
-    blocks.append(_fence_student_answer(student_answer))
+        blocks.append(untrusted.tag("key_points", "\n".join(f"- {str(point).strip()}" for point in key_points)))
+    blocks.append(untrusted.tag("student_answer", student_answer))
     if student_thinking and student_thinking.strip():
-        blocks.append(_fence_student_thinking(student_thinking))
+        blocks.append(untrusted.tag("student_thinking", student_thinking))
     if concept_ids:
-        listed = "\n".join(f"- {_escape_block(concept_id)}" for concept_id in concept_ids)
         blocks.append(
-            f"<concepts>\n{listed}\n</concepts>\nIf the answer falls short and the gap is clearly in one of these concepts, "
+            untrusted.tag("concepts", "\n".join(f"- {concept_id}" for concept_id in concept_ids))
+            + "\nIf the answer falls short and the gap is clearly in one of these concepts, "
             "name it in blamed_concept_id. Otherwise leave it out."
         )
     if key_points:

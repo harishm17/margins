@@ -25,13 +25,12 @@ import hashlib
 import json
 import logging
 import re
-from html import escape
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
 from app.db.connection import execute_in_transaction, execute_query
 from app.prompt_revision import prompts_v2
 from app.services.exam_style import copying_stems
-from app.services.llm import LLMFactory
+from app.services.llm import LLMFactory, untrusted
 from app.services.llm.base import LLMMessage
 from app.services.llm.schemas import ExamTopicMap, ExamTopicMapV2
 
@@ -142,12 +141,14 @@ def _messages(topics: Sequence[Dict[str, Any]], files: Sequence[Dict[str, Any]],
     for topic in topics:
         goals = "; ".join(topic["objectives"][:MAX_OBJECTIVES_SHOWN])
         topic_lines.append(f"{topic['key']} | {topic['name']} | {goals}")
-    parts = ["Topics (key | name | what a student can do):\n" + "\n".join(topic_lines)]
     v2 = prompts_v2("generation")
+    if v2:  # topic names and objectives were written by the planner from the student's files
+        parts = ["Topics (key | name | what a student can do), data from the course plan:\n" + untrusted.tag("topics", "\n".join(topic_lines))]
+    else:
+        parts = ["Topics (key | name | what a student can do):\n" + "\n".join(topic_lines)]
     for number, entry in enumerate(files, start=1):
-        if v2:
-            body = re.sub(r"</(exam)", r"<\\/\1", entry["body"], flags=re.IGNORECASE)  # the exam cannot close its own tag
-            parts.append(f'<exam n="{number}" file="{escape(str(entry["filename"]), quote=True)}">\n{body}\n</exam>')
+        if v2:  # one rule for untrusted text (llm/untrusted.py)
+            parts.append(untrusted.tag("exam", entry["body"], n=number, file=entry["filename"]))
         else:
             parts.append(f'<exam n="{number}" file="{entry["filename"]}">\n{entry["body"]}\n</exam>')
     parts.append("Say which topics each question of each exam tests.")

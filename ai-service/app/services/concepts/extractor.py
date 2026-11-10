@@ -16,6 +16,7 @@ from app.services.content_generator.context import NoSourceMaterialError, _pages
 from app.services.llm.base import LLMMessage, LLMOutputError
 from app.services.llm.factory import LLMFactory
 from app.prompt_revision import prompts_v2
+from app.services.llm import untrusted
 from app.services.llm.schemas import EDGE_TYPE_DEFINITIONS, ConceptExtraction, ConceptExtractionV2
 
 logger = logging.getLogger(__name__)
@@ -113,10 +114,12 @@ def format_excerpts(topic: Dict[str, Any], chunks: List[Dict[str, Any]], course_
     if prompts_v2("ingest"):
         # The name and description are planner output built from the student's files, and the course
         # map holds other topics' names: tag them as data like the excerpts.
-        parts = ["<topic>", f"Topic: {topic['name']}", f"Description: {topic.get('description') or 'n/a'}", "</topic>"]
+        v2 = True
+        parts = [untrusted.tag("topic", f"Topic: {topic['name']}\nDescription: {topic.get('description') or 'n/a'}")]
         if course_map:
-            parts += ["", "<course_map>", course_map, "</course_map>"]
+            parts += ["", untrusted.tag("course_map", course_map)]
     else:
+        v2 = False
         parts = [f"Topic: {topic['name']}", f"Description: {topic.get('description') or 'n/a'}"]
         if course_map:
             parts += ["", course_map]
@@ -130,6 +133,12 @@ def format_excerpts(topic: Dict[str, Any], chunks: List[Dict[str, Any]], course_
         text = str(chunk.get("chunk_text") or "").strip()
         if not text:
             continue
+        if v2:  # one rule for untrusted text (llm/untrusted.py)
+            parts.append(untrusted.tag(
+                "excerpt", text, chunk_id=chunk["id"], source=chunk.get("filename") or "unknown file",
+                location=_pages(chunk), section=chunk.get("section_hierarchy") or "n/a",
+            ))
+            continue
         parts.append(
             f'<excerpt chunk_id="{chunk["id"]}" source="{chunk.get("filename") or "unknown file"}" '
             f'location="{_pages(chunk)}" section="{chunk.get("section_hierarchy") or "n/a"}">\n{text}\n</excerpt>'
@@ -141,6 +150,9 @@ def format_excerpts(topic: Dict[str, Any], chunks: List[Dict[str, Any]], course_
 def format_objectives(objectives: List[str]) -> str:
     if not objectives:
         return "<objectives>\nThe topic lists no objectives: serve the topic description instead.\n</objectives>"
+    if prompts_v2("ingest"):
+        lines = [untrusted.inline("objective", text, index=i) for i, text in enumerate(objectives)]
+        return "<objectives>\n" + "\n".join(lines) + "\n</objectives>"
     lines = [f'<objective index="{i}">{text}</objective>' for i, text in enumerate(objectives)]
     return "<objectives>\n" + "\n".join(lines) + "\n</objectives>"
 
@@ -148,6 +160,12 @@ def format_objectives(objectives: List[str]) -> str:
 def format_prior_concepts(prior: Dict[str, dict]) -> str:
     if not prior:
         return "<prerequisite_concepts>\nNone: no prerequisite topic has concepts yet.\n</prerequisite_concepts>"
+    if prompts_v2("ingest"):
+        lines = [
+            untrusted.inline("concept", f'{concept["name"]}: {concept["summary"]}', id=concept_id)
+            for concept_id, concept in prior.items()
+        ]
+        return "<prerequisite_concepts>\n" + "\n".join(lines) + "\n</prerequisite_concepts>"
     lines = [
         f'<concept id="{concept_id}">{concept["name"]}: {concept["summary"]}</concept>'
         for concept_id, concept in prior.items()

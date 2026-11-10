@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 from app.prompt_revision import prompts_v2
 from app.services.concepts.validate import normalize
 from app.services.llm.base import LLMMessage, LLMUnavailableError
+from app.services.llm import untrusted
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import SupportReport
 
@@ -92,12 +93,22 @@ def _messages(items: Sequence[Dict[str, Any]], cited: List[List[int]], chunks: S
     if any(not indexes for indexes in cited):
         # An item that cites nothing is checked against everything the generator saw.
         shown = list(range(1, len(chunks) + 1))
-    excerpts = "\n".join(
-        f'<excerpt index="{i}">\n{str(chunks[i - 1].get("chunk_text") or "").strip()}\n</excerpt>' for i in shown
-    )
+    def text_of(i: int) -> str:
+        return str(chunks[i - 1].get("chunk_text") or "").strip()
+
+    if v2:  # one rule for untrusted text (llm/untrusted.py); maths in excerpts and keys stays as written
+        excerpts = "\n".join(untrusted.tag("excerpt", text_of(i), index=i) for i in shown)
+    else:
+        excerpts = "\n".join(f'<excerpt index="{i}">\n{text_of(i)}\n</excerpt>' for i in shown)
     blocks = []
     for item_id, (item, indexes) in enumerate(zip(items, cited), 1):
         listed = ",".join(str(i) for i in (indexes or shown))
+        if v2:
+            blocks.append(
+                f'<item id="{item_id}" excerpts="{listed}">\n{untrusted.inline("question", _question_text(item))}\n'
+                f'{untrusted.tag("answer_key", _answer_key(item))}\n</item>'
+            )
+            continue
         blocks.append(
             f'<item id="{item_id}" excerpts="{listed}">\n<question>{escape(_question_text(item), quote=False)}</question>\n'
             f"<answer_key>\n{escape(_answer_key(item), quote=False)}\n</answer_key>\n</item>"

@@ -12,6 +12,7 @@ from app.services.concepts.validate import validate_links
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import LLMFactory
 from app.prompt_revision import prompts_v2
+from app.services.llm import untrusted
 from app.services.concepts.validate import MIN_LINK_CONFIDENCE
 from app.services.llm.schemas import EDGE_TYPE_DEFINITIONS, ConceptLinks, ConceptLinksV2
 
@@ -72,8 +73,15 @@ def link_messages(
 ) -> List[LLMMessage]:
     shown = sorted({concept_id for pair in pairs for concept_id in pair})
     lines = []
+    v2 = prompts_v2("ingest")
     for concept_id in shown:
         concept = concepts[concept_id]
+        if v2:  # one rule for untrusted text (llm/untrusted.py)
+            body = "".join("\n" + untrusted.inline("quote", quote) for quote in quotes.get(concept_id, []))
+            text = untrusted.neutralise(f'{concept["name"]}: {concept["summary"]}', ("concept",))
+            topic = untrusted.attr(topic_names.get(concept["topic_id"], ""))
+            lines.append(f'<concept id="{untrusted.attr(concept_id)}" topic="{topic}">{text}{body}\n</concept>')
+            continue
         body = "".join(f"\n<quote>{quote}</quote>" for quote in quotes.get(concept_id, []))
         lines.append(
             f'<concept id="{concept_id}" topic="{topic_names.get(concept["topic_id"], "")}">'

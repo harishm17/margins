@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Sequence
 
 from app.db.connection import UTC_NOW, execute_in_transaction, execute_query
 from app.prompt_revision import prompts_v2
+from app.services.llm import untrusted
 from app.services.concepts.validate import MIN_LINK_CONFIDENCE
 from app.services.content_generator.context import (
     NoSourceMaterialError,
@@ -150,8 +151,21 @@ def _normalise_requests(requests: Sequence[Dict[str, Any]], known: Dict[str, Dic
 def _format_requests(wanted: List[Dict[str, Any]], known: Dict[str, Dict[str, Any]],
                      partners: Dict[str, List[Dict[str, Any]]]) -> str:
     blocks = []
+    v2 = prompts_v2("generation")
     for request in wanted:
         concept = known[request["concept_id"]]
+        if v2:  # one rule for untrusted text (llm/untrusted.py)
+            lines = [untrusted.neutralise(f'{concept["name"]}: {concept["summary"]}', ("request",))]
+            if request["mode"] == "discrimination":
+                for twin in partners.get(request["concept_id"], [])[:2]:
+                    lines.append(untrusted.inline("confusable", f'{twin["name"]}: {twin["summary"]}', concept_id=twin["id"]))
+            attrs = " ".join(
+                f'{key}="{untrusted.attr(value)}"'
+                for key, value in (("concept_id", request["concept_id"]), ("mode", request["mode"]),
+                                   ("difficulty", request["difficulty"]), ("count", ITEMS_PER_CONCEPT))
+            )
+            blocks.append(f"<request {attrs}>\n" + "\n".join(lines) + "\n</request>")
+            continue
         lines = [f'{concept["name"]}: {concept["summary"]}']
         if request["mode"] == "discrimination":
             for twin in partners.get(request["concept_id"], [])[:2]:
