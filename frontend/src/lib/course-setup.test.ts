@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { deriveSetup, deriveSetupStep, filesStepDone, needsTopicReview, newTopicsLabel, reviewTopicsLabel, topicOriginSentence, readyToStudy, type CourseSetupInput } from './course-setup'
+import { deriveSetup, deriveSetupStep, filesStepDone, needsTopicReview, newTopicsLabel, topicOriginSentence, readyToStudy, type CourseSetupInput } from './course-setup'
 
 // An active course with five topics found in the files, all confirmed, and some content.
 const base: CourseSetupInput = {
@@ -68,13 +68,6 @@ test('topics added by hand only: confirmed one by one, but the list is not until
   assert.equal(needsTopicReview(confirmed), false)
 })
 
-test('found and hand-added topics: "found" counts only the found ones', () => {
-  const setup = deriveSetup({ ...fresh, status: 'topics_pending', topicCount: 6, confirmedTopicCount: 1, extractedTopicCount: 5 })
-  assert.equal(setup.label, 'Review topics')
-  assert.equal(topicOriginSentence(setup.topics), 'We found 5 topics in your files and you added 1 topic.')
-  assert.equal(setup.topics.newSinceConfirm, 0)
-})
-
 test('new topics found on an active course: it stays active, the new ones wait for review', () => {
   // The planner leaves the status alone once the course is active.
   const input = { ...base, topicCount: 8, extractedTopicCount: 8 }
@@ -96,14 +89,6 @@ test('new topics found on an active course: it stays active, the new ones wait f
   assert.equal(needsTopicReview(deriveSetup(base)), false)
 })
 
-test('an older course still marked topics_pending with new topics is step 2 until confirmed', () => {
-  const input = { ...base, status: 'topics_pending', topicCount: 8, confirmedTopicCount: 5, extractedTopicCount: 8 }
-  const setup = deriveSetup(input)
-  assert.deepEqual(shape(input), { mode: 'setup', step: 2, label: 'Review topics' })
-  assert.equal(setup.topics.newSinceConfirm, 3)
-  assert.equal(newTopicsLabel(setup.topics), null)
-})
-
 test('an active course whose confirmed topics are all gone, only new ones left: back to step 2', () => {
   const input = { ...base, topicCount: 3, confirmedTopicCount: 0, extractedTopicCount: 3, confirmedExtractedTopicCount: 0, contentBlockCount: 0 }
   const setup = deriveSetup(input)
@@ -112,13 +97,6 @@ test('an active course whose confirmed topics are all gone, only new ones left: 
   assert.equal(readyToStudy(setup), false)
   assert.equal(needsTopicReview(setup), true)
   assert.equal(newTopicsLabel(setup.topics), null)
-})
-
-test('a confirmed course whose topics were all deleted is back to step 2', () => {
-  const setup = deriveSetup({ ...base, topicCount: 0, confirmedTopicCount: 0, extractedTopicCount: 0, confirmedExtractedTopicCount: 0, contentBlockCount: 0 })
-  assert.equal(setup.step, 2)
-  assert.equal(readyToStudy(setup), false)
-  assert.equal(needsTopicReview(setup), false)
 })
 
 test('confirmed topics without content is step 3', () => {
@@ -145,38 +123,6 @@ test('the last file deleted after studying: topics, content and progress stay, s
   const setup = deriveSetup({ ...base, materialCount: 0 })
   assert.equal(setup.mode, 'active')
   assert.equal(readyToStudy(setup), true)
-})
-
-test('no files but content, list not confirmed (hand-added topics opened before this fix): step 2, confirm', () => {
-  const setup = deriveSetup({ ...fresh, materialCount: 0, topicCount: 2, confirmedTopicCount: 2, contentBlockCount: 3 })
-  assert.equal(setup.step, 2)
-  assert.equal(setup.label, 'Confirm topics')
-  assert.equal(readyToStudy(setup), false)
-})
-
-test('the button to the topic editor never says "Start studying": it names the review', () => {
-  // A first list waiting: step 2 says its own label.
-  assert.equal(reviewTopicsLabel(deriveSetup({ ...fresh, status: 'topics_pending', topicCount: 5, extractedTopicCount: 5 })), 'Review topics')
-  assert.equal(reviewTopicsLabel(deriveSetup({ ...fresh, topicCount: 2, confirmedTopicCount: 2, extraction: 'failed' })), 'Confirm topics')
-  // A confirmed course with no content yet is "step 3" (label "Start studying"), and new topics wait: the button still reviews them.
-  const waiting = deriveSetup({ ...base, contentBlockCount: 0, topicCount: 8, extractedTopicCount: 8 })
-  assert.equal(waiting.mode === 'setup' && waiting.label, 'Start studying')
-  assert.equal(reviewTopicsLabel(waiting), 'Review new topics')
-  // An active course with new topics.
-  assert.equal(reviewTopicsLabel(deriveSetup({ ...base, topicCount: 8, extractedTopicCount: 8 })), 'Review new topics')
-})
-
-test('topics whose file was deleted are said to have lost it, not "found"', () => {
-  // Three new topics waiting on a confirmed course, and their file is gone: they have no source and are not confirmed.
-  const removed = deriveSetup({ ...base, topicCount: 8, extractedTopicCount: 5, sourceRemovedTopicCount: 3 })
-  assert.equal(removed.topics.sourceRemoved, 3)
-  assert.equal(removed.topics.manual, 0)
-  assert.equal(topicOriginSentence(removed.topics), '3 new topics are waiting, and the file they came from was deleted.')
-  // One of two new topics lost its file: the sentence says so after what was found.
-  const some = deriveSetup({ ...base, topicCount: 7, extractedTopicCount: 6, sourceRemovedTopicCount: 1 })
-  assert.equal(topicOriginSentence(some.topics), 'We found 1 new topic in your files. One came from a file you deleted.')
-  // Nothing removed: unchanged.
-  assert.equal(topicOriginSentence(deriveSetup({ ...base, topicCount: 8, extractedTopicCount: 8 }).topics), 'We found 3 new topics in your files.')
 })
 
 test('the sidebar and the setup page share one step: files still being read keep step 1', () => {

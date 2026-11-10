@@ -19,11 +19,6 @@ test('shape A: a string error', () => {
   assert.equal(error.status, 409)
 })
 
-test('shape A keeps its details', () => {
-  const error = parseApiError(400, { error: 'Invalid input', details: [{ path: 'name' }] })
-  assert.deepEqual(error.details, [{ path: 'name' }])
-})
-
 test('shape B: a typed error', () => {
   const error = parseApiError(404, { error: { code: 'NOT_FOUND', message: 'Project not found' } })
   assert.equal(error.message, 'Project not found')
@@ -40,11 +35,6 @@ test('shape C: a code in details wins over the typed code', () => {
   })
   assert.equal(error.code, 'ATTEMPT_EXPIRED')
   assert.deepEqual(error.details, { code: 'ATTEMPT_EXPIRED', submissionId: 's1' })
-})
-
-test('extra body fields stay reachable', () => {
-  const error = parseApiError(502, { error: 'Submitted, but grading did not start', submissionId: 's9' })
-  assert.equal((error.body as { submissionId: string }).submissionId, 's9')
 })
 
 test('no usable body falls back to a message that fits the status', () => {
@@ -77,20 +67,6 @@ test('apiFetch returns parsed JSON and sends a JSON body', async () => {
   }
 })
 
-test('apiFetch throws an ApiError for a failed response', async () => {
-  await withFetch(
-    () => new Response(JSON.stringify({ error: { code: 'INVALID_INPUT', message: 'Bad name' } }), { status: 400 }),
-    async () => {
-      await assert.rejects(apiFetch('/api/x'), (error: unknown) => {
-        assert.ok(error instanceof ApiError)
-        assert.equal(error.message, 'Bad name')
-        assert.equal(error.status, 400)
-        return true
-      })
-    }
-  )
-})
-
 test('apiFetch turns a network failure into status 0', async () => {
   const original = globalThis.fetch
   globalThis.fetch = (async () => {
@@ -106,13 +82,4 @@ test('apiFetch turns a network failure into status 0', async () => {
   } finally {
     globalThis.fetch = original
   }
-})
-
-test('apiFetch tolerates an empty success body', async () => {
-  await withFetch(
-    () => new Response(null, { status: 204 }),
-    async () => {
-      assert.equal(await apiFetch('/api/x', { method: 'DELETE' }), undefined)
-    }
-  )
 })

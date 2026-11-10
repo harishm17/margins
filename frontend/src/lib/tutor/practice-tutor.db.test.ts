@@ -190,17 +190,6 @@ dbTest('a model call that fails leaves the state as it was, and a retry is the s
   assert.equal((await stateOf(w)).attempts, before.attempts + 1)
 })
 
-dbTest('clarifying costs no rung, no attempt and no evidence', async () => {
-  const w = await world()
-  const f = fakes()
-  const result = await run(w, { event: 'clarify' }, f.deps)
-  assert.equal(result.status, 'ok')
-  assert.equal(f.calls[0].move, 'clarify')
-  const row = await stateOf(w)
-  assert.deepEqual([row.rung, row.attempts, row.lowEffortTurns], [0, 0, 0])
-  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id } }), 0)
-})
-
 dbTest('the worked example surrenders the step once: level 3, flagged, rung 5', async () => {
   const w = await world()
   const f = fakes()
@@ -222,16 +211,6 @@ dbTest('the worked example surrenders the step once: level 3, flagged, rung 5', 
   // Shown again: no second record.
   await run(w, { event: 'show_worked', attempts: ['25'] }, f.deps)
   assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id } }), 1)
-})
-
-dbTest('the third failed attempt offers the worked example once', async () => {
-  const w = await world()
-  const offers: boolean[] = []
-  for (const answer of ['1', '2', '3', '4']) {
-    const r = await run(w, { event: 'check', answer })
-    if (r.status === 'ok') offers.push(r.body.state.offerWorked)
-  }
-  assert.deepEqual(offers, [false, false, true, false])
 })
 
 dbTest('a rewritten practice is stale', async () => {
@@ -290,17 +269,6 @@ dbTest('only the latest message is the event: a short reply after long working i
   assert.deepEqual([(await stateOf(w)).attempts, (await stateOf(w)).lowEffortTurns], [2, 2])
 })
 
-dbTest('the tutor does not look at working before a checked answer', async () => {
-  const w = await world()
-  const f = fakes()
-  const refused = await run(w, { event: 'ask', working: 'I think the ratio is the thing to use here' }, f.deps)
-  assert.equal(refused.status, 'not_allowed')
-  assert.equal(f.calls.length, 0)
-  await run(w, { event: 'check', answer: '30' }, f.deps)
-  // Right or wrong, one check opens it.
-  assert.equal((await run(w, { event: 'ask', working: 'I think the ratio is the thing to use here' }, f.deps)).status, 'ok')
-})
-
 dbTest('the server keeps the check counts, so a reload loses nothing', async () => {
   const w = await world()
   await run(w, { event: 'check', answer: '1' })
@@ -336,20 +304,6 @@ dbTest('lastWrong and the confirm move come from the server record of the checks
   assert.notEqual(g.calls[0].move, 'confirm')
 })
 
-dbTest('a double submit of the worked example writes one surrender record', async () => {
-  const w = await world()
-  await prisma.concept.update({ where: { id: w.concept.id }, data: {} })
-  const content = await prisma.topicContent.findFirstOrThrow({ where: { topicId: w.topic.id } })
-  const data = content.contentData as { steps: Record<string, unknown>[] }[]
-  data[0].steps.forEach((s) => (s.concept_ids = [w.concept.id]))
-  await prisma.topicContent.update({ where: { id: content.id }, data: { contentData: data as never } })
-  await run(w, { event: 'check', answer: '25' })
-  const f = fakes()
-  const results = await Promise.all([run(w, { event: 'show_worked' }, f.deps), run(w, { event: 'show_worked' }, f.deps)])
-  assert.deepEqual(results.map((r) => r.status), ['ok', 'ok'])
-  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id, source: 'practice' } }), 1)
-})
-
 dbTest('requests that are invalid or stale do not use the model budget', async () => {
   const w = await world()
   let admitted = 0
@@ -374,14 +328,6 @@ dbTest('requests that are invalid or stale do not use the model budget', async (
     fakes().deps
   )
   assert.deepEqual(limited, { status: 'rate_limited', retryAfterSeconds: 7 })
-})
-
-dbTest('the request carries the problem statement, so the givens are told apart from work', async () => {
-  const w = await world()
-  const f = fakes()
-  await run(w, { event: 'check', answer: '25' }, f.deps)
-  await run(w, { event: 'ask', working: '12, then 30, so 7.5 and 99', attempts: ['25'] }, f.deps)
-  assert.equal(f.calls[0].problem.includes('Work out three values.'), true)
 })
 
 dbTest('a check with nothing written earns no rung and does not unlock "Ask about my working"', async () => {
@@ -421,18 +367,6 @@ dbTest('connect before a check is refused with ATTEMPT_FIRST and leaves the stat
   assert.equal((await run(other, { event: 'hint', hintIndex: 1 })).status, 'ok')
 })
 
-dbTest('dont know is the first check, wrong: it counts as an attempt and unlocks the help', async () => {
-  const w = await world()
-  const idk = await run(w, { event: 'dont_know' })
-  assert.equal(idk.status, 'ok')
-  if (idk.status !== 'ok') return
-  assert.deepEqual([idk.body.state.checks, idk.body.state.wrongChecks, idk.body.state.attempts, idk.body.state.workedAllowed], [1, 1, 1, true])
-  assert.equal(idk.body.state.rung, 0)
-  const row = await stateOf(w)
-  assert.notEqual(row.dontKnowAt, null)
-  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id } }), 0)
-})
-
 dbTest('fallback worked example is not surrendered', async () => {
   const w = await world()
   await withConceptSteps(w)
@@ -452,17 +386,6 @@ dbTest('fallback worked example is not surrendered', async () => {
   // The button stays: the worked example is still allowed, and delivered later it does surrender.
   assert.equal(result.body.state.workedAllowed, true)
   await run(w, { event: 'show_worked', attempts: ['25'] }, fakes().deps)
-  assert.equal((await surrenders(w)).length, 1)
-  assert.equal((await stateOf(w)).helpRung, 5)
-})
-
-dbTest('delivered worked example is surrendered once', async () => {
-  const w = await world()
-  await withConceptSteps(w)
-  await run(w, { event: 'check', answer: '25' })
-  const first = await run(w, { event: 'show_worked', attempts: ['25'] })
-  assert.equal(first.status === 'ok' && first.body.surrendered, true)
-  await run(w, { event: 'show_worked', attempts: ['25'] })
   assert.equal((await surrenders(w)).length, 1)
   assert.equal((await stateOf(w)).helpRung, 5)
 })

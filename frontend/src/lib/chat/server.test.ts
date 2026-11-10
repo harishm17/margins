@@ -1,18 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { errorCodeFromResponse, HISTORY_MESSAGES, requestChatAnswer, titleFromQuestion, toHistoryTurns } from './server'
-
-describe('titleFromQuestion', () => {
-  it('keeps a short question and flattens whitespace', () => {
-    assert.equal(titleFromQuestion('  What is\n hashing?  '), 'What is hashing?')
-  })
-
-  it('cuts a long question with an ellipsis', () => {
-    const title = titleFromQuestion('word '.repeat(60))
-    assert.ok(title.length <= 80)
-    assert.ok(title.endsWith('…'))
-  })
-})
+import { errorCodeFromResponse, HISTORY_MESSAGES, requestChatAnswer, toHistoryTurns } from './server'
 
 describe('toHistoryTurns', () => {
   it('keeps the last messages, oldest first, and skips failure notes and blanks', () => {

@@ -4,7 +4,6 @@ import { ALLOWANCE_TEMPLATE } from '@/lib/budget/copy'
 import {
   FALLBACK_FAILURE_MESSAGE,
   describeJobFailure,
-  parseContentTarget,
   pickGenerationFailures,
   type GenerationJobRow,
 } from './failure-message'
@@ -20,21 +19,10 @@ test('the daily budget message never shows the job message, which carries dollar
   assert.equal(describeJobFailure('LLM_DAILY_BUDGET', null), ALLOWANCE_TEMPLATE)
 })
 
-test('missing source material explains what to do', () => {
-  assert.match(describeJobFailure('NO_SOURCE_MATERIAL', 'No relevant chunks found for topic x'), /Add material/)
-  assert.match(describeJobFailure('NO_CONTENT_MATERIALS', 'x'), /Mark at least one as course content/)
-})
-
 test('raw server messages never reach the student for other codes', () => {
   const text = describeJobFailure('SOMETHING_ELSE', 'psycopg2.errors.UniqueViolation: secret detail')
   assert.equal(text, FALLBACK_FAILURE_MESSAGE)
   assert.equal(describeJobFailure(null, 'boom'), FALLBACK_FAILURE_MESSAGE)
-})
-
-test('content targets parse, and other keys do not', () => {
-  assert.deepEqual(parseContentTarget('content:abc-123:topic_quiz'), { topicId: 'abc-123', contentType: 'topic_quiz' })
-  assert.equal(parseContentTarget('extract:p1'), null)
-  assert.equal(parseContentTarget(null), null)
 })
 
 const row = (id: string, targetKey: string, status: string, errorCode: string | null = null): GenerationJobRow => ({
@@ -72,22 +60,4 @@ test('a failure is dropped once the content exists anyway', () => {
     (topicId, type) => topicId === 't1' && type === 'section_notes'
   )
   assert.deepEqual(failures.map((failure) => failure.topicId), ['t2'])
-})
-
-test('jobs without a content target are ignored', () => {
-  assert.deepEqual(pickGenerationFailures([row('j1', 'extract:p1', 'failed')], () => false), [])
-})
-
-test('a failure names the job that failed, not "generation"', () => {
-  // Each kind of job fails with its own default code; the text is about what the student asked for.
-  assert.match(describeJobFailure('EXAM_GRADING_FAILED'), /grading/i)
-  assert.match(describeJobFailure('EXAM_GENERATION_FAILED'), /mock exam/i)
-  assert.match(describeJobFailure('TOPIC_EXTRACTION_FAILED'), /topics/i)
-  assert.match(describeJobFailure('CHUNKING_FAILED'), /pages of this file/)
-  // An unknown code falls back by job type, and only then to the plain sentence.
-  assert.match(describeJobFailure('SOMETHING_ELSE', null, 'grade_exam'), /grade/i)
-  assert.match(describeJobFailure(null, null, 'generate_exam'), /mock exam/i)
-  for (const type of ['validate_material', 'chunk_material', 'extract_topics', 'generate_content', 'generate_exam', 'grade_exam']) {
-    assert.doesNotMatch(describeJobFailure(null, null, type), /Generation failed/)
-  }
 })

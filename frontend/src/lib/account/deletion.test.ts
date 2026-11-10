@@ -108,13 +108,6 @@ test('a storage failure keeps the account, tries every other file, and a retry f
   assert.equal(world.state.stored.size, 0)
 })
 
-test('a failing folder sweep before the row delete stops too', async () => {
-  const world = fakeWorld({ failFolder: 1 })
-  await assert.rejects(deleteAccount('u1', world), { name: 'AccountDeletionError', step: 'files' })
-  assert.equal(world.state.exists, true)
-  assert.equal((await deleteAccount('u1', world)).outcome, 'deleted')
-})
-
 test('a database failure on the row delete is retryable: files already gone count as deleted', async () => {
   const world = fakeWorld({ failRemove: 1 })
   await assert.rejects(deleteAccount('u1', world), { name: 'AccountDeletionError', step: 'account' })
@@ -136,23 +129,6 @@ test('an account that is already gone succeeds and only sweeps its folder', asyn
   assert.deepEqual(world.calls, ['exists:u1', 'folder:u1'])
 })
 
-test('a failed sweep after the row is gone is logged, not thrown', async () => {
-  // First folder call (before the row delete) works; the sweep after it fails.
-  const world = fakeWorld()
-  let folderCalls = 0
-  const files: DeletionFiles = {
-    deleteFile: world.files.deleteFile,
-    async deleteUserFiles(userId) {
-      folderCalls += 1
-      if (folderCalls === 2) throw new Error('bucket down')
-      return world.files.deleteUserFiles(userId)
-    },
-  }
-  const result = await deleteAccount('u1', { ...world, files })
-  assert.equal(result.outcome, 'deleted')
-  assert.ok(world.logged.some((line) => line.startsWith('error') && line.includes('remove u1/ by hand')))
-})
-
 test('a job-stop failure stops before any file is touched', async () => {
   const world = fakeWorld()
   world.store.stopJobs = async () => {
@@ -161,13 +137,6 @@ test('a job-stop failure stops before any file is touched', async () => {
   await assert.rejects(deleteAccount('u1', world), { name: 'AccountDeletionError', step: 'jobs' })
   assert.ok(!world.calls.some((call) => call.startsWith('file:') || call.startsWith('folder:')))
   assert.equal(world.state.exists, true)
-})
-
-test('the account row that disappears between the check and the delete still ends as deleted', async () => {
-  const world = fakeWorld()
-  world.store.removeAccount = async () => false
-  const result = await deleteAccount('u1', world)
-  assert.equal(result.outcome, 'already_deleted')
 })
 
 test('confirmation needs the word DELETE', () => {

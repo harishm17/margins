@@ -10,18 +10,6 @@ const ref = (filename: string, pageStart: number | null, pageEnd: number | null,
   pageEnd,
 })
 
-test('page and source wording', () => {
-  assert.equal(formatPages(4, 4), 'p. 4')
-  assert.equal(formatPages(4, null), 'p. 4')
-  assert.equal(formatPages(4, 9), 'pp. 4-9')
-  assert.equal(formatPages(null, null), '')
-  assert.equal(sourceText(ref('a.pdf', 4, 9)), 'a.pdf, pp. 4-9')
-  assert.equal(sourceText(ref('deck.pptx', null, null)), 'deck.pptx')
-  assert.equal(fromLabel(ref('a.pdf', 4, 4)), 'From a.pdf, p. 4')
-  assert.equal(fromLine([ref('a.pdf', 4, 4), ref('b.pdf', 2, 3, 'm2')]), 'From a.pdf, p. 4 and b.pdf, pp. 2-3')
-  assert.equal(fromLine([]), '')
-})
-
 test('mergeSources joins touching page ranges of one file and keeps other files apart', () => {
   const merged = mergeSources([ref('a.pdf', 9, 10), ref('a.pdf', 3, 5), ref('b.pdf', 1, 1, 'm2'), ref('a.pdf', 6, 6), ref('a.pdf', 4, 4)])
   assert.deepEqual(

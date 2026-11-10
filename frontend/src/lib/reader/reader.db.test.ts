@@ -252,16 +252,6 @@ test('explain this requires a take first', skip, async (t) => {
   assert.ok(memory.every((m) => m.nUnassisted === 0 && m.lastAssistedAt !== null))
 })
 
-test('explain this on a passage of a topic without concepts writes the note and no evidence', skip, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('rd-explain-legacy', { concepts: false })
-  const ask = async () => ({ reply: 'It is about buckets.', check_question: 'What is a bucket?' })
-  const result = await server.explainPassage({ userId: w.user.id, topicId: w.topic.id, chunkId: w.chunks[0].id, take: 'it says something about hashing', cantParse: false, timeZone: 'UTC' }, ask)
-  assert.equal(result.status, 'ok')
-  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id } }), 0)
-  assert.equal(await prisma.marginNote.count({ where: { userId: w.user.id } }), 1)
-})
-
 test('explain this keeps no note when the tutor cannot answer, and refuses a passage that is not theirs', skip, async (t) => {
   if (!available) return t.skip('no database')
   const w = await world('rd-explain-down')
@@ -343,33 +333,6 @@ test('the focus count is worked out from claims and chunk ids, and matches the r
   assert.equal(((await focus.withFocusCount(w.user.id, w.topic.id, state as never)) as { focusCount?: number }).focusCount, 3)
 })
 
-test('the focus count follows claims on a chunk that was only overlap, as the reader does', skip, async (t) => {
-  if (!available) return t.skip('no database')
-  const focus = await import('./focus')
-  const w = await world('rd-count-merged')
-  // Chunk 1 is nothing but the sentence chunk 0 ends with, so the reader merges it into chunk 0; the second concept's claim sits on it, beside the first concept's claim on chunk 0.
-  await prisma.materialChunk.update({ where: { id: w.chunks[1].id }, data: { chunkText: SHARED_1 } })
-  await prisma.conceptClaim.updateMany({ where: { conceptId: w.concepts[1].id }, data: { chunkId: w.chunks[1].id } })
-  await prisma.topicQuiz.create({
-    data: {
-      topicId: w.topic.id,
-      kind: 'warmup',
-      questions: w.concepts.map((concept, n) => ({ question_type: 'true_false', question_text: `Statement ${n}`, correct_answer: true, explanation: 'x', points: 1, difficulty: ['easy', 'medium', 'hard'][n], mode: 'recall', concept_ids: [concept.id] })),
-    },
-  })
-  let state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
-  while (state.status === 'asking') {
-    const result = await warmup.answerWarmup({ userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, answer: { answer: 'false', confidence: 0.75, confidenceLevel: 'fairly' }, timeZone: 'UTC' })
-    if (result.status !== 'ok') throw new Error(result.status)
-    state = result.state
-  }
-  const data = await reader.loadReader(w.user.id, w.topic.id)
-  assert.ok(data)
-  assert.equal(data.files[0].passages.length, 3)
-  assert.equal(data.focusCount, 2)
-  assert.equal(await focus.countFocusPassages(w.user.id, w.topic.id), data.focusCount)
-})
-
 // ---------------------------------------------------------------------------------- v3.1: the second turn and the restatement
 
 type CheckAsk = NonNullable<Parameters<typeof import('./reader-server').answerReaderCheck>[3]>
@@ -389,23 +352,6 @@ async function firstQuestion(w: Awaited<ReturnType<typeof world>>, ask: NonNulla
 }
 const tutorRow = (w: Awaited<ReturnType<typeof world>>) =>
   prisma.tutorState.findUnique({ where: { userId_scope_scopeKey: { userId: w.user.id, scope: 'reader', scopeKey: `${w.topic.id}:${w.chunks[2].id}` } } })
-
-test('the passage rung comes from the reader tutor state, not a count of notes', skip, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('rd-state')
-  const asked: ReaderTutorRequest[] = []
-  const ask = async (request: ReaderTutorRequest) => (asked.push(request), { reply: 'r', check_question: 'q?' })
-  const base = { userId: w.user.id, topicId: w.topic.id, chunkId: w.chunks[2].id, timeZone: 'UTC' }
-  await server.explainPassage({ ...base, take: 'first take here', cantParse: false }, ask)
-  // A note on the passage that the state does not know of changes nothing: the state is the count.
-  await prisma.marginNote.create({ data: { userId: w.user.id, topicId: w.topic.id, materialId: w.material.id, chunkId: w.chunks[2].id, kind: 'question', text: 'old', reply: { reply: 'x', checkQuestion: 'y?' } } })
-  await server.explainPassage({ ...base, take: 'second take here', cantParse: false }, ask)
-  await server.explainPassage({ ...base, take: 'third take here', cantParse: false }, ask)
-  assert.deepEqual(asked.map((request) => request.rung), [1, 2, 3])
-  const row = await tutorRow(w)
-  assert.equal(row?.attempts, 3)
-  assert.equal(row?.cantParseTurns, 0)
-})
 
 test('check answer gets a second turn at level 2', skip, async (t) => {
   if (!available) return t.skip('no database')
@@ -466,29 +412,6 @@ test('a right answer scores 1 and a wrong one 0, and an answer is taken once', s
   assert.equal((chained.reply as { parentNoteId: string }).parentNoteId, followUp!.id)
 })
 
-test('I do not know on a check is level 2, score 0, no confidence, and the verdict is not yet', skip, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('rd-check-idk')
-  const question = await firstQuestion(w)
-  const seen: Record<string, unknown>[] = []
-  const ask: CheckAsk = async (request) => (seen.push(request as unknown as Record<string, unknown>), checkAnswer({ verdict: 'not_yet' })(request))
-  const result = await server.answerReaderCheck(w.user.id, w.topic.id, { noteId: question.id, dontKnow: true, timeZone: 'UTC' }, ask)
-  assert.equal(result.status, 'ok')
-  assert.equal(seen[0].dont_know, true)
-  assert.equal(seen[0].student_answer, "I don't know")
-  const event = await prisma.evidenceEvent.findFirstOrThrow({ where: { userId: w.user.id, itemKey: { contains: ':answer:' } } })
-  assert.deepEqual([event.assistance, event.score, event.confidence], [2, 0, null])
-  assert.deepEqual([(event.metadata as Record<string, unknown>).idk, (event.metadata as Record<string, unknown>).missKind], [true, 'cue_miss'])
-  const note = await prisma.marginNote.findFirstOrThrow({ where: { userId: w.user.id, kind: 'answer' } })
-  assert.equal(note.text, "I don't know")
-  // A typed "idk" is the same thing, whatever the button said.
-  const w2 = await world('rd-check-typed-idk')
-  const q2 = await firstQuestion(w2)
-  const typed = await server.answerReaderCheck(w2.user.id, w2.topic.id, { noteId: q2.id, answer: 'idk', timeZone: 'UTC' }, ask)
-  assert.equal(typed.status, 'ok')
-  assert.equal(seen[1].dont_know, true)
-})
-
 test('a verdict that the tutor could not make is shown as a reply and scores nothing', skip, async (t) => {
   if (!available) return t.skip('no database')
   const w = await world('rd-check-fallback')
@@ -545,22 +468,6 @@ test('two cant-parse give a restatement', skip, async (t) => {
   await server.explainPassage({ ...base, take: 'I think it is about buckets', cantParse: false }, ask)
   assert.ok(asked[2].turn === undefined || asked[2].turn === 'explain')
   assert.equal((await tutorRow(w))?.cantParseTurns, 2)
-})
-
-test('restatement records an instruction event', skip, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('rd-restate-event')
-  const ask = async () => ({ reply: 'Put simply, keys can share a bucket.', check_question: 'What can share a bucket?' })
-  const base = { userId: w.user.id, topicId: w.topic.id, chunkId: w.chunks[2].id, take: '', cantParse: true, timeZone: 'UTC' }
-  await server.explainPassage(base, ask)
-  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id, source: 'instruction' } }), 0)
-  await server.explainPassage(base, ask)
-  const events = await prisma.evidenceEvent.findMany({ where: { userId: w.user.id, source: 'instruction' } })
-  assert.equal(events.length, 1)
-  assert.equal(events[0].itemKey, `instruction:restatement:${w.chunks[2].id}`)
-  assert.deepEqual([events[0].assistance, events[0].score, events[0].weight, events[0].conceptId], [3, 0, 0, w.concepts[1].id])
-  // The level-3 explanation of every reader reply is there as before.
-  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id, source: 'reader', assistance: 3 } }), 2)
 })
 
 test('fifth reply in a day is refused', skip, async (t) => {

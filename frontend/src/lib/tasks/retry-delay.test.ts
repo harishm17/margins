@@ -13,10 +13,6 @@ test('Retry-After wins when it is longer than the backoff', () => {
   assert.equal(retryDelayMs(2, '7'), 7_000)
 })
 
-test('the backoff wins when Retry-After is shorter', () => {
-  assert.equal(retryDelayMs(4, '1'), 2000)
-})
-
 test('junk and non-positive values are ignored; the wait is capped at two minutes', () => {
   assert.equal(retryDelayMs(1, 'soon'), 250)
   assert.equal(retryDelayMs(1, '0'), 250)

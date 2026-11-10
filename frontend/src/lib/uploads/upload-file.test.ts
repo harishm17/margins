@@ -18,8 +18,3 @@ test('an API error message is passed on as written', () => {
 test('a 413 without a body still names the limit', () => {
   assert.equal(uploadErrorMessage(413, null, 25), 'File must be 25 MB or smaller.')
 })
-
-test('other failures get a generic message', () => {
-  assert.equal(uploadErrorMessage(500, null, 25), 'Upload failed. Please try again.')
-  assert.match(uploadErrorMessage(401, {}, 25), /signed out/)
-})

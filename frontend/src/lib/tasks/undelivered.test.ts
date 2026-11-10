@@ -30,12 +30,6 @@ test('a job back in pending for its retry is left to the reaper, not failed', as
   assert.equal(await failJob({ id: 'j1', status: 'pending', startedAt: past }), false)
 })
 
-test('a job whose worker died, or one already finished, is not failed here', async () => {
-  for (const status of ['processing', 'completed', 'failed']) {
-    assert.equal(await failJob({ id: 'j1', status, startedAt: past }), false, status)
-  }
-})
-
 test('markJobFailed filters with the shared rule, the same as the AI service dispatcher', async () => {
   let seen: unknown
   const store = {

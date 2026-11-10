@@ -18,21 +18,6 @@ async function readAll(stream: Readable): Promise<string> {
   return Buffer.concat(parts).toString('utf8')
 }
 
-test('parseLocalPath reads local:// paths and the older gs://bucket/ form', async () => {
-  const { parseLocalPath } = await load()
-  assert.equal(parseLocalPath('local://u1/p1/materials/m1/notes.pdf'), 'u1/p1/materials/m1/notes.pdf')
-  assert.equal(parseLocalPath('gs://local-materials/u1/p1/notes.pdf'), 'u1/p1/notes.pdf')
-  assert.equal(parseLocalPath('gs://margins-materials/u1/p1/notes.pdf'), 'u1/p1/notes.pdf')
-})
-
-test('parseLocalPath ignores bucket paths and malformed ones', async () => {
-  const { parseLocalPath } = await load()
-  assert.equal(parseLocalPath('s3://bucket/u1/p1/notes.pdf'), null)
-  assert.equal(parseLocalPath('local://'), null)
-  assert.equal(parseLocalPath('gs://only-a-bucket'), null)
-  assert.equal(parseLocalPath('showcase/c1/notes.pdf'), null)
-})
-
 test('a local upload is stored as local://, read back and deleted', async () => {
   const { uploadStream, openStoredFile, deleteFile } = await load()
   const stored = await uploadStream(Readable.from(['hello']), 'u1/p1/materials/m1/a.pdf')

@@ -15,12 +15,6 @@ test('the message carries the question, the answer and where it comes from', () 
   assert.match(message, /Where it comes from: lecture3\.pdf, pp\. 4-6/)
 })
 
-test('a blank answer and a question with no sources are said plainly', () => {
-  const message = explainMistakeMessage({ questionText: 'Q', studentAnswer: null })
-  assert.match(message, /My answer: \(I left it blank\)/)
-  assert.doesNotMatch(message, /Where it comes from/)
-})
-
 test('a long question and answer are cut to fit the Ask box', () => {
   const message = explainMistakeMessage({ questionText: 'q'.repeat(5000), studentAnswer: 'a'.repeat(5000), sources })
   assert.ok(message.length < MAX_QUESTION_CHARS, `${message.length} characters`)

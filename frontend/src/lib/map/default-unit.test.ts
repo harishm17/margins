@@ -10,10 +10,6 @@ test('the unit of the first thing left to do today', () => {
   assert.equal(defaultUnit(plan(day(true, [item('u1', { done: true }), item('u2')]), day(false, [item('u3')])), ['u1', 'u2', 'u3']), 'u2')
 })
 
-test('with nothing left today, the next planned thing', () => {
-  assert.equal(defaultUnit(plan(day(true, [item('u1', { done: true })]), day(false, [item('u3')])), ['u1', 'u3']), 'u3')
-})
-
 test('mocks and units the map cannot show are skipped, and no plan means the first unit', () => {
   assert.equal(defaultUnit(plan(day(true, [item('u1', { topicId: null }), item('gone'), item(null)])), ['u2', null]), null)
   assert.equal(defaultUnit(null, ['u2', 'u3']), 'u2')

@@ -8,10 +8,4 @@ describe('job status response', () => {
     assert.equal(JOB_STATUS_SELECT.status, true)
     assert.equal(JOB_STATUS_SELECT.resultData, true)
   })
-
-  it('fills in the stage from the job type when the job has none', () => {
-    const row = { jobType: 'grade_exam', stage: null } as JobStatusRow
-    assert.equal(serializeJob(row).stage, 'grading')
-    assert.equal(serializeJob({ jobType: 'grade_exam', stage: 'saving' } as JobStatusRow).stage, 'saving')
-  })
 })

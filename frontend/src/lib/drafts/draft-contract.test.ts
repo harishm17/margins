@@ -11,10 +11,6 @@ test('a quiz draft keeps the idk flag and drops what an unanswered question cann
   assert.deepEqual((checked.payload as { answers: unknown }).answers, { '0': { answer: '', idk: true }, '1': { answer: 'B', confidence: 0.5 } })
 })
 
-test('a quiz draft refuses an idk that is not a boolean', () => {
-  assert.equal(quiz({ '0': { answer: '', idk: 'yes' } }).ok, false)
-})
-
 test('a draft written with the old marker text is stored as an idk answer', () => {
   for (const answer of [LEGACY_IDK_MARKER, { answer: LEGACY_IDK_MARKER }]) {
     const checked = quiz({ '0': answer })

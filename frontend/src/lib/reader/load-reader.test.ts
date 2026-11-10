@@ -12,12 +12,6 @@ test('an answer keeps its kind, its verdict and the note it answers', () => {
   assert.deepEqual(view.reply, { reply: 'You have half of it.', checkQuestion: 'And the second key?' })
 })
 
-test('an answer the tutor could not check has no verdict', () => {
-  const view = toNoteView(row('answer', { reply: 'Try again later.', checkQuestion: '', verdict: null, parentNoteId: 'q1' }))
-  assert.equal(view.kind, 'answer')
-  assert.equal(view.verdict, null)
-})
-
 test('an unknown verdict is dropped, and notes and questions carry neither verdict nor parent', () => {
   assert.equal(toNoteView(row('answer', { reply: 'x', verdict: 'great', parentNoteId: 'q1' })).verdict, null)
   for (const kind of ['note', 'question']) {

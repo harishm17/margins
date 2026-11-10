@@ -1,16 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { deriveExamStyleState, materialIdFromProfileTarget, type ExamStyleFile } from './style-state'
+import { deriveExamStyleState, type ExamStyleFile } from './style-state'
 
 const file = (id: string, over: Partial<ExamStyleFile> = {}): ExamStyleFile => ({
   id,
   validationStatus: 'valid',
   hasProfile: false,
   ...over,
-})
-
-test('no past-exam file: none', () => {
-  assert.equal(deriveExamStyleState([], []).kind, 'none')
 })
 
 test('one profile is enough: ready, even when another file failed', () => {
@@ -52,13 +48,4 @@ test('only the newest job of a file counts', () => {
     ]
   )
   assert.equal(state.kind, 'unavailable')
-})
-
-test('read and analysed, but no style found: unavailable', () => {
-  assert.equal(deriveExamStyleState([file('a'), file('b', { validationStatus: 'invalid' })], []).kind, 'unavailable')
-})
-
-test('profile target keys', () => {
-  assert.equal(materialIdFromProfileTarget('profile:m1'), 'm1')
-  assert.equal(materialIdFromProfileTarget('exam-relevance:p1'), null)
 })

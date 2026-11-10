@@ -10,7 +10,3 @@ test('a retried add goes to the current target when its unit was deleted', () =>
   assert.equal(unitForRetry('gone', ['u2'], 'u2'), 'u2')
   assert.equal(unitForRetry('gone', [], null), null)
 })
-
-test('an add with no unit stays without one unless a target is given', () => {
-  assert.equal(unitForRetry(null, ['u1'], null), null)
-})

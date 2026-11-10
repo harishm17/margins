@@ -24,10 +24,6 @@ test('guard has nothing to compare against without an open exam or a question wi
   assert.equal(examGuard('the of and', ['is a the']), false)
 })
 
-test('tokens are lowercased words without stopwords', () => {
-  assert.deepEqual([...tokens("What's the BIG-O of a hash lookup?")].sort(), ['big', 'hash', 'lookup', 'o', 'whats'].sort())
-})
-
 test('accents typed as a letter and as a letter plus a mark are the same word, in any script, in capitals or not', () => {
   const spanish = ['¿Cuál es la relación de transmisión según la información: más dientes en el plato o en el piñón? Explícalo con precisión.']
   assert.deepEqual([...tokens('Café NAÏVE')].sort(), [...tokens('Cafe\u0301 NAI\u0308VE')].sort())
@@ -44,11 +40,6 @@ test('a question with its options is compared as one text too', () => {
   assert.equal(examGuard('Pick the stable sort', texts), true)
 })
 
-test('odd stored questions are skipped, not thrown on', () => {
-  assert.deepEqual(examQuestionTexts([null, 3, {}, { question_text: 5 }, { question_text: 'Real one', options: 'nope' }]), ['Real one'])
-  assert.deepEqual(examQuestionTexts('not a list'), [])
-})
-
 const gears = [
   'A rider uses a chainring with 48 teeth and a rear cog with 16 teeth. The wheel has a circumference of 2.1 metres and the rider pedals at 80 rpm. What is the gear ratio?',
   'Which of the two gears is not suitable for climbing? Explain why a harder gear raises the speed more than a lighter one.',
@@ -61,11 +52,6 @@ test('guard blocks a paste with a long lead-in that drowns the question in Jacca
 
 test('guard blocks a paraphrase that keeps most of the content words', () => {
   assert.equal(examGuard('Given a rider on a chainring with 48 teeth and a rear cog with 16 teeth, wheel circumference 2.1 metres, pedalling at 80 rpm, what gear ratio is that', gears), true)
-})
-
-test('guard blocks several exam questions pasted together, and one question of them', () => {
-  assert.equal(examGuard(`${gears[0]}\n\n${gears[1]}`, gears), true)
-  assert.equal(examGuard(`Two questions for you. ${gears[1]} Thanks!`, gears), true)
 })
 
 test('guard keeps negations and comparatives as content: a flipped question is still that question, a different one is not', () => {

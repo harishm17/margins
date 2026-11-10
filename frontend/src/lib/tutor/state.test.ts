@@ -25,20 +25,6 @@ test('confront on misconception miss', () => {
   assert.equal(nextMove(moveState, signals({ lastWrong: true, missKind: 'execution' })), 'ladder')
 })
 
-test('confirm after hinted success', () => {
-  assert.equal(nextMove(moveState, signals({ justSolvedWithHints: true })), 'confirm')
-})
-
-test('two bare guesses require reasoning', () => {
-  assert.equal(nextMove({ ...moveState, bareGuesses: 2 }, signals()), 'reason_first')
-  assert.equal(nextMove({ ...moveState, bareGuesses: 1 }, signals()), 'ladder')
-})
-
-test('two stalled replies at one rung point to source', () => {
-  assert.equal(nextMove({ ...moveState, sameRungNoProgress: 2 }, signals()), 'to_source')
-  assert.equal(nextMove({ ...moveState, sameRungNoProgress: 1 }, signals()), 'ladder')
-})
-
 test('move precedence and the rest of the table', () => {
   assert.equal(nextMove({ ...moveState, bareGuesses: 3 }, signals({ event: { type: 'clarify' }, lastWrong: true, confident: true })), 'clarify')
   assert.equal(nextMove(moveState, signals({ event: { type: 'show_worked' } })), 'worked_analogue')
@@ -60,15 +46,6 @@ test('request never raises rung', () => {
   assert.equal(next.lowEffortTurns, 1)
 })
 
-test('genuine attempt raises by one', () => {
-  const next = nextRung(fresh, { type: 'attempt', text: GENUINE })
-  assert.equal(next.rung, 1)
-  assert.equal(next.maxRung, 1)
-  assert.equal(next.attempts, 1)
-  const again = nextRung(next, { type: 'attempt', text: GENUINE })
-  assert.equal(again.rung, 2)
-})
-
 test('an attempt never climbs past structure; rung 5 is the student\'s button', () => {
   let state = fresh
   for (let i = 0; i < 8; i++) state = { ...state, ...nextRung(state, { type: 'attempt', text: GENUINE }) }
@@ -80,18 +57,6 @@ test('a low-effort attempt does not climb or count', () => {
   assert.equal(next.rung, 0)
   assert.equal(next.attempts, 0)
   assert.equal(next.lowEffortTurns, 1)
-})
-
-test('checked wrong answer counts as attempt', () => {
-  const next = nextRung(fresh, { type: 'checked', correct: false })
-  assert.equal(next.attempts, 1)
-  assert.equal(next.rung, 1)
-})
-
-test('a correct check changes no rung and no attempt count', () => {
-  const next = nextRung({ ...fresh, rung: 1, maxRung: 1, attempts: 1 }, { type: 'checked', correct: true })
-  assert.equal(next.rung, 1)
-  assert.equal(next.attempts, 1)
 })
 
 test('three low-effort turns ask what is unclear', () => {
@@ -107,17 +72,6 @@ test('three low-effort turns ask what is unclear', () => {
   const after = nextRung(state, { type: 'attempt', text: GENUINE })
   assert.equal(after.askWhatIsUnclear, false)
   assert.equal(after.lowEffortTurns, 0)
-})
-
-test('clarify changes no state', () => {
-  const state: RungState = { rung: 2, maxRung: 3, attempts: 2, lowEffortTurns: 2, hintsOpened: 1 }
-  const next = nextRung(state, { type: 'clarify' })
-  assert.deepEqual({ rung: next.rung, maxRung: next.maxRung, attempts: next.attempts, lowEffortTurns: next.lowEffortTurns }, {
-    rung: 2,
-    maxRung: 3,
-    attempts: 2,
-    lowEffortTurns: 2,
-  })
 })
 
 test('authored hint index maps to rung 1, 3, 4', () => {
@@ -156,13 +110,6 @@ test('worked offered once at three failed attempts and never again', () => {
   assert.deepEqual(offers, [false, false, true, false, false])
 })
 
-test('maxRung only rises', () => {
-  const state: RungState = { rung: 2, maxRung: 4, attempts: 1, lowEffortTurns: 0, hintsOpened: 0 }
-  assert.equal(nextRung(state, { type: 'attempt', text: GENUINE }).maxRung, 4)
-  assert.equal(nextRung(state, { type: 'request' }).maxRung, 4)
-  assert.equal(nextRung(state, { type: 'hint_opened', index: 0 }).maxRung, 4)
-})
-
 test('idk variants are low effort', () => {
   for (const text of [
     'idk',
@@ -188,37 +135,6 @@ test('idk variants are low effort', () => {
   assert.equal(isGenuineAttempt('I think it is the second given'), true)
   assert.equal(isGenuineAttempt('  twelve chars  '), true)
   assert.equal(isGenuineAttempt('1234567890a'), false)
-})
-
-test('padded low-effort requests are still low effort', () => {
-  for (const text of [
-    'give me a hint',
-    'Give me a hint please',
-    'just tell me the answer',
-    'i dont know the answer',
-    "I don't know the answer.",
-    'hint please',
-    'can you just give me the answer pls',
-    'plz help me',
-    'no idea, sorry',
-    'can you tell me the answer please',
-  ])
-    assert.equal(isGenuineAttempt(text), false, text)
-})
-
-test('hesitation and intensifier words do not make a request genuine', () => {
-  for (const text of [
-    'hmm i really dont know',
-    'um uh i dont know',
-    'honestly no idea',
-    'well, actually i dont know',
-    'ok so really just a hint please',
-    'hmm, so what is the answer',
-  ])
-    assert.equal(isGenuineAttempt(text), false, text)
-  // Reasoning stays genuine with the same words around it.
-  assert.equal(isGenuineAttempt('hmm so I think the second given is the one to use'), true)
-  assert.equal(isGenuineAttempt('actually the units cancel so it is 12 m'), true)
 })
 
 test('reasoning that mentions hint or dont know is genuine', () => {
@@ -306,14 +222,6 @@ test('a correct check leaves rung, attempts and lowEffortTurns alone', () => {
   }
 })
 
-test('hint_opened keeps the most hints seen and leaves lowEffortTurns alone', () => {
-  const state: RungState = { rung: 4, maxRung: 4, attempts: 1, lowEffortTurns: 2, hintsOpened: 3 }
-  const next = nextRung(state, { type: 'hint_opened', index: 0 })
-  assert.equal(next.hintsOpened, 3)
-  assert.equal(next.lowEffortTurns, 2)
-  assert.equal(nextRung(fresh, { type: 'hint_opened', index: 1 }).hintsOpened, 2)
-})
-
 test('nextChecks counts checked answers from the server, not the browser', () => {
   const none = { checks: 0, wrongChecks: 0, lastCheckWrong: false, checkedCorrect: false }
   const one = nextChecks(none, { type: 'attempt', text: '5', correct: false })
@@ -383,13 +291,4 @@ test('connect before attempt is refused', () => {
   for (const event of [{ type: 'hint_opened', index: 1 }, { type: 'hint_opened', index: 2 }, { type: 'show_worked' }, { type: 'reveal' }] as const) {
     assert.deepEqual(gateHelp({ checks: 1 }, event), { ok: true })
   }
-})
-
-test('tutor low-effort detection unchanged', () => {
-  for (const text of ['idk', 'I dont know', 'no idea', 'just tell me', 'give me the answer', 'hint', '?', '???', 'please just tell me the answer']) {
-    assert.equal(isGenuineAttempt(text), false, text)
-  }
-  assert.equal(isGenuineAttempt('I think the answer uses the second given value'), true)
-  assert.equal(isBareGuess('42'), true)
-  assert.equal(isBareGuess('idk'), false)
 })

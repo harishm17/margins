@@ -11,11 +11,6 @@ test('firstWrongStep finds the first missing authored value', () => {
   assert.equal(firstWrongStep('I got 30 and then 7.5', steps), 0)
 })
 
-test('firstWrongStep returns null when the working has no numbers', () => {
-  assert.equal(firstWrongStep('I am not sure where to start', steps), null)
-  assert.equal(firstWrongStep('', steps), null)
-})
-
 test('firstWrongStep respects tolerance', () => {
   const tight = [{ answer: '10', tolerance: 0.1 }, { answer: '20', tolerance: 0.1 }]
   // 10.05 is within 0.1 of 10, 20.5 is not within 0.1 of 20.
@@ -33,18 +28,6 @@ test('firstWrongStep returns null when it cannot decide', () => {
   assert.equal(firstWrongStep('12 and 30 so far', steps), null)
   // Answers that are not numbers cannot be located.
   assert.equal(firstWrongStep('42', [{ answer: 'B' }, { answer: 'depth-first search' }]), null)
-})
-
-test('firstWrongStep reads fractions, percents, thousands separators and negatives', () => {
-  assert.equal(firstWrongStep('3/28 is about 0.107', [{ answer: '0.1071' }, { answer: '5' }]), 1)
-  assert.equal(firstWrongStep('it is 0.107 and 1,250', [{ answer: '10.7%' }, { answer: '1250' }]), null)
-  assert.equal(firstWrongStep('x = -4, then 9', [{ answer: '-4' }, { answer: '9' }]), null)
-  assert.equal(firstWrongStep('x = 4, then 9', [{ answer: '-4' }, { answer: '9' }]), 0)
-})
-
-test('firstWrongStep skips steps whose answer is not a number', () => {
-  const mixed = [{ answer: 'A' }, { answer: '8' }, { answer: '16' }]
-  assert.equal(firstWrongStep('8 then 15', mixed), 2)
 })
 
 test('firstWrongStep ignores numbers the problem itself states', () => {

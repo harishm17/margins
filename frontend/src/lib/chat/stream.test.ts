@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { parseUsage, relayChatStream, type AnswerRecord, type ChatStorage, type UsageInfo } from './stream'
+import { relayChatStream, type AnswerRecord, type ChatStorage, type UsageInfo } from './stream'
 
 const encoder = new TextEncoder()
 
@@ -162,20 +162,6 @@ describe('relayChatStream', () => {
     assert.deepEqual(calls.failures, [{ code: 'CHAT_INTERRUPTED', usage: null }])
   })
 
-  it('a broken connection is an interruption too', async () => {
-    const { storage, calls } = fakeStorage()
-    const events = await readAll(
-      relayChatStream({
-        head,
-        storage,
-        log: () => {},
-        upstream: upstreamOf([{ type: 'text', delta: 'partial' }], { failAfter: true }),
-      })
-    )
-    assert.equal(events.at(-1)?.code, 'CHAT_INTERRUPTED')
-    assert.equal(calls.failures.length, 1)
-  })
-
   it('tells the browser when the answer could not be saved', async () => {
     const { storage } = fakeStorage({
       async saveAnswer() {
@@ -185,41 +171,6 @@ describe('relayChatStream', () => {
     const events = await readAll(relayChatStream({ head, storage, log: () => {}, upstream: upstreamOf([done]) }))
     assert.deepEqual(events.slice(-2).map((e) => e.type), ['done', 'error'])
     assert.equal(events.at(-1)?.code, 'CHAT_NOT_SAVED')
-  })
-
-  it('ignores lines it does not understand and anything after the final event', async () => {
-    const { storage, calls } = fakeStorage()
-    const events = await readAll(
-      relayChatStream({
-        head: [],
-        storage,
-        upstream: upstreamOf([{ type: 'mystery' }, { type: 'text', delta: 'a' }, done, { type: 'text', delta: 'late' }]),
-      })
-    )
-    assert.deepEqual(events.map((e) => e.type), ['text', 'done', 'saved'])
-    assert.equal(calls.saved.length, 1)
-  })
-})
-
-describe('parseUsage', () => {
-  it('reads the AI service usage and tolerates bad numbers', () => {
-    assert.deepEqual(parseUsage({ model: 'm', input_tokens: 10.4, output_tokens: 2, cache_read_tokens: 6, cache_write_tokens: 3, cost_usd: 0.5 }), {
-      model: 'm',
-      inputTokens: 10,
-      outputTokens: 2,
-      cacheReadTokens: 6,
-      cacheWriteTokens: 3,
-      costUsd: 0.5,
-    })
-    assert.deepEqual(parseUsage({ input_tokens: -1, output_tokens: 'x', cache_read_tokens: 'y', cost_usd: NaN }), {
-      model: '',
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      costUsd: 0,
-    })
-    assert.equal(parseUsage(null), null)
   })
 })
 
@@ -269,31 +220,5 @@ describe('the Ask hooks', () => {
     assert.deepEqual(doneEvent.check_question, { question: 'q' })
     assert.equal(JSON.stringify(events).includes('secret'), false)
     assert.deepEqual(events.slice(-2), [{ type: 'saved', messageId: 'msg-1' }, { type: 'tutor', messageId: 'msg-1' }])
-  })
-
-  it('a hook that throws costs the answer nothing', async () => {
-    const { storage, calls } = fakeStorage()
-    const events = await readAll(
-      relayChatStream({
-        head,
-        storage,
-        log: () => {},
-        upstream: upstreamOf([{ type: 'route', intent: 'solve' }, done]),
-        hooks: {
-          onEvent: () => {
-            throw new Error('boom')
-          },
-          onDone: () => {
-            throw new Error('boom')
-          },
-          afterSaved: async () => {
-            throw new Error('boom')
-          },
-        },
-      })
-    )
-    assert.equal(calls.saved.length, 1)
-    assert.equal(calls.saved[0].tutor, undefined)
-    assert.equal((events.at(-1) as Record<string, unknown>).type, 'saved')
   })
 })

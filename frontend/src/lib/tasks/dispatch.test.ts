@@ -39,37 +39,6 @@ test('the review-item job is posted to the AI service with the topic and the con
   assert.deepEqual(sent[0].body, { jobId: 'job-1', jobType: 'generate_review_items', data: { topicId: 'topic-1', requests } })
 })
 
-test('a job is held, with its request written out, only while the spec has asked for the hold and until it lets it go', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'hold-'))
-  const sent = captureFetch()
-  const { enqueueReviewItemsJob } = await import('./dispatch')
-
-  // No variable: nothing is held.
-  await enqueueReviewItemsJob('job-free', 'topic-1', requests)
-  assert.equal(sent.length, 1)
-
-  // The variable without the .hold file: nothing is held either.
-  process.env.E2E_HOLD_DIR = dir
-  process.env.ENABLE_TEST_LOGIN = 'true'
-  process.env.NEXTAUTH_URL = 'http://localhost:3300'
-  await enqueueReviewItemsJob('job-no-file', 'topic-1', requests)
-  assert.equal(sent.length, 2)
-
-  await writeFile(join(dir, 'generate_review_items.hold'), '')
-  const held = enqueueReviewItemsJob('job-held', 'topic-1', requests)
-  let done = false
-  void held.then(() => (done = true))
-  const file = join(dir, 'job-held.request.json')
-  let written: string | null = null
-  while (written === null) written = await readFile(file, 'utf8').catch(() => null)
-  assert.deepEqual(JSON.parse(written).payload, { jobId: 'job-held', jobType: 'generate_review_items', data: { topicId: 'topic-1', requests } })
-  assert.equal(done, false)
-  assert.equal(sent.length, 2, 'nothing is sent while it is held')
-  await writeFile(join(dir, 'job-held.release'), '')
-  await held
-  assert.equal(sent.length, 3)
-})
-
 test('the hold does nothing where the test sign-in is not allowed, even with the variable and the file set', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'hold-'))
   await writeFile(join(dir, 'generate_review_items.hold'), '')

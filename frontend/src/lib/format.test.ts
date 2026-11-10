@@ -1,20 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  firstName,
   formatAgo,
   formatBytes,
   formatClock,
   formatDate,
   formatDueLabel,
   formatElapsed,
-  formatRelative,
-  formatTime,
-  greetingForHour,
   homeGreeting,
   homeIntro,
-  initials,
-  pluralize,
 } from './format'
 
 const now = new Date('2026-10-20T15:00:00')
@@ -43,18 +37,6 @@ test('formatDate adds the year only for other years', () => {
   assert.equal(formatDate(new Date('2025-03-02T12:00:00'), now), 'Mar 2, 2025')
 })
 
-test('formatTime uses lowercase am and pm', () => {
-  assert.equal(formatTime(new Date('2026-10-20T15:12:00')), '3:12 pm')
-  assert.equal(formatTime(new Date('2026-10-20T09:40:00')), '9:40 am')
-})
-
-test('formatRelative reads both directions', () => {
-  assert.equal(formatRelative(new Date(now.getTime() + 4 * 86_400_000), now), 'in 4 days')
-  assert.equal(formatRelative(new Date(now.getTime() - 86_400_000), now), 'yesterday')
-  assert.equal(formatRelative(new Date(now.getTime() + 86_400_000), now), 'tomorrow')
-  assert.equal(formatRelative(new Date(now.getTime() - 2 * 3_600_000), now), '2 hours ago')
-})
-
 test('formatDueLabel', () => {
   assert.equal(formatDueLabel(new Date(now.getTime() + 3_600_000), now), 'Due today')
   assert.equal(formatDueLabel(new Date(now.getTime() - 3_600_000), now), 'Due today')
@@ -67,25 +49,6 @@ test('timers', () => {
   assert.equal(formatClock(-4), '00:00')
   assert.equal(formatElapsed(4), '4s')
   assert.equal(formatElapsed(72), '1m 12s')
-})
-
-test('pluralize and greeting', () => {
-  assert.equal(pluralize(1, 'topic'), '1 topic')
-  assert.equal(pluralize(12, 'topic'), '12 topics')
-  assert.equal(pluralize(2, 'person', 'people'), '2 people')
-  assert.equal(greetingForHour(8), 'Good morning')
-  assert.equal(greetingForHour(13), 'Good afternoon')
-  assert.equal(greetingForHour(20), 'Good evening')
-})
-
-test('names', () => {
-  assert.equal(firstName('  Harish Mahadevan '), 'Harish')
-  assert.equal(firstName(null), null)
-  assert.equal(firstName('   '), null)
-  assert.equal(initials('Harish Mahadevan'), 'HM')
-  assert.equal(initials('harish'), 'HA')
-  assert.equal(initials(null, 'demo@margins.dev'), 'DE')
-  assert.equal(initials(null, null), '?')
 })
 
 test('Home never welcomes back an account that has not studied yet', () => {

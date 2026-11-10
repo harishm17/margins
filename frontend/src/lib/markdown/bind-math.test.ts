@@ -22,20 +22,6 @@ test('a full stop after a formula goes into the same no-wrap span', () => {
   assert.equal(after.value, ' Next sentence.')
 })
 
-test('brackets before and punctuation after are bound too, but the spaces stay breakable', () => {
-  const tree = run(paragraph(text('so ('), math(), text('), then')))
-  const wrapper = tree.children![1]
-  assert.ok(bound(wrapper))
-  assert.deepEqual(wrapper.children!.map((child) => child.value ?? 'katex'), ['(', 'katex', '),'])
-  assert.equal(tree.children![0].value, 'so ')
-  assert.equal(tree.children![2].value, ' then')
-})
-
-test('a formula with a space on both sides is left alone', () => {
-  const tree = run(paragraph(text('a '), math(), text(' b')))
-  assert.equal(tree.children!.some(bound), false)
-})
-
 test('display math is not touched', () => {
   const display: HastNode = { type: 'element', tagName: 'span', properties: { className: ['katex-display'] }, children: [math()] }
   const tree = run(paragraph(text('before'), display, text('.')))

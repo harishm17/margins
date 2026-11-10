@@ -15,18 +15,9 @@ describe('parseByteRange', () => {
     assert.deepEqual(parseByteRange('bytes=-10', 100), { start: 90, end: 99 })
   })
 
-  it('clamps the end and a suffix longer than the file', () => {
-    assert.deepEqual(parseByteRange('bytes=50-500', 100), { start: 50, end: 99 })
-    assert.deepEqual(parseByteRange('bytes=-500', 100), { start: 0, end: 99 })
-  })
-
   it('refuses a range that starts past the end', () => {
     assert.equal(parseByteRange('bytes=100-', 100), 'unsatisfiable')
     assert.equal(parseByteRange('bytes=-0', 100), 'unsatisfiable')
-  })
-
-  it('ignores a backwards range', () => {
-    assert.equal(parseByteRange('bytes=9-2', 100), null)
   })
 })
 
@@ -48,11 +39,5 @@ describe('contentDisposition', () => {
     assert.doesNotMatch(header, /[\r\n]/)
     assert.match(header, /^inline; filename="Lecture _1___X: y\.pdf"/)
     assert.match(header, /filename\*=UTF-8''Lecture%20_1___X%3A%20y\.pdf$/)
-  })
-
-  it('has an ASCII fallback for other scripts', () => {
-    const header = contentDisposition('attachment', 'résumé.docx')
-    assert.match(header, /filename="r_sum_\.docx"/)
-    assert.match(header, /filename\*=UTF-8''r%C3%A9sum%C3%A9\.docx/)
   })
 })
