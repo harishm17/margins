@@ -119,7 +119,7 @@ export async function POST(
     const sameDayRepeat = await takenEarlierToday({ userId: session.user.id, topicId, quizSetId, at: new Date(), timeZone })
     let graded
     try {
-      graded = await gradeAnswers(questions, answersForGrader(given))
+      graded = await gradeAnswers({ userId: session.user.id, projectId: topic.projectId }, questions, answersForGrader(given))
     } catch (gradeError) {
       if (gradeError instanceof GradingRejectedError) {
         // The grader refused the request itself (not the AI being away): an error, not a wait.

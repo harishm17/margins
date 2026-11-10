@@ -33,6 +33,8 @@ export type ChatAnswerRequest = {
   question: string
   history: { role: 'user' | 'assistant'; content: string }[]
   topicId?: string | null
+  /** The conversation, when it already exists: the AI service writes it on the ledger rows of the answer. */
+  threadId?: string
   /** Where the thread's tutor state stands (see lib/ask/ask-turn.ts). Absent: the AI service answers at rung 0. */
   tutor?: Record<string, unknown>
 }
@@ -49,6 +51,7 @@ export function requestChatAnswer(request: ChatAnswerRequest, signal?: AbortSign
       question: request.question,
       history: request.history,
       topic_id: request.topicId ?? null,
+      ...(request.threadId ? { thread_id: request.threadId } : {}),
       ...(request.tutor ? { tutor: request.tutor } : {}),
     }),
     signal: signal ?? AbortSignal.timeout(CHAT_TIMEOUT_MS),

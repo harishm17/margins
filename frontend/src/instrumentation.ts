@@ -12,5 +12,11 @@ export async function register() {
       console.error(`Refusing to start: ${error instanceof Error ? error.message : String(error)}`)
       process.exit(1)
     }
+    // Accounts made before spend keys get theirs (and the ledger rows they own are stamped). Not needed to serve
+    // requests, which compute a missing key on demand, so a failure is logged and the server carries on.
+    import('./lib/account/spend-key-backfill')
+      .then(({ backfillSpendKeys }) => backfillSpendKeys())
+      .then(({ users }) => users > 0 && console.log(`Gave ${users} existing account(s) their spend key`))
+      .catch((error) => console.error('Spend key backfill failed:', error))
   }
 }

@@ -19,8 +19,8 @@ export type PracticeTutorRequest = {
   weak_prerequisite?: { name: string; page?: number }
   first_wrong_step?: number
   confusable?: { name: string; summary: string }
-  user_id?: string
-  project_id?: string
+  user_id: string
+  project_id: string
   session_id?: string
 }
 
@@ -90,8 +90,8 @@ export type ReaderTutorRequest = {
   cant_parse: boolean
   rung: number
   claims: { text: string; quote: string; page?: number }[]
-  user_id?: string
-  project_id?: string
+  user_id: string
+  project_id: string
   session_id?: string
 }
 

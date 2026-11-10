@@ -241,7 +241,7 @@ export async function answerWarmup(input: { userId: string; topicId: string; ses
   // An "I don't know" is wrong by rule: no grader, so it works with the AI down.
   const result = idk
     ? { question_index: 0, question_type: String(item.question.question_type ?? 'multiple_choice'), points_possible: 1, points_earned: 0, is_correct: false, feedback: '', needs_review: false }
-    : (await gradeAnswers([item.question], answersForGrader({ '0': given }))).graded_questions[0]
+    : (await gradeAnswers({ userId, projectId: row.projectId }, [item.question], answersForGrader({ '0': given }))).graded_questions[0]
   if (!result) return { status: 'invalid', message: 'This question could not be graded.' }
 
   // Evidence first and idempotent (skipIfPresent): if the session update below is lost, the answer sent

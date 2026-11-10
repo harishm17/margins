@@ -7,8 +7,8 @@ export type RecallGradeRequest = {
   prompt: string
   claims: { id: string; concept_id: string; concept_name: string; text: string; quote: string; page?: number }[]
   answer: string
-  user_id?: string
-  project_id?: string
+  user_id: string
+  project_id: string
   session_id?: string
 }
 
