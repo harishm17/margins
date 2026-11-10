@@ -3605,5 +3605,385 @@
     "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>"
    }
   ]
+ },
+ {
+  "id": "tb-two_ideas-gears-1",
+  "steps": [
+   {
+    "kind": "explain",
+    "output": {
+     "concept": "Gear ratio",
+     "covered": [
+      {
+       "you_said": "<student_words>The ratio is chainring teeth divided by cog</student_words>"
+      },
+      {
+       "you_said": "<student_words>The ratio is chainring teeth divided by cog</student_words>"
+      }
+     ],
+     "partly": [],
+     "incorrect": [],
+     "missing": [],
+     "action": "ask_new_example",
+     "instruction": "The student covered every claim. Ask one small new example or prediction, then call record_check with their answer."
+    },
+    "state": {
+     "assessments": 1,
+     "said": [],
+     "gaps": {},
+     "sayBack": null,
+     "exampleAsked": true,
+     "outcome": null
+    },
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The ratio is chainring teeth divided by cog</student_words>\"},{\"you_said\":\"<student_words>The ratio is chainring teeth divided by cog</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+   },
+   {
+    "kind": "example",
+    "output": {
+     "concept": "Gear ratio",
+     "passed": true,
+     "covered": [
+      {
+       "you_said": "<student_words>With a 50 tooth chainring and a 25</student_words>"
+      }
+     ],
+     "partly": [],
+     "incorrect": [],
+     "missing": [],
+     "action": "wrap_up",
+     "outcome": "explained"
+    },
+    "state": {
+     "assessments": 1,
+     "said": [],
+     "gaps": {},
+     "sayBack": null,
+     "exampleAsked": true,
+     "outcome": "explained"
+    },
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+   },
+   {
+    "kind": "explain",
+    "output": {
+     "concept": "Development",
+     "covered": [
+      {
+       "you_said": "<student_words>Development is how far the bike travels for</student_words>"
+      },
+      {
+       "you_said": "<student_words>Development is how far the bike travels for</student_words>"
+      }
+     ],
+     "partly": [],
+     "incorrect": [],
+     "missing": [],
+     "action": "ask_new_example",
+     "instruction": "The student covered every claim. Ask one small new example or prediction, then call record_check with their answer."
+    },
+    "state": {
+     "assessments": 1,
+     "said": [],
+     "gaps": {},
+     "sayBack": null,
+     "exampleAsked": true,
+     "outcome": null
+    },
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[{\"you_said\":\"<student_words>Development is how far the bike travels for</student_words>\"},{\"you_said\":\"<student_words>Development is how far the bike travels for</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+   },
+   {
+    "kind": "example",
+    "output": {
+     "concept": "Development",
+     "passed": true,
+     "covered": [
+      {
+       "you_said": "<student_words>With a ratio of 2 and a wheel</student_words>"
+      }
+     ],
+     "partly": [],
+     "incorrect": [],
+     "missing": [],
+     "action": "wrap_up",
+     "outcome": "explained"
+    },
+    "state": {
+     "assessments": 1,
+     "said": [],
+     "gaps": {},
+     "sayBack": null,
+     "exampleAsked": true,
+     "outcome": "explained"
+    },
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Development\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a ratio of 2 and a wheel</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+   }
+  ]
+ },
+ {
+  "id": "tb-two_ideas-interest-1",
+  "steps": [
+   {
+    "kind": "explain",
+    "output": {
+     "concept": "Growth factor",
+     "covered": [
+      {
+       "you_said": "<student_words>The factor per period is one plus the</student_words>"
+      },
+      {
+       "you_said": "<student_words>The factor per period is one plus the</student_words>"
+      }
+     ],
+     "partly": [],
+     "incorrect": [],
+     "missing": [],
+     "action": "ask_new_example",
+     "instruction": "The student covered every claim. Ask one small new example or prediction, then call record_check with their answer."
+    },
+    "state": {
+     "assessments": 1,
+     "said": [],
+     "gaps": {},
+     "sayBack": null,
+     "exampleAsked": true,
+     "outcome": null
+    },
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The factor per period is one plus the</student_words>\"},{\"you_said\":\"<student_words>The factor per period is one plus the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+   },
+   {
+    "kind": "example",
+    "output": {
+     "concept": "Growth factor",
+     "passed": false,
+     "covered": [],
+     "partly": [],
+     "incorrect": [],
+     "missing": [
+      {
+       "pointer": "Look again at p. 1: Growth factor"
+      },
+      {
+       "pointer": "Look again at p. 2: Growth factor"
+      }
+     ],
+     "action": "wrap_up",
+     "outcome": "taught"
+    },
+    "state": {
+     "assessments": 2,
+     "said": [],
+     "gaps": {},
+     "sayBack": null,
+     "exampleAsked": true,
+     "outcome": "taught"
+    },
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":false,\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Growth factor\"},{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\"}</app_result>"
+   },
+   {
+    "kind": "explain",
+    "output": {
+     "concept": "Doubling time",
+     "covered": [],
+     "partly": [],
+     "incorrect": [],
+     "missing": [
+      {
+       "pointer": "Look again at p. 3: Doubling time"
+      },
+      {
+       "pointer": "Look again at p. 3: Doubling time"
+      }
+     ],
+     "action": "explain_first",
+     "source_claim": {
+      "text": "<source_claim>Doubling time is the number of periods after which the balance is twice the starting amount.</source_claim>",
+      "page": 3
+     },
+     "instruction": "Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first."
+    },
+    "state": {
+     "assessments": 1,
+     "said": [],
+     "gaps": {
+      "interest-c1-k0": {
+       "probes": 2,
+       "explained": false
+      }
+     },
+     "sayBack": "interest-c1-k0",
+     "exampleAsked": false,
+     "outcome": null
+    },
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"},{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Doubling time is the number of periods after which the balance is twice the starting amount.</source_claim>\",\"page\":3},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+   },
+   {
+    "kind": "explain",
+    "output": {
+     "concept": "Doubling time",
+     "covered": [
+      {
+       "you_said": "<student_words>Doubling time is how many periods it takes</student_words>"
+      },
+      {
+       "you_said": "<student_words>Doubling time is how many periods it takes</student_words>"
+      }
+     ],
+     "partly": [],
+     "incorrect": [],
+     "missing": [],
+     "action": "wrap_up",
+     "outcome": "taught",
+     "look_again": [
+      "p. 3"
+     ]
+    },
+    "state": {
+     "assessments": 2,
+     "said": [],
+     "gaps": {
+      "interest-c1-k0": {
+       "probes": 2,
+       "explained": true
+      }
+     },
+     "sayBack": null,
+     "exampleAsked": false,
+     "outcome": "taught"
+    },
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[{\"you_said\":\"<student_words>Doubling time is how many periods it takes</student_words>\"},{\"you_said\":\"<student_words>Doubling time is how many periods it takes</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 3\"]}</app_result>"
+   }
+  ]
+ },
+ {
+  "id": "tb-two_ideas-search-1",
+  "steps": [
+   {
+    "kind": "explain",
+    "output": {
+     "concept": "Halving",
+     "covered": [],
+     "partly": [],
+     "incorrect": [],
+     "missing": [
+      {
+       "pointer": "Look again at p. 1: Halving"
+      },
+      {
+       "pointer": "Look again at p. 1: Halving"
+      }
+     ],
+     "action": "explain_first",
+     "source_claim": {
+      "text": "<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>",
+      "page": 1
+     },
+     "instruction": "Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first."
+    },
+    "state": {
+     "assessments": 1,
+     "said": [],
+     "gaps": {
+      "search-c0-k0": {
+       "probes": 2,
+       "explained": false
+      }
+     },
+     "sayBack": "search-c0-k0",
+     "exampleAsked": false,
+     "outcome": null
+    },
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+   },
+   {
+    "kind": "explain",
+    "output": {
+     "concept": "Halving",
+     "covered": [
+      {
+       "you_said": "<student_words>So every comparison cuts the remaining items in</student_words>"
+      },
+      {
+       "you_said": "<student_words>So every comparison cuts the remaining items in</student_words>"
+      }
+     ],
+     "partly": [],
+     "incorrect": [],
+     "missing": [],
+     "action": "wrap_up",
+     "outcome": "taught",
+     "look_again": [
+      "p. 1"
+     ]
+    },
+    "state": {
+     "assessments": 2,
+     "said": [],
+     "gaps": {
+      "search-c0-k0": {
+       "probes": 2,
+       "explained": true
+      }
+     },
+     "sayBack": null,
+     "exampleAsked": false,
+     "outcome": "taught"
+    },
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>"
+   },
+   {
+    "kind": "explain",
+    "output": {
+     "concept": "Cost of binary search",
+     "covered": [
+      {
+       "you_said": "<student_words>It takes about log base 2 of the</student_words>"
+      },
+      {
+       "you_said": "<student_words>It takes about log base 2 of the</student_words>"
+      }
+     ],
+     "partly": [],
+     "incorrect": [],
+     "missing": [],
+     "action": "ask_new_example",
+     "instruction": "The student covered every claim. Ask one small new example or prediction, then call record_check with their answer."
+    },
+    "state": {
+     "assessments": 1,
+     "said": [],
+     "gaps": {},
+     "sayBack": null,
+     "exampleAsked": true,
+     "outcome": null
+    },
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[{\"you_said\":\"<student_words>It takes about log base 2 of the</student_words>\"},{\"you_said\":\"<student_words>It takes about log base 2 of the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+   },
+   {
+    "kind": "example",
+    "output": {
+     "concept": "Cost of binary search",
+     "passed": true,
+     "covered": [
+      {
+       "you_said": "<student_words>With 1000 items, 2 to the power 10</student_words>"
+      }
+     ],
+     "partly": [],
+     "incorrect": [],
+     "missing": [],
+     "action": "wrap_up",
+     "outcome": "explained"
+    },
+    "state": {
+     "assessments": 1,
+     "said": [],
+     "gaps": {},
+     "sayBack": null,
+     "exampleAsked": true,
+     "outcome": "explained"
+    },
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Cost of binary search\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 1000 items, 2 to the power 10</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+   }
+  ]
  }
 ]

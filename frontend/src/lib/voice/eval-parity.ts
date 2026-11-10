@@ -12,7 +12,7 @@ import { emptyConceptState, type AssessedClaim, type ConceptState } from '@/lib/
 import { toolsForStyle } from '@/lib/voice/tools'
 import { appResultBlock, exampleCheckStep } from '@/lib/voice/pre-run'
 import { promptsV2 } from '@/lib/prompt-revision'
-import { FINISH_CUT_OFF_NOTE } from '@/lib/voice/history'
+import { FINISH_CUT_OFF_NOTE, MAX_HISTORY_MESSAGES, STEPPED_HIGH, STEPPED_LOW } from '@/lib/voice/history'
 import { asksForHelp, classifyUtterance, hasSubstance, UTTERANCE_RULES } from '@/lib/voice/utterance'
 import { CORE_WORDS, FILLER, LOW_EFFORT, REQUEST_WORDS } from '@/lib/learning/dont-know'
 import type { Band } from '@/lib/learning/level'
@@ -120,6 +120,8 @@ export function teachPromptFixture(scenarios: TeachScenario[], v2 = false) {
       ])
     ),
     tools: toolsForStyle('teach_back', v2),
+    // How much of the conversation the app keeps between turns (history.ts toStoredHistory); the eval trims as the app does.
+    history: v2 ? { high: STEPPED_HIGH, low: STEPPED_LOW } : { max: MAX_HISTORY_MESSAGES },
     // v2: what the turn loop says to the model after a reply that stopped at its token limit (turn-engine.ts).
     ...(v2 ? { finish_cut_off_note: FINISH_CUT_OFF_NOTE } : {}),
   }

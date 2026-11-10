@@ -91,8 +91,13 @@ class ScriptedCoach(LLMProvider):
 def calm(action, output):
     if action == "probe":
         return "Thanks, that helps. What would that mean for the next case?"
-    if action == "explain":
+    if action in ("explain", "explain_first"):
         return "Your pages say it in two parts. Can you say it back to me in your words?"
+    if action in ("wrap_up", "done"):
+        following = output.get("next_idea") or output
+        if following.get("prompt"):
+            return f"You have that one. Next is {following['concept_name']}: how would you explain it to a classmate?"
+        return "You have that one. That is all for today, goodbye."
     return "Good. Tell me about it in your own words?"
 
 
@@ -140,7 +145,91 @@ def test_a_calm_coach_passes_every_gate_through_the_whole_loop():
     # The program gates pass; the judged gate did not run (no --judge), which is not a pass.
     passed = {g["key"]: g["passed"] for g in summary["gates"]}
     assert passed["teaches_before_probe"] is None
-    assert [v for k, v in passed.items() if k not in ("injection", "teaches_before_probe")] == [True, True, True]
+    assert {k: v for k, v in passed.items() if k not in ("injection", "teaches_before_probe")} == {
+        "spoken_length": True,
+        "one_question": True,
+        "question_form": True,
+        "wrap_up": True,
+        "claim_leak": True,
+    }
+
+
+def test_a_session_of_two_ideas_goes_from_the_first_to_the_second_in_one_reply():
+    """Voice review of PR #90 (V-1): every scenario ended with its one idea, so the turn that closes an idea with another
+    waiting was never played. The closing result carries the next idea, the coach asks it in the same reply, the
+    student's next words are heard on the second idea, and the judge reads that reply against the second idea's claims."""
+    scenario = BY_ID["tb-two_ideas-interest-1"]
+    second = scenario["then"][0]["concept"]
+    records, stop, _ = play(scenario, ScriptedCoach(scenario, calm))
+    assert not stop
+    assert [(r["idea"], r["last_action"]) for r in records] == [(0, "ask"), (0, "ask_new_example"), (0, "wrap_up"), (1, "explain_first"), (1, "wrap_up")]
+    closing = records[2]
+    assert closing["closed"] and closing["asks_idea"] == 1 and not closing["finished"] and not closing["asked_again"]
+    assert closing["tools"][0]["output"]["next_idea"] == {**closing["tools"][0]["output"]["next_idea"], "concept_id": second["id"], "ideas_left": 1}
+    assert second["name"] in closing["text"] and closing["model_calls"] == 1
+    assert records[3]["student"] == scenario["then"][0]["turns"][0]["say"]
+    assert records[4]["finished"] and records[4]["outcome"] == "taught" and records[4]["asks_idea"] is None
+    assert records[4]["tools"][0]["output"]["next_idea"]["done"] is True
+
+    import teach_judge
+
+    items = teach_judge.items_for_records(BY_ID, records, teach_metrics.is_judged)
+    assert [i["key"].split("#")[1] for i in items] == ["0", "2"]  # the first ask, and the reply that opens the second idea
+    assert items[1]["concept"] == second["name"] and [c["text"] for c in items[1]["claims"]] == [c["text"] for c in second["claims"]]
+    summary = teach_metrics.summarize(BY_ID, records)
+    assert {g["key"]: g["passed"] for g in summary["gates"]}["wrap_up"] is True and not summary["failures"]
+
+
+def test_the_conversation_is_kept_between_turns_as_the_app_keeps_it():
+    """The eval sent the model the whole conversation, thinking blocks included; the app stores it without them and cut
+    to its limits (history.ts toStoredHistory), which the prompt fixtures carry."""
+    assert PROMPTS["history"] == {"max": 30} and load_prompts(v2=True)["history"] == {"high": 40, "low": 20}
+
+    def turn(n):
+        return [
+            {"role": "user", "content": f"student {n}"},
+            {"role": "assistant", "content": [{"type": "thinking", "thinking": "..."}, {"type": "tool_use", "id": f"t{n}", "name": "assess_explanation", "input": {}}]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": f"t{n}", "content": "{}"}]},
+            {"role": "assistant", "content": [{"type": "text", "text": f"coach {n}"}]},
+        ]
+
+    history = [message for n in range(11) for message in turn(n)]  # 44 messages
+    kept = teach_eval.stored_history(history, {"max": 30})
+    assert not any(block.get("type") == "thinking" for message in kept for block in (message["content"] if isinstance(message["content"], list) else []))
+    # The window would start at a tool result (message 14 of 44): it starts at the next student message instead.
+    assert kept[0] == {"role": "user", "content": "student 4"} and len(kept) == 28
+    assert teach_eval.stored_history(history[:40], {"high": 40, "low": 20}) == teach_eval.stored_history(history[:40], {"max": 99})
+    stepped = teach_eval.stored_history(history, {"high": 40, "low": 20})
+    assert stepped[0] == {"role": "user", "content": "student 6"} and len(stepped) == 20
+
+
+def test_the_script_is_set_against_the_apps_grader_claim_by_claim():
+    """Voice review of PR #90: the grader is never called in this eval, so nothing showed whether the verdicts the script
+    hands the coach are the ones the app's grader gives for the same words. --grader grades what the app would have
+    graded and counts the claims where the two agree."""
+    scenario = BY_ID["tb-two_ideas-search-1"]
+    records, _, _ = play(scenario, ScriptedCoach(scenario, calm))
+    items = teach_eval.grader_items([scenario], records)
+    # Both explanations of the first idea, then the second idea's explanation and its example with the question the coach asked.
+    assert [(i["turn"], i["idea"], i["kind"]) for i in items] == [(1, 0, "explain"), (2, 0, "explain"), (3, 1, "explain"), (4, 1, "example")]
+    assert items[0]["prompt"].startswith('Explain "Halving"') and items[3]["prompt"] == records[3]["text"]
+    assert items[2]["claims"][0]["concept_name"] == "Cost of binary search" and list(items[2]["scripted"].values()) == ["covered", "covered"]
+    # A first "I don't know" is not graded by the app, and neither are words that are a request.
+    assert teach_eval.grader_items([BY_ID["tb-idk_first-gears-1"]], [])[0]["turn"] == 2
+    asked = BY_ID["tb-just_tell_me-search-1"]
+    assert [i["turn"] for i in teach_eval.grader_items([asked], [])] == [1, 4]
+
+    first_claim, second_claim = [c["id"] for c in items[2]["claims"]]
+    graded = {
+        items[0]["key"]: {"status": "graded", "verdicts": {c["id"]: "missing" for c in items[0]["claims"]}},
+        items[1]["key"]: {"status": "ungraded"},
+        items[2]["key"]: {"status": "graded", "verdicts": {first_claim: "covered", second_claim: "partial"}},
+        items[3]["key"]: {"error": "TimeoutError"},
+    }
+    result = teach_eval.grader_agreement(items, graded)
+    assert (result["turns"], result["graded"], result["abstained"], result["errors"], result["not_run"]) == (4, 2, 1, 1, 0)
+    assert (result["claims"], result["agree"], result["agreement"]) == (4, 3, 0.75)
+    assert [(d["key"], d["scripted"], d["grader"]) for d in result["differences"]] == [(items[2]["key"], "covered", "partial")]
 
 
 def test_a_coach_that_recites_a_claim_fails_the_gates():
@@ -258,5 +347,5 @@ def test_the_builder_reproduces_the_committed_file():
     built = build_teach_scenarios.build()
     committed = [json.loads(line) for line in teach_eval.TEACH_SCENARIOS.read_text().splitlines() if line.strip()]
     assert built == committed
-    assert len(built) == 26
+    assert len(built) == 29
     assert {s["pattern"] for s in built} == set(build_teach_scenarios.PATTERNS)

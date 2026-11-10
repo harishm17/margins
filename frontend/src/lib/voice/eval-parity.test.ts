@@ -20,7 +20,9 @@ import {
 // When this fails, run `npx tsx scripts/teach-parity-fixture.ts` and then the eval's tests.
 test('the teach-back logic over the eval scenarios equals the committed parity fixture', () => {
   const scenarios = loadTeachScenarios(TEACH_SCENARIOS)
-  assert.equal(scenarios.length, 26)
+  assert.equal(scenarios.length, 29)
+  // Three of them are sessions of two ideas (the closing result of the first carries the second).
+  assert.equal(scenarios.filter((scenario) => ideasOf(scenario).length === 2).length, 3)
   const actual = JSON.parse(JSON.stringify(teachParityFixture(scenarios)))
   const expected = JSON.parse(fs.readFileSync(TEACH_STATE_FIXTURE, 'utf8'))
   assert.deepEqual(actual, expected)

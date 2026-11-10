@@ -4,8 +4,9 @@
     uv run python -I ../evals/tutoring/run_eval.py --surface teach_back --max-usd 2 --label teach-back-gates
 
 What it does:
-  1. Loads the scripted students (scenarios/teach-back-original.jsonl, built by build_teach_scenarios.py): twenty-six
-     students explaining one idea to the voice coach, each turn with the verdict the recall grader would give each claim.
+  1. Loads the scripted students (scenarios/teach-back-original.jsonl, built by build_teach_scenarios.py): twenty-nine
+     students explaining an idea to the voice coach (three of them two ideas, one after the other), each turn with the
+     verdict the recall grader would give each claim.
   2. Plays each one against the coach as the app runs it: the app's own system prompt and tool definitions (rendered by
      the TypeScript, fixtures/teach_back_prompts.json), the app's own provider for the voice purpose, and the same turn
      structure (spec 19.1): the rules of utterance.py (a mirror of the app's, pinned by fixtures/utterance_parity.json) decide
@@ -14,11 +15,19 @@ What it does:
      returns the stored result, and there are at most four model calls per student message. What the tools answer comes from
      teach_state.py, a mirror of the app's probe rules pinned to the real code by fixtures/teach_state_parity.json. The grader
      is not called: its verdicts are the script's, so this measures the coach, not the grader (which has its own tests).
-     Per student message the run reports the model calls and the time to the first sentence (reported, not gated).
+     Between turns the conversation is kept as the app keeps it (`stored_history`: thinking left out, trimmed at the
+     app's limits, which the prompt fixture carries). Per student message the run reports the model calls and the time
+     to the first sentence (reported, not gated).
+     Not played, because a scripted text student cannot do them: an interruption (the student talking over the coach,
+     history.ts markInterrupted) and a turn sent again after a dropped connection (the app's own tests cover both).
   3. With --judge, one Opus call per asking turn (teach_judge.py) decides whether the turn teaches the idea before the student has
      tried; that gate (teaches_before_probe) is "not run" without it. Then scores every coach turn with teach_metrics.py and
      applies the gates.
-  4. Writes evals/results/<date>-<label>.md and the folder <date>-<label>/ with turns.json, summary.json, run.json and raw/.
+  4. With --grader, the app's recall grader (grade_recall) also grades every scripted explanation and example answer the
+     app would have sent it, and the report says how often its verdict for a claim is the script's. Reported, not gated:
+     it shows how far the scripted verdicts are from what the app would have told the coach. The conversations still
+     follow the script, so a run with --grader costs the grader calls on top and changes nothing else.
+  5. Writes evals/results/<date>-<label>.md and the folder <date>-<label>/ with turns.json, summary.json, run.json and raw/.
 
 Every model call goes through the spend gate: --max-usd (default 4) and --max-judge-usd (default 3, the judge alone) are hard stops checked before each call. --dry-run
 plays the scripts against the app's prompt and tools with the ideal coach, prints the plan and a cost estimate, and calls
@@ -297,6 +306,39 @@ class Session:
 
 # ---------------------------------------------------------------------------- playing
 
+DEFAULT_HISTORY = {"max": 30}  # a prompt fixture written before it carried the app's limits
+
+
+def stored_history(messages: List[Dict[str, Any]], limits: Dict[str, int]) -> List[Dict[str, Any]]:
+    """The conversation as the app keeps it between turns (frontend/src/lib/voice/history.ts toStoredHistory): thinking
+    blocks are left out, and the history is cut to the app's limits, starting at a student message that is not a tool
+    result. `limits` come from the prompt fixture: {"max": n} (a sliding window) or, for the audited prompts,
+    {"high": n, "low": m} (left whole until it passes `high`, then cut to `low`)."""
+    cleaned: List[Dict[str, Any]] = []
+    for message in messages:
+        content = message["content"]
+        if isinstance(content, str):
+            cleaned.append(message)
+            continue
+        blocks = [block for block in content if block.get("type") not in ("thinking", "redacted_thinking")]
+        if blocks:
+            cleaned.append({"role": message["role"], "content": blocks})
+    if "high" in limits:
+        if len(cleaned) <= limits["high"]:
+            return cleaned
+        keep = limits["low"]
+    else:
+        keep = limits["max"]
+
+    def tool_result(message: Dict[str, Any]) -> bool:
+        return isinstance(message["content"], list) and any(block.get("type") == "tool_result" for block in message["content"])
+
+    start = max(0, len(cleaned) - keep)
+    while start < len(cleaned) and (cleaned[start]["role"] != "user" or tool_result(cleaned[start])):
+        start += 1
+    return cleaned[start:]
+
+
 
 async def coach_turn(
     provider,
@@ -438,6 +480,7 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
             _TURN_CALLS.reset(token)
         if stop.get("reason"):
             break  # the cap was reached during this turn: it is not a result
+        messages[:] = stored_history(messages, prompts.get("history") or DEFAULT_HISTORY)
         last_text = text or last_text
         records.append(
             {
@@ -489,10 +532,133 @@ async def play_all(scenarios, provider, prompts, stop, raw_dir: Path, resume: bo
     return [turn for scenario in scenarios for turn in results.get(scenario["id"], [])]
 
 
+# ---------------------------------------------------------------------------- the script against the app's grader
+
+
+def grader_items(scenarios: List[Dict[str, Any]], records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """What the app would send its recall grader for each scripted turn (teach-tools.ts): an explanation against the
+    idea's own prompt, an example answer against the question the coach asked in the run. Left out, as the app leaves
+    them out: a first "I don't know" (not graded), words the app's rules do not read as an answer (a request, a
+    question), and an example whose question the run does not have."""
+    from teach_state import ideas_of, idea_prompt
+
+    questions: Dict[tuple, str] = {}
+    for record in records:
+        for call in record.get("tools") or []:
+            question = (call.get("input") or {}).get("question")
+            if call.get("name") in EXAMPLE_CHECK_TOOLS and question:
+                questions[(record["scenario"], record["turn"])] = question
+    items = []
+    for scenario in scenarios:
+        turn_number = 0
+        for index, idea in enumerate(ideas_of(scenario)):
+            concept = idea["concept"]
+            for position, turn in enumerate(idea["turns"]):
+                turn_number += 1
+                kind = classify_utterance(turn["say"])
+                if kind not in ("answer", "idk") or not has_substance(turn["say"], kind):
+                    continue
+                if turn["kind"] == "explain":
+                    if turn.get("dont_know") and position == 0:
+                        continue
+                    prompt = idea_prompt(concept, 1)["prompt"]
+                else:
+                    prompt = questions.get((scenario["id"], turn_number), "")
+                    if not prompt:
+                        continue
+                items.append(
+                    {
+                        "key": f"{scenario['id']}#{turn_number}",
+                        "scenario": scenario["id"],
+                        "idea": index,
+                        "turn": turn_number,
+                        "kind": turn["kind"],
+                        "prompt": prompt,
+                        "answer": turn["say"],
+                        # The eval's courses hold claims and pages, no page text, so the claims go without a quote.
+                        "claims": [{"id": c["id"], "concept_id": concept["id"], "concept_name": concept["name"], "text": c["text"], "page": c.get("page")} for c in concept["claims"]],
+                        "scripted": {c["id"]: v["verdict"] for c, v in zip(concept["claims"], turn["verdicts"])},
+                    }
+                )
+    return items
+
+
+def grader_agreement(items: List[Dict[str, Any]], graded: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """The grader's verdicts against the script's, claim by claim. `graded` maps an item's key to
+    {"status": "graded", "verdicts": {claim_id: verdict}}, {"status": <not graded>} when the grader asked a clarifying
+    question instead, or {"error": ...}."""
+    summary: Dict[str, Any] = {"turns": len(items), "graded": 0, "abstained": 0, "errors": 0, "not_run": 0, "claims": 0, "agree": 0, "differences": []}
+    for item in items:
+        result = graded.get(item["key"])
+        if result is None:
+            summary["not_run"] += 1
+        elif result.get("error"):
+            summary["errors"] += 1
+        elif result.get("status") != "graded":
+            summary["abstained"] += 1
+        else:
+            summary["graded"] += 1
+            for claim in item["claims"]:
+                scripted, found = item["scripted"][claim["id"]], result["verdicts"].get(claim["id"], "missing")
+                summary["claims"] += 1
+                if scripted == found:
+                    summary["agree"] += 1
+                else:
+                    summary["differences"].append({"key": item["key"], "kind": item["kind"], "answer": item["answer"], "claim": claim["text"], "scripted": scripted, "grader": found})
+    summary["agreement"] = (summary["agree"] / summary["claims"]) if summary["claims"] else None
+    return summary
+
+
+async def grade_script(provider, items: List[Dict[str, Any]], grader_dir: Path, concurrency: int, log) -> Dict[str, Dict[str, Any]]:
+    """Each item through the app's `grade_recall` (its quote checks and abstaining included), with the app's provider
+    for the purpose pointed at the metered one. A finished item is kept in grader_dir and not graded again."""
+    from spend import SpendLimitReached
+
+    from app.services.llm.factory import LLMFactory
+    from app.services.llm.schemas import RecallClaim, RecallGradeRequest
+    from app.services.recall_grader import grade_recall
+
+    grader_dir.mkdir(parents=True, exist_ok=True)
+    graded: Dict[str, Dict[str, Any]] = {}
+    stopped: Dict[str, str] = {}
+    semaphore = asyncio.Semaphore(max(1, concurrency))
+
+    async def one(item: Dict[str, Any]) -> None:
+        path = grader_dir / (item["key"].replace("#", "-") + ".json")
+        if path.exists():
+            graded[item["key"]] = json.loads(path.read_text())
+            return
+        async with semaphore:
+            if stopped:
+                return
+            try:
+                result = await grade_recall(
+                    RecallGradeRequest(prompt=item["prompt"], claims=[RecallClaim(**claim) for claim in item["claims"]], answer=item["answer"], user_id="eval", project_id="eval")
+                )
+                out: Dict[str, Any] = {"status": result.status, "verdicts": {v.claim_id: v.verdict for v in result.verdicts}}
+            except SpendLimitReached as exc:
+                stopped["reason"] = str(exc)
+                log(f"  STOP: {exc}")
+                return
+            except Exception as exc:  # one failed grading is a gap in the table, not a crash
+                out = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+            graded[item["key"]] = out
+            if "error" not in out:
+                path.write_text(json.dumps(out, indent=2) + "\n")
+
+    saved = LLMFactory._instance  # the grader takes its provider from the factory
+    LLMFactory._instance = provider
+    try:
+        await asyncio.gather(*[one(item) for item in items])
+    finally:
+        LLMFactory._instance = saved
+    return graded
+
+
 # ---------------------------------------------------------------------------- estimate
 
 
-def estimate(scenarios: List[Dict[str, Any]], prompts: Dict[str, Any], tracker, judge_spec=None) -> Dict[str, Any]:
+def estimate(scenarios: List[Dict[str, Any]], prompts: Dict[str, Any], tracker, judge_spec=None, grader: bool = False) -> Dict[str, Any]:
     """Dollars for a run, from the app's prompt and tools with an ideal coach: each student message costs one call that speaks
     (the app has already run the step and put its result in the message, spec 19.1), over a history that grows by the results.
     The input side is close; the output side is a guess (spend.py DEFAULT_OUTPUT_TOKENS)."""
@@ -521,8 +687,14 @@ def estimate(scenarios: List[Dict[str, Any]], prompts: Dict[str, Any], tracker, 
             calls += 1
             history.append("A short spoken reply with one question.")
     plan = {"scenarios": len(scenarios), "calls": calls, "model": model, "usd": usd}
+    if grader:
+        # Every scripted turn the app would grade, at most; an example answer is graded only when the run has its question.
+        graded = sum(1 for s in scenarios for t in flat_turns(s) if not t.get("dont_know"))
+        grader_model = resolve_model("recall_grading").model
+        per_call = tracker.estimate_call(grader_model, "recall_grading", 900)
+        plan.update({"grader_model": grader_model, "graded": graded, "grader_usd": graded * per_call})
     if judge_spec is not None:
-        # One judge call per asking turn: at most one per scripted student message, and the opening turn.
+        # One judge call per asking turn (a closing turn that asks the next idea is one): at most one per scripted student message, and the opening turn.
         judged = sum(len(flat_turns(s)) + 1 for s in scenarios)
         per_call = tracker.estimate_call(judge_spec.model_id, "judge_teach_back", 700)
         plan.update({"judge_model": judge_spec.label, "judged": judged, "judge_usd": judged * per_call})
@@ -540,7 +712,9 @@ def print_plan(args, plan: Dict[str, Any], log, revision: Optional[Dict[str, Any
     log(f"  coach {plan['model']}: about ${plan['usd']:.2f}")
     if plan.get("judge_usd") is not None:
         log(f"  teaches-before-probe judge {plan['judge_model']}: about ${plan['judge_usd']:.2f} for {plan['judged']} asking turns (an ideal coach asks on most turns)")
-    log(f"  estimated total: ${plan['usd'] + (plan.get('judge_usd') or 0):.2f}. Caps: --max-usd {args.max_usd}, --max-judge-usd {args.max_judge_usd}")
+    if plan.get("grader_usd") is not None:
+        log(f"  recall grader {plan['grader_model']} (--grader): about ${plan['grader_usd']:.2f} for up to {plan['graded']} scripted answers (counted under --max-usd)")
+    log(f"  estimated total: ${plan['usd'] + (plan.get('judge_usd') or 0) + (plan.get('grader_usd') or 0):.2f}. Caps: --max-usd {args.max_usd}, --max-judge-usd {args.max_judge_usd}")
     log("  These are rough: a coach that calls a tool twice in a turn, or speaks longer, costs more. Nothing was called.")
 
 
@@ -579,7 +753,7 @@ async def run(args, host) -> int:
 
     if args.dry_run:
         host.prepare_app_environment()
-        print_plan(args, estimate(scenarios, prompts, tracker, judge_spec), log, revision, prompts)
+        print_plan(args, estimate(scenarios, prompts, tracker, judge_spec, bool(getattr(args, "grader", False))), log, revision, prompts)
         return 0
 
     date = datetime.date.today().isoformat()
@@ -628,7 +802,7 @@ async def run(args, host) -> int:
         judge_provider = adapters.MeteredProvider(
             adapters.build_provider(mock=args.mock, api_key=api_key, timeout=args.timeout), judge_spec, tracker, spend_module.JUDGE
         )
-        items = teach_judge.items_for_records(by_id, records, lambda r: r.get("last_action") in teach_metrics.ASKING_ACTIONS)
+        items = teach_judge.items_for_records(by_id, records, teach_metrics.is_judged)
         if args.judge_limit is not None and args.judge_limit < len(items):
             step = len(items) / args.judge_limit
             items = [items[int(i * step)] for i in range(args.judge_limit)]
@@ -639,7 +813,17 @@ async def run(args, host) -> int:
         earlier = json.loads(cost_file.read_text())["cost_usd"] if cost_file.exists() else 0.0
         cost_file.write_text(json.dumps({"cost_usd": round(earlier + judge_info["cost_usd"], 4)}) + "\n")
 
+    # ------------------------------------------------------------------ --grader: the script against the app's own grader
+    grader_summary: Optional[Dict[str, Any]] = None
+    if getattr(args, "grader", False):
+        grader_provider = adapters.MeteredProvider(adapters.build_provider(mock=args.mock, api_key=api_key, timeout=args.timeout), None, tracker, spend_module.GENERATION)
+        items = grader_items(scenarios, records)
+        log(f"Grading {len(items)} scripted answers with the app's recall grader")
+        graded = await grade_script(grader_provider, items, run_dir / "grader", args.concurrency, log)
+        grader_summary = {**grader_agreement(items, graded), "model": resolve_model("recall_grading").model, "cost_usd": round(sum(c["cost_usd"] for c in grader_provider.calls), 4)}
+
     summary_metrics = teach_metrics.summarize(by_id, records, judgments)
+    summary_metrics["grader"] = grader_summary
     spoken = [r for r in records if r.get("text")]
     spent = round(tracker.spent[spend_module.GENERATION], 4)
     judge_spend = round(tracker.spent[spend_module.JUDGE], 4)
@@ -682,4 +866,4 @@ async def run(args, host) -> int:
     return 0 if summary_metrics["passed"] else 1
 
 
-__all__ = ["run", "make_teach_meter", "Session", "coach_turn", "play"]
+__all__ = ["run", "make_teach_meter", "Session", "coach_turn", "play", "stored_history", "grader_items", "grader_agreement"]

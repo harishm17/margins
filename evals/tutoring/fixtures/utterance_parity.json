@@ -390,6 +390,36 @@
    "help": false
   },
   {
+   "text": "Development is how far the bike travels for one full turn of the pedals, and you get it by multiplying the gear ratio by the wheel circumference.",
+   "kind": "answer",
+   "substance": true,
+   "help": false
+  },
+  {
+   "text": "With a ratio of 2 and a wheel about 2 metres round, one turn of the pedals moves the bike about 4 metres.",
+   "kind": "answer",
+   "substance": true,
+   "help": false
+  },
+  {
+   "text": "Doubling time is how many periods it takes for the balance to reach twice the start, and the rule of 72 estimates it in years as 72 divided by the percentage rate.",
+   "kind": "answer",
+   "substance": true,
+   "help": false
+  },
+  {
+   "text": "It takes about log base 2 of the list length comparisons, rounded up, and the list has to be sorted or the search can miss the target.",
+   "kind": "answer",
+   "substance": true,
+   "help": false
+  },
+  {
+   "text": "With 1000 items, 2 to the power 10 is 1024, so about 10 comparisons, as long as the list is sorted.",
+   "kind": "answer",
+   "substance": true,
+   "help": false
+  },
+  {
    "text": "stop",
    "kind": "control",
    "substance": false,

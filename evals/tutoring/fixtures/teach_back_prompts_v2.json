@@ -49,5 +49,9 @@
    }
   }
  ],
+ "history": {
+  "high": 40,
+  "low": 20
+ },
  "finish_cut_off_note": "[Your reply reached its length limit and stopped there. The student has heard all of it, so do not repeat any of it. Finish the thought in one short sentence, and ask your one question if you had not asked it yet.]"
 }
