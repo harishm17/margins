@@ -22,18 +22,14 @@ from app.services.content_generator.context import (
     format_concept_block,
     resolve_concept_ids,
 )
-from app.services.content_generator.quiz import (
-    APPLICATION_RULES,
-    DIFFICULTY_GUIDANCE,
-    QUESTION_FORMAT_RULES,
-    minimum_usable,
-)
+from app.prompt_revision import prompts_v2
+from app.services.content_generator.quiz import minimum_usable, question_rules, question_set_schema
 from app.services.content_generator.refill import refill_figures, refill_wanted
 from app.services.content_generator.support_check import check_support
 from app.services.exam_style import project_style_profile, style_guidance
 from app.services.llm.base import LLMError, LLMOutputError
 from app.services.llm.factory import LLMFactory
-from app.services.llm.schemas import QuestionSet, content_rng
+from app.services.llm.schemas import content_rng
 
 logger = logging.getLogger(__name__)
 
@@ -231,7 +227,10 @@ class ExamGenerator:
 
         concepts = await fetch_concepts(topic["id"])
         neighbours = await fetch_confusable_neighbours(topic["id"])
-        guidance = DIFFICULTY_GUIDANCE.get(difficulty, DIFFICULTY_GUIDANCE['medium'])
+        v2 = prompts_v2("generation")
+        difficulties, application_rules, format_rules = question_rules()
+        guidance = difficulties.get(difficulty, difficulties['medium'])
+        closing = "" if v2 else f'\nSet difficulty to "{difficulty}".'
         style_block = f"{style}\n" if style else ""
         existing = do_not_reuse_block(await existing_content_digest(topic["id"]))
 
@@ -245,15 +244,14 @@ class ExamGenerator:
 Use exactly this mix: {mix}. A few extra questions of each type are spares for questions that do not pass a check, so each one must stand on its own.
 Difficulty: {difficulty}. {guidance}
 
-{APPLICATION_RULES}
+{application_rules}
 {existing}{avoid}{format_concept_block(concepts, neighbours)}
-{style_block}{QUESTION_FORMAT_RULES}
-Set difficulty to "{difficulty}"."""
+{style_block}{format_rules}{closing}"""
 
             result = await self.llm.generate_structured(
                 content_messages(topic['name'], topic.get('description') or '', chunks, instructions,
                                  course_map=context.course_map),
-                QuestionSet,
+                question_set_schema(),
                 max_tokens=16000,
                 purpose="exam_questions",
             )
@@ -269,6 +267,8 @@ Set difficulty to "{difficulty}"."""
                 remaining[q_type] -= 1
                 question['topic_id'] = topic['id']
                 question['topic_name'] = topic['name']
+                if v2:
+                    question['difficulty'] = difficulty  # the code knows it; the model is not asked
                 questions.append(question)
             return await check_support(questions, chunks)
 
