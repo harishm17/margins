@@ -58,9 +58,10 @@ export async function helpAfterMiss(
   const first = new Map<string, { chunkId: string | null; page: number | null }>()
   for (const claim of claims) if (!first.has(claim.conceptId)) first.set(claim.conceptId, { chunkId: claim.chunkId, page: claim.pageStart })
 
-  const pointers = known.map((conceptId) => {
+  // An idea with no claim left (its file was deleted) has no page to point at: it is skipped, not pointed at nothing.
+  const pointers = known.filter((conceptId) => first.has(conceptId)).map((conceptId) => {
     const concept = byId.get(conceptId)!
-    const claim = first.get(conceptId) ?? { chunkId: null, page: null }
+    const claim = first.get(conceptId)!
     return {
       conceptId,
       conceptName: concept.name,
