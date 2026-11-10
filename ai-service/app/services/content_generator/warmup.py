@@ -22,6 +22,7 @@ from app.services.content_generator.context import (
     resolve_concept_ids,
 )
 from app.services.content_generator.quiz import minimum_usable
+from app.services.content_generator.refill import refill_figures, refill_once, refill_wanted
 from app.services.content_generator.support_check import check_support
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
@@ -36,6 +37,7 @@ WARMUP_TYPES = ("multiple_choice", "true_false")
 # A student who has not read yet gets the first question at medium and mostly misses, so the bank
 # is deeper on the easy side than on the hard side.
 WARMUP_MIX = "two easy, two medium and one hard"
+WARMUP_WANTED = {"easy": 2, "medium": 2, "hard": 1}
 
 WARMUP_INSTRUCTIONS = """Write {count} warm-up questions on "{topic}" from the excerpts above. The student answers some of them before reading, to find out what they already know and to prime what they are about to read.
 
@@ -61,7 +63,7 @@ def _usable_bank(questions: List[Dict]) -> List[Dict]:
         level = str(question.get("difficulty") or "").strip().lower()
         question["difficulty"] = level if level in WARMUP_LEVELS else "medium"
         bank.append(question)
-    wanted = {"easy": 2, "medium": 2, "hard": 1}
+    wanted = WARMUP_WANTED
     chosen: List[Dict] = []
     for level in WARMUP_LEVELS:
         chosen += [q for q in bank if q["difficulty"] == level][: wanted[level]]
@@ -84,22 +86,40 @@ async def generate_warmup(topic_id: str) -> Dict:
     concepts = await fetch_concepts(topic_id)
     neighbours = await fetch_confusable_neighbours(topic_id)
 
-    instructions = WARMUP_INSTRUCTIONS.format(
-        count=WARMUP_QUESTIONS, topic=context.topic["name"], mix=WARMUP_MIX, concepts=format_concept_block(concepts, neighbours)
-    )
-    result = await LLMFactory.get_provider().generate_structured(
-        content_messages(
-            context.topic["name"], context.topic.get("description") or "", chunks, instructions,
-            course_map=context.course_map,
-        ),
-        WarmupSet,
-        max_tokens=8000,
-        purpose="warmup",
-    )
-    supported, dropped = await check_support(
-        [q for q in result.usable() if q["question_type"] in WARMUP_TYPES], chunks
-    )
+    async def ask(count: int, mix: str, avoid: str = "") -> tuple[List[Dict], int]:
+        instructions = WARMUP_INSTRUCTIONS.format(
+            count=count, topic=context.topic["name"], mix=mix, concepts=format_concept_block(concepts, neighbours)
+        )
+        result = await LLMFactory.get_provider().generate_structured(
+            content_messages(
+                context.topic["name"], context.topic.get("description") or "", chunks, instructions + avoid,
+                course_map=context.course_map,
+            ),
+            WarmupSet,
+            max_tokens=8000,
+            purpose="warmup",
+        )
+        return await check_support([q for q in result.usable() if q["question_type"] in WARMUP_TYPES], chunks)
+
+    supported, dropped = await ask(WARMUP_QUESTIONS, WARMUP_MIX)
     questions = _usable_bank(supported)
+    refilled = 0
+    if refill_wanted(len(questions), minimum_usable(WARMUP_QUESTIONS)):
+        # Finding 102: ask once for the questions the checks removed, at the levels the bank lacks.
+        async def regenerate(missing: int) -> List[Dict]:
+            have = [q["difficulty"] for q in questions]
+            lacking = {level: max(0, n - have.count(level)) for level, n in WARMUP_WANTED.items()}
+            mix = ", ".join(f"{n} {level}" for level, n in lacking.items() if n) or f"{missing} medium"
+            avoid = "\n\nDo not repeat these questions:\n" + "\n".join(f"- {q.get('question_text')}" for q in supported)
+            nonlocal dropped
+            more, more_dropped = await ask(missing, mix, avoid if supported else "")
+            dropped += more_dropped
+            return more
+
+        more_questions, _ = await refill_once(supported, WARMUP_QUESTIONS, minimum_usable(WARMUP_QUESTIONS), regenerate)
+        before = len(questions)
+        questions = _usable_bank(more_questions)
+        refilled = max(0, len(questions) - before)
     if len(questions) < minimum_usable(WARMUP_QUESTIONS):
         raise LLMOutputError(
             f"Warm-up had {len(questions)} usable questions of {WARMUP_QUESTIONS} requested"
@@ -126,5 +146,6 @@ async def generate_warmup(topic_id: str) -> Dict:
         "questions": questions,
         "total_questions": len(questions),
         "dropped_unsupported": dropped,
+        **refill_figures(WARMUP_QUESTIONS, len(questions), refilled),
         "generated_at": datetime.now(UTC).isoformat(),
     }

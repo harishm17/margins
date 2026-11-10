@@ -119,6 +119,7 @@ JOB_ENDPOINTS = {
     "exam_relevance": "/jobs/exam-relevance",
     "generate_content": "/jobs/generate-content",
     "extract_concepts": "/jobs/extract-concepts",
+    "requote_concepts": "/jobs/requote-concepts",
     "link_concepts": "/jobs/link-concepts",
     "generate_review_items": "/jobs/generate-review-items",
     "gap_explainer": "/jobs/gap-explainer",

@@ -175,7 +175,7 @@ async def _run_child(
     status = result.get("status")
     if status == "ok":
         return ExtractedDocument(
-            pages=[ExtractedPage(number=p["number"], text=p["text"]) for p in result["pages"]],
+            pages=[ExtractedPage(number=p["number"], text=p["text"], from_text_layer=bool(p.get("from_text_layer", False))) for p in result["pages"]],
             extension=result["extension"],
             page_count=result["page_count"],
         )

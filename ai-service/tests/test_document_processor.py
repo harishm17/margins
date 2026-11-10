@@ -454,3 +454,34 @@ def test_only_the_child_module_uses_the_parsers():
         if path.name not in allowed and pattern.search(path.read_text())
     ]
     assert offenders == []
+
+
+async def test_finding_104_a_page_the_markdown_read_drops_is_read_from_its_text_layer(tmp_path, monkeypatch):
+    """pymupdf4llm returned only the footer of a typed maths page. The page is read from its text layer, and the
+    validator's plain read finds the same pages empty as the chunker's read (here: none)."""
+    import pymupdf
+
+    from app.services.document_processor import extractors
+    from app.services.document_processor.parse_types import ParseLimits
+
+    doc = pymupdf.open()
+    typed = ["The first page explains how a sample mean is found from a list of values.",
+             "The second page explains how spread is measured around that mean value."]
+    for text in typed:
+        doc.new_page().insert_textbox(pymupdf.Rect(50, 50, 500, 300), text, fontsize=12)
+    path = tmp_path / "typed.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    real = extractors.pymupdf4llm.to_markdown
+
+    def drops_page_two(doc, pages, **kwargs):
+        return "Page footer" if pages == [1] else real(doc, pages=pages, **kwargs)
+
+    monkeypatch.setattr(extractors.pymupdf4llm, "to_markdown", drops_page_two)
+    chunked = extractors.extract_document(str(path), "typed.pdf", True, ParseLimits())
+    validated = extractors.extract_document(str(path), "typed.pdf", False, ParseLimits())
+
+    assert [p.from_text_layer for p in chunked.pages] == [False, True]
+    assert "spread is measured" in chunked.pages[1].text and "Page footer" not in chunked.pages[1].text
+    assert chunked.empty_pages == validated.empty_pages == []

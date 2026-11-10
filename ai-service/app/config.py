@@ -103,6 +103,17 @@ class Settings(BaseSettings):
     VOICE_RETENTION_DAYS: int = 180
     VOICE_RETENTION_INTERVAL_SECONDS: float = 86400.0
 
+    # PR 1.6 behaviour flags, all off by default.
+    # 99: a hint or reply whose only match with an answer is a number word ("pick any two items" for 2) goes to a leak
+    # judge instead of being dropped (app/services/tutor/leak.py). A numeral or the exact answer text stays a hard leak.
+    LEAK_WORD_FORMS_TO_JUDGE: bool = False
+    # 102: a generated set left under its floor is regenerated once for the missing items instead of failing the job
+    # (app/services/content_generator/refill.py).
+    SUPPORT_REFILL: bool = False
+    # F0: the requote_concepts job gives a concept with no claims new ones from the topic's remaining files, keeping its
+    # id (app/services/concepts/requote.py). Off: the job completes without a model call.
+    CLAIM_REQUOTE: bool = False
+
     # Course structure. A topic is taught from the chunks of its primary sources, in document
     # order, up to this many tokens (whole sections are kept, the rest dropped from the end).
     TOPIC_SOURCE_TOKEN_BUDGET: int = 16000

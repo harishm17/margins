@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from app.db.connection import UTC_NOW, execute_in_transaction, execute_one, execute_query, execute_update
 from app.services.concepts.validate import ValidatedGraph
+from app.services.llm.schemas import ExtractedClaim
 from app.services.concepts.vectors import parse_vector, vector_literal
 from app.services.embeddings.generator import generate_embeddings
 
@@ -25,6 +26,70 @@ def _name_key(name: str) -> str:
 
 def concept_embedding_text(name: str, summary: str) -> str:
     return f"{name} — {summary}"
+
+
+async def _insert_claims(conn, claims: List[ExtractedClaim], ids: Dict[str, str]) -> int:
+    """Write `claims` for the concepts in `ids` (claim.concept_key -> concept id), numbered per concept in the order
+    given, each with the file and pages of its chunk. A claim whose chunk was rewritten meanwhile is skipped. Returns
+    how many were written."""
+    places = {
+        row["id"]: row
+        for row in await conn.fetch(
+            "SELECT id, material_id, page_start, page_end FROM material_chunks WHERE id = ANY($1::text[])",
+            sorted({claim.chunk_id for claim in claims}),
+        )
+    }
+    counts: Dict[str, int] = {}
+    written = 0
+    for claim in claims:
+        place = places.get(claim.chunk_id)
+        concept_id = ids.get(claim.concept_key)
+        if place is None or concept_id is None:
+            continue  # the chunk was rewritten while the model was working
+        order = counts.get(concept_id, 0)
+        counts[concept_id] = order + 1
+        await conn.execute(
+            """
+            INSERT INTO concept_claims (id, concept_id, text, quote, material_id, chunk_id,
+                                        page_start, page_end, order_index)
+            VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8)
+            """,
+            concept_id, claim.text, claim.quote, place["material_id"], claim.chunk_id,
+            place["page_start"], place["page_end"], order,
+        )
+        written += 1
+    return written
+
+
+async def store_requoted_claims(topic_id: str, claims: List[ExtractedClaim]) -> Dict[str, int]:
+    """Give claims to concepts of the topic that have none (claim.concept_key is the concept's id), in one transaction.
+
+    The concepts keep their ids, so the student's history, edges and tagged items stay attached. A concept that has
+    claims by the time the rows are locked (another job gave it some) is left alone. Returns concept id -> claims
+    written, for the concepts that got any."""
+
+    async def write(conn) -> Dict[str, int]:
+        rows = await conn.fetch(
+            """
+            SELECT id FROM concepts
+            WHERE topic_id = $1 AND status = 'active' AND origin = 'llm' AND id = ANY($2::text[])
+              AND NOT EXISTS (SELECT 1 FROM concept_claims k WHERE k.concept_id = concepts.id)
+            ORDER BY id FOR UPDATE
+            """,
+            topic_id, sorted({claim.concept_key for claim in claims}),
+        )
+        ids = {row["id"]: row["id"] for row in rows}
+        wanted = [claim for claim in claims if claim.concept_key in ids]
+        await _insert_claims(conn, wanted, ids)
+        return {
+            row["concept_id"]: row["n"]
+            for row in await conn.fetch(
+                "SELECT concept_id, COUNT(*) AS n FROM concept_claims WHERE concept_id = ANY($1::text[]) GROUP BY concept_id",
+                list(ids),
+            )
+        }
+
+    return await execute_in_transaction(write)
 
 
 async def store_graph(topic_id: str, graph: ValidatedGraph) -> int:
@@ -67,16 +132,6 @@ async def store_graph(topic_id: str, graph: ValidatedGraph) -> int:
         reusable = {_name_key(row["name"]): row["id"] for row in remaining if row["origin"] == "llm"}
         kept = len([row for row in remaining if row["origin"] == "llm"])
 
-        # Where each quote came from.
-        chunk_ids = sorted({claim.chunk_id for claim in graph.claims})
-        places = {
-            row["id"]: row
-            for row in await conn.fetch(
-                "SELECT id, material_id, page_start, page_end FROM material_chunks WHERE id = ANY($1::text[])",
-                chunk_ids,
-            )
-        }
-
         ids: Dict[str, str] = {}  # local key -> concept id
         for position, (concept, vector) in enumerate(zip(graph.concepts, vectors)):
             existing = reusable.pop(_name_key(concept.name), None)
@@ -118,23 +173,7 @@ async def store_graph(topic_id: str, graph: ValidatedGraph) -> int:
             own, topic_id,
         )
 
-        claim_counts: Dict[str, int] = {}
-        for claim in graph.claims:
-            place = places.get(claim.chunk_id)
-            concept_id = ids.get(claim.concept_key)
-            if place is None or concept_id is None:
-                continue  # the chunk was rewritten while the model was working
-            order = claim_counts.get(concept_id, 0)
-            claim_counts[concept_id] = order + 1
-            await conn.execute(
-                """
-                INSERT INTO concept_claims (id, concept_id, text, quote, material_id, chunk_id,
-                                            page_start, page_end, order_index)
-                VALUES (gen_random_uuid()::text, $1, $2, $3, $4, $5, $6, $7, $8)
-                """,
-                concept_id, claim.text, claim.quote, place["material_id"], claim.chunk_id,
-                place["page_start"], place["page_end"], order,
-            )
+        await _insert_claims(conn, graph.claims, ids)
 
         for edge in graph.edges:
             source, target = ids.get(edge.source, edge.source), ids.get(edge.target, edge.target)

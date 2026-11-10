@@ -112,9 +112,9 @@ async def test_a_number_word_answer_in_ordinary_prose_goes_to_the_judge_not_the_
 def test_the_authored_hint_check_still_holds_a_number_word():
     from app.services.tutor.leak import string_leak
 
-    assert string_leak("Answer: eight", ["8", "eight"], 0) is True
-    assert string_leak("Answer: eight", ["8", "eight"], 0, prose_words_to_judge=True) is False
-    assert string_leak("It is 8.", ["8", "eight"], 0, prose_words_to_judge=True) is True
+    assert string_leak("Answer: eight", ["8", "eight"], 0)
+    assert string_leak("Answer: eight", ["8", "eight"], 0, prose_words_to_judge=True) is None
+    assert string_leak("It is 8.", ["8", "eight"], 0, prose_words_to_judge=True) == "hard"
 
 
 def test_a_long_reply_keeps_its_closing_question_and_loses_lead_in_instead():

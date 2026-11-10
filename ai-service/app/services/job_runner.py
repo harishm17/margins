@@ -68,6 +68,7 @@ LEASE_SECONDS = {
     "exam_relevance": 300,
     "generate_content": 300,
     "extract_concepts": 300,
+    "requote_concepts": 300,
     "link_concepts": 300,
     "generate_review_items": 300,
     "gap_explainer": 300,
@@ -106,6 +107,7 @@ _NOT_FOUND_CODES = {
     "validate_material": "MATERIAL_NOT_FOUND",
     "chunk_material": "MATERIAL_NOT_FOUND",
     "profile_exam": "MATERIAL_NOT_FOUND",
+    "requote_concepts": "NOT_FOUND",
     "grade_exam": "SUBMISSION_NOT_FOUND",
     "grade_quiz": "QUIZ_SUBMISSION_NOT_FOUND",
 }

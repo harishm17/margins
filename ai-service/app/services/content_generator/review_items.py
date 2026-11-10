@@ -27,6 +27,7 @@ from app.services.content_generator.context import (
     resolve_concept_ids,
 )
 from app.services.content_generator.quiz import QUESTION_FORMAT_RULES
+from app.services.content_generator.refill import refill_figures, refill_wanted
 from app.services.content_generator.support_check import check_support
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
@@ -221,48 +222,63 @@ async def generate_review_items(topic_id: str, requests: Sequence[Dict[str, Any]
         await execute_query("SELECT 1 FROM topic_quizzes WHERE topic_id = $1 AND kind = 'review_bank' LIMIT 1", topic_id)
     )
 
-    supported: List[Dict[str, Any]] = []
-    dropped = 0
-    for start in range(0, len(wanted), BATCH_SIZE):
-        batch = wanted[start:start + BATCH_SIZE]
-        instructions = REVIEW_INSTRUCTIONS.format(
-            topic=context.topic["name"],
-            count=ITEMS_PER_CONCEPT,
-            requests=_format_requests(batch, known, partners),
-            concepts=format_concept_block(concepts, neighbours),
-            format_rules=QUESTION_FORMAT_RULES,
-        )
-        result = await LLMFactory.get_provider().generate_structured(
-            content_messages(
-                context.topic["name"], context.topic.get("description") or "", chunks, instructions + seen,
-                cache_excerpts=cache_excerpts or start > 0, course_map=context.course_map,
-            ),
-            ReviewItemSet,
-            max_tokens=16000,
-            purpose="review_items",
-        )
-        asked = len(batch) * ITEMS_PER_CONCEPT + SPARE_ITEMS
-        items = _asked_for(result.usable(), batch, partners)[:asked]
-        kept, lost = await check_support(items, chunks)
-        dropped += lost
-        # Tags are checked against the topic's concepts (a twin of another topic is a valid distractor target).
-        resolve_concept_ids(kept, concepts, chunks, neighbours)
-        kept = _asked_for(kept, batch, partners)
-        attach_sources(kept, chunks)
-        supported += kept
+    async def run_batches(requests: List[Dict[str, Any]], seen_text: str) -> tuple[List[Dict[str, Any]], int]:
+        """The supported items for `requests`, written BATCH_SIZE requests at a time, and how many were dropped."""
+        kept_items: List[Dict[str, Any]] = []
+        lost_items = 0
+        for start in range(0, len(requests), BATCH_SIZE):
+            batch = requests[start:start + BATCH_SIZE]
+            instructions = REVIEW_INSTRUCTIONS.format(
+                topic=context.topic["name"],
+                count=ITEMS_PER_CONCEPT,
+                requests=_format_requests(batch, known, partners),
+                concepts=format_concept_block(concepts, neighbours),
+                format_rules=QUESTION_FORMAT_RULES,
+            )
+            result = await LLMFactory.get_provider().generate_structured(
+                content_messages(
+                    context.topic["name"], context.topic.get("description") or "", chunks, instructions + seen_text,
+                    cache_excerpts=cache_excerpts or start > 0, course_map=context.course_map,
+                ),
+                ReviewItemSet,
+                max_tokens=16000,
+                purpose="review_items",
+            )
+            asked = len(batch) * ITEMS_PER_CONCEPT + SPARE_ITEMS
+            items = _asked_for(result.usable(), batch, partners)[:asked]
+            kept, lost = await check_support(items, chunks)
+            lost_items += lost
+            # Tags are checked against the topic's concepts (a twin of another topic is a valid distractor target).
+            resolve_concept_ids(kept, concepts, chunks, neighbours)
+            kept = _asked_for(kept, batch, partners)
+            attach_sources(kept, chunks)
+            kept_items += kept
+        return kept_items, lost_items
 
-    # Not a question the bank (or this batch) already has, and at most the count asked per request.
+    def fresh_items(candidates: List[Dict[str, Any]], texts: set) -> List[Dict[str, Any]]:
+        """Not a question the bank (or this set) already has, and at most the count asked per request."""
+        fresh_list: List[Dict[str, Any]] = []
+        per_request: Dict[tuple, int] = {}
+        for item in candidates:
+            key = (item["concept_ids"][0], item["mode"], item["difficulty"])
+            text = _normalised_text(item)
+            if text in texts or per_request.get(key, 0) >= ITEMS_PER_CONCEPT:
+                continue
+            texts.add(text)
+            per_request[key] = per_request.get(key, 0) + 1
+            fresh_list.append(item)
+        return fresh_list
+
+    supported, dropped = await run_batches(wanted, seen)
     texts = await _bank_texts(topic_id)
-    fresh: List[Dict[str, Any]] = []
-    per_request: Dict[tuple, int] = {}
-    for item in supported:
-        key = (item["concept_ids"][0], item["mode"], item["difficulty"])
-        text = _normalised_text(item)
-        if text in texts or per_request.get(key, 0) >= ITEMS_PER_CONCEPT:
-            continue
-        texts.add(text)
-        per_request[key] = per_request.get(key, 0) + 1
-        fresh.append(item)
+    fresh = fresh_items(supported, set(texts))
+    refilled = 0
+    if refill_wanted(len(fresh), 1):
+        # Finding 102: nothing usable came back. Ask once more for the requests, instead of failing the job.
+        more, lost = await run_batches(wanted, seen)
+        dropped += lost
+        fresh = fresh_items(supported + more, set(texts))
+        refilled = len(fresh)
     if not fresh:
         raise LLMOutputError(f"Review items had no usable question of {len(wanted) * ITEMS_PER_CONCEPT} requested")
 
@@ -274,6 +290,7 @@ async def generate_review_items(topic_id: str, requests: Sequence[Dict[str, Any]
         "total_items": len(fresh),
         "bank_size": total,
         "dropped_unsupported": dropped,
+        **refill_figures(len(wanted) * ITEMS_PER_CONCEPT, len(fresh), refilled),
         "concepts_without_items": [request["concept_id"] for request in wanted if request["concept_id"] not in covered],
         "generated_at": datetime.now(UTC).isoformat(),
     }
