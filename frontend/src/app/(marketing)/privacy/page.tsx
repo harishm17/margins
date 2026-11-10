@@ -63,6 +63,13 @@ export default function PrivacyPage() {
           nothing in them identifies you to anyone without your Google account. Copies of everything stay in our encrypted backups until those expire, after at most
           120 days; if we ever restore a backup, deleted accounts are deleted again before the app reopens. If you can&apos;t sign in or need help, email {CONTACT_EMAIL}.
         </p>
+        <p>
+          When you delete a single file, the notes and questions already made from it stay until you regenerate them or
+          delete the course.
+        </p>
+        <p>
+          Server logs are kept by Railway for about a week and hold ids and error types, not your text.
+        </p>
       </LegalSection>
       <LegalSection id="contact" heading="Contact">
         <p>
