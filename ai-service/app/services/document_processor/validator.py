@@ -24,6 +24,8 @@ from app.services.document_processor.parse_types import (
 from app.services.document_processor.sandbox import parse_document
 from app.services.document_processor.storage import local_copy
 
+from app.errors import VALIDATION_NOTES, describe_exception
+
 logger = logging.getLogger(__name__)
 
 # More than this share of pages without text means the file is a scan, not a text document.
@@ -111,7 +113,7 @@ async def validate_material(
     """
     # For development, we'll skip actual file processing
     if settings.is_development and not settings.ENABLE_PROCESSING:
-        logger.info(f"[DEV] Simulating validation for {filename}")
+        logger.info("[DEV] Simulating validation for material %s", material_id)
         return ValidationResult(
             status="valid",
             notes="Development mode: validation skipped",
@@ -123,10 +125,7 @@ async def validate_material(
     if extension not in SUPPORTED_EXTENSIONS:
         return ValidationResult(
             status="invalid",
-            notes=(
-                f"Unsupported file type '{extension}'. "
-                "Supported formats: .pdf, .docx, .pptx, .doc"
-            ),
+            notes=VALIDATION_NOTES["unsupported_type"],
         )
 
     async with local_copy(storage_path) as local_path:
@@ -198,12 +197,9 @@ Set kind to what the file is, whatever the category says: content (lecture notes
     except LLMError as llm_error:
         # Fallback path: keep pipeline functional if LLM credentials are missing
         # or upstream API auth is unavailable.
-        logger.warning(f"LLM validation unavailable for {material_id}: {llm_error}")
+        logger.warning("LLM validation unavailable for material %s: %s", material_id, describe_exception(llm_error))
         is_valid = True
-        notes = (
-            "Validation completed using structural checks only "
-            f"(LLM unavailable: {llm_error})."
-        )
+        notes = VALIDATION_NOTES["llm_unavailable"]
 
     return ValidationResult(
         status="valid" if is_valid else "invalid",

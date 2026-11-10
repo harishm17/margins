@@ -60,7 +60,7 @@ async def dependency_health_check():
             value = await ops.get_state(key)
             checks.append(_check(key, bool(value), value or "", "not recorded"))
     except Exception as exc:
-        checks.append(_check("database", False, "", f"Database check failed: {exc}", "fail"))
+        checks.append(_check("database", False, "", "Database check failed", "fail"))
 
     checks.append(_check("llm_key", settings.llm_configured, f"LLM provider {settings.LLM_PROVIDER} configured",
                          "ANTHROPIC_API_KEY missing", "fail"))

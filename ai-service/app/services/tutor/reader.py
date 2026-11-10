@@ -285,7 +285,7 @@ async def _leak_reason(req: ReaderTutorRequest, guarded: List[ReaderClaim], out:
     try:
         verdict = await judge_leak(text, "\n".join(answers), problem=req.passage, question=req.student_take)
     except Exception as exc:  # fail closed: an unchecked reply is not sent
-        raise JudgeUnavailable(str(exc)) from exc
+        raise JudgeUnavailable() from exc
     if verdict.answer_revealed:
         return verdict.reason.strip() or "gave the answer away"
     return None
@@ -307,7 +307,7 @@ async def _check_leak_reason(req: ReaderTutorRequest, guarded: List[ReaderClaim]
     try:
         verdict = await judge_leak(text, "\n".join(answers), problem=req.passage, question=req.check_question)
     except Exception as exc:  # fail closed: an unchecked reply is not sent
-        raise JudgeUnavailable(str(exc)) from exc
+        raise JudgeUnavailable() from exc
     if verdict.answer_revealed:
         return verdict.reason.strip() or "gave the answer away"
     return None
@@ -329,7 +329,7 @@ async def _restate_leak_reason(req: ReaderTutorRequest, out: ReaderTutorReply) -
     try:
         verdict = await judge_leak(out.reply, "\n".join(answers), problem=req.passage, question=out.check_question)
     except Exception as exc:  # fail closed: an unchecked reply is not sent
-        raise JudgeUnavailable(str(exc)) from exc
+        raise JudgeUnavailable() from exc
     if verdict.answer_revealed:
         return verdict.reason.strip() or "gave the answer away"
     return None
@@ -350,13 +350,13 @@ async def _check_reply(req: ReaderTutorRequest) -> ReaderCheckReply:
         try:
             reason = await _check_leak_reason(req, guarded, out)
         except JudgeUnavailable as exc:
-            logger.warning("event=tutor_leak_judge_failed scope=reader turn=check chunk=%s reason=%s", req.chunk_id, exc)
+            logger.warning("event=tutor_leak_judge_failed scope=reader turn=check chunk=%s cause=%s", req.chunk_id, exc.__cause__)
             break
         if reason is None:
             out.analysis = ""  # private notes, never returned
             out.from_fallback = False
             return out
-        logger.warning("event=tutor_leak scope=reader turn=check chunk=%s attempt=%s reason=%s", req.chunk_id, attempt, reason)
+        logger.warning("event=tutor_leak scope=reader turn=check chunk=%s attempt=%s", req.chunk_id, attempt)
     return ReaderCheckReply(
         analysis="", verdict="not_yet", reply=FALLBACK_VERDICT_REPLY, follow_up_question=FALLBACK_FOLLOW_UP, reveals_answer=False, from_fallback=True
     )
@@ -378,11 +378,11 @@ async def reader_reply(req: ReaderTutorRequest) -> Union[ReaderTutorReply, Reade
         try:
             reason = await (_restate_leak_reason(req, out) if restating else _leak_reason(req, guarded, out))
         except JudgeUnavailable as exc:
-            logger.warning("event=tutor_leak_judge_failed scope=reader chunk=%s reason=%s", req.chunk_id, exc)
+            logger.warning("event=tutor_leak_judge_failed scope=reader chunk=%s cause=%s", req.chunk_id, exc.__cause__)
             break
         if reason is None:
             out.analysis = ""  # private notes, never returned
             out.from_fallback = False
             return out
-        logger.warning("event=tutor_leak scope=reader chunk=%s rung=%s attempt=%s reason=%s", req.chunk_id, req.rung, attempt, reason)
+        logger.warning("event=tutor_leak scope=reader chunk=%s rung=%s attempt=%s", req.chunk_id, req.rung, attempt)
     return ReaderTutorReply(analysis="", reply=FALLBACK_REPLY, check_question=FALLBACK_CHECK, reveals_answer=False, from_fallback=True)

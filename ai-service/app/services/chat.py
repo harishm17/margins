@@ -34,6 +34,7 @@ from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Sequence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.config import settings
+from app.errors import describe_exception, public_message
 from app.services.budget import DailyBudgetExceeded
 from app.db.connection import execute_query
 from app.services.embeddings.generator import generate_query_embedding
@@ -931,15 +932,14 @@ async def _judged_answer(
                     # The judge costs what it costs, whatever it answered: the turn's ledger row carries it.
                     usage = _add_usage(usage, usage_total(judge_calls))
         except Exception as exc:  # fail closed: a reply that was not checked is not sent
-            logger.warning("event=tutor_leak_judge_failed scope=ask intent=%s reason=%s", route.intent, exc)
+            logger.warning("event=tutor_leak_judge_failed scope=ask intent=%s cause=%s", route.intent, exc)
             break
         if leak is None:
             for event in events:
                 yield {**event, "usage": usage} if event["type"] == "done" else event
             return
-        logger.warning(
-            "event=tutor_leak scope=ask intent=%s rung=%s attempt=%s reason=%s", route.intent, tutor.rung, attempt, leak
-        )
+        # The judge's reason can quote the answer it caught: the log says only that a draft was held back.
+        logger.warning("event=tutor_leak scope=ask intent=%s rung=%s attempt=%s", route.intent, tutor.rung, attempt)
     for event in _fallback_events(route, usage, len(chunks)):
         yield event
 
@@ -1009,23 +1009,23 @@ async def _stream_answer(
         ):
             yield event
     except LLMError as exc:
-        logger.warning("Chat answer failed: %s: %s", exc.code, exc)
+        logger.warning("Chat answer failed: %s", describe_exception(exc))
         yield {
             "type": "error",
             "code": exc.code,
-            "message": str(exc),
+            "message": public_message(exc.code),
             "retryable": exc.retryable,
             "usage": usage_payload(exc.usage) if exc.usage is not None else None,
         }
     except DailyBudgetExceeded as exc:  # the allowance ran out between the route's check and this call
-        logger.info("Chat answer refused: %s", exc)
-        yield {"type": "error", "code": exc.code, "message": str(exc), "retryable": False, "usage": None}
+        logger.info("Chat answer refused: %s", exc.code)
+        yield {"type": "error", "code": exc.code, "message": public_message(exc.code), "retryable": False, "usage": None}
     except Exception as exc:  # the stream has started: report it in-band
         logger.exception("Chat answer crashed")
         yield {
             "type": "error",
             "code": "CHAT_FAILED",
-            "message": f"The answer could not be written: {exc}",
+            "message": public_message("CHAT_FAILED"),
             "retryable": True,
             "usage": None,
         }

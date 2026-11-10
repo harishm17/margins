@@ -401,16 +401,17 @@ async def _leak_reason(req: PracticeTutorRequest, out: PracticeTutorReply) -> Op
             transfer_question=req.move == "confirm",
         )
     except Exception as exc:  # fail closed: an unchecked reply is not sent
-        raise JudgeUnavailable(str(exc)) from exc
+        raise JudgeUnavailable() from exc
     if verdict.answer_revealed:
         return Rejection("judge", verdict.reason.strip() or "gave the answer away")
     return None
 
 
-def _log_leak(req: PracticeTutorRequest, attempt: int, reason: str, event: str = "tutor_leak") -> None:
+def _log_leak(req: PracticeTutorRequest, attempt: int, kind: str, event: str = "tutor_leak") -> None:
+    """A held-back draft, by kind only: a reason or the values found can quote the authored answer."""
     logger.warning(
-        "event=%s move=%s rung=%s step=%s attempt=%s reason=%s",
-        event, req.move, req.rung_allowed, req.step_index, attempt, reason,
+        "event=%s move=%s rung=%s step=%s attempt=%s kind=%s",
+        event, req.move, req.rung_allowed, req.step_index, attempt, kind,
     )
 
 
@@ -437,8 +438,8 @@ async def tutor_reply(req: PracticeTutorRequest) -> PracticeTutorReply:
         try:
             rejection = await _leak_reason(req, out)
         except JudgeUnavailable as exc:
-            _log_leak(req, attempt, f"leak judge failed: {exc}", event="tutor_leak_judge_failed")
-            rejected.append(RejectedDraft(attempt=attempt, draft=out.reply, kind="other", reason=f"leak judge failed: {exc}"))
+            _log_leak(req, attempt, "judge_unavailable", event="tutor_leak_judge_failed")
+            rejected.append(RejectedDraft(attempt=attempt, draft=out.reply, kind="other", reason="leak judge failed"))
             break
         if rejected and rejected[-1].attempt == attempt - 1:
             rejected[-1].retry_passed = rejection is None
@@ -453,7 +454,7 @@ async def tutor_reply(req: PracticeTutorRequest) -> PracticeTutorReply:
         rejected.append(
             RejectedDraft(attempt=attempt, draft=out.reply, kind=rejection.kind, reason=rejection.reason, values=list(rejection.values))
         )
-        _log_leak(req, attempt, rejection.reason + (f" values={rejection.values}" if rejection.values else ""))
+        _log_leak(req, attempt, rejection.kind)
 
     text, rung = authored_fallback(req)
     return PracticeTutorReply(

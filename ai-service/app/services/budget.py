@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
+from app.errors import describe_exception
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_one, execute_update
 from app.services import ai_status, ops
@@ -76,7 +77,7 @@ async def record_usage_event(
             "Could not record %s usage (user %s, source %s, $%.6f): it will not count toward the daily budget",
             source, user_id, source_id, cost_usd,
         )
-        await ops.note("ledger_write_failed", f"{source} ${cost_usd:.4f} not in the ledger: {exc!r}")
+        await ops.note("ledger_write_failed", f"{source} ${cost_usd:.4f} not in the ledger: {describe_exception(exc)}")
 
 
 class DailyBudgetExceeded(Exception):

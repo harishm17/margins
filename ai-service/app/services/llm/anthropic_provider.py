@@ -237,6 +237,10 @@ def _retry_after(exc: anthropic.APIStatusError) -> Optional[float]:
     return None
 
 
+def _cost_text(cost: Optional[float]) -> str:
+    return "?" if cost is None else "%.5f" % cost
+
+
 def _translate_api_error(exc: anthropic.APIError) -> Exception:
     """Map SDK exceptions to the provider-neutral errors the job handlers classify.
 
@@ -244,25 +248,27 @@ def _translate_api_error(exc: anthropic.APIError) -> Exception:
     the job fails as retryable and the dispatcher tries again, after `retry_after` if the API
     gave one.
     """
+    # The SDK's text can echo the request (an answer key, a student's words): it goes in `detail`, which no log prints.
+    detail = f"{type(exc).__name__}: {exc}"
     if isinstance(exc, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
-        return LLMAuthError(f"Anthropic rejected the API key: {exc}")
+        return LLMAuthError(detail=detail)
     if isinstance(exc, anthropic.RateLimitError):
-        error: LLMError = LLMRateLimitError(f"Anthropic rate limit: {exc}")
+        error: LLMError = LLMRateLimitError(detail=detail)
         error.retry_after = _retry_after(exc)
         return error
     if isinstance(exc, anthropic.BadRequestError):
         if "credit balance" in str(exc).lower():
-            return LLMCreditError(f"Anthropic credit balance is too low: {exc}")
-        return LLMRequestError(f"Anthropic rejected the request: {exc}")
+            return LLMCreditError(detail=detail)
+        return LLMRequestError(detail=detail)
     if isinstance(exc, anthropic.APIConnectionError):  # includes APITimeoutError
-        return LLMUnavailableError(f"Could not reach Anthropic: {exc}")
+        return LLMUnavailableError(detail=detail)
     if isinstance(exc, anthropic.APIStatusError):
         if exc.status_code >= 500:  # includes 529 overloaded
-            error = LLMUnavailableError(f"Anthropic is unavailable ({exc.status_code}): {exc}")
+            error = LLMUnavailableError(detail=detail)
             error.retry_after = _retry_after(exc)
             return error
-        return LLMRequestError(f"Anthropic rejected the request ({exc.status_code}): {exc}")
-    return LLMUnavailableError(f"Anthropic call failed: {exc}")
+        return LLMRequestError(detail=detail)
+    return LLMUnavailableError(detail=detail)
 
 
 class AnthropicProvider(LLMProvider):
@@ -337,7 +343,7 @@ class AnthropicProvider(LLMProvider):
             usage.output_tokens,
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
-            f"{cost:.5f}" if cost is not None else "?",
+            _cost_text(cost),
             getattr(response, "_request_id", None),
         )
 
@@ -487,7 +493,7 @@ class AnthropicProvider(LLMProvider):
             usage.cache_creation_input_tokens,
             len(excerpts),
             len(citations),
-            f"{cost:.5f}" if cost is not None else "?",
+            _cost_text(cost),
             getattr(final, "_request_id", None),
         )
 
@@ -580,7 +586,7 @@ class AnthropicProvider(LLMProvider):
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
             len(tools),
-            f"{cost:.5f}" if cost is not None else "?",
+            _cost_text(cost),
             getattr(final, "_request_id", None),
         )
 

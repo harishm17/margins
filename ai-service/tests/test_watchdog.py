@@ -273,7 +273,7 @@ async def test_a_check_that_raises_is_itself_a_finding(db, posts, monkeypatch, c
     monkeypatch.setattr(watchdog, "check_leases", broken)
     assert {f.kind for f in await watchdog.run_watchdog(NOW)} == {"check_failed:leases"}
     assert "RuntimeError" in posts[0][1] and "column does not exist" not in posts[0][1]
-    assert "column does not exist" in caplog.text
+    assert "column does not exist" not in caplog.text  # exception text stays out of the log (app/logging_utils.py)
 
 
 @pytest.mark.asyncio

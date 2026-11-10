@@ -758,7 +758,7 @@ class TestRoute:
         response = post(client)
         assert response.status_code == 429
         assert response.json()["error_code"] == "LLM_DAILY_BUDGET"
-        assert "$3.10" in response.json()["detail"] and response.json()["budget_reason"] == "user"
+        assert "$" not in response.json()["detail"] and response.json()["budget_reason"] == "user"
         assert "retrieve_args" not in wired and wired["provider"].calls == []
 
     def test_nothing_retrieved_short_circuits_without_a_model_call(self, client, wired):

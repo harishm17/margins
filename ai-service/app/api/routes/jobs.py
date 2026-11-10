@@ -11,6 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 from app.api.routes.grading import GradeQuizBody
+from app.errors import describe_exception, public_message
 from app.models.jobs import (
     ConceptExtractionInput,
     ConceptLinkingInput,
@@ -165,7 +166,7 @@ async def validate_material_job(payload: JobPayload, job: JobContext) -> JobOutc
                     await enqueue_chunking_job(chunk_job_id, input_data.materialId)
                 except Exception as exc:
                     logger.error("Could not dispatch chunking job %s: %s", chunk_job_id, exc)
-                    await mark_undelivered(chunk_job_id, str(exc))
+                    await mark_undelivered(chunk_job_id, describe_exception(exc))
         else:
             logger.info("Chunking job %s already active for %s", chunk_job_id, input_data.materialId)
 
@@ -231,18 +232,19 @@ async def _start_topic_extraction(project_id: str, user_id: str) -> None:
             SET status = 'failed',
                 error_code = 'LLM_NOT_CONFIGURED',
                 retryable = FALSE,
-                error_message = 'ANTHROPIC_API_KEY is not configured',
+                error_message = $2,
                 completed_at = {UTC_NOW}
             WHERE id = $1
             """,
             topic_job_id,
+            public_message("LLM_NOT_CONFIGURED"),
         )
         return
     try:
         await enqueue_topic_extraction_job(topic_job_id, project_id)
     except Exception as exc:
         logger.error("Could not dispatch topic extraction %s: %s", topic_job_id, exc)
-        await mark_undelivered(topic_job_id, str(exc))
+        await mark_undelivered(topic_job_id, describe_exception(exc))
 
 
 # Chunks are embedded and inserted in batches, so one big file never holds everything in one call.
@@ -288,7 +290,7 @@ async def chunk_material_job(payload: JobPayload, job: JobContext) -> JobOutcome
 
     # For development without processing enabled, skip actual PDF processing
     if settings.is_development and not settings.ENABLE_PROCESSING:
-        logger.info(f"[DEV] Simulating chunking for {material['filename']}")
+        logger.info("[DEV] Simulating chunking for material %s", material["id"])
         return JobOutcome(
             result={"chunks_created": 0, "note": "Development mode"},
             response={"dev_mode": True},
@@ -303,7 +305,7 @@ async def chunk_material_job(payload: JobPayload, job: JobContext) -> JobOutcome
         chunks = await asyncio.to_thread(chunk_pages, extracted.pages)
         if len(chunks) > settings.PARSE_MAX_CHUNKS:
             raise ParseRefused("too_many_chunks")
-        logger.info(f"Created {len(chunks)} chunks from {material['filename']}")
+        logger.info("Created %d chunks from material %s", len(chunks), material["id"])
 
         await job.set_stage("embedding", 40)
         # An embedding failure fails the job (and it is retried): chunks stored without
@@ -317,7 +319,7 @@ async def chunk_material_job(payload: JobPayload, job: JobContext) -> JobOutcome
             raise RuntimeError(
                 f"Embedding returned {len(embeddings)} vectors for {len(chunks)} chunks"
             )
-        logger.info(f"Generated {len(embeddings)} embeddings")
+        logger.info("Generated %d embeddings", len(embeddings))
     except (ParseRefused, UnreadableDocumentError) as exc:
         # A refused or unreadable file is a content problem: retrying cannot help, and the
         # student sees a fixed note, never the parser's words.
@@ -367,7 +369,7 @@ async def chunk_material_job(payload: JobPayload, job: JobContext) -> JobOutcome
         return len(records)
 
     chunks_created = await execute_in_transaction(replace_chunks_transaction)
-    logger.info(f"Stored {chunks_created} chunks in database")
+    logger.info("Stored %d chunks in database", chunks_created)
 
     # Topic extraction stays off unless AUTO_EXTRACT_TOPICS_ON_CHUNK is set, to avoid
     # surprise topic churn while a student is still uploading files.
@@ -407,7 +409,7 @@ async def _start_exam_jobs(material_id: str, project_id: Optional[str], user_id:
             await enqueue_exam_profile_job(job_id, material_id)
         except Exception as exc:
             logger.error("Could not dispatch exam profile job %s: %s", job_id, exc)
-            await mark_undelivered(job_id, str(exc))
+            await mark_undelivered(job_id, describe_exception(exc))
 
 
 async def start_exam_relevance_job(project_id: str, user_id: str) -> None:
@@ -425,7 +427,7 @@ async def start_exam_relevance_job(project_id: str, user_id: str) -> None:
             await enqueue_exam_relevance_job(job_id, project_id)
         except Exception as exc:
             logger.error("Could not dispatch exam relevance job %s: %s", job_id, exc)
-            await mark_undelivered(job_id, str(exc))
+            await mark_undelivered(job_id, describe_exception(exc))
 
 
 @router.post("/jobs/profile-exam")
@@ -866,7 +868,7 @@ async def _generate_and_store_content(job: JobContext, input_data: ContentGenera
     if append and isinstance(metadata, dict) and content_record["item_count"] is not None:
         metadata["count"] = content_record["item_count"]
 
-    logger.info(f"Completed content generation: {content_type} for topic {topic['id']}")
+    logger.info("Completed content generation: %s for topic %s", content_type, topic["id"])
 
     # See app/services/generation_chain.py: the topic's next missing type (and, for a whole-course
     # run, the next topic) gets its job row now, before this one is marked completed, and is
@@ -901,7 +903,7 @@ async def _generate_support_content(job: JobContext, input_data: ContentGenerati
     else:
         warmup = await generate_warmup(topic["id"])
         result = {key: warmup[key] for key in ("warmup_id", "total_questions", "dropped_unsupported")}
-    logger.info("Completed %s for topic %s: %s", content_type, topic["id"], result)
+    logger.info("Completed %s for topic %s", content_type, topic["id"])
 
     next_job = await plan_next_job(
         user_id=job.user_id,
@@ -1067,7 +1069,7 @@ async def generate_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
         result['topics_covered'],
     )
 
-    logger.info(f"Completed exam generation: {result['total_questions']} questions")
+    logger.info("Completed exam generation: %d questions", result["total_questions"])
     return JobOutcome(
         result={
             "exam_id": exam_record['id'],
@@ -1203,7 +1205,7 @@ async def grade_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
 
     await execute_in_transaction(store_grading)
 
-    logger.info(f"Completed exam grading: {grading_result['overall_score']}%")
+    logger.info("Completed exam grading")
     return JobOutcome(
         result={
             "submission_id": submission_id,

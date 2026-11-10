@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
+from app.errors import error_body
 from app.db.connection import execute_one
 from app.services import chat as chat_service
 from app.services import ai_status, exam_guard
@@ -57,12 +58,9 @@ class ChatAnswerRequest(BaseModel):
         return value
 
 
-def _fail(status: int, code: str, message: str, retryable: bool = False, **extra: str) -> JSONResponse:
-    """The same body shape as the LLMError handler in main.py."""
-    return JSONResponse(
-        status_code=status,
-        content={"detail": message, "error_code": code, "retryable": retryable, **extra},
-    )
+def _fail(status: int, code: str, retryable: bool = False, **extra: str) -> JSONResponse:
+    """The same body shape as the LLMError handler in main.py: the code and its public message."""
+    return JSONResponse(status_code=status, content=error_body(code, retryable, **extra))
 
 
 async def _ndjson(events: AsyncIterator[Dict]) -> AsyncIterator[bytes]:
@@ -79,23 +77,23 @@ async def _billed_stream(payload: ChatAnswerRequest, events: AsyncIterator[Dict]
 @router.post("/answer", response_model=None)
 async def answer(payload: ChatAnswerRequest) -> Union[StreamingResponse, JSONResponse]:
     if not settings.llm_configured:
-        return _fail(503, LLMNotConfiguredError.code, "ANTHROPIC_API_KEY is not configured")
+        return _fail(503, LLMNotConfiguredError.code)
 
     project = await execute_one(
         "SELECT id FROM projects WHERE id = $1 AND user_id = $2", payload.project_id, payload.user_id
     )
     if project is None:
-        return _fail(404, "PROJECT_NOT_FOUND", "Project not found")
+        return _fail(404, "PROJECT_NOT_FOUND")
 
     # Known to be down (out of credit, say): refuse before anything is stored or streamed.
     unavailable = (await ai_status.get_status()).as_error()
     if unavailable is not None:
-        return _fail(503, unavailable.code, str(unavailable), unavailable.retryable)
+        return _fail(503, unavailable.code, unavailable.retryable)
 
     # Refuse before the first byte when the allowance is spent (the scope below checks again on every model call).
     allowance = await allowance_today(payload.user_id)
     if allowance.refused:
-        return _fail(429, "LLM_DAILY_BUDGET", allowance.message or "Daily AI usage limit reached", budget_reason=allowance.refused)
+        return _fail(429, "LLM_DAILY_BUDGET", budget_reason=allowance.refused)
 
     # The router call and the answer are billed to the student, however the stream ends. The scope is opened again inside
     # the stream's own generator: Starlette iterates that in another task, after this function has returned.
@@ -123,7 +121,7 @@ async def answer(payload: ChatAnswerRequest) -> Union[StreamingResponse, JSONRes
             if routing is not None:
                 routing.cancel()
             logger.exception("Retrieval failed for project %s", payload.project_id)
-            return _fail(503, "RETRIEVAL_FAILED", f"Could not search the materials: {exc}", True)
+            return _fail(503, "RETRIEVAL_FAILED", True)
         if worked:
             route = chat_service.RouteResult.worked_example()
         else:

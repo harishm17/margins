@@ -32,6 +32,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from app.errors import describe_exception
 from app.db.connection import execute_one, execute_query
 from app.services import ai_status
 from app.services.budget import over_budget_message
@@ -140,7 +141,7 @@ async def dispatch(planned: Optional[PlannedJob]) -> Optional[str]:
         await enqueue_job(planned.job_id, planned.job_type, planned.data)
     except Exception as exc:
         logger.error("Could not dispatch %s job %s: %s", planned.job_type, planned.job_id, exc)
-        await mark_undelivered(planned.job_id, str(exc))
+        await mark_undelivered(planned.job_id, describe_exception(exc))
         return None
     logger.info("Queued %s %s (job %s)", planned.job_type, planned.data, planned.job_id)
     return planned.job_id

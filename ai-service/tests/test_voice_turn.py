@@ -217,7 +217,7 @@ class TestRoute:
         response = post(client)
         assert response.status_code == 429
         body = response.json()
-        assert body["error_code"] == "LLM_DAILY_BUDGET" and "$3.10" in body["detail"]
+        assert body["error_code"] == "LLM_DAILY_BUDGET" and "$" not in body["detail"]
         assert wired["budget_user"] == "u1"
         assert wired["provider"].calls == []
 
