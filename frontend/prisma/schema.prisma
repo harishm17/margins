@@ -1343,3 +1343,15 @@ model PendingFileDeletion {
   @@index([doneAt, lastAttemptAt])
   @@map("pending_file_deletions")
 }
+
+// Fixed-window request counters shared by every web instance (migration 20261208000003_rate_limits). The key is
+// "<limiter name>:<spend key>", or "<limiter name>:ip:<address>" for a visitor with no account. Pruned by the limiter.
+model RateLimitHit {
+  key         String
+  windowStart DateTime @map("window_start") @db.Timestamptz(3)
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+  @@map("rate_limit_hits")
+}
