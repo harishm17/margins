@@ -664,3 +664,14 @@ export async function getTopicsData(userId: string, courseId: string): Promise<T
     generation,
   }
 }
+
+export type RemovedTopicNote = { id: string; quote: string | null; text: string; createdAt: Date }
+
+/** The student's margin notes in this course whose topic was deleted, newest first (finding 78). */
+export async function getRemovedTopicNotes(userId: string, courseId: string): Promise<RemovedTopicNote[]> {
+  return prisma.marginNote.findMany({
+    where: { userId, projectId: courseId, topicId: null, project: { userId } },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, quote: true, text: true, createdAt: true },
+  })
+}

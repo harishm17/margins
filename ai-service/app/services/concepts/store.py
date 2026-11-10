@@ -205,9 +205,33 @@ async def store_graph(topic_id: str, graph: ValidatedGraph) -> int:
                 "recall_prompts": [p.model_dump() for p in graph.recall_prompts],
             }),
         )
+        await _mark_new_topic_converted(conn, topic_id)
         return kept
 
     return await execute_in_transaction(write)
+
+
+async def _mark_new_topic_converted(conn, topic_id: str) -> None:
+    """A topic with no history to convert is converted the moment its first concepts exist (finding 94).
+
+    `topics.evidence_backfilled_at` is the switch the web app uses to read a topic through its concepts
+    (mastery, the explainer gate, the next-step choice). Left unset, a brand-new topic stayed on the old
+    blend until some request ran the web's `convertTopicIfDue`, and a page rendered while another request
+    held that lease saw no concepts. A topic that already has quiz, practice, voice or exam history, or
+    evidence, is left for that conversion (lib/learning/backfill.ts), which replays the history first.
+    """
+    await conn.execute(
+        f"""
+        UPDATE topics t SET evidence_backfilled_at = {UTC_NOW}
+        WHERE t.id = $1 AND t.evidence_backfilled_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM evidence_events e WHERE e.topic_id = t.id)
+          AND NOT EXISTS (SELECT 1 FROM quiz_attempts q WHERE q.topic_id = t.id)
+          AND NOT EXISTS (SELECT 1 FROM practice_progress p WHERE p.topic_id = t.id)
+          AND NOT EXISTS (SELECT 1 FROM voice_drill_attempts v WHERE v.topic_id = t.id)
+          AND NOT EXISTS (SELECT 1 FROM sample_exams s WHERE s.project_id = t.project_id AND s.questions::text LIKE '%' || t.id || '%')
+        """,
+        topic_id,
+    )
 
 
 def _json_value(value: Any) -> Any:

@@ -11,6 +11,7 @@
  * DELETE /api/topics/[topicId] - Delete topic (other topics stop listing it as a prerequisite)
  */
 
+import { deleteTopicReferences } from '@/lib/topics/topic-references'
 import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
@@ -166,11 +167,14 @@ export async function DELETE(
       )
     }
 
-    // Delete topic (cascade will handle related records), and stop listing it as a prerequisite.
-    await prisma.$transaction([
-      prisma.$executeRaw`UPDATE topics SET prerequisite_ids = array_remove(prerequisite_ids, ${topicId}) WHERE project_id = ${topic.projectId} AND ${topicId} = ANY(prerequisite_ids)`,
-      prisma.topic.delete({ where: { id: topicId } }),
-    ])
+    // Delete the topic and stop listing it as a prerequisite. The student's margin notes stay (the schema clears their
+    // topic and keeps the course and the quote: "Notes from removed topics"); every other table follows its rule in
+    // lib/topics/topic-references.ts, which also clears the tutor states that were keyed to the topic.
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`UPDATE topics SET prerequisite_ids = array_remove(prerequisite_ids, ${topicId}) WHERE project_id = ${topic.projectId} AND ${topicId} = ANY(prerequisite_ids)`
+      await deleteTopicReferences(tx, session.user.id, topicId)
+      await tx.topic.delete({ where: { id: topicId } })
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

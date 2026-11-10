@@ -109,7 +109,7 @@ test('topic editor: rename, add, reorder, merge, delete, confirm', async ({ page
   await page.getByRole('menuitem', { name: 'Merge into...' }).click()
   await page.getByRole('menuitem', { name: 'Renamed first topic' }).click()
   await expect(page.getByRole('dialog')).toContainText('Merge Added by hand into Renamed first topic?')
-  await expect(page.getByRole('dialog')).toContainText('Content and quiz history move to Renamed first topic.')
+  await expect(page.getByRole('dialog')).toContainText('mastery and review dates move to Renamed first topic.')
   await page.getByRole('button', { name: 'Merge topics' }).click()
   await expect(rows).toHaveCount(initial)
 
