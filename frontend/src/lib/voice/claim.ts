@@ -1,7 +1,8 @@
 /**
- * Claims a voice session on its first turn: one live session per user, and the daily minutes
- * cap. Both are checked and the session is marked connected in one serializable transaction,
- * so two requests cannot both pass.
+ * Claims a voice session for a turn: one live session per user, and the daily minutes cap. Both are
+ * checked and the session is marked connected (first turn) and seen (every turn) in one serializable
+ * transaction, so two requests cannot both pass. The turn route calls it on every turn: the cap counts
+ * the session's own minutes as they run, so a session that began with a minute left stops when it is used.
  */
 import { logServerError } from '@/lib/ops/log'
 import { Prisma } from '@prisma/client'

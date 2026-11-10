@@ -169,19 +169,16 @@ async function handlePost(request: NextRequest) {
   }
 
   try {
-    // First turn: one live session per user and the daily cap. Later turns: stay live.
-    if (!session.connectedAt) {
-      const claim = await claimVoiceSession(session)
-      if (!claim.ok) {
-        await releaseTurn()
-        return claim.reason === 'busy'
-          ? voiceFailure('ACTIVE_SESSION')
-          : voiceFailure('VOICE_DAILY_LIMIT', { remainingSeconds: 0, dailyMinutes: claim.capMinutes })
-      }
-      claimedHere = true
-    } else {
-      await prisma.voiceDrillSession.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } })
+    // Every turn: one live session per user and the daily cap, checked again as the session's own minutes run (a cap read
+    // only on the first turn let a student with a minute left talk for an hour). The same call keeps the session live.
+    const claim = await claimVoiceSession(session)
+    if (!claim.ok) {
+      await releaseTurn()
+      return claim.reason === 'busy'
+        ? voiceFailure('ACTIVE_SESSION')
+        : voiceFailure('VOICE_DAILY_LIMIT', { remainingSeconds: 0, dailyMinutes: claim.capMinutes })
     }
+    claimedHere = !session.connectedAt
 
     // A session from before teach-back and guided reading carries on in the style it began with.
     const style: CoachStyle = coachStyleOf(session.style)

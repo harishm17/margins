@@ -15,6 +15,7 @@ import { normalizeFocus } from '@/lib/voice/coach-prompt'
 import { cloudSpeechConfigured } from '@/lib/voice/cloud-speech'
 import { buildSprintQuestionSet, buildTopicQuestionSet, PromptsMismatchError } from '@/lib/voice/drill-pack'
 import { voiceErrorMessage } from '@/lib/voice/errors'
+import { isSessionLive } from '@/lib/voice/usage'
 import {
   ApiErrorCode,
   apiError,
@@ -196,8 +197,9 @@ export async function PATCH(request: NextRequest) {
       },
       select: {
         id: true,
-        interruptCount: true,
+        connectedAt: true,
         endedAt: true,
+        lastSeenAt: true,
       },
     })
 
@@ -210,9 +212,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ session: { id: session.id, endedAt: session.endedAt } })
     }
 
-    const nextInterruptCount = payload.incrementInterruptCount
-      ? session.interruptCount + payload.incrementInterruptCount
-      : session.interruptCount
+    const now = new Date()
+    const closing = payload.status === 'ended' || payload.status === 'aborted'
+    // The browser closed the call: it is seen for the last time at the moment it ends, so it stops counting as live (and
+    // stops using voice time) now. A drill that finished by itself was marked ended earlier and kept live by the turn that
+    // said goodbye; this moves its end to the close.
+    const closed = !!session.endedAt && !!session.lastSeenAt && session.lastSeenAt.getTime() <= session.endedAt.getTime()
+    // A heartbeat keeps a live call live. It does not bring back a closed call (one that was already on its way), nor one
+    // that went quiet (a sleeping laptop): that call becomes live again through its next turn, which checks the cap and
+    // that no other call is live.
+    const beat = !!payload.heartbeat && isSessionLive(session, now)
 
     const updated = await prisma.voiceDrillSession.update({
       where: { id: payload.sessionId },
@@ -221,12 +230,10 @@ export async function PATCH(request: NextRequest) {
         ...(payload.lastDetectedLanguage !== undefined
           ? { lastDetectedLanguage: payload.lastDetectedLanguage }
           : {}),
-        ...(payload.status === 'ended' || payload.status === 'aborted'
-          ? { endedAt: session.endedAt ?? new Date() }
-          : {}),
-        ...(payload.heartbeat ? { lastSeenAt: new Date() } : {}),
+        ...(closing ? (closed ? {} : { endedAt: now, lastSeenAt: now }) : beat ? { lastSeenAt: now } : {}),
+        // Counted in the database: two interruptions reported at once are both kept.
         ...(payload.incrementInterruptCount
-          ? { interruptCount: nextInterruptCount }
+          ? { interruptCount: { increment: payload.incrementInterruptCount } }
           : {}),
       },
       select: {

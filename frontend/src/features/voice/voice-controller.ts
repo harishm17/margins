@@ -405,14 +405,14 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     clearTimers()
   }
 
-  function finish(reason: EndReason, alert?: ReturnType<typeof describeTurnFailure>['alert'] | null) {
+  function finish(reason: EndReason, alert?: ReturnType<typeof describeTurnFailure>['alert'] | null, limitReached?: boolean) {
     if (ctx.ended) return
     const sessionId = ctx.sessionId
     teardown()
-    if (sessionId && reason !== 'complete' && reason !== 'ended') {
-      void patchVoiceSession({ sessionId, status: 'ended' })
-    }
-    dispatch({ type: 'finish', reason, at: Date.now(), alert: alert ?? null })
+    // Every way out closes the call on the server, a finished drill included: the session stops counting as live (and its
+    // minutes stop) now, not when its last heartbeat goes stale.
+    if (sessionId) void patchVoiceSession({ sessionId, status: 'ended' })
+    dispatch({ type: 'finish', reason, at: Date.now(), alert: alert ?? null, ...(limitReached ? { limitReached } : {}) })
     deps.onFinished?.(reason)
   }
 
@@ -850,8 +850,10 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       abandonToLobby({ kind: 'turn', alert: view.alert }, view.limitReached)
       return
     }
-    if (view.fate === 'summary') {
-      finish(failure.code === 'SESSION_ENDED' || failure.code === 'NOT_FOUND' ? 'ended' : 'error', view.alert)
+    // A refusal that sends a first turn back to the lobby (the day's voice time is used, another session is open) ends a
+    // session that is under way: it cannot go on, and the summary says why.
+    if (view.fate === 'summary' || view.fate === 'lobby') {
+      finish(failure.code === 'SESSION_ENDED' || failure.code === 'NOT_FOUND' ? 'ended' : 'error', view.alert, view.limitReached)
       return
     }
     ctx.retry = view.alert.action === 'retry' ? { utterance: ctx.toolRan ? '' : utterance } : null
