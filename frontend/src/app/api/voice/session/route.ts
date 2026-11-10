@@ -13,7 +13,7 @@ import { VoiceQuestion } from '@/lib/voice/concept'
 import { courseTermsForTopics, sessionTopicIds } from '@/lib/voice/course-terms'
 import { normalizeFocus } from '@/lib/voice/coach-prompt'
 import { cloudSpeechConfigured } from '@/lib/voice/cloud-speech'
-import { buildSprintQuestionSet, buildTopicQuestionSet, PromptsMismatchError } from '@/lib/voice/drill-pack'
+import { buildSprintQuestionSet, buildTopicQuestionSet, DrillGenerationError, PromptsMismatchError } from '@/lib/voice/drill-pack'
 import { voiceErrorMessage } from '@/lib/voice/errors'
 import { isSessionLive } from '@/lib/voice/usage'
 import {
@@ -164,7 +164,9 @@ async function handlePOST(request: NextRequest) {
     if (refused) return refused
     logServerError('Create voice session error', error)
 
-    if (error instanceof PromptsMismatchError) {
+    // The questions could not be written (the AI service failed, or the flag is half set): said as that, with "try
+    // again", and not as a topic without a quiz.
+    if (error instanceof PromptsMismatchError || error instanceof DrillGenerationError) {
       const info = voiceErrorMessage(error.code)
       return apiError(ApiErrorCode.UPSTREAM_ERROR, info.message, { code: error.code, retryable: info.retryable }, info.status)
     }

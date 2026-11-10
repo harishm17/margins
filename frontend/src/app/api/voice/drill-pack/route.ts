@@ -1,11 +1,12 @@
 import { logServerError } from '@/lib/ops/log'
-import { id, list, record } from '@/lib/api/fields'
+import { id } from '@/lib/api/fields'
 import { NextRequest, NextResponse } from 'next/server'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
-import { prisma } from '@/lib/db/prisma'
-import { buildSprintQuestionSet, buildTopicQuestionSet, PromptsMismatchError } from '@/lib/voice/drill-pack'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { ownedProject, ownedTopic } from '@/server/owned'
+import { buildSprintQuestionSet, buildTopicQuestionSet, DrillGenerationError, PromptsMismatchError } from '@/lib/voice/drill-pack'
 import { ApiErrorCode, apiError } from '@/lib/api/errors'
 import { voiceErrorMessage } from '@/lib/voice/errors'
 
@@ -19,6 +20,10 @@ const drillPackSchema = z.object({
 async function handleGET(request: NextRequest) {
   try {
     const session = await requireAuth()
+    // A GET, but one that can ask the model to write questions (a topic with notes and no quiz): it is limited like a
+    // route that changes data.
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { searchParams } = new URL(request.url)
 
     const payload = drillPackSchema.parse({
@@ -27,15 +32,7 @@ async function handleGET(request: NextRequest) {
       topicId: searchParams.get('topicId') || undefined,
     })
 
-    const project = await prisma.project.findFirst({
-      where: {
-        id: payload.projectId,
-        userId: session.user.id,
-      },
-      select: { id: true },
-    })
-
-    if (!project) {
+    if (!(await ownedProject(session.user.id, payload.projectId))) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
@@ -44,6 +41,10 @@ async function handleGET(request: NextRequest) {
     if (payload.mode === 'topic_drill') {
       if (!payload.topicId) {
         return NextResponse.json({ error: 'topicId is required' }, { status: 400 })
+      }
+      // The topic is the student's own and in this course, as when a session starts (the session route).
+      if (!(await ownedTopic(session.user.id, payload.topicId, payload.projectId))) {
+        return NextResponse.json({ error: 'Topic not found' }, { status: 404 })
       }
       questions = await buildTopicQuestionSet(payload.topicId, session.user.id)
     } else {
@@ -64,7 +65,7 @@ async function handleGET(request: NextRequest) {
   } catch (error) {
     logServerError('Fetch drill pack error', error)
 
-    if (error instanceof PromptsMismatchError) {
+    if (error instanceof PromptsMismatchError || error instanceof DrillGenerationError) {
       const info = voiceErrorMessage(error.code)
       return apiError(ApiErrorCode.UPSTREAM_ERROR, info.message, { code: error.code, retryable: info.retryable }, info.status)
     }

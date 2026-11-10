@@ -27,6 +27,18 @@ export class PromptsMismatchError extends Error {
   }
 }
 
+/**
+ * The questions could not be written just now: the AI service failed, timed out or refused (the day's allowance, an
+ * outage). Not the same as a topic with nothing to ask about: that one sends the student to create notes and a quiz,
+ * which they already have. `code` is the service's error code, for the words the student is shown.
+ */
+export class DrillGenerationError extends Error {
+  constructor(readonly code: string) {
+    super(`Drill generation failed: ${code}`)
+    this.name = 'DrillGenerationError'
+  }
+}
+
 async function errorCodeOf(response: Response): Promise<string | null> {
   try {
     const body = (await response.json()) as { error_code?: unknown }
@@ -56,30 +68,40 @@ const buildConceptQuestionsFromNotes = async (
   notesText: string,
   count: number
 ): Promise<VoiceQuestion[]> => {
-  const response = await fetch(`${AI_SERVICE_URL}/voice/generate-drill`, {
-    method: 'POST',
-    signal: callSignal(20000),
-    headers: aiServiceHeaders(),
-    body: JSON.stringify({
-      user_id: billing.userId,
-      project_id: billing.projectId,
-      topic: topicName,
-      topic_id: topicId,
-      notes: notesText.slice(0, MAX_NOTES_CHARS),
-      count,
-      difficulty: 'medium',
-      // R9: refused with 409 PROMPTS_MISMATCH when the AI service's voice flag differs from this one.
-      prompts_v2_voice: promptsV2('voice'),
-    }),
-  })
-
-  if (!response.ok) {
-    // A half-set voice flag is refused, and the student is told to try again shortly; any other failure leaves no questions.
-    if (response.status === 409 && (await errorCodeOf(response)) === PROMPTS_MISMATCH) throw new PromptsMismatchError()
-    return []
+  let response: Response
+  try {
+    response = await fetch(`${AI_SERVICE_URL}/voice/generate-drill`, {
+      method: 'POST',
+      signal: callSignal(20000),
+      headers: aiServiceHeaders(),
+      body: JSON.stringify({
+        user_id: billing.userId,
+        project_id: billing.projectId,
+        topic: topicName,
+        topic_id: topicId,
+        notes: notesText.slice(0, MAX_NOTES_CHARS),
+        count,
+        difficulty: 'medium',
+        // R9: refused with 409 PROMPTS_MISMATCH when the AI service's voice flag differs from this one.
+        prompts_v2_voice: promptsV2('voice'),
+      }),
+    })
+  } catch {
+    // Not reachable, or no answer in time.
+    throw new DrillGenerationError('VOICE_UNAVAILABLE')
   }
 
-  const data = await response.json()
+  if (!response.ok) {
+    const code = await errorCodeOf(response)
+    // A half-set voice flag is refused, and the student is told to try again shortly.
+    if (response.status === 409 && code === PROMPTS_MISMATCH) throw new PromptsMismatchError()
+    // Any other failure is a failure, said as one: an empty list here read as "this topic has no quiz".
+    throw new DrillGenerationError(code ?? 'VOICE_UNAVAILABLE')
+  }
+
+  const data = await response.json().catch(() => {
+    throw new DrillGenerationError('LLM_BAD_OUTPUT')
+  })
   const questions = Array.isArray(data.questions) ? data.questions : []
   return dedupeQuestions(filterConceptQuestions(
     questions
@@ -211,6 +233,7 @@ export const buildSprintQuestionSet = async (
 
   const selected = ranked.slice(0, SPRINT_TOPICS)
   const combined: VoiceQuestion[] = []
+  let failed: DrillGenerationError | null = null
 
   for (const entry of selected) {
     const topic = entry.topic
@@ -220,8 +243,16 @@ export const buildSprintQuestionSet = async (
       const notesContent = topic.content.find(c => c.contentType === 'section_notes')
       const notesText = extractTextFromNotes(notesContent?.contentData)
       if (notesText) {
-        questions = (await buildConceptQuestionsFromNotes({ userId, projectId }, topic.name, topic.id, notesText, 6))
-          .map(q => ({ ...q, topic_id: topic.id }))
+        try {
+          questions = (await buildConceptQuestionsFromNotes({ userId, projectId }, topic.name, topic.id, notesText, 6))
+            .map(q => ({ ...q, topic_id: topic.id }))
+        } catch (error) {
+          // One topic's questions could not be written: the sprint goes on with the others.
+          if (!(error instanceof DrillGenerationError)) throw error
+          failed ??= error
+          // The service is down or the allowance is spent: the next topic would fail the same way.
+          continue
+        }
       }
     }
 
@@ -232,5 +263,8 @@ export const buildSprintQuestionSet = async (
     })))
   }
 
-  return dedupeQuestions(combined).slice(0, SPRINT_MAX_QUESTIONS)
+  const pack = dedupeQuestions(combined).slice(0, SPRINT_MAX_QUESTIONS)
+  // Nothing to ask, and writing questions failed on the way: that failure is the reason, not a course without a quiz.
+  if (pack.length === 0 && failed) throw failed
+  return pack
 }

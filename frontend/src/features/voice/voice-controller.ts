@@ -148,8 +148,12 @@ function lobbyAlertFor(error: unknown): LobbyAlert {
   if (requiresClaims(error)) return { kind: 'needs-claims' }
   if (requiresGeneration(error)) return { kind: 'needs-generation' }
   if (isApiError(error)) {
-    const text =
-      error.status >= 500
+    // A refusal with a voice code carries words written for the student (the coach is not reachable, the day's
+    // allowance is used): those are shown. A bare 500 or 429 has none.
+    const coded = typeof (error.details as { code?: unknown } | undefined)?.code === 'string'
+    const text = coded
+      ? error.message
+      : error.status >= 500
         ? "We couldn't start the voice practice. Try again in a moment."
         : error.status === 429
           ? 'Too many requests. Wait a moment and try again.'

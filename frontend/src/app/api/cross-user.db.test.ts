@@ -346,12 +346,7 @@ const FOREIGN: Record<string, () => Record<string, Call>> = {
   'POST voice/speech-token': () => ({ 'sessionId: A call': { body: { sessionId: A().voiceSession } } }),
   'GET voice/drill-pack': () => ({
     'projectId: A course': { query: `?projectId=${A().project}&topicId=${A().topic}` },
-    // Not a 404: the question set is read through the topic's owner, so a topic of A's gives B no questions.
-    'topicId: A topic in B course': {
-      query: `?projectId=${B().project}&topicId=${A().topic}`,
-      status: 200,
-      safe: (body) => assert.equal(body.questionCount, 0),
-    },
+    'topicId: A topic in B course': { query: `?projectId=${B().project}&topicId=${A().topic}` },
   }),
   'POST projects/[projectId]/chat': () => ({
     'topicId: A topic': { body: { question: 'Why?', topicId: A().topic } },

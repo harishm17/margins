@@ -5,7 +5,14 @@ import { filterConceptQuestions, hasMath, normalizeVoiceQuestion, type VoiceQues
 const question = (extra: Partial<VoiceQuestion>): VoiceQuestion => normalizeVoiceQuestion({ question_type: 'multiple_choice', question_text: 'Q', ...extra }) as VoiceQuestion
 
 test('a bare number is not math', () => {
-  for (const text of ['Why is a hash lookup O(1) on average?', 'What happens in step 2 of the algorithm?', 'A tree with 5 nodes has how many edges, and why?']) {
+  for (const text of [
+    'Why is a hash lookup O(1) on average?',
+    'What happens in step 2 of the algorithm?',
+    'A tree with 5 nodes has how many edges, and why?',
+    // A percentage that is only named: these were dropped as working, and a statistics quiz had "no questions".
+    'Why is a 95% confidence interval wider than a 90% one?',
+    'What does a 5 % significance level mean?',
+  ]) {
     assert.equal(hasMath(text), false, text)
   }
 })

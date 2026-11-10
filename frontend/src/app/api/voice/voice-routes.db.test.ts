@@ -13,6 +13,7 @@ let prisma: Prisma
 let setTestSession: typeof import('@/lib/auth/get-session').setTestSession
 let turn: Handler
 let patchSession: Handler
+let startSession: Handler
 let available = false
 const userIds: string[] = []
 const realFetch = globalThis.fetch
@@ -20,6 +21,8 @@ const realFetch = globalThis.fetch
 /** What the stubbed AI service answers on POST /voice/turn; each test sets it. */
 let modelReply: (body: { messages: unknown[] }, signal: AbortSignal | null | undefined) => Response | Promise<Response>
 const modelCalls: Array<{ messages: unknown[] }> = []
+/** What the stubbed AI service answers on POST /voice/generate-drill. */
+let drillReply: () => Response | Promise<Response>
 
 function ndjson(events: unknown[]): Response {
   return new Response(events.map((event) => JSON.stringify(event) + '\n').join(''), { status: 200 })
@@ -40,6 +43,7 @@ before(async () => {
   if (!available) return
   turn = (await import('./turn/route')).POST as unknown as Handler
   patchSession = (await import('./session/route')).PATCH as unknown as Handler
+  startSession = (await import('./session/route')).POST as unknown as Handler
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input)
     if (url.endsWith('/voice/turn')) {
@@ -47,12 +51,14 @@ before(async () => {
       modelCalls.push(body)
       return modelReply(body, init?.signal)
     }
+    if (url.endsWith('/voice/generate-drill')) return drillReply()
     throw new Error(`unexpected fetch in a voice route test: ${url}`)
   }) as typeof fetch
 })
 beforeEach(() => {
   modelCalls.length = 0
   modelReply = () => says('Hello.')
+  drillReply = () => new Response(JSON.stringify({ questions: [] }), { status: 200 })
 })
 after(async () => {
   globalThis.fetch = realFetch
@@ -208,6 +214,29 @@ test('the same words sent again after a turn that failed before the coach spoke 
   const after = await turnOver(session.id)
   const said = (after.coachState as { said: Array<{ text: string }> }).said
   assert.deepEqual(said.map((entry) => entry.text), ['entropy never decreases'], 'a grader reads what was said since its question: once')
+})
+
+test('a quiz whose questions could not be written is reported as a failure to try again, not as a topic with no quiz', async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const { project } = await student()
+  // Notes and no quiz: the questions are written from the notes when the session starts.
+  const topic = await prisma.topic.create({ data: { projectId: project.id, name: 'Entropy', orderIndex: 0, userConfirmed: true } })
+  await prisma.topicContent.create({ data: { topicId: topic.id, contentType: 'section_notes', contentData: { text: 'Entropy never decreases in an isolated system.' } } })
+  const start = () => post(startSession, 'POST', '/api/voice/session', { mode: 'topic_drill', style: 'oral_quiz', projectId: project.id, topicId: topic.id })
+
+  // The AI service is down: "create notes and a quiz first" would send the student to make what they already have.
+  drillReply = () => new Response(JSON.stringify({ error_code: 'LLM_UNAVAILABLE', retryable: true }), { status: 503 })
+  const failed = await start()
+  const body = (await failed.json()) as { requiresGeneration?: boolean; error?: { details?: { code?: string; retryable?: boolean } } }
+  assert.equal(failed.status, 503)
+  assert.equal(body.requiresGeneration, undefined)
+  assert.equal(body.error?.details?.retryable, true)
+
+  // The service answered with nothing the coach can ask: that is the case the student can fix with a quiz.
+  drillReply = () => new Response(JSON.stringify({ questions: [] }), { status: 200 })
+  const empty = await start()
+  assert.equal(empty.status, 422)
+  assert.equal(((await empty.json()) as { requiresGeneration?: boolean }).requiresGeneration, true)
 })
 
 test('two interruptions reported at once are both counted', async (t) => {
