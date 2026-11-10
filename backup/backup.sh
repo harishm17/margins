@@ -60,7 +60,9 @@ export RCLONE_CONFIG_SAFE_TYPE=crypt
 export RCLONE_CONFIG_SAFE_REMOTE="r2:$R2_BUCKET"
 export RCLONE_CONFIG_SAFE_FILENAME_ENCRYPTION=off
 export RCLONE_CONFIG_SAFE_DIRECTORY_NAME_ENCRYPTION=false
-RCLONE_CONFIG_SAFE_PASSWORD="$(rclone obscure "$BACKUP_PASSPHRASE")"
+# On stdin, never as an argument: a passphrase that starts with "-" is read as a flag, and rclone's error then prints it
+# to the log (the first production run did, 2026-11-10). scripts/restore_drill.py passes it the same way.
+RCLONE_CONFIG_SAFE_PASSWORD="$(printf '%s' "$BACKUP_PASSPHRASE" | rclone obscure -)"
 export RCLONE_CONFIG_SAFE_PASSWORD
 
 # One folder per run (the R2 lock forbids overwriting a recent object, so a second run on the same day needs its own).

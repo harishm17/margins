@@ -137,6 +137,8 @@ Nightly to Cloudflare R2; what is kept, the secrets inventory and the restore st
 Run the drill (`python3 scripts/restore_drill.py` on the box) once a quarter and add its line here.
 
 Restore drills:
+- 2026-11-10: restore drill passed (backup daily/2026-11-10T0647Z, the first; 42 tables, 881 rows, counts match;
+  725 vectors searchable; 16 of 16 sampled files found).
 
 ## Database
 
