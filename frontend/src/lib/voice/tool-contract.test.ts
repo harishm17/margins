@@ -23,6 +23,8 @@ describe('voice tool contract', () => {
   // R6: the keys come from the typed results (tool-results.ts), which the handlers are built against.
   describe('v2 tools, every style', () => {
     const REASONING = /^(analysis|reasoning|thinking|scratchpad|chain_of_thought|trace)$/i
+    const ASKS_FOR_REASONING =
+      /\b(?:explain|describe|show|write(?: out)?|give|state|record|summari[sz]e)\s+(?:your|its|the)\s+(?:reasoning|thinking|thought process|chain of thought)\b|\b(?:your|its) (?:reasoning|thought process|chain of thought)\b|\bthink (?:it )?(?:step by step|out loud|aloud)\b|\bstep[- ]by[- ]step reasoning\b|\bin the (?:analysis|reasoning|scratchpad|thinking|notes) field\b|\bprivate (?:notes|analysis|reasoning)\b/i
     for (const style of COACH_STYLES) {
       const tools = toolsForStyle(style, true)
 
@@ -31,6 +33,9 @@ describe('voice tool contract', () => {
         for (const tool of tools) {
           const asked = Object.keys(tool.input_schema.properties).filter((key) => REASONING.test(key))
           assert.deepEqual(asked, [], tool.name)
+          // R1: nor through a description (the same pattern as ai-service/tests/test_prompt_guards.py).
+          const texts = [tool.description, ...Object.values(tool.input_schema.properties).map((property) => JSON.stringify(property))]
+          assert.deepEqual(texts.filter((text) => ASKS_FOR_REASONING.test(text)), [], tool.name)
         }
       })
 

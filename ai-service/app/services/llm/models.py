@@ -1,5 +1,7 @@
 """Which model and effort each kind of LLM call uses.
 
+Changing a purpose's model or effort re-runs the prompt audit for its calls first (rule in app/prompt_revision.py).
+
 Every call site passes a `purpose`; this module maps it to a `MODEL_*` setting, and the
 setting to a model id and an effort. The map is the only place that knows which purpose
 belongs to which setting:

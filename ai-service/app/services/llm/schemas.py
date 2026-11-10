@@ -1740,6 +1740,8 @@ def as_v1_reply(out: BaseModel, v1_class: Type[V1ReplyT]) -> V1ReplyT:
 
 
 class LeakVerdict(BaseModel):
+    # Prompt audit R1 (2026-11-10): `reason` stays. It is a pointer (which kind of leak, which sentence), not the
+    # judge's reasoning, and the rewrite is told it so the next draft fixes that sentence. No student reads it.
     answer_revealed: bool = Field(description="True when the reply is any of the four kinds of leak")
     reason: str = Field(description="One short clause naming which kind and where; empty when nothing is revealed")
 
