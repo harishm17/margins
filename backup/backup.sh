@@ -3,8 +3,8 @@
 #
 # 1. One snapshot of the database: the row count of every table and `pg_dump -Fc` read the same snapshot, so a
 #    restore can be checked against the counts exactly (scripts/restore_drill.py).
-# 2. The dump and a manifest (counts, newest migration, embedding model, sizes) go to daily/<date>/, and on Sundays
-#    also to weekly/<date>/. R2 keeps daily copies 35 days and weekly ones 120, and a lock rule keeps every object
+# 2. The dump and a manifest (counts, newest migration, embedding model, sizes) go to daily/<run time>/, and on Sundays
+#    also to weekly/<run time>/. R2 keeps daily copies 35 days and weekly ones 120, and a lock rule keeps every object
 #    under daily/ and weekly/ for at least 7 days, so a leaked key cannot delete recent backups.
 # 3. The uploads bucket is mirrored to uploads/current/. Objects deleted or replaced since the last run move to
 #    uploads/deleted/<date>/ (kept 35 days). The mirror includes ops/deletions/, the record of deleted accounts a
@@ -62,7 +62,9 @@ export RCLONE_CONFIG_SAFE_DIRECTORY_NAME_ENCRYPTION=false
 RCLONE_CONFIG_SAFE_PASSWORD="$(rclone obscure "$BACKUP_PASSPHRASE")"
 export RCLONE_CONFIG_SAFE_PASSWORD
 
-day="$(date -u +%F)"
+# One folder per run (the R2 lock forbids overwriting a recent object, so a second run on the same day needs its own).
+run="$(date -u +%FT%H%MZ)"
+day="${run%%T*}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -99,11 +101,11 @@ printf '{"created_at":"%s","snapshot":"%s","migration":"%s","embedding_model":"%
   "$(date -u +%FT%TZ)" "$snapshot" "$migration" "$embedding_model" "$(stat -c %s "$work/db.dump")" "$dump_sha" \
   "$S3_BUCKET" "$counts" >"$work/manifest.json"
 
-rclone copyto "$work/db.dump" "safe:daily/$day/db.dump"
-rclone copyto "$work/manifest.json" "safe:daily/$day/manifest.json"
+rclone copyto "$work/db.dump" "safe:daily/$run/db.dump"
+rclone copyto "$work/manifest.json" "safe:daily/$run/manifest.json"
 if [ "$(date -u +%u)" = 7 ]; then
-  rclone copyto "$work/db.dump" "safe:weekly/$day/db.dump"
-  rclone copyto "$work/manifest.json" "safe:weekly/$day/manifest.json"
+  rclone copyto "$work/db.dump" "safe:weekly/$run/db.dump"
+  rclone copyto "$work/manifest.json" "safe:weekly/$run/manifest.json"
   log "weekly copy written"
 fi
 
@@ -116,5 +118,5 @@ log "uploads mirrored"
 echo "INSERT INTO ops_state (key, value, updated_at) VALUES
     ('backup_last_success', :'at', now() AT TIME ZONE 'UTC'), ('backup_last_name', :'name', now() AT TIME ZONE 'UTC')
   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at;" |
-  psql "$DATABASE_URL" -qAtX -v ON_ERROR_STOP=1 -v at="$(date -u +%FT%T+00:00)" -v name="daily/$day"
-log "done: daily/$day"
+  psql "$DATABASE_URL" -qAtX -v ON_ERROR_STOP=1 -v at="$(date -u +%FT%T+00:00)" -v name="daily/$run"
+log "done: daily/$run"

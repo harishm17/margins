@@ -205,7 +205,7 @@ def main() -> int:
                                                               "postgresql://postgres@127.0.0.1:5544/postgres"),
                         help="a Postgres 18 server with pgvector where the scratch database is made")
     parser.add_argument("--into", help="restore into this empty database and keep it (a real restore)")
-    parser.add_argument("--backup", help="daily/YYYY-MM-DD or weekly/YYYY-MM-DD (default: the newest daily)")
+    parser.add_argument("--backup", help="daily/<run time> or weekly/<run time>, as listed in R2 (default: the newest daily)")
     parser.add_argument("--samples", type=int, default=20, help="material files to look for in the mirror")
     parser.add_argument("--keep", action="store_true", help="keep the scratch database")
     parser.add_argument("--safe-remote", help=argparse.SUPPRESS)  # tests: a local folder instead of R2

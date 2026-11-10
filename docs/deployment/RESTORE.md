@@ -10,9 +10,9 @@ The `backup` service (`backup/backup.sh`, a Railway cron job at 10:30 UTC) write
 
 | Path in R2 | What | Kept |
 |---|---|---|
-| `daily/<date>/db.dump` | `pg_dump --format=custom` of the whole database: schema, migrations table, indexes, vectors | 35 days |
-| `daily/<date>/manifest.json` | Row count of every table (same snapshot as the dump), newest migration, embedding model, dump checksum, uploads bucket name | 35 days |
-| `weekly/<date>/…` | Sunday's dump and manifest | 120 days |
+| `daily/<run time>/db.dump` (e.g. `daily/2026-11-10T1030Z/`) | `pg_dump --format=custom` of the whole database: schema, migrations table, indexes, vectors | 35 days |
+| `daily/<run time>/manifest.json` | Row count of every table (same snapshot as the dump), newest migration, embedding model, dump checksum, uploads bucket name | 35 days |
+| `weekly/<run time>/…` | Sunday's dump and manifest | 120 days |
 | `uploads/current/` | Mirror of the uploads bucket as of the last run, including `ops/deletions/` | Until the next run |
 | `uploads/deleted/<date>/` | Files deleted or replaced in the bucket since the run before | 35 days |
 
@@ -59,7 +59,7 @@ Needs a machine with `rclone`, and the Postgres 18 client (`psql`, `pg_restore`)
    ```
 
    The database must be empty. The script runs the same checks as the drill and keeps the result. Use
-   `--backup daily/<date>` for an older backup.
+   `--backup daily/<run time>` for an older backup.
 3. **Files.** Copy the mirror into the new uploads bucket, with the same rclone settings as `backup/backup.sh`
    (`safe:` is the decrypted view of R2, `uploads:` the new bucket):
 
