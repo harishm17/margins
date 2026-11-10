@@ -150,7 +150,7 @@ async function easierStepSince(userId: string, projectId: string, fails: Map<str
 
 async function loadConcepts(userId: string, topicId: string, now: Date, timeZone: string): Promise<TopicConceptState[]> {
   const rows = await prisma.concept.findMany({
-    where: { topicId, status: 'active' },
+    where: { topicId, status: 'active', project: { userId } },
     orderBy: { orderIndex: 'asc' },
     select: { id: true, kind: true, name: true, projectId: true },
   })
@@ -233,7 +233,7 @@ async function loadConcepts(userId: string, topicId: string, now: Date, timeZone
  * can start without the model). Looks at every set, not a window of attempts.
  */
 async function hardQuizState(userId: string, topicId: string): Promise<{ lastAt: Date | null; onHand: boolean }> {
-  const sets = await prisma.topicQuiz.findMany({ where: { topicId, kind: { in: ['standard', 'retry'] } }, select: { id: true, questions: true } })
+  const sets = await prisma.topicQuiz.findMany({ where: { topicId, topic: { project: { userId } }, kind: { in: ['standard', 'retry'] } }, select: { id: true, questions: true } })
   const hard = sets.filter((s) => isHardSet(asQuestionList(s.questions) ?? [])).map((s) => s.id)
   if (hard.length === 0) return { lastAt: null, onHand: false }
   const attempt = await prisma.quizAttempt.findFirst({
@@ -293,9 +293,9 @@ export async function loadTopicLearningState(input: {
   const newest = { orderBy: { createdAt: 'desc' as const }, select: { createdAt: true } }
   const [topic, progress, warmupBank, recalls, teachBackAttempt, hardQuiz, examEvent, teachBackEvent, anyEvidence, quizAttempts, nextReview, practice, writtenContent, conceptCount] =
     await Promise.all([
-      prisma.topic.findUnique({ where: { id: topicId }, select: { evidenceBackfilledAt: true } }),
+      prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { evidenceBackfilledAt: true } }),
       prisma.topicProgress.findUnique({ where: { topicId_userId: { topicId, userId } } }),
-      prisma.topicQuiz.count({ where: { topicId, kind: 'warmup' } }),
+      prisma.topicQuiz.count({ where: { topicId, topic: { project: { userId } }, kind: 'warmup' } }),
       // The newest answer to each card that was given with the book closed: the set the explainer's visit is written on too.
       newestAttempts(userId, topicId),
       prisma.recallAttempt.findFirst({ where: { userId, topicId, kind: 'teach_back' }, ...newest }),
@@ -307,8 +307,8 @@ export async function loadTopicLearningState(input: {
       prisma.quizAttempt.count({ where: { userId, topicId } }),
       prisma.conceptMemory.findFirst({ where: { userId, topicId, dueAt: { not: null }, concept: { status: 'active' } }, orderBy: { dueAt: 'asc' }, select: { dueAt: true } }),
       loadPracticeState(userId, topicId),
-      prisma.topicContent.count({ where: { topicId } }),
-      prisma.concept.count({ where: { topicId, status: 'active' } }),
+      prisma.topicContent.count({ where: { topicId, topic: { project: { userId } } } }),
+      prisma.concept.count({ where: { topicId, status: 'active', project: { userId } } }),
     ])
 
   // A topic uses concepts only after its history is converted (the switch mastery uses too).

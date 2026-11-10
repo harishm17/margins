@@ -23,6 +23,7 @@ import {
   zodDetails,
 } from '@/lib/api/errors'
 import { moveInOrder } from '@/lib/topics/ordering'
+import { ownedProject } from '@/server/owned'
 import { compactUnitOrder, normalizeTopicOrder } from '@/lib/topics/normalize-order'
 
 const createUnitSchema = z.object({
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const session = await requireAuth()
     const { projectId } = await params
 
-    const project = await prisma.project.findFirst({ where: { id: projectId, userId: session.user.id }, select: { id: true } })
+    const project = await ownedProject(session.user.id, projectId)
     if (!project) return apiNotFound('Project not found')
 
     const parsed = createUnitSchema.safeParse(await request.json().catch(() => null))
@@ -54,8 +55,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const order = moveInOrder(units.map((item) => item.id), created.id, orderIndex)
         for (const [index, id] of order.entries()) await tx.unit.update({ where: { id }, data: { orderIndex: index } })
       }
-      await compactUnitOrder(tx, projectId)
-      await normalizeTopicOrder(tx, projectId)
+      await compactUnitOrder(tx, project)
+      await normalizeTopicOrder(tx, project)
       return tx.unit.findUniqueOrThrow({ where: { id: created.id } })
     })
 

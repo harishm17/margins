@@ -16,6 +16,7 @@ import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { z } from 'zod'
 import { moveInOrder } from '@/lib/topics/ordering'
+import { ownedTopic } from '@/server/owned'
 import { normalizeTopicOrder } from '@/lib/topics/normalize-order'
 import { cleanPrerequisites, reachesPrerequisite } from '@/lib/topics/units'
 
@@ -39,16 +40,10 @@ export async function PATCH(
     const { topicId } = await params
 
     // Verify topic ownership through project
-    const topic = await prisma.topic.findFirst({
-      where: {
-        id: topicId,
-        project: {
-          userId: session.user.id,
-        },
-      },
-    })
+    const scope = await ownedTopic(session.user.id, topicId)
+    const topic = scope ? await prisma.topic.findUnique({ where: { id: scope.id } }) : null
 
-    if (!topic) {
+    if (!scope || !topic) {
       return NextResponse.json(
         { error: 'Topic not found' },
         { status: 404 }
@@ -126,7 +121,7 @@ export async function PATCH(
         },
       })
       if (unitId !== undefined) {
-        await normalizeTopicOrder(tx, topic.projectId)
+        await normalizeTopicOrder(tx, scope)
         return tx.topic.findUniqueOrThrow({ where: { id: topicId } })
       }
       return updated
@@ -159,14 +154,7 @@ export async function DELETE(
     const { topicId } = await params
 
     // Verify topic ownership through project
-    const topic = await prisma.topic.findFirst({
-      where: {
-        id: topicId,
-        project: {
-          userId: session.user.id,
-        },
-      },
-    })
+    const topic = await ownedTopic(session.user.id, topicId)
 
     if (!topic) {
       return NextResponse.json(

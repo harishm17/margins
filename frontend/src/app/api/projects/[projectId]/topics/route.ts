@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { z } from 'zod'
+import { ownedProject } from '@/server/owned'
 import { normalizeTopicOrder } from '@/lib/topics/normalize-order'
 
 const createTopicSchema = z.object({
@@ -89,12 +90,7 @@ export async function POST(
     const { projectId } = await params
 
     // Verify project ownership
-    const project = await prisma.project.findFirst({
-      where: {
-        id: projectId,
-        userId: session.user.id,
-      },
-    })
+    const project = await ownedProject(session.user.id, projectId)
 
     if (!project) {
       return NextResponse.json(
@@ -148,7 +144,7 @@ export async function POST(
       })
       if (!unitId) return created
       // Last in its unit, which is not the end of the course unless the unit is the last one.
-      await normalizeTopicOrder(tx, projectId)
+      await normalizeTopicOrder(tx, project)
       return tx.topic.findUniqueOrThrow({ where: { id: created.id } })
     })
 

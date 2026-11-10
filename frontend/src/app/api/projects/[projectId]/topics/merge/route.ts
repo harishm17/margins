@@ -20,6 +20,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { mergeKeywordLists } from '@/lib/topics/ordering'
+import { ownedTopics } from '@/server/owned'
 import { normalizeTopicOrder } from '@/lib/topics/normalize-order'
 import { reachesPrerequisite } from '@/lib/topics/units'
 import {
@@ -57,13 +58,8 @@ export async function POST(
     }
 
     // Ownership: both topics must belong to this project, and the project to this user.
-    const topics = await prisma.topic.findMany({
-      where: {
-        id: { in: [sourceTopicId, targetTopicId] },
-        projectId,
-        project: { userId: session.user.id },
-      },
-    })
+    const checked = (await ownedTopics(session.user.id, [sourceTopicId, targetTopicId])).filter((topic) => topic.projectId === projectId)
+    const topics = await prisma.topic.findMany({ where: { id: { in: checked.map((topic) => topic.id) } } })
     const source = topics.find((topic) => topic.id === sourceTopicId)
     const target = topics.find((topic) => topic.id === targetTopicId)
     if (!source || !target) {
@@ -217,7 +213,7 @@ export async function POST(
         }
       }
       // A merge across units can leave a unit's topics apart; keep the units contiguous.
-      await normalizeTopicOrder(tx, projectId)
+      await normalizeTopicOrder(tx, checked[0])
 
       return tx.topic.findUniqueOrThrow({ where: { id: target.id } })
     })
