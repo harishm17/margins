@@ -40,13 +40,35 @@ async function runAxe(page: Page): Promise<string[]> {
   })
 }
 
-export async function axeViolations(page: Page): Promise<string[]> {
+/**
+ * Every finite CSS transition and animation has ended. A button fades its background over 120 ms when the pointer
+ * comes to rest on it, as it does after a viewport resize moves the layout under the pointer; axe reads the mid-fade
+ * colour as a contrast failure (map.spec.ts "leads with reading", 390x844, failed this way on main, 2026-11-10).
+ * page.waitForFunction rather than settle.ts's expect.poll, since the workflow harness calls this outside a test.
+ */
+async function waitForTransitionsToEnd(page: Page) {
+  await page.waitForFunction(
+    () =>
+      document
+        .getAnimations()
+        .every((animation) => !(animation.playState === 'running' || animation.pending) || animation.effect?.getComputedTiming().iterations === Infinity),
+    undefined,
+    { timeout: 10_000 }
+  )
+}
+
+async function settle(page: Page) {
   await waitForToastsToSettle(page)
+  await waitForTransitionsToEnd(page)
+}
+
+export async function axeViolations(page: Page): Promise<string[]> {
+  await settle(page)
   const violations = await runAxe(page)
   if (violations.length === 0) return violations
   // A toast can start to leave while axe is reading the page (it is on screen for four seconds): a finding is looked at
-  // again once the toasts have settled, and counts only if it is still there.
-  await waitForToastsToSettle(page)
+  // again once the toasts and transitions have settled, and counts only if it is still there.
+  await settle(page)
   return runAxe(page)
 }
 
