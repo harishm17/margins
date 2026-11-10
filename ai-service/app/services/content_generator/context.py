@@ -199,8 +199,12 @@ async def _mapped_chunks(topic_id: str, limit: int) -> List[Dict[str, Any]]:
     return [{**dict(row), "source_kind": "mapped"} for row in rows]
 
 
-async def build_course_map(topic: Dict[str, Any]) -> str:
-    """The course in order, this topic marked, with its objectives and prerequisites."""
+async def build_course_map(topic: Dict[str, Any], *, order_only: bool = False) -> str:
+    """The course in order, this topic marked, with its objectives and prerequisites.
+
+    `order_only` leaves out the objectives and prerequisites lines, which are written for the lesson
+    generators ("teach these", "do not teach them again"); the concept extractor sends the objectives
+    and prerequisite concepts in its own blocks."""
     topics = await execute_query(
         "SELECT id, name, unit_id FROM topics WHERE project_id = $1 ORDER BY order_index, created_at, id",
         topic["project_id"],
@@ -225,6 +229,8 @@ async def build_course_map(topic: Dict[str, Any]) -> str:
         if loose and units:
             lines.append("Other topics")
         lines.extend(("  " if units else "") + mark(t) for t in loose)
+    if order_only:
+        return "\n".join(lines).strip()
     objectives = [o for o in (topic.get("objectives") or []) if o]
     if objectives:
         lines.append("")
@@ -241,7 +247,9 @@ async def build_course_map(topic: Dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
-async def fetch_topic_context(topic_id: str, limit: int = TOPIC_CHUNK_LIMIT) -> TopicContext:
+async def fetch_topic_context(
+    topic_id: str, limit: int = TOPIC_CHUNK_LIMIT, *, order_only_map: bool = False
+) -> TopicContext:
     """The topic's excerpts and course map. Raises LookupError for an unknown topic."""
     topic = await execute_one(
         """
@@ -260,7 +268,7 @@ async def fetch_topic_context(topic_id: str, limit: int = TOPIC_CHUNK_LIMIT) -> 
     else:
         # Added by hand, or planned before sources existed: today's hybrid mapping.
         chunks = await _mapped_chunks(topic_id, limit)
-    course_map = await build_course_map(topic) if chunks else ""
+    course_map = await build_course_map(topic, order_only=order_only_map) if chunks else ""
     return TopicContext(topic=topic, chunks=chunks, course_map=course_map,
                         primary_count=len(primary), dropped_sections=dropped)
 

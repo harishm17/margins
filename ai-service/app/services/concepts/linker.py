@@ -11,7 +11,9 @@ from app.db.connection import UTC_NOW, execute_in_transaction, execute_one, exec
 from app.services.concepts.validate import validate_links
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import LLMFactory
-from app.services.llm.schemas import ConceptLinks
+from app.prompt_revision import prompts_v2
+from app.services.concepts.validate import MIN_LINK_CONFIDENCE
+from app.services.llm.schemas import EDGE_TYPE_DEFINITIONS, ConceptLinks, ConceptLinksV2
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,15 @@ For each pair where you are fairly sure, add one edge:
 - encompasses: practising the target also exercises the source, so the target builds on and uses the source. The source is the smaller idea, the target the one that contains it. Give a weight of 0.25, 0.5, 0.75 or 1 for how much of the source the target exercises.
 - Give each edge a confidence from 0 to 1, and an evidence_quote copied exactly from the quotes shown for the two concepts when the text supports the relation.
 - Use only ids and pairs from the list. A pair with no clear relation gets no edge; most pairs will not have one. Do not propose prerequisite edges."""
+
+# Audited (v2) instructions, used when prompts_v2("ingest") is on: the shared edge definitions and
+# the confidence cut the code applies (validate.MIN_LINK_CONFIDENCE).
+LINK_INSTRUCTIONS_V2 = f"""Look at the candidate pairs in <candidate_pairs>. Each pair names two concepts by id; they belong to different topics.
+
+For each pair with a clear relation, add one edge. Give each edge a confidence from 0 to 1; edges below {MIN_LINK_CONFIDENCE} are discarded, so leave out a pair you would rate lower.
+{chr(10).join(line for line in EDGE_TYPE_DEFINITIONS.splitlines() if not line.startswith("- prerequisite"))}
+- Give an evidence_quote copied exactly from the quotes shown for the two concepts when the text supports the relation.
+- Use only ids and pairs from the list. A pair with no clear relation gets no edge; most pairs will not have one."""
 
 
 def _pair(a: str, b: str) -> Tuple[str, str]:
@@ -74,7 +85,8 @@ def link_messages(
         LLMMessage(role="user", content="<concepts>\n" + "\n".join(lines) + "\n</concepts>"),
         LLMMessage(
             role="user",
-            content="<candidate_pairs>\n" + "\n".join(pair_lines) + "\n</candidate_pairs>\n\n" + LINK_INSTRUCTIONS,
+            content="<candidate_pairs>\n" + "\n".join(pair_lines) + "\n</candidate_pairs>\n\n"
+            + (LINK_INSTRUCTIONS_V2 if prompts_v2("ingest") else LINK_INSTRUCTIONS),
         ),
     ]
 
@@ -114,7 +126,7 @@ async def link_unit(unit_id: str) -> int:
 
     raw = await LLMFactory.get_provider().generate_structured(
         link_messages(concepts, {row["id"]: row["name"] for row in topics}, quotes, pairs),
-        ConceptLinks,
+        ConceptLinksV2 if prompts_v2("ingest") else ConceptLinks,
         max_tokens=8000,
         purpose="link_concepts",
     )

@@ -15,7 +15,8 @@ from app.services.concepts.validate import ValidatedGraph, validate_extraction
 from app.services.content_generator.context import NoSourceMaterialError, _pages, fetch_topic_context
 from app.services.llm.base import LLMMessage, LLMOutputError
 from app.services.llm.factory import LLMFactory
-from app.services.llm.schemas import ConceptExtraction
+from app.prompt_revision import prompts_v2
+from app.services.llm.schemas import EDGE_TYPE_DEFINITIONS, ConceptExtraction, ConceptExtractionV2
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,30 @@ Example of one concept with its claim:
 concept: key "c1", name "Compute a sample mean", kind "procedure", summary "The sample mean is the sum of the values divided by how many there are.", objective_indexes [0]
 claim: concept_key "c1", text "The mean is found by adding all values and dividing by the count.", quote "the sum of the values divided by n", chunk_id "<the id of the excerpt containing that sentence>"."""
 
+# Audited (v2) instructions, used when prompts_v2("ingest") is on: a standard for claims and its
+# purpose, one shared definition of the edge types, and an "illustrative" label on the example.
+EXTRACTION_INSTRUCTIONS_V2 = (
+    EXTRACTION_INSTRUCTIONS
+    .replace(
+        "- A claim is one thing a student who knows the concept can state, written in your own words in the text field.\n",
+        "- A claim is one thing a student who knows the concept can state, written in your own words in the text field.\n"
+        "- A recall grader later checks a student's free-text answer against each claim, so write each claim to "
+        "stand alone and be checkable: one idea, a full statement that makes sense without the excerpt "
+        "(\"The sample mean is the sum divided by the count\", not \"It is found this way\"), and specific enough "
+        "that an answer either contains it or does not.\n",
+    )
+    .replace(
+        "with a type: prerequisite (the source must be known before the target), encompasses (practising the target "
+        "also exercises the source; weight is 0.25, 0.5, 0.75 or 1 for how much of the source it exercises) or "
+        "confusable (students mix the two up).\n",
+        "with a type:\n" + EDGE_TYPE_DEFINITIONS + "\n",
+    )
+    .replace(
+        "Example of one concept with its claim:\n",
+        "Illustrative example of one concept with its claim (the content here is not a template for yours):\n",
+    )
+)
+
 
 @dataclass
 class ExtractionSummary:
@@ -85,9 +110,16 @@ class ExtractionSummary:
 
 def format_excerpts(topic: Dict[str, Any], chunks: List[Dict[str, Any]], course_map: str) -> str:
     """The user message with the topic, the course map and the excerpts, each with its chunk id."""
-    parts = [f"Topic: {topic['name']}", f"Description: {topic.get('description') or 'n/a'}"]
-    if course_map:
-        parts += ["", course_map]
+    if prompts_v2("ingest"):
+        # The name and description are planner output built from the student's files, and the course
+        # map holds other topics' names: tag them as data like the excerpts.
+        parts = ["<topic>", f"Topic: {topic['name']}", f"Description: {topic.get('description') or 'n/a'}", "</topic>"]
+        if course_map:
+            parts += ["", "<course_map>", course_map, "</course_map>"]
+    else:
+        parts = [f"Topic: {topic['name']}", f"Description: {topic.get('description') or 'n/a'}"]
+        if course_map:
+            parts += ["", course_map]
     parts += [
         "",
         "<source_excerpts>",
@@ -131,7 +163,8 @@ def extraction_messages(
         LLMMessage(role="user", content=format_excerpts(topic, chunks, course_map)),
         LLMMessage(
             role="user",
-            content=format_objectives(objectives) + "\n\n" + format_prior_concepts(prior) + "\n\n" + EXTRACTION_INSTRUCTIONS,
+            content=format_objectives(objectives) + "\n\n" + format_prior_concepts(prior) + "\n\n"
+            + (EXTRACTION_INSTRUCTIONS_V2 if prompts_v2("ingest") else EXTRACTION_INSTRUCTIONS),
         ),
     ]
 
@@ -162,7 +195,9 @@ async def extract_concepts(topic_id: str) -> ExtractionSummary:
     """Extract, validate and store the topic's concepts. Raises LookupError for an unknown topic,
     NoSourceMaterialError (not retryable) when it has no primary-source excerpts, and
     LLMOutputError (retryable) when fewer than MIN_CONCEPTS concepts survive validation."""
-    context = await fetch_topic_context(topic_id)
+    v2 = prompts_v2("ingest")
+    # v2: the course map keeps the course order only; the objectives and prerequisites are sent below.
+    context = await (fetch_topic_context(topic_id, order_only_map=True) if v2 else fetch_topic_context(topic_id))
     topic = context.topic
     # Concepts come from what the topic is taught from; supporting excerpts only clarify.
     chunks = [chunk for chunk in context.chunks if chunk.get("source_kind") != "supporting"]
@@ -175,7 +210,7 @@ async def extract_concepts(topic_id: str) -> ExtractionSummary:
 
     raw = await LLMFactory.get_provider().generate_structured(
         extraction_messages(topic, chunks, context.course_map, objectives, prior),
-        ConceptExtraction,
+        ConceptExtractionV2 if v2 else ConceptExtraction,
         max_tokens=16000,
         purpose="extract_concepts",
     )
