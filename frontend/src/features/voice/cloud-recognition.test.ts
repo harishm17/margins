@@ -271,6 +271,42 @@ describe('cloudRecognitionClass with Deepgram', () => {
     assert.deepEqual(errors, ['cloud-unavailable'])
   })
 
+  it('a stream that never opens is given up on (the student talked into a socket that stayed connecting)', async () => {
+    const refused: string[] = []
+    const Recognition = cloudRecognitionClass({
+      capture: fakeCapture(),
+      grant: async () => ({ provider: 'deepgram', url: 'wss://api.deepgram.test/v1/listen?a=1', token: 'jwt' }),
+      onRefused: (provider) => refused.push(provider),
+      WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+      connectTimeoutMs: 20,
+    })
+    const recognition = new Recognition()
+    const errors: string[] = []
+    let ended = 0
+    recognition.onerror = (event) => errors.push(event.error)
+    recognition.onend = () => (ended += 1)
+    recognition.start()
+    await tick()
+    const socket = FakeSocket.last!
+    // The socket neither opens nor closes.
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    assert.deepEqual(errors, ['cloud-unavailable'])
+    assert.deepEqual(refused, ['deepgram'])
+    assert.equal(ended, 1)
+    assert.equal(socket.readyState, 3, 'the socket is closed')
+
+    // A stream that opens in time is left alone.
+    const fine = new Recognition()
+    const fineErrors: string[] = []
+    fine.onerror = (event) => fineErrors.push(event.error)
+    fine.start()
+    await tick()
+    FakeSocket.last!.open()
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    assert.deepEqual(fineErrors, [])
+    fine.abort()
+  })
+
 })
 
 describe('applyDeepgram', () => {

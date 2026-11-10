@@ -16,6 +16,19 @@ export const END_OF_TURN_WAIT_MS: Record<Exclude<ListenFor, 'none'>, number> = {
 export const CONTINUATION_EXTRA_MS = 1500
 export const END_OF_TURN_CAP_MS = 4000
 
+/**
+ * A running turn holds a claim on its session, renewed every TURN_KEEP_ALIVE_MS, and writes a keep-alive line to its
+ * reply stream at the same pace. Both sides read their limits from here:
+ * - a claim not renewed for TURN_CLAIM_STALE_MS was left by a server that died, and the next turn may take it;
+ * - a browser refused with TURN_IN_PROGRESS waits up to TURN_BUSY_WAIT_MS, a little longer than a dead claim lasts
+ *   (it used to give up after 9 seconds while a dead claim lasted three minutes);
+ * - a reply stream that sends nothing for TURN_STREAM_QUIET_MS has stalled, and the browser stops waiting for it.
+ */
+export const TURN_KEEP_ALIVE_MS = 10_000
+export const TURN_CLAIM_STALE_MS = 45_000
+export const TURN_BUSY_WAIT_MS = TURN_CLAIM_STALE_MS + 5_000
+export const TURN_STREAM_QUIET_MS = 35_000
+
 /** Sent by the client with a student turn. */
 export interface VoiceTurnExtras {
   /** When the student interrupted the coach's last reply: the text they heard before it stopped (spec 19.4). */
@@ -42,6 +55,8 @@ export type VoiceStreamExtra =
   | { type: 'listen'; for: ListenFor }
   /** The call just streamed was cut off at its token limit and is being asked again: drop what has not been spoken of it. */
   | { type: 'retract' }
+  /** The turn is still running (a long graded step sends nothing else): the browser's wait for the stream starts again. */
+  | { type: 'alive' }
 
 /** Sent once when a session starts: the topic's key terms (spec 19.5), at most 100. */
 export interface VoiceSessionTerms {

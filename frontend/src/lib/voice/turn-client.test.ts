@@ -5,6 +5,7 @@ import {
   createSentenceChunker,
   parseVoiceEvent,
   readVoiceEvents,
+  VoiceStreamQuietError,
   type VoiceEvent,
 } from './turn-client'
 
@@ -103,6 +104,42 @@ describe('readVoiceEvents', () => {
       { type: 'text', delta: ' there' },
       { type: 'done', text: 'Hello there' },
     ])
+  })
+
+  it('gives up on a stream that stays open and silent, but not on one kept alive (the session waited for ever)', async () => {
+    const encoder = new TextEncoder()
+    const line = (event: object) => encoder.encode(JSON.stringify(event) + '\n')
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+    let cancelled = false
+    const stalled = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(line({ type: 'text', delta: 'Let me think' }))
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    const seen: VoiceEvent[] = []
+    await assert.rejects(async () => {
+      for await (const event of readVoiceEvents(stalled, { quietMs: 40 })) seen.push(event)
+    }, VoiceStreamQuietError)
+    assert.deepEqual(seen, [{ type: 'text', delta: 'Let me think' }])
+    assert.equal(cancelled, true, 'the connection is dropped')
+
+    // A long step: nothing to say for longer than the limit, but the server's keep-alive lines keep arriving.
+    const alive = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        for (let i = 0; i < 4; i += 1) {
+          await wait(25)
+          controller.enqueue(line({ type: 'alive' }))
+        }
+        controller.enqueue(line({ type: 'done', text: 'Here it is.' }))
+        controller.close()
+      },
+    })
+    const events: VoiceEvent[] = []
+    for await (const event of readVoiceEvents(alive, { quietMs: 40 })) events.push(event)
+    assert.deepEqual(events, [{ type: 'done', text: 'Here it is.' }])
   })
 })
 

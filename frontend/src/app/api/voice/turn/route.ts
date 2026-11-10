@@ -32,7 +32,7 @@ import {
   readModelEvents,
   requestModelTurn,
 } from '@/lib/voice/ai-turn'
-import { claimVoiceSession, claimVoiceTurn, isSerializationConflict, releaseVoiceTurn } from '@/lib/voice/claim'
+import { claimVoiceSession, claimVoiceTurn, isSerializationConflict, keepVoiceTurn, releaseVoiceTurn } from '@/lib/voice/claim'
 import {
   coachStyleOf,
   CONTINUE_MESSAGE,
@@ -158,7 +158,13 @@ async function handlePost(request: NextRequest) {
   // One turn at a time per session, across server processes (a conditional update on the session row).
   if (!(await claimVoiceTurn(userId, session.id))) return voiceFailure('TURN_IN_PROGRESS')
   let claimedHere = false
-  const releaseTurn = () => releaseVoiceTurn(userId, session.id)
+  // The claim is renewed while the turn runs, and the reply stream (once there is one) gets a keep-alive line each time.
+  let keepAlive: (() => void) | null = null
+  const stopRenewing = keepVoiceTurn(userId, session.id, () => keepAlive?.())
+  const releaseTurn = () => {
+    stopRenewing()
+    return releaseVoiceTurn(userId, session.id)
+  }
   // Aborted when the browser leaves: the model call stops instead of finishing an answer nobody will hear.
   const turnAbort = new AbortController()
   // A failed first turn must not leave the session counted as connected.
@@ -269,6 +275,7 @@ async function handlePost(request: NextRequest) {
           const info = voiceErrorMessage(code)
           send({ type: 'error', code, message: info.message, retryable: info.retryable })
         }
+        keepAlive = () => send({ type: 'alive' })
 
         void (async () => {
           try {

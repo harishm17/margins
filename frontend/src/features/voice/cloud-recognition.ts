@@ -361,10 +361,18 @@ export type CloudRecognitionDeps = {
   /** The level of each frame, 0..1 (for the orb). */
   onLevel?: (level: number) => void
   WebSocketImpl?: typeof WebSocket
+  /** How long a stream may take to open (default CONNECT_TIMEOUT_MS). */
+  connectTimeoutMs?: number
 }
 
 /** How long new speech may go unworded before the hold is dropped (noise, a cough). */
 const VOICE_HOLD_MS = 2000
+
+/**
+ * A stream that has not opened by now is treated as refused. A socket to a host that never answers stays "connecting"
+ * for as long as the browser allows (a minute or more), and the student would talk into nothing all that time.
+ */
+const CONNECT_TIMEOUT_MS = 6000
 
 /** The browser-recognizer error codes the controller knows, plus `cloud-unavailable`: use the browser's recognizer. */
 export type CloudErrorCode = 'cloud-unavailable' | 'network' | 'not-allowed' | 'audio-capture'
@@ -390,6 +398,7 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
     private ended = false
     private activity = createActivityTracker()
     private holdTimer: ReturnType<typeof setTimeout> | null = null
+    private connectTimer: ReturnType<typeof setTimeout> | null = null
     /** The finished segment the last hold was for: one hold per segment, so steady noise cannot keep the turn open. */
     private heldFor = -1
     /** A graceful stop is waiting for the recognizer's last words. */
@@ -424,6 +433,8 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
       this.unsubscribe = null
       if (this.holdTimer) clearTimeout(this.holdTimer)
       this.holdTimer = null
+      if (this.connectTimer) clearTimeout(this.connectTimer)
+      this.connectTimer = null
       const socket = this.socket
       this.socket = null
       if (socket) {
@@ -493,6 +504,8 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
     private begin() {
       if (this.opened || this.ended) return
       this.opened = true
+      if (this.connectTimer) clearTimeout(this.connectTimer)
+      this.connectTimer = null
       this.unsubscribe = deps.capture.onFrame((frame) => this.onFrame(frame))
       this.onstart?.()
     }
@@ -525,6 +538,11 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
       }
       socket.binaryType = 'arraybuffer'
       this.socket = socket
+      this.connectTimer = setTimeout(() => {
+        if (this.ended || this.opened) return
+        deps.onRefused?.(grant.provider)
+        this.fail('cloud-unavailable')
+      }, deps.connectTimeoutMs ?? CONNECT_TIMEOUT_MS)
       socket.onopen = () => {
         if (protocol.openOn === 'open') this.begin()
       }

@@ -174,12 +174,43 @@ export function parseVoiceEvent(line: string): VoiceEvent | null {
  * Ends when the stream ends; a well-formed turn ends with `done` or `error`, so a stream that
  * ends without either was cut off (check with `isTerminal`).
  */
-export async function* readVoiceEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<VoiceEvent> {
+/** The reply stream sent nothing for too long: the server or the connection has stalled without closing. */
+export class VoiceStreamQuietError extends Error {
+  constructor() {
+    super('The reply stream went quiet')
+    this.name = 'VoiceStreamQuietError'
+  }
+}
+
+/**
+ * The events of a reply stream. With `quietMs`, a stream that sends nothing at all for that long (the server writes a
+ * keep-alive line while a turn runs) is dropped and VoiceStreamQuietError is thrown: without it the session waited for
+ * ever on a connection that had died without closing.
+ */
+export async function* readVoiceEvents(body: ReadableStream<Uint8Array>, options: { quietMs?: number } = {}): AsyncGenerator<VoiceEvent> {
   const splitter = createLineSplitter()
   const reader = body.getReader()
+  const quietMs = options.quietMs
+  const read = async () => {
+    if (!quietMs) return reader.read()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const quiet = new Promise<'quiet'>((resolve) => {
+      timer = setTimeout(() => resolve('quiet'), quietMs)
+    })
+    const pending = reader.read()
+    const result = await Promise.race([pending, quiet])
+    clearTimeout(timer)
+    if (result === 'quiet') {
+      // The read still in flight ends with the cancel; its outcome is of no interest.
+      pending.catch(() => undefined)
+      await reader.cancel().catch(() => undefined)
+      throw new VoiceStreamQuietError()
+    }
+    return result
+  }
   try {
     while (true) {
-      const { value, done } = await reader.read()
+      const { value, done } = await read()
       if (done) break
       for (const line of splitter.push(value)) {
         const event = parseVoiceEvent(line)
