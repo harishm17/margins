@@ -154,6 +154,13 @@ class Settings(BaseSettings):
     # Most ALL users together may cost per UTC day, from the same ledger. Sign-up is open and
     # the API key is shared, so this is the ceiling on the day's bill. 0 turns it off.
     GLOBAL_DAILY_LLM_BUDGET_USD: float = 40.00
+    # An account under 24 hours old (by its spend_key's first_seen_at) may spend this much per UTC day instead of
+    # DAILY_LLM_BUDGET_USD. 0 turns the smaller first-day allowance off.
+    FIRST_DAY_LLM_BUDGET_USD: float = 4.00
+    # The share of GLOBAL_DAILY_LLM_BUDGET_USD kept for accounts older than GLOBAL_RESERVE_MIN_AGE_DAYS: a younger
+    # account is refused once the day's global spend reaches (1 - share) of the cap.
+    GLOBAL_RESERVE_SHARE: float = 0.25
+    GLOBAL_RESERVE_MIN_AGE_DAYS: float = 7.0
 
     # The shared AI status (app/services/ai_status.py). An "unavailable" status older than this
     # many seconds counts as unknown, so the next real call tests the provider again.

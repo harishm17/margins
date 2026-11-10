@@ -60,9 +60,7 @@ from app.services.job_reaper import reap_expired_jobs
 from app.services.llm.base import LLMRefusalError
 from app.services.llm.limiter import topic_lock
 from app.services import ai_status
-from app.services.budget import over_budget_message
 from app.services.job_runner import (
-    DailyBudgetExceeded,
     JobContext,
     JobOutcome,
     PermanentJobError,
@@ -427,23 +425,20 @@ async def profile_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
 )
 async def exam_relevance_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     """Mark the topics of a project that its past exams test (one model call, only when there are
-    past exams and something changed). The daily budget is checked just before that call, so
+    past exams and something changed). The daily budget is checked by the billing scope on that call, so
     clearing the flags after the last past exam is removed works even over budget."""
     project_id = payload.data.get("projectId")
     if not project_id:
         raise PermanentJobError("projectId required", "INVALID_INPUT")
 
-    async def within_budget() -> None:
+    async def ready() -> None:
         if not settings.llm_configured:
             raise PermanentJobError("No model is configured", "LLM_NOT_CONFIGURED")
         unavailable = (await ai_status.get_status()).as_error()
         if unavailable is not None:
             raise unavailable
-        message = await over_budget_message(job.user_id)
-        if message:
-            raise DailyBudgetExceeded(message)
 
-    return JobOutcome(result=await mark_exam_relevant_topics(project_id, before_model=within_budget))
+    return JobOutcome(result=await mark_exam_relevant_topics(project_id, before_model=ready))
 
 
 @router.post("/jobs/extract-topics")

@@ -9,6 +9,7 @@ import logging
 from typing import List, Optional
 from pydantic import BaseModel
 from app.services import ai_status
+from app.services.budget import DailyBudgetExceeded
 from app.services.llm import LLMFactory
 from app.services.llm.base import LLMError, LLMMessage
 from app.services.llm.schemas import MATERIAL_KINDS, MaterialCheck
@@ -190,6 +191,11 @@ Set kind to what the file is, whatever the category says: content (lecture notes
         is_valid = check.is_valid
         notes = check.notes or "No validation notes provided"
         kind = check.kind
+    except DailyBudgetExceeded:
+        # Over the allowance: the same structural-only outcome as the AI being unavailable, and the file stays usable.
+        logger.info("LLM validation skipped for %s: daily allowance used", material_id)
+        is_valid = True
+        notes = "Validation completed using structural checks only (the daily AI allowance is used)."
     except LLMError as llm_error:
         # Fallback path: keep pipeline functional if LLM credentials are missing
         # or upstream API auth is unavailable.

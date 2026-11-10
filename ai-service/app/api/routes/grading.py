@@ -8,14 +8,12 @@ import math
 from typing import Any, Dict, List, Literal, Optional, Union
 
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.services import ai_status
-from app.services.budget import over_budget_message, record_usage_event
+from app.services.billing import billed
 from app.services.exam_grader import ExamGrader
 from app.services.llm.schemas import RecallGradeRequest, RecallGradeResult
-from app.services.llm.usage import ledger_figures, track_llm_usage
 from app.services.recall_grader import grade_recall
 
 router = APIRouter(prefix="/grade")
@@ -56,6 +54,10 @@ class RichAnswer(BaseModel):
 
 
 class GradeQuizRequest(BaseModel):
+    # The model-graded items are billed to this user and project (billing.py). A quiz of rule-graded items only never
+    # calls the model, so it stays free whatever the allowance.
+    user_id: str = Field(min_length=1, max_length=100)
+    project_id: str = Field(min_length=1, max_length=100)
     questions: List[GradableQuestion] = Field(min_length=1, max_length=MAX_QUESTIONS)
     answers: Dict[str, Union[AnswerValue, RichAnswer]] = Field(
         default_factory=dict,
@@ -97,13 +99,15 @@ class GradeQuizResponse(BaseModel):
 
 @router.post("/quiz", response_model=GradeQuizResponse)
 async def grade_quiz(payload: GradeQuizRequest) -> GradeQuizResponse:
-    """Grade answers against the supplied questions: by rule where possible, Claude for short answers."""
-    result = await ExamGrader().grade_submission(
-        "quiz",
-        [question.model_dump() for question in payload.questions],
-        payload.plain_answers(),
-        payload.thinking(),
-    )
+    """Grade answers against the supplied questions: by rule where possible, Claude for short answers. A quiz with
+    short answers over the daily allowance gets a 429 LLM_DAILY_BUDGET (main.py)."""
+    async with billed(payload.user_id, payload.project_id, "quiz"):
+        result = await ExamGrader().grade_submission(
+            "quiz",
+            [question.model_dump() for question in payload.questions],
+            payload.plain_answers(),
+            payload.thinking(),
+        )
     return GradeQuizResponse(
         graded_questions=result["graded_questions"],
         total_points=result["total_points"],
@@ -115,31 +119,14 @@ async def grade_quiz(payload: GradeQuizRequest) -> GradeQuizResponse:
 
 
 @router.post("/recall", response_model=RecallGradeResult, response_model_exclude={"analysis"})
-async def grade_recall_answer(payload: RecallGradeRequest) -> Union[RecallGradeResult, JSONResponse]:
+async def grade_recall_answer(payload: RecallGradeRequest) -> RecallGradeResult:
     """Verdicts on what a student recalled, claim by claim, or one clarifying question when the answer can't be graded.
 
-    Model failures and an AI marked unavailable are typed errors (main.py); a user over the daily budget gets
-    a 429 with the same body shape as the tutor routes.
+    Model failures and an AI marked unavailable are typed errors (main.py); a user over the daily allowance gets
+    a 429 LLM_DAILY_BUDGET with the same body shape as the tutor routes.
     """
     unavailable = (await ai_status.get_status()).as_error()
     if unavailable is not None:
         raise unavailable
-    if payload.user_id:
-        over_budget = await over_budget_message(payload.user_id)
-        if over_budget:
-            return JSONResponse(
-                status_code=429,
-                content={"detail": over_budget, "error_code": "LLM_DAILY_BUDGET", "retryable": False},
-            )
-    with track_llm_usage() as usages:
-        try:
-            return await grade_recall(payload)
-        finally:
-            if payload.user_id and usages:
-                await record_usage_event(
-                    user_id=payload.user_id,
-                    project_id=payload.project_id,
-                    source="recall",
-                    source_id=payload.session_id or "",
-                    **ledger_figures(usages),
-                )
+    async with billed(payload.user_id, payload.project_id, "recall", payload.session_id):
+        return await grade_recall(payload)

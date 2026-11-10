@@ -28,6 +28,9 @@ model User {
   seenEffortIntroAt DateTime? @map("seen_effort_intro_at")
   // When the student closed the "About this reading" row above the reader (the Focus and PDF notes), on any device.
   seenReaderNoteAt  DateTime? @map("seen_reader_note_at")
+  // A one-way key derived from the Google account (src/lib/account/spend-key.ts) that outlives the account, so the daily
+  // allowance and the voice minutes do not reset when the account is deleted and made again. Null until set.
+  spendKey          String?   @map("spend_key")
 
   // Relations
   projects            Project[]
@@ -53,6 +56,7 @@ model User {
   studyDrafts         StudyDraft[]
 
   @@index([oauthProvider, oauthId])
+  @@index([spendKey])
   @@map("users")
 }
 
@@ -90,6 +94,7 @@ model Project {
   sampleExams    SampleExam[]
   processingJobs ProcessingJob[]
   voiceDrillSessions VoiceDrillSession[]
+  voiceDrillSets   VoiceDrillSet[]
   learningSignals LearningSignal[]
   reviewSchedules ReviewSchedule[]
   chatThreads    ChatThread[]
@@ -880,11 +885,14 @@ model LlmUsageEvent {
   cacheReadTokens  Int      @default(0) @map("cache_read_tokens")
   cacheWriteTokens Int      @default(0) @map("cache_write_tokens")
   costUsd      Decimal  @default(0) @map("cost_usd") @db.Decimal(12, 6)
+  // The account's spend_key, stamped by the insert trigger (users, else deleted_accounts); the daily allowance sums by it.
+  spendKey     String?  @map("spend_key")
   createdAt    DateTime @default(now()) @map("created_at")
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
+  @@index([spendKey, createdAt])
   @@index([createdAt])
   @@map("llm_usage_events")
 }
@@ -1259,4 +1267,57 @@ model OpsAlert {
   lastMessage String   @map("last_message")
 
   @@map("ops_alerts")
+}
+
+// ============================================
+// Spend keys (the allowance and voice minutes that survive account deletion)
+// ============================================
+
+// When each spend_key was first seen. Never deleted; the account's age (first-day allowance, the share of the global
+// cap kept for older accounts) is read from it. Written by the web app when an account is created.
+model SpendAccount {
+  spendKey    String   @id @map("spend_key")
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+
+  @@map("spend_accounts")
+}
+
+// The tombstone delete_user_account() writes (migration 20261208000000_spend_key_and_drill_sets), so a ledger row for
+// an account that is already gone is still stamped with its key. No foreign key: the account is gone.
+model DeletedAccount {
+  userId    String   @id @map("user_id")
+  spendKey  String?  @map("spend_key")
+  deletedAt DateTime @default(now()) @map("deleted_at")
+
+  @@map("deleted_accounts")
+}
+
+// Seconds of voice time each session used, by spend_key, kept by a trigger on voice_drill_sessions. No foreign key to
+// the session or the user: deleting a course or the account does not give the minutes back.
+model VoiceUsage {
+  sessionId   String   @id @map("session_id")
+  spendKey    String?  @map("spend_key")
+  connectedAt DateTime @map("connected_at")
+  seconds     Int      @default(0)
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  @@index([spendKey, connectedAt])
+  @@map("voice_usage")
+}
+
+// A generated drill set per topic, kept so asking again for the same inputs costs nothing. `inputsHash` covers what
+// changes the output (the notes, count, difficulty, the topic's concepts and the prompt version). General on purpose:
+// it names no voice session.
+model VoiceDrillSet {
+  id         String   @id @default(uuid())
+  topicId    String   @map("topic_id")
+  inputsHash String   @map("inputs_hash")
+  count      Int
+  questions  Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, inputsHash])
+  @@map("voice_drill_sets")
 }

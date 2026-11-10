@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from datetime import UTC, datetime
 
 from app.services.ai_status import PROVIDER_DOWN_CODES, TRANSIENT_CODES
+from app.services.budget import DailyBudgetExceeded
 from app.services.llm.base import LLMError, LLMMessage
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import ShortAnswerGrade
@@ -130,7 +131,7 @@ class ExamGrader:
         # A short answer the model could not reach (AI unavailable, out of credit, overloaded) is
         # not graded at all: the whole grading fails with that error, so the caller can wait and
         # grade later instead of storing a 0.
-        unavailable: List[LLMError] = []
+        unavailable: List[Exception] = []
 
         thinking = thinking or {}
 
@@ -140,7 +141,7 @@ class ExamGrader:
                     return {'points_earned': 0, 'is_correct': False, 'feedback': ''}
                 try:
                     return await self._grade_short_answer(question, str(answer), thinking.get(str(idx)))
-                except LLMError as error:
+                except (LLMError, DailyBudgetExceeded) as error:
                     unavailable.append(error)
                     return {'points_earned': 0, 'is_correct': False, 'feedback': ''}
 
@@ -319,6 +320,8 @@ If the answer states a specific wrong idea, give it in misconception as the idea
                 max_tokens=2000,
                 purpose="grade_short_answer",
             )
+        except DailyBudgetExceeded:
+            raise  # the allowance is spent: not a bad answer
         except LLMError as e:
             if e.code in PROVIDER_DOWN_CODES or e.code in TRANSIENT_CODES:
                 raise

@@ -18,10 +18,12 @@ class LLMFactory:
 
     @classmethod
     def _create_provider(cls) -> LLMProvider:
+        from app.services.billing import BillingProvider
         from app.services.llm.observed import ObservedProvider
 
-        # Every call reports to the shared AI status (app/services/ai_status.py).
-        return ObservedProvider(cls._create_inner())
+        # Every call reports to the shared AI status (app/services/ai_status.py), and runs inside a billing scope that
+        # checks the allowance and writes the ledger (app/services/billing.py); a call outside one raises.
+        return BillingProvider(ObservedProvider(cls._create_inner()))
 
     @classmethod
     def _create_inner(cls) -> LLMProvider:

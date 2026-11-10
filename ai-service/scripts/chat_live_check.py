@@ -27,6 +27,7 @@ from app.services.llm.base import (  # noqa: E402
     AnswerReset,
     AnswerText,
 )
+from app.services.billing import unbilled  # noqa: E402
 from app.services.llm.factory import LLMFactory  # noqa: E402
 from app.services.llm.models import resolve_model  # noqa: E402
 
@@ -111,8 +112,9 @@ async def ask(question: str) -> None:
 async def main() -> None:
     choice = resolve_model("chat")
     print(f"provider={settings.LLM_PROVIDER} model={choice.model} effort={choice.effort}")
-    await ask("How does a hash table deal with two keys that land in the same bucket?")
-    await ask("What is the capital of France?")
+    with unbilled("script"):  # a live check by hand: no account to bill
+        await ask("How does a hash table deal with two keys that land in the same bucket?")
+        await ask("What is the capital of France?")
 
 
 if __name__ == "__main__":

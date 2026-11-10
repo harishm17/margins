@@ -336,7 +336,7 @@ class ReplayProvider(LLMProvider):
         with track_llm_usage() as usages:
             response = await self._real_model().generate_text(messages, purpose=purpose, max_tokens=max_tokens)
         for usage in usages:
-            record_usage(usage)
+            record_usage(usage, bill=False)  # the real call already billed it
         self._store(request, {"result": self._encode(request, response.model_dump(mode="json")), "usage": [u.model_dump() for u in usages]})
         return response
 
@@ -356,7 +356,7 @@ class ReplayProvider(LLMProvider):
         with track_llm_usage() as usages:
             result = await self._real_model().generate_structured(messages, schema, purpose=purpose, max_tokens=max_tokens)
         for usage in usages:
-            record_usage(usage)
+            record_usage(usage, bill=False)  # the real call already billed it
         self._store(request, {"result": self._encode(request, result.model_dump(mode="json")), "usage": [u.model_dump() for u in usages]})
         return result
 
@@ -429,7 +429,7 @@ def _usages(response: Dict[str, Any]) -> List[LLMUsage]:
 
 def recording_cost(cassette_dir: Path | str, *, since: float = 0.0) -> Dict[str, Any]:
     """What the recordings written at or after `since` (a Unix time) cost to make: a recording run's spend."""
-    from app.services.llm.usage import estimate_cost_usd
+    from app.services.llm.usage import estimate_cost_usd, has_price
 
     recordings, usages = 0, []
     for path in Path(cassette_dir).rglob("*.json"):
@@ -437,12 +437,11 @@ def recording_cost(cassette_dir: Path | str, *, since: float = 0.0) -> Dict[str,
             continue
         recordings += 1
         usages.extend(_usages(json.loads(path.read_text())["response"]))
-    costs = [estimate_cost_usd(u) for u in usages]
     return {
         "recordings": recordings,
         "calls": len(usages),
-        "cost_usd": sum(c for c in costs if c is not None),
-        "unpriced_calls": sum(1 for c in costs if c is None),
+        "cost_usd": sum(estimate_cost_usd(u) for u in usages),
+        "unpriced_calls": sum(1 for u in usages if not has_price(u.model)),
     }
 
 

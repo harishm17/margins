@@ -8,7 +8,8 @@ Every job endpoint is wrapped in `@job_handler`. The wrapper
    claimable again once the lease runs out,
 3. refuses LLM-backed jobs while the AI is known to be unavailable (app/services/ai_status.py)
    or the user is over the daily budget,
-4. collects LLM usage while the handler runs and stores it on the job,
+4. runs the handler in a billing scope (every model call is checked against the allowance and written to the ledger as
+   it is made, even if the handler is cancelled) and stores the job's usage totals on the job,
 5. marks the job completed, or classifies the failure and answers 400 (permanent, do not
    retry) or 5xx (transient, retry).
 
@@ -30,8 +31,9 @@ import inspect
 import json
 import logging
 import math
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, Optional, Type, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional, Type, TypeVar
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
@@ -40,7 +42,8 @@ from app.config import settings
 from app.db.connection import UTC_NOW, execute_one
 from app.models.jobs import JobPayload
 from app.services import ai_status, ops
-from app.services.budget import over_budget_message, record_usage_event
+from app.services.billing import billed
+from app.services.budget import DailyBudgetExceeded, allowance_today
 from app.services.content_generator.context import NoSourceMaterialError
 from app.services.document_processor.chunker import NoContentError
 from app.services.document_processor.storage import StorageError
@@ -80,10 +83,6 @@ class PermanentJobError(Exception):
         super().__init__(message)
         if code:
             self.code = code
-
-
-class DailyBudgetExceeded(PermanentJobError):
-    code = "LLM_DAILY_BUDGET"
 
 
 # The stage of a job that is waiting for the AI (or the allowance) instead of failing.
@@ -163,7 +162,7 @@ def classify_failure(exc: Exception, default_code: str) -> tuple[str, bool, int]
     ones answer 5xx. A rate limit or an overloaded model answers 503 with a Retry-After
     header (see retry_after): both are expected to pass, and the dispatcher retries any 5xx.
     """
-    if isinstance(exc, PermanentJobError):
+    if isinstance(exc, (PermanentJobError, DailyBudgetExceeded)):
         return exc.code, False, 400
     if isinstance(exc, (LLMRateLimitError, LLMUnavailableError)):
         return exc.code, True, 503
@@ -279,33 +278,20 @@ async def _enforce_ai_ready(job: JobContext) -> None:
     unavailable = (await ai_status.get_status()).as_error()
     if unavailable is not None:
         raise unavailable
-    message = await over_budget_message(job.user_id)
-    if message:
-        raise DailyBudgetExceeded(message)
+    allowance = await allowance_today(job.user_id)
+    if allowance.refused:
+        raise DailyBudgetExceeded(allowance.message or "Daily AI usage limit reached", allowance.refused)
 
 
 def _usage_columns(usages) -> tuple[Dict[str, object], int, int, float]:
     """The summary for result_data, and what the job row's columns add: input (cache reads and writes included),
-    output and cost, the same figures as the attempt's ledger row."""
+    output and cost. (The ledger is not written here: the billing scope writes one row per model call.)"""
     figures = ledger_figures(usages)
     return summarize_usage(usages), figures["input_tokens"], figures["output_tokens"], figures["cost_usd"]
 
 
-async def _record_ledger(job: JobContext, usages) -> None:
-    """Add this attempt's spend to the budget ledger, whether or not the job still holds its claim:
-    the model was called and billed either way."""
-    await record_usage_event(
-        user_id=job.user_id,
-        project_id=job.project_id,
-        source="job",
-        source_id=job.id,
-        **ledger_figures(usages),
-    )
-
-
 async def _complete(job: JobContext, outcome: JobOutcome, usages) -> None:
     summary, input_tokens, output_tokens, cost = _usage_columns(usages)
-    await _record_ledger(job, usages)
     result = dict(outcome.result)
     if usages:
         result["usage"] = summary
@@ -354,7 +340,6 @@ async def _fail(
     re-dispatch threshold, so the reaper never races a dispatcher that is still retrying.
     """
     summary, input_tokens, output_tokens, cost = _usage_columns(usages)
-    await _record_ledger(job, usages)
     redispatch_after = float(retry_in or 0) + settings.JOB_PENDING_REDISPATCH_SECONDS
     row = await execute_one(
         f"""
@@ -394,10 +379,9 @@ async def _defer(job: JobContext, exc: Exception, usages) -> bool:
     JOB_AI_WAIT_MAX_SECONDS: then it fails like any other job.
     """
     summary, input_tokens, output_tokens, cost = _usage_columns(usages)
-    await _record_ledger(job, usages)
     budget = isinstance(exc, DailyBudgetExceeded)
     wait = _seconds_until_reset() + 60 if budget else settings.JOB_AI_WAIT_RECHECK_SECONDS
-    code = exc.code if isinstance(exc, (LLMError, PermanentJobError)) else "LLM_UNAVAILABLE"
+    code = exc.code if isinstance(exc, (LLMError, PermanentJobError, DailyBudgetExceeded)) else "LLM_UNAVAILABLE"
     row = await execute_one(
         f"""
         UPDATE processing_jobs
@@ -428,6 +412,15 @@ async def _defer(job: JobContext, exc: Exception, usages) -> bool:
         float(settings.JOB_AI_WAIT_MAX_SECONDS),
     )
     return row is not None
+
+
+@asynccontextmanager
+async def _job_scope(job: JobContext) -> AsyncIterator[list]:
+    """Every model call the handler makes is billed to the job's user, one ledger row per call (billing.py), however
+    the handler ends; the calls are also collected for the job row's totals."""
+    async with billed(job.user_id, job.project_id, "job", job.id):
+        with track_llm_usage() as usages:
+            yield usages
 
 
 Handler = Callable[[JobPayload, JobContext], Awaitable[JobOutcome]]
@@ -476,7 +469,7 @@ def job_handler(
             logger.info("Starting %s job %s (attempt %d)", job_type, job.id, job.attempt)
             heartbeat = asyncio.create_task(_heartbeat(job))
             try:
-                with track_llm_usage() as usages:
+                async with _job_scope(job) as usages:
                     try:
                         if uses_llm:
                             await _enforce_ai_ready(job)
