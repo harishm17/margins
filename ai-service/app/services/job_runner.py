@@ -46,6 +46,7 @@ from app.services.document_processor.chunker import NoContentError
 from app.services.document_processor.storage import StorageError
 from app.services.llm.base import LLMError, LLMRateLimitError, LLMUnavailableError
 from app.services.llm.usage import ledger_figures, summarize_usage, track_llm_usage
+from app.validation_errors import describe_validation_error
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,9 @@ def parse_input(model: Type[InputT], data: Dict[str, Any]) -> InputT:
     try:
         return model(**data)
     except ValidationError as exc:
-        raise PermanentJobError(f"Invalid job input: {exc}", "INVALID_INPUT") from exc
+        raise PermanentJobError(
+            f"Invalid job input: {describe_validation_error(exc)}", "INVALID_INPUT"
+        ) from exc
 
 
 def classify_failure(exc: Exception, default_code: str) -> tuple[str, bool, int]:
