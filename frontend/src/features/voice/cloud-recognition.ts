@@ -328,7 +328,8 @@ export function createMicCapture(): MicCapture {
 // ---- The recognizer -------------------------------------------------------------------------
 
 export type CloudProvider = 'deepgram' | 'assemblyai'
-export type CloudGrant = { provider: CloudProvider; url: string; token: string }
+/** `maxSeconds`: how long the stream may run (the voice time left today); the recognizer closes it then. */
+export type CloudGrant = { provider: CloudProvider; url: string; token: string; maxSeconds?: number }
 
 /** How each provider is spoken to: how the token is passed, when the stream is open, and how it is closed. */
 const PROTOCOL: Record<
@@ -399,6 +400,9 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
     private activity = createActivityTracker()
     private holdTimer: ReturnType<typeof setTimeout> | null = null
     private connectTimer: ReturnType<typeof setTimeout> | null = null
+    /** Closes the stream when the grant's time is used up. */
+    private capTimer: ReturnType<typeof setTimeout> | null = null
+    private maxSeconds: number | null = null
     /** The finished segment the last hold was for: one hold per segment, so steady noise cannot keep the turn open. */
     private heldFor = -1
     /** A graceful stop is waiting for the recognizer's last words. */
@@ -435,6 +439,8 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
       this.holdTimer = null
       if (this.connectTimer) clearTimeout(this.connectTimer)
       this.connectTimer = null
+      if (this.capTimer) clearTimeout(this.capTimer)
+      this.capTimer = null
       const socket = this.socket
       this.socket = null
       if (socket) {
@@ -507,6 +513,13 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
       if (this.connectTimer) clearTimeout(this.connectTimer)
       this.connectTimer = null
       this.unsubscribe = deps.capture.onFrame((frame) => this.onFrame(frame))
+      // The stream ends with the voice time the grant was minted for. A Deepgram stream is not bounded by its token
+      // (that only limits when it may open), so an open microphone used to keep one running, and billed, past the
+      // day's limit until the next turn was refused. The controller then asks for a new stream, and the server
+      // refuses the grant once no time is left.
+      if (this.maxSeconds !== null && this.maxSeconds > 0) {
+        this.capTimer = setTimeout(() => this.close(true), this.maxSeconds * 1000)
+      }
       this.onstart?.()
     }
 
@@ -529,6 +542,7 @@ export function cloudRecognitionClass(deps: CloudRecognitionDeps): new () => Rec
       if (this.ended) return
       const protocol = PROTOCOL[grant.provider] ?? PROTOCOL.assemblyai
       this.provider = grant.provider
+      this.maxSeconds = typeof grant.maxSeconds === 'number' && Number.isFinite(grant.maxSeconds) ? grant.maxSeconds : null
       let socket: WebSocket
       try {
         socket = protocol.connect(deps.WebSocketImpl ?? WebSocket, grant)

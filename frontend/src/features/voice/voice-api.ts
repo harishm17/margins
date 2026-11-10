@@ -39,8 +39,11 @@ export const getVoiceUsage = (signal?: AbortSignal) => apiFetch<VoiceUsage>('/ap
 export const createVoiceSession = (input: CreateSessionInput) =>
   apiFetch<CreatedSession>('/api/voice/session', { method: 'POST', json: input })
 
-/** What /api/voice/speech-token returns: the provider, the recognizer's address and a short-lived token. */
-export type CloudSpeechGrant = { provider: 'deepgram' | 'assemblyai'; url: string; token: string }
+/**
+ * What /api/voice/speech-token returns: the provider, the recognizer's address, a short-lived token and how long the
+ * stream may run (the voice time left today).
+ */
+export type CloudSpeechGrant = { provider: 'deepgram' | 'assemblyai'; url: string; token: string; maxSeconds?: number }
 
 /** `exclude`: providers whose stream refused this session, so the server tries the next one. */
 export const getCloudSpeechGrant = (sessionId: string, exclude: string[] = []) =>

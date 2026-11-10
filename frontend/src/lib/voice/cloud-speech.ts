@@ -20,8 +20,13 @@ export const CLOUD_SPEECH_PROVIDERS: readonly CloudSpeechProvider[] = ['deepgram
 /** The providers used when CLOUD_SPEECH_PROVIDERS is not set (see above for why AssemblyAI is not one of them). */
 export const DEFAULT_CLOUD_SPEECH_PROVIDERS: readonly CloudSpeechProvider[] = ['deepgram']
 
-/** What the browser needs to open a stream: where, and the token (as a query parameter or a WebSocket subprotocol). */
-export type CloudSpeechGrant = { provider: CloudSpeechProvider; url: string; token: string }
+/**
+ * What the browser needs to open a stream: where, the token (as a query parameter or a WebSocket subprotocol), and how
+ * long the stream may run: the voice time the student has left today (`sessionCapSeconds`). AssemblyAI enforces it
+ * itself (the token carries it). Deepgram's token has no such field, so the browser closes a Deepgram stream at
+ * `maxSeconds` (cloud-recognition.ts) and has to ask for a new grant, which is refused once the time is used up.
+ */
+export type CloudSpeechGrant = { provider: CloudSpeechProvider; url: string; token: string; maxSeconds: number }
 
 /** The audio the browser sends: 16 kHz mono PCM16 (what the capture worklet makes). */
 export const CLOUD_SAMPLE_RATE = 16000
@@ -134,7 +139,7 @@ export function assemblyAiUrl(input: { language: string; terms: string[]; model?
   return `${ASSEMBLYAI_STREAM_URL}?${params.toString()}`
 }
 
-/** How long one AssemblyAI session may run: the voice time left today, at least a minute, at most its 3 h. */
+/** How long one stream may run: the voice time left today, at least a minute, at most AssemblyAI's 3 h. */
 export function sessionCapSeconds(remainingSeconds: number): number {
   const seconds = Number.isFinite(remainingSeconds) ? Math.ceil(remainingSeconds) : 60
   return Math.min(10_800, Math.max(60, seconds))
@@ -207,7 +212,7 @@ export async function mintCloudSpeechGrant(
         provider === 'deepgram'
           ? deepgramUrl({ language: input.language, terms: input.terms, model: env.DEEPGRAM_STREAMING_MODEL })
           : assemblyAiUrl({ language: input.language, terms: input.terms, model: env.ASSEMBLYAI_STREAMING_MODEL })
-      return { provider, url, token }
+      return { provider, url, token, maxSeconds: sessionCapSeconds(input.maxSessionSeconds) }
     } catch (error) {
       lastError = error
       if (input.log) input.log(`${provider} token failed`)
