@@ -29,7 +29,7 @@ const COMMAND_WORDS: Record<string, string> = {
   sum: 'the sum', prod: 'the product', int: 'the integral', lim: 'the limit', partial: 'partial', nabla: 'del',
   ldots: 'and so on', dots: 'and so on', cdots: 'and so on', sin: 'sine', cos: 'cosine', tan: 'tangent', log: 'log',
   ln: 'natural log', exp: 'exp', max: 'max', min: 'min', mod: 'mod', gcd: 'gcd', lcm: 'lcm', det: 'determinant',
-  circ: 'degrees', degree: 'degrees', neg: 'not', land: 'and', lor: 'or', ell: 'l', hbar: 'h bar', prime: 'prime',
+  circ: 'degrees', degree: 'degrees', mid: 'given', neg: 'not', land: 'and', lor: 'or', ell: 'l', hbar: 'h bar', prime: 'prime',
 }
 
 /** Commands whose braces hold plain words: the words are said and nothing is added. */
@@ -121,6 +121,7 @@ export function mathToWords(source: string): string {
   // True where an operand may start: a minus there is a sign, not a subtraction.
   let operandNext = true
   let i = 0
+  const loneBar = s.split('|').length === 2
 
   const word = (w: string, startsOperand = false) => {
     if (w) out.push(w)
@@ -190,7 +191,7 @@ export function mathToWords(source: string): string {
       } else if (name === 'cdot' || name === 'times' || name === 'ast') {
         word('times', true)
       } else if (name in COMMAND_WORDS) {
-        const startsOperand = ['pm', 'mp', 'div', 'leq', 'le', 'geq', 'ge', 'neq', 'ne', 'approx', 'equiv', 'sim', 'propto', 'to', 'rightarrow', 'longrightarrow', 'Rightarrow', 'in', 'notin', 'subset', 'cup', 'cap', 'sum', 'prod', 'int', 'lim', 'land', 'lor', 'neg'].includes(name)
+        const startsOperand = ['pm', 'mp', 'div', 'leq', 'le', 'geq', 'ge', 'neq', 'ne', 'approx', 'equiv', 'sim', 'propto', 'to', 'rightarrow', 'longrightarrow', 'Rightarrow', 'in', 'notin', 'subset', 'cup', 'cap', 'sum', 'prod', 'int', 'lim', 'land', 'lor', 'neg', 'mid'].includes(name)
         word(COMMAND_WORDS[name], startsOperand)
       } else {
         word(name)
@@ -202,7 +203,9 @@ export function mathToWords(source: string): string {
       const arg = readArg(s, i + 1)
       i = arg.next
       const inner = mathToWords(arg.raw)
-      if (c === '^') word(power(inner))
+      // 90^\circ is "90 degrees", not a power.
+      if (c === '^' && inner === 'degrees') word('degrees')
+      else if (c === '^') word(power(inner))
       else word(inner ? `sub ${inner}` : '')
       continue
     }
@@ -228,7 +231,13 @@ export function mathToWords(source: string): string {
       continue
     }
 
-    if (c === ')' || c === '[' || c === ']' || c === '|') {
+    if (c === '|') {
+      i += 1
+      // One bar between two terms is a condition: P(A|B) is "P of A given B". A pair of bars (|x|) is not spoken.
+      if (loneBar && out.length > 0 && s.slice(i).trim()) word('given', true)
+      continue
+    }
+    if (c === ')' || c === '[' || c === ']') {
       i += 1
       continue
     }
@@ -328,10 +337,14 @@ function plainToWords(text: string): string {
   // Slashes: 3/4 is "3 over 4", x/y is "x over y", and/or is "and or", a/b of words is "a slash b".
   out = out.replace(/(?<![\w/.])([A-Za-z0-9]+)\/([A-Za-z0-9]+)(?![\w/])/g, (match, a: string, b: string) => {
     if (/^\d+$/.test(a) && /^\d+$/.test(b)) return `${a} over ${b}`
+    // Two capitals are a name said letter by letter (I/O, A/B testing), not a fraction.
+    if (/^[A-Z]$/.test(a) && /^[A-Z]$/.test(b)) return `${a} ${b}`
     if (a.length === 1 && b.length === 1) return `${a} over ${b}`
     if (/^and$/i.test(a) && /^or$/i.test(b)) return `${a} ${b}`
     return `${a} slash ${b}`
   })
+  // A conditional written without maths marks: P(A|B) is "P(A given B)".
+  out = out.replace(/\(([^()|]+)\|([^()|]+)\)/g, '($1 given $2)')
   // "x = 5", "a ≤ b", "n > 3"; "C++" and "->" are left alone.
   out = out.replace(/\s(<=|>=|==|=|<|>)\s/g, (_m, op: string) => {
     const words: Record<string, string> = { '<=': 'less than or equal to', '>=': 'greater than or equal to', '==': 'equals', '=': 'equals', '<': 'less than', '>': 'greater than' }

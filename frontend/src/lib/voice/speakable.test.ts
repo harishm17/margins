@@ -51,6 +51,15 @@ describe('speakable: percent, money and slashes', () => {
     assert.equal(speakable('Use and/or.'), 'Use and or.')
     assert.equal(speakable('TCP/IP is a stack.'), 'TCP slash IP is a stack.')
     assert.equal(speakable('On 10/11/2026 we met.'), 'On 10/11/2026 we met.')
+    // "I/O" was said "I over O".
+    assert.equal(speakable('Disk I/O is slow, so run an A/B test.'), 'Disk I O is slow, so run an A B test.')
+  })
+
+  it('says degrees and a conditional bar ("90 to the degrees" and "P A B" were said)', () => {
+    assert.equal(speakable('Turn $90^\\circ$, then $30^{\\circ}$ more.'), 'Turn 90 degrees, then 30 degrees more.')
+    assert.equal(speakable('Bayes: $P(A|B) = P(B \\mid A)$.'), 'Bayes: P A given B equals P B given A.')
+    assert.equal(speakable('So P(A|B) is small.'), 'So P(A given B) is small.')
+    assert.equal(speakable('Here $|x|$ is positive.'), 'Here x is positive.')
   })
 
 })

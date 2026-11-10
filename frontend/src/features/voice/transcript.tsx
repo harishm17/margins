@@ -5,20 +5,43 @@ import { Lightbulb } from '@phosphor-icons/react/dist/ssr'
 import { Badge } from '@/components/ui/badge'
 import { MathText } from '@/components/ui/math-text'
 import { cn } from '@/lib/utils'
+import { speakable } from '@/lib/voice/speakable'
+import { cleanForSpeech } from '@/lib/voice/turn-client'
 import { evaluationBadge, type CoachEntry, type TranscriptEntry } from './session-state'
 
 type TranscriptProps = {
   entries: TranscriptEntry[]
   /** What the recognizer has heard so far, not yet sent. */
   interim: string
+  /**
+   * Tell a screen reader each coach reply once it is complete. Set when the reply is not read aloud by the app: with speech
+   * on, the student already hears it, and a second voice reading the same words over it is noise.
+   */
+  announce?: boolean
   className?: string
+}
+
+/** The reply a screen reader is told about: the newest coach turn that is complete, as it would be said. */
+function replyToAnnounce(entries: TranscriptEntry[]): string {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i]
+    if (entry.role !== 'coach') continue
+    if (entry.streaming) return ''
+    const parts = [entry.text.trim(), entry.evaluation ? evaluationBadge(entry.evaluation).label : '', entry.evaluation?.comment ?? '', entry.hint ? `Hint: ${entry.hint}` : '']
+    return speakable(cleanForSpeech(parts.filter(Boolean).join('. ')))
+  }
+  return ''
 }
 
 /**
  * The conversation so far. About six turns fit; older ones scroll. Coach turns are full
  * strength, the student's are quieter, interim recognition is italic and lighter.
+ *
+ * The log itself is silent to a screen reader (it can still be read by moving through it): a reply arrives a few words at
+ * a time, and a live log would read every piece, on top of the app's own voice. Complete replies go to the quiet region
+ * below when `announce` is set. The words being recognised are the student's own, said a moment ago: they are not read back.
  */
-export function Transcript({ entries, interim, className }: TranscriptProps) {
+export function Transcript({ entries, interim, announce = false, className }: TranscriptProps) {
   const scroller = React.useRef<HTMLDivElement>(null)
   const last = entries[entries.length - 1]
   const lastLength = last && last.role === 'coach' ? last.text.length : 0
@@ -31,11 +54,17 @@ export function Transcript({ entries, interim, className }: TranscriptProps) {
   const visible = entries.filter((entry) => entry.role === 'student' || hasContent(entry))
 
   return (
+    <>
+    {announce ? (
+      <div className="sr-only" aria-live="polite" aria-atomic="true" data-testid="voice-announcer">
+        {replyToAnnounce(entries)}
+      </div>
+    ) : null}
     <div
       ref={scroller}
       role="log"
       aria-label="Conversation"
-      aria-live="polite"
+      aria-live="off"
       data-testid="voice-transcript"
       className={cn('max-h-[22rem] min-h-24 overflow-y-auto py-1 pr-1', className)}
     >
@@ -47,7 +76,7 @@ export function Transcript({ entries, interim, className }: TranscriptProps) {
             entry.role === 'student' ? <StudentTurn key={entry.id} text={entry.text} /> : <CoachTurn key={entry.id} entry={entry} />
           )}
           {interim ? (
-            <li className="grid grid-cols-[3.25rem_1fr] gap-x-3">
+            <li className="grid grid-cols-[3.25rem_1fr] gap-x-3" aria-hidden="true">
               <span className="pt-0.5 text-caption text-fg-3">You</span>
               <p className="text-body italic text-fg-3" data-testid="voice-interim">
                 {interim}
@@ -57,6 +86,7 @@ export function Transcript({ entries, interim, className }: TranscriptProps) {
         </ol>
       )}
     </div>
+    </>
   )
 }
 
@@ -81,7 +111,8 @@ function CoachTurn({ entry }: { entry: CoachEntry }) {
       <div className="min-w-0">
         {entry.text.trim() ? (
           <p className={cn('text-body', entry.note ? 'text-fg-2' : 'text-fg')} data-testid={entry.note ? 'voice-coach-note' : undefined}>
-            {entry.text.trim()}
+            {/* Maths and emphasis are drawn once the reply is whole; half a formula is shown as it arrives. */}
+            {entry.streaming ? entry.text.trim() : <MathText>{entry.text.trim()}</MathText>}
             {entry.streaming ? (
               <span aria-hidden="true" className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-caret bg-fg-3" />
             ) : null}

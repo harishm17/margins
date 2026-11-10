@@ -160,7 +160,7 @@ export function SessionView({ state, orb, controller, courseId, title, hasQuesti
               <Transcript entries={restoredTranscript} interim="" className="min-h-0 opacity-80" />
             </div>
           ) : null}
-          <Transcript entries={entries} interim={interim} />
+          <Transcript entries={entries} interim={interim} announce={speech !== 'on'} />
 
           <div
             className={cn(
