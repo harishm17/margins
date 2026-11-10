@@ -137,6 +137,7 @@ def install_route():
 
     from app.config import settings
     from app.main import app
+    from app.api.routes import tutor as tutor_route
     from app.services import ai_status
 
     settings.AI_INTERNAL_TOKEN = ""
@@ -145,7 +146,11 @@ def install_route():
     async def available() -> "ai_status.AiStatus":
         return ai_status.AiStatus(True)
 
+    async def owns(user_id, **ids):
+        """No database: the eval's student owns the course it sends."""
+
     ai_status.get_status = available
+    tutor_route.assert_owns = owns
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://eval", timeout=None)
 
 

@@ -28,6 +28,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
+# The app settings have no default ENVIRONMENT (SEC-L2); offline eval tooling runs as development.
+os.environ.setdefault("ENVIRONMENT", "development")
+
 HERE = Path(__file__).resolve().parent
 EVALS_DIR = HERE.parent
 REPO_ROOT = EVALS_DIR.parent

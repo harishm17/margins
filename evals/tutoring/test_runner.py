@@ -18,6 +18,7 @@ import run_eval  # noqa: E402
 
 spend_module, adapters = run_eval.load_generation_helpers()
 
+from app.api.routes import tutor as tutor_route  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.services import ai_status  # noqa: E402
 from app.services.llm.factory import LLMFactory  # noqa: E402
@@ -142,6 +143,7 @@ class ScriptedTutor(MockProvider):
 @pytest.fixture
 def route(monkeypatch):
     monkeypatch.setattr(ai_status, "get_status", ai_status.get_status)  # restored after the test
+    monkeypatch.setattr(tutor_route, "assert_owns", tutor_route.assert_owns)
     monkeypatch.setattr(settings, "AI_INTERNAL_TOKEN", settings.AI_INTERNAL_TOKEN)
     monkeypatch.setattr(settings, "ENVIRONMENT", settings.ENVIRONMENT)
     monkeypatch.setattr(LLMFactory, "_instance", None)

@@ -34,6 +34,9 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# The app settings have no default ENVIRONMENT (SEC-L2); offline eval tooling runs as development.
+os.environ.setdefault("ENVIRONMENT", "development")
+
 HERE = Path(__file__).resolve().parent
 EVALS_DIR = HERE.parent
 REPO_ROOT = EVALS_DIR.parent
@@ -177,6 +180,7 @@ def make_client():
 
     from app.config import settings
     from app.main import app
+    from app.api.routes import tutor as tutor_route
     from app.services import ai_status
 
     settings.AI_INTERNAL_TOKEN = ""
@@ -185,7 +189,11 @@ def make_client():
     async def available() -> "ai_status.AiStatus":
         return ai_status.AiStatus(True)
 
+    async def owns(user_id, **ids):
+        """No database: the eval's student owns the course it sends."""
+
     ai_status.get_status = available
+    tutor_route.assert_owns = owns
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://eval", timeout=None)
 
 
