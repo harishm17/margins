@@ -18,7 +18,9 @@ CONTAINER_CALLS = {"dict", "set", "OrderedDict", "defaultdict", "deque"}
 ALLOWED = {
     ("db/connection.py", "asyncio.Lock"): "guards creating this process's own connection pool; nothing to share across processes",
     ("services/embeddings/generator.py", "threading.Lock"): "loads the embedding model once per process; the model is process memory",
-    ("services/document_processor/extractors.py", "threading.Lock"): "PyMuPDF is not thread-safe inside one process",
+    ("services/document_processor/sandbox.py", "asyncio.Semaphore"): "caps the parse children this process runs at once; it protects this process's memory, so it is per process by design",
+    ("services/billing.py", "_writes"): "keeps references to this process's shielded ledger writes so they are not collected",
+    ("services/llm/usage.py", "_unpriced_logged"): "logs an unpriced model id once per process; not a limit",
     ("services/exam_generator.py", "asyncio.Semaphore"): "bounds fan-out inside one request, created per call; not a cross-request limit",
     ("services/exam_grader.py", "asyncio.Semaphore"): "bounds fan-out inside one request, created per call; not a cross-request limit",
     ("services/dispatch.py", "_background_tasks"): "keeps references to this process's fire-and-forget tasks so they are not collected",
