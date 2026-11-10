@@ -167,8 +167,8 @@ test('every route with an id in its path is understood here', () => {
 for (const route of covered) {
   test(`another student gets 404 for A's ids on ${route}`, async (t) => {
     if (!available) return t.skip('no migrated test database')
-    const module = (await import(`./${route}/route`)) as Record<string, unknown>
-    const methods = METHODS.filter((method) => typeof module[method] === 'function')
+    const loaded = (await import(`./${route}/route`)) as Record<string, unknown>
+    const methods = METHODS.filter((method) => typeof loaded[method] === 'function')
     assert.ok(methods.length > 0, `${route} exports no handler`)
     const params: Record<string, string> = {}
     for (const segment of route.split('/')) {
@@ -181,7 +181,7 @@ for (const route of covered) {
         method,
         ...(hasBody ? { body: JSON.stringify(BODIES[`${method} ${route}`] ?? {}), headers: { 'content-type': 'application/json' } } : {}),
       })
-      const response = await (module[method] as Handler)(request, { params: Promise.resolve(params) })
+      const response = await (loaded[method] as Handler)(request, { params: Promise.resolve(params) })
       assert.equal(response.status, 404, `${method} ${route} answered ${response.status} to another student's ids`)
     }
   })
