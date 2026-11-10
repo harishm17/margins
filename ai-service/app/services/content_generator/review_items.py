@@ -294,6 +294,10 @@ async def generate_review_items(topic_id: str, requests: Sequence[Dict[str, Any]
         """The supported items for `requests`, written BATCH_SIZE requests at a time, and how many were dropped."""
         kept_items: List[Dict[str, Any]] = []
         lost_items = 0
+        # The batches run one after another over the same excerpts, so with more than one the first writes the cache
+        # entry and every later one reads it. (It used to start on the second batch: the second paid for the write and
+        # a job of two batches never read what it wrote.)
+        several = len(requests) > BATCH_SIZE
         for start in range(0, len(requests), BATCH_SIZE):
             batch = requests[start:start + BATCH_SIZE]
             instructions = review_template().format(
@@ -306,7 +310,7 @@ async def generate_review_items(topic_id: str, requests: Sequence[Dict[str, Any]
             result = await LLMFactory.get_provider().generate_structured(
                 content_messages(
                     context.topic["name"], context.topic.get("description") or "", chunks, instructions + seen_text,
-                    cache_excerpts=cache_excerpts or start > 0, course_map=context.course_map,
+                    cache_excerpts=cache_excerpts or several, course_map=context.course_map,
                 ),
                 review_schema(),
                 max_tokens=output_cap("review_items", 16000),

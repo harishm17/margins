@@ -156,9 +156,22 @@ class TestManyConcepts:
                 "VALUES ($1, $2, $3, $4, 's', 'concept', $5) RETURNING id",
                 new_id(), twins.project_id, twins.topic_id, f"Extra {n}", 10 + n,
             ))
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()):
+        provider = MockProvider()
+        writes = []
+        answer = provider.generate_structured
+
+        async def generate_structured(messages, schema, **kwargs):
+            if kwargs.get("purpose") == "review_items":
+                writes.append([m.cache for m in messages])
+            return await answer(messages, schema, **kwargs)
+
+        provider.generate_structured = generate_structured
+        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=provider):
             result = await generate_review_items(twins.topic_id, [_request(concepts)])
 
+        # The excerpts are cached from the first call on, so the second reads what the first wrote. (The first used to
+        # go uncached: the second call paid for the cache write and a job of two calls never read it.)
+        assert len(writes) > 1 and all(cached == [False, True, False] for cached in writes)
         assert result["concepts_without_items"] == []
         stored = json.loads((await _bank(db, twins.topic_id))[0]["questions"])
         assert {q["concept_ids"][0] for q in stored} == set(concepts)

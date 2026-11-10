@@ -278,7 +278,9 @@ def build_messages(req: PracticeTutorRequest, leak_reason: Optional[Rejection] =
     if leak_reason:
         parts.append(f"<leak_notice>\n{leak_reason.notice()}\n</leak_notice>")
     system = SYSTEM_PROMPT_V2 if v2 else SYSTEM_PROMPT
-    return [LLMMessage(role="system", content=system), LLMMessage(role="user", content="\n\n".join(parts))]
+    # The system prompt (and the reply schema before it) is the same on every tutor call, and a practice session makes
+    # many in a row, so it is cached: every call after the first reads it at a fraction of the price.
+    return [LLMMessage(role="system", content=system, cache=True), LLMMessage(role="user", content="\n\n".join(parts))]
 
 
 # A full stop after these does not end a sentence.
