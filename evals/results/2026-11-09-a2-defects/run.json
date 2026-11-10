@@ -1,0 +1,65 @@
+{
+  "label": "a2-defects",
+  "date": "2026-11-09",
+  "code": {
+    "commit": "8d1088babfde7417328d931a79aeeb4717265f91",
+    "branch": "plan-v5/w0-pr1",
+    "app_dirty": false
+  },
+  "kinds": [
+    "warmup",
+    "quiz",
+    "review",
+    "solved",
+    "interactive",
+    "exam"
+  ],
+  "topics": 10,
+  "topic_counts": {
+    "mit-18.05": 6,
+    "mit-6.006": 4
+  },
+  "params": {
+    "questions": 10,
+    "examples": 3,
+    "exam_questions": 20,
+    "difficulty": "medium"
+  },
+  "judge": "opus:medium",
+  "batch": true,
+  "batches": [
+    {
+      "id": "msgbatch_01WqHbcQnbMAYiZBggcNvuZC",
+      "requests": 58,
+      "seconds": 201.0
+    },
+    {
+      "id": "msgbatch_015ZSmjEpGaiwnzroRTjVLx5",
+      "requests": 38,
+      "seconds": 1214.7
+    },
+    {
+      "id": "msgbatch_01ESGV3Hz6MTy3zXnT4RVtA2",
+      "requests": 2,
+      "seconds": 142.4
+    },
+    {
+      "id": "msgbatch_016mC8fFM4xubTjADCAPuJpY",
+      "requests": 2,
+      "seconds": 169.7
+    },
+    {
+      "id": "msgbatch_01WRpqc8GEqbeNpeaBKU7DCz",
+      "requests": 10,
+      "seconds": 123.9
+    }
+  ],
+  "mock": false,
+  "max_usd": 9.0,
+  "max_judge_usd": 3.0,
+  "spend": {
+    "generation": 5.0459,
+    "judge": 0.4281
+  },
+  "stopped": null
+}

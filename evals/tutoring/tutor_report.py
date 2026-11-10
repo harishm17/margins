@@ -48,6 +48,12 @@ def render_markdown(summary: Dict[str, Any]) -> str:
         f"(caps: {usd(spend['max_usd'], 2)} total, {usd(spend['max_judge_usd'], 2)} judge).",
         f"- In the app, {pct(gates['regenerated_rate'])} of replies were written twice because the first leaked, and {pct(gates['fallback_rate'])} fell back to the authored hint.",
     ]
+    worked = gates.get("worked_fallback") or {}
+    if worked.get("of") or worked.get("refused"):
+        lines += [
+            f"- \"Show me a worked example\": {worked['count']} of {worked['of']} answered requests ({pct(worked['rate'])}) got the authored hint "
+            f"instead of a worked example; the app turned down {worked['refused']} more before any model call."
+        ]
     if summary.get("stopped"):
         lines += ["", f"**Stopped early:** {summary['stopped']}"]
     lines += ["", "## Gates", ""]

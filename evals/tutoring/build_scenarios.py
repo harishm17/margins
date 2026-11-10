@@ -7,6 +7,11 @@ Two sets, the same patterns and the same builder (students.py):
         written for this eval (probability, algebra, algorithms) with all three hints. No course text.
         This is the committed set: the parity fixture, the tests and CI use it.
 
+    python3 -I evals/tutoring/build_scenarios.py --worked
+        scenarios/practice-worked.jsonl: 24 scenarios, each original problem once per worked-example pattern
+        (fallback_worked, idk_button), 36 "Show me a worked example" presses. A6 runs it to measure how often a press
+        gets the authored hint instead of a worked example (finding 60). Committed: the problems are the eval's own.
+
     python3 -I evals/tutoring/build_scenarios.py --raw-dir <generation results folder>/raw [--raw-dir ...]
         scenarios/practice.jsonl: 50 scenarios from the practice problems that the generation eval wrote
         from its two cached corpora (MIT OpenCourseWare, CC BY-NC-SA). That text is derived from the
@@ -30,6 +35,9 @@ from students import PATTERNS, PRACTICE_MIX, WORKING_PATTERNS, make_scenario, pr
 DEFAULT_OUT = HERE / "scenarios" / "practice.jsonl"
 ORIGINAL_OUT = HERE / "scenarios" / "practice-original.jsonl"
 ORIGINAL_PROBLEMS = HERE / "problems" / "original.json"
+WORKED_OUT = HERE / "scenarios" / "practice-worked.jsonl"
+# The patterns that press "Show me a worked example": fallback_worked twice, idk_button once.
+WORKED_PATTERNS = ("fallback_worked", "idk_button")
 # Every pattern, injection included, in 12 scenarios.
 ORIGINAL_MIX = {
     "just_tell_me": 1,
@@ -130,6 +138,20 @@ def build_original(mix: Dict[str, int] = ORIGINAL_MIX) -> List[Dict[str, Any]]:
     return deal(load_original(), mix, rng, shuffle_plan=False)
 
 
+def build_worked() -> List[Dict[str, Any]]:
+    """Every original problem once per worked-example pattern, patterns in turn."""
+    rng = random.Random(SEED)
+    scenarios: List[Dict[str, Any]] = []
+    for pattern in WORKED_PATTERNS:
+        for candidate in load_original():
+            serial = len(scenarios) + 1
+            scenario = make_scenario(f"worked-{serial:03d}-{pattern}", pattern, candidate["raw"], candidate["source"], rng, serial)
+            if scenario is None:
+                raise SystemExit(f"original problem '{candidate['raw']['title']}' does not suit '{pattern}'")
+            scenarios.append(scenario)
+    return scenarios
+
+
 def write(scenarios: List[Dict[str, Any]], out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("".join(json.dumps(s, ensure_ascii=False) + "\n" for s in scenarios))
@@ -142,13 +164,17 @@ def write(scenarios: List[Dict[str, Any]], out: Path) -> None:
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--original", action="store_true", help="build the committed set from problems/original.json")
+    parser.add_argument("--worked", action="store_true", help="build the worked-example set (A6) from problems/original.json")
     parser.add_argument("--raw-dir", type=Path, action="append", default=[], help="a generation results folder's raw/ directory (repeatable)")
     parser.add_argument("--out", type=Path, default=None)
     args = parser.parse_args(argv)
-    if args.original == bool(args.raw_dir):
-        parser.error("give either --original or one or more --raw-dir")
+    if [args.original, args.worked, bool(args.raw_dir)].count(True) != 1:
+        parser.error("give one of --original, --worked or one or more --raw-dir")
     if args.original:
         write(build_original(), args.out or ORIGINAL_OUT)
+        return 0
+    if args.worked:
+        write(build_worked(), args.out or WORKED_OUT)
         return 0
     for raw_dir in args.raw_dir:
         if not raw_dir.is_dir():

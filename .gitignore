@@ -51,6 +51,9 @@ htmlcov/
 # Retrieval eval downloads (OpenStax PDFs are not committed)
 evals/.cache/
 !evals/results/*.md
+# Extraction eval: the reader's prompt, the attribution and the keys of the committed (CC BY 4.0 and MIT) pages
+!evals/extraction/*.md
+!evals/extraction/keys/*.md
 
 # e2e stack logs and uploads (scripts/e2e-stack.sh)
 .e2e/

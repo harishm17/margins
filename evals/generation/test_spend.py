@@ -88,3 +88,9 @@ def test_prompt_token_estimate_counts_the_schema():
     with_schema = estimate_prompt_tokens(["a" * 3200], {"x": "y" * 3200})
     assert plain == 1001
     assert with_schema > plain + 900
+
+
+def test_short_answer_grading_has_a_short_default_output():
+    # A grade is a few sentences and one check per key point; the 6000-token fallback would overstate A5 tenfold.
+    tracker = SpendTracker(10, 3, cost_fn)
+    assert tracker.expected_output_tokens("m", "grade_short_answer") == 600

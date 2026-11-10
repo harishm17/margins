@@ -1,0 +1,39 @@
+{
+  "label": "a5",
+  "date": "2026-11-09",
+  "commit": "4f0ede2e",
+  "dirty": true,
+  "arms": {
+    "haiku": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "app_choice": true
+    },
+    "sonnet": {
+      "model": "claude-sonnet-5-5",
+      "effort": "low"
+    }
+  },
+  "estimate_usd": {
+    "haiku": 0.0252,
+    "sonnet": 0.5031
+  },
+  "cost_usd": {
+    "haiku": 0.023214,
+    "sonnet": 0.390409
+  },
+  "total_cost_usd": 0.413623,
+  "price_factor": 0.5,
+  "mock": false,
+  "batches": [
+    {
+      "id": "msgbatch_0123DjP5ucAqTyewvTvfP9RC",
+      "requests": 240,
+      "seconds": 276.9
+    }
+  ],
+  "outcomes": {
+    "haiku: ok": 120,
+    "sonnet: ok": 120
+  }
+}

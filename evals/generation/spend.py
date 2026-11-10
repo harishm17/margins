@@ -43,6 +43,8 @@ DEFAULT_OUTPUT_TOKENS = {
     "chat": 500,
     # A voice coach turn: one or two spoken sentences, or a tool call.
     "voice": 250,
+    # A short-answer grade (the grading eval, evals/grading): points, 2-3 sentences of feedback, one check per key point.
+    "grade_short_answer": 600,
 }
 FALLBACK_OUTPUT_TOKENS = 6000
 OBSERVED_MARGIN = 1.25

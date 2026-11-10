@@ -761,3 +761,171 @@ def summarize_model(per_topic: Dict[str, Dict[str, object]], statements: Dict[st
         "duplicate_example_pairs": len(pairs),
         "duplicate_example_details": pairs,
     }
+
+
+# ---------------------------------------------------------------------------- item defects (A2)
+#
+# Faults one generated item can have that no reader should meet, found without a model. A2 counts them per generator on
+# what the model wrote and on what the app kept; the quality gate's stage 1 (plan Q1) runs the same tests in the app.
+
+# The model thinking aloud in text a student reads. "wait" only at the start of a sentence (a queue's "expected wait" is
+# not), "let me" only with a redo verb, "actually" only when it takes back what came before.
+_SELF_CORRECTION = re.compile(
+    r"(?:^|[.!?:;]\s+|\n)\s*(?:no,?\s+)?wait\b[,.!:;—-]"
+    r"|\bhmm+\b|\boops\b|\bon second thought\b|\bscratch that\b|\bcorrection\s*:"
+    r"|\bI (?:made|have made) (?:an?|a small) (?:error|mistake)\b"
+    r"|\blet me (?:re-?check|re-?compute|re-?calculate|re-?consider|re-?do|re-?read|re-?examine|re-?verify|try (?:that |this )?again|correct (?:that|this|myself)|fix (?:that|this))\b"
+    r"|\bactually,?\s+(?:that(?:'s| is)|this is|it(?:'s| is)) (?:not|wrong|incorrect)\b",
+    re.IGNORECASE,
+)
+# A past exam's header: "Problem 3. [5 points]" or "(4 points)" anywhere, or "Problem 3." / "**Question 2:**" at the start.
+_POINTS_HEADER = re.compile(
+    r"(?:\b(?:problem|question|q)\s*\d+[.:)]?\s*)?[\[(]\s*\d+(?:\.\d+)?\s*(?:points?|pts?|marks?)\s*[\])]", re.IGNORECASE
+)
+_LEADING_HEADER = re.compile(r"^\s*(?:\*\*|__)?\s*(?:problem|question)\s+\d+\s*[.:)]", re.IGNORECASE)
+_FRACTION = re.compile(r"^(-?\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)$")
+_TEX_FRACTION = re.compile(r"^(-?)\\d?frac\{(-?\d+(?:\.\d+)?)\}\{(\d+(?:\.\d+)?)\}$")
+# The correct option is a tell when it is the only longest one and this much longer than every wrong one.
+LONGEST_TELL_RATIO = 1.3
+QUESTION_DEFECTS = (
+    "self_correction",
+    "exam_header",
+    "answer_not_in_options",
+    "two_correct_options",
+    "duplicate_options",
+    "longest_option_tell",
+)
+
+
+def self_correction_phrases(text: str) -> List[str]:
+    return [m.group(0).strip(" .,;:\n") for m in _SELF_CORRECTION.finditer(text or "")]
+
+
+def exam_header_hits(text: str) -> List[str]:
+    hits = [m.group(0) for m in _POINTS_HEADER.finditer(text or "")]
+    leading = _LEADING_HEADER.match(text or "")
+    return hits + ([leading.group(0).strip()] if leading and not hits else [])
+
+
+def _plain_option(text: str) -> str:
+    plain = re.sub(r"\s+", " ", (text or "").replace("$", "").strip().lower())
+    return plain.rstrip(".").strip()
+
+
+def _option_value(text: str) -> Optional[float]:
+    plain = _plain_option(text).replace(" ", "").replace(",", "")
+    try:
+        if plain.endswith("%"):
+            return float(plain[:-1]) / 100
+        return float(plain)
+    except ValueError:
+        pass
+    fraction = _FRACTION.match(plain)
+    tex = _TEX_FRACTION.match(plain)
+    try:
+        if fraction:
+            return float(fraction.group(1)) / float(fraction.group(2))
+        if tex:
+            value = float(tex.group(2)) / float(tex.group(3))
+            return -value if tex.group(1) else value
+    except ZeroDivisionError:
+        return None
+    return None
+
+
+def same_option(a: str, b: str) -> bool:
+    """Two options that say the same thing: the same text (case, spacing, `$` and a final full stop aside) or the
+    same number written two ways ("0.5", "1/2", "\\frac{1}{2}", "50%")."""
+    if _plain_option(a) == _plain_option(b):
+        return True
+    x, y = _option_value(a), _option_value(b)
+    return x is not None and y is not None and abs(x - y) <= 1e-9 * max(1.0, abs(x))
+
+
+def _question_texts(question: dict) -> List[str]:
+    texts = [question.get("question_text", ""), question.get("explanation", ""), question.get("sample_answer") or ""]
+    texts += [o.get("text", "") for o in question.get("options") or []]
+    return texts
+
+
+def question_defects(question: dict) -> List[str]:
+    """The faults of one question (as the model wrote it or as the app stored it), in QUESTION_DEFECTS order."""
+    found = set()
+    if any(self_correction_phrases(text) for text in _question_texts(question)):
+        found.add("self_correction")
+    if exam_header_hits(question.get("question_text", "")):
+        found.add("exam_header")
+    if question.get("question_type") == "multiple_choice":
+        options = [o for o in question.get("options") or [] if str(o.get("id", "")).strip()]
+        ids = [str(o["id"]).strip().upper() for o in options]
+        answer = str(question.get("correct_answer") or "").strip().upper()
+        if answer not in ids:
+            found.add("answer_not_in_options")
+        for i, first in enumerate(options):
+            for j in range(i + 1, len(options)):
+                if same_option(first.get("text", ""), options[j].get("text", "")):
+                    found.add("two_correct_options" if answer in (ids[i], ids[j]) else "duplicate_options")
+        if answer in ids and len(options) >= 2:
+            lengths = [len(_plain_option(o.get("text", ""))) for o in options]
+            key = lengths[ids.index(answer)]
+            wrong = [n for k, n in zip(ids, lengths) if k != answer]
+            if key > max(wrong) and key >= LONGEST_TELL_RATIO * max(wrong):
+                found.add("longest_option_tell")
+    return [code for code in QUESTION_DEFECTS if code in found]
+
+
+def problem_defects(content_type: str, problem: dict) -> List[str]:
+    """Faults of one worked example or practice problem: thinking aloud anywhere, an exam header in its statement."""
+    texts = [text for _, text, _ in iter_text_fields(content_type, [problem])]
+    for step in problem.get("steps") or []:
+        texts += [str(h) for h in step.get("hints") or []]
+    found = []
+    if any(self_correction_phrases(text) for text in texts):
+        found.append("self_correction")
+    if exam_header_hits(problem.get("problem_statement", "")):
+        found.append("exam_header")
+    return found
+
+
+def _correct_is_longest(question: dict) -> Optional[bool]:
+    options = question.get("options") or []
+    ids = [str(o.get("id", "")).strip().upper() for o in options]
+    answer = str(question.get("correct_answer") or "").strip().upper()
+    if answer not in ids or len(options) < 2:
+        return None
+    lengths = [len(_plain_option(o.get("text", ""))) for o in options]
+    key = lengths[ids.index(answer)]
+    return key > max(n for k, n in zip(ids, lengths) if k != answer)
+
+
+def item_set_report(questions: List[dict]) -> Dict[str, object]:
+    """Faults over a set of questions, how often the correct option is the only longest one (against what chance gives:
+    one in the number of options), and the share of true/false items (a coin flip answers half of them)."""
+    defects = [question_defects(q) for q in questions]
+    by_defect = Counter(code for found in defects for code in found)
+    mc = [q for q in questions if q.get("question_type") == "multiple_choice"]
+    longest = [x for x in (_correct_is_longest(q) for q in mc) if x is not None]
+    true_false = sum(1 for q in questions if q.get("question_type") == "true_false")
+    flagged = sum(1 for found in defects if found)
+    return {
+        "items": len(questions),
+        "flagged": flagged,
+        "flagged_rate": (flagged / len(questions)) if questions else None,
+        "by_defect": dict(sorted(by_defect.items())),
+        "multiple_choice": len(mc),
+        "correct_longest": sum(longest),
+        "chance_longest": sum(1 / len(q.get("options") or [None]) for q in mc),
+        "true_false": true_false,
+        "true_false_share": (true_false / len(questions)) if questions else None,
+    }
+
+
+def problem_set_report(content_type: str, problems: List[dict]) -> Dict[str, object]:
+    defects = [problem_defects(content_type, p) for p in problems]
+    flagged = sum(1 for found in defects if found)
+    return {
+        "items": len(problems),
+        "flagged": flagged,
+        "flagged_rate": (flagged / len(problems)) if problems else None,
+        "by_defect": dict(sorted(Counter(code for found in defects for code in found).items())),
+    }

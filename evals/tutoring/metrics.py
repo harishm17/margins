@@ -654,9 +654,24 @@ def summarize(
         "by_pattern": by_pattern,
         "failures": failures,
         "fallback_rate": _share(replied, lambda r: r.get("from_authored_hint")),
+        "worked_fallback": _worked_fallback(records),
         "regenerated_rate": _share(replied, lambda r: r.get("leaked")),
         "no_data": no_data,
         "passed": all(g["passed"] is True for g in gates.values()),
+    }
+
+
+def _worked_fallback(records: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """A6 (finding 60): of the "Show me a worked example" presses that got a reply, how many ended in the authored-hint
+    fallback instead of a worked example. `refused` counts presses the app turned down before any model call."""
+    presses = [r for r in records if r.get("event") == "show_worked"]
+    answered = [r for r in presses if r.get("reply")]
+    fell_back = sum(1 for r in answered if r.get("from_authored_hint"))
+    return {
+        "count": fell_back,
+        "of": len(answered),
+        "rate": fell_back / len(answered) if answered else None,
+        "refused": sum(1 for r in presses if r.get("blocked")),
     }
 
 

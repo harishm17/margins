@@ -454,3 +454,89 @@ def test_item_tags_are_not_checked_for_a_topic_without_concepts():
     summary = summarize_model({"t1": result}, {})
     assert summary["concept_topics"] == 0
     assert summary["item_tag_gate_ok"] is None and summary["warmup_reuse_gate_ok"] is None
+
+
+# ---------------------------------------------------------------- item defects (A2)
+
+
+def mc(options, answer, text="Which one holds?", explanation="Because the rule says so."):
+    return {
+        "question_type": "multiple_choice",
+        "question_text": text,
+        "options": [{"id": letter, "text": option} for letter, option in zip("ABCD", options)],
+        "correct_answer": answer,
+        "explanation": explanation,
+    }
+
+
+def test_self_correction_phrases_catch_thinking_aloud_but_not_ordinary_words():
+    assert checks.self_correction_phrases("The sum is 12. Wait, that's wrong: it is 14.")
+    assert checks.self_correction_phrases("Let me recompute the total.")
+    assert checks.self_correction_phrases("Hmm, the second case fails.")
+    assert checks.self_correction_phrases("Actually, that is not right; the bound is n.")
+    assert checks.self_correction_phrases("Correction: the order is reversed.")
+    assert checks.self_correction_phrases("I made an error in step 2.")
+    assert checks.self_correction_phrases("On second thought, use the other rule.")
+    assert not checks.self_correction_phrases("Customers wait in a queue; what is the expected wait?")
+    assert not checks.self_correction_phrases("What actually happens to the list after one pass?")
+    assert not checks.self_correction_phrases("Check your answer against the definition.")
+
+
+def test_exam_headers_are_found_anywhere_in_the_text_and_at_its_start():
+    assert checks.exam_header_hits("Problem 3. [5 points] Show that the loop ends.")
+    assert checks.exam_header_hits("Show that the loop ends. (4 points)")
+    assert checks.exam_header_hits("**Question 2:** Show that the loop ends.")
+    assert not checks.exam_header_hits("Show that the loop ends in at most 3 points of the grid.")
+    assert not checks.exam_header_hits("The problem has 3 parts.")
+
+
+def test_options_are_the_same_when_their_text_or_their_value_is():
+    assert checks.same_option("O(n log n)", "o(n log n).")
+    assert checks.same_option("$\\frac{1}{2}$", "0.5")
+    assert checks.same_option("1/4", "25%")
+    assert checks.same_option(" 3 ", "3.0")
+    assert not checks.same_option("1/3", "0.33")
+    assert not checks.same_option("n", "n^2")
+
+
+def test_question_defects_name_each_fault():
+    assert checks.question_defects(mc(["1", "2", "3", "4"], "B")) == []
+    assert checks.question_defects(mc(["1", "2", "3", "4"], "E")) == ["answer_not_in_options"]
+    assert checks.question_defects(mc(["0.5", "1/2", "3", "4"], "A")) == ["two_correct_options"]
+    assert checks.question_defects(mc(["0.5", "2", "3", "3.0"], "A")) == ["duplicate_options"]
+    tell = mc(["A heap keeps the smallest key at its root after every insert", "Never", "Always", "Sometimes"], "A")
+    assert checks.question_defects(tell) == ["longest_option_tell"]
+    thinking = mc(["1", "2", "3", "4"], "b", explanation="It is 3. Wait, no: it is 2.")
+    assert checks.question_defects(thinking) == ["self_correction"]
+    header = {"question_type": "true_false", "question_text": "Problem 1. [2 points] The loop ends.", "correct_answer": True, "explanation": "x"}
+    assert checks.question_defects(header) == ["exam_header"]
+
+
+def test_a_problem_is_checked_for_thinking_aloud_everywhere_and_a_header_in_its_statement():
+    problem = {"title": "T", "problem_statement": "Problem 2 (3 points). Sort the list.", "steps": [{"question": "q", "hint": "Let me redo this.", "explanation": "e"}]}
+    assert checks.problem_defects(checks.INTERACTIVE, problem) == ["self_correction", "exam_header"]
+    clean = {"title": "T", "problem_statement": "Sort the list.", "solution_steps": [{"description": "d", "work": "w", "explanation": "e"}], "final_answer": "done"}
+    assert checks.problem_defects(checks.SOLVED, clean) == []
+
+
+def test_an_item_set_report_counts_faults_the_longest_option_and_true_false_items():
+    items = [
+        mc(["The correct option, which is clearly much longer than the rest", "No", "Yes", "Maybe"], "A"),
+        mc(["1", "2", "3", "4"], "B"),
+        mc(["0.5", "1/2", "3", "4"], "A"),
+        {"question_type": "true_false", "question_text": "The loop ends.", "correct_answer": True, "explanation": "x"},
+    ]
+    report = checks.item_set_report(items)
+    assert (report["items"], report["flagged"], report["flagged_rate"]) == (4, 2, 0.5)
+    assert report["by_defect"] == {"longest_option_tell": 1, "two_correct_options": 1}
+    assert (report["multiple_choice"], report["correct_longest"]) == (3, 1)
+    assert report["chance_longest"] == pytest.approx(0.75)  # 3 questions of 4 options: 1/4 each
+    assert (report["true_false"], report["true_false_share"]) == (1, 0.25)
+    empty = checks.item_set_report([])
+    assert (empty["items"], empty["flagged_rate"], empty["true_false_share"]) == (0, None, None)
+
+
+def test_a_problem_set_report_counts_flagged_problems():
+    problems = [{"title": "T", "problem_statement": "Hmm, sort it.", "solution_steps": [], "final_answer": "x"}, {"title": "U", "problem_statement": "Sort it.", "solution_steps": [], "final_answer": "x"}]
+    report = checks.problem_set_report(checks.SOLVED, problems)
+    assert (report["items"], report["flagged"], report["by_defect"]) == (2, 1, {"self_correction": 1})

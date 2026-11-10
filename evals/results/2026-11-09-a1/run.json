@@ -1,0 +1,42 @@
+{
+  "label": "a1",
+  "date": "2026-11-09",
+  "commit": "caa23579",
+  "branch": "plan-v5/w0-pr1",
+  "arms": {
+    "text": null,
+    "haiku": "claude-haiku-5-5",
+    "sonnet": "claude-sonnet-5-5",
+    "opus": "claude-opus-5-5"
+  },
+  "reader": {
+    "dpi": 200,
+    "max_side_px": 2576,
+    "effort": "low",
+    "max_tokens": 16000
+  },
+  "pages": [
+    "os-tables-1",
+    "os-tables-2",
+    "os-maths-1",
+    "os-maths-2",
+    "os-maths-3",
+    "os-figures-1",
+    "os-figures-2",
+    "os-scans-1",
+    "os-scans-2",
+    "rs-code-1",
+    "ocw-tables-1",
+    "ocw-maths-1",
+    "ocw-maths-2",
+    "bio-figures-1",
+    "ocw-code-1",
+    "py-code-1",
+    "ocw-scans-1",
+    "hw-1",
+    "hw-2",
+    "hw-3"
+  ],
+  "dry_run": false,
+  "estimate_usd": 2.002
+}

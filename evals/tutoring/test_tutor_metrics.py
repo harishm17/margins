@@ -466,3 +466,43 @@ def test_leak_flags_a_transfer_question_that_uses_a_later_steps_single_digit():
     )
     assert metrics.leak_any_rung(reply, steps[:3] + [{**steps[3], "question": "Count the leaves."}], 1, problem="A decision tree.", own_answer="8")
     assert not metrics.leak_any_rung(reply.replace("height 5", "height 4"), steps, 1, problem="A decision tree.", own_answer="8")
+
+
+def worked_example_run():
+    """Three "Show me a worked example" presses: one answered with a worked example, one sent the authored hint, one
+    refused by the app before any model call."""
+    scenarios = {"s1": scenario_of("check", "show_worked", "ask", "show_worked", "show_worked", pattern="fallback_worked")}
+    worked = dict(event="show_worked", move="worked_analogue", rung_allowed=5, rung_used=5)
+    records = [
+        CHECK,
+        reply_record("A different bag holds 2 green and 4 white. What changes after one draw?", n=2, **worked),
+        reply_record(n=3),
+        reply_record("Re-read the first sentence.", n=4, from_authored_hint=True, **worked),
+        {"scenario": "s1", "turn": 5, "event": "show_worked", "blocked": "no genuine attempt", "rung_after": 1},
+    ]
+    return scenarios, records
+
+
+def test_worked_fallback_is_the_share_of_answered_worked_example_requests_sent_the_authored_hint():
+    # A6: of the "Show me a worked example" presses that got a reply, how many ended in the authored-hint fallback.
+    summary = metrics.summarize(*worked_example_run())
+    assert summary["worked_fallback"] == {"count": 1, "of": 2, "rate": 0.5, "refused": 1}
+
+
+def test_the_report_states_the_worked_example_fallback():
+    import tutor_report
+
+    summary = {
+        "label": "t",
+        "date": "2026-01-01",
+        "code": {},
+        "config": {"surface": "practice", "scenarios": 1, "tutor_model": "m", "router_model": "r", "judge": None},
+        "spend": {"generation": 0.0, "judge": 0.0, "max_usd": 1.0, "max_judge_usd": 0.5},
+        "cost": {"per_reply": 0.0, "mean_seconds": 0.0},
+        "metrics": metrics.summarize(*worked_example_run()),
+    }
+    report = tutor_report.render_markdown(summary)
+    assert (
+        '- "Show me a worked example": 1 of 2 answered requests (50.0%) got the authored hint instead of a worked example; '
+        "the app turned down 1 more before any model call."
+    ) in report
