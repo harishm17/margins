@@ -7,6 +7,7 @@ import {
   deepgramUrl,
   mintCloudSpeechGrant,
   mintProviderToken,
+  sessionCapSeconds,
 } from './cloud-speech'
 
 const env = (values: Record<string, string>) => values as unknown as NodeJS.ProcessEnv
@@ -97,3 +98,20 @@ describe('mintCloudSpeechGrant', () => {
   })
 
 })
+
+describe('sessionCapSeconds', () => {
+  it('is the time left, between a minute and three hours', () => {
+    assert.equal(sessionCapSeconds(10), 60)
+    assert.equal(sessionCapSeconds(900.2), 901)
+    assert.equal(sessionCapSeconds(99_999), 10_800)
+    assert.equal(sessionCapSeconds(Number.NaN), 60)
+  })
+})
+
+  it('asks AssemblyAI for a one-minute token capped at the time left', async () => {
+    const seen: Seen[] = []
+    const fetchImpl = fakeFetch({ 'https://token.assemblyai.com/v1/token': ok({ token: 'tok' }) }, seen)
+    assert.equal(await mintProviderToken('assemblyai', { maxSessionSeconds: 600, fetchImpl, env: env({ ASSEMBLYAI_API_KEY: 'ak' }) }), 'tok')
+    assert.equal((seen[0].init.headers as Record<string, string>).Authorization, 'ak')
+    assert.deepEqual(JSON.parse(String(seen[0].init.body)), { product: 'streaming', expires_in_seconds: 60, max_session_duration_seconds: 600 })
+  })

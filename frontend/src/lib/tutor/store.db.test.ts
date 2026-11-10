@@ -132,3 +132,12 @@ dbTest('an I do not know is recorded once with its time, and a started-over conv
   await store.resetTutorState(userId, 'practice', 'c:0:1')
   assert.equal((await prisma.tutorState.findUniqueOrThrow({ where: key })).dontKnowAt, null)
 })
+
+dbTest('concurrent first saves do not fail on the unique key', async () => {
+  const userId = await makeUser()
+  await Promise.all([
+    store.saveTutorState(userId, 'voice', 'v', { ...store.EMPTY_TUTOR_STATE, rung: 1, maxRung: 1 }),
+    store.saveTutorState(userId, 'voice', 'v', { ...store.EMPTY_TUTOR_STATE, rung: 1, maxRung: 1 }),
+  ])
+  assert.equal(await prisma.tutorState.count({ where: { userId, scopeKey: 'v' } }), 1)
+})

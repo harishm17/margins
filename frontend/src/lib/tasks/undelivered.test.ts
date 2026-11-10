@@ -55,3 +55,9 @@ test('a stored quiz whose dispatch could not reach the AI service is left pendin
   await markJobFailed(quiz, new TaskEnqueueError('refused', false), store)
   assert.equal(touched, true)
 })
+
+test('a job whose worker died, or one already finished, is not failed here', async () => {
+  for (const status of ['processing', 'completed', 'failed']) {
+    assert.equal(await failJob({ id: 'j1', status, startedAt: past }), false, status)
+  }
+})

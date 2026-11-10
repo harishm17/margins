@@ -7,6 +7,7 @@ import {
   practiceConceptOf,
   summarize,
   type CoachEntry,
+  type Evaluation,
   type SessionAction,
   type SessionState,
 } from './session-state'
@@ -16,6 +17,15 @@ const run = (actions: SessionAction[], from: SessionState = initialSessionState)
 
 const live = (): SessionState =>
   run([{ type: 'starting' }, { type: 'started', at: 1_000, style: 'oral_quiz', inputMode: 'voice', speech: 'on', micNotice: null }])
+
+const evaluation = (over: Partial<Evaluation> = {}): Evaluation => ({
+  isCorrect: true,
+  score: 1,
+  comment: 'Good.',
+  explanation: '',
+  ungraded: false,
+  ...over,
+})
 
 describe('sessionReducer', () => {
   it('goes lobby, starting, live and keeps the limit flag across a reset', () => {
@@ -48,6 +58,24 @@ describe('sessionReducer', () => {
     assert.equal(state.turnActive, false)
   })
 
+
+  it('attaches the evaluation to the same coach turn and records the answer', () => {
+    const state = run(
+      [
+        { type: 'question', question: { index: 1, total: 2, text: 'Define a hash function' } },
+        { type: 'student-said', text: 'it maps keys to buckets' },
+        { type: 'turn-started' },
+        { type: 'evaluation', evaluation: evaluation({ isCorrect: false, score: 0.5 }) },
+        { type: 'coach-text', delta: 'Close.' },
+        { type: 'turn-done' },
+      ],
+      live()
+    )
+    const coach = state.entries[1] as CoachEntry
+    assert.equal(coach.role, 'coach')
+    assert.equal(coach.evaluation?.score, 0.5)
+    assert.deepEqual(state.answered, [{ text: 'Define a hash function', isCorrect: false, score: 0.5, ungraded: false }])
+  })
 })
 
 describe('summarize', () => {

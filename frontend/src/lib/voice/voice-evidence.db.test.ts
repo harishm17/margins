@@ -211,3 +211,26 @@ dbTest('two answers to the same question arriving together write one piece of ev
   assert.equal((await events(w)).length, 1)
   assert.equal(await prisma.voiceDrillAttempt.count({ where: { sessionId: w.session.id } }), 1)
 })
+
+dbTest('asking for a hint twice records it once', async () => {
+  stubGrader(0)
+  const w = await world()
+  await run(w, 'record_answer', { question_index: 0, user_answer: 'a try' })
+  await run(w, 'get_hint', { question_index: 0 })
+  await run(w, 'get_hint', { question_index: 0 })
+  const session = await prisma.voiceDrillSession.findUniqueOrThrow({ where: { id: w.session.id } })
+  assert.deepEqual(session.hintedQuestions, [0])
+})
+
+dbTest('an evidence failure never takes the recorded answer away', async () => {
+  stubGrader(1)
+  const w = await world()
+  // A concept id that is not a concept in this project is filtered out, not an error.
+  await prisma.voiceDrillSession.update({
+    where: { id: w.session.id },
+    data: { questionSet: [{ question_type: 'conceptual', question_text: 'q', sample_answer: 'a', key_points: ['p'], concept_ids: ['not-a-concept'], topic_id: w.topic.id }] },
+  })
+  const out = await run(w, 'record_answer', { question_index: 0, user_answer: 'a' })
+  assert.equal(out.isError, false)
+  assert.equal(await prisma.voiceDrillAttempt.count({ where: { sessionId: w.session.id } }), 1)
+})

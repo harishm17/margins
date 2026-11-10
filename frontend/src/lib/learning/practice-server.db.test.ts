@@ -171,3 +171,20 @@ dbTest('evidence that fails to write keeps the progress and is written by the ne
   await save(w, state)
   assert.equal((await events(w)).length, 1)
 })
+
+dbTest('two saves of one problem at once keep both steps and write each step\'s evidence once', async () => {
+  const w = await world()
+  await seen(w, 0, { checks: 1, checkedCorrect: true })
+  await seen(w, 1, { checks: 1, checkedCorrect: true })
+  const one = { solvedSteps: [0], attemptedSteps: [0], firstTrySteps: [0], maxRungs: {}, missRungs: {} }
+  const both = { solvedSteps: [0, 1], attemptedSteps: [0, 1], firstTrySteps: [0, 1], maxRungs: {}, missRungs: {} }
+  const results = await Promise.all([save(w, one), save(w, both), save(w, one), save(w, both)])
+  // A smaller state arriving after a larger one is refused (a solved step cannot un-solve), never half-applied.
+  assert.ok(results.every((result) => result.status === 'saved' || result.status === 'invalid'))
+  assert.ok(results.some((result) => result.status === 'saved'))
+  const rows = await events(w)
+  assert.deepEqual(rows.map((row) => row.itemKey).sort(), [...new Set(rows.map((row) => row.itemKey))].sort())
+  assert.equal(rows.length, 2)
+  const row = await prisma.practiceProgress.findFirstOrThrow({ where: { userId: w.user.id } })
+  assert.deepEqual(row.evidenceSteps.slice().sort(), [0, 1])
+})

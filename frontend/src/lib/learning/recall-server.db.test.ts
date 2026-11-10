@@ -214,3 +214,37 @@ test('feedback keeps what the student missed out of sight until they ask', { ski
 })
 
 // ------------------------------------------------------------------------------------------ "I don't remember" (spec 18.3)
+
+test('two answers to one card sent together: only one is a first try', { skip: !process.env.DATABASE_URL }, async (t) => {
+  if (!available) return t.skip('no database')
+  const w = await world('rc-concurrent')
+  // Both graders wait until both requests are at the grader, so both reach the repeat check together.
+  let waiting = 0
+  let release: () => void = () => {}
+  const bothHere = new Promise<void>((resolve) => (release = resolve))
+  const inner = fakeGrader(w, good).grade
+  const grade = async (request: RecallGradeRequest) => {
+    if (++waiting === 2) release()
+    await bothHere
+    return inner(request)
+  }
+  const [a, b] = await Promise.all([submit(w, grade), submit(w, grade)])
+  assert.ok(a.status === 'graded' && b.status === 'graded')
+  const repeats = [a, b].map((r) => (r.status === 'graded' ? r.feedback.repeat ?? null : 'x'))
+  assert.deepEqual([...repeats].sort(), [null, 'seen'])
+  assert.equal(await prisma.recallAttempt.count({ where: { userId: w.user.id } }), 2)
+  // Level-0 evidence from one attempt only: the first try's, one event per concept (Hash function and Collision).
+  const levelZero = (await events(w, 'recall')).filter((row) => row.assistance === 0)
+  assert.equal(levelZero.length, 2)
+})
+
+test('when the AI is unavailable nothing is stored and the error reaches the caller', { skip: !process.env.DATABASE_URL }, async (t) => {
+  if (!available) return t.skip('no database')
+  const { TutorUnavailableError } = await import('@/lib/ai-service/tutor')
+  const w = await world('rc-503')
+  await assert.rejects(() => submit(w, async () => { throw new TutorUnavailableError('LLM_UNAVAILABLE', 503) }), TutorUnavailableError)
+  assert.equal(await prisma.recallAttempt.count({ where: { userId: w.user.id } }), 0)
+  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id } }), 0)
+})
+
+const good = { 'A hash function': { verdict: 'covered' as const, student_quote: 'sends each key to a bucket' }, 'A collision': { verdict: 'covered' as const, student_quote: 'collide' }, 'Chaining': { verdict: 'covered' as const, student_quote: 'keeps a list' } }

@@ -299,3 +299,28 @@ test('an answer to an item that tests several concepts, or a step surrendered an
   assert.equal(result.weekly[0].n, 10)
   assert.equal(result.calibration.n, 10)
 })
+
+test('weeks start on Monday in the student zone', async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const w = await world('zone')
+  const c = await w.concept('Hashing')
+  // 2026-10-26 03:00 UTC is still Sunday 25 Oct evening in Los Angeles: last week there, this week in UTC.
+  await events(w, c.id, times(10, new Date('2026-10-26T03:00:00Z'), 1))
+  const la = await progress.getProgress(w.user.id, w.project.id, { timeZone: 'America/Los_Angeles', now: NOW })
+  assert.deepEqual(la.weekly.map((row) => row.week), ['2026-10-19'])
+  assert.deepEqual((await get(w)).weekly.map((row) => row.week), ['2026-10-26'])
+})
+
+test('instruction events are not counted as help used', async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const w = await world('instruction-help')
+  const c = await w.concept('Hashing')
+  const monday = new Date('2026-10-26T09:00:00Z')
+  await events(w, c.id, [...times(6, monday, 1), ...times(5, monday, 0, { assistance: 3, source: 'instruction' })])
+  const result = await get(w)
+  // Showing the idea after a miss is not a hint: six answers, none helped.
+  assert.equal(result.weekAnswers, 6)
+  assert.equal(result.assistedShare, 0)
+  // And it is not a first try either.
+  assert.deepEqual(result.weekly, [{ week: '2026-10-26', n: 6, accuracy: 1 }].filter((row) => row.n >= progress.MIN_WEEK_EVENTS))
+})

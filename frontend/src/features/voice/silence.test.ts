@@ -88,6 +88,24 @@ describe('createUtteranceCollector', () => {
     assert.deepEqual(commits, ['because it visits nodes in order'])
   })
 
+
+  it('commits an interim result that never finalises, after the stale wait', () => {
+    const { clock, commits, collector } = setup()
+    collector.update([interim('stuck phrase')])
+    clock.advance(2499)
+    assert.deepEqual(commits, [])
+    clock.advance(1)
+    assert.deepEqual(commits, ['stuck phrase'])
+  })
+
+  it('does not commit the same words twice and keeps counting from the committed length', () => {
+    const { clock, commits, collector } = setup()
+    collector.update([final('first answer')])
+    clock.advance(1200)
+    collector.update([final('first answer'), final('second answer')])
+    clock.advance(1200)
+    assert.deepEqual(commits, ['first answer', 'second answer'])
+  })
 })
 
 describe('the adaptive wait', () => {
@@ -172,4 +190,10 @@ describe('idleAction', () => {
     assert.equal(idleAction({ ...base, idleMs: 30_000 }), 'gentle')
   })
 
+
+  it('ends the session after two minutes of silence', () => {
+    assert.equal(idleAction({ ...base, idleMs: 119_999, gentleShown: true }), 'none')
+    assert.equal(idleAction({ ...base, idleMs: 120_000, gentleShown: true }), 'end')
+    assert.equal(idleAction({ ...base, idleMs: 120_000, waitingForAnswer: false }), 'end')
+  })
 })

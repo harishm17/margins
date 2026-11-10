@@ -77,3 +77,8 @@ test('guard reads the last messages together with this one: a question asked in 
   assert.equal(examGuard(pieces[1], exam, ['what is a marble', 'unrelated', 'unrelated again', 'and another']), false)
   assert.equal(examGuard('What is the median of a list?', open, ['what is a hash table', 'tell me about quicksort']), false)
 })
+
+test('guard blocks several exam questions pasted together, and one question of them', () => {
+  assert.equal(examGuard(`${gears[0]}\n\n${gears[1]}`, gears), true)
+  assert.equal(examGuard(`Two questions for you. ${gears[1]} Thanks!`, gears), true)
+})

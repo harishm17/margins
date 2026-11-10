@@ -75,4 +75,13 @@ describe('toolsForStyle', () => {
     assert.deepEqual(toolsForStyle('guided_reading')[1].input_schema.required, ['claim_index'])
   })
 
+
+  it('none takes the student\'s words as an argument: the server heard them', () => {
+    const everyTool = [...VOICE_TOOLS, ...toolsForStyle('teach_back'), ...toolsForStyle('guided_reading')]
+    for (const tool of everyTool) {
+      for (const name of ['user_answer', 'answer', 'explanation', 'prediction']) {
+        assert.ok(!(name in tool.input_schema.properties), `${tool.name} takes ${name}`)
+      }
+    }
+  })
 })

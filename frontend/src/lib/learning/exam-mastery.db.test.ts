@@ -157,3 +157,58 @@ dbTest('exam evidence that failed to write is tried again on the next visit', as
   assert.equal(await mod.retryPendingExamEvidence(w.user.id, w.project.id), 0)
   assert.equal((await events(w)).length, 2)
 })
+
+dbTest('a failure while marking the evidence written does not undo the applied schedules', async () => {
+  const { failExamEvidenceMarking } = await import('./evidence-test-support')
+  const w = await world()
+  const restore = await failExamEvidenceMarking(prisma, w.user.id)
+  try {
+    assert.equal(await mod.applyGradedExam(w.user.id, w.project.id, w.submission.id), true)
+  } finally {
+    await restore()
+  }
+  const after = await prisma.examSubmission.findUniqueOrThrow({ where: { id: w.submission.id } })
+  // The evidence is written and the claim stands, so the schedules are not applied a second time.
+  assert.equal((await events(w)).length, 2)
+  assert.ok(after.reviewAppliedAt)
+  assert.equal(after.evidenceRecordedAt, null)
+  assert.equal(await mod.applyGradedExam(w.user.id, w.project.id, w.submission.id), false)
+})
+
+dbTest('exam evidence is given up on after the cap and a poison row does not starve another', async () => {
+  const { failEvidenceWrites } = await import('./evidence-test-support')
+  const { EVIDENCE_MAX_ATTEMPTS } = await import('./evidence-retry-budget')
+  const w = await world()
+  const restore = await failEvidenceWrites(prisma, w.user.id)
+  try {
+    await mod.applyGradedExam(w.user.id, w.project.id, w.submission.id)
+    for (let i = 1; i < EVIDENCE_MAX_ATTEMPTS; i += 1) {
+      await backdateTry(w.submission.id)
+      await mod.retryPendingExamEvidence(w.user.id, w.project.id)
+    }
+  } finally {
+    await restore()
+  }
+  const poisoned = await prisma.examSubmission.findUniqueOrThrow({ where: { id: w.submission.id } })
+  assert.equal(poisoned.evidenceAttempts, EVIDENCE_MAX_ATTEMPTS)
+  // Over the cap: no longer tried, even with the database healthy again and the hour passed.
+  await backdateTry(w.submission.id)
+  assert.equal(await mod.retryPendingExamEvidence(w.user.id, w.project.id, 1), 0)
+  assert.equal((await events(w)).length, 0)
+
+  // A second owed submission in the same course is still reached with a limit of one.
+  const other = await prisma.examSubmission.create({
+    data: {
+      sampleExamId: w.exam.id,
+      userId: w.user.id,
+      status: 'submitted',
+      answers: { '1': 'true' },
+      aiGrading: grading([graded(0, 'multiple_choice', 0, 1), graded(1, 'true_false', 1, 1), graded(2, 'true_false', 1, 1)]),
+      gradedAt: new Date(),
+      reviewAppliedAt: new Date(),
+      submittedAt: new Date(Date.now() + 1000),
+    },
+  })
+  assert.equal(await mod.retryPendingExamEvidence(w.user.id, w.project.id, 1), 1)
+  assert.ok((await prisma.examSubmission.findUniqueOrThrow({ where: { id: other.id } })).evidenceRecordedAt)
+})

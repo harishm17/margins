@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  applyDeepgram,
   applyTurn,
+  createRecoveryBudget,
   cloudRecognitionClass,
   createActivityTracker,
   emptyTurnState,
@@ -43,6 +45,15 @@ describe('createActivityTracker', () => {
     assert.equal(tracker.push(0.001), false)
   })
 
+
+  it('learns a steady hum and does not take it for speech', () => {
+    const tracker = createActivityTracker()
+    for (let i = 0; i < 200; i += 1) tracker.push(0.015)
+    assert.equal(tracker.push(0.03), false)
+    assert.equal(tracker.push(0.03), false)
+    assert.equal(tracker.push(0.2), false)
+    assert.equal(tracker.push(0.2), true)
+  })
 })
 
 // ---- The recognizer, with a fake socket and capture ------------------------------------------
@@ -143,6 +154,60 @@ describe('cloudRecognitionClass', () => {
     assert.deepEqual(socket.sent.at(-1), JSON.stringify({ type: 'Terminate' }))
   })
 
+
+  it('reports a dropped stream as a network error, and a refused token as cloud-unavailable', async () => {
+    for (const [code, opened, expected] of [
+      [1006, true, 'network'],
+      [1008, true, 'cloud-unavailable'],
+      [1006, false, 'cloud-unavailable'],
+    ] as const) {
+      const Recognition = cloudRecognitionClass({
+        capture: fakeCapture(),
+        grant: async () => ({ provider: 'assemblyai', url: 'wss://example.test/ws?a=1', token: 't' }),
+        WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+      })
+      const recognition = new Recognition()
+      const errors: string[] = []
+      recognition.onerror = (event) => errors.push(event.error)
+      recognition.start()
+      await tick()
+      const socket = FakeSocket.last!
+      if (opened) {
+        socket.readyState = 1
+        socket.message({ type: 'Begin' })
+      }
+      socket.onclose?.({ code })
+      assert.deepEqual(errors, [expected], `${code} ${opened}`)
+    }
+  })
+
+  it('holds once per segment, so steady noise cannot keep the turn open', async () => {
+    const capture = fakeCapture()
+    const Recognition = cloudRecognitionClass({
+      capture,
+      grant: async () => ({ provider: 'assemblyai', url: 'wss://example.test/ws?a=1', token: 't' }),
+      WebSocketImpl: FakeSocket as unknown as typeof WebSocket,
+    })
+    const recognition = new Recognition()
+    let emits = 0
+    recognition.onresult = () => {
+      emits += 1
+    }
+    recognition.start()
+    await tick()
+    const socket = FakeSocket.last!
+    socket.readyState = 1
+    socket.message({ type: 'Begin' })
+    socket.message(turn(0, 'It doubles.', true, 900))
+    const loud = new Int16Array(1600).fill(8000)
+    for (let i = 0; i < 4; i += 1) capture.emit(loud)
+    assert.equal(emits, 2)
+    await new Promise((resolve) => setTimeout(resolve, 2100))
+    // The hold ran out (3 emits); the noise goes on, and no second hold starts for the same segment.
+    for (let i = 0; i < 10; i += 1) capture.emit(loud)
+    assert.equal(emits, 3)
+    recognition.abort()
+  })
 })
 
 // ---- Deepgram ------------------------------------------------------------------------------
@@ -208,3 +273,51 @@ describe('cloudRecognitionClass with Deepgram', () => {
 
 })
 
+describe('applyDeepgram', () => {
+  it('keeps the final segments, then one interim, each replaced at its own position', () => {
+    let state = emptyTurnState()
+    state = applyDeepgram(state, results('smoke from', false, false, 0.8)).state
+    state = applyDeepgram(state, results('smoke from hundreds', false, false, 1.4)).state
+    assert.deepEqual(resultsOf(state), [{ transcript: 'smoke from hundreds', isFinal: false }])
+    const closed = applyDeepgram(state, results('Smoke from hundreds of wildfires.', true, true, 2.1))
+    assert.equal(closed.segmentEnd, true)
+    assert.equal(closed.state.lastWordEndMs, 2100)
+    state = applyDeepgram(closed.state, results('skylines', false, false, 3.0)).state
+    assert.deepEqual(resultsOf(state), [
+      { transcript: 'Smoke from hundreds of wildfires.', isFinal: true },
+      { transcript: 'skylines', isFinal: false },
+    ])
+  })
+
+  it('keeps an interim that came out empty as an empty final, so positions do not shift', () => {
+    let state = applyDeepgram(emptyTurnState(), results('It doubles.', true, false, 1)).state
+    state = applyDeepgram(state, results('um', false, false, 1.5)).state
+    state = applyDeepgram(state, results('', true, false)).state
+    assert.deepEqual(resultsOf(state), [
+      { transcript: 'It doubles.', isFinal: true },
+      { transcript: '', isFinal: true },
+    ])
+    // An empty final with nothing in progress adds nothing.
+    assert.equal(applyDeepgram(state, results('', true, true)).state.turns.length, 2)
+  })
+
+  it('a final without speech_final does not close the segment', () => {
+    assert.equal(applyDeepgram(emptyTurnState(), results('Skylines', true, false, 9.5)).segmentEnd, false)
+  })
+})
+
+describe('createRecoveryBudget', () => {
+  it('allows three reopenings in 30 s, then none until the oldest is 30 s old', () => {
+    let now = 0
+    const budget = createRecoveryBudget({ now: () => now })
+    assert.equal(budget.allow(), true)
+    now = 1000
+    assert.equal(budget.allow(), true)
+    now = 2000
+    assert.equal(budget.allow(), true)
+    now = 3000
+    assert.equal(budget.allow(), false)
+    now = 30_001
+    assert.equal(budget.allow(), true)
+  })
+})

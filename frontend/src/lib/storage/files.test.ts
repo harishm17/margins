@@ -71,3 +71,11 @@ test('deleteProjectFolder removes only that project', async () => {
   assert.equal(fs.existsSync(path.join(uploads, 'u3/p3')), false)
   assert.equal(fs.existsSync(path.join(uploads, 'u3/p4/materials/m4/b.pdf')), true)
 })
+
+test('parseLocalPath ignores bucket paths and malformed ones', async () => {
+  const { parseLocalPath } = await load()
+  assert.equal(parseLocalPath('s3://bucket/u1/p1/notes.pdf'), null)
+  assert.equal(parseLocalPath('local://'), null)
+  assert.equal(parseLocalPath('gs://only-a-bucket'), null)
+  assert.equal(parseLocalPath('showcase/c1/notes.pdf'), null)
+})

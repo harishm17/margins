@@ -64,3 +64,9 @@ test('remaining time is the cap minus use, never below zero', () => {
   assert.equal(remainingSeconds(sessions, 20, now), 0)
   assert.equal(remainingSeconds([], 0, now), 0)
 })
+
+test('a drill that ended while the call stayed open keeps counting while heartbeats arrive', () => {
+  const stillOpen = session({ connectedAt: ago(600), lastSeenAt: ago(5), endedAt: ago(300) })
+  assert.equal(isSessionLive(stillOpen, now), true)
+  assert.equal(sessionSeconds(stillOpen, now), 600)
+})

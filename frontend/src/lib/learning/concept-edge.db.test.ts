@@ -124,3 +124,25 @@ dbTest('a failure while rejecting leaves the link and its credit as they were', 
   )
   assert.equal((await prisma.conceptEdge.findUniqueOrThrow({ where: { id: fresh.edge.id } })).status, 'proposed')
 })
+
+dbTest('an answer recorded while a link with credit is rejected leaves no credit behind', async () => {
+  const w = await world()
+  await w.answerBasic('first', new Date('2026-11-01T12:00:00Z'))
+  await w.answer('one', new Date('2026-11-11T12:00:00Z'))
+  const held = gate()
+  const rejecting = edges.setEdgeStatus({ userId: w.user.id, edgeId: w.edge.id, status: 'rejected', timeZone: 'UTC' }, { afterStatusWritten: () => held.wait })
+  await pause(300)
+  const answering = w.answer('two', new Date('2026-11-12T12:00:00Z'))
+  await pause(300)
+  held.open()
+  await Promise.all([rejecting, answering])
+  assert.equal(await implicitFor(w.user.id, w.basic.id), 0)
+  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id, conceptId: w.advanced.id, source: 'quiz' } }), 2)
+})
+
+const gate = () => {
+  let open!: () => void
+  const wait = new Promise<void>((resolve) => (open = resolve))
+  return { wait, open }
+}
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))

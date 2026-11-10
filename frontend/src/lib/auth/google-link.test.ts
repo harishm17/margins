@@ -41,3 +41,13 @@ test('an account linked to a different Google login is refused', () => {
     error: 'GoogleAccountMismatch',
   })
 })
+
+test('a password account made before Google-only sign-in links on its first verified Google sign-in, then stays linked', () => {
+  // The stored row of an old password account: a hash, but no OAuth login.
+  const passwordAccount = { oauthProvider: null, oauthId: null }
+  assert.deepEqual(decideGoogleSignIn({ emailVerified: true, providerAccountId: 'g1', existing: passwordAccount }), {
+    action: 'link',
+  })
+  const linked = { oauthProvider: 'google', oauthId: 'g1' }
+  assert.deepEqual(decideGoogleSignIn({ emailVerified: true, providerAccountId: 'g1', existing: linked }), { action: 'allow' })
+})

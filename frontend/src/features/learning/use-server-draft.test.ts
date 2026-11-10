@@ -243,3 +243,51 @@ test('a tombstone left in the cache is deleted on the next load, whatever the se
   assert.equal(h.last().value, null)
   assert.equal(h.cache(), null)
 })
+
+test('engine: a stale version where this edit is newer overwrites with the server version', async () => {
+  const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'a' }, version: 1, updatedAtMs: 10 } } })
+  await h.engine.start()
+  h.script.put.push({ kind: 'conflict', draft: { payload: { text: 'old' }, version: 2, updatedAtMs: 20 } })
+  h.engine.set({ text: 'mine' })
+  await h.clock.advance(800)
+  assert.deepEqual(h.log.puts.map((p) => p.version), [1, 2])
+  assert.deepEqual(h.last().value, { text: 'mine' })
+  assert.equal(h.last().conflict, null)
+})
+
+test('engine: a conflict because the draft is gone writes our edits again from version 0', async () => {
+  const h = harness({ get: { kind: 'ok', draft: { payload: { text: 'a' }, version: 3, updatedAtMs: 10 } } })
+  await h.engine.start()
+  h.script.put.push({ kind: 'conflict', draft: null })
+  h.engine.set({ text: 'mine' })
+  await h.clock.advance(800)
+  assert.deepEqual(h.log.puts.map((p) => p.version), [3, 0])
+  assert.equal(h.last().status, 'saved')
+})
+
+test('offline while loading: shows the cache, retries the load, then pushes unsaved edits', async () => {
+  const h = harness({ cached: entry({ version: 0, dirty: true }), get: { kind: 'offline' } })
+  await h.engine.start()
+  assert.equal(h.last().status, 'offline')
+  assert.deepEqual(h.last().value, { text: 'cache' })
+  h.script.get = { kind: 'ok', draft: null }
+  await h.clock.advance(2000)
+  assert.equal(h.log.gets, 2)
+  assert.equal(h.log.puts.length, 1)
+  assert.equal(h.last().status, 'saved')
+})
+
+test('a rejected save (too large, invalid) is an error, not retried, and the next edit tries again', async () => {
+  const h = harness()
+  await h.engine.start()
+  h.script.put.push({ kind: 'rejected', reason: 'rejected' })
+  h.engine.set({ text: 'x' })
+  await h.clock.advance(800)
+  assert.equal(h.last().status, 'error')
+  await h.clock.advance(60_000)
+  assert.equal(h.log.puts.length, 1)
+  h.engine.set({ text: 'xy' })
+  await h.clock.advance(800)
+  assert.equal(h.log.puts.length, 2)
+  assert.equal(h.last().status, 'saved')
+})

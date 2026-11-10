@@ -78,4 +78,15 @@ describe('analytics proxy routes', () => {
     assert.equal((await proxyPosthog(new Request('https://studymargins.com/m/i/v0/e/', { method: 'DELETE' }), fetchImpl)).status, 405)
     assert.equal(calls.length, 0)
   })
+
+  it('passes PostHog errors through (a 4xx from PostHog is still an answer) and hides upstream encoding headers', async () => {
+    const { fetchImpl } = upstream(
+      () => new Response('{"status":0}', { status: 400, headers: { 'content-type': 'application/json', 'content-encoding': 'gzip', 'set-cookie': 'x=1', 'content-length': '3' } })
+    )
+    const res = await proxyPosthog(new Request('https://studymargins.com/m/i/v0/e/', { method: 'POST', body: '{}' }), fetchImpl)
+    assert.equal(res.status, 400)
+    assert.equal(res.headers.get('content-encoding'), null)
+    assert.equal(res.headers.get('set-cookie'), null)
+    assert.equal(res.headers.get('content-length'), null)
+  })
 })

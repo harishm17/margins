@@ -263,3 +263,23 @@ dbTest('a run that died is picked up after its lease, and a live lease keeps oth
   assert.ok(await markerOf(w, w.topic.id))
   assert.ok(await projectMarker(w))
 })
+
+dbTest('two backfillIfDue calls at once write one set of events', async () => {
+  const w = await world()
+  await addQuiz(w)
+  await addExam(w)
+  const [a, b] = await Promise.all([mod.backfillIfDue(w.user.id, w.project.id), mod.backfillIfDue(w.user.id, w.project.id)])
+  assert.deepEqual([a, b].sort(), ['busy', 'ran'])
+  assert.equal((await eventsOf(w)).filter((row) => row.source === 'quiz').length, 2)
+})
+
+dbTest('a run that fails marks nothing and keeps its lease; the retry after the lease finishes', async () => {
+  const w = await world()
+  await addQuiz(w)
+  await assert.rejects(mod.backfillIfDue(w.user.id, w.project.id, { timeZone: 'Not/AZone' }))
+  assert.equal(await markerOf(w, w.topic.id), null)
+  assert.equal(await projectMarker(w), null)
+  assert.equal(await mod.backfillIfDue(w.user.id, w.project.id), 'busy')
+  assert.equal(await mod.backfillIfDue(w.user.id, w.project.id, { now: later(11) }), 'ran')
+  assert.ok(await markerOf(w, w.topic.id))
+})

@@ -77,3 +77,8 @@ test('the signature check rejects a wrong file after its first bytes, even split
     InvalidSignatureError
   )
 })
+
+test('the signature check rejects a file shorter than its signature', async () => {
+  const { sink } = collect()
+  await assert.rejects(pipeline(Readable.from([Buffer.from('%PD')]), createSignatureCheck('.pdf'), sink), InvalidSignatureError)
+})

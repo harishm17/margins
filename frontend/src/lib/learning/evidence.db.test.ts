@@ -168,3 +168,48 @@ dbTest('a transaction that loses a deadlock runs again from the start', async ()
   assert.equal(attempts, 2)
   assert.ok((await prisma.topic.findUniqueOrThrow({ where: { id: w.topic.id } })).evidenceBackfilledAt)
 })
+
+dbTest('skipIfPresent: the same answer written by two writers at once counts once', async () => {
+  const w = await world()
+  const sameVoice = () => answer(w, { itemKey: 'voice:sess:0', source: 'voice', sessionKey: 'voice:sess' })
+  await Promise.all([
+    mod.recordEvidence([sameVoice()], { skipIfPresent: true }),
+    mod.recordEvidence([{ ...sameVoice(), sessionKey: 'voice:backfill' }], { skipIfPresent: true }),
+  ])
+  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id, itemKey: 'voice:sess:0' } }), 1)
+  // The same quiz item under another attempt is a different answer, and is kept.
+  await mod.recordEvidence([answer(w, { sessionKey: 'quiz:a1' })], { skipIfPresent: true })
+  await mod.recordEvidence([answer(w, { sessionKey: 'quiz:a2' })], { skipIfPresent: true })
+  await mod.recordEvidence([answer(w, { sessionKey: 'quiz:a2' })], { skipIfPresent: true })
+  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id, itemKey: 'quiz:set1:0' } }), 2)
+})
+
+dbTest('concurrent writers keep both events', async () => {
+  const w = await world()
+  const conceptId = w.concepts[0].id
+  await Promise.all([
+    mod.recordEvidence([answer(w, { itemKey: 'quiz:a:0', sessionKey: 'sess-a' })]),
+    mod.recordEvidence([answer(w, { itemKey: 'quiz:b:0', sessionKey: 'sess-b', at: new Date(Date.now() + DAY) })]),
+  ])
+  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id } }), 2)
+
+  // Many writers on distinct days: the cached memory must equal a full replay of every event.
+  const base = Date.now() + 10 * DAY
+  await Promise.all(
+    Array.from({ length: 8 }, (_, i) =>
+      mod.recordEvidence([
+        answer(w, { itemKey: `quiz:c:${i}`, sessionKey: `sess-c${i}`, at: new Date(base + i * DAY) }),
+      ])
+    )
+  )
+  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id } }), 10)
+  const key = { userId_conceptId: { userId: w.user.id, conceptId } }
+  const memory = await prisma.conceptMemory.findUniqueOrThrow({ where: key })
+  assert.equal(memory.nUnassisted, 10)
+  assert.equal((memory.card as { reps: number }).reps, 10)
+
+  await mod.rebuildConcepts(w.user.id, [conceptId], 'UTC')
+  const rebuilt = await prisma.conceptMemory.findUniqueOrThrow({ where: key })
+  assert.deepEqual(rebuilt.card, memory.card)
+  assert.equal(rebuilt.nUnassisted, memory.nUnassisted)
+})

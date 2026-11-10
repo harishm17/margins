@@ -418,3 +418,17 @@ dbTest('a miss and an I do not know send back what to read: the pointer for the 
   const read = await mod.readPracticeTutorState(w.user.id, { id: w.topic.id }, { problemIndex: 0, problemTitle: 'P1', stepIndex: 1 })
   assert.match(read?.contentId ?? '', /^[0-9a-f-]{36}$/)
 })
+
+dbTest('a double submit of the worked example writes one surrender record', async () => {
+  const w = await world()
+  await prisma.concept.update({ where: { id: w.concept.id }, data: {} })
+  const content = await prisma.topicContent.findFirstOrThrow({ where: { topicId: w.topic.id } })
+  const data = content.contentData as { steps: Record<string, unknown>[] }[]
+  data[0].steps.forEach((s) => (s.concept_ids = [w.concept.id]))
+  await prisma.topicContent.update({ where: { id: content.id }, data: { contentData: data as never } })
+  await run(w, { event: 'check', answer: '25' })
+  const f = fakes()
+  const results = await Promise.all([run(w, { event: 'show_worked' }, f.deps), run(w, { event: 'show_worked' }, f.deps)])
+  assert.deepEqual(results.map((r) => r.status), ['ok', 'ok'])
+  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id, source: 'practice' } }), 1)
+})

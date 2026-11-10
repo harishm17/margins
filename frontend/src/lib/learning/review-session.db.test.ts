@@ -305,3 +305,19 @@ test('an answer and its evidence are stored together: a failed session update le
 })
 
 // ---- v3.1 workstream S: resume, abandon, I don't know, the end screen that teaches, short sessions ----
+
+test('answers must come in order and a finished session takes no more', async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const w = await world('order')
+  const [a, b] = [await w.concept(w.topicA.id, 'Hashing', 0), await w.concept(w.topicB.id, 'Quicksort', 0)]
+  await overdue(w.user.id, w.project.id, w.topicA.id, a.id)
+  await overdue(w.user.id, w.project.id, w.topicB.id, b.id)
+  await prisma.topicQuiz.create({ data: { topicId: w.topicA.id, questions: items([{ conceptId: a.id }]) } })
+  await prisma.topicQuiz.create({ data: { topicId: w.topicB.id, questions: items([{ conceptId: b.id }]) } })
+  const id = ((await start(w)) as { sessionId: string }).sessionId
+  const skipped = await session.answerItem({ userId: w.user.id, sessionId: id, index: 1, answer: { answer: 'true' }, timeZone: ZONE })
+  assert.equal(skipped.status, 'invalid')
+  const stranger = await session.answerItem({ userId: 'someone-else', sessionId: id, index: 0, answer: { answer: 'true' }, timeZone: ZONE })
+  assert.equal(stranger.status, 'not_found')
+  assert.equal(await session.sessionView('someone-else', id, ZONE), null)
+})

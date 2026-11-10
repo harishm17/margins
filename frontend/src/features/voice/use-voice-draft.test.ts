@@ -3,6 +3,8 @@ import { describe, it } from 'node:test'
 import type { TranscriptEntry } from './session-state'
 import {
   SNAPSHOT_MAX_AGE_MS,
+  clearVoiceSnapshot,
+  readVoiceDraft,
   describeSnapshot,
   persistLiveSession,
   readVoiceSnapshot,
@@ -68,4 +70,15 @@ describe('voice snapshot', () => {
     assert.equal(toTranscript(next.restored)[0].id, -1)
   })
 
+
+  it('keeps typed words even before the first snapshot exists, drops them when stale, and clears with the snapshot', () => {
+    const store = memoryStore()
+    writeVoiceDraft('c1', 't1', 'half an answer', store, 1000)
+    assert.equal(readVoiceDraft('c1', 't1', store, 2000), 'half an answer')
+    assert.equal(readVoiceDraft('c1', 't1', store, 1000 + SNAPSHOT_MAX_AGE_MS + 1), '')
+    persistLiveSession(base, { entries, question: null }, store, 1500)
+    assert.equal(readVoiceSnapshot('c1', 't1', store, 2000)?.draft, 'half an answer')
+    clearVoiceSnapshot('c1', 't1', store)
+    assert.equal(readVoiceDraft('c1', 't1', store, 2000), '')
+  })
 })

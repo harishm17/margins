@@ -293,3 +293,77 @@ dbTest('rule items graded while short answers wait', async () => {
   assert.equal(waiting[0].partial?.review.length, 1)
   assert.equal(waiting[0].partial?.review[0].questionIndex, 0)
 })
+
+dbTest('two looks at the same time apply it once', async () => {
+  const w = await world()
+  const submission = await gradedSubmission(w)
+
+  const results = await Promise.all([
+    applyQuizSubmission(w.user.id, submission.id),
+    applyQuizSubmission(w.user.id, submission.id),
+    applyQuizSubmission(w.user.id, submission.id),
+  ])
+
+  assert.ok(results.every((result) => result?.attemptId === submission.id))
+  assert.deepEqual(await effects(w), { attempts: 1, signals: 1, schedules: 1, progress: { quizCompleted: true, quizScore: 100 } })
+})
+
+dbTest('rule item evidence written once across the partial and the final apply', async () => {
+  const { w, questions, given } = await partialWorld()
+  const partial = await mod.gradeRuleItemsNow({
+    userId: w.user.id,
+    topic: w.topic,
+    quizSetId: null,
+    questions,
+    given,
+    unavailableCode: null,
+    timeZone: 'UTC',
+    sameDayRepeat: false,
+    grade: async () => ruleGraded(true),
+  })
+  assert.ok(partial)
+  const id = partial.submission.submissionId
+  const before = await prisma.evidenceEvent.findMany({ where: { userId: w.user.id } })
+  assert.equal(before.length, 1)
+
+  // The job grades the whole stored quiz; the short answer is the only new thing, and the rule item keeps its one event.
+  await prisma.quizSubmission.update({
+    where: { id },
+    data: {
+      status: 'graded',
+      gradedAt: new Date(),
+      aiGrading: {
+        overall_score: 100,
+        earned_points: 3,
+        total_points: 3,
+        graded_questions: [
+          ...ruleGraded(true).graded_questions,
+          { question_index: 1, question_type: 'short_answer', points_possible: 2, points_earned: 2, is_correct: true, feedback: 'Good.', needs_review: false },
+        ],
+      },
+    },
+  })
+  const applied = await applyQuizSubmission(w.user.id, id)
+  assert.equal(applied?.score, 100)
+  await applyQuizSubmission(w.user.id, id)
+  const after = await prisma.evidenceEvent.findMany({ where: { userId: w.user.id }, orderBy: { itemKey: 'asc' } })
+  assert.deepEqual(after.map((e) => [e.itemKey, e.gradedBy, e.sessionKey]), [
+    ['quiz:legacy:0', 'rule', `quiz:${id}`],
+    ['quiz:legacy:1', 'model', `quiz:${id}`],
+  ])
+  assert.equal(after[0].id, before[0].id)
+})
+
+dbTest('when the AI service cannot be reached the job stays pending for the reaper, not failed', async () => {
+  const w = await world()
+  const queued = await queueQuizSubmission({ userId: w.user.id, topic: w.topic, quizSetId: null, questions: QUESTIONS, answers: { '0': 'true' } })
+
+  assert.equal(queued.started, true)
+  const job = await prisma.processingJob.findFirstOrThrow({ where: { targetKey: `grade-quiz:${queued.submissionId}` } })
+  assert.equal(job.status, 'pending')
+  assert.equal(job.startedAt, null)
+  assert.equal(job.errorCode, null)
+  // The page shows it as being graded, not as a failure.
+  const [item] = await getWaitingQuizzes(w.user.id, w.topic.id)
+  assert.equal(item.state, 'grading')
+})

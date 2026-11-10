@@ -33,3 +33,7 @@ test('the words read the earlier messages too', async () => {
   const found = await guardingExam('u', 'p', 'lookup by key?', history, { exams, semantic: async () => false })
   assert.equal(found?.examId, 'e1')
 })
+
+test('with no exam in progress nothing is checked', async () => {
+  assert.equal(await guardingExam('u', 'p', 'anything', [], { exams: async () => [], semantic: never }), undefined)
+})

@@ -214,3 +214,20 @@ test('deleting a user removes concept memory, evidence, recall attempts, margin 
   ])
   assert.deepEqual(owned, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 })
+
+test('a failed sweep after the row is gone is logged, not thrown', async () => {
+  // First folder call (before the row delete) works; the sweep after it fails.
+  const world = fakeWorld()
+  let folderCalls = 0
+  const files: DeletionFiles = {
+    deleteFile: world.files.deleteFile,
+    async deleteUserFiles(userId) {
+      folderCalls += 1
+      if (folderCalls === 2) throw new Error('bucket down')
+      return world.files.deleteUserFiles(userId)
+    },
+  }
+  const result = await deleteAccount('u1', { ...world, files })
+  assert.equal(result.outcome, 'deleted')
+  assert.ok(world.logged.some((line) => line.startsWith('error') && line.includes('remove u1/ by hand')))
+})

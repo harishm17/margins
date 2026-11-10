@@ -8,6 +8,7 @@ import assert from 'node:assert/strict'
 type Prisma = typeof import('@/lib/db/prisma').prisma
 let prisma: Prisma
 let warmup: typeof import('./warmup-session')
+let quizSets: typeof import('./quiz-sets')
 let available = false
 const realFetch = globalThis.fetch
 let gradeCalls = 0
@@ -17,6 +18,7 @@ const ZONE = 'UTC'
 before(async () => {
   ;({ prisma } = await import('@/lib/db/prisma'))
   warmup = await import('./warmup-session')
+  quizSets = await import('./quiz-sets')
   available = await prisma.$queryRaw`SELECT 1 FROM item_sessions LIMIT 1`.then(
     () => true,
     () => false
@@ -168,4 +170,40 @@ test('a topic without a bank has no warm-up, and the state follows what was take
   assert.equal((await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })).status, 'none')
   const w2 = await world('wu-ready')
   assert.deepEqual(await warmup.loadWarmupState(w2.user.id, w2.topic.id), { status: 'ready', total: 3 })
+})
+
+test('starting serves a medium question without its key', { skip: !process.env.DATABASE_URL }, async (t) => {
+  if (!available) return t.skip('no database')
+  const w = await world('wu-start')
+  const state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
+  assert.equal(state.status, 'asking')
+  if (state.status !== 'asking') return
+  assert.equal(state.total, 3)
+  assert.equal(state.position, 1)
+  assert.match(state.question.question_text, /\(medium\)/)
+  assert.equal(JSON.stringify(state).includes('correct_answer'), false)
+  assert.equal(JSON.stringify(state).includes('must not reach'), false)
+  // The same session comes back when the page is opened again, and no new one is made.
+  const before = await prisma.itemSession.count({ where: { userId: w.user.id, kind: 'warmup' } })
+  assert.equal(before, 1)
+  const again = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
+  assert.equal(again.status === 'asking' && again.sessionId, state.sessionId)
+  assert.equal(await prisma.itemSession.count({ where: { userId: w.user.id, kind: 'warmup' } }), before)
+})
+
+test('warmup answers never appear in quiz history', { skip: !process.env.DATABASE_URL }, async (t) => {
+  if (!available) return t.skip('no database')
+  const w = await world('wu-history')
+  let state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
+  for (let i = 0; i < 3; i++) {
+    if (state.status !== 'asking') break
+    const result = await warmup.answerWarmup({ userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, answer: { answer: 'true', ...sure }, timeZone: ZONE })
+    if (result.status === 'ok') state = result.state
+  }
+  assert.equal(state.status, 'done')
+  assert.equal(await prisma.quizAttempt.count({ where: { userId: w.user.id } }), 0)
+  // The bank is not a quiz set, whatever reads quiz sets.
+  const sets = await prisma.topicQuiz.findMany({ where: { topicId: w.topic.id, kind: { in: ['standard', 'retry'] } } })
+  assert.equal(sets.length, 0)
+  assert.equal((await quizSets.loadAllQuizQuestionSets(w.topic.id)).size, 0)
 })
