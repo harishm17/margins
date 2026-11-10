@@ -82,7 +82,7 @@ test('quiz: submitted during an outage, the answers are saved and graded once AI
   await expect(page.getByRole('heading', { name: 'Your answers are saved' })).toBeVisible()
 
   // The outage ends the natural way, as it does for a student: only the shared status clears, and the job's own recheck
-  // lease (30 s) and the reaper (5 s in the e2e stack) bring the results back by themselves, within the long wait below.
+  // lease and the reaper (5 s each in the e2e stack, JOB_AI_WAIT_RECHECK_SECONDS) bring the results back by themselves.
   await markAvailable()
   await expect(page.getByRole('heading', { name: /of 3 points/ })).toBeVisible({ timeout: 150_000 })
 

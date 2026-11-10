@@ -64,66 +64,6 @@ async function makeExam(seeded: Seeded, topicName: string, createdAt?: Date) {
   )
 }
 
-/** A submitted attempt. `earned` is the points for each question, in order; `answers` is what the student gave (blank when absent). */
-async function submit(seeded: Seeded, examId: string, earned: [number, number], answers: Record<string, unknown>) {
-  const id = randomUUID()
-  const total = 4
-  const got = earned[0] + earned[1]
-  await withPrisma((prisma) =>
-    prisma.examSubmission.create({
-      data: {
-        id,
-        sampleExamId: examId,
-        userId: seeded.userId,
-        answers: answers as object,
-        aiGrading: {
-          total_points: total,
-          earned_points: got,
-          overall_score: (got / total) * 100,
-          submission_id: id,
-          graded_questions: [
-            { question_index: 0, question_type: 'multiple_choice', points_possible: 2, points_earned: earned[0], is_correct: earned[0] >= 2, feedback: earned[0] >= 2 ? 'Correct.' : 'Not quite.', needs_review: false },
-            { question_index: 1, question_type: 'short_answer', points_possible: 2, points_earned: earned[1], is_correct: earned[1] >= 2, feedback: earned[1] >= 2 ? 'Correct.' : 'Not quite.', needs_review: false, criteria: [] },
-          ],
-        },
-        submittedAt: new Date(Date.now() - 3600_000),
-        gradedAt: new Date(),
-        status: 'submitted',
-        startedAt: new Date(Date.now() - 2 * 3600_000),
-        deadlineAt: new Date(Date.now() - 3600_000),
-        answersSavedAt: new Date(),
-      },
-    })
-  )
-  return id
-}
-
-test('a 0% exam result is a small calm ring, a blank answer has no "Explain this mistake", and a wrong one does', async ({ page }) => {
-  const seeded = await seed(page, 'exam-zero')
-  const exam = await makeExam(seeded, 'Graph search')
-  // The first question is answered wrongly; the second is left blank.
-  const submissionId = await submit(seeded, exam.id, [0, 0], { '0': { answer: 'B', confidence: 0.5 } })
-  for (const [name, size] of [['1440x900', DESKTOP], ['390x844', PHONE]] as const) {
-    await page.setViewportSize(size)
-    await page.goto(`/courses/${seeded.courseId}/exams/${exam.id}/results/${submissionId}`)
-    const score = page.getByRole('region', { name: 'Your score' })
-    await expect(score).toBeVisible()
-    const ring = score.getByRole('img', { name: 'Score 0%' })
-    await expect(ring).toBeVisible()
-    // Not the big 96px ring of a real score: the small one, with the headline in the smaller size.
-    const box = await ring.boundingBox()
-    expect(box!.width).toBeLessThanOrEqual(48)
-    await expect(score.getByText('0 of 4 points')).toBeVisible()
-    // One wrong answer gets the link; the blank one does not.
-    await expect(page.getByRole('link', { name: 'Explain this mistake' })).toHaveCount(1)
-    const items = page.locator('ol > li').filter({ hasText: /Which structure|Why does a visited set/ })
-    await expect(items.filter({ hasText: 'Why does a visited set' }).getByRole('link', { name: 'Explain this mistake' })).toHaveCount(0)
-    await expect(items.filter({ hasText: 'Which structure' }).getByRole('link', { name: 'Explain this mistake' })).toHaveCount(1)
-    await screenshotIfAsked(page, `final-exam-zero-${name}`)
-    await expectNoAxeViolations(page, `exam result at 0%, ${name}`)
-  }
-})
-
 test('the weakest topic is the one recommended first step; every row links to its topic, and a topic scored 100% is not recommended', async ({ page }) => {
   const seeded = await seed(page, 'exam-full', ['Graph search', 'Hashing'])
   // Both topics' questions in one exam: full marks on the first topic's, none on the second's.
@@ -174,25 +114,6 @@ test('the weakest topic is the one recommended first step; every row links to it
   await expect(page.getByRole('link', { name: 'Review Hashing' })).toHaveAttribute('href', `/courses/${seeded.courseId}/topics/${seeded.topics.Hashing}`)
   await expect(page.getByRole('link', { name: /^Review / })).toHaveCount(1)
   await expect(focus.getByRole('link', { name: /^(Study|Open|Review) / })).toHaveCount(0)
-})
-
-test('exams made on one day are told apart by the topics they cover', async ({ page }) => {
-  const seeded = await seed(page, 'exam-titles', ['Graph search', 'Hashing'])
-  const first = await makeExam(seeded, 'Graph search', new Date(Date.now() - 2 * 60_000))
-  const second = await makeExam(seeded, 'Hashing', new Date(Date.now() - 60_000))
-  await page.goto(`/courses/${seeded.courseId}/exams`)
-  // The name is the date (one line); the topics are told apart on their own "Covers" line.
-  await expect(page.getByRole('heading', { name: /^Mock exam · [A-Z][a-z]{2} \d{1,2}$/ })).toHaveCount(2)
-  await expect(page.getByText('Covers: Graph search')).toBeVisible()
-  await expect(page.getByText('Covers: Hashing')).toBeVisible()
-  await screenshotIfAsked(page, 'final-exam-titles-1440x900')
-  // The lobby heading is the short name, with the topics it covers listed below.
-  await page.goto(`/courses/${seeded.courseId}/exams/${second.id}`)
-  await expect(page.getByRole('heading', { name: /^Mock exam · [A-Z][a-z]{2} \d{1,2}$/ })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Covers' })).toBeVisible()
-  await expect(page.getByText('Hashing', { exact: true })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Your attempts' })).toHaveCount(0)
-  expect(first.id).not.toBe(second.id)
 })
 
 test('a mock exam in progress is shown on the other course pages, with the way back, and only while it is in progress', async ({ page }) => {

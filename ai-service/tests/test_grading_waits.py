@@ -98,6 +98,19 @@ class TestWaiting:
         job = await get_job(db, job_id)
         assert (job["status"], job["stage"], job["attempt_count"]) == ("pending", "waiting_for_ai", 0)
 
+    async def test_a_job_waiting_for_the_ai_is_looked_at_again_after_the_recheck_setting(self, db, anthropic, monkeypatch):
+        monkeypatch.setattr(settings, "JOB_AI_WAIT_RECHECK_SECONDS", 5.0)
+        user_id = await seed_user(db)
+        job_id = await seed_job(db, user_id, "grade_exam")
+
+        async def body(payload, job):
+            raise LLMCreditError("credit")
+
+        assert (await waiting_handler(body)(payload(job_id)))["status"] == "deferred"
+        job = await get_job(db, job_id)
+        wait = (job["lease_until"] - datetime.now(UTC).replace(tzinfo=None)).total_seconds()
+        assert 0 < wait <= 5
+
     async def test_over_the_allowance_it_waits_until_the_reset(self, db, anthropic, monkeypatch):
         monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 1.0)
         user_id = await seed_user(db)

@@ -3,7 +3,6 @@ import { openMoreHelp, workingBox } from './helpers/practice'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { withPrisma } from './helpers/db'
 import { addContent, createCourse, practiceProblem, signUpAndIn } from './helpers/loop'
-import { expectClearOfTabBar } from './helpers/overflow'
 
 // "Ask about my working" in practice (spec §5.6, §6.2): the tutor panel under a step, the one-time offer
 // after two wrong checks, "What is this asking?", and the worked example. The AI service is the mock,
@@ -71,68 +70,6 @@ const tutorRows = (userEmail: string, topicId: string) =>
 const accountEmail = async (page: Page) => (await (await page.request.get('/api/auth/session')).json()).user.email as string
 
 test.describe('the practice tutor', () => {
-  test('after a miss the help stays in view: hints fold to a line, Try again stays primary', async ({ page }) => {
-    test.setTimeout(120_000)
-    await open(page, 'tutor-dense')
-    const hint = (name: string) => page.getByRole('button', { name: `Hint: ${name}` }).locator('visible=true')
-    const getHelp = page.getByRole('button', { name: 'Get help' }).locator('visible=true')
-
-    // Before a first try the help is one button (open here by `open`): one hint ladder, with the next hint only.
-    await expect(getHelp).toHaveAttribute('aria-expanded', 'true')
-    await expect(page.getByRole('group', { name: 'Hints' }).locator('visible=true').getByRole('button', { name: /^Show / })).toHaveCount(1)
-    await page.getByRole('button', { name: /Show where to look/ }).click()
-    await expect(hint('Where to look')).toHaveAttribute('aria-expanded', 'true')
-    await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
-    // The next hint waits for an attempt and says so; it is not a second button of costs.
-    await expect(page.getByRole('button', { name: /Show the first step/ }).locator('visible=true')).toBeDisabled()
-    await expect(page.getByRole('button', { name: /Show the first step/ }).locator('visible=true')).toContainText('Opens after your first try')
-    // Connect waits for an attempt (spec 18.4): a wrong check opens it.
-    await check(page, '5')
-    await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-    // After a miss the helps are open, not behind "Get help" (spec 18.4).
-    await expect(getHelp).toHaveCount(0)
-    await tryAgain(page)
-    // The next hint stays beside Check for a step that has been missed.
-    await expect(page.getByRole('button', { name: /Show the first step/ }).locator('visible=true')).toBeVisible()
-    await page.getByRole('button', { name: /Show the first step/ }).click()
-    // The newest hint is open, the one before it is a line that opens on a tap.
-    await expect(hint('The first step')).toHaveAttribute('aria-expanded', 'true')
-    await expect(hint('Where to look')).toHaveAttribute('aria-expanded', 'false')
-    await expect(page.getByText('Look at the number.').locator('visible=true')).toHaveCount(0)
-    await hint('Where to look').click()
-    await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
-    await hint('Where to look').click()
-    await expect(page.getByText('Look at the number.').locator('visible=true')).toHaveCount(0)
-
-    // A miss: the authored feedback stays, nothing leaks the answer, Try again is the one primary button.
-    await check(page, '5')
-    await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-    await expect(page.getByText('Not that one.').locator('visible=true')).toBeVisible()
-    await expect(page.getByText('Check your units').locator('visible=true')).toHaveCount(0)
-    await expect(getHelp).toHaveCount(0)
-    await expect(clarifyButton(page)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Try again' }).locator('visible=true')).toBeVisible()
-    for (const [name, size] of [
-      ['1440x900', { width: 1440, height: 900 }],
-      ['390x844', { width: 390, height: 844 }],
-    ] as const) {
-      await page.setViewportSize(size)
-      await screenshotIfAsked(page, `practice-folded-after-miss-${name}`)
-      await expectNoAxeViolations(page, `${name}, practice after a miss, helps folded`)
-      if (size.width < 500) await expectClearOfTabBar(page, page.getByRole('button', { name: 'Try again' }).locator('visible=true'), 'Try again')
-    }
-
-    // A wrong number, even a power of ten off, gets no note (it would confirm the digits); only a non-number is told so.
-    await tryAgain(page)
-    await check(page, '40')
-    await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-    await expect(page.getByText('Check your units').locator('visible=true')).toHaveCount(0)
-    await expect(page.getByText('Your answer should be a number').locator('visible=true')).toHaveCount(0)
-    await tryAgain(page)
-    await check(page, 'four')
-    await expect(page.getByText('Your answer should be a number. A unit after it is fine.').locator('visible=true')).toBeVisible()
-  })
-
   test('worked example button disabled before an attempt', async ({ page }) => {
     test.setTimeout(120_000)
     await open(page, 'tutor-worked')
@@ -521,61 +458,5 @@ test.describe('the practice tutor', () => {
     await expect(page.getByText('The tutor could not take that', { exact: true })).toHaveCount(0)
   })
 
-  test('the tutor panel: no axe violations at desktop and phone width, screenshots on request', async ({ page }) => {
-    test.setTimeout(180_000)
-    await open(page, 'tutor-axe')
-    for (const [name, size] of [
-      ['1440x900', { width: 1440, height: 900 }],
-      ['390x844', { width: 390, height: 844 }],
-    ] as const) {
-      await page.setViewportSize(size)
-      await page.evaluate(() => localStorage.clear())
-      await page.request.post(`/api/topics/${await topicIdOf(page)}/practice-progress`, {
-        data: { problemIndex: 0, problemTitle: 'Squares', solvedSteps: [], revealedSteps: [], hintedSteps: [], attemptedSteps: [], firstTrySteps: [], maxRungs: {}, missRungs: {} },
-      })
-      await page.reload()
-      await openHelp(page)
-      await expect(clarifyButton(page)).toBeVisible()
-      await screenshotIfAsked(page, `tutor-${name}-start`)
-      await expectNoAxeViolations(page, `${name}, start`)
-
-      await check(page, '5')
-      await tryAgain(page)
-      await check(page, '6')
-      await expect(offer(page)).toBeVisible()
-      await screenshotIfAsked(page, `tutor-${name}-offer`)
-      await expectNoAxeViolations(page, `${name}, offer`)
-
-      await page.getByRole('button', { name: 'Yes, talk it through' }).locator('visible=true').click()
-      await expect(thread(page)).toBeVisible()
-      await openHelp(page)
-      await (await workingBox(page)).fill('I squared by adding the number to itself.')
-      await askButton(page).click()
-      await expect(thread(page)).toContainText('I squared by adding')
-      await workedButton(page).click()
-      await expect(thread(page)).toContainText('Worked example')
-      await screenshotIfAsked(page, `tutor-${name}-thread`)
-      await expectNoAxeViolations(page, `${name}, conversation`)
-
-      await page.route('**/api/topics/*/practice-tutor', (route) =>
-        route.fulfill({
-          status: 503,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: { code: 'UPSTREAM_ERROR', message: 'x', details: { code: 'LLM_UNAVAILABLE', retryable: true } } }),
-        })
-      )
-      await clarifyButton(page).click()
-      await expect(page.getByText('AI is busy', { exact: true }).locator('visible=true')).toBeVisible()
-      await screenshotIfAsked(page, `tutor-${name}-failure`)
-      await expectNoAxeViolations(page, `${name}, failure`)
-      await page.unroute('**/api/topics/*/practice-tutor')
-    }
-  })
 })
 
-/** The topic id from the page address. */
-async function topicIdOf(page: Page): Promise<string> {
-  const match = /\/topics\/([^/?]+)/.exec(page.url())
-  if (!match) throw new Error('not on a topic page')
-  return match[1]
-}

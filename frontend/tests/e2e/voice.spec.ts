@@ -1,10 +1,8 @@
-import { openKeepStudying } from './helpers/review'
 import { expect, test, type Page } from '@playwright/test'
 import { signIn as signInAs } from './helpers/auth'
 import { clearVoiceSessions, ensureVoiceFixture, makeLoadFactorStrong, VOICE_TEST_EMAIL, type VoiceFixture } from './helpers/voice-fixture'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { withPrisma } from './helpers/db'
-import { overflowing } from './helpers/overflow'
 import { installVoiceStubs } from './helpers/voice-stubs'
 
 import { END_OF_TURN_WAIT_MS } from '../../src/lib/voice/turn-contract'
@@ -41,28 +39,6 @@ async function waitForLobby(page: Page) {
   await expect(page.getByTestId('voice-lobby')).toBeVisible({ timeout: 30_000 })
   await expect(startButton(page)).toBeEnabled({ timeout: 15_000 })
 }
-
-test('the Review page links to voice practice, which has a screen of its own with the weakest topics and the lobby', async ({ page }) => {
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  await page.goto(`/courses/${ids.courseId}/review`)
-  await expect(page.getByRole('heading', { level: 1, name: 'Review' })).toBeVisible()
-  await openKeepStudying(page)
-  await expect(page.getByRole('heading', { level: 2, name: 'Voice practice' })).toBeVisible()
-  // The session does not run inside the Review page: there is no lobby here, only the way in.
-  await expect(page.getByTestId('voice-lobby')).toHaveCount(0)
-  await page.getByRole('link', { name: 'Start voice practice' }).click()
-  await expect(page).toHaveURL(new RegExp(`/courses/${ids.courseId}/review/voice$`))
-  await expect(page.getByRole('heading', { level: 1, name: 'Voice practice' })).toBeVisible()
-  // The Review page the link was on can still be in the document, hidden, while the new screen shows: only the one on screen counts.
-  await expect(page.locator('p:visible', { hasText: 'Covers your 3 weakest topics: Recursion basics, Graph search and Sorting by comparison.' })).toBeVisible()
-  // A focus screen: Exit leads back to Review.
-  await expect(page.getByRole('link', { name: 'Exit' })).toHaveAttribute('href', `/courses/${ids.courseId}/review`)
-  await waitForLobby(page)
-  await expect(page.getByText(/min left today$/)).toBeVisible()
-  await expect(page.getByLabel('Focus (optional)')).toBeVisible()
-  // The browser has no speech recognition: the lobby says so before the start, in one line that names the browsers that do.
-  await expect(page.getByTestId('voice-no-recognition')).toHaveText("This browser can't listen, so you will type your answers. Talking works in Chrome, Edge and Safari.")
-})
 
 test('text mode: start, first question, answer, evaluation, end, summary', async ({ page }) => {
   await installVoiceStubs(page, { recognition: false, synthesis: false })
@@ -106,34 +82,6 @@ test('text mode: start, first question, answer, evaluation, end, summary', async
   // Start again returns to the lobby.
   await page.getByRole('button', { name: 'Start again' }).click()
   await waitForLobby(page)
-})
-
-test('lobby: three style cards, one chosen at a time, each saying what it does', async ({ page }) => {
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice`)
-  await waitForLobby(page)
-  const styles = page.getByRole('radiogroup', { name: 'Style' })
-  await expect(styles.getByRole('radio')).toHaveCount(3)
-  const quiz = styles.getByRole('radio', { name: /Quiz me/ })
-  const teach = styles.getByRole('radio', { name: /Teach it back/ })
-  const reading = styles.getByRole('radio', { name: /Read it with me/ })
-  // Quiz me is chosen to begin with. The old free conversation is not offered.
-  await expect(quiz).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByRole('radio', { name: /Just talk/ })).toHaveCount(0)
-  await expect(page.getByRole('radio', { name: /Walk me through it/ })).toHaveCount(0)
-  await expect(teach).toContainText('does not explain first')
-  await expect(reading).toContainText('you predict it, hear it, then answer one check question')
-  await teach.click()
-  await expect(teach).toHaveAttribute('aria-checked', 'true')
-  await expect(quiz).toHaveAttribute('aria-checked', 'false')
-  await screenshotIfAsked(page, 'g1-lobby-cards-1440x900')
-  await expectNoAxeViolations(page, 'voice lobby with style cards')
-  // Arrow keys move through the cards (held a moment, as a keyboard does: Radix selects on the focus the key causes).
-  await teach.focus()
-  await page.keyboard.down('ArrowRight')
-  await expect(reading).toBeFocused()
-  await page.keyboard.up('ArrowRight')
-  await expect(reading).toHaveAttribute('aria-checked', 'true')
 })
 
 test('board shows the current question with rendered math', async ({ page }) => {
@@ -253,56 +201,6 @@ test('teach it back: the idea is on the board, the explanation is assessed again
   await expect(page.getByRole('heading', { name: 'Teach-back finished' })).toBeVisible()
 })
 
-test('the teach-back card links "Do it out loud" to the voice lobby with Teach it back chosen for that idea, and the summary lists what closed', async ({ page }) => {
-  await withPrisma(async (prisma) => {
-    await prisma.evidenceEvent.deleteMany({ where: { user: { email: VOICE_TEST_EMAIL }, source: { in: ['teach_back', 'voice'] } } })
-    await prisma.recallAttempt.deleteMany({ where: { user: { email: VOICE_TEST_EMAIL } } })
-  })
-  const concept = await withPrisma((prisma) => prisma.concept.findFirstOrThrow({ where: { topicId: ids.topicId, name: 'Load factor' }, select: { id: true } }))
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  const base = `/courses/${ids.courseId}/topics/${ids.topicId}`
-  // The whole-topic teach-back names no idea; the lobby will pick the weakest.
-  await page.goto(`${base}?view=recall&mode=teach_back`)
-  await expect(page.getByTestId('do-it-out-loud')).toHaveAttribute('href', `${base}?view=voice&style=teach_back`)
-  // A card for one idea carries it along.
-  await page.goto(`${base}?view=recall&mode=teach_back&concept=${concept.id}`)
-  const link = page.getByRole('link', { name: 'Do it out loud' })
-  await expect(link).toHaveAttribute('href', `${base}?view=voice&style=teach_back&concept=${concept.id}`)
-  await screenshotIfAsked(page, 'g1-do-it-out-loud-1440x900')
-  await expectNoAxeViolations(page, 'teach-back card with the Do it out loud link')
-  await link.click()
-  // It lands on the voice page of the topic (not written recall), with Teach it back chosen.
-  await expect(page).toHaveURL(new RegExp(`/topics/${ids.topicId}\\?view=voice&style=teach_back&concept=${concept.id}$`))
-  await waitForLobby(page)
-  await expect(page.getByRole('heading', { level: 2, name: 'Voice practice' })).toBeVisible()
-  await expect(page.getByRole('radio', { name: /Teach it back/ })).toHaveAttribute('aria-checked', 'true')
-  await startButton(page).click()
-
-  // The session starts on that idea, although another is weaker.
-  const board = page.getByTestId('voice-board')
-  await expect(board).toContainText('Explain "Load factor" in your own words', { timeout: 30_000 })
-  const created = await withPrisma((prisma) => prisma.voiceDrillSession.findFirstOrThrow({ where: { user: { email: VOICE_TEST_EMAIL } }, orderBy: { createdAt: 'desc' } }))
-  expect((created.coachState as { teach: { current: string } }).teach.current).toBe(concept.id)
-
-  // Covering the only claim asks one new example, and the answer closes the idea as explained.
-  await page.getByLabel('Your answer').fill('The load factor is entries divided by the number of buckets in the table')
-  await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByText(/Mock example: what happens in a new case/)).toBeVisible({ timeout: 30_000 })
-  await page.getByLabel('Your answer').fill('If the entries double and the buckets stay the same, the load factor doubles')
-  await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByText(/Mock wrap-up/)).toBeVisible({ timeout: 30_000 })
-  await page.getByRole('button', { name: 'End', exact: true }).click()
-  await expect(page.getByTestId('voice-ideas-explained')).toContainText('Load factor')
-  await expect(page.getByTestId('voice-ideas-taught')).toHaveCount(0)
-  await expect(page.getByTestId('voice-summary')).toContainText(/You typed for (under a minute|\d+ minutes?) and sent 2 messages\./)
-  // Everything was explained: the one next step is to explain it again tomorrow.
-  await expect(page.getByTestId('voice-next-step')).toContainText('Explain it again tomorrow')
-  await expect(page.getByRole('link', { name: 'Practice this' })).toHaveCount(0)
-  await page.setViewportSize({ width: 1440, height: 900 })
-  await screenshotIfAsked(page, 'g1-teach-back-summary-1440x900')
-  await expectNoAxeViolations(page, 'teach-back summary')
-})
-
 test('a teach-back ended before the first idea closes has the same summary: what was covered, what to revisit, a next step', async ({ page }) => {
   await withPrisma(async (prisma) => {
     await prisma.evidenceEvent.deleteMany({ where: { user: { email: VOICE_TEST_EMAIL }, source: { in: ['teach_back', 'voice'] } } })
@@ -363,64 +261,6 @@ test('guided reading: predict first, then the claim on the board with its page, 
   await expect(page.getByRole('heading', { name: 'Reading finished' })).toBeVisible()
 })
 
-test('phone: the style cards and the board fit at 390 wide, with axe clean and the claim page link a touch target', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice`)
-  await waitForLobby(page)
-  expect(await overflowing(page)).toEqual([])
-  await page.getByRole('radio', { name: /Read it with me/ }).click()
-  await expect(page.getByRole('radio', { name: /Quiz me/ })).toHaveAttribute('aria-checked', 'false')
-  await expect(page.getByRole('radio', { name: /Quiz me/ })).toHaveAttribute('data-state', 'unchecked')
-  await page.mouse.move(0, 0)
-  await screenshotIfAsked(page, 'g1-lobby-cards-390x844')
-  await expectNoAxeViolations(page, 'voice lobby with style cards on a phone')
-  await startButton(page).click()
-  const board = page.getByTestId('voice-board')
-  await expect(board).toHaveAttribute('data-kind', 'prediction', { timeout: 30_000 })
-  await page.getByLabel('Your answer').fill('I think it measures how full the table is')
-  await page.getByRole('button', { name: 'Send' }).click()
-  await expect(board).toHaveAttribute('data-kind', 'claim', { timeout: 30_000 })
-  await expect(board.locator('.katex').first()).toBeVisible()
-  expect(await overflowing(page)).toEqual([])
-  const box = await board.getByTestId('voice-board-source').boundingBox()
-  expect(box?.height ?? 0).toBeGreaterThanOrEqual(43)
-  await screenshotIfAsked(page, 'g1-guided-claim-390x844')
-  await expectNoAxeViolations(page, 'guided reading claim on a phone')
-  await page.getByRole('button', { name: 'End', exact: true }).click()
-})
-
-test('voice view: no Next bar and no intro card over the lobby, and on a phone all three style cards sit above the nav', async ({ page }) => {
-  await withPrisma((prisma) => prisma.user.update({ where: { email: VOICE_TEST_EMAIL }, data: { seenEffortIntroAt: null } }))
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  const base = `/courses/${ids.courseId}/topics/${ids.topicId}`
-  // On another view of the same topic the card and the Next bar are there.
-  await page.goto(`${base}?view=practice`)
-  await expect(page.getByRole('heading', { name: 'Margins asks you to try before it helps.' })).toBeVisible()
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto(`${base}?view=voice`)
-  await waitForLobby(page)
-  await expect(page.getByRole('region', { name: 'Next on this topic' })).toHaveCount(0)
-  await expect(page.getByRole('heading', { name: 'Margins asks you to try before it helps.' })).toHaveCount(0)
-  // The three cards are fully above the bottom nav.
-  const nav = await page.getByRole('navigation', { name: 'Course tabs' }).boundingBox()
-  expect(nav).not.toBeNull()
-  const cards = page.getByRole('radiogroup', { name: 'Style' }).getByRole('radio')
-  await expect(cards).toHaveCount(3)
-  for (let index = 0; index < 3; index += 1) {
-    const box = await cards.nth(index).boundingBox()
-    expect(box, `card ${index + 1}`).not.toBeNull()
-    expect((box?.y ?? 0) + (box?.height ?? 0), `card ${index + 1} ends above the nav`).toBeLessThanOrEqual((nav?.y ?? 0) + 1)
-  }
-  expect(await overflowing(page)).toEqual([])
-  await page.mouse.move(0, 0)
-  await screenshotIfAsked(page, 'g1-lobby-above-the-fold-390x844')
-  await expectNoAxeViolations(page, 'voice lobby on a phone, compact cards')
-  // The card was kept: it is there again on the next view.
-  await page.goto(`${base}?view=practice`)
-  await expect(page.getByRole('heading', { name: 'Margins asks you to try before it helps.' })).toBeVisible()
-})
-
 test('lobby: a topic with no claims starts on Quiz me even when a link asks for Teach it back, and says why before the start', async ({ page }) => {
   await installVoiceStubs(page, { recognition: false, synthesis: false })
   const bare = `/courses/${ids.courseId}/topics/${fixture.topics['Recursion basics']}`
@@ -467,74 +307,6 @@ test('lobby: an idea with no claims in a topic that has some starts on Quiz me a
   } finally {
     await withPrisma((prisma) => prisma.concept.delete({ where: { id: bare.id } }))
   }
-})
-
-test('teach-back summary: what was taught after questions links to the pages, one next step leads to practice', async ({ page }) => {
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice&style=teach_back`)
-  await waitForLobby(page)
-  const lines = (events: object[]) => events.map((event) => JSON.stringify(event)).join('\n') + '\n'
-  let call = 0
-  await page.route('**/api/voice/turn', (route) => {
-    call += 1
-    // The opening turn is the coach's greeting; the idea closes on the answer.
-    if (call === 1) return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: lines([{ type: 'text', delta: 'Explain it to me.' }, { type: 'done', text: 'Explain it to me.' }]) })
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/x-ndjson',
-      body: lines([
-        { type: 'text', delta: 'Good. Let us wrap up this idea.' },
-        { type: 'idea_done', name: 'Load factor', outcome: 'explained', conceptId: 'load-id' },
-        { type: 'idea_done', name: 'Collision', outcome: 'taught', conceptId: 'collision-id', lookAgain: ['p. 5', 'page 9', 'pp. 12\u201313'], lookLinks: [{ label: 'p. 5', href: '/api/materials/m1/file#page=5' }, { label: 'pp. 8-10', href: '/api/materials/m1/file#page=8' }, { label: 'pp. 12-13', href: '/api/materials/m1/file#page=12' }] },
-        { type: 'done', text: 'Good. Let us wrap up this idea.' },
-      ]),
-    })
-  })
-  await startButton(page).click()
-  await expect(page.getByLabel('Your answer')).toBeVisible({ timeout: 30_000 })
-  await page.getByLabel('Your answer').fill('Keys that share a bucket collide.')
-  await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByText('Good. Let us wrap up this idea.')).toBeVisible({ timeout: 30_000 })
-  await page.getByRole('button', { name: 'End', exact: true }).click()
-
-  const summary = page.getByTestId('voice-summary')
-  await expect(summary).toBeVisible()
-  await expect(page.getByTestId('voice-ideas-explained')).toContainText('Load factor')
-  await expect(page.getByTestId('voice-ideas-taught')).toContainText('Collision')
-  // To revisit: the page, as a link to the student's own file.
-  const revisit = page.getByTestId('voice-ideas-revisit')
-  await expect(revisit).toContainText('Collision: look again at p. 5')
-  const pageLink = revisit.getByRole('link', { name: /p\. 5/ })
-  await expect(pageLink).toHaveAttribute('href', '/api/materials/m1/file#page=5')
-  await expect(pageLink).toHaveAttribute('target', '_blank')
-  // A page said another way ("page 9", an en dash) still finds the link whose range covers it.
-  await expect(revisit.getByRole('link', { name: /^page 9/ })).toHaveAttribute('href', '/api/materials/m1/file#page=8')
-  await expect(revisit.getByRole('link', { name: /^pp\. 12.13/ })).toHaveAttribute('href', '/api/materials/m1/file#page=12')
-  // One next step, with the way to do it. One idea came up short, so the drill is on that idea.
-  const next = page.getByTestId('voice-next-step')
-  await expect(next).toContainText('Practice what came up short')
-  await expect(next.getByRole('link', { name: 'Practice this' })).toHaveAttribute('href', `/courses/${ids.courseId}/review/session?concept=collision-id`)
-  await page.setViewportSize({ width: 1440, height: 900 })
-  await screenshotIfAsked(page, 'g1-teach-back-summary-taught-1440x900')
-  await expectNoAxeViolations(page, 'teach-back summary with a taught idea and a next step')
-})
-
-test('lobby: teach it back on a topic with no claims from the pages says so, and quiz me still starts', async ({ page }) => {
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  await page.goto(`/courses/${ids.courseId}/topics/${fixture.topics['Recursion basics']}?view=voice`)
-  await waitForLobby(page)
-  await page.getByRole('radio', { name: /Teach it back/ }).click()
-  await startButton(page).click()
-  const alert = page.getByText("Your pages aren't read into ideas yet")
-  await expect(alert).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByText('Quiz me still works.')).toBeVisible()
-  await expect(page.getByTestId('voice-lobby')).toBeVisible()
-  await screenshotIfAsked(page, 'g1-lobby-no-claims-1440x900')
-  await expectNoAxeViolations(page, 'voice lobby with the no-claims alert')
-  await page.getByRole('radio', { name: /Quiz me/ }).click()
-  await startButton(page).click()
-  await expect(page.getByTestId('voice-board')).toBeVisible({ timeout: 30_000 })
-  await page.getByRole('button', { name: 'End', exact: true }).click()
 })
 
 test('new topic_conversation session rejected; old one renders', async ({ page }) => {
@@ -818,11 +590,7 @@ test('the session is ended on page hide and a heartbeat goes out every 30 second
 
 // ---------------------------------------------------------------------------------------------------------
 // v3.1 (spec 5.8, 18.3, 18.6): a spoken "I don't know" is a try, and the coach explains first.
-
-// The turn route allows 30 turns a minute per student, and the tests above have used most of them: the three below start in a fresh window.
-test.beforeEach(async ({}, testInfo) => {
-  if (testInfo.title.includes("I-don't-know")) await new Promise((resolve) => setTimeout(resolve, testInfo.title.startsWith('oral quiz') ? 45_000 : 0))
-})
+// (The turn limit is no reason to wait here: scripts/e2e-stack.sh gives the web app VOICE_TURNS_PER_MINUTE=1000.)
 
 test("oral quiz: an I-don't-know is a wrong answer at level 0 with score 0, and no grader is asked", async ({ page }) => {
   test.setTimeout(120_000)

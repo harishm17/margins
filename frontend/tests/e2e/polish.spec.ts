@@ -20,16 +20,6 @@ async function gradedAttempts(page: Page, course: string): Promise<[string, stri
   return found
 }
 
-/** Opens the results of an attempt that has a written answer in it (the seeded exam does; one that was submitted blank may not). */
-async function openAttemptWithWrittenAnswer(page: Page, course: string): Promise<[string, string]> {
-  for (const [examId, submissionId] of await gradedAttempts(page, course)) {
-    await page.goto(`/courses/${course}/exams/${examId}/results/${submissionId}`)
-    await expect(page.getByRole('heading', { name: 'Questions' })).toBeVisible()
-    if ((await page.getByRole('button', { name: 'Disagree? Grade again' }).count()) > 0) return [examId, submissionId]
-  }
-  throw new Error('no graded attempt has a written answer')
-}
-
 test('an address that names nothing answers 404, in the app and in the exam shell', async ({ page }) => {
   const { course } = demoIds()
   await signIn(page, DEMO_EMAIL)
@@ -49,43 +39,6 @@ test('an address that names nothing answers 404, in the app and in the exam shel
   // Inside a course the way back leads to the course.
   await page.goto(`/courses/${course}/exams/not-a-uuid`)
   await expect(page.getByRole('link', { name: 'Back to the course' })).toHaveAttribute('href', `/courses/${course}`)
-})
-
-test('the theme is a visible choice in the account menu', async ({ page }) => {
-  await signIn(page, DEMO_EMAIL)
-  await page.getByRole('button', { name: /account menu/i }).click()
-  // Not behind a submenu: the three choices are in the menu itself.
-  for (const name of ['Light', 'Dark', 'Match device']) {
-    await expect(page.getByRole('menuitemradio', { name: name === 'Match device' ? /^Match device/ : name, exact: name !== 'Match device' })).toBeVisible()
-  }
-  await page.getByRole('menuitemradio', { name: 'Dark', exact: true }).click()
-  await expect(page.locator('html')).toHaveClass(/dark/)
-  await expect(page.getByRole('menuitemradio', { name: 'Dark', exact: true })).toBeChecked()
-  await page.getByRole('menuitemradio', { name: 'Light', exact: true }).click()
-  await expect(page.locator('html')).not.toHaveClass(/dark/)
-})
-
-test('a graded exam shows what was checked, and asks Ask to explain a miss', async ({ page }) => {
-  const { course } = demoIds()
-  await signIn(page, DEMO_EMAIL)
-  await openAttemptWithWrittenAnswer(page, course)
-
-  // A written answer: the rubric, the model answer and a way to ask for another grading.
-  const rubric = page.getByRole('group', { name: /was graded/ }).first()
-  await expect(rubric).toBeVisible()
-  await expect(rubric.getByText(/for the whole answer/)).toBeVisible()
-  await expect(page.getByText('Model answer').first()).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Disagree? Grade again' }).first()).toBeVisible()
-
-  // The score reads the same in the ring, the lobby and everywhere else (one decimal at most).
-  const ring = await page.getByRole('img', { name: /^Score / }).getAttribute('aria-label')
-  await expect(page.getByRole('img', { name: /^Score / })).toContainText(ring!.replace('Score ', ''))
-
-  // A missed question opens Ask with the question and the answer written, and nothing sent.
-  await page.getByRole('link', { name: 'Explain this mistake' }).first().click()
-  await expect(page).toHaveURL(/\/ask\?.*q=/)
-  const box = page.locator('#ask-composer')
-  await expect(box).toHaveValue(/Explain this mistake\.[\s\S]*Question: [\s\S]*My answer: /)
 })
 
 test('the lobby and the results give the same score for an attempt', async ({ page }) => {

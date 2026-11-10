@@ -142,6 +142,9 @@ class Settings(BaseSettings):
     # Jobs that wait for AI instead of failing (exam grading: the answers are the student's work)
     # wait at most this long, then fail with the reason they were waiting for.
     JOB_AI_WAIT_MAX_SECONDS: float = 7 * 24 * 3600.0
+    # How soon the reaper may look again at a job waiting for the AI (not the allowance, which
+    # waits for its reset). The e2e stack sets it low so a spec's outage ends in seconds.
+    JOB_AI_WAIT_RECHECK_SECONDS: float = 30.0
     # Most a user's LLM-backed jobs and chat answers may cost per UTC day, from the stored
     # costs. 0 turns the cap off.
     DAILY_LLM_BUDGET_USD: float = 8.00

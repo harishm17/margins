@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
+import { withEnv } from './env'
 import { endOutage, errorStateGaps, stageOutage } from './outage'
 
 const BUSY = 'The AI is busy right now. Try again in a few minutes.'
@@ -33,15 +34,11 @@ describe('what a surface that failed during an outage leaves out (WF11)', () => 
 describe('a staged outage', () => {
   it('writes the code to the stack\'s fault file, and an empty file ends it', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'wf-outage-'))
-    const before = process.env.E2E_RUN_DIR
-    process.env.E2E_RUN_DIR = dir
-    try {
+    withEnv('E2E_RUN_DIR', dir, () => {
       stageOutage('LLM_UNAVAILABLE')
       assert.equal(readFileSync(path.join(dir, 'llm-fault'), 'utf8'), 'LLM_UNAVAILABLE')
       endOutage()
       assert.equal(readFileSync(path.join(dir, 'llm-fault'), 'utf8'), '')
-    } finally {
-      process.env.E2E_RUN_DIR = before
-    }
+    })
   })
 })

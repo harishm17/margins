@@ -118,19 +118,3 @@ export async function screenshotIfAsked(page: Page, name: string) {
     }
   }
 }
-
-/**
- * Runs axe-core on one part of the page, such as an open menu. The page-level rules (landmarks, a heading
- * one, regions) are off: they say nothing about a floating surface that is not a page.
- */
-export async function expectNoAxeViolationsIn(page: Page, selector: string, label: string) {
-  await page.evaluate(readFileSync(require.resolve('axe-core'), 'utf8'))
-  const violations = await page.evaluate(async (css) => {
-    const target = document.querySelector(css)
-    if (!target) return [`no element matches ${css}`]
-    const axe = (window as unknown as { axe: { run: (context: Element, options: object) => Promise<AxeResult> } }).axe
-    const result = await axe.run(target, { rules: { region: { enabled: false }, 'landmark-one-main': { enabled: false }, 'page-has-heading-one': { enabled: false } } })
-    return result.violations.map((v) => v.id + ': ' + v.nodes.map((n) => n.html.slice(0, 120)).join(' | '))
-  }, selector)
-  expect(violations, label).toEqual([])
-}
