@@ -66,8 +66,13 @@ async function world(label: string) {
   const project = await prisma.project.create({ data: { userId: user.id, name: 'P' } })
   const topicA = await prisma.topic.create({ data: { projectId: project.id, name: 'Hash tables', orderIndex: 0, userConfirmed: true } })
   const topicB = await prisma.topic.create({ data: { projectId: project.id, name: 'Sorting', orderIndex: 1, userConfirmed: true } })
-  const concept = (topicId: string, name: string, orderIndex: number) =>
-    prisma.concept.create({ data: { projectId: project.id, topicId, name, summary: `${name}.`, kind: 'concept', orderIndex, objectiveIndexes: [] } })
+  const material = await prisma.material.create({ data: { projectId: project.id, category: 'lecture_notes', filename: 'notes.pdf', gcsPath: 'x', sizeBytes: 1 } })
+  // An extracted idea comes with a claim from the file; one with none "needs re-reading" and gets no pointer.
+  const concept = async (topicId: string, name: string, orderIndex: number) => {
+    const row = await prisma.concept.create({ data: { projectId: project.id, topicId, name, summary: `${name}.`, kind: 'concept', orderIndex, objectiveIndexes: [] } })
+    await prisma.conceptClaim.create({ data: { conceptId: row.id, text: `${name}.`, quote: name, materialId: material.id, pageStart: 1, orderIndex: 0 } })
+    return row
+  }
   return { user, project, topicA, topicB, concept }
 }
 
