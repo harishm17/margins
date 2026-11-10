@@ -15,9 +15,11 @@ import {
   deleteS3Prefix,
   openS3Object,
   parseS3Path,
+  putS3Object,
   s3Configured,
   uploadStreamToS3,
 } from './s3'
+import { recordOpsEvent } from '@/lib/ops/events'
 
 const LOCAL_UPLOAD_BASE = process.env.LOCAL_UPLOADS_DIR || '/data/uploads'
 const LOCAL_UPLOAD_FALLBACK_BASE = '/tmp/margins-uploads'
@@ -174,6 +176,7 @@ export async function recordStoredFile<T>(
       await remove(storedPath)
     } catch (cleanupError) {
       console.error(`[STORAGE] Could not delete ${storedPath} after its record failed; remove it by hand:`, cleanupError)
+      await recordOpsEvent('storage_delete_failed', `${storedPath} (after its record failed): ${String(cleanupError)}`)
     }
     throw error
   }
@@ -194,6 +197,7 @@ export async function deleteFilesBestEffort(storagePaths: string[]): Promise<str
     } catch (error) {
       failed.push(storagePath)
       console.error(`[STORAGE] Could not delete ${storagePath}; remove it by hand:`, error)
+      await recordOpsEvent('storage_delete_failed', `${storagePath}: ${String(error)}`)
     }
   }
   return failed
@@ -215,6 +219,7 @@ export async function deleteProjectFolder(userId: string, projectId: string): Pr
     return true
   } catch (error) {
     console.error(`[STORAGE] Could not delete the folder ${folder}; remove it by hand:`, error)
+    await recordOpsEvent('storage_delete_failed', `folder ${folder}: ${String(error)}`)
     return false
   }
 }
@@ -233,6 +238,41 @@ export async function deleteUserFiles(userId: string): Promise<void> {
   if (s3Configured()) {
     await deleteS3Prefix(folder)
   }
+}
+
+/** Where deletion records live in storage, beside (never inside) any user's folder. */
+export const DELETION_RECORDS_PREFIX = 'ops/deletions/'
+
+/**
+ * Record that an account was deleted, as `ops/deletions/<userId>.json` in the bucket (or the uploads folder).
+ *
+ * A restore brings back the database as of the last nightly backup, and an account deleted after that backup would
+ * come back with it. The bucket is copied nightly too, and these records with it, so the restore script
+ * (scripts/restore_drill.py) deletes every recorded account again. Records hold the id and the time only.
+ */
+export async function writeDeletionRecord(userId: string, deletedAt: Date = new Date()): Promise<void> {
+  if (!/^[A-Za-z0-9-]+$/.test(userId)) throw new Error(`Refusing to record deletion for user id "${userId}"`)
+  const key = `${DELETION_RECORDS_PREFIX}${userId}.json`
+  const body = JSON.stringify({ userId, deletedAt: deletedAt.toISOString() })
+  if (s3Configured()) {
+    await putS3Object(key, body, 'application/json')
+    return
+  }
+  const fs = await import('fs')
+  const pathModule = await import('path')
+  let lastError: unknown = null
+  for (const base of [LOCAL_UPLOAD_BASE, LOCAL_UPLOAD_FALLBACK_BASE]) {
+    // Runtime upload folder, not project files: keep Turbopack from tracing the whole project.
+    const target = pathModule.join(/* turbopackIgnore: true */ base, key)
+    try {
+      fs.mkdirSync(pathModule.dirname(target), { recursive: true })
+      fs.writeFileSync(target, body)
+      return
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw new Error(`[LOCAL_STORAGE] Could not write the deletion record: ${String(lastError)}`)
 }
 
 /**

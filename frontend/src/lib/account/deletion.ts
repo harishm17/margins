@@ -40,7 +40,15 @@ export type DeletionFiles = {
   deleteFile(path: string): Promise<void>
   /** Deletes everything under the user's folder in every storage. Throws when a storage fails. */
   deleteUserFiles(userId: string): Promise<void>
+  /** Records in storage that the account is gone, so a restore from an older backup deletes it again. */
+  recordDeletion?(userId: string): Promise<void>
 }
+
+/** Counts a handled failure for the operator's watchdog (lib/ops/events). Never throws. */
+export type DeletionNote = (
+  kind: 'storage_delete_failed' | 'account_delete_failed' | 'deletion_record_failed',
+  detail: string
+) => Promise<void>
 
 export type DeletionLog = {
   info: (message: string) => void
@@ -67,13 +75,37 @@ export type DeletionResult = {
   deletedFiles: number
 }
 
+const noNote: DeletionNote = async () => {}
+
 export async function deleteAccount(
   userId: string,
-  { store, files, log = console }: { store: DeletionStore; files: DeletionFiles; log?: DeletionLog }
+  {
+    store,
+    files,
+    log = console,
+    note = noNote,
+  }: { store: DeletionStore; files: DeletionFiles; log?: DeletionLog; note?: DeletionNote }
+): Promise<DeletionResult> {
+  try {
+    return await runDeletion(userId, store, files, log, note)
+  } catch (error) {
+    // The student sees the error and can retry; the operator hears about it in case retrying does not help.
+    if (error instanceof AccountDeletionError) await note('account_delete_failed', `${userId}: stopped at ${error.step}`)
+    throw error
+  }
+}
+
+async function runDeletion(
+  userId: string,
+  store: DeletionStore,
+  files: DeletionFiles,
+  log: DeletionLog,
+  note: DeletionNote
 ): Promise<DeletionResult> {
   if (!(await store.accountExists(userId))) {
-    // A previous attempt deleted the row; make sure its files went too.
-    await sweep(userId, files, log)
+    // A previous attempt deleted the row; make sure its files went, and that the deletion is recorded.
+    await sweep(userId, files, log, note)
+    await recordDeletion(userId, files, log, note)
     return { outcome: 'already_deleted', stoppedJobs: 0, deletedFiles: 0 }
   }
 
@@ -118,7 +150,8 @@ export async function deleteAccount(
     throw new AccountDeletionError('account', error)
   }
 
-  await sweep(userId, files, log)
+  await sweep(userId, files, log, note)
+  await recordDeletion(userId, files, log, note)
   log.info(
     `[ACCOUNT] Deleted account ${userId}: ${stoppedJobs} job(s) stopped, ${paths.length} file(s) deleted` +
       (removed ? '' : ' (the row was already gone)')
@@ -126,12 +159,25 @@ export async function deleteAccount(
   return { outcome: removed ? 'deleted' : 'already_deleted', stoppedJobs, deletedFiles: paths.length }
 }
 
-async function sweep(userId: string, files: DeletionFiles, log: DeletionLog) {
+async function sweep(userId: string, files: DeletionFiles, log: DeletionLog, note: DeletionNote) {
   try {
     await files.deleteUserFiles(userId)
   } catch (error) {
     // The account is gone and cannot retry: leave a line to clean up by hand.
     log.error(`[ACCOUNT] Account ${userId} is deleted, but its folder could not be swept; remove ${userId}/ by hand:`, error)
+    await note('storage_delete_failed', `folder ${userId}/ after account deletion: ${String(error)}`)
+  }
+}
+
+/** After the row is gone (never before: a record for an account that still exists would delete it on a restore). */
+async function recordDeletion(userId: string, files: DeletionFiles, log: DeletionLog, note: DeletionNote) {
+  if (!files.recordDeletion) return
+  try {
+    await files.recordDeletion(userId)
+  } catch (error) {
+    // The deletion stands; only a restore from an older backup would bring the account back.
+    log.error(`[ACCOUNT] Account ${userId} is deleted, but the deletion could not be recorded for restores:`, error)
+    await note('deletion_record_failed', `${userId}: ${String(error)}`)
   }
 }
 
