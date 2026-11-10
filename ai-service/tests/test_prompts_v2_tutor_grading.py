@@ -75,6 +75,9 @@ def required_and_order(model):
     return list(schema["properties"]), schema.get("required", [])
 
 
+# The billing fields every model route takes (billing scope, PR #88).
+IDS = {"user_id": "u1", "project_id": "p1"}
+
 # ---------------------------------------------------------------- practice tutor
 
 PROBLEM = "A bag holds 3 red and 5 blue marbles. Two are drawn without replacement. Find P(both red)."
@@ -98,7 +101,7 @@ def practice_request(**over):
         claims=[],
     )
     base.update(over)
-    return PracticeTutorRequest(**base)
+    return PracticeTutorRequest(**IDS, **base)
 
 
 def practice_reply_v2(text="Which draw changes what is left in the bag?"):
@@ -213,7 +216,7 @@ CLAIMS = [ReaderClaim(text="A collision is two keys that map to the same bucket.
 def reader_request(**over):
     base = dict(passage=PASSAGE, chunk_id="chunk-1", student_take="I think it says a table needs a way to deal with keys that share a spot.", rung=1, claims=CLAIMS)
     base.update(over)
-    return ReaderTutorRequest(**base)
+    return ReaderTutorRequest(**IDS, **base)
 
 
 def check_request(**over):
@@ -314,7 +317,7 @@ ANSWER = "A hash table sends each key to a bucket. When two keys land in the sam
 
 
 def recall_request():
-    return RecallGradeRequest(prompt="Explain how a hash table handles keys that share a bucket.", claims=RECALL_CLAIMS, answer=ANSWER)
+    return RecallGradeRequest(**IDS, prompt="Explain how a hash table handles keys that share a bucket.", claims=RECALL_CLAIMS, answer=ANSWER)
 
 
 def test_recall_v2_prompt(v2_tutor):

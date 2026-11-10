@@ -71,7 +71,10 @@ async def run_validator(monkeypatch, category="lecture_notes") -> Capture:
     text = "Plain readable sentence about the topic. " * 20
     document = ExtractedDocument(pages=[ExtractedPage(number=1, text=text)], extension=".pdf", page_count=1)
     monkeypatch.setattr(validator, "local_copy", fake_copy)
-    monkeypatch.setattr(validator, "extract_document", lambda *a, **k: document)
+    async def parse_document(*args, **kwargs):
+        return document
+
+    monkeypatch.setattr(validator, "parse_document", parse_document)
     monkeypatch.setattr(ai_status, "get_status", available)
     monkeypatch.setattr(validator.LLMFactory, "get_provider", classmethod(lambda cls: provider))
     monkeypatch.setattr(settings, "ENVIRONMENT", "production")
