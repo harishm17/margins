@@ -5,8 +5,9 @@ process served every job, and a second replica (or a deploy that overlaps the ol
 topic's jobs side by side. Keys: `topic:<id>`, `unit:<id>`, `attempt:<id>`.
 
 Concept extraction and concept linking take the lock exclusive, because they rewrite the topic's concept
-graph. Everything else that reads or adds to it takes it shared, so those run together but never during an
-extraction.
+graph. Content generation and review items also take it exclusive for now, which keeps today's order (one
+content job per topic at a time); PR 7's PARALLEL_TOPIC_JOBS moves them to shared. The gap explainer locks
+its own attempt, so it no longer waits behind the topic's generation.
 
 The lock lives on its own pooled connection for as long as the block runs (a session-level advisory lock
 belongs to its connection). It is taken with `pg_try_advisory_lock*` in a loop with a short, jittered sleep

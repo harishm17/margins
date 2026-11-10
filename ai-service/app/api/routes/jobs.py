@@ -592,7 +592,9 @@ async def generate_content_job(payload: JobPayload, job: JobContext) -> JobOutco
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
 
-    async with topic_lock(f"topic:{topic['id']}", exclusive=False):
+    # Exclusive until PR 7's PARALLEL_TOPIC_JOBS: a topic's content jobs (one per content type) run one at a time,
+    # as they did under the old per-process lock, so the quiz never starts before the notes it builds on.
+    async with topic_lock(f"topic:{topic['id']}", exclusive=True):
         try:
             return await _generate_and_store_content(job, input_data, topic)
         except Exception as exc:
@@ -991,7 +993,9 @@ async def generate_review_items_job(payload: JobPayload, job: JobContext) -> Job
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
 
-    async with topic_lock(f"topic:{topic['id']}", exclusive=False):
+    # Exclusive until PR 7's PARALLEL_TOPIC_JOBS: a topic's content jobs (one per content type) run one at a time,
+    # as they did under the old per-process lock, so the quiz never starts before the notes it builds on.
+    async with topic_lock(f"topic:{topic['id']}", exclusive=True):
         result = await generate_review_items(
             topic["id"],
             [
