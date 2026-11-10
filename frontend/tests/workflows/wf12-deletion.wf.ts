@@ -76,7 +76,8 @@ test('WF12 deletion: a studied course deleted, then the account while a file is 
   })
 
   const courseLeft = [...filesLeft(path.join(uploads, userId, courseId)), ...pathsNaming(filesLeft(path.join(uploads, userId)), owned)]
-  const courseRows = await rowsNaming(owned, ['llm_usage_events'])
+  // voice_usage keeps the seconds each voice session used, by session id and one-way key, so deleting a course does not give the minutes back.
+  const courseRows = await rowsNaming(owned, ['llm_usage_events', 'voice_usage'])
   const spentAfter = await spendToday(userId)
   console.log(`course delete: ${courseLeft.length} file(s) left, rows left: ${courseRows.join(', ') || 'none'}; today's spend $${spentBefore.toFixed(4)} then $${spentAfter.toFixed(4)}`)
   await checks.check('WF12.course-files-gone', 'Deleting a course removes its whole folder in storage, page images included (B8)', () =>
@@ -124,7 +125,9 @@ test('WF12 deletion: a studied course deleted, then the account while a file is 
   await aiServiceQuiet()
 
   const accountLeft = filesLeft(path.join(uploads, userId))
-  const accountRows = await rowsNaming([userId, email, ...owned, ...ownedNow])
+  // Two tables outlive the account by rule (privacy page, "Your choices"): the tombstone delete_user_account() writes (a random id and
+  // the one-way key, so a late ledger row is still stamped) and voice_usage. Neither holds a name, an email or a course.
+  const accountRows = await rowsNaming([userId, email, ...owned, ...ownedNow], ['deleted_accounts', 'voice_usage'])
   const totalAfter = await spendToday()
   console.log(`account delete: ${accountLeft.length} file(s) left, rows left: ${accountRows.join(', ') || 'none'}; today's spend (everyone) $${totalBefore.toFixed(4)} then $${totalAfter.toFixed(4)}`)
   await checks.check('WF12.account-files-gone', "Deleting the account removes its whole folder in storage, a file still waiting to be read and page images included (B8)", () =>
@@ -135,6 +138,11 @@ test('WF12 deletion: a studied course deleted, then the account while a file is 
     "Deleting the account leaves no row naming it, its email or anything it owned, the spend ledger's rows included (they are unlinked), and the day's total spend does not fall (SW13)",
     () => expectNone([...accountRows, ...(totalAfter + 1e-9 < totalBefore ? [`today's total spend fell from $${totalBefore} to $${totalAfter}`] : [])], 'left behind')
   )
+  await checks.check('WF12.deletion-says-what-stays', 'The Delete account dialog and the Privacy Policy say that anonymous usage records stay under a one-way key (SW14, SEC-L7)', async () => {
+    expect(accountDialog, 'the Delete account dialog').toMatch(/usage records[^.]*stay[^.]*one-way key/i)
+    await page.goto('/privacy')
+    expect(await allText(page.locator('main')), 'the Privacy Policy').toMatch(/one-way key[\s\S]*deleting an account and\s+signing up again/i)
+  })
   await checks.check('WF12.account-dialog-once', 'The Delete account dialog says "Enter DELETE" once (U4)', () =>
     expect(timesSaid(accountDialog, INSTRUCTIONS.enterDelete), `times "Enter DELETE" is said in: ${accountDialog}`).toBe(1)
   )

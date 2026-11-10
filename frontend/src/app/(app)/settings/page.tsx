@@ -34,7 +34,7 @@ export default async function SettingsPage() {
         <SettingsSection
           id="delete-heading"
           title="Delete account"
-          description="This permanently deletes your account, your courses, the files you uploaded and everything made from them, including your progress and quiz and exam history. It can't be undone."
+          description="This permanently deletes your account, your courses, the files you uploaded and everything made from them, including your progress and quiz and exam history. It can't be undone. Anonymous AI usage records (no name, email or course) stay, under a one-way key, so a new account does not restart today's AI allowance or voice minutes."
         >
           <DeleteAccount email={account.email} />
         </SettingsSection>

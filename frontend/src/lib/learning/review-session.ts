@@ -833,7 +833,7 @@ export async function answerItem(input: {
   const points = typeof item.question.points === 'number' && item.question.points > 0 ? item.question.points : 1
   const result = given.idk
     ? { question_index: 0, question_type: String(item.question.question_type ?? ''), points_possible: points, points_earned: 0, is_correct: false, feedback: '', needs_review: false }
-    : (await gradeAnswers([item.question], answersForGrader({ '0': given }))).graded_questions[0]
+    : (await gradeAnswers({ userId: input.userId, projectId: row.projectId }, [item.question], answersForGrader({ '0': given }))).graded_questions[0]
   if (!result) return { status: 'invalid', message: 'This question could not be graded.' }
 
   const source: 'review' | 'drill' = row.kind === 'drill' ? 'drill' : 'review'

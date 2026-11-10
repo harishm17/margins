@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import List
 
 import pytest
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.api.routes import chat as chat_route
 from app.config import settings
 from app.main import app
+from app.services.budget import Allowance
 from app.services import chat as chat_service
 from app.services.embeddings import search
 from app.services.embeddings.search import search_chunks_for_question
@@ -649,8 +651,13 @@ def wired(monkeypatch):
     async def execute_one(sql, *args):
         return state["project"]
 
-    async def over_budget(user_id):
-        return state["budget"]
+    async def allowance(user_id):
+        state["budget_user"] = user_id
+        refused = state["budget"]
+        return Allowance(
+            limit_usd=3.0, used_usd=3.1 if refused else 0.0, resets_at=datetime.now(timezone.utc),
+            refused="user" if refused else None, message=refused,
+        )
 
     async def retrieve(project_id, question, topic_id):
         state["retrieve_args"] = (project_id, question, topic_id)
@@ -666,7 +673,7 @@ def wired(monkeypatch):
 
     state["concepts"] = []
     monkeypatch.setattr(chat_route, "execute_one", execute_one)
-    monkeypatch.setattr(chat_route, "over_budget_message", over_budget)
+    monkeypatch.setattr(chat_route, "allowance_today", allowance)
     monkeypatch.setattr(chat_service, "retrieve", retrieve)
     monkeypatch.setattr(chat_service, "topic_concept_names", concept_names)
     monkeypatch.setattr(chat_service, "resolve_concept_ids", resolve)
@@ -751,7 +758,7 @@ class TestRoute:
         response = post(client)
         assert response.status_code == 429
         assert response.json()["error_code"] == "LLM_DAILY_BUDGET"
-        assert "$3.10" in response.json()["detail"]
+        assert "$3.10" in response.json()["detail"] and response.json()["budget_reason"] == "user"
         assert "retrieve_args" not in wired and wired["provider"].calls == []
 
     def test_nothing_retrieved_short_circuits_without_a_model_call(self, client, wired):

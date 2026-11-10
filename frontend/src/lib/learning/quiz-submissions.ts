@@ -31,7 +31,7 @@ import { applyQuizAttempt, isStrongStart, quizHelp, quizOutcome, type QuizHelp, 
 import { answersForGrader, answersForStorage, confidences, dontKnowIndexes, normalizeAnswers, plainAnswers, type QuizAnswer, type RawQuizAnswer } from './quiz-answers'
 import { pendingQuizEvidence, recordAttemptEvidence, recordQuizEvidence, retryPendingQuizEvidence, takenEarlierToday } from './quiz-evidence'
 import { studentTimeZone } from './student-time-zone'
-import type { GradedQuestion } from '@/lib/ai-service/grading'
+import type { GradedQuestion, GradingAccount } from '@/lib/ai-service/grading'
 
 type Topic = { id: string; projectId: string }
 type RawQuestion = Record<string, unknown>
@@ -197,7 +197,7 @@ export async function gradeRuleItemsNow(input: {
   timeZone: string
   sameDayRepeat: boolean
   /** The grader, replaceable in tests. */
-  grade?: (questions: unknown[], answers: Record<string, RawQuizAnswer>, only?: number[]) => Promise<{ graded_questions: GradedQuestion[] }>
+  grade?: (account: GradingAccount, questions: unknown[], answers: Record<string, RawQuizAnswer>, only?: number[]) => Promise<{ graded_questions: GradedQuestion[] }>
 }): Promise<PartialGrading | null> {
   const { userId, topic, quizSetId, questions, given } = input
   if (input.unavailableCode === 'AI_UNREACHABLE') return null
@@ -207,7 +207,7 @@ export async function gradeRuleItemsNow(input: {
 
   let ruleGraded: GradedQuestion[]
   try {
-    ruleGraded = (await (input.grade ?? defaultGrade)(questions, answersForGrader(given), only)).graded_questions
+    ruleGraded = (await (input.grade ?? defaultGrade)({ userId, projectId: topic.projectId }, questions, answersForGrader(given), only)).graded_questions
   } catch (error) {
     if (error instanceof GradingUnavailableError) return null
     throw error

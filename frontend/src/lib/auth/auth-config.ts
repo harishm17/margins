@@ -7,6 +7,8 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
 import { prisma } from '@/lib/db/prisma'
 import { trackFromRequest } from '@/lib/analytics/server'
+import { computeSpendKey } from '@/lib/account/spend-key'
+import { recordSpendAccount } from '@/lib/account/spend-key-store'
 import { resolveAuthSecret } from './secret'
 import { decideGoogleSignIn } from './google-link'
 import { ACCOUNT_GONE, assertAccountExists } from './account-check'
@@ -44,7 +46,9 @@ export const authOptions: NextAuthOptions = {
               if (!isTestLoginEmail(email)) return null
               const name = credentials?.name?.trim() || null
               // Signs in to the account with this email, making it the first time.
-              const user = await prisma.user.upsert({ where: { email }, update: {}, create: { email, name } })
+              const spendKey = computeSpendKey({ email })
+              const user = await prisma.user.upsert({ where: { email }, update: {}, create: { email, name, spendKey } })
+              await recordSpendAccount(user.spendKey ?? spendKey, user.createdAt)
               return { id: user.id, email: user.email, name: user.name }
             },
           }),
@@ -82,6 +86,12 @@ export const authOptions: NextAuthOptions = {
           return `/login?error=${decision.error}`
         }
 
+        // The same Google account always has the same key, also after its account was deleted and made again.
+        const spendKey = computeSpendKey({
+          email,
+          oauthProvider: account.provider,
+          oauthId: account.providerAccountId,
+        })
         let signedInUser = existingUser
         if (decision.action === 'link' && existingUser) {
           // An account made with a password before sign-in became Google only: the same verified
@@ -92,8 +102,11 @@ export const authOptions: NextAuthOptions = {
               oauthProvider: account.provider,
               oauthId: account.providerAccountId,
               name: user.name || existingUser.name,
+              // A key the account already has stays, so what it spent today is still its own.
+              ...(existingUser.spendKey ? {} : { spendKey }),
             },
           })
+          if (!existingUser.spendKey) await recordSpendAccount(spendKey, existingUser.createdAt)
         } else if (decision.action === 'create') {
           signedInUser = await prisma.user.create({
             data: {
@@ -101,8 +114,11 @@ export const authOptions: NextAuthOptions = {
               name: user.name,
               oauthProvider: account.provider,
               oauthId: account.providerAccountId,
+              spendKey,
             },
           })
+          // A key seen before (the account was deleted) keeps its first-seen date, so it is not a new account.
+          await recordSpendAccount(spendKey)
         }
 
         // Funnel: a new account is a signup, any other sign-in a login (no account detail is sent).

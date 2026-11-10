@@ -74,6 +74,9 @@ export default defineRailway(() => {
     env: {
       ENVIRONMENT: "production",
       NEXTAUTH_SECRET: preserve(),
+      // Keys the one-way account key behind the daily allowance and voice minutes (src/lib/account/spend-key.ts).
+      // Set it once and never rotate it: a new value makes every returning student look like a new one.
+      SPEND_KEY_SECRET: preserve(),
       NEXTAUTH_URL: SITE_URL,
       // Google sign-in (OAuth client "Margins web" in the Google Cloud project "studybuddy").
       GOOGLE_OAUTH_CLIENT_ID: preserve(),

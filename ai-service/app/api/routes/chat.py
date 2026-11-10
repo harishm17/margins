@@ -19,7 +19,8 @@ from app.config import settings
 from app.db.connection import execute_one
 from app.services import chat as chat_service
 from app.services import ai_status, exam_guard
-from app.services.budget import over_budget_message
+from app.services.billing import billed
+from app.services.budget import allowance_today
 from app.services.llm.base import LLMNotConfiguredError
 from app.services.llm.factory import LLMFactory
 
@@ -39,6 +40,8 @@ class ChatAnswerRequest(BaseModel):
     question: str
     history: List[ChatTurn] = Field(default_factory=list, max_length=50)
     topic_id: Optional[str] = None
+    # The conversation, named on the ledger rows of this answer.
+    thread_id: Optional[str] = None
     # The thread's tutor state, read by the app: the rung allowed, whether the student has their own
     # correct answer, and whether to ask which part of the last hint is unclear. Absent: rung 0.
     tutor: chat_service.TutorParams = Field(default_factory=chat_service.TutorParams)
@@ -54,17 +57,23 @@ class ChatAnswerRequest(BaseModel):
         return value
 
 
-def _fail(status: int, code: str, message: str, retryable: bool = False) -> JSONResponse:
+def _fail(status: int, code: str, message: str, retryable: bool = False, **extra: str) -> JSONResponse:
     """The same body shape as the LLMError handler in main.py."""
     return JSONResponse(
         status_code=status,
-        content={"detail": message, "error_code": code, "retryable": retryable},
+        content={"detail": message, "error_code": code, "retryable": retryable, **extra},
     )
 
 
 async def _ndjson(events: AsyncIterator[Dict]) -> AsyncIterator[bytes]:
     async for event in events:
         yield (json.dumps(event, ensure_ascii=False) + "\n").encode()
+
+
+async def _billed_stream(payload: ChatAnswerRequest, events: AsyncIterator[Dict]) -> AsyncIterator[Dict]:
+    async with billed(payload.user_id, payload.project_id, "chat", payload.thread_id):
+        async for event in events:
+            yield event
 
 
 @router.post("/answer", response_model=None)
@@ -83,48 +92,52 @@ async def answer(payload: ChatAnswerRequest) -> Union[StreamingResponse, JSONRes
     if unavailable is not None:
         return _fail(503, unavailable.code, str(unavailable), unavailable.retryable)
 
-    over_budget = await over_budget_message(payload.user_id)
-    if over_budget:
-        return _fail(429, "LLM_DAILY_BUDGET", over_budget)
+    # Refuse before the first byte when the allowance is spent (the scope below checks again on every model call).
+    allowance = await allowance_today(payload.user_id)
+    if allowance.refused:
+        return _fail(429, "LLM_DAILY_BUDGET", allowance.message or "Daily AI usage limit reached", budget_reason=allowance.refused)
 
-    history = chat_service.clean_history([turn.model_dump() for turn in payload.history])
-    # Routing never raises (a router that fails leaves a lookup); retrieval failing is the 503 it
-    # always was. With a topic, the concepts to route against are known up front and routing runs
-    # beside retrieval (and is cancelled if retrieval fails). Without one, the project's concepts
-    # are ordered by the topics of the retrieved chunks, so routing follows retrieval.
-    routing = None
-    worked = payload.tutor.show_worked
-    if payload.topic_id and not worked:
-        routing = asyncio.create_task(
-            chat_service.route_question(payload.project_id, payload.topic_id, payload.question, history)
-        )
-    # The worked-example button is one fixed sentence that says nothing about the problem, so the passages
-    # are found from what the student has written in the conversation.
-    search = payload.question
-    if worked:
-        written = [turn.content for turn in history if turn.role == "user"][-2:]
-        search = " ".join(written) or payload.question
-    try:
-        chunks = await chat_service.retrieve(payload.project_id, search, payload.topic_id)
-    except Exception as exc:
-        if routing is not None:
-            routing.cancel()
-        logger.exception("Retrieval failed for project %s", payload.project_id)
-        return _fail(503, "RETRIEVAL_FAILED", f"Could not search the materials: {exc}", True)
-    if worked:
-        route = chat_service.RouteResult.worked_example()
-    else:
-        if routing is None:
-            routing = chat_service.route_question(
-                payload.project_id, None, payload.question, history, [str(chunk["id"]) for chunk in chunks]
+    # The router call and the answer are billed to the student, however the stream ends. The scope is opened again inside
+    # the stream's own generator: Starlette iterates that in another task, after this function has returned.
+    async with billed(payload.user_id, payload.project_id, "chat", payload.thread_id):
+        history = chat_service.clean_history([turn.model_dump() for turn in payload.history])
+        # Routing never raises (a router that fails leaves a lookup); retrieval failing is the 503 it
+        # always was. With a topic, the concepts to route against are known up front and routing runs
+        # beside retrieval (and is cancelled if retrieval fails). Without one, the project's concepts
+        # are ordered by the topics of the retrieved chunks, so routing follows retrieval.
+        routing = None
+        worked = payload.tutor.show_worked
+        if payload.topic_id and not worked:
+            routing = asyncio.create_task(
+                chat_service.route_question(payload.project_id, payload.topic_id, payload.question, history)
             )
-        route = await routing
+        # The worked-example button is one fixed sentence that says nothing about the problem, so the passages
+        # are found from what the student has written in the conversation.
+        search = payload.question
+        if worked:
+            written = [turn.content for turn in history if turn.role == "user"][-2:]
+            search = " ".join(written) or payload.question
+        try:
+            chunks = await chat_service.retrieve(payload.project_id, search, payload.topic_id)
+        except Exception as exc:
+            if routing is not None:
+                routing.cancel()
+            logger.exception("Retrieval failed for project %s", payload.project_id)
+            return _fail(503, "RETRIEVAL_FAILED", f"Could not search the materials: {exc}", True)
+        if worked:
+            route = chat_service.RouteResult.worked_example()
+        else:
+            if routing is None:
+                routing = chat_service.route_question(
+                    payload.project_id, None, payload.question, history, [str(chunk["id"]) for chunk in chunks]
+                )
+            route = await routing
 
     events = chat_service.stream_answer(
         LLMFactory.get_provider(), chunks, payload.question, history, route=route, tutor=payload.tutor
     )
     return StreamingResponse(
-        _ndjson(events),
+        _ndjson(_billed_stream(payload, events)),
         media_type="application/x-ndjson",
         # No proxy may hold the stream back.
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},

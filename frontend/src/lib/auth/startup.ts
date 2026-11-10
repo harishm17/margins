@@ -1,4 +1,5 @@
 import { googleOAuthSettings } from './google-config'
+import { resolveSpendKeySecret } from '@/lib/account/spend-key'
 import { resolveAuthSecret } from './secret'
 import { isDeployed, type Env } from './site'
 import { testLoginBlocker, testLoginRequested } from './test-login'
@@ -13,6 +14,7 @@ export function checkAuthStartup(env: Env = process.env): void {
   // `next build` only compiles pages; the checks are for the server that will serve them.
   if (env.NEXT_PHASE === 'phase-production-build') return
   resolveAuthSecret(env)
+  resolveSpendKeySecret(env)
 
   if (testLoginRequested(env)) {
     const blocker = testLoginBlocker(env)

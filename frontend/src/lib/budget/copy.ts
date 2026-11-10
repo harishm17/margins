@@ -40,3 +40,18 @@ export function allowanceMessage(now: Date = new Date(), timeZone?: string): str
 export function fillResetTime(message: string, now: Date = new Date(), timeZone?: string): string {
   return message.includes(RESET_TOKEN) ? message.replace(RESET_TOKEN, resetPhrase(now, timeZone)) : message
 }
+
+/**
+ * Why a student cannot use AI right now when it is not simply "today's allowance is used", in plain words. A new account
+ * has a smaller allowance on its first day, and new accounts pause when the whole service is nearly at its daily cap, so
+ * what is left goes to people who have been here longer. Both come back at the reset. Null for the ordinary case.
+ */
+export function refusalNote(refused: 'user' | 'first_day' | 'reserve' | 'global' | null, resets: string): string | null {
+  if (refused === 'first_day') {
+    return `Your first-day allowance is used. New accounts start with a smaller allowance for their first day, and it resets ${resets}.`
+  }
+  if (refused === 'reserve') {
+    return `New accounts are paused for the rest of today. Margins is close to its daily limit and is keeping what is left for people who have been here longer. It resets ${resets}.`
+  }
+  return null
+}

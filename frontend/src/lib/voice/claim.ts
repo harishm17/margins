@@ -5,7 +5,9 @@
  */
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
+import { spendKeyFor } from '@/lib/account/spend-key-store'
 import { dailyVoiceMinutes, isSessionLive, remainingSeconds } from '@/lib/voice/usage'
+import { loadKeptUsage } from '@/lib/voice/usage-query'
 
 export type VoiceClaim =
   | { ok: true; remainingSeconds: number }
@@ -16,6 +18,7 @@ export async function claimVoiceSession(
   now = new Date()
 ): Promise<VoiceClaim> {
   const capMinutes = dailyVoiceMinutes()
+  const spendKey = await spendKeyFor(session.userId)
   return prisma.$transaction(
     async (tx): Promise<VoiceClaim> => {
       const recent = await tx.voiceDrillSession.findMany({
@@ -28,7 +31,8 @@ export async function claimVoiceSession(
       if (recent.some((other) => other.id !== session.id && isSessionLive(other, now))) {
         return { ok: false, reason: 'busy', capMinutes }
       }
-      const remaining = remainingSeconds(recent, capMinutes, now)
+      const kept = await loadKeptUsage(session.userId, spendKey, now, tx)
+      const remaining = remainingSeconds(recent, capMinutes, now, kept)
       if (remaining <= 0) return { ok: false, reason: 'cap', capMinutes }
       await tx.voiceDrillSession.update({
         where: { id: session.id },

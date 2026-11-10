@@ -138,6 +138,7 @@ def install_course(scenarios: Dict[str, Dict[str, Any]]):
     from app.main import app
     from app.services import ai_status
     from app.services import chat as chat_service
+    from app.services.budget import Allowance
 
     def scenario_of(project_id: str) -> Dict[str, Any]:
         return scenarios[project_id[len(PROJECT_PREFIX):]]
@@ -145,8 +146,8 @@ def install_course(scenarios: Dict[str, Dict[str, Any]]):
     async def execute_one(sql, *args):
         return {"id": args[0]}
 
-    async def over_budget(user_id):
-        return None
+    async def allowance(user_id):
+        return Allowance(limit_usd=None, used_usd=0.0, resets_at=datetime.datetime.now(datetime.timezone.utc))
 
     async def retrieve(project_id, question, topic_id):
         return chunks_of(scenario_of(project_id))
@@ -159,7 +160,7 @@ def install_course(scenarios: Dict[str, Dict[str, Any]]):
         return route.model_copy(update={"concept_ids": [f"{project_id}-c{names.index(name)}" for name in route.concepts if name in names]})
 
     chat_route.execute_one = execute_one
-    chat_route.over_budget_message = over_budget
+    chat_route.allowance_today = allowance
     chat_service.retrieve = retrieve
     chat_service.topic_concept_names = concept_names
     chat_service.resolve_concept_ids = resolve

@@ -406,6 +406,8 @@ class Conversation:
         step = steps[self.step_index]
         hints_shown = [hint for i, hint in enumerate(step.get("hints", [])) if i < preview.hints_opened and hint.strip()]
         request: Dict[str, Any] = {
+            "user_id": "eval-user",  # the route bills a student; evals pay through the spend meter instead (_IDS)
+            "project_id": "eval-project",
             "problem": scn["problem"],
             "steps": [
                 {

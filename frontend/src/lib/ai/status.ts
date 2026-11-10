@@ -7,6 +7,14 @@
  * (features/ai/ai-status.tsx), which asks /api/ai-status. Pure: no fetch, no React.
  */
 
+/**
+ * Why the AI service would refuse this student now (ai-service budget.py): "user" (today's allowance is used), "first_day"
+ * (the smaller allowance of an account under a day old), "reserve" (new accounts are paused while the shared cap is nearly
+ * used, to keep the rest for older accounts) or "global" (the shared cap is used).
+ */
+export type AllowanceRefusal = 'user' | 'first_day' | 'reserve' | 'global'
+const REFUSALS: readonly string[] = ['user', 'first_day', 'reserve', 'global']
+
 /** The allowance as the server sees it. `used` and `limit` are dollars and never reach a page. */
 export type AiAllowanceDetails = {
   used: number
@@ -16,6 +24,8 @@ export type AiAllowanceDetails = {
   /** used / limit, 0 to 1, or null without a cap. */
   usedFraction: number | null
   exhausted: boolean
+  /** Why calls are refused now, or null while the student may go on. */
+  refused: AllowanceRefusal | null
 }
 
 export type AiStatusDetails = {
@@ -38,7 +48,7 @@ export type AiStatus = {
   since: string | null
   /** Why AI actions are refused for this student right now: the reason, LLM_DAILY_BUDGET, or null. */
   blocked: string | null
-  allowance: { usedFraction: number | null; exhausted: boolean; resetsAt: string } | null
+  allowance: { usedFraction: number | null; exhausted: boolean; resetsAt: string; refused: AllowanceRefusal | null } | null
 }
 
 export const AVAILABLE: AiStatus = { available: true, reason: null, since: null, blocked: null, allowance: null }
@@ -62,12 +72,15 @@ export function parseStatusResponse(body: unknown, now: Date = new Date()): AiSt
     const used = Math.max(0, num(data.allowance.used) ?? 0)
     const limit = num(data.allowance.limit)
     const capped = limit !== null && limit > 0
+    const refusal = str(data.allowance.refused)
+    const refused = refusal !== null && REFUSALS.includes(refusal) ? (refusal as AllowanceRefusal) : null
     allowance = {
       used,
       limit: capped ? limit : null,
       resetsAt: str(data.allowance.resets_at) ?? resetsAt,
       usedFraction: capped ? Math.min(1, used / limit) : null,
-      exhausted: capped ? used >= limit : false,
+      exhausted: refused !== null || (capped && used >= limit),
+      refused,
     }
   }
   return {
@@ -111,6 +124,7 @@ export function toClientStatus(status: AiStatusDetails): AiStatus {
           usedFraction: status.allowance.usedFraction,
           exhausted: status.allowance.exhausted || status.globalCapHit,
           resetsAt: status.allowance.resetsAt,
+          refused: status.allowance.refused,
         }
       : null,
   }

@@ -406,7 +406,7 @@ async function runVoiceTool(
         return finish({ error: 'Too many answers too quickly. Wait a moment and try again.' })
       }
       try {
-        const graded = (await gradeAnswers([gradable], { '0': userAnswer })).graded_questions[0]
+        const graded = (await gradeAnswers({ userId, projectId: session.projectId }, [gradable], { '0': userAnswer })).graded_questions[0]
         grading = {
           score: graded.points_possible > 0 ? graded.points_earned / graded.points_possible : 0,
           isCorrect: graded.is_correct,

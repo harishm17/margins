@@ -191,7 +191,7 @@ async def db(test_database_url, monkeypatch):
     finally:
         # A test may have closed the pool it was given.
         pool = await connection.get_db_pool()
-        await pool.execute("TRUNCATE users CASCADE")
+        await pool.execute("TRUNCATE users, spend_accounts, deleted_accounts, voice_usage, llm_usage_events CASCADE")
         # The shared AI status is not tied to a user: a test that marked it down must not
         # refuse the next test's calls.
         await pool.execute("DELETE FROM ai_status")

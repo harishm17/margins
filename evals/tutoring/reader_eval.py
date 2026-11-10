@@ -111,6 +111,8 @@ class Margin:
 
     def base(self, take: str) -> Dict[str, Any]:
         return {
+            "user_id": "eval-user",  # the route bills a student; evals pay through the spend meter instead
+            "project_id": "eval-project",
             "passage": self.scenario["passage"],
             "chunk_id": f"{self.scenario['id']}-chunk",
             "claims": [{"text": c["text"], "quote": c["quote"], "page": c["page"]} for c in self.scenario["claims"]],

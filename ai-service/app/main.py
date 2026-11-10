@@ -11,6 +11,7 @@ from app.api.internal_auth import require_internal_token
 from app.api.routes import health
 from app.config import settings
 from app.logging_utils import configure_sensitive_data_redaction
+from app.services.budget import DailyBudgetExceeded
 from app.services.job_runner import retry_after
 from app.services.llm.base import LLMError
 
@@ -20,6 +21,10 @@ logger = logging.getLogger(__name__)
 async def _run_startup_checks() -> None:
     """Initialize services on startup."""
     logger.info("Margins AI service starting in %s mode", settings.ENVIRONMENT)
+    # A model with no price would be billed from a guess: refuse to start (raises, naming the setting).
+    from app.services.llm.models import check_model_prices
+
+    check_model_prices()
     logger.info("LLM Provider: %s", settings.LLM_PROVIDER)
     if not settings.llm_configured:
         logger.warning("ANTHROPIC_API_KEY is not set: generation, grading and validation calls will fail")
@@ -138,6 +143,15 @@ async def llm_error_handler(_: Request, exc: LLMError) -> JSONResponse:
         status_code=503 if exc.retryable else 502,
         content={"detail": str(exc), "error_code": exc.code, "retryable": exc.retryable},
         headers={"Retry-After": str(wait)} if wait else None,
+    )
+
+
+@app.exception_handler(DailyBudgetExceeded)
+async def daily_budget_handler(_: Request, exc: DailyBudgetExceeded) -> JSONResponse:
+    """A model call refused because the allowance is spent (billing scope): the same 429 body every route returns."""
+    return JSONResponse(
+        status_code=429,
+        content={"detail": str(exc), "error_code": exc.code, "retryable": False, "budget_reason": exc.reason},
     )
 
 

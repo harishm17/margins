@@ -9,7 +9,8 @@ const GOOGLE = {
   GOOGLE_OAUTH_CLIENT_ID: '1234567890-abcdefg.apps.googleusercontent.com',
   GOOGLE_OAUTH_CLIENT_SECRET: 'GOCSPX-abcdefghijklmnopqrstuvwx',
 }
-const LIVE = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, NEXTAUTH_URL: 'https://studymargins.com' }
+const SPEND = 'spend-key-secret-for-tests-only'
+const LIVE = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: SPEND, NEXTAUTH_URL: 'https://studymargins.com' }
 
 test('missing, empty and placeholder Google settings count as missing', () => {
   const cases = [
@@ -38,7 +39,7 @@ test('a deployed production server will not start without a real Google client',
 })
 
 test('Railway, or a missing NEXTAUTH_URL, counts as deployed even on a localhost URL', () => {
-  const local = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, NEXTAUTH_URL: 'http://localhost:3000' }
+  const local = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: SPEND, NEXTAUTH_URL: 'http://localhost:3000' }
   assert.equal(isDeployed(local), false)
   assert.equal(isDeployed({ ...local, RAILWAY_ENVIRONMENT_NAME: 'production' }), true)
   assert.equal(isDeployed({ ...local, NEXTAUTH_URL: undefined }), true)
@@ -47,7 +48,7 @@ test('Railway, or a missing NEXTAUTH_URL, counts as deployed even on a localhost
 
 test('a local production build (e2e, the image check, docker compose) and development start without Google', () => {
   for (const url of ['http://localhost:3104', 'http://127.0.0.1:3000', 'http://[::1]:3000']) {
-    assert.doesNotThrow(() => checkAuthStartup({ NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, NEXTAUTH_URL: url }))
+    assert.doesNotThrow(() => checkAuthStartup({ NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, SPEND_KEY_SECRET: SPEND, NEXTAUTH_URL: url }))
   }
   assert.doesNotThrow(() => checkAuthStartup({ NODE_ENV: 'development' }))
 })
@@ -60,4 +61,11 @@ test('next build is never stopped: the checks run when the server starts', () =>
   assert.doesNotThrow(() =>
     checkAuthStartup({ NODE_ENV: 'production', NEXT_PHASE: 'phase-production-build', NEXTAUTH_URL: 'https://studymargins.com', ENABLE_TEST_LOGIN: 'true' })
   )
+})
+
+test('production will not start without SPEND_KEY_SECRET: a changed key resets every daily allowance', () => {
+  const local = { NODE_ENV: 'production', NEXTAUTH_SECRET: SECRET, NEXTAUTH_URL: 'http://localhost:3000' }
+  assert.throws(() => checkAuthStartup(local), /SPEND_KEY_SECRET/)
+  assert.doesNotThrow(() => checkAuthStartup({ ...local, SPEND_KEY_SECRET: SPEND }))
+  assert.doesNotThrow(() => checkAuthStartup({ NODE_ENV: 'development' }))
 })

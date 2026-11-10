@@ -35,7 +35,7 @@ from app.services.llm.base import (
 )
 from app.services.llm.limiter import llm_slot
 from app.services.llm.models import resolve_model
-from app.services.llm.usage import estimate_cost_usd, record_usage
+from app.services.llm.usage import estimate_cost_usd, note_partial_usage, record_usage
 from app.validation_errors import describe_validation_error
 
 logger = logging.getLogger(__name__)
@@ -418,6 +418,7 @@ class AnthropicProvider(LLMProvider):
             params["fallbacks"] = "default"
 
         refs = [excerpt.ref for excerpt in excerpts]
+        partial: Optional[LLMUsage] = None
         text_parts: List[str] = []
         written = 0
         citations: List[AnswerCitation] = []
@@ -438,6 +439,7 @@ class AnthropicProvider(LLMProvider):
         try:
             async with llm_slot(), self.client.beta.messages.stream(**params) as stream:
                 async for event in stream:
+                    partial = _partial_usage(event, partial, model, purpose)
                     kind = getattr(event, "type", None)
                     if kind == "content_block_start":
                         for citation in settle():
@@ -543,9 +545,11 @@ class AnthropicProvider(LLMProvider):
             params["betas"] = [_SERVER_FALLBACK_BETA]
             params["fallbacks"] = "default"
 
+        partial: Optional[LLMUsage] = None
         try:
             async with llm_slot(), self.client.beta.messages.stream(**params) as stream:
                 async for event in stream:
+                    partial = _partial_usage(event, partial, model, purpose)
                     if getattr(event, "type", None) != "content_block_delta":
                         continue
                     delta = event.delta
@@ -600,6 +604,29 @@ class AnthropicProvider(LLMProvider):
         for block in tool_uses:
             yield TurnToolUse(id=block["id"], name=block["name"], input=block["input"] or {})
         yield TurnDone(stop_reason=stop_reason, content=content, usage=usage)
+
+
+def _partial_usage(event: Any, seen: Optional[LLMUsage], model: str, purpose: str) -> Optional[LLMUsage]:
+    """What a stream has said about its usage so far: the input tokens come with its first event (message_start), the
+    output tokens as message_delta events report them. Reported to the billing scope, so a stream that is cut off is
+    billed for what it used (the final figures replace this when the stream completes)."""
+    kind = getattr(event, "type", None)
+    if kind == "message_start":
+        start = event.message
+        seen = LLMUsage(
+            model=getattr(start, "model", None) or model,
+            purpose=purpose,
+            input_tokens=start.usage.input_tokens or 0,
+            output_tokens=start.usage.output_tokens or 0,
+            cache_read_input_tokens=getattr(start.usage, "cache_read_input_tokens", 0) or 0,
+            cache_creation_input_tokens=getattr(start.usage, "cache_creation_input_tokens", 0) or 0,
+        )
+    elif kind == "message_delta" and seen is not None:
+        seen = seen.model_copy(update={"output_tokens": getattr(event.usage, "output_tokens", 0) or seen.output_tokens})
+    else:
+        return seen
+    note_partial_usage(seen)
+    return seen
 
 
 def _to_answer_citation(citation: Any, refs: List[str], offset: int) -> Optional[AnswerCitation]:

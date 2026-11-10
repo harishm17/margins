@@ -55,14 +55,30 @@ export function sessionSeconds(session: SessionTiming, now: Date): number {
   return Math.min(seconds, MAX_SESSION_SECONDS)
 }
 
-/** Seconds used by sessions that connected inside the usage window ending now. */
-export function usedSeconds(sessions: SessionTiming[], now: Date): number {
+/**
+ * What a session used, as the database kept it when the session was last written (voice_usage). It stays when the
+ * session is deleted with its course or its account, which is the point: those minutes are not given back.
+ */
+export type KeptUsage = { sessionId: string; connectedAt: Date; seconds: number }
+
+type IdentifiedSession = SessionTiming & { id?: string }
+
+/**
+ * Seconds used by sessions that connected inside the usage window ending now. A session that still exists is measured
+ * live (an open call counts up to now); the kept usage of sessions that no longer exist is added as stored.
+ */
+export function usedSeconds(sessions: IdentifiedSession[], now: Date, kept: KeptUsage[] = []): number {
   const windowStart = now.getTime() - USAGE_WINDOW_MS
-  return sessions
+  const live = sessions
     .filter((session) => session.connectedAt && session.connectedAt.getTime() >= windowStart)
     .reduce((sum, session) => sum + sessionSeconds(session, now), 0)
+  const present = new Set(sessions.map((session) => session.id))
+  const gone = kept
+    .filter((row) => !present.has(row.sessionId) && row.connectedAt.getTime() >= windowStart)
+    .reduce((sum, row) => sum + Math.min(Math.max(0, row.seconds), MAX_SESSION_SECONDS), 0)
+  return live + gone
 }
 
-export function remainingSeconds(sessions: SessionTiming[], capMinutes: number, now: Date): number {
-  return Math.max(0, Math.round(capMinutes * 60) - usedSeconds(sessions, now))
+export function remainingSeconds(sessions: IdentifiedSession[], capMinutes: number, now: Date, kept: KeptUsage[] = []): number {
+  return Math.max(0, Math.round(capMinutes * 60) - usedSeconds(sessions, now, kept))
 }

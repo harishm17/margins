@@ -17,7 +17,7 @@ test('an unreachable model is reported with its reason, never as a score', () =>
   withFetch(
     async () => json(502, { detail: 'credit balance is too low', error_code: 'LLM_CREDIT_EXHAUSTED', retryable: false }),
     async () => {
-      await assert.rejects(gradeAnswers([{}], { '0': 'x' }), (error: unknown) => {
+      await assert.rejects(gradeAnswers({ userId: 'u1', projectId: 'p1' }, [{}], { '0': 'x' }), (error: unknown) => {
         assert.ok(error instanceof GradingUnavailableError)
         assert.equal(error.code, 'LLM_CREDIT_EXHAUSTED')
         assert.equal(error.message, 'Grading is unavailable right now')

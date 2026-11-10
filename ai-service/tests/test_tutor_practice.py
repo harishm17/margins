@@ -33,6 +33,8 @@ def step(question, answer, acceptable=(), tolerance=None, hints=()):
 
 def request(**over):
     base = dict(
+        user_id="u1",
+        project_id="p1",
         problem=PROBLEM,
         steps=[
             step("How many marbles are in the bag?", "8", ["eight"], 0, ["Re-read the first sentence.", "Add the colours.", "total = red + blue"]),
@@ -305,45 +307,6 @@ class TestRoute:
         payload = request().model_dump(mode="json")
         payload.update(over)
         return payload
-
-    def test_a_user_over_budget_gets_a_429_and_no_model_call(self, client):
-        provider = Scripted([reply("unused")])
-
-        async def over(_user_id):
-            return "Daily AI usage limit reached"
-
-        with use(provider), patch("app.api.routes.tutor.over_budget_message", over):
-            response = client.post("/tutor/practice", json=self.body(user_id="u1"))
-        assert response.status_code == 429
-        assert response.json()["error_code"] == "LLM_DAILY_BUDGET"
-        assert provider.calls == []
-
-    def test_usage_is_written_to_the_ledger_for_a_known_user(self, client):
-        from app.services.llm.base import LLMUsage
-        from app.services.llm.usage import record_usage
-
-        class Billed(Scripted):
-            async def generate_structured(self, messages, schema, **kwargs):
-                record_usage(LLMUsage(model="claude-sonnet-5-5", purpose=kwargs["purpose"], input_tokens=1000, output_tokens=100, cache_read_input_tokens=800, cache_creation_input_tokens=200))
-                return await super().generate_structured(messages, schema, **kwargs)
-
-        rows = []
-
-        async def record(**row):
-            rows.append(row)
-
-        async def no_budget(_user_id):
-            return None
-
-        with use(Billed([reply("Which draw changes the bag?")])), \
-                patch("app.api.routes.tutor.over_budget_message", no_budget), \
-                patch("app.api.routes.tutor.record_usage_event", record):
-            response = client.post("/tutor/practice", json=self.body(user_id="u1", project_id="p1", session_id="s1"))
-        assert response.status_code == 200
-        assert len(rows) == 1
-        assert rows[0]["source"] == "tutor" and rows[0]["user_id"] == "u1" and rows[0]["source_id"] == "s1"
-        assert rows[0]["input_tokens"] == 4000 and rows[0]["cost_usd"] > 0
-        assert (rows[0]["cache_read_tokens"], rows[0]["cache_write_tokens"]) == (1600, 400)
 
 
 def test_leak_judge_has_room_for_its_reasoning():

@@ -240,10 +240,12 @@ class TestLargeOutline:
 
 @pytest.fixture
 def mock_llm(monkeypatch):
+    # The mock without the billing wrapper: these tests call the services outside a job, so there is no scope to bill.
+    from app.services.llm.mock_provider import MockProvider
+
     monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")
-    LLMFactory.reset()
+    monkeypatch.setattr(LLMFactory, "_instance", MockProvider())
     yield
-    LLMFactory.reset()
 
 
 async def add_file(db, project_id: str, filename: str, sections: List[tuple], role: str = "content",

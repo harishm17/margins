@@ -179,7 +179,7 @@ export async function POST(
   } else {
     let response: Response
     try {
-      response = await requestChatAnswer({ projectId, userId, question, history, topicId, tutor: plan.tutor })
+      response = await requestChatAnswer({ projectId, userId, threadId: thread?.id, question, history, topicId, tutor: plan.tutor })
     } catch (error) {
       console.error('[CHAT] The AI service is not reachable:', error)
       return chatFailure('CHAT_UNAVAILABLE')
@@ -224,7 +224,6 @@ export async function POST(
   }
   const storage = createChatStorage(prisma, {
     userId,
-    projectId,
     threadId: activeThread.id,
     userMessageId,
     isNewThread,
