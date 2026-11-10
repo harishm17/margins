@@ -170,29 +170,37 @@ class _CapturePrompt:
 
     def __init__(self):
         self.messages: List[Any] = []
+        self.schemas: List[Any] = []
 
     async def generate_structured(self, messages, schema, *, purpose, max_tokens=16000):
         self.messages.append(messages)
+        self.schemas.append(schema)
         return schema(points_earned=0, feedback="")
 
 
-async def estimate_usd(dataset: List[Dict[str, Any]], model: str) -> float:
-    """Batch-price estimate for grading every answer once on `model`, from the prompts the app's grader builds."""
+async def capture_requests(dataset: List[Dict[str, Any]]) -> "_CapturePrompt":
+    """Every request the app's grader builds for the dataset (messages and the schema it picked), nothing sent."""
     _app()
-    import adapters
-    from app.services.llm.schemas import ShortAnswerGrade
-    from spend import DEFAULT_OUTPUT_TOKENS, estimate_prompt_tokens
-
     capture = _CapturePrompt()
     grader = make_grader(capture)
     for entry in dataset:
         for answer in entry["answers"]:
             await grader._grade_short_answer(entry["question"], answer["text"])
-    schema = ShortAnswerGrade.model_json_schema()
+    return capture
+
+
+async def estimate_usd(dataset: List[Dict[str, Any]], model: str, capture: Optional["_CapturePrompt"] = None) -> float:
+    """Batch-price estimate for grading every answer once on `model`, from the prompts and schema the app's grader
+    builds (v1 or v2, as PROMPTS_V2 says)."""
+    _app()
+    import adapters
+    from spend import DEFAULT_OUTPUT_TOKENS, estimate_prompt_tokens
+
+    capture = capture or await capture_requests(dataset)
     output = DEFAULT_OUTPUT_TOKENS["grade_short_answer"]
     total = 0.0
-    for messages in capture.messages:
-        tokens = estimate_prompt_tokens([m.content for m in messages], schema)
+    for messages, schema in zip(capture.messages, capture.schemas):
+        tokens = estimate_prompt_tokens([m.content for m in messages], schema.model_json_schema())
         total += adapters.estimate_cost(model, tokens, output, 0) or 0.0
     return total * BATCH_PRICE
 
@@ -403,9 +411,15 @@ async def run(args: argparse.Namespace) -> int:
         for arm, spec in specs.items()
     }
     price = 1.0 if args.mock else BATCH_PRICE
-    estimates = {arm: await estimate_usd(dataset, models[arm]["model"]) for arm in args.arm_list}
+    capture = await capture_requests(dataset)
+    estimates = {arm: await estimate_usd(dataset, models[arm]["model"], capture) for arm in args.arm_list}
+    from common.revision import prompt_revision, request_summary
+
+    revision = prompt_revision("grading")
+    request = request_summary(capture.messages[0], capture.schemas[0]) if capture.messages else {}
 
     log("Plan")
+    log(f"  prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> grading {revision['areas']['grading']}; first request: {request}")
     log(f"  {counts['answers']} answers to {counts['questions']} questions; by category {counts['by_category']}")
     for arm in args.arm_list:
         log(f"  {arm:<7} {models[arm]['model']} at {models[arm]['effort']} effort: about ${estimates[arm]:.3f} on the Batch API")
@@ -458,6 +472,7 @@ async def run(args: argparse.Namespace) -> int:
         "commit": git("rev-parse", "--short", "HEAD"),
         "dirty": bool(git("status", "--porcelain", "--", "evals", "ai-service/app")),
         "arms": models,
+        "prompts": {**revision, "request": request},
         "estimate_usd": {arm: round(v, 4) for arm, v in estimates.items()},
         "cost_usd": summary["cost"],
         "total_cost_usd": round(sum(summary["cost"].values()), 6),

@@ -132,3 +132,13 @@ def test_pick_model_switches_to_sonnet_only_for_a_clear_gain(scores, pick):
     assert run_a5.pick_model(_summary(*scores))[0] == pick
 
 
+@pytest.mark.parametrize("flag, schema, grader_prompt", [("", "ShortAnswerGrade", "v1"), ("grading", "ShortAnswerGradeV2", "v2")])
+def test_the_captured_request_follows_the_grading_flag(monkeypatch, flag, schema, grader_prompt):
+    from app.config import settings
+    from app.services.exam_grader import GRADER_SYSTEM_PROMPT, GRADER_SYSTEM_PROMPT_V2
+
+    monkeypatch.setattr(settings, "PROMPTS_V2", flag)
+    dataset = [{"qid": "q01", "question": QUESTION, "answers": [{"n": 0, "text": "Metal moves heat."}]}]
+    capture = asyncio.run(run_a5.capture_requests(dataset))
+    assert capture.schemas[0].__name__ == schema
+    assert capture.messages[0][0].content == (GRADER_SYSTEM_PROMPT_V2 if grader_prompt == "v2" else GRADER_SYSTEM_PROMPT)
