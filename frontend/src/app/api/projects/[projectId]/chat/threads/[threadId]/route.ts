@@ -1,6 +1,5 @@
+import { readSession } from '@/lib/auth/get-session'
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { ownedThread as owned } from '@/server/owned'
 import { apiNotFound, apiUnauthorized } from '@/lib/api/errors'
@@ -11,7 +10,7 @@ import { getTutorState } from '@/lib/tutor/store'
 export const dynamic = 'force-dynamic'
 
 async function ownedThread(projectId: string, threadId: string) {
-  const session = await getServerSession(authOptions)
+  const session = await readSession()
   const userId = session?.user?.id
   if (!userId) return { userId: null, thread: null }
   return { userId, thread: await owned(userId, threadId, projectId) }

@@ -1,6 +1,5 @@
+import { readSession } from '@/lib/auth/get-session'
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { dailyMinutesSchema, examDateColumn, examDateSchema } from '@/lib/learning/plan-settings';
@@ -15,7 +14,7 @@ const createProjectSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await readSession();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

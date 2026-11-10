@@ -1,7 +1,6 @@
+import { readSession } from '@/lib/auth/get-session'
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { deleteQueuedFilesNow, queueFileDeletions } from '@/lib/storage/pending-deletions';
@@ -31,7 +30,7 @@ export async function PATCH(
   { params }: { params: Promise<{ materialId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await readSession();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -89,7 +88,7 @@ export async function DELETE(
   { params }: { params: Promise<{ materialId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await readSession();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

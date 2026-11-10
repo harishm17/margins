@@ -1,8 +1,7 @@
+import { readSession } from '@/lib/auth/get-session'
 import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth/auth-config'
 import { holdsInternalToken, publicHealthBody } from '@/lib/ops/health'
 
 export const runtime = 'nodejs'
@@ -13,7 +12,7 @@ export const dynamic = 'force-dynamic'
 async function mayReadDetail(request: Request): Promise<boolean> {
   if (holdsInternalToken(request.headers)) return true
   try {
-    return Boolean((await getServerSession(authOptions))?.user)
+    return Boolean((await readSession())?.user)
   } catch {
     return false
   }

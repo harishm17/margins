@@ -1,7 +1,6 @@
+import { readSession } from '@/lib/auth/get-session'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { ownedProject as owned } from '@/server/owned'
 import { apiInvalidInput, apiNotFound, apiUnauthorized } from '@/lib/api/errors'
@@ -12,7 +11,7 @@ export const dynamic = 'force-dynamic'
 const MAX_THREADS = 100
 
 async function ownedProject(projectId: string) {
-  const session = await getServerSession(authOptions)
+  const session = await readSession()
   const userId = session?.user?.id
   if (!userId) return { userId: null, project: null }
   return { userId, project: await owned(userId, projectId) }

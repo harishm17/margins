@@ -3,7 +3,12 @@ import { resolveTimeZone, TIME_ZONE_COOKIE } from '@/lib/learning/time-zone'
 
 /** The student's time zone from the cookie the browser sets, or UTC before it has. */
 export async function getTimeZone(): Promise<string> {
-  return resolveTimeZone((await cookies()).get(TIME_ZONE_COOKIE)?.value)
+  // Outside a request (a script, a test) there are no cookies: that is the same as the browser not having told us.
+  try {
+    return resolveTimeZone((await cookies()).get(TIME_ZONE_COOKIE)?.value)
+  } catch {
+    return resolveTimeZone(undefined)
+  }
 }
 
 /**
