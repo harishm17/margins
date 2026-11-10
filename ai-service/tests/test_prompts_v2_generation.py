@@ -164,7 +164,7 @@ async def test_v2_exam_request_follows_the_audit(v2):
     style = exam_style.style_guidance({"question_count": 3, "multi_part": False})
     with stub_topic_context(CHUNKS), patch("app.services.llm.factory.LLMFactory.get_provider", return_value=llm):
         generator = ExamGenerator()
-        questions, _ = await generator._generate_topic_questions(
+        questions, _, _ = await generator._generate_topic_questions(
             {"id": "t1", "name": "Stats", "description": "d"}, {"multiple_choice": 1}, "hard", style
         )
     messages, schema = _sent(llm)
