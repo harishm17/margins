@@ -6,6 +6,7 @@
  * here and only here, and only once the submission is submitted and graded.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -47,7 +48,7 @@ export async function GET(
     const gradingJob = await prisma.processingJob.findFirst({
       where: { userId: session.user.id, jobType: 'grade_exam', targetKey: gradeExamTarget(submission.id) },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true, errorCode: true, errorMessage: true },
+      select: { id: true, status: true, errorCode: true },
     })
     const jobRunning = gradingJob?.status === 'pending' || gradingJob?.status === 'processing'
 
@@ -111,7 +112,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Error loading exam results:', error)
+    logServerError('Error loading exam results', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Internal server error')
   }

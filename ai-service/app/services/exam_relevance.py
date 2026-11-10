@@ -27,7 +27,7 @@ import logging
 import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
-from app.db.connection import execute_in_transaction, execute_one, execute_query
+from app.db.connection import execute_in_transaction, execute_query
 from app.services.exam_style import copying_stems
 from app.services.llm import LLMFactory
 from app.services.llm.base import LLMMessage

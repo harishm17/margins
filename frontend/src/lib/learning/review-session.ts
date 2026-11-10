@@ -14,6 +14,7 @@
  * nothing here moves on by itself.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { gradeAnswers } from '@/lib/ai-service/grading'
@@ -634,7 +635,7 @@ async function advance(userId: string, sessionId: string, timeZone: string, now:
       if (written) return
     }
     // Not an error for the student (the next read does the work again) but worth knowing about.
-    console.warn(`Review session ${sessionId} changed under every attempt to advance it; the next read tries again.`)
+    logServerError('A review session changed under every attempt to advance it; the next read tries again', undefined, { sessionId })
   } finally {
     await sendJobs(toSend)
   }
@@ -698,7 +699,7 @@ async function missHelp(row: { userId: string; kind: string }, items: SessionIte
     }
     return merged
   } catch (error) {
-    console.error('Help after a missed review item failed:', error)
+    logServerError('Help after a missed review item failed', error)
     return null
   }
 }
@@ -833,7 +834,7 @@ export async function answerItem(input: {
   const points = typeof item.question.points === 'number' && item.question.points > 0 ? item.question.points : 1
   const result = given.idk
     ? { question_index: 0, question_type: String(item.question.question_type ?? ''), points_possible: points, points_earned: 0, is_correct: false, feedback: '', needs_review: false }
-    : (await gradeAnswers([item.question], answersForGrader({ '0': given }))).graded_questions[0]
+    : (await gradeAnswers({ userId: input.userId, projectId: row.projectId }, [item.question], answersForGrader({ '0': given }))).graded_questions[0]
   if (!result) return { status: 'invalid', message: 'This question could not be graded.' }
 
   const source: 'review' | 'drill' = row.kind === 'drill' ? 'drill' : 'review'

@@ -10,7 +10,8 @@ import json
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
-from app.api.routes.grading import GradeQuizRequest
+from app.api.routes.grading import GradeQuizBody
+from app.errors import describe_exception, public_message
 from app.models.jobs import (
     ConceptExtractionInput,
     ConceptLinkingInput,
@@ -22,7 +23,13 @@ from app.models.jobs import (
     ReviewItemsInput,
 )
 from app.services.document_processor.validator import material_role, validate_material
-from app.services.document_processor.chunker import chunk_document, NoContentError
+from app.services.document_processor.chunker import chunk_pages, NoContentError
+from app.services.document_processor.parse_types import (
+    ParseRefused,
+    UnreadableDocumentError,
+    refusal_note,
+)
+from app.services.document_processor.sandbox import parse_document
 from app.services.document_processor.storage import local_copy
 from app.services.embeddings.generator import embedding_text, generate_embeddings
 from app.services.course_planner import NoPlannableMaterialError, StalePlanError, plan_course, write_plan
@@ -58,11 +65,9 @@ from app.services.generation_chain import (
 )
 from app.services.job_reaper import reap_expired_jobs
 from app.services.llm.base import LLMRefusalError
-from app.services.llm.limiter import topic_lock
+from app.services.locks import topic_lock
 from app.services import ai_status
-from app.services.budget import over_budget_message
 from app.services.job_runner import (
-    DailyBudgetExceeded,
     JobContext,
     JobOutcome,
     PermanentJobError,
@@ -161,7 +166,7 @@ async def validate_material_job(payload: JobPayload, job: JobContext) -> JobOutc
                     await enqueue_chunking_job(chunk_job_id, input_data.materialId)
                 except Exception as exc:
                     logger.error("Could not dispatch chunking job %s: %s", chunk_job_id, exc)
-                    await mark_undelivered(chunk_job_id, str(exc))
+                    await mark_undelivered(chunk_job_id, describe_exception(exc))
         else:
             logger.info("Chunking job %s already active for %s", chunk_job_id, input_data.materialId)
 
@@ -227,18 +232,38 @@ async def _start_topic_extraction(project_id: str, user_id: str) -> None:
             SET status = 'failed',
                 error_code = 'LLM_NOT_CONFIGURED',
                 retryable = FALSE,
-                error_message = 'ANTHROPIC_API_KEY is not configured',
+                error_message = $2,
                 completed_at = {UTC_NOW}
             WHERE id = $1
             """,
             topic_job_id,
+            public_message("LLM_NOT_CONFIGURED"),
         )
         return
     try:
         await enqueue_topic_extraction_job(topic_job_id, project_id)
     except Exception as exc:
         logger.error("Could not dispatch topic extraction %s: %s", topic_job_id, exc)
-        await mark_undelivered(topic_job_id, str(exc))
+        await mark_undelivered(topic_job_id, describe_exception(exc))
+
+
+# Chunks are embedded and inserted in batches, so one big file never holds everything in one call.
+EMBED_BATCH_SIZE = 64
+INSERT_BATCH_SIZE = 500
+
+
+async def _mark_material_invalid(material_id: str, note: str) -> None:
+    await execute_update(
+        f"""
+        UPDATE materials
+        SET validation_status = 'invalid',
+            validation_notes = $1,
+            validated_at = {UTC_NOW}
+        WHERE id = $2
+        """,
+        note,
+        material_id,
+    )
 
 
 @router.post("/jobs/chunk-material")
@@ -265,7 +290,7 @@ async def chunk_material_job(payload: JobPayload, job: JobContext) -> JobOutcome
 
     # For development without processing enabled, skip actual PDF processing
     if settings.is_development and not settings.ENABLE_PROCESSING:
-        logger.info(f"[DEV] Simulating chunking for {material['filename']}")
+        logger.info("[DEV] Simulating chunking for material %s", material["id"])
         return JobOutcome(
             result={"chunks_created": 0, "note": "Development mode"},
             response={"dev_mode": True},
@@ -275,35 +300,37 @@ async def chunk_material_job(payload: JobPayload, job: JobContext) -> JobOutcome
         # The source file is a local copy for the length of the job; downloaded copies are
         # deleted when the block exits.
         async with local_copy(material["gcs_path"]) as local_path:
-            # Parsing is blocking, so it runs in a worker thread.
-            chunks = await asyncio.to_thread(chunk_document, local_path, material["filename"])
-            logger.info(f"Created {len(chunks)} chunks from {material['filename']}")
+            # The file is read in a limited child process (see sandbox.py).
+            extracted = await parse_document(local_path, material["filename"], markdown=True)
+        chunks = await asyncio.to_thread(chunk_pages, extracted.pages)
+        if len(chunks) > settings.PARSE_MAX_CHUNKS:
+            raise ParseRefused("too_many_chunks")
+        logger.info("Created %d chunks from material %s", len(chunks), material["id"])
 
-            await job.set_stage("embedding", 40)
-            # An embedding failure fails the job (and it is retried): chunks stored without
-            # vectors would be invisible to semantic search while the job claimed success.
-            # The heading path is embedded with the text; the stored chunk_text is unchanged.
-            embeddings = await generate_embeddings(
-                [embedding_text(chunk.section_hierarchy, chunk.chunk_text) for chunk in chunks]
+        await job.set_stage("embedding", 40)
+        # An embedding failure fails the job (and it is retried): chunks stored without
+        # vectors would be invisible to semantic search while the job claimed success.
+        # The heading path is embedded with the text; the stored chunk_text is unchanged.
+        texts = [embedding_text(chunk.section_hierarchy, chunk.chunk_text) for chunk in chunks]
+        embeddings: list = []
+        for start in range(0, len(texts), EMBED_BATCH_SIZE):
+            embeddings.extend(await generate_embeddings(texts[start : start + EMBED_BATCH_SIZE]))
+        if len(embeddings) != len(chunks):
+            raise RuntimeError(
+                f"Embedding returned {len(embeddings)} vectors for {len(chunks)} chunks"
             )
-            if len(embeddings) != len(chunks):
-                raise RuntimeError(
-                    f"Embedding returned {len(embeddings)} vectors for {len(chunks)} chunks"
-                )
-            logger.info(f"Generated {len(embeddings)} embeddings")
+        logger.info("Generated %d embeddings", len(embeddings))
+    except (ParseRefused, UnreadableDocumentError) as exc:
+        # A refused or unreadable file is a content problem: retrying cannot help, and the
+        # student sees a fixed note, never the parser's words.
+        note = refusal_note(exc)
+        await _mark_material_invalid(input_data.materialId, note)
+        raise PermanentJobError(note, "MATERIAL_UNREADABLE") from exc
     except NoContentError:
         # A file with no text to chunk is a content problem: retrying cannot help, and the
         # material must not stay "valid" with zero chunks.
-        await execute_update(
-            f"""
-            UPDATE materials
-            SET validation_status = 'invalid',
-                validation_notes = $1,
-                validated_at = {UTC_NOW}
-            WHERE id = $2
-            """,
-            "No readable text could be extracted from this file.",
-            input_data.materialId,
+        await _mark_material_invalid(
+            input_data.materialId, "No readable text could be extracted from this file."
         )
         raise
 
@@ -329,19 +356,20 @@ async def chunk_material_job(payload: JobPayload, job: JobContext) -> JobOutcome
             "DELETE FROM material_chunks WHERE material_id = $1",
             input_data.materialId,
         )
-        await conn.executemany(
-            f"""
-            INSERT INTO material_chunks
-            (id, material_id, chunk_text, chunk_embedding, section_hierarchy,
-             page_start, page_end, chunk_index, token_count, created_at)
-            VALUES (gen_random_uuid()::text, $1, $2, $3::vector, $4, $5, $6, $7, $8, {UTC_NOW})
-            """,
-            records,
-        )
+        for start in range(0, len(records), INSERT_BATCH_SIZE):
+            await conn.executemany(
+                f"""
+                INSERT INTO material_chunks
+                (id, material_id, chunk_text, chunk_embedding, section_hierarchy,
+                 page_start, page_end, chunk_index, token_count, created_at)
+                VALUES (gen_random_uuid()::text, $1, $2, $3::vector, $4, $5, $6, $7, $8, {UTC_NOW})
+                """,
+                records[start : start + INSERT_BATCH_SIZE],
+            )
         return len(records)
 
     chunks_created = await execute_in_transaction(replace_chunks_transaction)
-    logger.info(f"Stored {chunks_created} chunks in database")
+    logger.info("Stored %d chunks in database", chunks_created)
 
     # Topic extraction stays off unless AUTO_EXTRACT_TOPICS_ON_CHUNK is set, to avoid
     # surprise topic churn while a student is still uploading files.
@@ -381,7 +409,7 @@ async def _start_exam_jobs(material_id: str, project_id: Optional[str], user_id:
             await enqueue_exam_profile_job(job_id, material_id)
         except Exception as exc:
             logger.error("Could not dispatch exam profile job %s: %s", job_id, exc)
-            await mark_undelivered(job_id, str(exc))
+            await mark_undelivered(job_id, describe_exception(exc))
 
 
 async def start_exam_relevance_job(project_id: str, user_id: str) -> None:
@@ -399,7 +427,7 @@ async def start_exam_relevance_job(project_id: str, user_id: str) -> None:
             await enqueue_exam_relevance_job(job_id, project_id)
         except Exception as exc:
             logger.error("Could not dispatch exam relevance job %s: %s", job_id, exc)
-            await mark_undelivered(job_id, str(exc))
+            await mark_undelivered(job_id, describe_exception(exc))
 
 
 @router.post("/jobs/profile-exam")
@@ -427,23 +455,20 @@ async def profile_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
 )
 async def exam_relevance_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     """Mark the topics of a project that its past exams test (one model call, only when there are
-    past exams and something changed). The daily budget is checked just before that call, so
+    past exams and something changed). The daily budget is checked by the billing scope on that call, so
     clearing the flags after the last past exam is removed works even over budget."""
     project_id = payload.data.get("projectId")
     if not project_id:
         raise PermanentJobError("projectId required", "INVALID_INPUT")
 
-    async def within_budget() -> None:
+    async def ready() -> None:
         if not settings.llm_configured:
             raise PermanentJobError("No model is configured", "LLM_NOT_CONFIGURED")
         unavailable = (await ai_status.get_status()).as_error()
         if unavailable is not None:
             raise unavailable
-        message = await over_budget_message(job.user_id)
-        if message:
-            raise DailyBudgetExceeded(message)
 
-    return JobOutcome(result=await mark_exam_relevant_topics(project_id, before_model=within_budget))
+    return JobOutcome(result=await mark_exam_relevant_topics(project_id, before_model=ready))
 
 
 @router.post("/jobs/extract-topics")
@@ -552,8 +577,8 @@ RETURNING id,
 async def generate_content_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     """Generate content for a topic (concepts, warm-up, notes, examples, or quiz).
 
-    Jobs for the same topic run one at a time: a job waits here, holding its claim and lease,
-    until the topic's earlier jobs have finished and stored their content.
+    Takes the topic lock shared: generation jobs for a topic may overlap (each stores its own content type),
+    but none runs while concept extraction holds the lock exclusive.
     """
     input_data = parse_input(ContentGenerationInput, payload.data)
 
@@ -569,7 +594,9 @@ async def generate_content_job(payload: JobPayload, job: JobContext) -> JobOutco
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
 
-    async with topic_lock(topic["id"]):
+    # Exclusive until PR 7's PARALLEL_TOPIC_JOBS: a topic's content jobs (one per content type) run one at a time,
+    # as they did under the old per-process lock, so the quiz never starts before the notes it builds on.
+    async with topic_lock(f"topic:{topic['id']}", exclusive=True):
         try:
             return await _generate_and_store_content(job, input_data, topic)
         except Exception as exc:
@@ -646,6 +673,79 @@ async def _usable_prerequisite_id(topic, preferences: dict) -> str | None:
         logger.info("Ignoring prerequisite %s for topic %s: not in the same project", prerequisite_id, topic["id"])
         return None
     return prerequisite_id
+
+
+async def _save_generated_content(job: JobContext, topic, content_type: str, generated_content, metadata, append: bool):
+    """Store what was generated and return the `topic_content` row (id, item_count).
+
+    A quiz is stored in one transaction under a transaction-level advisory lock on the topic: the copy of a
+    pre-existing single quiz into a set, the new set, and the content upsert all happen or none do, and two quiz
+    jobs for one topic cannot count the sets at the same time. The new set carries the job attempt that wrote it
+    (`source_job_id`), so a retry after a crash finds it and does not add a second one. `metadata` gets the set's
+    id before the upsert, so the stored content points at it.
+    """
+    if content_type != "topic_quiz":
+        return await execute_one(
+            _SAVE_CONTENT_SQL,
+            topic['id'],
+            content_type,
+            json.dumps(generated_content),
+            json.dumps(metadata) if metadata is not None else None,
+            append,
+        )
+
+    source_job_id = f"{job.id}:{job.attempt}"
+
+    async def store_quiz(conn):
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", f"quiz-write:{topic['id']}")
+        written = await conn.fetchrow("SELECT id FROM topic_quizzes WHERE source_job_id = $1", source_job_id)
+        if written is None:
+            # Preserve any pre-existing single quiz payload before appending the new set.
+            # This keeps the original quiz visible as Set 1 instead of appearing replaced.
+            existing_sets = await conn.fetchval(
+                "SELECT COUNT(*)::int FROM topic_quizzes WHERE topic_id = $1 AND kind IN ('standard', 'retry')",
+                topic['id'],
+            )
+            if not existing_sets:
+                legacy = await conn.fetchrow(
+                    "SELECT content_data, created_at, updated_at FROM topic_content "
+                    "WHERE topic_id = $1 AND content_type = 'topic_quiz'",
+                    topic['id'],
+                )
+                legacy_questions = _json_value(legacy["content_data"]) if legacy else None
+                if isinstance(legacy_questions, list) and legacy_questions:
+                    await conn.execute(
+                        f"""
+                        INSERT INTO topic_quizzes (id, topic_id, questions, created_at)
+                        VALUES (gen_random_uuid()::text, $1, $2, COALESCE($3, $4, {UTC_NOW}))
+                        """,
+                        topic['id'],
+                        json.dumps(legacy_questions),
+                        legacy["updated_at"],
+                        legacy["created_at"],
+                    )
+            written = await conn.fetchrow(
+                f"""
+                INSERT INTO topic_quizzes (id, topic_id, questions, source_job_id, created_at)
+                VALUES (gen_random_uuid()::text, $1, $2, $3, {UTC_NOW})
+                RETURNING id
+                """,
+                topic['id'],
+                json.dumps(generated_content),
+                source_job_id,
+            )
+        if isinstance(metadata, dict):
+            metadata["quiz_set_id"] = written["id"]
+        return await conn.fetchrow(
+            _SAVE_CONTENT_SQL,
+            topic['id'],
+            content_type,
+            json.dumps(generated_content),
+            json.dumps(metadata) if metadata is not None else None,
+            append,
+        )
+
+    return await execute_in_transaction(store_quiz)
 
 
 async def _generate_and_store_content(job: JobContext, input_data: ContentGenerationInput, topic) -> JobOutcome:
@@ -763,72 +863,12 @@ async def _generate_and_store_content(job: JobContext, input_data: ContentGenera
 
     await job.set_stage("saving", 80)
 
-    quiz_set_id = None
-    if content_type == "topic_quiz":
-        # Preserve any pre-existing single quiz payload before appending the new set.
-        # This keeps the original quiz visible as Set 1 instead of appearing replaced.
-        existing_quiz_set_count_row = await execute_one(
-            """
-            SELECT COUNT(*)::int AS count
-            FROM topic_quizzes
-            WHERE topic_id = $1 AND kind IN ('standard', 'retry')
-            """,
-            topic['id'],
-        )
-        existing_quiz_set_count = int(existing_quiz_set_count_row.get("count", 0)) if existing_quiz_set_count_row else 0
-
-        if existing_quiz_set_count == 0:
-            legacy_quiz_row = await execute_one(
-                """
-                SELECT content_data, created_at, updated_at
-                FROM topic_content
-                WHERE topic_id = $1 AND content_type = 'topic_quiz'
-                """,
-                topic['id'],
-            )
-            if legacy_quiz_row:
-                legacy_questions = _json_value(legacy_quiz_row.get("content_data"))
-                if isinstance(legacy_questions, list) and legacy_questions:
-                    await execute_update(
-                        f"""
-                        INSERT INTO topic_quizzes
-                        (id, topic_id, questions, created_at)
-                        VALUES (gen_random_uuid()::text, $1, $2, COALESCE($3, $4, {UTC_NOW}))
-                        """,
-                        topic['id'],
-                        json.dumps(legacy_questions),
-                        legacy_quiz_row.get("updated_at"),
-                        legacy_quiz_row.get("created_at"),
-                    )
-
-        quiz_set_record = await execute_one(
-            f"""
-            INSERT INTO topic_quizzes
-            (id, topic_id, questions, created_at)
-            VALUES (gen_random_uuid()::text, $1, $2, {UTC_NOW})
-            RETURNING id
-            """,
-            topic['id'],
-            json.dumps(generated_content),
-        )
-        if quiz_set_record:
-            quiz_set_id = quiz_set_record.get("id")
-            if isinstance(metadata, dict):
-                metadata["quiz_set_id"] = quiz_set_id
-
     # Regeneration replaces the stored content; appending (examples only) adds to it.
-    content_record = await execute_one(
-        _SAVE_CONTENT_SQL,
-        topic['id'],
-        content_type,
-        json.dumps(generated_content),
-        json.dumps(metadata) if metadata is not None else None,
-        append,
-    )
+    content_record = await _save_generated_content(job, topic, content_type, generated_content, metadata, append)
     if append and isinstance(metadata, dict) and content_record["item_count"] is not None:
         metadata["count"] = content_record["item_count"]
 
-    logger.info(f"Completed content generation: {content_type} for topic {topic['id']}")
+    logger.info("Completed content generation: %s for topic %s", content_type, topic["id"])
 
     # See app/services/generation_chain.py: the topic's next missing type (and, for a whole-course
     # run, the next topic) gets its job row now, before this one is marked completed, and is
@@ -863,7 +903,7 @@ async def _generate_support_content(job: JobContext, input_data: ContentGenerati
     else:
         warmup = await generate_warmup(topic["id"])
         result = {key: warmup[key] for key in ("warmup_id", "total_questions", "dropped_unsupported")}
-    logger.info("Completed %s for topic %s: %s", content_type, topic["id"], result)
+    logger.info("Completed %s for topic %s", content_type, topic["id"])
 
     next_job = await plan_next_job(
         user_id=job.user_id,
@@ -894,14 +934,14 @@ async def _generate_support_content(job: JobContext, input_data: ContentGenerati
 )
 async def extract_concepts_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     """Extract the concept graph of one topic: concepts, claims, edges, focus questions and
-    recall prompts. Jobs for the same topic run one at a time, like content generation."""
+    recall prompts. It holds the topic lock exclusive: no other job for the topic runs meanwhile."""
     input_data = parse_input(ConceptExtractionInput, payload.data)
 
     topic = await execute_one("SELECT id FROM topics WHERE id = $1", input_data.topicId)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
 
-    async with topic_lock(topic["id"]):
+    async with topic_lock(f"topic:{topic['id']}", exclusive=True):
         summary = await extract_concepts(topic["id"])
     logger.info("Extracted concepts for topic %s: %s", topic["id"], summary.as_result())
     return JobOutcome(result=summary.as_result())
@@ -923,7 +963,7 @@ async def link_concepts_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     if not unit:
         raise HTTPException(status_code=404, detail="Unit not found")
 
-    async with topic_lock(f"unit:{unit['id']}"):
+    async with topic_lock(f"unit:{unit['id']}", exclusive=True):
         written = await link_unit(unit["id"])
     logger.info("Linked concepts for unit %s: %d edges", unit["id"], written)
 
@@ -948,14 +988,16 @@ async def link_concepts_job(payload: JobPayload, job: JobContext) -> JobOutcome:
 )
 async def generate_review_items_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     """New items for the concepts of one topic that a review session lacks, appended to the topic's
-    review bank. One job per topic; jobs for the same topic run one at a time, like content generation."""
+    review bank. One job per topic; it holds the topic lock shared."""
     input_data = parse_input(ReviewItemsInput, payload.data)
 
     topic = await execute_one("SELECT id FROM topics WHERE id = $1", input_data.topicId)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
 
-    async with topic_lock(topic["id"]):
+    # Exclusive until PR 7's PARALLEL_TOPIC_JOBS: a topic's content jobs (one per content type) run one at a time,
+    # as they did under the old per-process lock, so the quiz never starts before the notes it builds on.
+    async with topic_lock(f"topic:{topic['id']}", exclusive=True):
         result = await generate_review_items(
             topic["id"],
             [
@@ -977,7 +1019,7 @@ async def generate_review_items_job(payload: JobPayload, job: JobContext) -> Job
 )
 async def gap_explainer_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     """Explain what one recall attempt missed, from the student's pages, and store it on the attempt.
-    Jobs for the same topic run one at a time, like content generation."""
+    Jobs for the same attempt run one at a time."""
     input_data = parse_input(GapExplainerInput, payload.data)
 
     attempt = await execute_one(
@@ -986,7 +1028,7 @@ async def gap_explainer_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     if not attempt:
         raise PermanentJobError("Recall attempt not found", "ATTEMPT_NOT_FOUND")
 
-    async with topic_lock(attempt["topic_id"]):
+    async with topic_lock(f"attempt:{input_data.attemptId}", exclusive=True):
         stored = await generate_gap_explainer(input_data.attemptId, job.user_id)
     logger.info("Gap explainer for attempt %s: %s gaps", input_data.attemptId, len(stored["gaps"]))
     return JobOutcome(result={"gaps": len(stored["gaps"]), "skipped": len(stored["skipped"])}, response={"gaps": len(stored["gaps"])})
@@ -1027,7 +1069,7 @@ async def generate_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
         result['topics_covered'],
     )
 
-    logger.info(f"Completed exam generation: {result['total_questions']} questions")
+    logger.info("Completed exam generation: %d questions", result["total_questions"])
     return JobOutcome(
         result={
             "exam_id": exam_record['id'],
@@ -1163,7 +1205,7 @@ async def grade_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
 
     await execute_in_transaction(store_grading)
 
-    logger.info(f"Completed exam grading: {grading_result['overall_score']}%")
+    logger.info("Completed exam grading")
     return JobOutcome(
         result={
             "submission_id": submission_id,
@@ -1211,7 +1253,7 @@ async def grade_quiz_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     # The stored snapshot goes through the same model the immediate path (POST /grade/quiz) uses, so
     # a malformed question or answer is refused or normalised the same way in both.
     try:
-        request = GradeQuizRequest.model_validate({
+        request = GradeQuizBody.model_validate({
             "questions": _json_value(submission["questions"]),
             "answers": _json_value(submission["answers"]),
         })

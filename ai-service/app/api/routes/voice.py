@@ -4,20 +4,25 @@ The browser does speech-to-text and text-to-speech, so the model only ever sees 
 POST /voice/turn is one model call of that conversation, streamed back as newline-delimited
 JSON (see `turn` below). The Next.js server owns the conversation and runs the tools.
 """
+import hashlib
 import json
 import logging
 import re
 import time
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.api.disconnect import run_unless_disconnected
 from app.config import settings
-from app.db.connection import execute_one
+from app.errors import error_body, describe_exception, public_message
+from app.db.connection import execute_one, execute_update
 from app.services import ai_status
-from app.services.budget import over_budget_message, record_usage_event
+from app.services.billing import billed
+from app.services.ownership import NotOwnedError, assert_owns
+from app.services.budget import DailyBudgetExceeded, allowance_today
 from app.services.chat import usage_payload
 from app.services.content_generator.context import fetch_concepts, format_concept_block, resolve_concept_ids
 from app.services.llm.base import (
@@ -25,14 +30,12 @@ from app.services.llm.base import (
     LLMMessage,
     LLMNotConfiguredError,
     LLMProvider,
-    LLMUsage,
     TurnDone,
     TurnText,
     TurnToolUse,
 )
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import DrillQuestionSet
-from app.services.llm.usage import ledger_figures
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +86,32 @@ def _filter_concept_questions(questions: List[Dict[str, Any]]) -> List[Dict[str,
 
 
 class DrillGenerateRequest(BaseModel):
+    # The call is billed to this user and project (billing.py).
+    user_id: str = Field(min_length=1, max_length=100)
+    project_id: str = Field(min_length=1, max_length=100)
     topic: Optional[str] = None
     # When given, the questions are tagged with this topic's concepts.
     topic_id: Optional[str] = None
     notes: str
     count: int = Field(default=10, ge=3, le=20)
     difficulty: str = Field(default="medium")
+
+
+# Part of the drill's cache key: bump it when the prompt below changes, so old sets are not served for the new prompt.
+DRILL_PROMPT_VERSION = 1
+
+
+def _inputs_hash(payload: DrillGenerateRequest, concepts: List[Dict[str, Any]]) -> str:
+    """What decides the questions: the request's fields that reach the prompt, the topic's concepts and the prompt."""
+    inputs = {
+        "v": DRILL_PROMPT_VERSION,
+        "topic": payload.topic,
+        "notes": payload.notes,
+        "count": payload.count,
+        "difficulty": payload.difficulty,
+        "concepts": [[str(concept.get("id")), concept.get("name"), concept.get("summary")] for concept in concepts],
+    }
+    return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
 
 
 class VoiceTurnRequest(BaseModel):
@@ -102,25 +125,9 @@ class VoiceTurnRequest(BaseModel):
     tools: List[Dict[str, Any]] = Field(default_factory=list, max_length=10)
 
 
-def _fail(status: int, code: str, message: str, retryable: bool = False) -> JSONResponse:
-    """The same body shape as the LLMError handler in main.py."""
-    return JSONResponse(
-        status_code=status,
-        content={"detail": message, "error_code": code, "retryable": retryable},
-    )
-
-
-async def _record_voice_usage(payload: VoiceTurnRequest, usage: Optional[LLMUsage]) -> None:
-    """One ledger row per model call, so voice counts toward the daily budget."""
-    if usage is None:
-        return
-    await record_usage_event(
-        user_id=payload.user_id,
-        project_id=payload.project_id,
-        source="voice",
-        source_id=payload.session_id,
-        **ledger_figures([usage]),
-    )
+def _fail(status: int, code: str, retryable: bool = False, **extra: str) -> JSONResponse:
+    """The same body shape as the LLMError handler in main.py: the code and its public message."""
+    return JSONResponse(status_code=status, content=error_body(code, retryable, **extra))
 
 
 async def stream_voice_turn(provider: LLMProvider, payload: VoiceTurnRequest) -> AsyncIterator[Dict[str, Any]]:
@@ -146,7 +153,6 @@ async def stream_voice_turn(provider: LLMProvider, payload: VoiceTurnRequest) ->
             elif isinstance(event, TurnToolUse):
                 yield {"type": "tool_use", "id": event.id, "name": event.name, "input": event.input}
             elif isinstance(event, TurnDone):
-                await _record_voice_usage(payload, event.usage)
                 timing = {"ttft_ms": first_token_ms, "total_ms": round((time.perf_counter() - started) * 1000)}
                 logger.info("Voice call session=%s ttft_ms=%s total_ms=%s", payload.session_id, timing["ttft_ms"], timing["total_ms"])
                 yield {
@@ -157,17 +163,27 @@ async def stream_voice_turn(provider: LLMProvider, payload: VoiceTurnRequest) ->
                     "timing": timing,
                 }
     except LLMError as exc:
-        logger.warning("Voice turn failed: %s: %s", exc.code, exc)
-        await _record_voice_usage(payload, exc.usage)
-        yield {"type": "error", "code": exc.code, "message": str(exc), "retryable": exc.retryable}
+        logger.warning("Voice turn failed: %s", describe_exception(exc))
+        yield {"type": "error", "code": exc.code, "message": public_message(exc.code), "retryable": exc.retryable}
+    except DailyBudgetExceeded as exc:  # the allowance ran out between the route's check and this call
+        logger.info("Voice turn refused: %s", exc.code)
+        yield {"type": "error", "code": exc.code, "message": public_message(exc.code), "retryable": False}
     except Exception as exc:  # the stream has started: report it in-band
         logger.exception("Voice turn crashed")
         yield {
             "type": "error",
             "code": "VOICE_TURN_FAILED",
-            "message": f"The coach could not reply: {exc}",
+            "message": public_message("VOICE_TURN_FAILED"),
             "retryable": True,
         }
+
+
+async def _billed_turn(payload: VoiceTurnRequest) -> AsyncIterator[Dict[str, Any]]:
+    """The turn's events, with every model call billed to the student as it is made (a turn the browser drops is billed
+    for what it used). The scope is opened here, not in the route: Starlette iterates this in another task."""
+    async with billed(payload.user_id, payload.project_id, "voice", payload.session_id):
+        async for event in stream_voice_turn(LLMFactory.get_provider(), payload):
+            yield event
 
 
 async def _ndjson(events: AsyncIterator[Dict[str, Any]]) -> AsyncIterator[bytes]:
@@ -191,25 +207,25 @@ async def turn(payload: VoiceTurnRequest) -> Union[StreamingResponse, JSONRespon
     ordinary HTTP errors with an `error_code`, like /chat/answer.
     """
     if not settings.llm_configured:
-        return _fail(503, LLMNotConfiguredError.code, "ANTHROPIC_API_KEY is not configured")
+        return _fail(503, LLMNotConfiguredError.code)
 
-    project = await execute_one(
-        "SELECT id FROM projects WHERE id = $1 AND user_id = $2", payload.project_id, payload.user_id
-    )
-    if project is None:
-        return _fail(404, "PROJECT_NOT_FOUND", "Project not found")
+    try:
+        await assert_owns(payload.user_id, project_id=payload.project_id, session_id=payload.session_id)
+    except NotOwnedError:
+        return _fail(404, "PROJECT_NOT_FOUND")
 
     # Known to be down (out of credit, say): refuse before anything is stored or streamed.
     unavailable = (await ai_status.get_status()).as_error()
     if unavailable is not None:
-        return _fail(503, unavailable.code, str(unavailable), unavailable.retryable)
+        return _fail(503, unavailable.code, unavailable.retryable)
 
-    over_budget = await over_budget_message(payload.user_id)
-    if over_budget:
-        return _fail(429, "LLM_DAILY_BUDGET", over_budget)
+    # Refuse before the first byte when the allowance is spent (the scope checks again on every model call).
+    allowance = await allowance_today(payload.user_id)
+    if allowance.refused:
+        return _fail(429, "LLM_DAILY_BUDGET", budget_reason=allowance.refused)
 
     return StreamingResponse(
-        _ndjson(stream_voice_turn(LLMFactory.get_provider(), payload)),
+        _ndjson(_billed_turn(payload)),
         media_type="application/x-ndjson",
         # No proxy may hold the stream back.
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
@@ -227,9 +243,11 @@ async def purge_transcripts():
 @router.post("/generate-drill")
 async def generate_concept_drill(
     payload: DrillGenerateRequest,
+    request: Request,
 ):
-    """Generate concept-only oral drill questions from notes."""
-    llm = LLMFactory.get_provider()
+    """Generate concept-only oral drill questions from notes. With a topic, the set is kept (voice_drill_sets) and the
+    next request with the same inputs gets it back without a model call."""
+    await assert_owns(payload.user_id, project_id=payload.project_id, topic_id=payload.topic_id)
     topic_label = payload.topic or "the study topic"
 
     system_prompt = (
@@ -244,6 +262,17 @@ async def generate_concept_drill(
             concepts = await fetch_concepts(payload.topic_id)
         except Exception as exc:  # tagging is a bonus: never fail a drill for it
             logger.warning("Concepts for topic %s unavailable, drill is untagged: %s", payload.topic_id, exc)
+
+    inputs_hash = _inputs_hash(payload, concepts) if payload.topic_id else None
+    if inputs_hash is not None:
+        stored = await execute_one(
+            "SELECT questions FROM voice_drill_sets WHERE topic_id = $1 AND inputs_hash = $2",
+            payload.topic_id,
+            inputs_hash,
+        )
+        if stored is not None:
+            questions = json.loads(stored["questions"]) if isinstance(stored["questions"], str) else stored["questions"]
+            return {"questions": questions, "total": len(questions)}
 
     user_prompt = f"""
 Topic: {topic_label}
@@ -262,12 +291,17 @@ For each, give 2-4 key points a listener can check, a short sample answer, and t
         LLMMessage(role="user", content=user_prompt),
     ]
 
-    result = await llm.generate_structured(
-        messages,
-        DrillQuestionSet,
-        max_tokens=8000,
-        purpose="voice_drill",
-    )
+    async with billed(payload.user_id, payload.project_id, "drill", payload.topic_id):
+        work = LLMFactory.get_provider().generate_structured(
+            messages,
+            DrillQuestionSet,
+            max_tokens=8000,
+            purpose="voice_drill",
+        )
+        # A topic's set is kept below and reused by the next session, so it is finished even when the web app has given
+        # up waiting (its 20 s session-start timeout can be shorter than a busy lane plus the generation); without a
+        # topic nothing is kept, and a caller that has gone cancels the call.
+        result = await (work if inputs_hash is not None else run_unless_disconnected(request, work))
 
     cleaned: List[Dict[str, Any]] = []
     for q in result.questions:
@@ -290,6 +324,22 @@ For each, give 2-4 key points a listener can check, a short sample answer, and t
     # Extra questions were requested so the set is still full after the math filter.
     cleaned = _filter_concept_questions(cleaned)[: payload.count]
     resolve_concept_ids(cleaned, concepts, [])
+
+    if inputs_hash is not None and cleaned:
+        try:
+            await execute_update(
+                """
+                INSERT INTO voice_drill_sets (id, topic_id, inputs_hash, count, questions, created_at)
+                VALUES (gen_random_uuid()::text, $1, $2, $3, $4::jsonb, NOW() AT TIME ZONE 'UTC')
+                ON CONFLICT (topic_id, inputs_hash) DO NOTHING
+                """,
+                payload.topic_id,
+                inputs_hash,
+                payload.count,
+                json.dumps(cleaned),
+            )
+        except Exception as exc:  # the topic was deleted meanwhile, or a blip: the set is still returned
+            logger.warning("Could not keep the drill set for topic %s: %s", payload.topic_id, exc)
 
     return {
         "questions": cleaned,

@@ -1,12 +1,13 @@
 import { prisma } from '@/lib/db/prisma'
+import type { OwnedTopic } from '@/server/owned'
 import { asQuestionList } from './quiz-questions'
 
 type RawQuestion = Record<string, unknown>
 
 /** The first quiz, stored before quiz sets existed, lives in topic_content. */
-async function loadLegacyQuestions(topicId: string): Promise<RawQuestion[] | null> {
+async function loadLegacyQuestions(topic: OwnedTopic): Promise<RawQuestion[] | null> {
   const content = await prisma.topicContent.findUnique({
-    where: { topicId_contentType: { topicId, contentType: 'topic_quiz' } },
+    where: { topicId_contentType: { topicId: topic.id, contentType: 'topic_quiz' } },
     select: { contentData: true },
   })
   return asQuestionList(content?.contentData)
@@ -17,12 +18,12 @@ async function loadLegacyQuestions(topicId: string): Promise<RawQuestion[] | nul
  * browser before the student has submitted. Without a set id this is the legacy quiz.
  */
 export async function loadQuizQuestions(
-  topicId: string,
+  topic: OwnedTopic,
   quizSetId: string | null | undefined
 ): Promise<RawQuestion[] | null> {
-  if (!quizSetId) return loadLegacyQuestions(topicId)
+  if (!quizSetId) return loadLegacyQuestions(topic)
   const set = await prisma.topicQuiz.findFirst({
-    where: { id: quizSetId, topicId },
+    where: { id: quizSetId, topicId: topic.id },
     select: { questions: true },
   })
   return asQuestionList(set?.questions)
@@ -35,11 +36,11 @@ export async function loadQuizQuestions(
  * content row is then overwritten by the new set, so from then on `null` is the oldest set.
  */
 export async function loadAllQuizQuestionSets(
-  topicId: string
+  topic: OwnedTopic
 ): Promise<Map<string | null, RawQuestion[]>> {
   const [sets, legacy] = await Promise.all([
-    prisma.topicQuiz.findMany({ where: { topicId, kind: { in: ['standard', 'retry'] } }, orderBy: { createdAt: 'asc' }, select: { id: true, questions: true } }),
-    loadLegacyQuestions(topicId),
+    prisma.topicQuiz.findMany({ where: { topicId: topic.id, kind: { in: ['standard', 'retry'] } }, orderBy: { createdAt: 'asc' }, select: { id: true, questions: true } }),
+    loadLegacyQuestions(topic),
   ])
   const map = new Map<string | null, RawQuestion[]>()
   let oldest: RawQuestion[] | null = null

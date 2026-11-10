@@ -170,6 +170,16 @@ class TestErrorTranslation:
 
 
 
+# A complete production configuration: tests change one field of it at a time.
+PRODUCTION = {
+    "ENVIRONMENT": "production",
+    "LLM_PROVIDER": "anthropic",
+    "S3_BUCKET": "uploads",
+    "AI_INTERNAL_TOKEN": "a-shared-token",
+    "ANTHROPIC_API_KEY": "sk-test",
+}
+
+
 class TestFactory:
     def teardown_method(self):
         LLMFactory.reset()
@@ -189,6 +199,55 @@ class TestFactory:
         from app.config import Settings
 
         with pytest.raises(ValidationError, match="LLM_PROVIDER=mock"):
-            Settings(ENVIRONMENT="production", LLM_PROVIDER="Mock")
+            Settings(**{**PRODUCTION, "LLM_PROVIDER": "Mock"})
         assert Settings(ENVIRONMENT="development", LLM_PROVIDER="mock").LLM_PROVIDER == "mock"
-        assert Settings(ENVIRONMENT="production", LLM_PROVIDER="anthropic").is_production
+        assert Settings(**PRODUCTION).is_production
+
+    def test_the_service_does_not_start_in_production_without_a_bucket(self):
+        from pydantic import ValidationError
+
+        from app.config import Settings
+
+        with pytest.raises(ValidationError, match="S3_BUCKET"):
+            Settings(**{**PRODUCTION, "S3_BUCKET": ""})
+        assert Settings(ENVIRONMENT="development", LLM_PROVIDER="anthropic").S3_BUCKET == ""
+
+    def test_a_missing_or_misspelt_environment_never_means_development(self, monkeypatch):
+        """SEC-L2: no default for ENVIRONMENT, and the spelling is exact."""
+        from pydantic import ValidationError
+
+        from app.config import Settings
+
+        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        with pytest.raises(ValidationError, match="ENVIRONMENT"):
+            Settings(_env_file=None)
+        for value in ("Production", "prod", "staging", "", "productoin"):
+            with pytest.raises(ValidationError, match="ENVIRONMENT must be one of"):
+                Settings(ENVIRONMENT=value)
+        for value in ("development", "test", "production"):
+            assert Settings(**{**PRODUCTION, "ENVIRONMENT": value}).ENVIRONMENT == value
+
+    def test_the_internal_token_is_required_outside_development(self):
+        from pydantic import ValidationError
+
+        from app.config import Settings
+
+        assert Settings(ENVIRONMENT="development", AI_INTERNAL_TOKEN="").AI_INTERNAL_TOKEN == ""
+        for environment in ("test", "production"):
+            for token in ("", "   "):
+                with pytest.raises(ValidationError, match="AI_INTERNAL_TOKEN"):
+                    Settings(**{**PRODUCTION, "ENVIRONMENT": environment, "AI_INTERNAL_TOKEN": token})
+        assert Settings(ENVIRONMENT="test", AI_INTERNAL_TOKEN="tok").ENVIRONMENT == "test"
+
+    def test_production_needs_every_budget_above_zero_and_a_model_key(self):
+        """A budget of 0 turns its cap off; production refuses to start with a cap off."""
+        from pydantic import ValidationError
+
+        from app.config import Settings
+
+        for name in ("DAILY_LLM_BUDGET_USD", "GLOBAL_DAILY_LLM_BUDGET_USD", "FIRST_DAY_LLM_BUDGET_USD"):
+            with pytest.raises(ValidationError, match=name):
+                Settings(**{**PRODUCTION, name: 0})
+        with pytest.raises(ValidationError, match="ANTHROPIC_API_KEY"):
+            Settings(**{**PRODUCTION, "ANTHROPIC_API_KEY": ""})
+        assert Settings(ENVIRONMENT="development", DAILY_LLM_BUDGET_USD=0).DAILY_LLM_BUDGET_USD == 0

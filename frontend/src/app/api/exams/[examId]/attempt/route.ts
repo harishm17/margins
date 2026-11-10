@@ -8,6 +8,10 @@
  * Submitting is POST /api/exams/[examId]/submit.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
+import { ownedExam } from '@/server/owned'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -24,20 +28,19 @@ import {
   ATTEMPT_IN_PROGRESS,
   countQuestions,
   finalizeAttempt,
-  findExamForUser,
   findInProgressAttempt,
   loadAttemptState,
   startAttempt,
   toAttemptView,
 } from '@/lib/exams/attempts'
-import { acceptsAnswers, remainingSeconds, sanitizeAnswers } from '@/lib/exams/attempt-timing'
+import { EXAM_ANSWERS_MAX_BYTES, acceptsAnswers, examAnswersSchema, remainingSeconds, sanitizeAnswers } from '@/lib/exams/attempt-timing'
 
 export const dynamic = 'force-dynamic'
 
 type Context = { params: Promise<{ examId: string }> }
 
-const handleError = (error: unknown, label: string) => {
-  console.error(label, error)
+const handleError = (error: unknown) => {
+  logServerError('Exam attempt error', error)
   if (isUnauthorizedError(error)) return apiUnauthorized()
   return apiInternal('Internal server error')
 }
@@ -47,7 +50,7 @@ export async function GET(_request: NextRequest, { params }: Context) {
   try {
     const session = await requireAuth()
     const { examId } = await params
-    const exam = await findExamForUser(session.user.id, examId)
+    const exam = await ownedExam(session.user.id, examId)
     if (!exam) return apiNotFound('Exam not found')
 
     const state = await loadAttemptState(session.user.id, exam)
@@ -60,15 +63,17 @@ export async function GET(_request: NextRequest, { params }: Context) {
     }
     return NextResponse.json({ attempt: null })
   } catch (error) {
-    return handleError(error, 'Error loading exam attempt:')
+    return handleError(error)
   }
 }
 
 export async function POST(_request: NextRequest, { params }: Context) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { examId } = await params
-    const exam = await findExamForUser(session.user.id, examId)
+    const exam = await ownedExam(session.user.id, examId)
     if (!exam) return apiNotFound('Exam not found')
 
     // An attempt that ran out of time while the student was away is submitted first, so
@@ -78,19 +83,22 @@ export async function POST(_request: NextRequest, { params }: Context) {
     const attempt = await startAttempt(session.user.id, exam)
     return NextResponse.json({ attempt: toAttemptView(attempt, new Date()) })
   } catch (error) {
-    return handleError(error, 'Error starting exam attempt:')
+    return handleError(error)
   }
 }
 
 export async function PUT(request: NextRequest, { params }: Context) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { examId } = await params
-    const exam = await findExamForUser(session.user.id, examId)
+    const exam = await ownedExam(session.user.id, examId)
     if (!exam) return apiNotFound('Exam not found')
 
-    const body = await request.json().catch(() => null)
-    const answers = sanitizeAnswers(body?.answers, await countQuestions(examId))
+    const body = await readJson(request, examAnswersSchema, { maxBytes: EXAM_ANSWERS_MAX_BYTES })
+    if (!body.ok) return body.response
+    const answers = sanitizeAnswers(body.data.answers, await countQuestions(exam))
     if (!answers) return apiInvalidInput('answers must be an object')
 
     const attempt = await findInProgressAttempt(session.user.id, examId)
@@ -138,6 +146,6 @@ export async function PUT(request: NextRequest, { params }: Context) {
       remainingSeconds: remainingSeconds(attempt.deadlineAt, now),
     })
   } catch (error) {
-    return handleError(error, 'Error saving exam answers:')
+    return handleError(error)
   }
 }

@@ -19,7 +19,7 @@ test('provider problems read as AI being unavailable, with no ops wording, on ev
     for (const text of [
       shared.title,
       shared.text,
-      describeJobFailure(code, 'Anthropic credit balance is too low', 'generate_content'),
+      describeJobFailure(code, 'generate_content'),
       chatErrorMessage(code).message,
       voiceErrorMessage(code).message,
       describeTurnFailure({ code, message: 'credit balance is too low', retryable: false }).alert.text,

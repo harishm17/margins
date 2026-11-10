@@ -35,6 +35,9 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# The app settings have no default ENVIRONMENT (SEC-L2); offline eval tooling runs as development.
+os.environ.setdefault("ENVIRONMENT", "development")
+
 HERE = Path(__file__).resolve().parent
 EVALS_DIR = HERE.parent
 RESULTS_DIR = EVALS_DIR / "results"

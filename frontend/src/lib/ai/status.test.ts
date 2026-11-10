@@ -18,7 +18,7 @@ test('the allowance used, or the global cap hit, blocks with the allowance code'
 
 test('the browser never gets dollar figures', () => {
   const client = toClientStatus(parseStatusResponse({ available: true, allowance: { used: 6, limit: 8 } }, now))
-  assert.deepEqual(client.allowance, { usedFraction: 0.75, exhausted: false, resetsAt: '2026-10-29T00:00:00.000Z' })
+  assert.deepEqual(client.allowance, { usedFraction: 0.75, exhausted: false, resetsAt: '2026-10-29T00:00:00.000Z', refused: null })
   assert.doesNotMatch(JSON.stringify(client), /"used"|"limit"/)
 })
 

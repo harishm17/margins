@@ -1,4 +1,5 @@
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
+import { ownedTopic, ownedTopics } from '@/server/owned'
 import { prisma } from '@/lib/db/prisma'
 import { loadAllQuizQuestionSets } from './quiz-sets'
 import { topicStanding, topicStandings } from './topic-standing'
@@ -28,7 +29,9 @@ export async function getMissedQuestions(userId: string, topicId: string): Promi
     select: { quizSetId: true, results: true },
   })
   if (attempts.length === 0) return []
-  const sets = await loadAllQuizQuestionSets(topicId)
+  const topic = await ownedTopic(userId, topicId)
+  if (!topic) return []
+  const sets = await loadAllQuizQuestionSets(topic)
   return missedQuestions(
     attempts.flatMap((attempt) => {
       const questions = sets.get(attempt.quizSetId ?? null)
@@ -65,8 +68,11 @@ export async function countMissedByTopic(
     if (list.length < 2) list.push(attempt)
     byTopic.set(attempt.topicId, list)
   }
+  const owned = new Map((await ownedTopics(userId, [...byTopic.keys()])).map((topic) => [topic.id, topic]))
   for (const [topicId, list] of byTopic) {
-    const sets = await loadAllQuizQuestionSets(topicId)
+    const topic = owned.get(topicId)
+    if (!topic) continue
+    const sets = await loadAllQuizQuestionSets(topic)
     const missed = missedQuestions(
       list.flatMap((attempt) => {
         const questions = sets.get(attempt.quizSetId ?? null)

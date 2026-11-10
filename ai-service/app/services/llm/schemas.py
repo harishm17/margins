@@ -1486,9 +1486,9 @@ class PracticeTutorRequest(BaseModel):
     # The earliest wrong or unanswered step, found by the app without the model; left out when it can't decide.
     first_wrong_step: Optional[int] = Field(default=None, ge=0)
     confusable: Optional[PracticeConfusable] = None
-    # Optional: with a user the call counts toward the daily budget and the ledger.
-    user_id: Optional[str] = Field(default=None, max_length=100)
-    project_id: Optional[str] = Field(default=None, max_length=100)
+    # The call is billed to this user and project (billing.py).
+    user_id: str = Field(min_length=1, max_length=100)
+    project_id: str = Field(min_length=1, max_length=100)
     session_id: Optional[str] = Field(default=None, max_length=100)
 
     @model_validator(mode="after")
@@ -1653,9 +1653,9 @@ class ReaderTutorRequest(BaseModel):
     cant_parse: bool = False
     rung: int = Field(ge=0, le=5)
     claims: List[ReaderClaim] = Field(default_factory=list, max_length=MAX_TUTOR_LIST)
-    # Optional: with a user the call counts toward the daily budget and the ledger.
-    user_id: Optional[str] = Field(default=None, max_length=100)
-    project_id: Optional[str] = Field(default=None, max_length=100)
+    # The call is billed to this user and project (billing.py).
+    user_id: str = Field(min_length=1, max_length=100)
+    project_id: str = Field(min_length=1, max_length=100)
     session_id: Optional[str] = Field(default=None, max_length=100)
     # explain: the first reply (the take above). check: the student's answer to the check question the last reply ended with
     # (or "I don't know"), and the reply is a verdict. restate: the plain restatement a student gets after two "can't parse"
@@ -1787,9 +1787,9 @@ class RecallGradeRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=MAX_TUTOR_TEXT_CHARS)
     claims: List[RecallClaim] = Field(min_length=1, max_length=MAX_RECALL_CLAIMS)
     answer: str = Field(max_length=MAX_RECALL_ANSWER_CHARS)
-    # Optional: with a user the call counts toward the daily budget and the ledger.
-    user_id: Optional[str] = Field(default=None, max_length=100)
-    project_id: Optional[str] = Field(default=None, max_length=100)
+    # The call is billed to this user and project (billing.py).
+    user_id: str = Field(min_length=1, max_length=100)
+    project_id: str = Field(min_length=1, max_length=100)
     session_id: Optional[str] = Field(default=None, max_length=100)
 
 

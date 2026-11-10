@@ -6,6 +6,9 @@
  * for the student: nothing moves on until the next question is asked for.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { readJson } from '@/lib/api/read-json'
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -20,7 +23,6 @@ import {
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { getTimeZone } from '@/server/timezone'
 
@@ -42,16 +44,16 @@ const bodySchema = z.object({
 })
 
 // A short answer costs a model call.
-const answerLimiter = createRateLimiter({ limit: 40, windowMs: 60_000 })
+const answerLimiter = createRateLimiter({ name: 'review-answer', limit: 40, windowMs: 60_000 })
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
     const auth = await requireAuth()
     const { sessionId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
 
-    const rate = answerLimiter.check(auth.user.id)
+    const rate = await answerLimiter.check(auth.user.id)
     if (!rate.ok) {
       return NextResponse.json(
         { error: 'Too many answers. Please wait a moment and try again.' },
@@ -80,8 +82,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       throw error
     }
   } catch (error) {
-    console.error('Review answer error:', error)
+    logServerError('Review answer error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save the answer')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

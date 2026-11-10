@@ -55,6 +55,13 @@ export default defineRailway(() => {
       // lists what each alert means. The nightly backup's age is checked from the first run on.
       OPS_ALERT_WEBHOOK_URL: preserve(),
       BACKUPS_EXPECTED: "true",
+      // The weekly sweep of bucket files no material points to only reports while this is "true". Turn it off after
+      // a few reports (docs/deployment/RAILWAY.md, "orphaned files") look right.
+      STORAGE_SWEEP_DRY_RUN: "true",
+      // On a deploy Railway sends SIGTERM. Open requests get uvicorn's graceful window (JOB_SHUTDOWN_GRACE_SECONDS, 20,
+      // start.sh), then running jobs get the same 20 to finish before they are cancelled and their leases released. Keep
+      // the drain time longer than both together plus the pool close, or the kill comes before the leases are released.
+      RAILWAY_DEPLOYMENT_DRAINING_SECONDS: "50",
       DATABASE_URL: Postgres.env.DATABASE_URL,
       PORT: "8000",
       AI_SERVICE_URL: aiServiceUrl,
@@ -74,6 +81,9 @@ export default defineRailway(() => {
     env: {
       ENVIRONMENT: "production",
       NEXTAUTH_SECRET: preserve(),
+      // Keys the one-way account key behind the daily allowance and voice minutes (src/lib/account/spend-key.ts).
+      // Set it once and never rotate it: a new value makes every returning student look like a new one.
+      SPEND_KEY_SECRET: preserve(),
       NEXTAUTH_URL: SITE_URL,
       // Google sign-in (OAuth client "Margins web" in the Google Cloud project "studybuddy").
       GOOGLE_OAUTH_CLIENT_ID: preserve(),

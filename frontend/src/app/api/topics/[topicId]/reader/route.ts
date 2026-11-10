@@ -5,6 +5,7 @@
  * the warm-up marks Focus here. Overlap between chunks is already removed.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { loadReader } from '@/lib/reader/load-reader'
@@ -20,7 +21,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (!reader) return apiNotFound('Topic not found')
     return NextResponse.json(reader)
   } catch (error) {
-    console.error('Reader error:', error)
+    logServerError('Reader error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the reading')
   }

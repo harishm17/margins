@@ -171,3 +171,44 @@ async def test_a_ledger_failure_is_logged_not_raised(db, monkeypatch, caplog):
         )
     assert any("Could not record job usage" in r.getMessage() for r in caplog.records)
     assert await db.fetchval("SELECT count(*) FROM llm_usage_events") == 0
+
+
+@pytest.mark.parametrize(
+    "age_days, own, others, refused",
+    [
+        (0, 3.9, 0, None),  # under the first-day allowance ($4)
+        (0, 4.0, 0, "first_day"),
+        (2, 4.0, 0, None),  # past the first day: the full $8 applies
+        (30, 8.0, 0, "user"),
+        (0, 0, 14.9, None),  # the global cap is $20, the reserve starts at 75% of it
+        (0, 0, 15.0, "reserve"),  # a day-old account is paused ...
+        (3, 0, 15.0, "reserve"),  # ... and so is one under 7 days
+        (30, 0, 15.0, None),  # an older account is not
+        (30, 0, 20.0, "global"),  # everyone is, at the cap
+    ],
+)
+async def test_first_day_allowance_and_the_reserve_for_older_accounts(db, monkeypatch, age_days, own, others, refused):
+    monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 8.0)
+    monkeypatch.setattr(settings, "GLOBAL_DAILY_LLM_BUDGET_USD", 20.0)
+    user_id = await seed_user(db, age_days=age_days)
+    if own:
+        await seed_usage(db, user_id, own)
+    if others:
+        await seed_usage(db, await seed_user(db), others)
+    assert (await budget_module.allowance_today(user_id)).refused == refused
+
+
+async def test_deleting_the_account_and_signing_in_again_does_not_give_the_allowance_back(db, monkeypatch):
+    # The same Google account has the same spend_key after it is deleted and created again.
+    monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 8.0)
+    first = await seed_user(db, spend_key="key-of-one-google-account")
+    await seed_usage(db, first, 8.0)
+    assert (await budget_module.allowance_today(first)).refused == "user"
+
+    assert await db.fetchval("SELECT delete_user_account($1)", first) is True
+    second = await seed_user(db, age_days=0, spend_key="key-of-one-google-account")
+
+    allowance = await budget_module.allowance_today(second)
+    assert allowance.refused == "user" and allowance.used_usd == pytest.approx(8.0)
+    # It is a new account, but not a new person: no first-day allowance either.
+    assert allowance.limit_usd == 8.0

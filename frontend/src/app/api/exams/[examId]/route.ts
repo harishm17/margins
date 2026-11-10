@@ -1,6 +1,6 @@
+import { logServerError } from '@/lib/ops/log'
+import { readSession } from '@/lib/auth/get-session'
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { toPublicQuestions } from '@/lib/learning/quiz-questions';
 
@@ -10,7 +10,7 @@ export async function GET(
   { params }: { params: Promise<{ examId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await readSession();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -42,7 +42,7 @@ export async function GET(
     // No answer key: it is released only in a graded submission's results.
     return NextResponse.json({ exam: { ...exam, questions: toPublicQuestions(exam.questions) } });
   } catch (error) {
-    console.error('Error fetching exam:', error);
+    logServerError('Error fetching exam', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

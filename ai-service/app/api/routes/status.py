@@ -10,7 +10,7 @@ from fastapi import APIRouter
 
 from app.config import settings
 from app.services import ai_status
-from app.services.budget import global_spent_today_usd, spent_today_usd
+from app.services.budget import allowance_today, global_spent_today_usd
 
 router = APIRouter(prefix="/status")
 
@@ -29,12 +29,14 @@ async def ai_status_route(user_id: Optional[str] = None):
 
     allowance = None
     if user_id:
-        limit = settings.DAILY_LLM_BUDGET_USD
+        today = await allowance_today(user_id)
         allowance = {
-            "used": round(await spent_today_usd(user_id), 6),
-            # None: no per-user cap.
-            "limit": limit if limit > 0 else None,
-            "resets_at": resets_at,
+            "used": round(today.used_usd, 6),
+            # None: no per-user cap. This is the limit that applies to the account today (the first-day one while it lasts).
+            "limit": today.limit_usd,
+            "resets_at": _iso(today.resets_at),
+            # Why a call would be refused now: user, first_day, reserve or global. None while the account may go on.
+            "refused": today.refused,
         }
 
     return {

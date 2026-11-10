@@ -7,6 +7,9 @@
  * JSON events (see src/lib/voice/turn-client.ts). Problems found before the reply starts are
  * ordinary JSON errors.
  */
+import { logServerError } from '@/lib/ops/log'
+import { id, list, record } from '@/lib/api/fields'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
@@ -16,13 +19,12 @@ import {
   ApiErrorCode,
   apiError,
   apiInternal,
-  apiInvalidInput,
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { createRateLimiter } from '@/lib/api/rate-limit'
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { voiceTurnsPerMinute } from '@/lib/voice/turn-limit'
 import {
   VoiceModelError,
@@ -30,7 +32,7 @@ import {
   readModelEvents,
   requestModelTurn,
 } from '@/lib/voice/ai-turn'
-import { claimVoiceSession, isSerializationConflict } from '@/lib/voice/claim'
+import { claimVoiceSession, claimVoiceTurn, isSerializationConflict, releaseVoiceTurn } from '@/lib/voice/claim'
 import {
   coachStyleOf,
   CONTINUE_MESSAGE,
@@ -59,14 +61,10 @@ export const dynamic = 'force-dynamic'
 const MAX_UTTERANCE_CHARS = 2000
 
 // Every turn is at least one model call.
-const turnLimiter = createRateLimiter({ limit: voiceTurnsPerMinute(), windowMs: 60_000 })
-
-// Sessions with a turn running on this instance. Two turns at once would each load the same
-// history and the later write would drop the earlier one.
-const turnsInProgress = new Set<string>()
+const turnLimiter = createRateLimiter({ name: 'voice-turn', limit: voiceTurnsPerMinute(), windowMs: 60_000 })
 
 const bodySchema = z.object({
-  sessionId: z.string().min(1),
+  sessionId: id(),
   // Empty (or missing) means "start the session" the first time, "carry on" afterwards.
   utterance: z.string().trim().max(MAX_UTTERANCE_CHARS, `Keep it under ${MAX_UTTERANCE_CHARS} characters`).default(''),
   // The student interrupted the coach's last reply: what they heard of it before it stopped (spec 19.4).
@@ -90,8 +88,8 @@ function voiceFailure(code: string, extraDetails: Record<string, unknown> = {}, 
 }
 
 /** What the coach needs to know about the session's topic or sprint, read fresh each turn. */
-async function loadPromptContext(session: { mode: string; topicId: string | null; questionSet: Prisma.JsonValue }) {
-  const courseTerms = await courseTermsForTopics(sessionTopicIds(session))
+async function loadPromptContext(userId: string, session: { mode: string; topicId: string | null; questionSet: Prisma.JsonValue }) {
+  const courseTerms = await courseTermsForTopics(userId, sessionTopicIds(session))
   if (session.mode === 'sprint') {
     const ids = new Set<string>()
     if (Array.isArray(session.questionSet)) {
@@ -101,7 +99,7 @@ async function loadPromptContext(session: { mode: string; topicId: string | null
     }
     const topics = ids.size
       ? await prisma.topic.findMany({
-          where: { id: { in: [...ids] } },
+          where: { id: { in: [...ids] }, project: { userId } },
           select: { name: true },
           orderBy: { orderIndex: 'asc' },
         })
@@ -109,8 +107,8 @@ async function loadPromptContext(session: { mode: string; topicId: string | null
     return { topicName: null, topicDescription: null, notes: null, sprintTopics: topics.map((topic) => topic.name), courseTerms }
   }
   const topic = session.topicId
-    ? await prisma.topic.findUnique({
-        where: { id: session.topicId },
+    ? await prisma.topic.findFirst({
+        where: { id: session.topicId, project: { userId } },
         select: {
           name: true,
           description: true,
@@ -127,51 +125,45 @@ async function loadPromptContext(session: { mode: string; topicId: string | null
   }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const requestStarted = performance.now()
   let userId: string
   try {
     userId = (await requireAuth()).user.id
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('[VOICE] Auth failed:', error)
+    logServerError('Voice: Auth failed', error)
     return apiInternal('Failed to start the turn')
   }
 
-  const limit = turnLimiter.check(userId)
+  const limit = await turnLimiter.check(userId)
   if (!limit.ok) {
     const response = voiceFailure('RATE_LIMITED')
     response.headers.set('Retry-After', String(limit.retryAfterSeconds))
     return response
   }
 
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return apiInvalidInput('The request body must be JSON')
-  }
-  const parsed = bodySchema.safeParse(body)
-  if (!parsed.success) {
-    return apiInvalidInput(parsed.error.issues[0]?.message ?? 'Invalid input', zodDetails(parsed.error))
-  }
+  const parsed = await readJson(request, bodySchema)
+  if (!parsed.ok) return parsed.response
   const { sessionId, utterance, interruptedHeard, timing } = parsed.data
 
   const session = await prisma.voiceDrillSession.findFirst({ where: { id: sessionId, userId } })
   if (!session) return apiNotFound('Session not found')
   if (session.status !== 'active' || session.endedAt) return voiceFailure('SESSION_ENDED')
 
-  if (turnsInProgress.has(session.id)) return voiceFailure('TURN_IN_PROGRESS')
-  turnsInProgress.add(session.id)
+  // One turn at a time per session, across server processes (a conditional update on the session row).
+  if (!(await claimVoiceTurn(userId, session.id))) return voiceFailure('TURN_IN_PROGRESS')
   let claimedHere = false
-  const releaseTurn = () => turnsInProgress.delete(session.id)
+  const releaseTurn = () => releaseVoiceTurn(userId, session.id)
+  // Aborted when the browser leaves: the model call stops instead of finishing an answer nobody will hear.
+  const turnAbort = new AbortController()
   // A failed first turn must not leave the session counted as connected.
   const releaseClaim = async () => {
     if (!claimedHere) return
     claimedHere = false
     await prisma.voiceDrillSession
       .update({ where: { id: session.id }, data: { connectedAt: null, lastSeenAt: null } })
-      .catch((error) => console.error('[VOICE] Could not release the session claim:', error))
+      .catch((error) => logServerError('Voice: Could not release the session claim', error))
   }
 
   try {
@@ -179,7 +171,7 @@ export async function POST(request: NextRequest) {
     if (!session.connectedAt) {
       const claim = await claimVoiceSession(session)
       if (!claim.ok) {
-        releaseTurn()
+        await releaseTurn()
         return claim.reason === 'busy'
           ? voiceFailure('ACTIVE_SESSION')
           : voiceFailure('VOICE_DAILY_LIMIT', { remainingSeconds: 0, dailyMinutes: claim.capMinutes })
@@ -191,7 +183,7 @@ export async function POST(request: NextRequest) {
 
     // A session from before teach-back and guided reading carries on in the style it began with.
     const style: CoachStyle = coachStyleOf(session.style)
-    const context = await loadPromptContext(session)
+    const context = await loadPromptContext(userId, session)
     const system = buildCoachSystemPrompt({
       mode: session.mode === 'sprint' ? 'sprint' : 'topic_drill',
       style,
@@ -214,10 +206,10 @@ export async function POST(request: NextRequest) {
     // The step the session is waiting for runs before the model speaks (spec 19.1), in the stream below so the browser can be
     // told at once; the model is then called once, with the result in the student's message.
     const steps: StepCache = new Map()
-    const preRun = await planPreRunForSession({ sessionId: session.id, language: session.language, utterance, history })
+    const preRun = await planPreRunForSession({ userId, sessionId: session.id, language: session.language, utterance, history })
 
     const modelRequest = (messages: VoiceMessage[]) =>
-      requestModelTurn({ userId, projectId: session.projectId, sessionId: session.id, system, messages, tools })
+      requestModelTurn({ userId, projectId: session.projectId, sessionId: session.id, system, messages, tools }, turnAbort.signal)
 
     // Ask first, unless a step has to run first. When the AI service refuses (daily budget) or is down, the session keeps its
     // old conversation and the browser gets an ordinary JSON error.
@@ -229,16 +221,16 @@ export async function POST(request: NextRequest) {
         firstCallStarted = performance.now()
         first = await modelRequest(startMessages)
       } catch (error) {
-        console.error('[VOICE] The AI service is not reachable:', error)
+        logServerError('Voice: The AI service is not reachable', error)
         await releaseClaim()
-        releaseTurn()
+        await releaseTurn()
         return voiceFailure('VOICE_UNAVAILABLE')
       }
       if (!first.ok || !first.body) {
         const failure = await modelErrorFromResponse(first)
-        console.error(`[VOICE] ${failure.message}`)
+        logServerError('Voice: the AI service refused the turn', undefined, { code: failure.code, retryable: failure.retryable })
         await releaseClaim()
-        releaseTurn()
+        await releaseTurn()
         return voiceFailure(failure.code, {}, failure.retryable)
       }
       firstBody = first.body
@@ -281,7 +273,7 @@ export async function POST(request: NextRequest) {
                   try {
                     response = await modelRequest(messages)
                   } catch (error) {
-                    console.error('[VOICE] The AI service is not reachable:', error)
+                    logServerError('Voice: The AI service is not reachable', error)
                     throw new VoiceModelError('VOICE_UNAVAILABLE', 'The AI service is not reachable', true)
                   }
                   if (!response.ok || !response.body) throw await modelErrorFromResponse(response)
@@ -320,7 +312,7 @@ export async function POST(request: NextRequest) {
                   },
                 })
               } catch (error) {
-                console.error('[VOICE] Could not store the conversation:', error)
+                logServerError('Voice: Could not store the conversation', error)
                 saved = false
               }
             } else if (!outcome.text) {
@@ -330,16 +322,16 @@ export async function POST(request: NextRequest) {
             if (outcome.ok) {
               if (saved) {
                 // What the session waits for next, so the browser can set its end-of-turn wait.
-                send({ type: 'listen', for: await listenForSession(session.id).catch(() => 'short_answer' as const) })
+                send({ type: 'listen', for: await listenForSession(userId, session.id).catch(() => 'short_answer' as const) })
                 send({ type: 'done', text: outcome.text })
               } else sendError('VOICE_NOT_SAVED')
             }
             // A failed turn has already sent its error event.
           } catch (error) {
-            console.error('[VOICE] The turn crashed:', error)
+            logServerError('Voice: The turn crashed', error)
             sendError('VOICE_TURN_FAILED')
           } finally {
-            releaseTurn()
+            await releaseTurn()
             try {
               controller.close()
             } catch {
@@ -349,8 +341,10 @@ export async function POST(request: NextRequest) {
         })()
       },
       cancel() {
-        // The browser left. The turn keeps going so the conversation is still stored.
+        // The browser left: stop the model call. The turn ends through its usual failure path, which keeps what the
+        // tools already recorded.
         clientGone = true
+        turnAbort.abort()
       },
     })
 
@@ -362,10 +356,12 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    releaseTurn()
+    await releaseTurn()
     await releaseClaim()
     if (isSerializationConflict(error)) return voiceFailure('TURN_IN_PROGRESS')
-    console.error('[VOICE] Turn failed:', error)
+    logServerError('Voice: Turn failed', error)
     return apiInternal('Failed to run the turn')
   }
 }
+
+export const POST = withClientSignal(handlePost)

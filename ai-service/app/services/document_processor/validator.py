@@ -4,23 +4,27 @@ Only the file's content can make a material invalid. A storage, download or netw
 raises instead (`StorageError` and friends), so the caller fails the job as retryable and
 leaves the material's validation status alone.
 """
-import asyncio
 import logging
 from typing import List, Optional
 from pydantic import BaseModel
 from app.services import ai_status
+from app.services.budget import DailyBudgetExceeded
 from app.services.llm import LLMFactory
 from app.services.llm.base import LLMError, LLMMessage
 from app.services.llm.schemas import MATERIAL_KINDS, MaterialCheck
 from app.config import settings
-from app.services.document_processor.extractors import (
-    ExtractedDocument,
-    UnreadableDocumentError,
-    extract_document,
-    infer_extension,
+from app.services.document_processor.parse_types import (
     SUPPORTED_EXTENSIONS,
+    ExtractedDocument,
+    ParseRefused,
+    UnreadableDocumentError,
+    infer_extension,
+    refusal_note,
 )
+from app.services.document_processor.sandbox import parse_document
 from app.services.document_processor.storage import local_copy
+
+from app.errors import VALIDATION_NOTES, describe_exception
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +113,7 @@ async def validate_material(
     """
     # For development, we'll skip actual file processing
     if settings.is_development and not settings.ENABLE_PROCESSING:
-        logger.info(f"[DEV] Simulating validation for {filename}")
+        logger.info("[DEV] Simulating validation for material %s", material_id)
         return ValidationResult(
             status="valid",
             notes="Development mode: validation skipped",
@@ -121,20 +125,15 @@ async def validate_material(
     if extension not in SUPPORTED_EXTENSIONS:
         return ValidationResult(
             status="invalid",
-            notes=(
-                f"Unsupported file type '{extension}'. "
-                "Supported formats: .pdf, .docx, .pptx, .doc"
-            ),
+            notes=VALIDATION_NOTES["unsupported_type"],
         )
 
     async with local_copy(storage_path) as local_path:
         try:
-            extracted = await asyncio.to_thread(
-                extract_document, local_path, filename, markdown=False
-            )
-        except UnreadableDocumentError as exc:
-            logger.info(f"Material {material_id} is unreadable: {exc}")
-            return ValidationResult(status="invalid", notes=str(exc))
+            extracted = await parse_document(local_path, filename, markdown=False)
+        except (UnreadableDocumentError, ParseRefused) as exc:
+            logger.info("Material %s is unreadable: %s", material_id, type(exc).__name__)
+            return ValidationResult(status="invalid", notes=refusal_note(exc))
 
     page_count = extracted.page_count
     if page_count <= 0:
@@ -190,15 +189,17 @@ Set kind to what the file is, whatever the category says: content (lecture notes
         is_valid = check.is_valid
         notes = check.notes or "No validation notes provided"
         kind = check.kind
+    except DailyBudgetExceeded:
+        # Over the allowance: the same structural-only outcome as the AI being unavailable, and the file stays usable.
+        logger.info("LLM validation skipped for %s: daily allowance used", material_id)
+        is_valid = True
+        notes = "Validation completed using structural checks only (the daily AI allowance is used)."
     except LLMError as llm_error:
         # Fallback path: keep pipeline functional if LLM credentials are missing
         # or upstream API auth is unavailable.
-        logger.warning(f"LLM validation unavailable for {material_id}: {llm_error}")
+        logger.warning("LLM validation unavailable for material %s: %s", material_id, describe_exception(llm_error))
         is_valid = True
-        notes = (
-            "Validation completed using structural checks only "
-            f"(LLM unavailable: {llm_error})."
-        )
+        notes = VALIDATION_NOTES["llm_unavailable"]
 
     return ValidationResult(
         status="valid" if is_valid else "invalid",

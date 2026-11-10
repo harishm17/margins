@@ -145,7 +145,7 @@ async def post(title: str, text: str) -> bool:
             logger.error("The ops alert webhook answered %s", response.status_code)
             return False
     except Exception as exc:
-        logger.error("Could not post the ops alert: %r", exc)
+        logger.error("Could not post the ops alert: %s", exc)
         return False
     return True
 
@@ -159,7 +159,7 @@ async def ping_deadman() -> None:
         async with httpx.AsyncClient(timeout=10.0) as client:
             await client.get(url)
     except Exception as exc:
-        logger.warning("Could not ping the dead-man check: %r", exc)
+        logger.warning("Could not ping the dead-man check: %s", exc)
 
 
 async def wait_for_alerts() -> None:

@@ -20,7 +20,7 @@ from app.services.exam_relevance import (
 from app.services.llm.base import LLMUnavailableError
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import ExamQuestionTopics, ExamTopicMap
-from tests.db_helpers import add_chunk, get_job, new_id, seed_job, seed_material, seed_project, seed_user
+from tests.db_helpers import add_chunk, get_job, new_id, seed_job, seed_material, seed_project, seed_usage, seed_user
 
 EXAM = [
     "# Exam 1\nNo books or calculators. You may use one sheet of notes.",
@@ -265,10 +265,8 @@ async def run_job(course):
 async def test_over_budget_the_model_is_not_called_but_clearing_still_works(three_topics, mock_llm, monkeypatch):
     course, _ = three_topics
 
-    async def over(user_id):
-        return "Daily limit reached."
-
-    monkeypatch.setattr(jobs, "over_budget_message", over)
+    monkeypatch.setattr(settings, "DAILY_LLM_BUDGET_USD", 1.0)
+    await seed_usage(course.db, course.user_id, 1.25)
     await add_file(course)
     job_id, payload = await run_job(course)
     with pytest.raises(HTTPException) as raised:

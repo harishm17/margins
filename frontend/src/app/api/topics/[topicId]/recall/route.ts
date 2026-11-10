@@ -12,10 +12,13 @@
  *   and level 3 on their concepts.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { readJson } from '@/lib/api/read-json'
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
-import { createRateLimiter } from '@/lib/api/rate-limit'
+import { createRateLimiter, enforceMutationLimit } from '@/lib/api/rate-limit'
 import { TutorUnavailableError } from '@/lib/ai-service/tutor'
 import { tutorFailure } from '@/lib/api/tutor-failure'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
@@ -29,12 +32,11 @@ import {
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 
-const recallLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 })
+const recallLimiter = createRateLimiter({ name: 'recall', limit: 10, windowMs: 60_000 })
 
 const submitSchema = z.object({
   kind: z.enum(['recall', 'teach_back']),
@@ -48,14 +50,14 @@ const submitSchema = z.object({
 
 const revealSchema = z.object({ attemptId: z.string().min(1).max(100) })
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
     const { topicId } = await params
-    const parsed = submitSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, submitSchema)
+    if (!parsed.ok) return parsed.response
 
-    const rate = recallLimiter.check(auth.user.id)
+    const rate = await recallLimiter.check(auth.user.id)
     if (!rate.ok) {
       const response = apiError(ApiErrorCode.RATE_LIMITED, 'You are submitting quickly. Wait a moment, then try again.', { code: 'RATE_LIMITED', retryable: true }, 429)
       response.headers.set('Retry-After', String(rate.retryAfterSeconds))
@@ -88,14 +90,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         // An answer given with the reading open is not a recall: nothing is written for it. An "I don't remember" always gets its explainer.
         if (parsed.data.kind === 'recall' && (result.feedback.idk || !result.feedback.abandoned)) {
           // Not awaited: the answer does not wait for the job to be created (the explainer page shows it as being written meanwhile).
-          void startGapExplainer({ userId: auth.user.id, attemptId: result.feedback.attemptId, quiet: true }).catch((error) => console.error('Gap explainer start error:', error))
+          void startGapExplainer({ userId: auth.user.id, attemptId: result.feedback.attemptId, quiet: true }).catch((error) => logServerError('Gap explainer start error', error))
         }
         return NextResponse.json({ status: 'graded', feedback: result.feedback })
     }
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof TutorUnavailableError) return tutorFailure(error)
-    console.error('Recall error:', error)
+    logServerError('Recall error', error)
     return apiInternal('Your answer could not be graded')
   }
 }
@@ -103,15 +105,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { topicId } = await params
-    const parsed = revealSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, revealSchema)
+    if (!parsed.ok) return parsed.response
     const result = await revealMissed({ userId: auth.user.id, topicId, attemptId: parsed.data.attemptId, timeZone: await studentTimeZone() })
     if (result.status === 'not_found') return apiNotFound('Answer not found')
     return NextResponse.json({ revealed: result.revealed })
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('Recall reveal error:', error)
+    logServerError('Recall reveal error', error)
     return apiInternal('Could not show what you missed')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

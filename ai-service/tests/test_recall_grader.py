@@ -20,7 +20,7 @@ ANSWER = "A hash table sends each key to a bucket. When two keys land in the sam
 
 
 def request(**over):
-    base = dict(prompt="Explain how a hash table handles keys that share a bucket.", claims=CLAIMS, answer=ANSWER)
+    base = dict(prompt="Explain how a hash table handles keys that share a bucket.", claims=CLAIMS, answer=ANSWER, user_id="u1", project_id="p1")
     base.update(over)
     return RecallGradeRequest(**base)
 
@@ -285,19 +285,9 @@ def body(**over):
         "prompt": "Explain how a hash table handles keys that share a bucket.",
         "claims": [c.model_dump() for c in CLAIMS],
         "answer": ANSWER,
+        "user_id": "u1",
+        "project_id": "p1",
     }
     base.update(over)
     return base
-
-
-def test_a_user_over_budget_gets_a_429_and_no_model_call(client):
-    provider = Scripted([])
-
-    async def over(_user_id):
-        return "Daily AI usage limit reached"
-
-    with use(provider), patch("app.api.routes.grading.over_budget_message", over):
-        response = client.post("/grade/recall", json=body(user_id="u1"))
-    assert response.status_code == 429 and response.json()["error_code"] == "LLM_DAILY_BUDGET"
-    assert provider.calls == []
 

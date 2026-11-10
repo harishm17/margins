@@ -11,13 +11,27 @@ def new_id() -> str:
     return uuid.uuid4().hex
 
 
-async def seed_user(pool, user_id: Optional[str] = None) -> str:
+async def seed_user(
+    pool, user_id: Optional[str] = None, *, age_days: float = 30, spend_key: Optional[str] = None
+) -> str:
+    """A user. Seeded users are a month old by default, so the first-day allowance and the reserve for older accounts
+    do not apply unless a test asks (age_days=0). `spend_key` also adds the key's spend_accounts row."""
     user_id = user_id or new_id()
     await pool.execute(
-        f"INSERT INTO users (id, email, updated_at) VALUES ($1, $2, {UTC_NOW})",
+        f"INSERT INTO users (id, email, spend_key, created_at, updated_at) "
+        f"VALUES ($1, $2, $3, {UTC_NOW} - make_interval(secs => $4), {UTC_NOW})",
         user_id,
         f"{user_id}@example.com",
+        spend_key,
+        age_days * 86400.0,
     )
+    if spend_key is not None:
+        await pool.execute(
+            f"INSERT INTO spend_accounts (spend_key, first_seen_at) VALUES ($1, {UTC_NOW} - make_interval(secs => $2)) "
+            "ON CONFLICT DO NOTHING",
+            spend_key,
+            age_days * 86400.0,
+        )
     return user_id
 
 
@@ -152,3 +166,14 @@ async def seed_usage(pool, user_id: str, cost: float, *, source: str = "job",
         event_id, user_id, project_id, source, new_id(), cost,
     )
     return event_id
+
+
+async def seed_voice_session(pool, user_id: str, project_id: str, *, session_id: str | None = None,
+                             topic_id: str | None = None, mode: str = "topic_drill") -> str:
+    session_id = session_id or new_id()
+    await pool.execute(
+        "INSERT INTO voice_drill_sessions (id, user_id, project_id, topic_id, mode, question_set) "
+        "VALUES ($1, $2, $3, $4, $5, '[]')",
+        session_id, user_id, project_id, topic_id, mode,
+    )
+    return session_id

@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { publicHealthBody, readiness } from '@/lib/ops/health'
@@ -23,7 +24,7 @@ export async function GET() {
     watchdogLastRun: async () =>
       (await prisma.opsState.findUnique({ where: { key: 'watchdog_last_run' } }))?.value ?? null,
   })
-  if (!result.ready) console.error(`[HEALTH] Not ready: ${result.failed.join(', ')}`)
+  if (!result.ready) logServerError('Health: not ready', undefined, { failed: result.failed.join(',') })
   return NextResponse.json(publicHealthBody(result.ready), {
     status: result.ready ? 200 : 503,
     headers: { 'Cache-Control': 'no-store' },

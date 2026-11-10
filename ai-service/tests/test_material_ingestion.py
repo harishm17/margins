@@ -197,8 +197,26 @@ class TestValidateJob:
         result = await jobs.validate_material_job(s.payload)
 
         assert result["status"] == "success"
-        assert (await s.material())["validation_status"] == "invalid"
+        material = await s.material()
+        assert material["validation_status"] == "invalid"
+        assert material["validation_notes"] == "This file could not be read. It may be corrupt."
         assert (await s.job())["status"] == "completed"
+        assert dispatched == []
+
+    async def test_file_over_a_parse_limit_is_invalid_with_a_fixed_note(
+        self, db, local_uploads, dispatched, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "PARSE_MAX_PDF_PAGES", 2)
+        gcs_path = put_upload(local_uploads, "long.pdf", text_pdf(3))
+        s = await Setup.create(db, "validate_material", gcs_path, "long.pdf")
+
+        await jobs.validate_material_job(s.payload)
+
+        material = await s.material()
+        assert material["validation_status"] == "invalid"
+        assert material["validation_notes"] == (
+            "This file has more pages than Margins can read (limit 2)."
+        )
         assert dispatched == []
 
     async def test_valid_file_completes_and_starts_one_chunking_job(
@@ -351,6 +369,66 @@ class TestChunkJob:
         assert (await s.material())["validation_status"] == "invalid"
         job = await s.job()
         assert (job["error_code"], job["retryable"]) == ("NO_CONTENT", False)
+
+    @pytest.mark.parametrize(
+        "limit,value,note",
+        [
+            ("PARSE_MAX_PDF_PAGES", 2, "This file has more pages than Margins can read (limit 2)."),
+            ("PARSE_MAX_CHUNKS", 1, "This file has more text than Margins can read."),
+        ],
+    )
+    async def test_refused_or_unreadable_file_is_invalid_and_never_retried(
+        self, db, local_uploads, monkeypatch, limit, value, note
+    ):
+        monkeypatch.setattr(settings, limit, value)
+        gcs_path = put_upload(local_uploads, "doc.pdf", text_pdf(3))
+        self.fake_embeddings(monkeypatch)
+        s = await Setup.create(db, "chunk_material", gcs_path, "doc.pdf", status="valid")
+
+        with pytest.raises(HTTPException) as raised:
+            await jobs.chunk_material_job(s.payload)
+
+        assert raised.value.status_code == 400
+        assert await db.fetchval("SELECT count(*) FROM material_chunks") == 0
+        material = await s.material()
+        assert (material["validation_status"], material["validation_notes"]) == ("invalid", note)
+        job = await s.job()
+        assert (job["status"], job["retryable"]) == ("failed", False)
+
+    async def test_unreadable_file_is_invalid_and_never_retried(self, db, local_uploads, monkeypatch):
+        bad = local_uploads / "user" / "project" / "bad.pdf"
+        bad.parent.mkdir(parents=True, exist_ok=True)
+        bad.write_bytes(b"junk")
+        self.fake_embeddings(monkeypatch)
+        s = await Setup.create(db, "chunk_material", "local://user/project/bad.pdf", "bad.pdf", status="valid")
+
+        with pytest.raises(HTTPException) as raised:
+            await jobs.chunk_material_job(s.payload)
+
+        assert raised.value.status_code == 400
+        material = await s.material()
+        assert material["validation_status"] == "invalid"
+        assert material["validation_notes"] == "This file could not be read. It may be corrupt."
+        assert (await s.job())["retryable"] is False
+
+    async def test_many_chunks_are_embedded_and_stored_in_batches(self, db, local_uploads, monkeypatch):
+        gcs_path = put_upload(local_uploads, "doc.pdf", text_pdf(3))
+        sizes: list[int] = []
+
+        async def embed(texts):
+            sizes.append(len(texts))
+            return [[0.5] * 384 for _ in texts]
+
+        monkeypatch.setattr(jobs, "generate_embeddings", embed)
+        monkeypatch.setattr(jobs, "EMBED_BATCH_SIZE", 2)
+        monkeypatch.setattr(jobs, "INSERT_BATCH_SIZE", 2)
+        s = await Setup.create(db, "chunk_material", gcs_path, "doc.pdf", status="valid")
+
+        await jobs.chunk_material_job(s.payload)
+
+        stored = await db.fetchval("SELECT count(*) FROM material_chunks")
+        assert stored == sum(sizes) and max(sizes) == 2 and stored > 2
+
 
 class TestAutoTopicExtraction:
     @pytest.fixture(autouse=True)

@@ -1,6 +1,10 @@
 """Chunking and extraction, checked against files built at test time."""
-import subprocess
+import asyncio
+import re
+import stat
 import time
+
+import httpx
 
 import pytest
 
@@ -10,16 +14,26 @@ from app.services.document_processor.chunker import (
     OVERLAP_TOKENS,
     NUMBERED_HEADING,
     NoContentError,
-    chunk_document,
     chunk_pages,
     count_tokens,
 )
-from app.services.document_processor.extractors import (
+from app.config import settings
+from app.main import app
+from app.services.document_processor.parse_types import (
     ExtractedPage,
+    ParseRefused,
     UnreadableDocumentError,
-    extract_document,
+    refusal_note,
 )
-from tests.document_fixtures import PdfBuilder, build_docx, build_pptx, sentences
+from app.services.document_processor.sandbox import parse_document
+from tests.document_fixtures import (
+    PdfBuilder,
+    build_docx,
+    build_pptx,
+    inflate_xml_part,
+    many_page_pdf,
+    sentences,
+)
 
 # The embedding model reads 512 tokens; chunks must leave room for tokenizer differences.
 EMBEDDING_LIMIT = 512
@@ -27,6 +41,14 @@ EMBEDDING_LIMIT = 512
 
 def page(text: str, number=1) -> ExtractedPage:
     return ExtractedPage(number=number, text=text)
+
+
+async def extract_document(path, filename, markdown=True):
+    return await parse_document(str(path), filename, markdown=markdown)
+
+
+async def chunk_document(path, filename):
+    return chunk_pages((await extract_document(path, filename)).pages)
 
 
 def assert_chunks_within_limits(chunks):
@@ -57,8 +79,8 @@ class TestPdfChunking:
         pdf.paragraph("A binary search tree keeps its keys ordered.")
         return pdf.save(tmp_path / "book.pdf")
 
-    def test_headings_hierarchy_and_body(self, book_pdf):
-        chunks = chunk_document(book_pdf, "book.pdf")
+    async def test_headings_hierarchy_and_body(self, book_pdf):
+        chunks = await chunk_document(book_pdf, "book.pdf")
 
         hashing = next(c for c in chunks if "2.1 Hashing" in c.chunk_text)
         assert hashing.section_hierarchy == "Chapter 2 Data Structures > 2.1 Hashing"
@@ -69,8 +91,8 @@ class TestPdfChunking:
         # Heading levels stay consistent across pages: 2.2 nests under Chapter 2 like 2.1 did.
         assert trees.section_hierarchy == "Chapter 2 Data Structures > 2.2 Trees"
 
-    def test_numbered_lines_table_and_subscripts_survive(self, book_pdf):
-        text = "\n".join(c.chunk_text for c in chunk_document(book_pdf, "book.pdf"))
+    async def test_numbered_lines_table_and_subscripts_survive(self, book_pdf):
+        text = "\n".join(c.chunk_text for c in await chunk_document(book_pdf, "book.pdf"))
 
         for line in (
             "1. Compute the hash of the key",
@@ -84,29 +106,29 @@ class TestPdfChunking:
         assert "H 2 O" not in text
 
 
-    def test_pdf_of_only_numbered_items_yields_chunks(self, tmp_path):
+    async def test_pdf_of_only_numbered_items_yields_chunks(self, tmp_path):
         pdf = PdfBuilder()
         items = [f"{n}. Question number {n} about sorting algorithms" for n in range(1, 31)]
         for item in items:
             pdf.line(item)
         path = pdf.save(tmp_path / "numbered.pdf")
 
-        chunks = chunk_document(path, "numbered.pdf")
+        chunks = await chunk_document(path, "numbered.pdf")
 
         assert chunks
         text = "\n".join(c.chunk_text for c in chunks)
         for item in items:
             assert item in text
 
-    def test_long_document_page_ranges(self, tmp_path):
+    async def test_long_document_page_ranges(self, tmp_path):
         pdf = PdfBuilder()
         pdf.heading("Chapter 1 Everything", 20)
         for sentence in sentences(400):
             pdf.paragraph(sentence)
         path = pdf.save(tmp_path / "long.pdf")
 
-        extracted = extract_document(path, "long.pdf")
-        chunks = chunk_document(path, "long.pdf")
+        extracted = await extract_document(path, "long.pdf")
+        chunks = await chunk_document(path, "long.pdf")
 
         assert extracted.page_count > 3
         assert len(chunks) > 5
@@ -123,7 +145,7 @@ class TestPdfChunking:
         for sentence in sentences(400):
             assert sentence in text
 
-    def test_password_protected_pdf_is_unreadable(self, tmp_path):
+    async def test_password_protected_pdf_is_unreadable(self, tmp_path):
         import pymupdf
 
         doc = pymupdf.open()
@@ -133,14 +155,14 @@ class TestPdfChunking:
         doc.close()
 
         with pytest.raises(UnreadableDocumentError, match="password"):
-            extract_document(str(path), "locked.pdf")
+            await extract_document(str(path), "locked.pdf")
 
-    def test_corrupt_pdf_is_unreadable(self, tmp_path):
+    async def test_corrupt_pdf_is_unreadable(self, tmp_path):
         path = tmp_path / "bad.pdf"
         path.write_bytes(b"this is not a pdf at all")
 
-        with pytest.raises(UnreadableDocumentError):
-            extract_document(str(path), "bad.pdf")
+        with pytest.raises(UnreadableDocumentError, match="may be corrupt"):
+            await extract_document(str(path), "bad.pdf")
 
 
 class TestSplitter:
@@ -241,8 +263,8 @@ class TestSections:
 
 
 class TestDocx:
-    def test_tables_stay_in_order_and_headings_map(self, tmp_path):
-        extracted = extract_document(build_docx(tmp_path / "notes.docx"), "notes.docx")
+    async def test_tables_stay_in_order_and_headings_map(self, tmp_path):
+        extracted = await extract_document(build_docx(tmp_path / "notes.docx"), "notes.docx")
         text = extracted.text
 
         assert text.startswith("# Course Notes")
@@ -260,8 +282,8 @@ class TestDocx:
 
 
 class TestPptx:
-    def test_tables_groups_and_notes_are_included(self, tmp_path):
-        extracted = extract_document(build_pptx(tmp_path / "deck.pptx"), "deck.pptx")
+    async def test_tables_groups_and_notes_are_included(self, tmp_path):
+        extracted = await extract_document(build_pptx(tmp_path / "deck.pptx"), "deck.pptx")
 
         assert extracted.page_count == 2
         assert [p.number for p in extracted.pages] == [1, 2]
@@ -274,52 +296,161 @@ class TestPptx:
         assert "Text inside a grouped shape" in second
 
 
-def test_doc_without_libreoffice_fails_with_clear_message(monkeypatch, tmp_path):
-    monkeypatch.setattr("shutil.which", lambda name: None)
+def _catdoc_on_path(monkeypatch, tmp_path, script: str = ""):
+    """A PATH holding only a fake catdoc running `script` (no catdoc at all when empty)."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    if script:
+        catdoc = bin_dir / "catdoc"
+        catdoc.write_text("#!/bin/sh\n" + script + "\n")
+        catdoc.chmod(catdoc.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", str(bin_dir))
     path = tmp_path / "old.doc"
     path.write_bytes(b"\xd0\xcf\x11\xe0 legacy")
-
-    with pytest.raises(UnreadableDocumentError, match="LibreOffice or catdoc"):
-        extract_document(str(path), "old.doc")
+    return path
 
 
-def _fake_catdoc(monkeypatch, stdout: bytes, returncode: int = 0):
-    """No LibreOffice; catdoc at /usr/bin/catdoc printing `stdout`."""
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/catdoc" if name == "catdoc" else None)
-    calls = []
+async def test_doc_without_catdoc_fails_with_clear_message(monkeypatch, tmp_path):
+    path = _catdoc_on_path(monkeypatch, tmp_path)
 
-    def run(args, **kwargs):
-        calls.append(args)
-        return subprocess.CompletedProcess(args, returncode, stdout=stdout, stderr=b"")
-
-    monkeypatch.setattr("subprocess.run", run)
-    return calls
+    with pytest.raises(UnreadableDocumentError, match="cannot be read on this server"):
+        await extract_document(str(path), "old.doc")
 
 
-def test_doc_falls_back_to_catdoc_text(monkeypatch, tmp_path):
-    calls = _fake_catdoc(monkeypatch, "Hash tables\n\nChaining keeps a list per bucket. H₂O.\n".encode())
-    path = tmp_path / "old.doc"
-    path.write_bytes(b"\xd0\xcf\x11\xe0 legacy")
+async def test_doc_is_read_as_plain_text_through_catdoc(monkeypatch, tmp_path):
+    path = _catdoc_on_path(
+        monkeypatch, tmp_path, "printf 'Hash tables\\n\\nChaining keeps a list per bucket.\\n'"
+    )
 
-    extracted = extract_document(str(path), "old.doc")
+    extracted = await extract_document(str(path), "old.doc")
 
-    assert calls[0][:4] == ["/usr/bin/catdoc", "-w", "-d", "utf-8"]
     assert extracted.extension == ".doc"
-    assert "Chaining keeps a list per bucket. H₂O." in extracted.text
+    assert "Chaining keeps a list per bucket." in extracted.text
     assert extracted.pages[0].number is None
 
 
-@pytest.mark.parametrize("stdout,returncode", [(b"", 0), (b"partial", 1)])
-def test_unreadable_catdoc_output_is_a_clear_error(monkeypatch, tmp_path, stdout, returncode):
-    _fake_catdoc(monkeypatch, stdout, returncode)
-    path = tmp_path / "old.doc"
-    path.write_bytes(b"\xd0\xcf\x11\xe0 legacy")
+@pytest.mark.parametrize("script", ["exit 0", "echo partial; exit 1"])
+async def test_unreadable_catdoc_output_is_a_clear_error(monkeypatch, tmp_path, script):
+    path = _catdoc_on_path(monkeypatch, tmp_path, script)
 
     with pytest.raises(UnreadableDocumentError, match="could not be read"):
-        extract_document(str(path), "old.doc")
+        await extract_document(str(path), "old.doc")
 
 
-def test_unsupported_extension_is_rejected(tmp_path):
+async def test_unsupported_extension_is_rejected(tmp_path):
     with pytest.raises(UnreadableDocumentError, match="Unsupported"):
-        extract_document(str(tmp_path / "x.txt"), "x.txt")
+        await extract_document(str(tmp_path / "x.txt"), "x.txt")
 
+
+class TestParseLimits:
+    """Untrusted files are read in a limited child process; a file past a limit is refused fast
+    and the service keeps answering."""
+
+    @pytest.mark.parametrize("kind", ["docx", "pptx"])
+    async def test_xml_that_expands_past_the_limit_is_refused(self, tmp_path, kind):
+        build = build_docx if kind == "docx" else build_pptx
+        part = "word/document.xml" if kind == "docx" else "ppt/slides/slide1.xml"
+        path = inflate_xml_part(build(tmp_path / f"bomb.{kind}"), part, 40 * 1024 * 1024)
+
+        with pytest.raises(ParseRefused) as refused:
+            await extract_document(path, f"bomb.{kind}")
+
+        assert refusal_note(refused.value) == "This file could not be read safely."
+
+    async def test_package_with_too_many_parts_is_refused(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(settings, "PARSE_MAX_ZIP_MEMBERS", 5)
+        with pytest.raises(ParseRefused):
+            await extract_document(build_pptx(tmp_path / "deck.pptx"), "deck.pptx")
+
+    async def test_5000_page_pdf_is_refused_in_seconds_while_the_service_answers(self, tmp_path):
+        path = many_page_pdf(tmp_path / "huge.pdf", 5000)
+        started = time.perf_counter()
+        parse = asyncio.create_task(extract_document(path, "huge.pdf"))
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            answer = await client.get("/")
+
+        with pytest.raises(ParseRefused) as refused:
+            await parse
+
+        assert answer.status_code == 200
+        assert time.perf_counter() - started < 15
+        assert refusal_note(refused.value) == (
+            f"This file has more pages than Margins can read (limit {settings.PARSE_MAX_PDF_PAGES})."
+        )
+
+    async def test_a_300_page_pdf_is_not_refused(self, tmp_path):
+        path = many_page_pdf(tmp_path / "course.pdf", 300, text=True)
+
+        extracted = await extract_document(path, "course.pdf", markdown=False)
+
+        assert extracted.page_count == 300
+
+    async def test_text_over_the_cap_is_refused(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(settings, "PARSE_MAX_CHARS", 100)
+        with pytest.raises(ParseRefused) as refused:
+            await extract_document(build_docx(tmp_path / "n.docx"), "n.docx")
+        assert refused.value.reason_code == "too_much_text"
+
+    async def test_file_over_the_code_ceiling_is_refused_before_parsing(self, tmp_path):
+        path = tmp_path / "big.pdf"
+        with open(path, "wb") as handle:
+            handle.truncate(50 * 1024 * 1024 + 1)
+        with pytest.raises(ParseRefused) as refused:
+            await extract_document(str(path), "big.pdf")
+        assert refusal_note(refused.value) == "This file is too large to read."
+
+    async def test_child_past_its_memory_limit_is_refused_not_retried(self, monkeypatch, tmp_path):
+        from docx import Document
+
+        monkeypatch.setattr(settings, "PARSE_MEMORY_MB", 1)
+        document = Document()
+        for number in range(5000):
+            document.add_paragraph(f"Paragraph {number} about hash tables and their buckets.")
+        document.save(str(tmp_path / "long.docx"))
+
+        with pytest.raises(ParseRefused) as refused:
+            await extract_document(tmp_path / "long.docx", "long.docx")
+
+        assert refused.value.reason_code == "unsafe"
+
+    async def test_child_past_its_wall_clock_is_killed(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(settings, "PARSE_WALL_SECONDS", 1)
+        path = many_page_pdf(tmp_path / "course.pdf", 200, text=True)
+
+        started = time.perf_counter()
+        with pytest.raises(ParseRefused) as refused:
+            await extract_document(path, "course.pdf")
+
+        assert refused.value.reason_code == "timeout"
+        assert refusal_note(refused.value) == "This file took too long to read."
+        assert time.perf_counter() - started < 10
+
+    async def test_child_does_not_see_the_service_secrets(self, monkeypatch):
+        from app.services.document_processor import sandbox
+
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret")
+        monkeypatch.setenv("DATABASE_URL", "postgresql://secret")
+        assert set(sandbox._child_env()) <= {"PATH", "LANG", "VIRTUAL_ENV", "TMPDIR"}
+
+
+def test_only_the_child_module_uses_the_parsers():
+    """Every read of an upload goes through parse_document: nothing else in app/ imports the
+    extractors or a parsing library."""
+    from pathlib import Path
+
+    app_dir = Path(__file__).resolve().parents[1] / "app"
+    allowed = {"extractors.py", "sandbox_child.py"}
+    pattern = re.compile(
+        r"^\s*(import|from)\s+(pymupdf|pymupdf4llm|docx|pptx|fitz)\b"
+        r"|document_processor(\.extractors|\s+import\s+extractors)"
+        r"|\bextract_document\b",
+        re.MULTILINE,
+    )
+    offenders = [
+        str(path.relative_to(app_dir))
+        for path in app_dir.rglob("*.py")
+        if path.name not in allowed and pattern.search(path.read_text())
+    ]
+    assert offenders == []

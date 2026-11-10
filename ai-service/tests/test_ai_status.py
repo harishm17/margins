@@ -25,7 +25,7 @@ from app.services.llm.base import (
 )
 from app.services.llm.mock_provider import MockProvider
 from app.services.llm.observed import ObservedProvider
-from tests.db_helpers import get_job, seed_job, seed_project, seed_usage, seed_user
+from tests.db_helpers import seed_voice_session, get_job, seed_job, seed_project, seed_usage, seed_user
 
 
 @pytest.fixture
@@ -143,7 +143,7 @@ class TestRecoveryAlert:
         await ai_status.record_failure(LLMCreditError("credit balance too low for request req_abc"))
         await ops.wait_for_alerts()
         assert "LLM_CREDIT_EXHAUSTED" in alerts[0][1]
-        assert "req_abc" not in alerts[0][1] and "req_abc" in caplog.text
+        assert "req_abc" not in alerts[0][1] and "LLMCreditError(LLM_CREDIT_EXHAUSTED)" in caplog.text
 
     async def test_only_the_process_that_makes_the_change_alerts(self, db, alerts):
         await ai_status.record_failure(LLMCreditError("credit"))
@@ -225,6 +225,7 @@ class TestRefusedWhileDown:
     async def test_chat_and_voice_are_refused_before_anything_streams(self, db, alerts, path, body):
         user_id = await seed_user(db)
         project_id = await seed_project(db, user_id)
+        await seed_voice_session(db, user_id, project_id, session_id="s1")
         await mark_down()
 
         response = await call("POST", path, json={"project_id": project_id, "user_id": user_id, **body})

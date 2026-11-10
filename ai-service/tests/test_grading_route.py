@@ -60,7 +60,7 @@ def _llm(reply=None, error=None):
 
 def _post(client, llm, questions, answers):
     with patch("app.services.exam_grader.LLMFactory.get_provider", return_value=llm):
-        return client.post("/grade/quiz", json={"questions": questions, "answers": answers})
+        return client.post("/grade/quiz", json={"user_id": "u1", "project_id": "p1", "questions": questions, "answers": answers})
 
 
 def test_grades_every_question_type(client):
@@ -107,7 +107,7 @@ def test_extra_fields_in_the_request_do_not_override_grading(client):
     with patch("app.services.exam_grader.LLMFactory.get_provider", return_value=llm):
         resp = client.post(
             "/grade/quiz",
-            json={"questions": QUESTIONS, "answers": {"0": "A"}, "score": 100, "results": {"0": True}},
+            json={"user_id": "u1", "project_id": "p1", "questions": QUESTIONS, "answers": {"0": "A"}, "score": 100, "results": {"0": True}},
         )
 
     assert resp.status_code == 200
@@ -123,7 +123,7 @@ def test_extra_fields_in_the_request_do_not_override_grading(client):
     ],
 )
 def test_bad_requests_are_rejected(client, payload):
-    assert client.post("/grade/quiz", json=payload).status_code == 422
+    assert client.post("/grade/quiz", json={"user_id": "u1", "project_id": "p1", **payload}).status_code == 422
 
 
 def test_thinking_passed_to_grader_as_untrusted(client):

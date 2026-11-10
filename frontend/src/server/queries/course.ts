@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { notFound } from 'next/navigation'
 import { areRecordIds } from '@/lib/ids'
 import { prisma } from '@/lib/db/prisma'
@@ -155,7 +156,7 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
       where: { projectId: courseId, userId, jobType: 'extract_topics' },
       orderBy: { createdAt: 'desc' },
       take: 3,
-      select: { id: true, status: true, stage: true, progressPercent: true, createdAt: true, errorCode: true, errorMessage: true },
+      select: { id: true, status: true, stage: true, progressPercent: true, createdAt: true, errorCode: true },
     }),
     typicalReadSeconds(),
   ])
@@ -246,7 +247,7 @@ export async function getMaterialsData(userId: string, courseId: string): Promis
     extractJob: activeExtract ? toJobRef(activeExtract) : null,
     extractFailure:
       !activeExtract && latestExtract?.status === 'failed'
-        ? describeJobFailure(latestExtract.errorCode, latestExtract.errorMessage, 'extract_topics')
+        ? describeJobFailure(latestExtract.errorCode, 'extract_topics')
         : null,
     typicalReadSeconds: typicalSeconds,
   }
@@ -303,7 +304,7 @@ export async function getGenerationState(userId: string, course: CourseShell): P
       where: { projectId: course.id, userId, jobType: 'generate_content', targetKey: { not: null } },
       orderBy: { createdAt: 'desc' },
       take: 600,
-      select: { id: true, targetKey: true, status: true, errorCode: true, errorMessage: true },
+      select: { id: true, targetKey: true, status: true, errorCode: true },
     }),
   ])
 
@@ -497,7 +498,7 @@ export async function getCourseOverview(
   // promise keeps running after the response is sent. On a host that freezes or stops the process when the
   // response ends (serverless), this must move to a job. A run that dies midway marks nothing; its lease
   // (Project.evidenceBackfillClaimedAt) expires and a later visit finishes it, so a failure here is only logged.
-  void backfillIfDue(userId, courseId, { timeZone }).catch((error) => console.error('Evidence backfill failed:', error))
+  void backfillIfDue(userId, courseId, { timeZone }).catch((error) => logServerError('Evidence backfill failed', error))
 
   const examTitles = await getExamTitles(userId, courseId)
   const now = new Date()

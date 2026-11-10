@@ -5,6 +5,7 @@
  * A page that was refreshed mid-job calls this to find the jobs to follow again.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ jobs: jobs.map(serializeJob) })
   } catch (error) {
-    console.error('Active jobs error:', error)
+    logServerError('Active jobs error', error)
 
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()

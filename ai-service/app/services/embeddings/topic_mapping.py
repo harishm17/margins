@@ -80,9 +80,8 @@ async def ensure_topic_mappings(topic_id: str, limit: int) -> None:
         return
 
     logger.info(
-        "Mapping topic %s ('%s') to chunks: %s",
+        "Mapping topic %s to chunks: %s",
         topic_id,
-        topic["name"],
         "mappings are older than the newest chunk" if stale else "no mappings yet",
     )
     try:

@@ -60,6 +60,8 @@ jobs:
       - run: npx prisma validate
       - run: npm run lint
       - run: npx tsc --noEmit
+      - name: Dependency audit (high and critical; accepted advisories are listed with reasons in the script)
+        run: node scripts/audit-gate.mjs
       - run: npx prisma migrate deploy
       - name: Tests, with none skipped (the database tests skip when the database is missing)
         run: |
@@ -95,6 +97,8 @@ jobs:
       DATABASE_URL: postgresql://dev:devpass@localhost:5432/margins
       TEST_DB_ADMIN_URL: postgresql://dev:devpass@localhost:5432/postgres
       ANTHROPIC_API_KEY: test-key
+      # No default for ENVIRONMENT: the suites say they run as development (the evals import the settings too).
+      ENVIRONMENT: development
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
@@ -104,6 +108,11 @@ jobs:
           cache-dependency-glob: ai-service/uv.lock
       - run: uv sync --locked --python 3.14
       - run: uv run python -m compileall -q app
+      - name: Dependency audit (the locked runtime requirements; accepted findings are in audit-ignore.txt)
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-emit-project -o "$RUNNER_TEMP/req.txt" > /dev/null
+          ignores=$(grep -v '^#' audit-ignore.txt | grep . | sed 's/^/--ignore-vuln /' | tr '\n' ' ')
+          uvx pip-audit -r "$RUNNER_TEMP/req.txt" --no-deps --disable-pip $ignores
       - name: Migrations only add, and the AI service names the newest one
         run: python3 ../scripts/check_migrations.py
       - run: uv run pytest -q
@@ -209,8 +218,8 @@ jobs:
           # Railway's pre-deploy command runs `prisma migrate deploy` in this image.
           docker run --rm --network none --entrypoint prisma margins-frontend --version
           docker run -d --name web -p 3000:3000 \
-            -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db \
-            -e NEXTAUTH_SECRET=ci-secret -e NEXTAUTH_URL=http://127.0.0.1:3000 \
+            -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ENVIRONMENT=development \
+            -e NEXTAUTH_SECRET=ci-secret -e NEXTAUTH_URL=http://127.0.0.1:3000 -e SPEND_KEY_SECRET=ci-spend-key \
             margins-frontend
           for _ in $(seq 1 30); do
             curl -fsS -o /dev/null http://127.0.0.1:3000/login && exit 0
@@ -218,20 +227,32 @@ jobs:
           done
           docker logs web
           exit 1
-      - name: Image refuses to start on a public URL without Google sign-in, or with the test sign-in on
+      - name: Image refuses to start on a public URL with an unsafe or missing setting
         run: |
+          # Every case starts from a production base that is valid except for the one setting under test, and checks
+          # the refusal names that setting, so a case cannot pass because an earlier check refused first.
+          GOOGLE="-e GOOGLE_OAUTH_CLIENT_ID=1-ci.apps.googleusercontent.com -e GOOGLE_OAUTH_CLIENT_SECRET=ci-not-a-real-google-secret"
           refuses() {
+            local expect="$1"; shift
             if out="$(timeout 60 docker run --rm \
-                -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e NEXTAUTH_SECRET=ci-secret \
+                -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ENVIRONMENT=production -e AI_INTERNAL_TOKEN=ci-token \
+                -e NEXTAUTH_SECRET=ci-secret -e SPEND_KEY_SECRET=ci-spend-key -e S3_BUCKET=ci-bucket \
                 -e NEXTAUTH_URL=https://studymargins.com "$@" margins-frontend 2>&1)"; then
               echo "started, but should have refused: $*"; echo "$out"; exit 1
             fi
             grep -q "Refusing to start" <<<"$out" || { echo "no refusal message: $*"; echo "$out"; exit 1; }
+            grep -q "$expect" <<<"$out" || { echo "refused, but not for $expect: $*"; echo "$out"; exit 1; }
           }
-          refuses
-          refuses -e GOOGLE_OAUTH_CLIENT_ID=your-google-client-id -e GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
-          refuses -e GOOGLE_OAUTH_CLIENT_ID=1-ci.apps.googleusercontent.com -e GOOGLE_OAUTH_CLIENT_SECRET=ci-not-a-real-google-secret \
-            -e ENABLE_TEST_LOGIN=true
+          refuses GOOGLE_OAUTH_CLIENT_ID
+          refuses GOOGLE_OAUTH_CLIENT_ID -e GOOGLE_OAUTH_CLIENT_ID=your-google-client-id -e GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
+          # shellcheck disable=SC2086
+          refuses ENABLE_TEST_LOGIN $GOOGLE -e ENABLE_TEST_LOGIN=true
+          # shellcheck disable=SC2086
+          refuses SPEND_KEY_SECRET $GOOGLE -e SPEND_KEY_SECRET=
+          # shellcheck disable=SC2086
+          refuses S3_BUCKET $GOOGLE -e S3_BUCKET=
+          # shellcheck disable=SC2086
+          refuses AI_INTERNAL_TOKEN $GOOGLE -e AI_INTERNAL_TOKEN=
 
   ai-service-image:
     runs-on: ubuntu-latest
@@ -251,10 +272,21 @@ jobs:
             "import tiktoken; print(len(tiktoken.get_encoding('cl100k_base').encode('hello world')))"
       - name: catdoc is available for legacy .doc uploads
         run: docker run --rm --network none --entrypoint catdoc margins-ai -V
+      - name: Uploads are read by the limited child process as the image's user
+        run: |
+          docker run --rm --network none -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key -e ENVIRONMENT=development \
+            --entrypoint python margins-ai -c "
+          import asyncio, docx
+          from app.services.document_processor.sandbox import parse_document
+          d = docx.Document(); d.add_paragraph('Hash tables map keys to buckets.'); d.save('/tmp/t.docx')
+          r = asyncio.run(parse_document('/tmp/t.docx', 't.docx', markdown=True))
+          assert 'Hash tables' in r.text, r
+          print('child parse ok', r.page_count)
+          "
       - name: Image starts; /health stays unready without its database
         run: |
           docker run -d --name ai -p 8000:8000 \
-            -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key \
+            -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key -e ENVIRONMENT=development \
             margins-ai
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8000/; then

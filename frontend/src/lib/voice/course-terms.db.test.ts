@@ -36,11 +36,11 @@ test('a topic gives its active concepts in order, then terms from their claims; 
   await prisma.conceptClaim.create({ data: { conceptId: second.id, text: 'Dijkstra finds the shortest path when no edge weight is negative.', quote: 'q', materialId: material.id, orderIndex: 0 } })
   await prisma.conceptClaim.create({ data: { conceptId: first.id, text: 'A graph has vertices joined by edges.', quote: 'q', materialId: material.id, orderIndex: 0 } })
 
-  const got = await terms.courseTermsForTopics([topic.id])
+  const got = await terms.courseTermsForTopics(user.id, [topic.id])
   assert.deepEqual(got.slice(0, 2), ['Graph', 'Shortest path'])
   assert.ok(got.includes('Dijkstra'))
   assert.equal(got.includes('Retired idea'), false)
-  assert.deepEqual(await terms.courseTermsForTopics([]), [])
+  assert.deepEqual(await terms.courseTermsForTopics(user.id, []), [])
 })
 
 test("several topics' terms come in course order, not in the order of the topics' ids", async (t) => {
@@ -54,6 +54,6 @@ test("several topics' terms come in course order, not in the order of the topics
   await prisma.concept.create({ data: { projectId: project.id, topicId: later.id, name: 'Heap', summary: 's', kind: 'concept', orderIndex: 0 } })
   await prisma.concept.create({ data: { projectId: project.id, topicId: earlier.id, name: 'Graph', summary: 's', kind: 'concept', orderIndex: 0 } })
 
-  const got = await terms.courseTermsForTopics([later.id, earlier.id])
+  const got = await terms.courseTermsForTopics(user.id, [later.id, earlier.id])
   assert.deepEqual(got.slice(0, 2), ['Graph', 'Heap'])
 })

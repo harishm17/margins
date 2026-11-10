@@ -42,7 +42,6 @@ export type JobStatusJob = {
   stage?: string | null
   progressPercent?: number
   errorCode?: string | null
-  errorMessage?: string | null
   retryable?: boolean
   attemptCount?: number
   jobType?: string
@@ -107,7 +106,7 @@ export function JobStatus({
 
   if (job?.status === 'failed') {
     icon = <WarningCircle aria-hidden="true" className="size-4 shrink-0 text-danger" />
-    text = fillResetTime(describeJobFailure(job.errorCode, job.errorMessage, job.jobType))
+    text = fillResetTime(describeJobFailure(job.errorCode, job.jobType))
     // Not while AI is unavailable or the allowance is used: the banner or the note says why.
     if (job.retryable !== false && onRetry && !blocked) {
       action = (

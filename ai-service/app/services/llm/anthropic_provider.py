@@ -35,7 +35,7 @@ from app.services.llm.base import (
 )
 from app.services.llm.limiter import llm_slot
 from app.services.llm.models import resolve_model
-from app.services.llm.usage import estimate_cost_usd, record_usage
+from app.services.llm.usage import estimate_cost_usd, note_partial_usage, record_usage
 from app.validation_errors import describe_validation_error
 
 logger = logging.getLogger(__name__)
@@ -237,6 +237,10 @@ def _retry_after(exc: anthropic.APIStatusError) -> Optional[float]:
     return None
 
 
+def _cost_text(cost: Optional[float]) -> str:
+    return "?" if cost is None else "%.5f" % cost
+
+
 def _translate_api_error(exc: anthropic.APIError) -> Exception:
     """Map SDK exceptions to the provider-neutral errors the job handlers classify.
 
@@ -244,25 +248,27 @@ def _translate_api_error(exc: anthropic.APIError) -> Exception:
     the job fails as retryable and the dispatcher tries again, after `retry_after` if the API
     gave one.
     """
+    # The SDK's text can echo the request (an answer key, a student's words): it goes in `detail`, which no log prints.
+    detail = f"{type(exc).__name__}: {exc}"
     if isinstance(exc, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
-        return LLMAuthError(f"Anthropic rejected the API key: {exc}")
+        return LLMAuthError(detail=detail)
     if isinstance(exc, anthropic.RateLimitError):
-        error: LLMError = LLMRateLimitError(f"Anthropic rate limit: {exc}")
+        error: LLMError = LLMRateLimitError(detail=detail)
         error.retry_after = _retry_after(exc)
         return error
     if isinstance(exc, anthropic.BadRequestError):
         if "credit balance" in str(exc).lower():
-            return LLMCreditError(f"Anthropic credit balance is too low: {exc}")
-        return LLMRequestError(f"Anthropic rejected the request: {exc}")
+            return LLMCreditError(detail=detail)
+        return LLMRequestError(detail=detail)
     if isinstance(exc, anthropic.APIConnectionError):  # includes APITimeoutError
-        return LLMUnavailableError(f"Could not reach Anthropic: {exc}")
+        return LLMUnavailableError(detail=detail)
     if isinstance(exc, anthropic.APIStatusError):
         if exc.status_code >= 500:  # includes 529 overloaded
-            error = LLMUnavailableError(f"Anthropic is unavailable ({exc.status_code}): {exc}")
+            error = LLMUnavailableError(detail=detail)
             error.retry_after = _retry_after(exc)
             return error
-        return LLMRequestError(f"Anthropic rejected the request ({exc.status_code}): {exc}")
-    return LLMUnavailableError(f"Anthropic call failed: {exc}")
+        return LLMRequestError(detail=detail)
+    return LLMUnavailableError(detail=detail)
 
 
 class AnthropicProvider(LLMProvider):
@@ -337,7 +343,7 @@ class AnthropicProvider(LLMProvider):
             usage.output_tokens,
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
-            f"{cost:.5f}" if cost is not None else "?",
+            _cost_text(cost),
             getattr(response, "_request_id", None),
         )
 
@@ -418,6 +424,7 @@ class AnthropicProvider(LLMProvider):
             params["fallbacks"] = "default"
 
         refs = [excerpt.ref for excerpt in excerpts]
+        partial: Optional[LLMUsage] = None
         text_parts: List[str] = []
         written = 0
         citations: List[AnswerCitation] = []
@@ -438,6 +445,7 @@ class AnthropicProvider(LLMProvider):
         try:
             async with llm_slot(), self.client.beta.messages.stream(**params) as stream:
                 async for event in stream:
+                    partial = _partial_usage(event, partial, model, purpose)
                     kind = getattr(event, "type", None)
                     if kind == "content_block_start":
                         for citation in settle():
@@ -485,7 +493,7 @@ class AnthropicProvider(LLMProvider):
             usage.cache_creation_input_tokens,
             len(excerpts),
             len(citations),
-            f"{cost:.5f}" if cost is not None else "?",
+            _cost_text(cost),
             getattr(final, "_request_id", None),
         )
 
@@ -543,9 +551,11 @@ class AnthropicProvider(LLMProvider):
             params["betas"] = [_SERVER_FALLBACK_BETA]
             params["fallbacks"] = "default"
 
+        partial: Optional[LLMUsage] = None
         try:
             async with llm_slot(), self.client.beta.messages.stream(**params) as stream:
                 async for event in stream:
+                    partial = _partial_usage(event, partial, model, purpose)
                     if getattr(event, "type", None) != "content_block_delta":
                         continue
                     delta = event.delta
@@ -576,7 +586,7 @@ class AnthropicProvider(LLMProvider):
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
             len(tools),
-            f"{cost:.5f}" if cost is not None else "?",
+            _cost_text(cost),
             getattr(final, "_request_id", None),
         )
 
@@ -600,6 +610,29 @@ class AnthropicProvider(LLMProvider):
         for block in tool_uses:
             yield TurnToolUse(id=block["id"], name=block["name"], input=block["input"] or {})
         yield TurnDone(stop_reason=stop_reason, content=content, usage=usage)
+
+
+def _partial_usage(event: Any, seen: Optional[LLMUsage], model: str, purpose: str) -> Optional[LLMUsage]:
+    """What a stream has said about its usage so far: the input tokens come with its first event (message_start), the
+    output tokens as message_delta events report them. Reported to the billing scope, so a stream that is cut off is
+    billed for what it used (the final figures replace this when the stream completes)."""
+    kind = getattr(event, "type", None)
+    if kind == "message_start":
+        start = event.message
+        seen = LLMUsage(
+            model=getattr(start, "model", None) or model,
+            purpose=purpose,
+            input_tokens=start.usage.input_tokens or 0,
+            output_tokens=start.usage.output_tokens or 0,
+            cache_read_input_tokens=getattr(start.usage, "cache_read_input_tokens", 0) or 0,
+            cache_creation_input_tokens=getattr(start.usage, "cache_creation_input_tokens", 0) or 0,
+        )
+    elif kind == "message_delta" and seen is not None:
+        seen = seen.model_copy(update={"output_tokens": getattr(event.usage, "output_tokens", 0) or seen.output_tokens})
+    else:
+        return seen
+    note_partial_usage(seen)
+    return seen
 
 
 def _to_answer_citation(citation: Any, refs: List[str], offset: int) -> Optional[AnswerCitation]:

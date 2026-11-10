@@ -6,7 +6,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { aiMessage, isUnavailableCode, type AiMessage } from '@/lib/ai/messages'
 import { AVAILABLE, type AiStatus } from '@/lib/ai/status'
 import { createStatusTracker, statusUrl } from '@/lib/ai/status-tracker'
-import { fillResetTime } from '@/lib/budget/copy'
+import { fillResetTime, refusalNote, refusalTitle, resetPhrase } from '@/lib/budget/copy'
 import { cn } from '@/lib/utils'
 
 /**
@@ -117,11 +117,17 @@ const NOOP = () => {}
 export function useAiStatus(): UseAiStatus {
   const context = React.useContext(AiStatusContext)
   const status = context?.status ?? AVAILABLE
+  const refused = status.allowance?.refused ?? null
   const blocked = React.useMemo(() => {
     if (!status.blocked) return null
     const message = aiMessage(status.blocked)
+    // A first-day or reserve refusal says why, the same words Settings shows, on every surface that reads this.
+    if (status.blocked === 'LLM_DAILY_BUDGET') {
+      const note = refusalNote(refused, resetPhrase())
+      if (note) return { ...message, title: refusalTitle(refused) ?? message.title, text: note }
+    }
     return { ...message, text: fillResetTime(message.text) }
-  }, [status.blocked])
+  }, [status.blocked, refused])
   return { status, refresh: context?.refresh ?? NOOP, report: context?.report ?? NOOP, blocked }
 }
 

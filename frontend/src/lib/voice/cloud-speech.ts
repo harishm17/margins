@@ -13,6 +13,8 @@
  * Pure parts (the order, the URLs, the term lists) are exported for tests; `mintCloudSpeechGrant` makes the network calls.
  */
 
+import { logServerError } from '@/lib/ops/log'
+
 export type CloudSpeechProvider = 'deepgram' | 'assemblyai'
 export const CLOUD_SPEECH_PROVIDERS: readonly CloudSpeechProvider[] = ['deepgram', 'assemblyai']
 /** The providers used when CLOUD_SPEECH_PROVIDERS is not set (see above for why AssemblyAI is not one of them). */
@@ -208,7 +210,8 @@ export async function mintCloudSpeechGrant(
       return { provider, url, token }
     } catch (error) {
       lastError = error
-      ;(input.log ?? console.error)(`[VOICE] ${provider} token failed: ${error instanceof Error ? error.message : String(error)}`)
+      if (input.log) input.log(`${provider} token failed`)
+      else logServerError('Voice: a speech token could not be minted', error, { provider })
     }
   }
   throw lastError instanceof CloudSpeechError ? lastError : new CloudSpeechError('Cloud speech is not available', 502)

@@ -164,3 +164,16 @@ async def test_deleting_a_user_removes_study_drafts(db):
 
     assert await db.fetchval("SELECT delete_user_account($1)", user_id) is True
     assert await db.fetchval("SELECT count(*) FROM study_drafts WHERE user_id = $1", user_id) == 0
+
+
+async def test_every_ledger_row_is_stamped_with_the_accounts_spend_key_even_after_deletion(db):
+    user_id = await seed_user(db, spend_key="k-1")
+    live = new_id()
+    await db.execute(INSERT, live, user_id, None, "m1")
+    await db.fetchval("SELECT delete_user_account($1)", user_id)
+    late = new_id()  # a job still running when the account was deleted
+    await db.execute(INSERT, late, user_id, None, "m2")
+
+    keys = await db.fetch("SELECT spend_key FROM llm_usage_events WHERE id = ANY($1)", [live, late])
+    assert [r["spend_key"] for r in keys] == ["k-1", "k-1"]
+    assert await db.fetchval("SELECT first_seen_at IS NOT NULL FROM spend_accounts WHERE spend_key = 'k-1'") is True

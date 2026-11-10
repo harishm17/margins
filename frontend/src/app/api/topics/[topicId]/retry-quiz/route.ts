@@ -6,6 +6,9 @@
  * The set is taken and graded like any other (POST /quiz-attempts with its quizSetId).
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { ownedTopic } from '@/server/owned'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -20,11 +23,10 @@ export const dynamic = 'force-dynamic'
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId } = await params
-    const topic = await prisma.topic.findFirst({
-      where: { id: topicId, project: { userId: session.user.id } },
-      select: { id: true },
-    })
+    const topic = await ownedTopic(session.user.id, topicId)
     if (!topic) return apiNotFound('Topic not found')
 
     // A quiz that waited for the AI and was graded since counts: its misses are what to retry.
@@ -36,7 +38,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     if (!set) return apiNotFound('There are no missed questions to retry')
     return NextResponse.json(set)
   } catch (error) {
-    console.error('Retry quiz error:', error)
+    logServerError('Retry quiz error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to prepare the retry quiz')
   }

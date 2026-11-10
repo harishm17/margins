@@ -15,11 +15,16 @@
  * merged chunks; regenerate it from the topic page if needed.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { id, list, record } from '@/lib/api/fields'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { mergeKeywordLists } from '@/lib/topics/ordering'
+import { ownedTopics } from '@/server/owned'
 import { normalizeTopicOrder } from '@/lib/topics/normalize-order'
 import { reachesPrerequisite } from '@/lib/topics/units'
 import {
@@ -30,12 +35,11 @@ import {
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 
 const mergeSchema = z.object({
-  sourceTopicId: z.string().min(1),
-  targetTopicId: z.string().min(1),
+  sourceTopicId: id(),
+  targetTopicId: id(),
   name: z.string().trim().min(1).max(255).optional(),
 })
 
@@ -45,25 +49,20 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
-    const parsed = mergeSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) {
-      return apiInvalidInput('Invalid input', zodDetails(parsed.error))
-    }
+    const parsed = await readJson(request, mergeSchema)
+    if (!parsed.ok) return parsed.response
     const { sourceTopicId, targetTopicId, name } = parsed.data
     if (sourceTopicId === targetTopicId) {
       return apiInvalidInput('Choose two different topics to merge')
     }
 
     // Ownership: both topics must belong to this project, and the project to this user.
-    const topics = await prisma.topic.findMany({
-      where: {
-        id: { in: [sourceTopicId, targetTopicId] },
-        projectId,
-        project: { userId: session.user.id },
-      },
-    })
+    const checked = (await ownedTopics(session.user.id, [sourceTopicId, targetTopicId])).filter((topic) => topic.projectId === projectId)
+    const topics = await prisma.topic.findMany({ where: { id: { in: checked.map((topic) => topic.id) } } })
     const source = topics.find((topic) => topic.id === sourceTopicId)
     const target = topics.find((topic) => topic.id === targetTopicId)
     if (!source || !target) {
@@ -217,14 +216,14 @@ export async function POST(
         }
       }
       // A merge across units can leave a unit's topics apart; keep the units contiguous.
-      await normalizeTopicOrder(tx, projectId)
+      await normalizeTopicOrder(tx, checked[0])
 
       return tx.topic.findUniqueOrThrow({ where: { id: target.id } })
     })
 
     return NextResponse.json({ topic: merged, mergedTopicId: source.id })
   } catch (error) {
-    console.error('Merge topics error:', error)
+    logServerError('Merge topics error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof SyntaxError) {
       return apiError(ApiErrorCode.INVALID_INPUT, 'Invalid JSON body', undefined, 400)

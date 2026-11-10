@@ -17,13 +17,16 @@
  *   The name of that concept of this topic ({ conceptName }, null when it is not one), so the full explainer can scroll to it.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
 import { explainerAccess, explainerViewed, loadGapExplainer, markExplainerViewed, recordGapsShown, startMissingGapExplainers } from '@/lib/learning/explainer-server'
-import { ApiErrorCode, apiError, apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { ApiErrorCode, apiError, apiInternal, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,7 +59,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
     return NextResponse.json(await loadGapExplainer(auth.user.id, topicId))
   } catch (error) {
-    console.error('Explainer state error:', error)
+    logServerError('Explainer state error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Could not load the explainer')
   }
@@ -65,9 +68,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { topicId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const access = await explainerAccess(auth.user.id, topicId)
     if (!access) return apiNotFound('Topic not found')
     if (!access.open) return locked()
@@ -91,7 +96,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (started.status === 'not_found') return apiNotFound('Answer not found')
     return NextResponse.json({ ok: true, status: started.status })
   } catch (error) {
-    console.error('Explainer action error:', error)
+    logServerError('Explainer action error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Could not do that')
   }

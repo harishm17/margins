@@ -8,11 +8,15 @@
  *   "You'll find this on p. N", the test-out offer, how many passages are marked Focus here) after the last.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { readJson } from '@/lib/api/read-json'
+import { ownedTopic } from '@/server/owned'
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
-import { createRateLimiter } from '@/lib/api/rate-limit'
+import { createRateLimiter, enforceMutationLimit } from '@/lib/api/rate-limit'
 import { GradingRejectedError, GradingUnavailableError } from '@/lib/ai-service/grading'
 import { answerWarmup, loadWarmupState, startWarmup, type WarmupState } from '@/lib/learning/warmup-session'
 import { withFocusCount } from '@/lib/reader/focus'
@@ -24,7 +28,6 @@ import {
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
 
@@ -42,7 +45,7 @@ const answerSchema = z.object({
 })
 
 // A choice answer is graded by rule, but each one writes evidence.
-const answerLimiter = createRateLimiter({ limit: 40, windowMs: 60_000 })
+const answerLimiter = createRateLimiter({ name: 'item-answer', limit: 40, windowMs: 60_000 })
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
@@ -53,7 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!state) return apiNotFound('Topic not found')
     return NextResponse.json(await withFocusCount(auth.user.id, topicId, state))
   } catch (error) {
-    console.error('Warm-up state error:', error)
+    logServerError('Warm-up state error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the warm-up')
   }
@@ -61,34 +64,36 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 /** The state of a topic the user owns; null when it is not theirs. */
 async function startable(userId: string, topicId: string): Promise<WarmupState | null> {
-  const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true } })
+  const topic = await ownedTopic(userId, topicId)
   return topic ? loadWarmupState(userId, topicId) : null
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { topicId } = await params
-    const parsed = startSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, startSchema)
+    if (!parsed.ok) return parsed.response
     const state = await startWarmup({ userId: auth.user.id, topicId })
     if (state.status === 'not_found') return apiNotFound('Topic not found')
     return NextResponse.json(await withFocusCount(auth.user.id, topicId, state))
   } catch (error) {
-    console.error('Warm-up start error:', error)
+    logServerError('Warm-up start error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to start the warm-up')
   }
 }
 
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
+async function handlePATCH(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
     const { topicId } = await params
-    const parsed = answerSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, answerSchema)
+    if (!parsed.ok) return parsed.response
 
-    const rate = answerLimiter.check(auth.user.id)
+    const rate = await answerLimiter.check(auth.user.id)
     if (!rate.ok) {
       return NextResponse.json(
         { error: 'Too many answers. Please wait a moment and try again.' },
@@ -118,8 +123,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       throw error
     }
   } catch (error) {
-    console.error('Warm-up answer error:', error)
+    logServerError('Warm-up answer error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save the answer')
   }
 }
+
+export const POST = withClientSignal(handlePOST)
+
+export const PATCH = withClientSignal(handlePATCH)

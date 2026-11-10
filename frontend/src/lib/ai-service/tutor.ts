@@ -1,4 +1,6 @@
+import { logServerError } from '@/lib/ops/log'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { callSignal } from '@/lib/ai-service/client-signal'
 import type { MissKind } from '@/lib/tutor/state'
 
 /** The body of POST /tutor/practice (ai-service PracticeTutorRequest). */
@@ -19,8 +21,8 @@ export type PracticeTutorRequest = {
   weak_prerequisite?: { name: string; page?: number }
   first_wrong_step?: number
   confusable?: { name: string; summary: string }
-  user_id?: string
-  project_id?: string
+  user_id: string
+  project_id: string
   session_id?: string
 }
 
@@ -66,15 +68,15 @@ export async function postTutor<T>(path: string, request: unknown): Promise<T> {
       method: 'POST',
       headers: aiServiceHeaders(),
       body: JSON.stringify(request),
-      signal: AbortSignal.timeout(TUTOR_TIMEOUT_MS),
+      signal: callSignal(TUTOR_TIMEOUT_MS),
     })
   } catch (error) {
-    console.error('Tutor request failed:', error)
+    logServerError('Tutor request failed', error)
     throw new TutorUnavailableError('AI_UNREACHABLE', 503)
   }
   if (!response.ok) {
     const code = await errorCode(response)
-    console.error('Tutor request returned', response.status, code)
+    logServerError('Tutor request returned an error', undefined, { status: response.status, code })
     throw new TutorUnavailableError(code, response.status)
   }
   return (await response.json()) as T
@@ -90,8 +92,8 @@ export type ReaderTutorRequest = {
   cant_parse: boolean
   rung: number
   claims: { text: string; quote: string; page?: number }[]
-  user_id?: string
-  project_id?: string
+  user_id: string
+  project_id: string
   session_id?: string
 }
 

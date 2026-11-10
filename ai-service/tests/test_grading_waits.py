@@ -14,7 +14,7 @@ from app.models.jobs import JobPayload
 from app.services import ai_status, job_reaper
 from app.services.exam_grader import ExamGrader
 from app.services.job_runner import JobOutcome, job_handler
-from app.services.llm.base import LLMCreditError, LLMUnavailableError
+from app.services.llm.base import LLMBusyError, LLMCreditError, LLMUnavailableError
 from tests.db_helpers import get_job, seed_job, seed_usage, seed_user
 
 SHORT = {"question_type": "short_answer", "question_text": "Why cache?", "points": 2,
@@ -31,7 +31,7 @@ def grader_with(error=None, reply=None):
 
 
 class TestGrader:
-    @pytest.mark.parametrize("error", [LLMCreditError("credit"), LLMUnavailableError("overloaded")])
+    @pytest.mark.parametrize("error", [LLMCreditError("credit"), LLMUnavailableError("overloaded"), LLMBusyError("busy")])
     async def test_an_unreachable_model_fails_the_grading_instead_of_scoring_zero(self, error):
         grader = grader_with(error=error)
         with pytest.raises(type(error)):
@@ -48,7 +48,7 @@ async def test_quiz_grading_is_refused_with_the_reason_when_the_model_is_unreach
     llm = MagicMock()
     llm.generate_structured = AsyncMock(side_effect=LLMCreditError("credit"))
     with patch("app.services.exam_grader.LLMFactory.get_provider", return_value=llm):
-        response = await call("POST", "/grade/quiz", json={"questions": [SHORT], "answers": {"0": "x"}})
+        response = await call("POST", "/grade/quiz", json={"user_id": "u1", "project_id": "p1", "questions": [SHORT], "answers": {"0": "x"}})
     # The web app keeps the answers and stores nothing (no 0 score).
     assert response.status_code == 502
     assert response.json()["error_code"] == "LLM_CREDIT_EXHAUSTED"
@@ -64,7 +64,7 @@ def waiting_handler(body):
 
 
 def payload(job_id):
-    return JobPayload(jobId=job_id, jobType="grade_exam", data={"submissionId": "s1"})
+    return JobPayload(jobId=job_id, jobType="grade_exam", data={})  # the handlers here are stubs: no row is read
 
 
 @pytest.fixture

@@ -288,6 +288,56 @@ class TestConcurrencyLimit:
         ])
         assert provider.peak == limit
 
+    async def test_interactive_calls_go_before_waiting_background_ones_and_are_never_starved(self, monkeypatch):
+        from app.services.llm.limiter import background_lane
+
+        monkeypatch.setattr(settings, "LLM_MAX_CONCURRENCY", 4)
+        order: list[str] = []
+        release = asyncio.Event()
+
+        async def hold(name, lane):
+            ctx = background_lane() if lane == "background" else None
+            if ctx:
+                ctx.__enter__()
+            try:
+                async with llm_slot():
+                    order.append(name)
+                    await release.wait()
+            finally:
+                if ctx:
+                    ctx.__exit__(None, None, None)
+
+        # Background work may take at most 3 of the 4 slots, however many jobs are queued.
+        background = [asyncio.create_task(hold(f"bg{i}", "background")) for i in range(5)]
+        await asyncio.sleep(0.05)
+        assert order == ["bg0", "bg1", "bg2"]
+        # A student's call takes the free slot at once.
+        student = asyncio.create_task(hold("student", "interactive"))
+        await asyncio.sleep(0.05)
+        assert order[-1] == "student"
+        release.set()
+        await asyncio.gather(*background, student)
+
+    async def test_a_student_gets_a_busy_error_instead_of_waiting_for_ever(self, monkeypatch):
+        from app.services.llm.base import LLMBusyError
+
+        monkeypatch.setattr(settings, "LLM_MAX_CONCURRENCY", 2)
+        monkeypatch.setattr(settings, "LLM_INTERACTIVE_WAIT_SECONDS", 0.1)
+        release = asyncio.Event()
+
+        async def hold():
+            async with llm_slot():
+                await release.wait()
+
+        holders = [asyncio.create_task(hold()) for _ in range(2)]
+        await asyncio.sleep(0.05)
+        with pytest.raises(LLMBusyError) as caught:
+            async with llm_slot():
+                pass
+        assert caught.value.code == "LLM_BUSY" and caught.value.retryable
+        release.set()
+        await asyncio.gather(*holders)
+
 
     async def test_a_slot_is_released_when_the_call_fails(self, monkeypatch):
         monkeypatch.setattr(settings, "LLM_MAX_CONCURRENCY", 1)
@@ -300,9 +350,13 @@ class TestConcurrencyLimit:
 
 
 class TestTopicSerialisation:
-    async def test_two_jobs_for_the_same_topic_do_not_overlap(self, db, course, generators):
+    async def test_generation_jobs_for_one_topic_run_one_at_a_time_and_wait_for_an_extraction(self, db, course, generators):
+        from app.services.locks import topic_lock
+
         generators.delay = 0.05
         topic = course.topics[0]
+        # Generation takes the topic's lock exclusive until PR 7's PARALLEL_TOPIC_JOBS: the quiz never starts before the
+        # notes it builds on, so three jobs for one topic run one at a time.
         await asyncio.gather(
             run_job(db, course, topic, "solved_examples"),
             run_job(db, course, topic, "interactive_examples"),
@@ -311,6 +365,14 @@ class TestTopicSerialisation:
         assert len(generators.calls) == 3
         assert generators.max_active == 1
 
+        # Concept extraction takes it exclusive: a generation job waits until it is done.
+        generators.calls.clear()
+        async with topic_lock(f"topic:{topic}", exclusive=True):
+            job = asyncio.create_task(run_job(db, course, topic, "solved_examples"))
+            await asyncio.sleep(0.6)
+            assert generators.calls == []
+        await asyncio.wait_for(job, 5)
+        assert len(generators.calls) == 1
 
     async def test_a_failed_job_releases_the_topic(self, db, course, generators):
         topic = course.topics[0]

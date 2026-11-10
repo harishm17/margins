@@ -1,5 +1,7 @@
 """Generators tag their items with the topic's concepts, practice steps carry three hints, and a
 wrong multiple-choice option names the idea behind it."""
+import contextlib
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -105,12 +107,21 @@ class TestConceptIds:
             return [dict(c) for c in CONCEPTS]
 
         with patch.object(voice.LLMFactory, "get_provider", return_value=llm), \
-             patch.object(voice, "fetch_concepts", concepts):
+             patch.object(voice, "fetch_concepts", concepts), no_drill_cache():
             result = await voice.generate_concept_drill(
-                voice.DrillGenerateRequest(topic_id="t1", notes="n", count=3)
+                voice.DrillGenerateRequest(user_id="u1", project_id="p1", topic_id="t1", notes="n", count=3), SimpleNamespace(is_disconnected=AsyncMock(return_value=False))
             )
         assert [q["concept_ids"] for q in result["questions"]] == [["k-var"], ["k-mean"]]
         assert '<concept id="k-var">' in llm.generate_structured.call_args.args[0][-1].content
+
+@contextlib.contextmanager
+def no_drill_cache():
+    """The drill set cache (voice_drill_sets) is tested with a database in test_voice.py; these tests do not need one."""
+    async def miss(*args):
+        return None
+
+    with patch.object(voice, "execute_one", miss), patch.object(voice, "execute_update", miss):
+        yield
 
 
 def _step(number=1, **overrides):
@@ -192,8 +203,8 @@ class TestDegradation:
             raise RuntimeError("database down")
 
         with patch.object(voice.LLMFactory, "get_provider", return_value=llm), \
-             patch.object(voice, "fetch_concepts", broken):
-            result = await voice.generate_concept_drill(voice.DrillGenerateRequest(topic_id="bad", notes="n", count=3))
+             patch.object(voice, "fetch_concepts", broken), no_drill_cache():
+            result = await voice.generate_concept_drill(voice.DrillGenerateRequest(user_id="u1", project_id="p1", topic_id="bad", notes="n", count=3), SimpleNamespace(is_disconnected=AsyncMock(return_value=False)))
         assert result["total"] == 1
         assert result["questions"][0]["concept_ids"] == []
         assert "<concept id=" not in llm.generate_structured.call_args.args[0][-1].content

@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { nextActionsFromStep, setupNextAction } from '@/lib/learning/next-actions'
@@ -48,7 +49,7 @@ export async function GET(
       actions,
     })
   } catch (error) {
-    console.error('Next actions error:', error)
+    logServerError('Next actions error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load next actions')
   }

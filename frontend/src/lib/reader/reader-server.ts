@@ -17,6 +17,7 @@
  * - A "Quick check" check is self-graded (Got it, Partly, Missed): level 2, for display, never memory.
  */
 
+import { ownedTopic } from '@/server/owned'
 import { prisma } from '@/lib/db/prisma'
 import { postTutor, requestReaderTutor, type ReaderTutorAnswer, type ReaderTutorRequest } from '@/lib/ai-service/tutor'
 import { dontKnowEvidence, isDontKnow } from '@/lib/learning/dont-know'
@@ -77,7 +78,7 @@ export async function explainPassage(
   ask: (request: ReaderTurnRequest) => Promise<ReaderTutorAnswer> = requestReaderTutor
 ): Promise<ExplainResult> {
   const { userId, topicId, chunkId } = input
-  const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true, projectId: true } })
+  const topic = await ownedTopic(userId, topicId)
   if (!topic) return { status: 'not_found' }
   const chunk = await prisma.materialChunk.findFirst({ where: { id: chunkId, material: { projectId: topic.projectId } }, select: { chunkText: true, materialId: true } })
   if (!chunk) return { status: 'not_found' }
@@ -89,7 +90,7 @@ export async function explainPassage(
   }
   if ((await repliesToday(userId, topicId, chunkId, input.timeZone)) >= MAX_REPLIES_PER_DAY) return { status: 'limit' }
 
-  const claims = await claimsOnChunk(topicId, chunkId)
+  const claims = await claimsOnChunk(topic, chunkId)
   // The rung and the can't-parse count are the passage's tutor state, read before the reply and moved after it.
   const state = await prisma.tutorState.findUnique({ where: stateWhere(userId, topicId, chunkId) })
   const earlier = state?.attempts ?? 0
@@ -190,7 +191,7 @@ export async function answerReaderCheck(
   ask: (request: ReaderCheckRequest) => Promise<ReaderCheckAnswer> = requestReaderCheck
 ): Promise<AnswerResult> {
   const timeZone = input.timeZone ?? 'UTC'
-  const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true, projectId: true } })
+  const topic = await ownedTopic(userId, topicId)
   if (!topic) return { status: 'not_found' }
   const asked = await prisma.marginNote.findFirst({
     where: { id: input.noteId, userId, topicId, kind: { in: ['question', 'answer'] } },
@@ -218,7 +219,7 @@ export async function answerReaderCheck(
   }
   const take = root?.text ?? CANT_PARSE_TEXT
 
-  const claims = await claimsOnChunk(topicId, asked.chunkId)
+  const claims = await claimsOnChunk(topic, asked.chunkId)
   const state = await prisma.tutorState.findUnique({ where: stateWhere(userId, topicId, asked.chunkId), select: { rung: true } })
   const result = await ask({
     passage: chunk.chunkText.slice(0, MAX_PASSAGE_CHARS),

@@ -15,6 +15,7 @@
  * `TopicProgress.warmupAt`.
  */
 
+import { ownedTopic } from '@/server/owned'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { gradeAnswers } from '@/lib/ai-service/grading'
@@ -161,9 +162,6 @@ async function loadBank(topicId: string): Promise<WarmupItem[]> {
   })
 }
 
-const ownedTopic = (userId: string, topicId: string) =>
-  prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true, projectId: true } })
-
 const latestSession = (userId: string, topicId: string, completed: boolean) =>
   prisma.itemSession.findFirst({
     where: { userId, kind: 'warmup', topicIds: { has: topicId }, completedAt: completed ? { not: null } : null },
@@ -241,7 +239,7 @@ export async function answerWarmup(input: { userId: string; topicId: string; ses
   // An "I don't know" is wrong by rule: no grader, so it works with the AI down.
   const result = idk
     ? { question_index: 0, question_type: String(item.question.question_type ?? 'multiple_choice'), points_possible: 1, points_earned: 0, is_correct: false, feedback: '', needs_review: false }
-    : (await gradeAnswers([item.question], answersForGrader({ '0': given }))).graded_questions[0]
+    : (await gradeAnswers({ userId, projectId: row.projectId }, [item.question], answersForGrader({ '0': given }))).graded_questions[0]
   if (!result) return { status: 'invalid', message: 'This question could not be graded.' }
 
   // Evidence first and idempotent (skipIfPresent): if the session update below is lost, the answer sent

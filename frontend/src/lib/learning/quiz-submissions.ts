@@ -19,6 +19,7 @@
  * then sees `appliedAt`). There is no separate claim that could be left behind.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { createHash } from 'node:crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
@@ -31,7 +32,7 @@ import { applyQuizAttempt, isStrongStart, quizHelp, quizOutcome, type QuizHelp, 
 import { answersForGrader, answersForStorage, confidences, dontKnowIndexes, normalizeAnswers, plainAnswers, type QuizAnswer, type RawQuizAnswer } from './quiz-answers'
 import { pendingQuizEvidence, recordAttemptEvidence, recordQuizEvidence, retryPendingQuizEvidence, takenEarlierToday } from './quiz-evidence'
 import { studentTimeZone } from './student-time-zone'
-import type { GradedQuestion } from '@/lib/ai-service/grading'
+import type { GradedQuestion, GradingAccount } from '@/lib/ai-service/grading'
 
 type Topic = { id: string; projectId: string }
 type RawQuestion = Record<string, unknown>
@@ -107,7 +108,7 @@ export async function startQuizGrading(userId: string, topic: Topic, submissionI
     await enqueueQuizGradingJob(job.id, submissionId)
     return { submissionId, jobId: job.id, started: true }
   } catch (error) {
-    console.error('Error enqueuing quiz grading job:', error)
+    logServerError('Error enqueuing quiz grading job', error)
     const retryable =
       typeof (error as { retryable?: unknown })?.retryable === 'boolean'
         ? Boolean((error as { retryable: boolean }).retryable)
@@ -197,7 +198,7 @@ export async function gradeRuleItemsNow(input: {
   timeZone: string
   sameDayRepeat: boolean
   /** The grader, replaceable in tests. */
-  grade?: (questions: unknown[], answers: Record<string, RawQuizAnswer>, only?: number[]) => Promise<{ graded_questions: GradedQuestion[] }>
+  grade?: (account: GradingAccount, questions: unknown[], answers: Record<string, RawQuizAnswer>, only?: number[]) => Promise<{ graded_questions: GradedQuestion[] }>
 }): Promise<PartialGrading | null> {
   const { userId, topic, quizSetId, questions, given } = input
   if (input.unavailableCode === 'AI_UNREACHABLE') return null
@@ -207,7 +208,7 @@ export async function gradeRuleItemsNow(input: {
 
   let ruleGraded: GradedQuestion[]
   try {
-    ruleGraded = (await (input.grade ?? defaultGrade)(questions, answersForGrader(given), only)).graded_questions
+    ruleGraded = (await (input.grade ?? defaultGrade)({ userId, projectId: topic.projectId }, questions, answersForGrader(given), only)).graded_questions
   } catch (error) {
     if (error instanceof GradingUnavailableError) return null
     throw error
@@ -465,7 +466,7 @@ export async function applyPendingQuizResults(
     try {
       if (await applyQuizSubmission(userId, id)) applied += 1
     } catch (error) {
-      console.error('Applying a graded quiz to mastery failed:', error)
+      logServerError('Applying a graded quiz to mastery failed', error)
     }
   }
   return applied

@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 import pytest
 from fastapi import HTTPException
 
+from app.errors import public_message
 from app.api.routes import jobs
 from app.config import settings
 from app.models.jobs import JobPayload
@@ -240,10 +241,12 @@ class TestLargeOutline:
 
 @pytest.fixture
 def mock_llm(monkeypatch):
+    # The mock without the billing wrapper: these tests call the services outside a job, so there is no scope to bill.
+    from app.services.llm.mock_provider import MockProvider
+
     monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")
-    LLMFactory.reset()
+    monkeypatch.setattr(LLMFactory, "_instance", MockProvider())
     yield
-    LLMFactory.reset()
 
 
 async def add_file(db, project_id: str, filename: str, sections: List[tuple], role: str = "content",
@@ -341,7 +344,7 @@ class TestPlanningRun:
         assert raised.value.status_code == 400  # permanent: the dispatcher does not retry it
         row = await course.db.fetchrow("SELECT error_code, retryable, error_message FROM processing_jobs WHERE job_type = 'extract_topics'")
         assert row["error_code"] == "NO_CONTENT_MATERIALS" and row["retryable"] is False
-        assert "course content" in row["error_message"]
+        assert row["error_message"] == public_message("NO_CONTENT_MATERIALS")
 
     async def test_find_again_before_confirming_replaces_unconfirmed_topics_and_keeps_same_named_ones(self, course):
         db = course.db

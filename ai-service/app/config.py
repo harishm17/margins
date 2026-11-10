@@ -3,6 +3,10 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# The places this service may run. ENVIRONMENT has no default and must be exactly one of these.
+ENVIRONMENTS = ("development", "test", "production")
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -15,6 +19,18 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     DB_POOL_MAX_SIZE: int = 20
     DB_COMMAND_TIMEOUT_SECONDS: float = 60.0
+    # How long a query waits for a free pooled connection before failing, instead of queueing for ever.
+    DB_ACQUIRE_TIMEOUT_SECONDS: float = 10.0
+    # How long a lock on one topic (app/services/locks.py) is waited for, in seconds, before the job fails and retries.
+    TOPIC_LOCK_WAIT_SECONDS: float = 600.0
+    # Connections that only hold those locks, apart from DB_POOL_MAX_SIZE: a lock is held for a whole job (a model call
+    # included), so holders must not take the connections that interactive routes, heartbeats and ledger writes need.
+    # More locked jobs at once than this wait for a free one, inside TOPIC_LOCK_WAIT_SECONDS.
+    DB_LOCK_POOL_MAX_SIZE: int = 20
+    # On shutdown, running jobs get this long to finish before they are cancelled and their leases released.
+    JOB_SHUTDOWN_GRACE_SECONDS: float = 20.0
+    # Queued file deletions (pending_file_deletions) that failed this many times raise a watchdog alert.
+    FILE_DELETION_ALERT_ATTEMPTS: int = 5
 
     # LLM: Claude for all text generation and grading.
     # "mock" returns schema-valid placeholder output with no API calls (local dev, e2e runs).
@@ -43,6 +59,9 @@ class Settings(BaseSettings):
     LLM_MAX_RETRIES: int = 4
     # Model calls running at once, across every job and chat answer in this process.
     LLM_MAX_CONCURRENCY: int = 4
+    # Background jobs hold at most LLM_MAX_CONCURRENCY - 1 of those slots; a student-facing call waits this long for a
+    # slot, then fails with LLM_BUSY (app/services/llm/limiter.py).
+    LLM_INTERACTIVE_WAIT_SECONDS: float = 20.0
     # The mock provider (LLM_PROVIDER=mock) takes this long per call, to look like a model.
     MOCK_LLM_LATENCY_SECONDS: float = 0.0
 
@@ -149,11 +168,18 @@ class Settings(BaseSettings):
     # waits for its reset). The e2e stack sets it low so a spec's outage ends in seconds.
     JOB_AI_WAIT_RECHECK_SECONDS: float = 30.0
     # Most a user's LLM-backed jobs and chat answers may cost per UTC day, from the stored
-    # costs. 0 turns the cap off.
+    # costs. 0 turns the cap off (development and test only: production refuses to start at 0).
     DAILY_LLM_BUDGET_USD: float = 8.00
     # Most ALL users together may cost per UTC day, from the same ledger. Sign-up is open and
-    # the API key is shared, so this is the ceiling on the day's bill. 0 turns it off.
+    # the API key is shared, so this is the ceiling on the day's bill. 0 turns it off (not in production).
     GLOBAL_DAILY_LLM_BUDGET_USD: float = 40.00
+    # An account under 24 hours old (by its spend_key's first_seen_at) may spend this much per UTC day instead of
+    # DAILY_LLM_BUDGET_USD. 0 turns the smaller first-day allowance off (not in production).
+    FIRST_DAY_LLM_BUDGET_USD: float = 4.00
+    # The share of GLOBAL_DAILY_LLM_BUDGET_USD kept for accounts older than GLOBAL_RESERVE_MIN_AGE_DAYS: a younger
+    # account is refused once the day's global spend reaches (1 - share) of the cap.
+    GLOBAL_RESERVE_SHARE: float = 0.25
+    GLOBAL_RESERVE_MIN_AGE_DAYS: float = 7.0
 
     # The shared AI status (app/services/ai_status.py). An "unavailable" status older than this
     # many seconds counts as unknown, so the next real call tests the provider again.
@@ -186,14 +212,39 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY_ID: str = ""
     S3_SECRET_ACCESS_KEY: str = ""
     S3_FORCE_PATH_STYLE: bool = False
+    # The weekly sweep of bucket files no material points to (watchdog.py). It ignores files younger than an hour and
+    # refuses to delete when the orphans are more than STORAGE_SWEEP_MAX_SHARE of the bucket, or more than
+    # STORAGE_SWEEP_MAX_FILES files: it alerts instead. While STORAGE_SWEEP_DRY_RUN is true it only reports; the
+    # operator turns it off in .railway/railway.ts after reading a few reports.
+    STORAGE_SWEEP_DRY_RUN: bool = True
+    STORAGE_SWEEP_MAX_SHARE: float = 0.05
+    STORAGE_SWEEP_MAX_FILES: int = 200
 
     # Where the frontend writes uploads when it has no S3 bucket (`local://` material paths).
     LOCAL_UPLOADS_DIR: str = "/data/uploads"
 
+    # Reading uploads: the parsers run in a child process with these limits (see
+    # services/document_processor/sandbox.py). A file over any limit is refused with a fixed note.
+    PARSE_MEMORY_MB: int = 1536  # address space a parse may map beyond loading the parsers
+    PARSE_CPU_SECONDS: int = 120  # CPU time limit of the child
+    PARSE_WALL_SECONDS: int = 180  # wall-clock time before the child is killed
+    PARSE_MAX_OUTPUT_MB: int = 64  # size of the child's result file
+    PARSE_MAX_CONCURRENCY: int = 2  # parses running at once in this process
+    PARSE_MAX_PDF_PAGES: int = 600
+    PARSE_MAX_CHARS: int = 4_000_000  # extracted characters per file
+    PARSE_MAX_CHUNKS: int = 4000  # chunks per file
+    PARSE_MAX_ZIP_MEMBERS: int = 2000  # parts in a DOCX or PPTX
+    PARSE_MAX_XML_MB: int = 300  # total uncompressed XML in a DOCX or PPTX
+    PARSE_MAX_XML_RATIO: int = 200  # one XML part may not expand more than this many times
+
     # Service Configuration
     AI_SERVICE_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:3000"  # Frontend URL for CORS
-    ENVIRONMENT: str = "development"
+    # No default: a service that forgot to say where it runs must not start as a development one (SEC-L2). One of
+    # ENVIRONMENTS, spelt exactly; anything else refuses to start.
+    ENVIRONMENT: str
+    # The shared secret between the web app and this service. Required (non-empty) when ENVIRONMENT is test or
+    # production; only development may leave it empty (internal_auth.py then lets local calls through).
     AI_INTERNAL_TOKEN: str = ""
 
     @field_validator(
@@ -209,6 +260,27 @@ class Settings(BaseSettings):
         parse_model_spec(value, ModelChoice("placeholder", None))
         return value
 
+    @field_validator("ENVIRONMENT")
+    @classmethod
+    def _known_environment(cls, value: str) -> str:
+        if value not in ENVIRONMENTS:
+            raise ValueError(f"ENVIRONMENT must be one of {', '.join(ENVIRONMENTS)}, spelt exactly")
+        return value
+
+    @model_validator(mode="after")
+    def _fail_closed_outside_development(self) -> "Settings":
+        # SEC-L2: a missing or odd setting must never mean "development". Test and production need the shared
+        # token; production also needs the caps that stop the bill (0 turns a cap off) and the model key.
+        if self.ENVIRONMENT != "development" and not self.AI_INTERNAL_TOKEN.strip():
+            raise ValueError(f"AI_INTERNAL_TOKEN must be set when ENVIRONMENT={self.ENVIRONMENT}")
+        if self.ENVIRONMENT == "production":
+            for name in ("DAILY_LLM_BUDGET_USD", "GLOBAL_DAILY_LLM_BUDGET_USD", "FIRST_DAY_LLM_BUDGET_USD"):
+                if getattr(self, name) <= 0:
+                    raise ValueError(f"{name} must be above 0 when ENVIRONMENT=production (0 turns the cap off)")
+            if not self.ANTHROPIC_API_KEY.strip():
+                raise ValueError("ANTHROPIC_API_KEY must be set when ENVIRONMENT=production")
+        return self
+
     @model_validator(mode="after")
     def _no_mock_model_in_production(self) -> "Settings":
         # The mock and replay providers answer with canned or recorded text and never fail a leak check: in
@@ -216,6 +288,10 @@ class Settings(BaseSettings):
         provider = self.LLM_PROVIDER.strip().lower()
         if self.ENVIRONMENT == "production" and provider in ("mock", "replay"):
             raise ValueError(f"LLM_PROVIDER={provider} is not allowed when ENVIRONMENT=production")
+        # Without a bucket the services fall back to the container's disk, which a deploy wipes: uploads would vanish
+        # without an error. Refuse to start rather than lose students' files.
+        if self.ENVIRONMENT == "production" and not self.S3_BUCKET.strip():
+            raise ValueError("S3_BUCKET must be set when ENVIRONMENT=production (uploads would go to local disk)")
         if provider == "replay" and not self.LLM_CASSETTE_DIR.strip():
             raise ValueError("LLM_PROVIDER=replay needs LLM_CASSETTE_DIR (the folder of recordings)")
         return self

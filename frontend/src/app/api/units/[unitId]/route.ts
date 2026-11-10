@@ -10,6 +10,9 @@
  *   200: { success: true }
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
@@ -18,13 +21,12 @@ import {
   ApiErrorCode,
   apiError,
   apiInternal,
-  apiInvalidInput,
   apiNotFound,
   apiUnauthorized,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { moveInOrder } from '@/lib/topics/ordering'
+import { ownedUnit } from '@/server/owned'
 import { compactUnitOrder, normalizeTopicOrder } from '@/lib/topics/normalize-order'
 
 const updateUnitSchema = z.object({
@@ -34,18 +36,17 @@ const updateUnitSchema = z.object({
   orderIndex: z.number().int().min(0).optional(),
 })
 
-const ownedUnit = (unitId: string, userId: string) =>
-  prisma.unit.findFirst({ where: { id: unitId, project: { userId } }, select: { id: true, projectId: true } })
-
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ unitId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { unitId } = await params
-    const unit = await ownedUnit(unitId, session.user.id)
+    const unit = await ownedUnit(session.user.id, unitId)
     if (!unit) return apiNotFound('Unit not found')
 
-    const parsed = updateUnitSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, updateUnitSchema)
+    if (!parsed.ok) return parsed.response
     const { orderIndex, summary, weekLabel, title } = parsed.data
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -65,8 +66,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         })
         const order = moveInOrder(units.map((item) => item.id), unitId, orderIndex)
         for (const [index, id] of order.entries()) await tx.unit.update({ where: { id }, data: { orderIndex: index } })
-        await compactUnitOrder(tx, unit.projectId)
-        await normalizeTopicOrder(tx, unit.projectId)
+        await compactUnitOrder(tx, unit)
+        await normalizeTopicOrder(tx, unit)
         return tx.unit.findUniqueOrThrow({ where: { id: unitId } })
       }
       return row
@@ -76,7 +77,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       unit: { id: updated.id, title: updated.title, summary: updated.summary, weekLabel: updated.weekLabel, orderIndex: updated.orderIndex },
     })
   } catch (error) {
-    console.error('Update unit error:', error)
+    logServerError('Update unit error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof SyntaxError) return apiError(ApiErrorCode.INVALID_INPUT, 'Invalid JSON body', undefined, 400)
     return apiInternal('Failed to update unit')
@@ -86,8 +87,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ unitId: string }> }) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { unitId } = await params
-    const unit = await ownedUnit(unitId, session.user.id)
+    const unit = await ownedUnit(session.user.id, unitId)
     if (!unit) return apiNotFound('Unit not found')
 
     const topicCount = await prisma.topic.count({ where: { unitId } })
@@ -96,11 +99,11 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     }
     await prisma.$transaction(async (tx) => {
       await tx.unit.delete({ where: { id: unitId } })
-      await compactUnitOrder(tx, unit.projectId)
+      await compactUnitOrder(tx, unit)
     })
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Delete unit error:', error)
+    logServerError('Delete unit error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to delete unit')
   }

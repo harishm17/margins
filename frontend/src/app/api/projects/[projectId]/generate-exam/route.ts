@@ -1,22 +1,23 @@
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { assertQuota, quotaErrorResponse } from '@/lib/api/quota'
+import { id, list, record } from '@/lib/api/fields'
+import { readJson } from '@/lib/api/read-json'
+import { readSession } from '@/lib/auth/get-session'
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { stableStringify } from '@/lib/utils/stable-json';
 import {
-  apiError,
-  ApiErrorCode,
   apiInternal,
   apiUnauthorized,
   apiUpstream,
-  zodDetails,
 } from '@/lib/api/errors';
 import { ensureAiGenerationReady } from '@/lib/api/ai-preflight';
 
 
 const generateExamSchema = z.object({
-  topicIds: z.array(z.string()).min(1, 'At least one topic must be selected'),
+  topicIds: list(id(), 200).min(1, 'At least one topic must be selected'),
   totalQuestions: z.number().min(5).max(100),
   durationMinutes: z.number().min(15).max(300),
   difficultyLevel: z.enum(['easy', 'medium', 'hard']),
@@ -50,10 +51,12 @@ export async function POST(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await readSession();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const limited = await enforceMutationLimit(session.user.id);
+    if (limited) return limited;
 
     const { projectId } = await params;
 
@@ -74,17 +77,8 @@ export async function POST(
       return preflightError;
     }
 
-    const body = await req.json();
-    const validation = generateExamSchema.safeParse(body);
-
-    if (!validation.success) {
-      return apiError(
-        ApiErrorCode.INVALID_INPUT,
-        'Invalid input',
-        zodDetails(validation.error),
-        400
-      );
-    }
+    const validation = await readJson(req, generateExamSchema)
+    if (!validation.ok) return validation.response
 
     const uniqueTopicIds = Array.from(new Set(validation.data.topicIds));
     const { totalQuestions, durationMinutes, difficultyLevel, questionTypeDistribution, matchPastExams, name } = validation.data;
@@ -149,20 +143,24 @@ export async function POST(
     }
 
     // Create processing job
-    const job = await prisma.processingJob.create({
-      data: {
-        userId: session.user.id,
-        projectId,
-        jobType: 'generate_exam',
-        status: 'pending',
-        stage: 'generating',
-        inputData: {
+    const job = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, session.user, 'generationJobs');
+      return tx.processingJob.create({
+        data: {
+          userId: session.user.id,
           projectId,
-          topicIds: uniqueTopicIds,
-          config,
-          idempotencyKey,
+          jobType: 'generate_exam',
+          quotaCounted: true,
+          status: 'pending',
+          stage: 'generating',
+          inputData: {
+            projectId,
+            topicIds: uniqueTopicIds,
+            config,
+            idempotencyKey,
+          },
         },
-      },
+      });
     });
 
     // Send the job to the AI service
@@ -178,7 +176,7 @@ export async function POST(
         },
       });
     } catch (error) {
-      console.error('Error enqueuing job:', error);
+      logServerError('Error enqueuing job', error);
       const retryable = typeof (error as { retryable?: unknown })?.retryable === 'boolean'
         ? Boolean((error as { retryable: boolean }).retryable)
         : true
@@ -205,7 +203,9 @@ export async function POST(
       estimatedSeconds: 90,
     });
   } catch (error) {
-    console.error('Error in generate-exam:', error);
+    const refused = quotaErrorResponse(error);
+    if (refused) return refused;
+    logServerError('Error in generate-exam', error);
     return apiInternal('Internal server error');
   }
 }

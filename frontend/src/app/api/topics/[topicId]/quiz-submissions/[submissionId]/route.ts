@@ -6,6 +6,8 @@
  * look at a graded quiz turns it into the attempt and applies it to mastery and the review date.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -46,7 +48,7 @@ export async function GET(
       ...(applied.help ?? {}),
     })
   } catch (error) {
-    console.error('Quiz submission status error:', error)
+    logServerError('Quiz submission status error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the quiz result')
   }
@@ -62,6 +64,8 @@ export async function DELETE(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId, submissionId } = await params
     const outcome = await dismissQuizSubmission(session.user.id, topicId, submissionId)
     if (outcome === 'not_found') return apiNotFound('Quiz submission not found')
@@ -70,7 +74,7 @@ export async function DELETE(
     }
     return NextResponse.json({ status: 'deleted' })
   } catch (error) {
-    console.error('Quiz submission dismiss error:', error)
+    logServerError('Quiz submission dismiss error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to dismiss the quiz')
   }

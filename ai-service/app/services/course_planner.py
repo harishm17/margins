@@ -591,7 +591,7 @@ async def plan_sections(
                           existing_context=existing_context)
         )
         valid = validate_plan(plan, sections, existing_topic_keys=existing_topic_keys, existing_unit_keys=existing_unit_keys)
-        logger.info("Course plan for %r: %s sections, %s units, %s topics, %s", course_name, len(sections),
+        logger.info("Course plan: %s sections, %s units, %s topics, %s", len(sections),
                     len(valid.units), len(valid.topics()), valid.stats)
         return valid
 

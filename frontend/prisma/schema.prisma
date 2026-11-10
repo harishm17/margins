@@ -28,6 +28,9 @@ model User {
   seenEffortIntroAt DateTime? @map("seen_effort_intro_at")
   // When the student closed the "About this reading" row above the reader (the Focus and PDF notes), on any device.
   seenReaderNoteAt  DateTime? @map("seen_reader_note_at")
+  // A one-way key derived from the Google account (src/lib/account/spend-key.ts) that outlives the account, so the daily
+  // allowance and the voice minutes do not reset when the account is deleted and made again. Null until set.
+  spendKey          String?   @map("spend_key")
 
   // Relations
   projects            Project[]
@@ -53,6 +56,7 @@ model User {
   studyDrafts         StudyDraft[]
 
   @@index([oauthProvider, oauthId])
+  @@index([spendKey])
   @@map("users")
 }
 
@@ -225,6 +229,7 @@ model Topic {
   quizAttempts       QuizAttempt[]
   quizSubmissions    QuizSubmission[]
   voiceDrillSessions VoiceDrillSession[]
+  voiceDrillSets     VoiceDrillSet[]
   voiceDrillAttempts VoiceDrillAttempt[]
   learningSignals    LearningSignal[]
   reviewSchedules    ReviewSchedule[]
@@ -343,6 +348,9 @@ model TopicQuiz {
   // attempts, copied from the sets they came from (no model call). warmup: the pretest bank. review_bank:
   // items written for review sessions, only ever appended to; read by review selection, never listed as a quiz.
   kind      String   @default("standard")
+  // The job attempt that wrote a standard set: a retry after a crash finds it and adds nothing. A partial unique
+  // index (see the ops_locks_deletions migration; Prisma cannot express it).
+  sourceJobId String? @map("source_job_id")
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
@@ -492,6 +500,9 @@ model VoiceDrillSession {
   // Teach-back and guided reading: where the session is (probes asked per gap, the claim being read). The tools
   // read and write it, so the model cannot move it (spec §5.8).
   coachState Json? @map("coach_state")
+  // Set while a voice turn runs (claimed by a conditional update, cleared when it ends); a value older than the
+  // longest turn counts as abandoned. Replaces the in-memory double-turn guard.
+  turnStartedAt DateTime? @map("turn_started_at")
 
   user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   project  Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -786,6 +797,10 @@ model ProcessingJob {
   // allows one pending/processing job per targetKey.
   targetKey       String?   @map("target_key")
 
+  // A job the web started for a student's request; the daily cap on study-material requests counts only these
+  // (lib/api/quota.ts). Jobs the AI service chains after it stay false.
+  quotaCounted    Boolean   @default(false) @map("quota_counted")
+
   // Summed over every attempt. llmCostUsd feeds the per-user daily budget.
   llmInputTokens  Int       @default(0) @map("llm_input_tokens")
   llmOutputTokens Int       @default(0) @map("llm_output_tokens")
@@ -880,11 +895,14 @@ model LlmUsageEvent {
   cacheReadTokens  Int      @default(0) @map("cache_read_tokens")
   cacheWriteTokens Int      @default(0) @map("cache_write_tokens")
   costUsd      Decimal  @default(0) @map("cost_usd") @db.Decimal(12, 6)
+  // The account's spend_key, stamped by the insert trigger (users, else deleted_accounts); the daily allowance sums by it.
+  spendKey     String?  @map("spend_key")
   createdAt    DateTime @default(now()) @map("created_at")
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
+  @@index([spendKey, createdAt])
   @@index([createdAt])
   @@map("llm_usage_events")
 }
@@ -1259,4 +1277,85 @@ model OpsAlert {
   lastMessage String   @map("last_message")
 
   @@map("ops_alerts")
+}
+
+// ============================================
+// Spend keys (the allowance and voice minutes that survive account deletion)
+// ============================================
+
+// When each spend_key was first seen. Never deleted; the account's age (first-day allowance, the share of the global
+// cap kept for older accounts) is read from it. Written by the web app when an account is created.
+model SpendAccount {
+  spendKey    String   @id @map("spend_key")
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+
+  @@map("spend_accounts")
+}
+
+// The tombstone delete_user_account() writes (migration 20261208000000_spend_key_and_drill_sets), so a ledger row for
+// an account that is already gone is still stamped with its key. No foreign key: the account is gone.
+model DeletedAccount {
+  userId    String   @id @map("user_id")
+  spendKey  String?  @map("spend_key")
+  deletedAt DateTime @default(now()) @map("deleted_at")
+
+  @@map("deleted_accounts")
+}
+
+// Seconds of voice time each session used, by spend_key, kept by a trigger on voice_drill_sessions. No foreign key to
+// the session or the user: deleting a course or the account does not give the minutes back.
+model VoiceUsage {
+  sessionId   String   @id @map("session_id")
+  spendKey    String?  @map("spend_key")
+  connectedAt DateTime @map("connected_at")
+  seconds     Int      @default(0)
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  @@index([spendKey, connectedAt])
+  @@map("voice_usage")
+}
+
+// A generated drill set per topic, kept so asking again for the same inputs costs nothing. `inputsHash` covers what
+// changes the output (the notes, count, difficulty, the topic's concepts and the prompt version). General on purpose:
+// it names no voice session.
+model VoiceDrillSet {
+  id         String   @id @default(uuid())
+  topicId    String   @map("topic_id")
+  inputsHash String   @map("inputs_hash")
+  count      Int
+  questions  Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, inputsHash])
+  @@map("voice_drill_sets")
+}
+
+// Files whose row was deleted (a material, a project, a failed upload), queued in the same transaction as the delete.
+// The AI service's reaper loop deletes them from storage and retries with backoff; the watchdog alerts when one is
+// stuck.
+model PendingFileDeletion {
+  id            String    @id @default(dbgenerated("gen_random_uuid()::text"))
+  path          String
+  reason        String
+  createdAt     DateTime  @default(now()) @map("created_at")
+  attempts      Int       @default(0)
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  doneAt        DateTime? @map("done_at")
+
+  @@index([doneAt, lastAttemptAt])
+  @@map("pending_file_deletions")
+}
+
+// Fixed-window request counters shared by every web instance (migration 20261208000003_rate_limits). The key is
+// "<limiter name>:<spend key>", or "<limiter name>:ip:<address>" for a visitor with no account. Pruned by the limiter.
+model RateLimitHit {
+  key         String
+  windowStart DateTime @map("window_start") @db.Timestamptz(3)
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+  @@map("rate_limit_hits")
 }

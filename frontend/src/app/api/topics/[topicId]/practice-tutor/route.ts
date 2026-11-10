@@ -9,6 +9,10 @@
  *   the body says why (error.details.code). A miss comes back with what to read next (`help`).
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { readJson } from '@/lib/api/read-json'
+import { ownedTopic } from '@/server/owned'
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -32,7 +36,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 // A model call, and often two.
-const tutorLimiter = createRateLimiter({ limit: 20, windowMs: 60_000 })
+const tutorLimiter = createRateLimiter({ name: 'practice-tutor', limit: 20, windowMs: 60_000 })
 
 const bodySchema = z.object({
   problemIndex: z.number().int().min(0).max(200),
@@ -49,25 +53,21 @@ const bodySchema = z.object({
 
 const CALLS_THE_TUTOR = new Set(['ask', 'clarify', 'show_worked'])
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
+async function handlePOST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const session = await requireAuth()
     const userId = session.user.id
     const { topicId } = await params
-    const topic = await prisma.topic.findFirst({
-      where: { id: topicId, project: { userId } },
-      select: { id: true, projectId: true },
-    })
+    const topic = await ownedTopic(userId, topicId)
     if (!topic) return apiNotFound('Topic not found')
 
-    const body = await request.json().catch(() => null)
-    const parsed = bodySchema.safeParse(body)
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
 
     // Every model call counts toward the limit; a request that turns out invalid or stale does not.
     const admit = CALLS_THE_TUTOR.has(parsed.data.event)
-      ? () => {
-          const limit = tutorLimiter.check(userId)
+      ? async () => {
+          const limit = await tutorLimiter.check(userId)
           return limit.ok ? ({ ok: true } as const) : ({ ok: false, retryAfterSeconds: limit.retryAfterSeconds } as const)
         }
       : undefined
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof TutorUnavailableError) return tutorFailure(error)
-    console.error('Practice tutor error:', error)
+    logServerError('Practice tutor error', error)
     return apiInternal('The tutor could not answer')
   }
 }
@@ -111,7 +111,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const session = await requireAuth()
     const { topicId } = await params
-    const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId: session.user.id } }, select: { id: true } })
+    const topic = await ownedTopic(session.user.id, topicId)
     if (!topic) return apiNotFound('Topic not found')
     const parsed = stateQuery.safeParse(Object.fromEntries(new URL(request.url).searchParams))
     if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
@@ -121,7 +121,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ state: rest, contentId, ...(help ? { help } : {}) })
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('Practice tutor state error:', error)
+    logServerError('Practice tutor state error', error)
     return apiInternal('The tutor state could not be read')
   }
 }
+
+export const POST = withClientSignal(handlePOST)

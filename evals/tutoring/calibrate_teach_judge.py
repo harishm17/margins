@@ -9,8 +9,12 @@ Target: no labelled-true turn missed, at most two false positives. The labels ar
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
+
+# The app settings have no default ENVIRONMENT (SEC-L2); offline eval tooling runs as development.
+os.environ.setdefault("ENVIRONMENT", "development")
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))

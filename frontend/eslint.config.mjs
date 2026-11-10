@@ -12,6 +12,26 @@ export default defineConfig([
       'react-hooks/preserve-manual-memoization': 'warn',
     },
   },
+  {
+    // Server code logs errors through logServerError (src/lib/ops/log.ts), which keeps an error's message (it can
+    // carry student text) out of the logs. Browser-only components under src/features and src/components may keep console;
+    // the server actions there ('use server', named actions.ts) are server code.
+    files: ['src/app/**/*.{ts,tsx}', 'src/server/**/*.{ts,tsx}', 'src/lib/**/*.{ts,tsx}', 'src/features/**/actions.ts', 'src/instrumentation.ts'],
+    ignores: ['**/*.test.{ts,tsx}', 'src/lib/ops/log.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "MemberExpression[object.name='console'][property.name=/^(error|warn)$/]",
+          message: 'Use logServerError(label, error, { ids }) from @/lib/ops/log in server code.',
+        },
+        {
+          selector: "CallExpression[callee.name='logServerError'][arguments.0.type!='Literal']",
+          message: 'The first argument of logServerError must be a plain string literal: no template, no variable.',
+        },
+      ],
+    },
+  },
   globalIgnores([
     '.next/**',
     'out/**',

@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { prisma } from '@/lib/db/prisma'
 import type { GradedQuestion } from '@/lib/ai-service/grading'
 import { confidenceOf, plainAnswerOf } from '@/lib/exams/attempt-timing'
@@ -112,7 +113,7 @@ export async function recordExamEvidence(
     })
     return true
   } catch (error) {
-    console.error('Recording exam evidence failed:', error)
+    logServerError('Recording exam evidence failed', error)
     return false
   }
 }

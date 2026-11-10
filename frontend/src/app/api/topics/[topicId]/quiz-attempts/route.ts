@@ -5,6 +5,11 @@
  * GET /api/topics/[topicId]/quiz-attempts - Get quiz history
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { id, record } from '@/lib/api/fields'
+import { readJson } from '@/lib/api/read-json'
+import { ownedTopic } from '@/server/owned'
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -26,7 +31,7 @@ import { getTimeZone } from '@/server/timezone'
 // An answer is the plain string (a quiz started before confidence existed) or an object with the
 // student's confidence and thinking; a confidence outside 0 to 1 is dropped by normalizeAnswers.
 const saveQuizAttemptSchema = z.object({
-  answers: z.record(
+  answers: record(
     z.union([
       z.string().max(5000),
       z.object({
@@ -36,13 +41,15 @@ const saveQuizAttemptSchema = z.object({
         thinking: z.string().max(4000).optional(),
         idk: z.boolean().optional(),
       }),
-    ])
+    ]),
+    200,
+    20
   ), // { questionIndex: answer | { answer, confidence, confidenceLevel, thinking, idk } }
-  quizSetId: z.string().optional(),
+  quizSetId: id().optional(),
 })
 
 // Each submission can cost model calls for short answers.
-const submitLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 })
+const submitLimiter = createRateLimiter({ name: 'quiz-submit', limit: 10, windowMs: 60_000 })
 
 function isMissingQuizSetColumnError(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
@@ -63,7 +70,7 @@ function isMissingQuizSetColumnError(error: unknown): boolean {
   )
 }
 
-export async function POST(
+async function handlePOST(
   request: NextRequest,
   { params }: { params: Promise<{ topicId: string }> }
 ) {
@@ -72,14 +79,7 @@ export async function POST(
     const { topicId } = await params
 
     // Verify topic ownership
-    const topic = await prisma.topic.findFirst({
-      where: {
-        id: topicId,
-        project: {
-          userId: session.user.id,
-        },
-      },
-    })
+    const topic = await ownedTopic(session.user.id, topicId)
 
     if (!topic) {
       return NextResponse.json(
@@ -88,17 +88,10 @@ export async function POST(
       )
     }
 
-    const body = await request.json()
-    const validation = saveQuizAttemptSchema.safeParse(body)
+    const validation = await readJson(request, saveQuizAttemptSchema)
+    if (!validation.ok) return validation.response
 
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error },
-        { status: 400 }
-      )
-    }
-
-    const rate = submitLimiter.check(session.user.id)
+    const rate = await submitLimiter.check(session.user.id)
     if (!rate.ok) {
       return NextResponse.json(
         { error: 'Too many quiz submissions. Please wait a moment and try again.' },
@@ -107,7 +100,7 @@ export async function POST(
     }
 
     const quizSetId = validation.data.quizSetId || null
-    const questions = await loadQuizQuestions(topicId, quizSetId)
+    const questions = await loadQuizQuestions(topic, quizSetId)
     if (!questions) {
       return NextResponse.json({ error: 'Quiz not found' }, { status: 404 })
     }
@@ -119,7 +112,7 @@ export async function POST(
     const sameDayRepeat = await takenEarlierToday({ userId: session.user.id, topicId, quizSetId, at: new Date(), timeZone })
     let graded
     try {
-      graded = await gradeAnswers(questions, answersForGrader(given))
+      graded = await gradeAnswers({ userId: session.user.id, projectId: topic.projectId }, questions, answersForGrader(given))
     } catch (gradeError) {
       if (gradeError instanceof GradingRejectedError) {
         // The grader refused the request itself (not the AI being away): an error, not a wait.
@@ -229,7 +222,7 @@ export async function POST(
       outcome,
     })
   } catch (error) {
-    console.error('Save quiz attempt error:', error)
+    logServerError('Save quiz attempt error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -262,14 +255,7 @@ export async function GET(
       : {}
 
     // Verify topic ownership
-    const topic = await prisma.topic.findFirst({
-      where: {
-        id: topicId,
-        project: {
-          userId: session.user.id,
-        },
-      },
-    })
+    const topic = await ownedTopic(session.user.id, topicId)
 
     if (!topic) {
       return NextResponse.json(
@@ -348,7 +334,7 @@ export async function GET(
 
     // Past attempts are already graded, so the review (answer key included) can be sent.
     // The history list shows the five most recent, so only those carry one.
-    const questionSets = await loadAllQuizQuestionSets(topicId)
+    const questionSets = await loadAllQuizQuestionSets(topic)
     const attemptsWithReview = attempts.map((attempt, index) => {
       const questions = questionSets.get(attempt.quizSetId ?? null)
       return {
@@ -367,7 +353,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Fetch quiz attempts error:', error)
+    logServerError('Fetch quiz attempts error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -382,3 +368,5 @@ export async function GET(
     )
   }
 }
+
+export const POST = withClientSignal(handlePOST)

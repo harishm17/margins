@@ -3,6 +3,10 @@
  * POST /api/topics/[topicId]/generate-content
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { quotaErrorResponse } from '@/lib/api/quota'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -10,12 +14,10 @@ import { enqueueContentGenerationJob, TaskEnqueueError } from '@/lib/tasks/dispa
 import { z } from 'zod'
 import {
   apiInternal,
-  apiInvalidInput,
   apiNotFound,
   apiUnauthorized,
   apiUpstream,
   isUnauthorizedError,
-  zodDetails,
 } from '@/lib/api/errors'
 import { ensureAiGenerationReady } from '@/lib/api/ai-preflight'
 import {
@@ -33,7 +35,7 @@ const generateContentSchema = z.object({
     question_count: z.number().min(5).max(30).optional(),
     difficulty_level: z.enum(['easy', 'medium', 'hard']).optional(),
     focus: z.string().trim().min(3).max(280).optional(),
-    question_types: z.array(z.enum(['multiple_choice', 'short_answer', 'numerical', 'true_false'])).optional(),
+    question_types: z.array(z.enum(['multiple_choice', 'short_answer', 'numerical', 'true_false'])).max(4).optional(),
     append: z.boolean().optional(),
     // When this job finishes, the AI service queues the topic's other missing content one job at
     // a time (see ai-service/app/services/generation_chain.py). Set when a topic is opened.
@@ -50,6 +52,8 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { topicId } = await params
 
     // Verify topic ownership through project
@@ -74,12 +78,8 @@ export async function POST(
       return preflightError
     }
 
-    const body = await request.json()
-    const validation = generateContentSchema.safeParse(body)
-
-    if (!validation.success) {
-      return apiInvalidInput('Invalid input', zodDetails(validation.error))
-    }
+    const validation = await readJson(request, generateContentSchema)
+    if (!validation.ok) return validation.response
 
     const { contentType: requestedType, preferences: requested } = validation.data
     const { only_if_missing: onlyIfMissing, ...preferences } = requested ?? {}
@@ -167,7 +167,9 @@ export async function POST(
       replacingExisting: existingContent,
     })
   } catch (error) {
-    console.error('Content generation error:', error)
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
+    logServerError('Content generation error', error)
 
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()

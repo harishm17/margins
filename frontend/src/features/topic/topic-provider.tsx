@@ -143,8 +143,9 @@ function toNotice(error: unknown): GenerationNotice {
       const notice = noticeForCode(error.code)
       return { ...notice, message: fillResetTime(notice.message) }
     }
-    // error.message is already filled in by apiFetch.
-    return { message: error.message, tone: 'danger', retry: true }
+    // error.message is already filled in by apiFetch. A refusal the server marks not retryable (a quota) offers no retry.
+    const retryable = (error.details as { retryable?: unknown } | null | undefined)?.retryable !== false
+    return { message: error.message, tone: 'danger', retry: retryable }
   }
   return { message: 'Something went wrong. Try again.', tone: 'danger', retry: true }
 }

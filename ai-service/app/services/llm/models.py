@@ -107,3 +107,27 @@ def resolve_model(purpose: str) -> ModelChoice:
     if config.effort is not None:
         choice = ModelChoice(choice.model, config.effort)
     return choice
+
+
+def check_model_prices() -> None:
+    """Refuse to start when any model a purpose can resolve to has no price (usage.py): its calls would otherwise
+    be billed from a guess. Names the setting to fix. Only the real provider matters: the mock and replay providers
+    report made-up or recorded model names."""
+    from app.services.llm.usage import has_price
+
+    if settings.LLM_PROVIDER.strip().lower() != "anthropic":
+        return
+    problems = []
+    for purpose, config in sorted(PURPOSES.items()):
+        model = resolve_model(purpose).model
+        if not has_price(model):
+            source = config.setting if getattr(settings, config.setting) or config.inherits and getattr(settings, config.inherits) else (
+                "ANTHROPIC_FAST_MODEL" if config.fallback_tier == "fast" else "ANTHROPIC_MODEL"
+            )
+            problems.append(f"{source} (purpose {purpose}) is {model!r}")
+    if problems:
+        raise RuntimeError(
+            "These models have no price in app/services/llm/usage.py, so their cost cannot be counted: "
+            + "; ".join(problems)
+            + ". Add the price there or change the setting."
+        )

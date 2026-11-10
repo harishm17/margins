@@ -7,6 +7,7 @@
  * return the existing job when the insert loses the race.
  */
 
+import { GENERATION_JOB_TYPES, assertQuota } from '@/lib/api/quota'
 import { Prisma, type ProcessingJob } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 
@@ -48,7 +49,14 @@ export async function createJobOrFindActive(
     if (existing) return { job: existing, created: false }
 
     try {
-      const job = await prisma.processingJob.create({ data })
+      // A job the model runs for a student's request counts toward their daily cap; the count and the insert share one
+      // lock, so parallel requests cannot all pass at the edge. Throws QuotaExceededError (the route's catch answers 409).
+      const job = (GENERATION_JOB_TYPES as readonly string[]).includes(data.jobType)
+        ? await prisma.$transaction(async (tx) => {
+            await assertQuota(tx, { id: data.userId }, 'generationJobs')
+            return tx.processingJob.create({ data: { ...data, quotaCounted: true } })
+          })
+        : await prisma.processingJob.create({ data })
       return { job, created: true }
     } catch (error) {
       // Lost the race to another request: loop and return the winner.

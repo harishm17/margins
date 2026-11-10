@@ -8,13 +8,15 @@
  * fail on their own.
  */
 
+import { logServerError } from '@/lib/ops/log'
+
 /** The message of the error thrown for a deleted account (the auth logger keeps it out of errors). */
 export const ACCOUNT_GONE = 'ACCOUNT_GONE'
 
 export async function assertAccountExists(
   userId: unknown,
   exists: (userId: string) => Promise<boolean>,
-  warn: (message: string, error: unknown) => void = console.warn
+  warn: (message: string, error: unknown) => void = (_message, error) => logServerError('Auth: could not check that the signed-in account exists', error)
 ): Promise<void> {
   if (typeof userId !== 'string' || !userId) return
   let found: boolean

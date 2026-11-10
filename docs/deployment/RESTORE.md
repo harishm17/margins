@@ -51,6 +51,7 @@ when Railway is gone.
 | `ANTHROPIC_API_KEY` | ai | Anthropic console | Make a new key |
 | `AI_INTERNAL_TOKEN` | ai (web references it) | Nowhere; random | `openssl rand -hex 32` |
 | `NEXTAUTH_SECRET` | web | Nowhere; random | `openssl rand -base64 48` (everyone signs in again) |
+| `SPEND_KEY_SECRET` | web | Nowhere; random. Keep a copy in the password manager | Generate 32 random bytes in hex. A new value starts every returning student's daily allowance and voice minutes over, so keep the old one |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | web | Google Cloud project "studybuddy", OAuth client "Margins web" | Add a new secret to the same client |
 | `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY` | web | The providers' consoles | Make new keys |
 | `OPS_ALERT_WEBHOOK_URL` | ai | The box's `box-health` service (`NTFY_TOPIC`) | Use the same ntfy topic |

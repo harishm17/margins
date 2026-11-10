@@ -18,6 +18,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict
 
+from app.errors import describe_exception
 from app.config import settings
 from app.db.connection import UTC_NOW, execute_query
 from app.services import ops
@@ -117,5 +118,5 @@ async def voice_retention_loop() -> None:
             await ops.set_state("voice_retention_last_run", datetime.now(timezone.utc).isoformat())
         except Exception as exc:
             logger.exception("Voice transcript purge failed")
-            await ops.note("voice_retention_failed", repr(exc))
+            await ops.note("voice_retention_failed", describe_exception(exc))
         await asyncio.sleep(settings.VOICE_RETENTION_INTERVAL_SECONDS)

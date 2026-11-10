@@ -29,6 +29,23 @@ UTC_NOW = "(NOW() AT TIME ZONE 'UTC')"
 
 _pool: asyncpg.Pool | None = None
 _pool_lock = asyncio.Lock()
+# Connections that hold advisory locks for a whole job (app/services/locks.py), kept apart from the main pool.
+_lock_pool: asyncpg.Pool | None = None
+
+
+class _TimedPool(asyncpg.Pool):
+    """A pool whose `acquire()` (and so every `fetch`, `execute` and the like, which acquire through it) gives up
+    after DB_ACQUIRE_TIMEOUT_SECONDS instead of waiting for a free connection for ever. An explicit `timeout=` wins."""
+
+    __slots__ = ()
+
+    def acquire(self, *, timeout=None):
+        return super().acquire(timeout=settings.DB_ACQUIRE_TIMEOUT_SECONDS if timeout is None else timeout)
+
+
+def _with_acquire_timeout(pool: asyncpg.Pool) -> asyncpg.Pool:
+    pool.__class__ = _TimedPool  # same slots, so the swap is allowed; asyncpg offers no pool_class argument
+    return pool
 
 
 async def get_db_pool() -> asyncpg.Pool:
@@ -38,25 +55,47 @@ async def get_db_pool() -> asyncpg.Pool:
     if _pool is None:
         async with _pool_lock:
             if _pool is None:
-                _pool = await asyncpg.create_pool(
+                _pool = _with_acquire_timeout(await asyncpg.create_pool(
                     asyncpg_dsn(settings.DATABASE_URL),
                     min_size=2,
                     max_size=settings.DB_POOL_MAX_SIZE,
                     command_timeout=settings.DB_COMMAND_TIMEOUT_SECONDS,
                     # So a bare now call or a timestamptz comparison is UTC as well.
                     server_settings={"timezone": "UTC"},
-                )
+                ))
 
     return _pool
 
 
+async def get_lock_pool() -> asyncpg.Pool:
+    """The pool for advisory-lock connections (DB_LOCK_POOL_MAX_SIZE). A lock holder keeps its connection for the whole
+    job, so these never come out of the main pool."""
+    global _lock_pool
+
+    if _lock_pool is None:
+        async with _pool_lock:
+            if _lock_pool is None:
+                _lock_pool = await asyncpg.create_pool(
+                    asyncpg_dsn(settings.DATABASE_URL),
+                    min_size=0,
+                    max_size=settings.DB_LOCK_POOL_MAX_SIZE,
+                    command_timeout=settings.DB_COMMAND_TIMEOUT_SECONDS,
+                    server_settings={"timezone": "UTC"},
+                )
+
+    return _lock_pool
+
+
 async def close_db_pool():
-    """Close database connection pool."""
-    global _pool, _pool_lock
+    """Close the database connection pools."""
+    global _pool, _lock_pool, _pool_lock
 
     if _pool is not None:
         await _pool.close()
         _pool = None
+    if _lock_pool is not None:
+        await _lock_pool.close()
+        _lock_pool = None
     # A lock that has waited is tied to that event loop; start fresh for the next one.
     _pool_lock = asyncio.Lock()
 

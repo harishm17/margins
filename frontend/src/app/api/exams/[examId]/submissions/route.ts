@@ -1,6 +1,6 @@
+import { logServerError } from '@/lib/ops/log'
+import { readSession } from '@/lib/auth/get-session'
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 const getOverallScore = (value: unknown): number | null => {
@@ -15,7 +15,7 @@ export async function GET(
   { params }: { params: Promise<{ examId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await readSession();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -82,7 +82,7 @@ export async function GET(
       stats,
     });
   } catch (error) {
-    console.error('Error fetching submissions:', error);
+    logServerError('Error fetching submissions', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

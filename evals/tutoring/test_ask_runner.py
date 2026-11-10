@@ -72,7 +72,7 @@ class ScriptedAsk(LLMProvider):
 @pytest.fixture
 def course(monkeypatch):
     """The route with the scenario's course in place of the database, restored after each test."""
-    names = [(chat_route, "execute_one"), (chat_route, "over_budget_message"), (chat_service, "retrieve"), (chat_service, "topic_concept_names"),
+    names = [(chat_route, "assert_owns"), (chat_route, "allowance_today"), (chat_service, "retrieve"), (chat_service, "topic_concept_names"),
              (chat_service, "resolve_concept_ids"), (ai_status, "get_status")]
     saved = [(owner, name, getattr(owner, name)) for owner, name in names]
     monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")

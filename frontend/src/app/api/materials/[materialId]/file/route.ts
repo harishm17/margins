@@ -1,7 +1,7 @@
+import { logServerError } from '@/lib/ops/log'
+import { readSession } from '@/lib/auth/get-session'
 import { Readable } from 'node:stream'
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import {
   contentDisposition,
@@ -24,7 +24,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ materialId: string }> }
 ) {
-  const session = await getServerSession(authOptions)
+  const session = await readSession()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -42,7 +42,7 @@ export async function GET(
   try {
     stored = await openStoredFile(material.gcsPath)
   } catch (error) {
-    console.error('Could not open material file:', error)
+    logServerError('Could not open material file', error)
     return NextResponse.json({ error: 'The file could not be read right now' }, { status: 502 })
   }
   if (!stored) {

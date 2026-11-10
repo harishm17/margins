@@ -255,7 +255,7 @@ async function partialWorld() {
 dbTest('rule items graded while short answers wait', async () => {
   const { w, questions, given } = await partialWorld()
   const asked: number[][] = []
-  const grade = async (_questions: unknown[], _answers: unknown, only?: number[]) => {
+  const grade = async (_account: unknown, _questions: unknown[], _answers: unknown, only?: number[]) => {
     asked.push(only ?? [])
     return ruleGraded(true)
   }

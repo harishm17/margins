@@ -14,6 +14,8 @@
 # It reads the AI status uncached (AI_STATUS_CACHE_MS=0), so a spec that marks AI unavailable sees it at once,
 # and the AI service reaps every 5 seconds and looks again at a job waiting for the AI after 5 seconds (30 in
 # production, JOB_AI_WAIT_RECHECK_SECONDS), so a job that waited for the AI is sent again soon after it is back.
+# The specs reuse a few signed-in students for many courses, so the per-student caps on courses, voice sessions and
+# generation requests (frontend/src/lib/api/quota.ts) are raised here; the caps themselves are tested in quota.db.test.ts.
 # Use a database of its own for the stack and the specs (for example margins_e2e, migrated): the AI service's reaper
 # sends any pending job in its database, so a database shared with `npm test` or a dev server lets their jobs, and
 # the shared AI status, leak into the specs. Export the same E2E_RUN_DIR to the stack and to Playwright.
@@ -79,8 +81,10 @@ start() {
       exec setsid env \
         AI_SERVICE_URL="http://127.0.0.1:$AI_PORT" \
         AI_INTERNAL_TOKEN="$TOKEN" \
+        ENVIRONMENT=development \
         NEXTAUTH_URL="http://localhost:$WEB_PORT" \
         NEXTAUTH_SECRET="e2e-secret-e2e-secret-e2e-secret-32" \
+        SPEND_KEY_SECRET="e2e-spend-key-secret-e2e-spend-key" \
         ENABLE_TEST_LOGIN=true \
         GOOGLE_OAUTH_CLIENT_ID="e2e-not-a-real-client.apps.googleusercontent.com" \
         GOOGLE_OAUTH_CLIENT_SECRET="e2e-not-a-real-google-secret" \
@@ -88,6 +92,9 @@ start() {
         LOCAL_UPLOADS_DIR="$RUN/uploads" \
         E2E_HOLD_DIR="$RUN/hold" \
         VOICE_TURNS_PER_MINUTE=1000 \
+        QUOTA_COURSES=1000 \
+        QUOTA_VOICE_SESSIONS_PER_DAY=1000 \
+        QUOTA_GENERATION_JOBS_PER_DAY=10000 \
         NEXT_TELEMETRY_DISABLED=1 \
         npx next start --port "$WEB_PORT" \
         >"$RUN/web.log" 2>&1

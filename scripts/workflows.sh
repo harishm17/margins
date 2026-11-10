@@ -35,6 +35,9 @@ if [ "${WF_RECORD:-}" = 1 ]; then export E2E_REPLAY_MISS=record; else export E2E
 # Each workflow is a new student, and a replayed call counts its recorded cost: the whole suite in one day
 # would pass the shared daily cap. Each student's own allowance (DAILY_LLM_BUDGET_USD) stays as it is.
 export GLOBAL_DAILY_LLM_BUDGET_USD=100000
+# A workflow student is minutes old, so the first-day allowance ($4) would apply; WF9 works up to the full
+# DAILY_LLM_BUDGET_USD (harness/allowance.ts DAILY_LIMIT_USD). The first-day rule has its own tests in ai-service.
+export FIRST_DAY_LLM_BUDGET_USD=0
 export WF_FILES_DIR WF_CASSETTE_DIR
 export WF_RESULTS_DIR="${WF_RESULTS_DIR:-$ROOT/frontend/test-results/workflows}"
 

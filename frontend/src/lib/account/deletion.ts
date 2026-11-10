@@ -23,6 +23,8 @@
  * and a call for an account that is already gone succeeds.
  */
 
+import { describeErrorForOps } from '@/lib/ops/log'
+
 export type DeletionStore = {
   /** True while the account row exists. */
   accountExists(userId: string): Promise<boolean>
@@ -42,6 +44,8 @@ export type DeletionFiles = {
   deleteUserFiles(userId: string): Promise<void>
   /** Records in storage that the account is gone, so a restore from an older backup deletes it again. */
   recordDeletion?(userId: string): Promise<void>
+  /** Queues the user's folder in the deletion queue (the account is gone, so nobody can retry the delete). Never throws. */
+  queueFolder?(userId: string): Promise<void>
 }
 
 /** Counts a handled failure for the operator's watchdog (lib/ops/events). Never throws. */
@@ -165,7 +169,8 @@ async function sweep(userId: string, files: DeletionFiles, log: DeletionLog, not
   } catch (error) {
     // The account is gone and cannot retry: leave a line to clean up by hand.
     log.error(`[ACCOUNT] Account ${userId} is deleted, but its folder could not be swept; remove ${userId}/ by hand:`, error)
-    await note('storage_delete_failed', `folder ${userId}/ after account deletion: ${String(error)}`)
+    await note('storage_delete_failed', `folder ${userId}/ after account deletion: ${describeErrorForOps(error)}`)
+    await files.queueFolder?.(userId)
   }
 }
 
@@ -177,7 +182,7 @@ async function recordDeletion(userId: string, files: DeletionFiles, log: Deletio
   } catch (error) {
     // The deletion stands; only a restore from an older backup would bring the account back.
     log.error(`[ACCOUNT] Account ${userId} is deleted, but the deletion could not be recorded for restores:`, error)
-    await note('deletion_record_failed', `${userId}: ${String(error)}`)
+    await note('deletion_record_failed', `${userId}: ${describeErrorForOps(error)}`)
   }
 }
 

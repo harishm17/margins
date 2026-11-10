@@ -1,3 +1,7 @@
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { id, list, record } from '@/lib/api/fields'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -12,19 +16,22 @@ const metricEntrySchema = z.object({
   toolLatencyMs: z.number().finite().nonnegative().max(600000).optional(),
   toolFailures: z.number().int().nonnegative().max(100).optional(),
   interrupts: z.number().int().nonnegative().max(50).optional(),
-  lastDetectedLanguage: z.string().regex(/^[a-z]{2,8}$/i).optional(),
+  lastDetectedLanguage: z.string().max(8).regex(/^[a-z]{2,8}$/i).optional(),
 }).strict()
 
 const metricsSchema = z.object({
-  sessionId: z.string(),
+  sessionId: id(),
   entry: metricEntrySchema,
 })
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth()
-    const body = await request.json()
-    const payload = metricsSchema.parse(body)
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
+    const parsed = await readJson(request, metricsSchema)
+    if (!parsed.ok) return parsed.response
+    const payload = parsed.data
 
     const session = await prisma.voiceDrillSession.findFirst({
       where: {
@@ -57,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Voice metrics error:', error)
+    logServerError('Voice metrics error', error)
 
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 })

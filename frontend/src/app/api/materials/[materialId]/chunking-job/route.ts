@@ -3,6 +3,7 @@
  * GET /api/materials/[materialId]/chunking-job
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -53,7 +54,6 @@ export async function GET(
         status: true,
         stage: true,
         progressPercent: true,
-        errorMessage: true,
         errorCode: true,
         retryable: true,
         createdAt: true,
@@ -68,7 +68,7 @@ export async function GET(
 
     return NextResponse.json({ chunkingJob })
   } catch (error) {
-    console.error('Get chunking job error:', error)
+    logServerError('Get chunking job error', error)
 
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()

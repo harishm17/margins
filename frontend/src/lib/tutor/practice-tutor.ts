@@ -5,6 +5,8 @@
  * rung. Using the worked example surrenders the step: it is recorded at level 3 for the closing retest.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import type { OwnedTopic } from '@/server/owned'
 import { prisma } from '@/lib/db/prisma'
 import { checkPracticeAnswer } from '@/features/topic/practice-check'
 import type { PracticeProblem, PracticeStep } from '@/features/topic/types'
@@ -37,7 +39,8 @@ export type PracticeTutorResult =
   | { status: 'rate_limited'; retryAfterSeconds: number }
   | { status: 'ok'; body: PracticeTutorResponse }
 
-export type Admit = () => { ok: true } | { ok: false; retryAfterSeconds: number }
+type Admitted = { ok: true } | { ok: false; retryAfterSeconds: number }
+export type Admit = () => Admitted | Promise<Admitted>
 
 const MAX_ATTEMPT_CHARS = 500
 
@@ -63,7 +66,7 @@ async function helpFor(userId: string, topicId: string, step: PracticeStep): Pro
   try {
     return await helpAfterMiss(prisma, { userId, topicId, conceptIds: step.conceptIds, surface: 'practice' })
   } catch (error) {
-    console.error('Help after a miss failed:', error)
+    logServerError('Help after a miss failed', error)
     return undefined
   }
 }
@@ -71,10 +74,10 @@ async function helpFor(userId: string, topicId: string, step: PracticeStep): Pro
 /** Where the step's conversation stands, for a page that was just opened; the content row the step belongs to; and the help when it was missed. */
 export async function readPracticeTutorState(
   userId: string,
-  topic: { id: string },
+  topic: OwnedTopic,
   at: { problemIndex: number; problemTitle: string; stepIndex: number }
 ): Promise<(PracticeTutorState & { contentId: string; help?: HelpAfterMiss }) | null> {
-  const practice = await currentPractice(topic.id)
+  const practice = await currentPractice(topic)
   const problem = practice?.problems[at.problemIndex]
   if (!practice || !problem || !problem.steps[at.stepIndex] || problem.title !== at.problemTitle) return null
   const state = await getTutorState(userId, 'practice', practiceScopeKey(practice.contentId, at.problemIndex, at.stepIndex))
@@ -144,12 +147,12 @@ const cleanAttempts = (attempts: string[] | undefined) =>
 
 export async function runPracticeTutor(
   userId: string,
-  topic: { id: string; projectId: string },
+  topic: OwnedTopic,
   body: PracticeTutorBody,
   options: { timeZone: string; admit?: Admit },
   deps: PracticeTutorDeps = defaultDeps
 ): Promise<PracticeTutorResult> {
-  const practice = await currentPractice(topic.id)
+  const practice = await currentPractice(topic)
   const problem = practice?.problems[body.problemIndex]
   const step = problem?.steps[body.stepIndex]
   if (!practice || !problem || !step || problem.title !== body.problemTitle) return { status: 'stale' }
@@ -206,7 +209,7 @@ export async function runPracticeTutor(
   if (body.event === 'show_worked' && (!gateHelp(before, event).ok || !preview.workedAllowed)) return { status: 'attempt_first' }
   // Effort first (spec 5.6): the tutor looks at working once the student has checked an answer.
   if (body.event === 'ask' && before.checks < 1) return { status: 'not_allowed' }
-  const admitted = options.admit?.()
+  const admitted = await options.admit?.()
   if (admitted && !admitted.ok) return { status: 'rate_limited', retryAfterSeconds: admitted.retryAfterSeconds }
 
   // What the checks said comes from the server's own record of them, never from the browser's list.
@@ -264,7 +267,7 @@ export async function runPracticeTutor(
 /** Level 3, flagged: the concept is due tomorrow and the closing retest serves the item again in fresh form. */
 async function recordSurrender(
   userId: string,
-  topic: { id: string; projectId: string },
+  topic: OwnedTopic,
   contentId: string,
   body: PracticeTutorBody,
   step: PracticeStep,

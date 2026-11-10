@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 /**
  * The voice coach's three tools, run on the server inside the turn loop.
@@ -9,6 +10,7 @@ import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
  */
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
+import { ownedTopic } from '@/server/owned'
 import { createRateLimiter } from '@/lib/api/rate-limit'
 import { voiceTurnsPerMinute } from './turn-limit'
 import { gradeAnswers, GradingRejectedError, GradingUnavailableError } from '@/lib/ai-service/grading'
@@ -188,7 +190,7 @@ const hintArgs = z.object({
 })
 
 // Each graded answer costs a model call, so one user cannot hammer them.
-const answerLimiter = createRateLimiter({ limit: voiceTurnsPerMinute(), windowMs: 60_000 })
+const answerLimiter = createRateLimiter({ name: 'voice-grade', limit: voiceTurnsPerMinute(), windowMs: 60_000 })
 
 export type VoiceToolResult = {
   /** What goes back to the model as the tool result. */
@@ -267,7 +269,7 @@ async function recordVoiceEvidence(input: {
       { timeZone: input.timeZone, userId: input.userId, skipIfPresent: true }
     )
   } catch (error) {
-    console.error('Recording voice evidence failed:', error)
+    logServerError('Recording voice evidence failed', error)
   }
 }
 
@@ -308,10 +310,10 @@ async function runVoiceTool(
       sessionId,
       userId,
       projectId: session.projectId,
-      topicId: session.topicId,
+      topic: session.topicId ? await ownedTopic(userId, session.topicId, session.projectId) : null,
       timeZone: ctx.timeZone ?? 'UTC',
       grade: ctx.grade,
-      allowGrading: () => answerLimiter.check(userId).ok,
+      allowGrading: async () => (await answerLimiter.check(userId)).ok,
       turn: ctx.turn,
       autoCheck: ctx.autoCheck,
     }
@@ -387,9 +389,14 @@ async function runVoiceTool(
     const userAnswer = heardSince(quizState, quizState.quiz.askedTurn)
     if (!userAnswer) return finish({ error: NOBODY_SPOKE })
 
-    const inferredTopicId =
+    // The topic this answer is written to (attempt, signal, review schedule, evidence) is the question's own topic, or
+    // the session's, and only when it is the student's and in this course: a question set is stored data, never trusted
+    // for a write (SEC-L1).
+    const claimedTopicId =
       (typeof question.topic_id === 'string' && question.topic_id.length > 0 ? question.topic_id : null) ||
       session.topicId
+    const questionTopic = claimedTopicId ? await ownedTopic(userId, claimedTopicId, session.projectId) : null
+    const inferredTopicId = questionTopic?.id ?? null
 
     // "I don't know" has one detector (lib/learning/dont-know.ts), applied to what the student said as well as to the coach's flag.
     const dontKnow = parsed.data.idk === true || isDontKnow(userAnswer)
@@ -401,12 +408,12 @@ async function runVoiceTool(
       // Nothing was answered, so nothing is graded: a wrong answer with score 0 (spec 18.3).
       grading = { score: 0, isCorrect: false, comment: 'The student said they did not know.', ungraded: false }
     } else if (gradable) {
-      const rate = answerLimiter.check(userId)
+      const rate = await answerLimiter.check(userId)
       if (!rate.ok) {
         return finish({ error: 'Too many answers too quickly. Wait a moment and try again.' })
       }
       try {
-        const graded = (await gradeAnswers([gradable], { '0': userAnswer })).graded_questions[0]
+        const graded = (await gradeAnswers({ userId, projectId: session.projectId }, [gradable], { '0': userAnswer })).graded_questions[0]
         grading = {
           score: graded.points_possible > 0 ? graded.points_earned / graded.points_possible : 0,
           isCorrect: graded.is_correct,

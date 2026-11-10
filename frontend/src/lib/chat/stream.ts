@@ -3,9 +3,11 @@
  *
  * The browser gets the AI service's events as they arrive (text, citations), with `thread`
  * and `user_message` events first and `saved` last. The relay keeps reading the AI service
- * even when the browser has gone away, so a closed tab still ends with the answer stored and
- * its cost recorded, instead of a paid answer nobody can find.
+ * even when the browser has gone away, so a closed tab or a Stop still ends with the answer stored and
+ * its cost recorded, instead of a paid answer nobody can find. This is the one model call a dropped request does not
+ * cancel: its result is kept and shown (use-ask-chat.ts attaches the stored reply after a Stop).
  */
+import { logServerError } from '@/lib/ops/log'
 import { createLineSplitter, parseChatEvent } from './events'
 import { chatErrorMessage } from './errors'
 import type { ChatSource, CitationMark } from './citations'
@@ -73,7 +75,7 @@ export function relayChatStream(args: {
 }): ReadableStream<Uint8Array> {
   const { head, upstream, storage } = args
   const hooks = args.hooks ?? {}
-  const log = args.log ?? ((message, error) => console.error(`[CHAT] ${message}`, error ?? ''))
+  const log = args.log ?? ((_message, error) => logServerError('Chat: the answer stream reported a problem', error))
   const encoder = new TextEncoder()
   let clientGone = false
 

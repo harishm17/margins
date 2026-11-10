@@ -9,6 +9,7 @@ type Prisma = typeof import('@/lib/db/prisma').prisma
 let prisma: Prisma
 let warmup: typeof import('./warmup-session')
 let quizSets: typeof import('./quiz-sets')
+let ownedTopic: typeof import('@/server/owned').ownedTopic
 let available = false
 const realFetch = globalThis.fetch
 let gradeCalls = 0
@@ -18,6 +19,7 @@ const ZONE = 'UTC'
 before(async () => {
   ;({ prisma } = await import('@/lib/db/prisma'))
   warmup = await import('./warmup-session')
+  ;({ ownedTopic } = await import('@/server/owned'))
   quizSets = await import('./quiz-sets')
   available = await prisma.$queryRaw`SELECT 1 FROM item_sessions LIMIT 1`.then(
     () => true,
@@ -205,5 +207,5 @@ test('warmup answers never appear in quiz history', { skip: !process.env.DATABAS
   // The bank is not a quiz set, whatever reads quiz sets.
   const sets = await prisma.topicQuiz.findMany({ where: { topicId: w.topic.id, kind: { in: ['standard', 'retry'] } } })
   assert.equal(sets.length, 0)
-  assert.equal((await quizSets.loadAllQuizQuestionSets(w.topic.id)).size, 0)
+  assert.equal((await quizSets.loadAllQuizQuestionSets((await ownedTopic(w.user.id, w.topic.id))!)).size, 0)
 })

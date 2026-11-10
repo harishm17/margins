@@ -12,14 +12,12 @@ import { confidenceValue, type ConfidenceId } from '@/lib/learning/calibration'
 import { recordEvidence } from '@/lib/learning/evidence'
 import { itemKey } from '@/lib/learning/item-key'
 import { checkScore, type CheckGrade } from '@/lib/reader/checks'
+import { ownedMessage } from '@/server/owned'
 import { parseStoredTutor } from './tutor-message'
 
 /** The assistant message with a card, if it is this student's. */
 async function ownedCard(userId: string, messageId: string) {
-  const message = await prisma.chatMessage.findFirst({
-    where: { id: messageId, role: 'assistant', thread: { userId } },
-    select: { id: true, tutor: true, threadId: true, thread: { select: { projectId: true } } },
-  })
+  const message = await ownedMessage(userId, messageId, 'assistant')
   const check = parseStoredTutor(message?.tutor)?.check
   return message && check ? { message, check } : null
 }
@@ -81,7 +79,7 @@ export async function recordAskCheck(input: {
     // A card that names no concept of the course (or one that has since gone) is graded but not filed.
     const concept = check.conceptId
       ? await prisma.concept.findFirst({
-          where: { id: check.conceptId, projectId: message.thread.projectId, status: 'active', project: { userId } },
+          where: { id: check.conceptId, projectId: message.projectId, status: 'active', project: { userId } },
           select: { id: true, topicId: true },
         })
       : null
@@ -90,7 +88,7 @@ export async function recordAskCheck(input: {
       [
         {
           userId,
-          projectId: message.thread.projectId,
+          projectId: message.projectId,
           topicId: concept.topicId,
           itemKey: itemKey({ kind: 'ask', threadId: message.threadId, messageId }),
           conceptIds: [concept.id],

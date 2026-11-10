@@ -19,6 +19,7 @@
  * turn number (`beginVoiceTurn`), and a tool that takes an answer reads the words spoken after the question was asked.
  * With none, the tool refuses, so an answer cannot be made up, nor taken in the turn that asked the question.
  */
+import { logServerError } from '@/lib/ops/log'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { viewerUrl } from '@/lib/chat/citations'
@@ -46,6 +47,7 @@ import {
   type StoredClaim,
 } from '@/lib/learning/recall-server'
 import { itemKey } from '@/lib/learning/item-key'
+import type { OwnedTopic } from '@/server/owned'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
 import {
   afterExample,
@@ -64,13 +66,14 @@ export type TeachToolContext = {
   sessionId: string
   userId: string
   projectId: string
-  topicId: string | null
+  /** The session's topic, when it is the student's own and in this course (checked by `ownedTopic`); null for a sprint. */
+  topic: OwnedTopic | null
   /** The student's IANA zone, for the one-review-per-local-day rule. */
   timeZone: string
   /** Replaced by tests; the recall grader of the AI service otherwise. */
   grade?: (request: RecallGradeRequest) => Promise<RecallGradeAnswer>
   /** True when one more model-graded call is allowed now (the per-user limit). */
-  allowGrading: () => boolean
+  allowGrading: () => boolean | Promise<boolean>
   /** The number of the student turn this call belongs to (`beginVoiceTurn`). */
   turn: number
   /** The step runs before the model speaks (spec 19.1): a guided-reading reveal without a check question from the model gets the server's own. */
@@ -348,8 +351,8 @@ async function weakestFirst(userId: string, concepts: RecallConcept[], now = new
 }
 
 export async function getConceptToExplain(ctx: TeachToolContext, state: CoachState): Promise<TeachToolResult> {
-  if (!ctx.topicId) return error(NO_TOPIC)
-  const concepts = await loadRecallConcepts(ctx.topicId)
+  if (!ctx.topic) return error(NO_TOPIC)
+  const concepts = await loadRecallConcepts(ctx.topic)
   if (concepts.length === 0) return error('This topic has no claims from the student\'s pages to check an explanation against.')
   const open = concepts.filter((concept) => !state.teach.concepts[concept.id]?.outcome)
   if (open.length === 0) {
@@ -375,7 +378,7 @@ async function scoreSayBack(ctx: TeachToolContext, concept: RecallConcept, claim
   if (!claim) return
   // A second grader call for the same answer: it counts against the per-user limit like the first. Over the limit there
   // is no grade, so nothing is written (as when the grader is unavailable), and the coach goes on.
-  if (!ctx.allowGrading()) return
+  if (!(await ctx.allowGrading())) return
   let score = 0
   try {
     const graded = await grade(ctx, {
@@ -395,7 +398,7 @@ async function scoreSayBack(ctx: TeachToolContext, concept: RecallConcept, claim
     return
   }
   await writeAssistedEvidence(ctx, {
-    itemKey: `${itemKey({ kind: 'teach_back', topicId: ctx.topicId ?? '', conceptId: concept.id })}:say_back:${claim.id}`,
+    itemKey: `${itemKey({ kind: 'teach_back', topicId: ctx.topic?.id ?? '', conceptId: concept.id })}:say_back:${claim.id}`,
     conceptId: concept.id,
     source: 'teach_back',
     score,
@@ -421,8 +424,8 @@ function saidTogether(said: string[]): string {
  * student saying an explanation back after two probes, which counts as level 2 on that claim.
  */
 export async function assessExplanation(ctx: TeachToolContext, state: CoachState, args: { concept_id: string }): Promise<TeachToolResult> {
-  if (!ctx.topicId) return error(NO_TOPIC)
-  const concepts = await loadRecallConcepts(ctx.topicId)
+  if (!ctx.topic) return error(NO_TOPIC)
+  const concepts = await loadRecallConcepts(ctx.topic)
   const concept = concepts.find((entry) => entry.id === args.concept_id)
   if (!concept) return error('Concept not found. Call get_concept_to_explain.')
   const before = state.teach.concepts[concept.id] ?? emptyConceptState()
@@ -434,7 +437,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
   const dontKnow = isDontKnow(explanation)
   const first = before.assessments === 0
   const skipGrader = dontKnow && first
-  if (!skipGrader && !ctx.allowGrading()) return error(TOO_FAST)
+  if (!skipGrader && !(await ctx.allowGrading())) return error(TOO_FAST)
 
   const said = [...before.said, explanation]
   let verdicts: Pick<StoredClaim, 'claim_id' | 'verdict' | 'student_quote' | 'misconception' | 'pointer' | 'reasoning_gap'>[]
@@ -449,7 +452,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
           conceptId: concept.id,
           objectiveIndex: null,
           userId: ctx.userId,
-          topicId: ctx.topicId,
+          topicId: ctx.topic.id,
           answer: explanation,
           abandoned: false,
           inputMode: 'voice',
@@ -494,15 +497,15 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
   // said just now and against that claim alone, so a wrong sentence from earlier cannot count against it. Level 2.
   if (before.sayBack) await scoreSayBack(ctx, concept, before.sayBack, explanation)
   // Every explain step is instruction: it is the explanation the student did not have (lastInstructionAt, spec 18.5).
-  if ((next.plan.action === 'explain' || next.plan.action === 'explain_first') && ctx.topicId) {
+  if ((next.plan.action === 'explain' || next.plan.action === 'explain_first') && ctx.topic) {
     await recordInstruction(prisma, {
       userId: ctx.userId,
-      topicId: ctx.topicId,
+      topicId: ctx.topic.id,
       kind: 'voice_explain',
       conceptIds: [concept.id],
       ref: `${concept.id}:${next.plan.gap.claimId}`,
       timeZone: ctx.timeZone,
-    }).catch((failure) => console.error('Recording the voice explanation failed:', failure))
+    }).catch((failure) => logServerError('Recording the voice explanation failed', failure))
   }
 
   return { output: next.output, events: await ideaDone(concept, next.output, next.state) }
@@ -616,13 +619,13 @@ function clarify(question: string | null | undefined): TeachToolResult {
 
 /** A spoken "I don't know" on a check right after the claim was told: level 2, score 0, no confidence. A failed write is logged. */
 async function writeIdkAssisted(ctx: TeachToolContext, input: { itemKey: string; conceptId: string; metadata: Record<string, unknown> }): Promise<void> {
-  if (!ctx.topicId) return
+  if (!ctx.topic) return
   try {
     await recordEvidence(
       dontKnowEvidence({
         userId: ctx.userId,
         projectId: ctx.projectId,
-        topicId: ctx.topicId,
+        topicId: ctx.topic.id,
         itemKey: input.itemKey,
         conceptIds: [input.conceptId],
         sessionKey: `voice:${ctx.sessionId}`,
@@ -633,20 +636,20 @@ async function writeIdkAssisted(ctx: TeachToolContext, input: { itemKey: string;
       { timeZone: ctx.timeZone, userId: ctx.userId, skipIfPresent: true }
     )
   } catch (failure) {
-    console.error('Recording voice evidence failed:', failure)
+    logServerError('Recording voice evidence failed', failure)
   }
 }
 
 /** A spoken "I don't know" on the first explanation: level 1, score 0, no confidence, recorded once per concept and day. A failed write is logged. */
 async function writeIdkEvidence(ctx: TeachToolContext, conceptId: string): Promise<void> {
-  if (!ctx.topicId) return
+  if (!ctx.topic) return
   try {
     await recordEvidence(
       dontKnowEvidence({
         userId: ctx.userId,
         projectId: ctx.projectId,
-        topicId: ctx.topicId,
-        itemKey: `${itemKey({ kind: 'teach_back', topicId: ctx.topicId, conceptId })}:idk`,
+        topicId: ctx.topic.id,
+        itemKey: `${itemKey({ kind: 'teach_back', topicId: ctx.topic.id, conceptId })}:idk`,
         conceptIds: [conceptId],
         sessionKey: `voice:${ctx.sessionId}`,
         surface: 'teach_back',
@@ -656,7 +659,7 @@ async function writeIdkEvidence(ctx: TeachToolContext, conceptId: string): Promi
       { timeZone: ctx.timeZone, userId: ctx.userId, skipIfPresent: true }
     )
   } catch (failure) {
-    console.error('Recording voice evidence failed:', failure)
+    logServerError('Recording voice evidence failed', failure)
   }
 }
 
@@ -676,7 +679,7 @@ async function writeAssistedEvidence(
         {
           userId: ctx.userId,
           projectId: ctx.projectId,
-          topicId: ctx.topicId,
+          topicId: ctx.topic?.id ?? null,
           itemKey: input.itemKey,
           conceptIds: [input.conceptId],
           source: input.source,
@@ -690,7 +693,7 @@ async function writeAssistedEvidence(
       { timeZone: ctx.timeZone, userId: ctx.userId, skipIfPresent: true }
     )
   } catch (failure) {
-    console.error('Recording voice evidence failed:', failure)
+    logServerError('Recording voice evidence failed', failure)
   }
 }
 
@@ -701,8 +704,8 @@ async function recordExampleCheck(
   state: CoachState,
   args: { concept_id: string; question: string }
 ): Promise<TeachToolResult> {
-  if (!ctx.topicId) return error(NO_TOPIC)
-  const concepts = await loadRecallConcepts(ctx.topicId)
+  if (!ctx.topic) return error(NO_TOPIC)
+  const concepts = await loadRecallConcepts(ctx.topic)
   const concept = concepts.find((entry) => entry.id === args.concept_id)
   const before = state.teach.concepts[args.concept_id]
   if (!concept || !before) return error('Concept not found. Call get_concept_to_explain.')
@@ -710,7 +713,7 @@ async function recordExampleCheck(
   if (!before.exampleAsked) return error('The new example is asked after assess_explanation says ask_new_example.')
   const answer = heardSince(state, state.teach.askedTurn)
   if (!answer) return error(NOBODY_SPOKE)
-  if (!ctx.allowGrading()) return error(TOO_FAST)
+  if (!(await ctx.allowGrading())) return error(TOO_FAST)
 
   let graded: RecallGradeAnswer
   try {
@@ -771,9 +774,9 @@ type ReadingClaim = {
 }
 
 /** Every claim of the topic's active concepts, in the order of the concepts and then of the claims. */
-export async function loadReadingClaims(topicId: string): Promise<ReadingClaim[]> {
+export async function loadReadingClaims(topic: OwnedTopic): Promise<ReadingClaim[]> {
   const rows = await prisma.concept.findMany({
-    where: { topicId, status: 'active' },
+    where: { topicId: topic.id, status: 'active' },
     orderBy: { orderIndex: 'asc' },
     select: {
       id: true,
@@ -814,8 +817,8 @@ export async function nextClaim(
   state: CoachState,
   args: { reveal?: boolean; check_question?: string }
 ): Promise<TeachToolResult> {
-  if (!ctx.topicId) return error(NO_TOPIC)
-  const claims = await loadReadingClaims(ctx.topicId)
+  if (!ctx.topic) return error(NO_TOPIC)
+  const claims = await loadReadingClaims(ctx.topic)
   if (claims.length === 0) return error("This topic has no claims from the student's pages to read.")
   const guided = state.guided
 
@@ -879,8 +882,8 @@ export async function nextClaim(
 }
 
 async function recordReadingCheck(ctx: TeachToolContext, state: CoachState, args: { claim_index: number; idk?: boolean }): Promise<TeachToolResult> {
-  if (!ctx.topicId) return error(NO_TOPIC)
-  const claims = await loadReadingClaims(ctx.topicId)
+  if (!ctx.topic) return error(NO_TOPIC)
+  const claims = await loadReadingClaims(ctx.topic)
   const guided = state.guided
   const claim = claims[args.claim_index]
   if (!claim) return error('Claim not found.')
@@ -915,7 +918,7 @@ async function recordReadingCheck(ctx: TeachToolContext, state: CoachState, args
       events: [{ type: 'evaluation', isCorrect: false, score: 0, comment: '', explanation: '' }],
     }
   }
-  if (!ctx.allowGrading()) return error(TOO_FAST)
+  if (!(await ctx.allowGrading())) return error(TOO_FAST)
 
   let graded: RecallGradeAnswer
   try {

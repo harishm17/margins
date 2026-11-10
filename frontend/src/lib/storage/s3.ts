@@ -6,6 +6,10 @@
 import type { Readable, Transform } from 'stream'
 import type { S3Client } from '@aws-sdk/client-s3'
 
+export const S3_CONNECTION_TIMEOUT_MS = 5_000
+export const S3_REQUEST_TIMEOUT_MS = 60_000
+export const S3_MAX_ATTEMPTS = 3
+
 let clientInstance: S3Client | null = null
 
 export function s3Bucket(): string {
@@ -36,6 +40,9 @@ async function getClient(): Promise<S3Client> {
       // SDK's default ones.
       requestChecksumCalculation: 'WHEN_REQUIRED',
       responseChecksumValidation: 'WHEN_REQUIRED',
+      // A stalled store must fail the call, not hang the request: 5 s to connect, 60 s without a byte moving.
+      requestHandler: { connectionTimeout: S3_CONNECTION_TIMEOUT_MS, requestTimeout: S3_REQUEST_TIMEOUT_MS },
+      maxAttempts: S3_MAX_ATTEMPTS,
     })
   }
   return clientInstance

@@ -6,12 +6,15 @@
  * the topic to file it under.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { recordExplainerCheck } from '@/lib/learning/explainer-server'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
-import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthorizedError, zodDetails } from '@/lib/api/errors'
+import { apiInternal, apiNotFound, apiUnauthorized, isUnauthorizedError } from '@/lib/api/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,9 +30,11 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
+    const limited = await enforceMutationLimit(auth.user.id)
+    if (limited) return limited
     const { topicId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const result = await recordExplainerCheck({
       userId: auth.user.id,
       topicId,
@@ -43,7 +48,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (result.status === 'not_found') return apiNotFound('Topic not found')
     return NextResponse.json({ ok: true, recorded: result.recorded })
   } catch (error) {
-    console.error('Explainer check error:', error)
+    logServerError('Explainer check error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save your answer')
   }

@@ -34,6 +34,8 @@ from typing import Any, AsyncIterator, Dict, List, Literal, Optional, Sequence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.config import settings
+from app.errors import describe_exception, public_message
+from app.services.budget import DailyBudgetExceeded
 from app.db.connection import execute_query
 from app.services.embeddings.generator import generate_query_embedding
 from app.services.embeddings.search import search_chunks_for_question
@@ -558,7 +560,7 @@ def usage_total(usages: Sequence[LLMUsage]) -> Dict[str, Any]:
 
 
 def usage_payload(usage: Optional[LLMUsage]) -> Dict[str, Any]:
-    """Token counts and cost, as stored on the assistant message and in the web app's ledger row."""
+    """Token counts and cost, as stored on the assistant message (the ledger row is written by the billing scope)."""
     if usage is None:
         return {"model": None, "input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": 0.0}
     cost = estimate_cost_usd(usage)
@@ -569,7 +571,7 @@ def usage_payload(usage: Optional[LLMUsage]) -> Dict[str, Any]:
         "output_tokens": usage.output_tokens,
         "cache_read_tokens": usage.cache_read_input_tokens,
         "cache_write_tokens": usage.cache_creation_input_tokens,
-        "cost_usd": round(cost, 6) if cost is not None else 0.0,
+        "cost_usd": round(cost, 6),
     }
 
 
@@ -930,15 +932,14 @@ async def _judged_answer(
                     # The judge costs what it costs, whatever it answered: the turn's ledger row carries it.
                     usage = _add_usage(usage, usage_total(judge_calls))
         except Exception as exc:  # fail closed: a reply that was not checked is not sent
-            logger.warning("event=tutor_leak_judge_failed scope=ask intent=%s reason=%s", route.intent, exc)
+            logger.warning("event=tutor_leak_judge_failed scope=ask intent=%s cause=%s", route.intent, exc)
             break
         if leak is None:
             for event in events:
                 yield {**event, "usage": usage} if event["type"] == "done" else event
             return
-        logger.warning(
-            "event=tutor_leak scope=ask intent=%s rung=%s attempt=%s reason=%s", route.intent, tutor.rung, attempt, leak
-        )
+        # The judge's reason can quote the answer it caught: the log says only that a draft was held back.
+        logger.warning("event=tutor_leak scope=ask intent=%s rung=%s attempt=%s", route.intent, tutor.rung, attempt)
     for event in _fallback_events(route, usage, len(chunks)):
         yield event
 
@@ -1008,20 +1009,23 @@ async def _stream_answer(
         ):
             yield event
     except LLMError as exc:
-        logger.warning("Chat answer failed: %s: %s", exc.code, exc)
+        logger.warning("Chat answer failed: %s", describe_exception(exc))
         yield {
             "type": "error",
             "code": exc.code,
-            "message": str(exc),
+            "message": public_message(exc.code),
             "retryable": exc.retryable,
             "usage": usage_payload(exc.usage) if exc.usage is not None else None,
         }
+    except DailyBudgetExceeded as exc:  # the allowance ran out between the route's check and this call
+        logger.info("Chat answer refused: %s", exc.code)
+        yield {"type": "error", "code": exc.code, "message": public_message(exc.code), "retryable": False, "usage": None}
     except Exception as exc:  # the stream has started: report it in-band
         logger.exception("Chat answer crashed")
         yield {
             "type": "error",
             "code": "CHAT_FAILED",
-            "message": f"The answer could not be written: {exc}",
+            "message": public_message("CHAT_FAILED"),
             "retryable": True,
             "usage": None,
         }

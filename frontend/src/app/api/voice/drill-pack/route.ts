@@ -1,4 +1,7 @@
+import { logServerError } from '@/lib/ops/log'
+import { id, list, record } from '@/lib/api/fields'
 import { NextRequest, NextResponse } from 'next/server'
+import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -6,12 +9,12 @@ import { buildSprintQuestionSet, buildTopicQuestionSet } from '@/lib/voice/drill
 
 const drillPackSchema = z.object({
   mode: z.enum(['topic_drill', 'sprint']).default('topic_drill'),
-  projectId: z.string(),
-  topicId: z.string().optional(),
+  projectId: id(),
+  topicId: id().optional(),
 })
 
 // Kept for API clients; the UI reads this through server queries.
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   try {
     const session = await requireAuth()
     const { searchParams } = new URL(request.url)
@@ -57,7 +60,7 @@ export async function GET(request: NextRequest) {
       preview,
     })
   } catch (error) {
-    console.error('Fetch drill pack error:', error)
+    logServerError('Fetch drill pack error', error)
 
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid query parameters' }, { status: 400 })
@@ -70,3 +73,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch drill pack' }, { status: 500 })
   }
 }
+
+export const GET = withClientSignal(handleGET)

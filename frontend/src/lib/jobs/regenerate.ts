@@ -18,7 +18,7 @@ export const regenerateContentSchema = z.object({
       focus: z.string().trim().min(3).max(280).optional(),
       // The concepts a review set is about (the missed questions' `concept_ids`); `focus` names them in words.
       concept_ids: z.array(z.string().min(1).max(64)).max(6).optional(),
-      question_types: z.array(z.enum(['multiple_choice', 'short_answer', 'numerical', 'true_false'])).optional(),
+      question_types: z.array(z.enum(['multiple_choice', 'short_answer', 'numerical', 'true_false'])).max(4).optional(),
       append: z.boolean().optional(),
       variation_seed: z.number().optional(), // Used to ensure different content each time
       // A quiz set that also asks 1-2 questions from one of the topic's prerequisite topics (a review).

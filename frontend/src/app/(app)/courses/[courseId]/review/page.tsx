@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -34,7 +35,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ courseI
     unlocked ? getSprintTopics(user.id, courseId) : { topics: [], studied: false },
     data.hasTopics
       ? getProgress(user.id, courseId, { timeZone }).catch((error) => {
-          console.error('[REVIEW] Progress could not be read:', error)
+          logServerError('Review: Progress could not be read', error)
           return null
         })
       : null,

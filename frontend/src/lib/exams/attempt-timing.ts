@@ -3,6 +3,8 @@
  * only clock that counts, and everything here takes `now` as an argument.
  */
 
+import { z } from 'zod'
+import { record } from '@/lib/api/fields'
 import { isConfidenceId, type ConfidenceId } from '@/lib/learning/calibration'
 
 /** Answers still count this long after the deadline, to cover the round trip of an auto-submit. */
@@ -10,6 +12,13 @@ export const DEADLINE_GRACE_MS = 15_000
 
 /** Autosave never keeps more than this many characters for one answer. */
 export const MAX_ANSWER_LENGTH = 20_000
+
+/** An exam has at most 100 questions (generate-exam), so an answers body has at most that many entries. */
+export const MAX_EXAM_QUESTIONS = 100
+/** Room for every answer at its length cap, plus the frame. */
+export const EXAM_ANSWERS_MAX_BYTES = MAX_EXAM_QUESTIONS * MAX_ANSWER_LENGTH * 3 + 4096
+/** The `{ answers }` body of an autosave or a submit. Values are cleaned by `sanitizeAnswers`; the body size is capped by the reader. */
+export const examAnswersSchema = z.object({ answers: record(z.unknown(), MAX_EXAM_QUESTIONS * 2, 4) })
 
 export type PlainAnswer = string | number | boolean | null
 /**

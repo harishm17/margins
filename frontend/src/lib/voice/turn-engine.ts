@@ -7,6 +7,7 @@
  * hint, session_complete and error events). The final `done` event is the caller's to send,
  * once it has stored the conversation.
  */
+import { logServerError } from '@/lib/ops/log'
 import type { ModelEvent } from '@/lib/voice/ai-turn'
 import { VoiceModelError } from '@/lib/voice/ai-turn'
 import { voiceErrorMessage } from '@/lib/voice/errors'
@@ -59,7 +60,7 @@ function textOf(content: VoiceBlock[]): string {
 }
 
 export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<TurnOutcome> {
-  const log = deps.log ?? ((message, error) => console.error(`[VOICE] ${message}`, error ?? ''))
+  const log = deps.log ?? ((_message, error) => logServerError('Voice: the turn loop reported a problem', error))
   const max = deps.maxModelCalls ?? MAX_MODEL_CALLS
   const now = deps.now ?? (() => performance.now())
   const calls: CallTiming[] = []

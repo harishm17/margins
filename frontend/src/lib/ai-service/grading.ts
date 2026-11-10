@@ -1,4 +1,6 @@
+import { logServerError } from '@/lib/ops/log'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { callSignal } from '@/lib/ai-service/client-signal'
 import type { RawQuizAnswer } from '@/lib/learning/quiz-answers'
 
 export type GradedQuestion = {
@@ -61,6 +63,7 @@ const WAIT_CODES = new Set([
   'LLM_NOT_CONFIGURED',
   'LLM_RATE_LIMITED',
   'LLM_UNAVAILABLE',
+  'LLM_BUSY',
   'LLM_DAILY_BUDGET',
   'AI_UNREACHABLE',
 ])
@@ -97,6 +100,9 @@ export function ruleGradableIndexes(questions: unknown[]): number[] {
   return questions.flatMap((question, index) => (ruleGradable(question) ? [index] : []))
 }
 
+/** Who the grading is billed to: the student, and the course it was for (the AI service writes both on the ledger). */
+export type GradingAccount = { userId: string; projectId: string }
+
 /**
  * Grade answers against questions the server loaded from its own database.
  * `answers` maps question index (as a string) to the student's answer, or to `{ answer, thinking }`
@@ -106,6 +112,7 @@ export function ruleGradableIndexes(questions: unknown[]): number[] {
  * sees just those questions; the result is given back under the original indexes, and its totals cover only them.
  */
 export async function gradeAnswers(
+  account: GradingAccount,
   questions: unknown[],
   answers: Record<string, RawQuizAnswer>,
   only?: number[]
@@ -113,6 +120,7 @@ export async function gradeAnswers(
   if (only) {
     const picked = [...new Set(only)].filter((index) => index >= 0 && index < questions.length).sort((a, b) => a - b)
     const subset = await gradeAnswers(
+      account,
       picked.map((index) => questions[index]),
       Object.fromEntries(picked.flatMap((index, position) => (answers[String(index)] === undefined ? [] : [[String(position), answers[String(index)]]])))
     )
@@ -125,17 +133,17 @@ export async function gradeAnswers(
     response = await fetch(`${aiServiceUrl}/grade/quiz`, {
       method: 'POST',
       headers: aiServiceHeaders(),
-      body: JSON.stringify({ questions, answers }),
-      signal: AbortSignal.timeout(GRADING_TIMEOUT_MS),
+      body: JSON.stringify({ user_id: account.userId, project_id: account.projectId, questions, answers }),
+      signal: callSignal(GRADING_TIMEOUT_MS),
     })
   } catch (error) {
-    console.error('Grading request failed:', error)
+    logServerError('Grading request failed', error)
     throw new GradingUnavailableError(undefined, 'AI_UNREACHABLE')
   }
 
   if (!response.ok) {
     const code = await errorCode(response)
-    console.error('Grading request returned', response.status, code)
+    logServerError('Grading request returned an error', undefined, { status: response.status, code })
     if (!isAiUnavailableOutcome(response.status, code)) throw new GradingRejectedError(response.status)
     throw new GradingUnavailableError(undefined, code)
   }

@@ -14,7 +14,7 @@ import { SegmentedControl } from '@/components/ui/segmented-control'
 import { THEME_OPTIONS, useThemeChoice, type ThemeChoice } from '@/components/ui/theme-switch'
 import { useAiStatus } from '@/features/ai/ai-status'
 import { CONFIRM_WORD, confirmsDeletion } from '@/lib/account/deletion'
-import { resetPhrase } from '@/lib/budget/copy'
+import { refusalNote, resetPhrase } from '@/lib/budget/copy'
 import { allowanceView } from './allowance'
 import { CONTACT_EMAIL } from '@/config/site'
 import { deleteAccountAction } from './actions'
@@ -98,6 +98,9 @@ export function AiAllowance({ timeZone }: { timeZone: string }) {
           <span className="text-fg-2">Allowance can&apos;t be shown right now</span>
         )}
       </p>
+      {(view.kind === 'used' || view.kind === 'exhausted') && refusalNote(view.refused, resets) ? (
+        <p className="max-w-[56ch] text-small text-fg-2" data-testid="allowance-reason">{refusalNote(view.refused, resets)}</p>
+      ) : null}
       {view.kind === 'used' ? (
         <Progress value={view.percent} tone={view.exhausted ? 'warning' : 'accent'} aria-label="Today's AI allowance used" className="max-w-[420px]" />
       ) : null}
@@ -176,7 +179,8 @@ export function DeleteAccount({ email }: { email: string }) {
         description={
           <>
             This permanently deletes <span className="font-medium text-fg wrap-anywhere">{email}</span> and all courses, files, study content
-            and progress. Enter {CONFIRM_WORD} to confirm.
+            and progress. Enter {CONFIRM_WORD} to confirm. Anonymous AI usage records (no name, email or course) stay, under a
+            one-way key, so a new account does not restart today&apos;s allowance.
           </>
         }
         confirmLabel="Delete account"

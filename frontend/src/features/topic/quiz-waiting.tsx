@@ -190,7 +190,7 @@ export function QuizWaiting({ courseId, topicId, item, questions, variant, gone 
             </div>
           }
         >
-          Your answers are saved. {describeJobFailure(jobFailure ?? item.errorCode, null, 'grade_quiz')}
+          Your answers are saved. {describeJobFailure(jobFailure ?? item.errorCode, 'grade_quiz')}
         </InlineAlert>
         {variant === 'page' && onLeave ? (
           <Button variant="ghost" className="-ml-3.5 mt-4" onClick={onLeave}>

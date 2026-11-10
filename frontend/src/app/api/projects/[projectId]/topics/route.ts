@@ -7,16 +7,22 @@
  *   one it is last in the course and belongs to no unit.
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
+import { id, list, record } from '@/lib/api/fields'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { z } from 'zod'
+import { ownedProject } from '@/server/owned'
 import { normalizeTopicOrder } from '@/lib/topics/normalize-order'
 
 const createTopicSchema = z.object({
   name: z.string().min(1).max(255),
-  description: z.string().optional(),
-  unitId: z.string().min(1).nullable().optional(),
+  description: z.string().max(4000).optional(),
+  unitId: id().nullable().optional(),
 })
 
 // Kept for API clients; the UI reads this through server queries.
@@ -64,7 +70,7 @@ export async function GET(
 
     return NextResponse.json({ topics })
   } catch (error) {
-    console.error('Fetch topics error:', error)
+    logServerError('Fetch topics error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -86,15 +92,12 @@ export async function POST(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     // Verify project ownership
-    const project = await prisma.project.findFirst({
-      where: {
-        id: projectId,
-        userId: session.user.id,
-      },
-    })
+    const project = await ownedProject(session.user.id, projectId)
 
     if (!project) {
       return NextResponse.json(
@@ -103,15 +106,8 @@ export async function POST(
       )
     }
 
-    const body = await request.json()
-    const validation = createTopicSchema.safeParse(body)
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error },
-        { status: 400 }
-      )
-    }
+    const validation = await readJson(request, createTopicSchema)
+    if (!validation.ok) return validation.response
 
     // Get next order index
     const maxOrder = await prisma.topic.findFirst({
@@ -132,6 +128,7 @@ export async function POST(
 
     // Create topic
     const topic = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, session.user, 'topics', { projectId })
       const created = await tx.topic.create({
         data: {
           projectId,
@@ -148,13 +145,15 @@ export async function POST(
       })
       if (!unitId) return created
       // Last in its unit, which is not the end of the course unless the unit is the last one.
-      await normalizeTopicOrder(tx, projectId)
+      await normalizeTopicOrder(tx, project)
       return tx.topic.findUniqueOrThrow({ where: { id: created.id } })
     })
 
     return NextResponse.json({ topic })
   } catch (error) {
-    console.error('Create topic error:', error)
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
+    logServerError('Create topic error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

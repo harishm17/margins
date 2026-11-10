@@ -8,6 +8,8 @@
  * Recording never throws: the failure it records has already been handled, and must not turn into a second one.
  */
 
+import { logServerError } from '@/lib/ops/log'
+
 export type OpsEventWriter = (kind: string, detail: string | null) => Promise<void>
 
 async function writeToDatabase(kind: string, detail: string | null): Promise<void> {
@@ -24,7 +26,7 @@ export async function recordOpsEvent(kind: OpsEventKind, detail?: string): Promi
   try {
     await writer(kind, detail ? detail.slice(0, 500) : null)
   } catch (error) {
-    console.error(`[OPS] Could not record ${kind}:`, error)
+    logServerError('Ops: could not record an event', error, { kind })
   }
 }
 

@@ -4,22 +4,29 @@ from contextlib import asynccontextmanager
 import logging
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.internal_auth import require_internal_token
 from app.api.routes import health
 from app.config import settings
-from app.logging_utils import configure_sensitive_data_redaction
+from app.errors import describe_exception, error_body
+from app.logging_utils import configure_logging
+from app.services.budget import DailyBudgetExceeded
 from app.services.job_runner import retry_after
 from app.services.llm.base import LLMError
 
-configure_sensitive_data_redaction()
+configure_logging()
 logger = logging.getLogger(__name__)
 
 async def _run_startup_checks() -> None:
     """Initialize services on startup."""
     logger.info("Margins AI service starting in %s mode", settings.ENVIRONMENT)
+    # A model with no price would be billed from a guess: refuse to start (raises, naming the setting).
+    from app.services.llm.models import check_model_prices
+
+    check_model_prices()
     logger.info("LLM Provider: %s", settings.LLM_PROVIDER)
     if not settings.llm_configured:
         logger.warning("ANTHROPIC_API_KEY is not set: generation, grading and validation calls will fail")
@@ -76,6 +83,9 @@ async def lifespan(_: FastAPI):
     from app.services.watchdog import install_error_counter
 
     install_error_counter()
+    from app.services.job_runner import drain_jobs, start_accepting
+
+    start_accepting()
     warm = asyncio.create_task(_warm_exam_guard())
     reaper = None
     if settings.JOB_REAPER_INTERVAL_SECONDS > 0:
@@ -95,6 +105,12 @@ async def lifespan(_: FastAPI):
             reaper.cancel()
         if retention is not None:
             retention.cancel()
+        # Jobs first: no new claims, a grace window for running handlers, then cancel the rest and release their
+        # leases, all while the database pool is still open.
+        try:
+            await drain_jobs()
+        except Exception:
+            logger.exception("Draining jobs on shutdown failed")
         await _run_shutdown()
 
 
@@ -129,15 +145,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    """FastAPI's own 422 body repeats each rejected value (`input`, `ctx`), which can be a student's text or a secret.
+    This one names where and why, never what."""
+    problems = [
+        {"loc": list(error.get("loc", ())), "type": error.get("type", ""), "msg": error.get("msg", "")}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": problems, "error_code": "VALIDATION_ERROR", "retryable": False})
+
+
 @app.exception_handler(LLMError)
 async def llm_error_handler(_: Request, exc: LLMError) -> JSONResponse:
     """Model failures outside job handlers (voice drills) get a typed error, not a bare 500."""
-    logger.warning("LLM error: %s: %s", exc.code, exc)
+    logger.warning("LLM error: %s", describe_exception(exc))
     wait = retry_after(exc)
     return JSONResponse(
         status_code=503 if exc.retryable else 502,
-        content={"detail": str(exc), "error_code": exc.code, "retryable": exc.retryable},
+        content=error_body(exc.code, exc.retryable),
         headers={"Retry-After": str(wait)} if wait else None,
+    )
+
+
+@app.exception_handler(DailyBudgetExceeded)
+async def daily_budget_handler(_: Request, exc: DailyBudgetExceeded) -> JSONResponse:
+    """A model call refused because the allowance is spent (billing scope): the same 429 body every route returns."""
+    return JSONResponse(
+        status_code=429,
+        content=error_body(exc.code, False, budget_reason=exc.reason),
     )
 
 

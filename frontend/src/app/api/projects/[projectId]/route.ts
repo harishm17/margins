@@ -5,15 +5,20 @@
  * DELETE /api/projects/[projectId] - Delete project
  */
 
+import { logServerError } from '@/lib/ops/log'
+import { enforceMutationLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
 import { z } from 'zod'
+import { storedFolderPath } from '@/lib/storage/files'
+import { deleteQueuedFilesNow, queueFileDeletions } from '@/lib/storage/pending-deletions'
 import { dailyMinutesSchema, examDateColumn, examDateSchema } from '@/lib/learning/plan-settings'
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  description: z.string().optional(),
+  description: z.string().max(1000).optional(),
   status: z.enum(['setup', 'topics_pending', 'active', 'completed']).optional(),
   // The exam date (YYYY-MM-DD, or null to clear it), the minutes to study each day, and whether the
   // "When is your exam?" card was closed.
@@ -55,7 +60,7 @@ export async function GET(
 
     return NextResponse.json({ project })
   } catch (error) {
-    console.error('Fetch project error:', error)
+    logServerError('Fetch project error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -77,6 +82,8 @@ export async function PATCH(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     // Verify ownership
@@ -94,15 +101,8 @@ export async function PATCH(
       )
     }
 
-    const body = await request.json()
-    const validation = updateProjectSchema.safeParse(body)
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error },
-        { status: 400 }
-      )
-    }
+    const validation = await readJson(request, updateProjectSchema)
+    if (!validation.ok) return validation.response
 
     const updatedProject = await prisma.project.update({
       where: { id: projectId },
@@ -111,7 +111,7 @@ export async function PATCH(
 
     return NextResponse.json({ project: updatedProject })
   } catch (error) {
-    console.error('Update project error:', error)
+    logServerError('Update project error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -133,6 +133,8 @@ export async function DELETE(
 ) {
   try {
     const session = await requireAuth()
+    const limited = await enforceMutationLimit(session.user.id)
+    if (limited) return limited
     const { projectId } = await params
 
     // Verify ownership
@@ -156,25 +158,30 @@ export async function DELETE(
       select: { gcsPath: true },
     })
 
-    // Delete project (cascade will handle all related records). One statement, so the
-    // database is either fully deleted or untouched.
-    await prisma.project.delete({
-      where: { id: projectId },
+    // Delete the project (cascade will handle all related records) and queue its files and its folder in the same
+    // transaction, so the database is either fully deleted with the files promised for removal, or untouched.
+    const queued = await prisma.$transaction(async (tx) => {
+      await tx.project.delete({ where: { id: projectId } })
+      return queueFileDeletions(
+        tx,
+        [...materials.map((material) => material.gcsPath), storedFolderPath(`${session.user.id}/${projectId}/`)],
+        'project_deleted'
+      )
     })
 
-    // Then the uploaded files. Best effort: the project is already deleted, so a storage
-    // error is logged for manual cleanup instead of failing the request.
+    // Then try the files right away; whatever fails stays queued for the AI service's reaper to retry.
     try {
-      const { deleteFilesBestEffort, deleteProjectFolder } = await import('@/lib/storage/files')
-      await deleteFilesBestEffort(materials.map((material) => material.gcsPath))
+      await deleteQueuedFilesNow(queued)
+      const { deleteProjectFolder } = await import('@/lib/storage/files')
+      // The local uploads folder too (uploads made before a bucket was set up); the queue covers the bucket.
       await deleteProjectFolder(session.user.id, projectId)
     } catch (storageError) {
-      console.error(`Project ${projectId} deleted, but its files could not be cleaned up:`, storageError)
+      logServerError('Course deleted, but its files could not be cleaned up yet', storageError, { projectId })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Delete project error:', error)
+    logServerError('Delete project error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

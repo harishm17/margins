@@ -8,6 +8,7 @@ import {
   VoiceQuestion,
 } from '@/lib/voice/concept'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
+import { callSignal } from '@/lib/ai-service/client-signal'
 import type { VoiceQuizStatus } from '@/features/voice/quiz-status'
 
 import { SPRINT_MAX_QUESTIONS, SPRINT_QUESTIONS_PER_TOPIC, SPRINT_TOPICS } from './sprint-size'
@@ -25,7 +26,11 @@ const dedupeQuestions = (questions: VoiceQuestion[]) => {
   })
 }
 
+/** Who the drill generation is billed to (the AI service writes both on the ledger). */
+type Billing = { userId: string; projectId: string }
+
 const buildConceptQuestionsFromNotes = async (
+  billing: Billing,
   topicName: string,
   topicId: string,
   notesText: string,
@@ -33,9 +38,11 @@ const buildConceptQuestionsFromNotes = async (
 ): Promise<VoiceQuestion[]> => {
   const response = await fetch(`${AI_SERVICE_URL}/voice/generate-drill`, {
     method: 'POST',
-    signal: AbortSignal.timeout(20000),
+    signal: callSignal(20000),
     headers: aiServiceHeaders(),
     body: JSON.stringify({
+      user_id: billing.userId,
+      project_id: billing.projectId,
       topic: topicName,
       topic_id: topicId,
       notes: notesText.slice(0, MAX_NOTES_CHARS),
@@ -131,7 +138,7 @@ export const buildTopicQuestionSet = async (
     return []
   }
 
-  const generated = await buildConceptQuestionsFromNotes(topic.name, topic.id, notesText, 10)
+  const generated = await buildConceptQuestionsFromNotes({ userId, projectId: topic.projectId }, topic.name, topic.id, notesText, 10)
   return dedupeQuestions(generated.map(q => ({ ...q, topic_id: topic.id })))
 }
 
@@ -189,7 +196,7 @@ export const buildSprintQuestionSet = async (
       const notesContent = topic.content.find(c => c.contentType === 'section_notes')
       const notesText = extractTextFromNotes(notesContent?.contentData)
       if (notesText) {
-        questions = (await buildConceptQuestionsFromNotes(topic.name, topic.id, notesText, 6))
+        questions = (await buildConceptQuestionsFromNotes({ userId, projectId }, topic.name, topic.id, notesText, 6))
           .map(q => ({ ...q, topic_id: topic.id }))
       }
     }

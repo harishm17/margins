@@ -1,11 +1,11 @@
-import type { AiStatus } from '@/lib/ai/status'
+import type { AiStatus, AllowanceRefusal } from '@/lib/ai/status'
 
 /** What the Settings page says about today's allowance (from the browser's AI status). */
 export type AllowanceView =
   /** A per-user cap: the share used. */
-  | { kind: 'used'; percent: number; exhausted: boolean }
+  | { kind: 'used'; percent: number; exhausted: boolean; refused: AllowanceRefusal | null }
   /** No per-user cap, but the service-wide cap is used up. */
-  | { kind: 'exhausted' }
+  | { kind: 'exhausted'; refused: AllowanceRefusal | null }
   /** No per-user cap. */
   | { kind: 'unlimited' }
   /** No allowance came back (the AI service could not be reached): nothing is known. */
@@ -14,7 +14,12 @@ export type AllowanceView =
 export function allowanceView(allowance: AiStatus['allowance']): AllowanceView {
   if (!allowance) return { kind: 'unknown' }
   if (allowance.usedFraction !== null) {
-    return { kind: 'used', percent: Math.round(allowance.usedFraction * 100), exhausted: allowance.exhausted }
+    return {
+      kind: 'used',
+      percent: Math.round(allowance.usedFraction * 100),
+      exhausted: allowance.exhausted,
+      refused: allowance.refused,
+    }
   }
-  return allowance.exhausted ? { kind: 'exhausted' } : { kind: 'unlimited' }
+  return allowance.exhausted ? { kind: 'exhausted', refused: allowance.refused } : { kind: 'unlimited' }
 }

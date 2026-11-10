@@ -71,7 +71,7 @@ Browser ──▶ Next.js 16 (web) ──────────────▶
               └───────────▶ Postgres + pgvector ◀─────────┘
 ```
 
-- **Parsing and chunking.** Files are read as markdown (PDFs with pymupdf4llm; DOCX, PPTX, and DOC through LibreOffice when installed) and split at headings and paragraphs into chunks of about 350 tokens, each tagged with its heading path and pages.
+- **Parsing and chunking.** Files are read in a limited child process (memory, CPU, time, output and page caps; zip-bomb checks on DOCX and PPTX; at most 50 MB per file) as markdown (PDFs with pymupdf4llm; DOCX and PPTX with their own readers; legacy DOC as plain text through catdoc) and split at headings and paragraphs into chunks of about 350 tokens, each tagged with its heading path and pages. A file over a limit is marked invalid with a fixed note.
 - **Local embeddings.** Chunks are embedded in-process with `BAAI/bge-small-en-v1.5` (384 dimensions, no API cost) and stored in pgvector with an HNSW index.
 - **Topic-scoped retrieval.** Each topic is mapped to at most 24 chunks by hybrid search: vector similarity and Postgres full-text search, merged with Reciprocal Rank Fusion, with a similarity floor so a barely covered topic gets a short list instead of loose matches. Generators only ever see those chunks, so prompt size stays flat as a course grows, and the shared excerpt block is prompt-cached across notes, examples, quizzes and exams.
 - **Models.** Claude Opus writes notes, examples, quizzes and exams, plans each course in one low-effort call and answers Ask questions; Claude Haiku handles file validation, short-answer grading and the voice coach. The learning features add three more purposes: Sonnet at low effort writes the practice tutor's replies and grades recall answers, and Haiku at low effort routes Ask messages and judges tutor replies for leaks. Each purpose has its own setting (`MODEL_TUTOR`, `MODEL_RECALL_GRADING`, `MODEL_ROUTER`).
@@ -242,7 +242,7 @@ MODEL_CHAT=:low                  # one model per purpose, "<model>:<effort>" (":
                                  # _CHAT, _VOICE, _VALIDATION. ai-service/.env.example lists the defaults.
 LLM_MAX_CONCURRENCY=4            # model calls at once in the AI service
 VOICE_DAILY_MINUTES=30           # per user per 24 hours
-MAX_UPLOAD_MB=25
+MAX_UPLOAD_MB=25                 # per file, 50 at most (a hard ceiling in both services)
 S3_BUCKET=... S3_ENDPOINT=... S3_REGION=auto S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=...
 ```
 
