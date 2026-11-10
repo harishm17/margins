@@ -10,7 +10,7 @@ REQUIRED_MIGRATION is always the newest migration in frontend/prisma/migrations:
 """
 from app.db.connection import execute_one
 
-REQUIRED_MIGRATION = "20261207000000_ops_state_and_events"
+REQUIRED_MIGRATION = "20261208000002_ops_locks_deletions"
 
 _seen = {"ok": False}
 

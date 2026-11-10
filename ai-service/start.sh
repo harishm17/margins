@@ -13,4 +13,7 @@ echo "Listening on port: ${PORT}"
 # Start uvicorn with the PORT environment variable
 # Using exec to replace shell process with uvicorn for proper signal handling
 WORKERS=${UVICORN_WORKERS:-1}
-exec uvicorn app.main:app --host "$HOST" --port "$PORT" --workers "$WORKERS"
+# Running jobs get JOB_SHUTDOWN_GRACE_SECONDS (default 20) to finish on SIGTERM before they are cancelled and their
+# leases released; keep the deploy platform's drain time (RAILWAY_DEPLOYMENT_DRAINING_SECONDS) longer than this.
+GRACE=${JOB_SHUTDOWN_GRACE_SECONDS:-20}
+exec uvicorn app.main:app --host "$HOST" --port "$PORT" --workers "$WORKERS" --timeout-graceful-shutdown "${GRACE%.*}"

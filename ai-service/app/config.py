@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     DB_POOL_MAX_SIZE: int = 20
     DB_COMMAND_TIMEOUT_SECONDS: float = 60.0
+    # How long a query waits for a free pooled connection before failing, instead of queueing for ever.
+    DB_ACQUIRE_TIMEOUT_SECONDS: float = 10.0
+    # How long a lock on one topic (app/services/locks.py) is waited for, in seconds, before the job fails and retries.
+    TOPIC_LOCK_WAIT_SECONDS: float = 600.0
+    # On shutdown, running jobs get this long to finish before they are cancelled and their leases released.
+    JOB_SHUTDOWN_GRACE_SECONDS: float = 20.0
 
     # LLM: Claude for all text generation and grading.
     # "mock" returns schema-valid placeholder output with no API calls (local dev, e2e runs).
@@ -43,6 +49,9 @@ class Settings(BaseSettings):
     LLM_MAX_RETRIES: int = 4
     # Model calls running at once, across every job and chat answer in this process.
     LLM_MAX_CONCURRENCY: int = 4
+    # Background jobs hold at most LLM_MAX_CONCURRENCY - 1 of those slots; a student-facing call waits this long for a
+    # slot, then fails with LLM_BUSY (app/services/llm/limiter.py).
+    LLM_INTERACTIVE_WAIT_SECONDS: float = 20.0
     # The mock provider (LLM_PROVIDER=mock) takes this long per call, to look like a model.
     MOCK_LLM_LATENCY_SECONDS: float = 0.0
 
