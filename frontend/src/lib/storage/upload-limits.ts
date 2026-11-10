@@ -6,7 +6,8 @@
 import { Transform } from 'stream'
 
 export const DEFAULT_MAX_UPLOAD_MB = 25
-const MAX_CONFIGURABLE_MB = 500
+/** No setting raises the limit past this. The AI service refuses larger files too (MAX_FILE_BYTES in parse_types.py). */
+export const MAX_CONFIGURABLE_MB = 50
 
 /** The upload limit in bytes: MAX_UPLOAD_MB (default 25), read each time so a restart is not needed in tests. */
 export function maxUploadBytes(env: Record<string, string | undefined> = process.env): number {

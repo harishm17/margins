@@ -5,19 +5,25 @@ markdown tables. PDFs come out of pymupdf4llm one page at a time, so each chunk 
 traced to its pages. PPTX is one page per slide. DOCX has no page breaks to read, so it is a
 single page with no page number.
 
-Everything here is blocking. Call it through `asyncio.to_thread`.
+This module runs only inside the limited child process (`sandbox_child.py`); the app reads
+files through `sandbox.parse_document`. It is blocking and single-threaded.
 """
 from __future__ import annotations
 
 import logging
 import re
 import shutil
+import signal
 import subprocess
+import sys
 import tempfile
-import threading
-from dataclasses import dataclass
+import zipfile
 from pathlib import Path
 from typing import Iterator, List, Optional
+
+# pymupdf loads an ONNX layout model when `pymupdf.layout` can be imported, which costs seconds and
+# about 3 GB of address space. Layout mode is off (see below), so keep that import from working.
+sys.modules["pymupdf.layout"] = None  # type: ignore[assignment]
 
 import pymupdf
 import pymupdf4llm
@@ -29,13 +35,19 @@ from docx.text.run import Run
 from pptx import Presentation
 from pptx.shapes.group import GroupShape
 
+from app.services.document_processor.parse_types import (
+    SUPPORTED_EXTENSIONS,
+    ExtractedDocument,
+    ExtractedPage,
+    ParseLimits,
+    ParseRefused,
+    UnreadableDocumentError,
+    infer_extension,
+)
+
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".doc"}
-
-# A page with fewer letters and digits than this counts as having no text (scans, pure images).
-EMPTY_PAGE_ALNUM_CHARS = 20
-DOC_CONVERSION_TIMEOUT_SECONDS = 120
+CORRUPT_NOTE = "This file could not be read. It may be corrupt."
 DOCX_CHARS_PER_PAGE = 2400  # page-count estimate only; DOCX has no real pages to count
 
 # The plain heading detection (font sizes across the whole document) is the one that stays
@@ -43,46 +55,17 @@ DOCX_CHARS_PER_PAGE = 2400  # page-count estimate only; DOCX has no real pages t
 # different level on page 2 than "2.1" had on page 1.
 pymupdf4llm.use_layout(False)
 
-# PyMuPDF is not thread-safe, and jobs parse in worker threads.
-_PYMUPDF_LOCK = threading.Lock()
+class _TextBudget:
+    """Counts extracted characters and stops the read once the cap is passed."""
 
+    def __init__(self, max_chars: int):
+        self.max_chars = max_chars
+        self.used = 0
 
-class UnreadableDocumentError(ValueError):
-    """The file's content cannot be read: corrupt, protected, or a format we cannot convert."""
-
-
-@dataclass
-class ExtractedPage:
-    number: Optional[int]  # 1-indexed page or slide; None when the format has no pages
-    text: str
-
-
-@dataclass
-class ExtractedDocument:
-    pages: List[ExtractedPage]
-    extension: str
-    page_count: int
-
-    @property
-    def text(self) -> str:
-        return "\n\n".join(page.text for page in self.pages if page.text)
-
-    @property
-    def empty_pages(self) -> List[int]:
-        """Page numbers that carry no text. Empty for formats without pages."""
-        return [
-            page.number
-            for page in self.pages
-            if page.number is not None and _alnum_count(page.text) < EMPTY_PAGE_ALNUM_CHARS
-        ]
-
-
-def infer_extension(filename: str) -> str:
-    return Path(filename).suffix.lower()
-
-
-def _alnum_count(text: str) -> int:
-    return sum(1 for char in text if char.isalnum())
+    def add(self, text: str) -> None:
+        self.used += len(text)
+        if self.used > self.max_chars:
+            raise ParseRefused("too_much_text")
 
 
 def _normalize_text(text: str) -> str:
@@ -110,28 +93,65 @@ def _markdown_table(rows: List[List[str]]) -> str:
 
 # PDF
 
-def _extract_pdf(file_path: str, markdown: bool) -> ExtractedDocument:
-    with _PYMUPDF_LOCK:
-        doc = pymupdf.open(file_path)
-        try:
-            if doc.needs_pass:
-                raise UnreadableDocumentError("The PDF is password-protected.")
-            pages: List[ExtractedPage] = []
-            # Heading levels come from font sizes over the whole document, computed once.
-            headers = pymupdf4llm.IdentifyHeaders(doc, body_limit=10) if markdown else None
-            for index in range(doc.page_count):
-                if markdown:
-                    text = pymupdf4llm.to_markdown(
-                        doc, pages=[index], hdr_info=headers, ignore_images=True
-                    )
-                    # "mc <sup>2</sup>" -> "mc<sup>2</sup>"
-                    text = re.sub(r"[ \t]+(<su[bp]>)", r"\1", text)
-                else:
-                    text = doc[index].get_text()
-                pages.append(ExtractedPage(number=index + 1, text=_normalize_text(text)))
-            return ExtractedDocument(pages=pages, extension=".pdf", page_count=doc.page_count)
-        finally:
-            doc.close()
+def _extract_pdf(file_path: str, markdown: bool, limits: ParseLimits) -> ExtractedDocument:
+    doc = pymupdf.open(file_path)
+    try:
+        if doc.needs_pass:
+            raise UnreadableDocumentError("The PDF is password-protected.")
+        # Refused before any page is converted.
+        if doc.page_count > limits.max_pdf_pages:
+            raise ParseRefused("too_many_pages", max_pages=limits.max_pdf_pages)
+        budget = _TextBudget(limits.max_chars)
+        pages: List[ExtractedPage] = []
+        # Heading levels come from font sizes over the whole document, computed once.
+        headers = pymupdf4llm.IdentifyHeaders(doc, body_limit=10) if markdown else None
+        for index in range(doc.page_count):
+            if markdown:
+                text = pymupdf4llm.to_markdown(
+                    doc, pages=[index], hdr_info=headers, ignore_images=True
+                )
+                # "mc <sup>2</sup>" -> "mc<sup>2</sup>"
+                text = re.sub(r"[ \t]+(<su[bp]>)", r"\1", text)
+            else:
+                text = doc[index].get_text()
+            text = _normalize_text(text)
+            budget.add(text)
+            pages.append(ExtractedPage(number=index + 1, text=text))
+        return ExtractedDocument(pages=pages, extension=".pdf", page_count=doc.page_count)
+    finally:
+        doc.close()
+
+
+# DOCX and PPTX are zip files of XML parts. The declared sizes in a zip's directory are what the
+# reader honours, so they bound the work: check them before any XML is parsed.
+
+_XML_PART_SUFFIXES = (".xml", ".rels")
+_SMALL_PART_BYTES = 1024 * 1024  # a part this small cannot hurt, whatever its ratio
+
+
+def _check_zip_package(file_path: str, limits: ParseLimits) -> None:
+    """Refuse a package with too many members, too much XML, or an absurdly packed XML part.
+    Media parts are ignored, so a deck full of pictures passes."""
+    try:
+        archive = zipfile.ZipFile(file_path)
+    except (zipfile.BadZipFile, OSError) as exc:
+        raise UnreadableDocumentError(CORRUPT_NOTE) from exc
+    with archive:
+        members = archive.infolist()
+        if len(members) > limits.max_zip_members:
+            raise ParseRefused("unsafe")
+        total_xml = 0
+        for member in members:
+            if not member.filename.lower().endswith(_XML_PART_SUFFIXES):
+                continue
+            total_xml += member.file_size
+            if total_xml > limits.max_xml_mb * 1024 * 1024:
+                raise ParseRefused("unsafe")
+            if (
+                member.file_size > _SMALL_PART_BYTES
+                and member.file_size > limits.max_xml_ratio * max(member.compress_size, 1)
+            ):
+                raise ParseRefused("unsafe")
 
 
 # DOCX
@@ -203,8 +223,10 @@ def _docx_table_markdown(table: Table) -> str:
     return _markdown_table(rows)
 
 
-def _extract_docx(file_path: str) -> ExtractedDocument:
+def _extract_docx(file_path: str, limits: ParseLimits) -> ExtractedDocument:
+    _check_zip_package(file_path, limits)
     document = Document(file_path)
+    budget = _TextBudget(limits.max_chars)
     blocks: List[str] = []
     for element in _iter_docx_blocks(document.element.body):
         if element.tag == qn("w:p"):
@@ -212,6 +234,7 @@ def _extract_docx(file_path: str) -> ExtractedDocument:
         else:
             block = _docx_table_markdown(Table(element, document))
         if block:
+            budget.add(block)
             blocks.append(block)
 
     text = _normalize_text("\n\n".join(blocks))
@@ -272,26 +295,56 @@ def _pptx_slide_markdown(slide, number: int) -> str:
     return "\n\n".join(blocks)
 
 
-def _extract_pptx(file_path: str) -> ExtractedDocument:
+def _extract_pptx(file_path: str, limits: ParseLimits) -> ExtractedDocument:
+    _check_zip_package(file_path, limits)
     presentation = Presentation(file_path)
-    pages = [
-        ExtractedPage(number=number, text=_normalize_text(_pptx_slide_markdown(slide, number)))
-        for number, slide in enumerate(presentation.slides, start=1)
-    ]
+    budget = _TextBudget(limits.max_chars)
+    pages = []
+    for number, slide in enumerate(presentation.slides, start=1):
+        text = _normalize_text(_pptx_slide_markdown(slide, number))
+        budget.add(text)
+        pages.append(ExtractedPage(number=number, text=text))
     return ExtractedDocument(pages=pages, extension=".pptx", page_count=len(pages))
 
 
 # Legacy DOC
 
-def _extract_doc_text(file_path: str, catdoc: str) -> ExtractedDocument:
-    """Plain text of a legacy Word file through catdoc (no headings or tables)."""
-    completed = subprocess.run(
-        [catdoc, "-w", "-d", "utf-8", file_path],
-        capture_output=True,
-        timeout=DOC_CONVERSION_TIMEOUT_SECONDS,
-        check=False,
-    )
-    text = _normalize_text(completed.stdout.decode("utf-8", errors="replace"))
+def _extract_doc(file_path: str, limits: ParseLimits) -> ExtractedDocument:
+    """Plain text of a legacy Word file through catdoc (no headings or tables). catdoc is what
+    the Docker image ships. It runs as a child of the limited process, so it inherits the
+    limits, and writes to a file so its output is never buffered in memory."""
+    catdoc = shutil.which("catdoc")
+    if not catdoc:
+        raise UnreadableDocumentError(
+            "Legacy .doc files cannot be read on this server. "
+            "Please save the file as .docx or PDF and upload it again."
+        )
+    work_dir = tempfile.mkdtemp(prefix="margins-doc-")
+    try:
+        out_path = Path(work_dir) / "text.txt"
+        with open(out_path, "wb") as out:
+            try:
+                completed = subprocess.run(
+                    [catdoc, "-w", "-d", "utf-8", file_path],
+                    stdout=out,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    timeout=limits.doc_timeout_seconds,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise ParseRefused("timeout") from exc
+        if completed.returncode == -signal.SIGXFSZ:
+            raise ParseRefused("too_much_text")
+        if completed.returncode in (-signal.SIGXCPU, -signal.SIGKILL):
+            raise ParseRefused("unsafe")
+        if out_path.stat().st_size > limits.max_chars * 4:
+            raise ParseRefused("too_much_text")
+        text = _normalize_text(out_path.read_bytes().decode("utf-8", errors="replace"))
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+    if len(text) > limits.max_chars:
+        raise ParseRefused("too_much_text")
     if completed.returncode != 0 or not text.strip():
         raise UnreadableDocumentError(
             "The .doc file could not be read. Please save it as .docx or PDF and upload it again."
@@ -299,77 +352,35 @@ def _extract_doc_text(file_path: str, catdoc: str) -> ExtractedDocument:
     return ExtractedDocument(pages=[ExtractedPage(number=None, text=text)], extension=".doc", page_count=1)
 
 
-def _extract_doc(file_path: str) -> ExtractedDocument:
-    """Legacy Word files: converted to DOCX with LibreOffice when it is installed (keeps
-    headings and tables), otherwise read as plain text with catdoc (the Docker image ships
-    catdoc; LibreOffice would add several hundred MB)."""
-    soffice = shutil.which("soffice") or shutil.which("libreoffice")
-    if not soffice:
-        catdoc = shutil.which("catdoc")
-        if catdoc:
-            return _extract_doc_text(file_path, catdoc)
-        raise UnreadableDocumentError(
-            "Legacy .doc files need LibreOffice or catdoc to be read, and neither is installed "
-            "on this server. Please save the file as .docx or PDF and upload it again."
-        )
-
-    work_dir = tempfile.mkdtemp(prefix="margins-doc-")
-    try:
-        # A private profile dir keeps parallel conversions from fighting over one lock.
-        subprocess.run(
-            [
-                soffice,
-                f"-env:UserInstallation=file://{work_dir}/profile",
-                "--headless",
-                "--convert-to",
-                "docx",
-                "--outdir",
-                work_dir,
-                file_path,
-            ],
-            capture_output=True,
-            timeout=DOC_CONVERSION_TIMEOUT_SECONDS,
-            check=False,
-        )
-        converted = Path(work_dir) / f"{Path(file_path).stem}.docx"
-        if not converted.is_file():
-            raise UnreadableDocumentError(
-                "The .doc file could not be converted. Please save it as .docx or PDF and "
-                "upload it again."
-            )
-        result = _extract_docx(str(converted))
-        result.extension = ".doc"
-        return result
-    finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
-
-
-def extract_document(file_path: str, filename: str, markdown: bool = True) -> ExtractedDocument:
-    """Read a supported file into pages.
+def extract_document(
+    file_path: str,
+    filename: str,
+    markdown: bool = True,
+    limits: Optional[ParseLimits] = None,
+) -> ExtractedDocument:
+    """Read a supported file into pages. Runs only in the limited child process.
 
     `markdown=False` reads PDFs as plain text, which is much faster and enough for validation.
-    A file whose content cannot be parsed raises `UnreadableDocumentError`; environment
-    problems (disk, memory, a hung converter) keep their own exception types.
+    A file whose content cannot be parsed raises `UnreadableDocumentError` with a fixed note;
+    a limit raises `ParseRefused`.
     """
+    limits = limits or ParseLimits()
     extension = infer_extension(filename)
     if extension not in SUPPORTED_EXTENSIONS:
         raise UnreadableDocumentError(
-            f"Unsupported file extension '{extension}'. "
-            "Supported formats: .pdf, .docx, .pptx, .doc"
+            "Unsupported file type. Supported formats: .pdf, .docx, .pptx, .doc"
         )
 
     try:
         if extension == ".pdf":
-            return _extract_pdf(file_path, markdown)
+            return _extract_pdf(file_path, markdown, limits)
         if extension == ".docx":
-            return _extract_docx(file_path)
+            return _extract_docx(file_path, limits)
         if extension == ".pptx":
-            return _extract_pptx(file_path)
-        return _extract_doc(file_path)
-    except (UnreadableDocumentError, subprocess.TimeoutExpired, MemoryError, OSError):
+            return _extract_pptx(file_path, limits)
+        return _extract_doc(file_path, limits)
+    except (UnreadableDocumentError, ParseRefused, MemoryError):
         raise
     except Exception as exc:
-        logger.warning("Could not parse %s: %s", filename, exc)
-        raise UnreadableDocumentError(
-            f"The {extension} file could not be read (it may be corrupt): {exc}"
-        ) from exc
+        logger.warning("Could not parse a %s file: %s", extension, type(exc).__name__)
+        raise UnreadableDocumentError(CORRUPT_NOTE) from exc

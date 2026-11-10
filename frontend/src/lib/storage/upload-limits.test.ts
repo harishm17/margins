@@ -78,6 +78,13 @@ test('the signature check rejects a wrong file after its first bytes, even split
   )
 })
 
+test('MAX_UPLOAD_MB cannot raise the limit past the 50 MB ceiling', () => {
+  assert.equal(maxUploadMb({}), 25)
+  assert.equal(maxUploadMb({ MAX_UPLOAD_MB: '40' }), 40)
+  assert.equal(maxUploadMb({ MAX_UPLOAD_MB: '500' }), 50)
+  assert.equal(maxUploadBytes({ MAX_UPLOAD_MB: '9999' }), 50 * MB)
+})
+
 test('the signature check rejects a file shorter than its signature', async () => {
   const { sink } = collect()
   await assert.rejects(pipeline(Readable.from([Buffer.from('%PD')]), createSignatureCheck('.pdf'), sink), InvalidSignatureError)

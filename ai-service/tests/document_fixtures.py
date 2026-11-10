@@ -1,5 +1,6 @@
 """Builds small PDF, DOCX and PPTX files for the document tests, so no binary fixtures are kept."""
 import textwrap
+import zipfile
 from pathlib import Path
 from typing import List, Sequence
 
@@ -144,3 +145,29 @@ def build_pptx(path: Path) -> str:
     grouped.text_frame.text = "Text inside a grouped shape"
     presentation.save(str(path))
     return str(path)
+
+
+def many_page_pdf(path: Path, pages: int, text: bool = False) -> str:
+    """A PDF of `pages` pages: blank by default, or one short line of text on each."""
+    doc = pymupdf.open()
+    for number in range(pages):
+        page = doc.new_page()
+        if text:
+            page.insert_text((72, 100), f"Page {number + 1} of the course reading.", fontsize=11)
+    doc.save(str(path))
+    doc.close()
+    return str(path)
+
+
+def inflate_xml_part(package: str, member: str, extra_bytes: int) -> str:
+    """Rewrite a DOCX or PPTX so one XML part carries `extra_bytes` of padding (a few KB packed),
+    the shape of a zip bomb."""
+    source = Path(package)
+    target = source.with_name("inflated-" + source.name)
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as out:
+        for info in original.infolist():
+            data = original.read(info.filename)
+            if info.filename == member:
+                data += b"<!--" + b"A" * extra_bytes + b"-->"
+            out.writestr(info.filename, data)
+    return str(target)
