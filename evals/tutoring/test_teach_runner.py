@@ -113,10 +113,10 @@ def test_the_session_answers_the_tools_from_the_scripted_verdicts_like_the_app()
     assert session.answer("get_concept_to_explain", {})["prompt"] == f'Explain "{scenario["concept"]["name"]}" in your own words, as if you were teaching it to a classmate.'
     # Nothing is assessed before the student has said anything.
     assert "error" in session.answer("assess_explanation", {"concept_id": cid, "explanation": "x"})
-    session.turn = 1
+    session.next_student_turn()
     first_result = session.answer("assess_explanation", {"concept_id": cid, "explanation": "something"})
     assert first_result["action"] == "probe" and first_result["probe"]["type"] == "assumption"
-    session.turn = 2
+    session.next_student_turn()
     assert session.answer("assess_explanation", {"concept_id": cid, "explanation": "again"})["probe"]["type"] == "confront"
     assert "error" in session.answer("record_check", {"concept_id": cid, "question": "q", "answer": "a"})  # no example asked yet
     assert "error" in session.answer("assess_explanation", {"concept_id": "elsewhere", "explanation": "x"})
@@ -193,6 +193,7 @@ def test_a_request_is_not_graded_and_a_coach_that_asks_for_the_tool_anyway_gets_
     session = teach_eval.Session(scenario)
     session.answer("get_concept_to_explain", {})
     session.started = True
+    session.next_student_turn()
     session.begin_turn(1)
     assert session.plan_pre_run("Please just tell me how it works, I keep going round in circles.", "") is None  # a request, not an answer
     plan = session.plan_pre_run("Two keys that land in the same bucket collide and then they chain.", "")
@@ -200,6 +201,7 @@ def test_a_request_is_not_graded_and_a_coach_that_asks_for_the_tool_anyway_gets_
     first_result = session.answer_once(plan["name"], plan["input"])
     assert session.answer_once(plan["name"], plan["input"]) is first_result  # not graded or counted twice
     assert session.state["assessments"] == 1
+    session.next_student_turn()
     session.begin_turn(2)  # the next utterance is a new turn: a fresh run
     assert session.answer_once(plan["name"], plan["input"]) is not first_result
     assert session.state["assessments"] == 2

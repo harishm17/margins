@@ -118,33 +118,60 @@ def make_teach_meter(adapters, stop: Dict[str, str]):
 
 
 class Session:
-    """What the app keeps for one voice teach-back and answers the coach's tools with (the mirror of teach-tools.ts)."""
+    """What the app keeps for one voice teach-back and answers the coach's tools with (the mirror of teach-tools.ts).
+    A scenario is one idea, or several in order (`then`): when an idea closes, the closing result carries what
+    get_concept_to_explain would answer next (`next_idea`), as the app's does."""
 
     def __init__(self, scenario: Dict[str, Any]):
-        from teach_state import empty_state
+        from teach_state import empty_state, ideas_of
 
         self.scenario = scenario
-        self.concept = scenario["concept"]
-        self.state = empty_state()
-        self.turn = 0  # the scripted student message the coach is answering (0 before the student has said anything)
+        self.ideas = ideas_of(scenario)
+        self.states = [empty_state() for _ in self.ideas]
+        self.index = 0  # the idea being worked on (len(self.ideas) once every idea is closed)
+        self.said = 0  # scripted student messages said on the idea being worked on
+        self.turn = 0  # the scripted student message the coach is answering, counted over the whole session (0 before any)
+        self.finished = False  # every idea is closed and the coach has been told so
         self.claims_given: List[str] = []
         self.started = False
         self.steps: Dict[str, Dict[str, Any]] = {}  # the results of the steps already run for this utterance (spec 19.1)
 
+    @property
+    def concept(self) -> Dict[str, Any]:
+        return self.ideas[min(self.index, len(self.ideas) - 1)]["concept"]
+
+    @property
+    def state(self) -> Dict[str, Any]:
+        return self.states[min(self.index, len(self.ideas) - 1)]
+
+    def turns(self) -> List[Dict[str, Any]]:
+        return self.ideas[min(self.index, len(self.ideas) - 1)]["turns"]
+
+    def next_student_turn(self) -> Optional[Dict[str, Any]]:
+        """The scripted student's next message, on the idea being worked on; None when the script has no more."""
+        if self.index >= len(self.ideas) or self.said >= len(self.turns()):
+            return None
+        self.said += 1
+        return self.turns()[self.said - 1]
+
+    def current_turn(self) -> Dict[str, Any]:
+        turns = self.turns()
+        return turns[min(max(self.said, 1), len(turns)) - 1]
+
     def current_verdicts(self) -> List[Dict[str, Any]]:
-        turns = self.scenario["turns"]
-        return turns[min(max(self.turn, 1), len(turns)) - 1]["verdicts"]
+        return self.current_turn()["verdicts"]
 
     def explain_verdicts(self) -> List[Dict[str, Any]]:
-        """The verdicts of the newest scripted explanation (an example is not one)."""
-        turns = self.scenario["turns"][: max(self.turn, 1)]
+        """The verdicts of the newest scripted explanation of this idea (an example is not one)."""
+        turns = self.turns()[: max(self.said, 1)]
         for turn in reversed(turns):
             if turn["kind"] == "explain":
                 return turn["verdicts"]
         return turns[-1]["verdicts"]
 
     def closed(self) -> bool:
-        return bool(self.state["outcome"])
+        """No idea is open."""
+        return self.index >= len(self.ideas)
 
     def note_given(self, output: Dict[str, Any]) -> None:
         from teach_state import untagged
@@ -156,6 +183,20 @@ class Session:
     def begin_turn(self, turn: int) -> None:
         self.turn = turn
         self.steps = {}
+
+    def what_follows(self, output: Dict[str, Any]) -> Dict[str, Any]:
+        """A closing result with the next step in it (teach-tools.ts withWhatFollows): the next open idea, now the one
+        being worked on, or the end of the session."""
+        if output.get("action") != "wrap_up":
+            return output
+        from teach_state import EVERY_IDEA_DONE, idea_prompt
+
+        self.index += 1
+        self.said = 0
+        if self.index >= len(self.ideas):
+            self.finished = True
+            return {**output, "next_idea": dict(EVERY_IDEA_DONE)}
+        return {**output, "next_idea": idea_prompt(self.concept, len(self.ideas) - self.index)}
 
     def plan_pre_run(self, said: str, last_coach_text: str) -> Optional[Dict[str, Any]]:
         """The step the app runs before the model speaks for this utterance, or None (frontend/src/lib/voice/pre-run.ts planPreRun,
@@ -186,58 +227,49 @@ class Session:
         return output
 
     def answer(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-        from teach_state import assessed_claims, assessment_result, example_result
+        from teach_state import EVERY_IDEA_DONE, assessed_claims, assessment_result, example_result, idea_prompt
 
-        concept = self.concept
         if name == "get_concept_to_explain":
             if self.closed():
-                return {"done": True, "message": "Every idea has been worked through. Sum up and say goodbye."}
+                self.finished = True
+                return dict(EVERY_IDEA_DONE)
             self.started = True
-            return {
-                "done": False,
-                "concept_id": concept["id"],
-                "concept_name": concept["name"],
-                "prompt": f'Explain "{concept["name"]}" in your own words, as if you were teaching it to a classmate.',
-                "ideas_left": 1,
-            }
+            return idea_prompt(self.concept, len(self.ideas) - self.index)
+        if name not in ("assess_explanation", *EXAMPLE_CHECK_TOOLS):
+            return {"error": "Unknown tool"}
         from app.prompt_revision import prompts_v2
 
         # Under the voice flag the model passes no concept_id: the app takes the one last given (frontend tools.ts).
-        given = concept["id"] if prompts_v2("voice") else args.get("concept_id")
-        if name == "assess_explanation":
-            if given != concept["id"]:
-                return {"error": "Concept not found. Call get_concept_to_explain."}
-            if self.closed():
+        open_id = None if self.closed() else self.concept["id"]
+        given = open_id if prompts_v2("voice") else args.get("concept_id")
+        if given != open_id or given is None:
+            done = [idea["concept"]["id"] for idea in self.ideas[: self.index]]
+            if given in done or (given is None and done and prompts_v2("voice")):
                 return {"error": "That idea is finished. Call get_concept_to_explain for the next one."}
+            return {"error": "Concept not found. Call get_concept_to_explain."}
+        concept, index = self.concept, self.index
+        if name == "assess_explanation":
             # The app takes the student's words from its own record of the turn, so the model passes none (voice/teach-tools.ts).
-            if self.turn == 0:
+            if self.said == 0:
                 return {"error": "The student has not said anything since your last question. Ask it, stop, and call this tool only after they have answered."}
             claims = assessed_claims(concept, self.explain_verdicts())
             covered_something = any(claim["verdict"] in ("covered", "partial") for claim in claims)
             # What the student said was an "I don't know" when the script says so (the parity test pins that flag to the app's detector).
-            said = self.scenario["turns"][min(max(self.turn, 1), len(self.scenario["turns"])) - 1]
-            output, self.state, _ = assessment_result(
+            output, self.states[index], _ = assessment_result(
                 concept["name"],
                 claims,
                 self.state,
                 None if covered_something else concept["prerequisite"],
-                bool(said.get("dont_know")),
+                bool(self.current_turn().get("dont_know")),
                 int(self.scenario.get("band", 1)),
             )
-            self.note_given(output)
-            return output
-        if name in EXAMPLE_CHECK_TOOLS:
-            if given != concept["id"]:
-                return {"error": "Concept not found. Call get_concept_to_explain."}
-            if self.closed():
-                return {"error": "That idea is finished. Call get_concept_to_explain for the next one."}
+        else:
             if not self.state["exampleAsked"]:
                 return {"error": "The new example is asked after assess_explanation says ask_new_example."}
             claims = assessed_claims(concept, self.current_verdicts())
-            output, self.state, _ = example_result(concept["name"], claims, self.state)
-            self.note_given(output)
-            return output
-        return {"error": "Unknown tool"}
+            output, self.states[index], _ = example_result(concept["name"], claims, self.state)
+        self.note_given(output)
+        return self.what_follows(output)
 
 
 # ---------------------------------------------------------------------------- playing
@@ -246,12 +278,13 @@ class Session:
 async def coach_turn(provider, system: str, tools: List[Dict[str, Any]], messages: List[Dict[str, Any]], session: Session, log: Optional[List[Dict[str, Any]]] = None):
     """One coach turn as the app's turn loop runs it. Returns (spoken text, the tool calls with their results). `log` starts with
     the step the app ran before the model, if it ran one."""
+    from app.config import settings  # the app's own limit for a spoken reply (routes/voice.py)
     from app.services.llm.base import TurnDone, TurnText
 
     spoken: List[str] = []
     log = log if log is not None else []
     for call in range(1, MAX_MODEL_CALLS + 1):
-        events = [e async for e in provider.stream_turn(system=system, messages=messages, tools=tools, max_tokens=800, purpose="voice")]
+        events = [e async for e in provider.stream_turn(system=system, messages=messages, tools=tools, max_tokens=settings.VOICE_MAX_TOKENS, purpose="voice")]
         done = next((e for e in reversed(events) if isinstance(e, TurnDone)), None)
         text = "".join(e.text for e in events if isinstance(e, TurnText)).strip()
         if text:
@@ -290,8 +323,10 @@ def first_sentence_seconds(calls: List[Dict[str, Any]]) -> Optional[float]:
 
 
 def last_action(log: List[Dict[str, Any]]) -> Optional[str]:
-    """What the coach was told to do at the end of the turn: the action of the last result that has one, 'ask' after getting an
-    idea, None when no tool ran."""
+    """What the coach was told to do at the end of the turn: 'wrap_up' when an idea closed in it (whatever the coach
+    called afterwards), else the action of the last result that has one, 'ask' after getting an idea, None when no tool ran."""
+    if any(item["output"].get("action") == "wrap_up" for item in log):
+        return "wrap_up"
     for item in reversed(log):
         output = item["output"]
         if "action" in output:
@@ -303,6 +338,13 @@ def last_action(log: List[Dict[str, Any]]) -> Optional[str]:
     return None
 
 
+def asked_again(log: List[Dict[str, Any]]) -> bool:
+    """The coach called get_concept_to_explain after a closing result that already carried the next step (a wasted call,
+    and in the app a second announcement)."""
+    closing = next((i for i, item in enumerate(log) if item["output"].get("action") == "wrap_up"), None)
+    return closing is not None and any(item["name"] == "get_concept_to_explain" for item in log[closing + 1 :])
+
+
 async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop: Dict[str, str]) -> List[Dict[str, Any]]:
     """One scripted conversation: the start of the session, then each student message in turn. One record per coach turn."""
     from spend import SpendLimitReached
@@ -312,13 +354,18 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
     messages: List[Dict[str, Any]] = [{"role": "user", "content": entry["start"]}]
     records: List[Dict[str, Any]] = []
     last_text = ""
-    for turn in range(0, len(scenario["turns"]) + 1):
-        if stop.get("reason") or (turn > 0 and session.closed() and records and records[-1].get("closed")):
-            break
+    turn = 0
+    while not stop.get("reason"):
+        said = ""
+        if turn > 0:
+            scripted = session.next_student_turn()
+            if scripted is None:
+                break
+            said = scripted["say"]
         session.begin_turn(turn)
+        idea = session.index  # the idea this student message is about
         pre_run: List[Dict[str, Any]] = []
         if turn > 0:
-            said = scenario["turns"][turn - 1]["say"]
             plan = session.plan_pre_run(said, last_text)
             content: Any = said
             if plan:
@@ -330,7 +377,7 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
         calls: list = []
         token = _TURN_CALLS.set(calls)
         started = time.perf_counter()
-        base = {"scenario": scenario["id"], "pattern": scenario["pattern"], "turn": turn, "student": scenario["turns"][turn - 1]["say"] if turn else ""}
+        base = {"scenario": scenario["id"], "pattern": scenario["pattern"], "turn": turn, "idea": idea, "student": said}
         try:
             text, log = await coach_turn(provider, entry["system"], prompts["tools"], messages, session, list(pre_run))
         except SpendLimitReached as exc:
@@ -353,16 +400,21 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
                 "pre_run": pre_run[0]["name"] if pre_run else None,
                 "first_sentence_s": first_sentence_seconds(calls),
                 "last_action": last_action(log),
+                "asked_again": asked_again(log),
+                # The idea the coach is asking about when the turn ends: the next one after a closing result; None when none is open.
+                "asks_idea": None if session.closed() else session.index,
                 "claims_given": list(session.claims_given),
-                "closed": session.closed(),
-                "outcome": session.state["outcome"],
+                "closed": session.index > idea,
+                "finished": session.finished,
+                "outcome": session.states[idea]["outcome"] if idea < len(session.states) else None,
                 "seconds": round(time.perf_counter() - started, 2),
                 "cost_usd": round(sum(c["cost_usd"] for c in calls), 6),
                 "model_calls": len(calls),
             }
         )
-        if log and any(item["output"].get("done") is True for item in log):
+        if session.finished:
             break  # the session is over
+        turn += 1
     return records
 
 
@@ -400,7 +452,7 @@ def estimate(scenarios: List[Dict[str, Any]], prompts: Dict[str, Any], tracker, 
     from app.services.llm.models import resolve_model
 
     from spend import estimate_prompt_tokens
-    from teach_state import parity_trace
+    from teach_state import flat_turns, parity_trace
 
     model = resolve_model("voice").model
     tools_json = json.dumps(prompts["tools"])
@@ -415,7 +467,7 @@ def estimate(scenarios: List[Dict[str, Any]], prompts: Dict[str, Any], tracker, 
             usd += tracker.estimate_call(model, "voice", estimate_prompt_tokens([entry["system"], tools_json, *history], None))
             calls += 1
         history.append("Explain it in your own words as if teaching a classmate.")
-        for turn, step in zip(scenario["turns"], steps):
+        for turn, step in zip(flat_turns(scenario), steps):
             history.append(turn["say"])
             history.append(step["app_result"])
             usd += tracker.estimate_call(model, "voice", estimate_prompt_tokens([entry["system"], tools_json, *history], None))
@@ -424,7 +476,7 @@ def estimate(scenarios: List[Dict[str, Any]], prompts: Dict[str, Any], tracker, 
     plan = {"scenarios": len(scenarios), "calls": calls, "model": model, "usd": usd}
     if judge_spec is not None:
         # One judge call per asking turn: at most one per scripted student message, and the opening turn.
-        judged = sum(len(s["turns"]) + 1 for s in scenarios)
+        judged = sum(len(flat_turns(s)) + 1 for s in scenarios)
         per_call = tracker.estimate_call(judge_spec.model_id, "judge_teach_back", 700)
         plan.update({"judge_model": judge_spec.label, "judged": judged, "judge_usd": judged * per_call})
     return plan

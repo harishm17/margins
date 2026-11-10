@@ -56,6 +56,7 @@ import type {
   ExampleCheckResult,
   FindingsFields,
   NextClaimResult,
+  NextIdea,
   PlanFields,
 } from '@/lib/voice/tool-results'
 import type { OwnedTopic } from '@/server/owned'
@@ -369,12 +370,20 @@ async function weakestFirst(userId: string, concepts: RecallConcept[], now = new
     .map((entry) => entry.concept)
 }
 
-export async function getConceptToExplain(ctx: TeachToolContext, state: CoachState): Promise<TeachToolResult> {
-  if (!ctx.topic) return error(NO_TOPIC)
-  const concepts = await loadRecallConcepts(ctx.topic)
-  if (concepts.length === 0) return error('This topic has no claims from the student\'s pages to check an explanation against.')
+/**
+ * The idea to explain now: the one already begun, or else the weakest that is still open; or, with none open, the end of
+ * the session. `state` is changed and saved, and the session is ended when every idea is done. It is what
+ * `get_concept_to_explain` answers, and what a result that closes an idea carries as `next_idea`, so the coach closes one idea
+ * and opens the next in the same reply.
+ */
+async function nextIdea(
+  ctx: TeachToolContext,
+  state: CoachState,
+  concepts: RecallConcept[]
+): Promise<{ output: NextIdea; events: VoiceEvent[]; sessionComplete: boolean }> {
   const open = concepts.filter((concept) => !state.teach.concepts[concept.id]?.outcome)
   if (open.length === 0) {
+    await saveState(ctx.sessionId, state)
     await endSession(ctx.sessionId)
     return { output: { done: true, message: 'Every idea has been worked through. Sum up and say goodbye.' }, events: [{ type: 'session_complete' }], sessionComplete: true }
   }
@@ -387,9 +396,38 @@ export async function getConceptToExplain(ctx: TeachToolContext, state: CoachSta
   await saveState(ctx.sessionId, state)
   const prompt = conceptTeachBackPrompt(concept.name)
   return {
-    output: { done: false, concept_id: concept.id, concept_name: concept.name, prompt, ideas_left: open.length } satisfies ConceptToExplainResult,
+    output: { done: false, concept_id: concept.id, concept_name: concept.name, prompt, ideas_left: open.length },
     events: [{ type: 'board', kind: 'concept', text: prompt, idea: { name: concept.name, conceptId: concept.id } }],
+    sessionComplete: false,
   }
+}
+
+export async function getConceptToExplain(ctx: TeachToolContext, state: CoachState): Promise<TeachToolResult> {
+  if (!ctx.topic) return error(NO_TOPIC)
+  const concepts = await loadRecallConcepts(ctx.topic)
+  if (concepts.length === 0) return error('This topic has no claims from the student\'s pages to check an explanation against.')
+  const next = await nextIdea(ctx, state, concepts)
+  return { output: next.output satisfies ConceptToExplainResult, events: next.events, ...(next.sessionComplete ? { sessionComplete: true } : {}) }
+}
+
+/**
+ * The result of a step on an idea, with what follows it. A result that closes the idea (wrap_up) also carries the next idea
+ * to ask, or says that every idea is done: the coach used to be told only "wrap up", said so, and then had to call
+ * get_concept_to_explain in the same turn, so it summed up twice ("let's move on", then "that was the last one") and every
+ * finished idea cost a second model call.
+ */
+async function withWhatFollows(
+  ctx: TeachToolContext,
+  state: CoachState,
+  concepts: RecallConcept[],
+  concept: RecallConcept,
+  output: Record<string, unknown>,
+  conceptState: ConceptState
+): Promise<TeachToolResult> {
+  const closed = await ideaDone(concept, output, conceptState)
+  if (output.action !== 'wrap_up') return { output, events: closed }
+  const next = await nextIdea(ctx, state, concepts)
+  return { output: { ...output, next_idea: next.output }, events: [...closed, ...next.events], ...(next.sessionComplete ? { sessionComplete: true } : {}) }
 }
 
 async function scoreSayBack(ctx: TeachToolContext, concept: RecallConcept, claimId: string, said: string): Promise<void> {
@@ -527,7 +565,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
     }).catch((failure) => logServerError('Recording the voice explanation failed', failure))
   }
 
-  return { output: next.output, events: await ideaDone(concept, next.output, next.state) }
+  return withWhatFollows(ctx, state, concepts, concept, next.output, next.state)
 }
 
 /**
@@ -591,17 +629,23 @@ export function assessmentResult(
   }
 }
 
-/** What the answer to the new example leads to. Pure, for the same reason. */
+/**
+ * What the answer to the new example leads to. Pure, for the same reason. An example that held lists nothing as left out:
+ * one small case does not touch every claim of the idea, and the claims it did not touch came back as `missing`, so the
+ * coach told a student who had just passed that they had missed something.
+ */
 export function exampleResult(conceptName: string, claims: AssessedClaim[], before: ConceptState): { output: ExampleCheckResult; state: ConceptState; passed: boolean } {
   const passed = exampleHeld(claims)
   const next = afterExample(claims, before, passed)
+  const findings = findingsOutput(claims)
   return {
     passed,
     state: next.state,
     output: {
       concept: conceptName,
       passed,
-      ...findingsOutput(claims),
+      ...findings,
+      ...(passed ? { missing: [] } : {}),
       ...planOutput(next.plan, claims, null),
       ...(next.plan.action === 'wrap_up' ? { outcome: next.state.outcome } : {}),
     },
@@ -777,7 +821,7 @@ async function recordExampleCheck(
     metadata: { mode: 'teach_back_check' },
   })
 
-  return { output: next.output, events: await ideaDone(concept, next.output, next.state) }
+  return withWhatFollows(ctx, state, concepts, concept, next.output, next.state)
 }
 
 // ---------------------------------------------------------------------------------------------- guided reading

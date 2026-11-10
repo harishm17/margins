@@ -250,35 +250,71 @@ def assessment_result(
 def example_result(concept_name: str, claims: List[Dict[str, Any]], before: Dict[str, Any]):
     passed = example_held(claims)
     plan, state = after_example(claims, before, passed)
-    output: Dict[str, Any] = {"concept": concept_name, "passed": passed, **findings_output(claims), **plan_output(plan, claims, None)}
+    findings = findings_output(claims)
+    if passed:
+        # An example that held lists nothing as left out: one small case does not touch every claim (teach-tools.ts exampleResult).
+        findings["missing"] = []
+    output: Dict[str, Any] = {"concept": concept_name, "passed": passed, **findings, **plan_output(plan, claims, None)}
     if plan["action"] == "wrap_up":
         output["outcome"] = state["outcome"]
     return output, state, passed
 
 
-def parity_trace(scenario: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """The scenario's turns through the mirror, as the fixture has them (until the idea closes)."""
+def ideas_of(scenario: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The ideas a scenario works through, in order: its own concept and turns, then each entry of `then` (a session
+    of more than one idea). Each is {"concept": ..., "turns": [...]}."""
+    return [{"concept": scenario["concept"], "turns": scenario["turns"]}, *scenario.get("then", [])]
+
+
+def flat_turns(scenario: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Every scripted student turn of the scenario, idea after idea."""
+    return [turn for idea in ideas_of(scenario) for turn in idea["turns"]]
+
+
+def idea_prompt(concept: Dict[str, Any], ideas_left: int) -> Dict[str, Any]:
+    """What get_concept_to_explain answers for an open idea (teach-tools.ts nextIdea, recall-server.ts conceptTeachBackPrompt)."""
+    return {
+        "done": False,
+        "concept_id": concept["id"],
+        "concept_name": concept["name"],
+        "prompt": f'Explain "{concept["name"]}" in your own words, as if you were teaching it to a classmate.',
+        "ideas_left": ideas_left,
+    }
+
+
+EVERY_IDEA_DONE = {"done": True, "message": "Every idea has been worked through. Sum up and say goodbye."}
+
+
+def trace_idea(concept: Dict[str, Any], turns: List[Dict[str, Any]], band: int = DEFAULT_BAND) -> List[Dict[str, Any]]:
+    """One idea's turns through the mirror, until the idea closes."""
     state = empty_state()
     steps = []
-    for turn in scenario["turns"]:
+    for turn in turns:
         if state["outcome"]:
             break
-        claims = assessed_claims(scenario["concept"], turn["verdicts"])
+        claims = assessed_claims(concept, turn["verdicts"])
         if turn["kind"] == "explain":
             covered_something = any(claim["verdict"] in ("covered", "partial") for claim in claims)
             output, state, _ = assessment_result(
-                scenario["concept"]["name"],
+                concept["name"],
                 claims,
                 state,
-                None if covered_something else scenario["concept"]["prerequisite"],
+                None if covered_something else concept["prerequisite"],
                 bool(turn.get("dont_know")),
-                int(scenario.get("band", DEFAULT_BAND)),
+                band,
             )
         else:
-            output, state, _ = example_result(scenario["concept"]["name"], claims, state)
-        tool = "assess_explanation" if turn["kind"] == "explain" else "record_check"  # the v1 name, as the fixture was written
+            output, state, _ = example_result(concept["name"], claims, state)
+        tool = "assess_explanation" if turn["kind"] == "explain" else example_check_tool()
         steps.append({"kind": turn["kind"], "output": output, "state": state, "app_result": app_result_text(tool, output)})
     return steps
+
+
+def parity_trace(scenario: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Each idea of the scenario through the mirror, as the fixture has them: the steps of the first idea, then of each
+    idea in `then`. What ties one idea to the next (`next_idea`) is the session's, not these pure functions'."""
+    band = int(scenario.get("band", DEFAULT_BAND))
+    return [step for idea in ideas_of(scenario) for step in trace_idea(idea["concept"], idea["turns"], band)]
 
 
 def load_prompts(v2: Optional[bool] = None) -> Dict[str, Any]:

@@ -1251,11 +1251,7 @@
      ],
      "partly": [],
      "incorrect": [],
-     "missing": [
-      {
-       "pointer": "Look again at p. 2: Gear ratio"
-      }
-     ],
+     "missing": [],
      "action": "wrap_up",
      "outcome": "explained"
     },
@@ -1272,7 +1268,7 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
    }
   ]
  },
@@ -1409,11 +1405,7 @@
      ],
      "partly": [],
      "incorrect": [],
-     "missing": [
-      {
-       "pointer": "Look again at p. 2: Growth factor"
-      }
-     ],
+     "missing": [],
      "action": "wrap_up",
      "outcome": "explained"
     },
@@ -1430,7 +1422,7 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
    }
   ]
  },
@@ -1567,11 +1559,7 @@
      ],
      "partly": [],
      "incorrect": [],
-     "missing": [
-      {
-       "pointer": "Look again at p. 1: Halving"
-      }
-     ],
+     "missing": [],
      "action": "wrap_up",
      "outcome": "explained"
     },
@@ -1588,7 +1576,7 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
    }
   ]
  },
@@ -2012,11 +2000,7 @@
      ],
      "partly": [],
      "incorrect": [],
-     "missing": [
-      {
-       "pointer": "Look again at p. 2: Gear ratio"
-      }
-     ],
+     "missing": [],
      "action": "wrap_up",
      "outcome": "explained"
     },
@@ -2033,7 +2017,7 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
    }
   ]
  },
@@ -2125,11 +2109,7 @@
      ],
      "partly": [],
      "incorrect": [],
-     "missing": [
-      {
-       "pointer": "Look again at p. 2: Growth factor"
-      }
-     ],
+     "missing": [],
      "action": "wrap_up",
      "outcome": "explained"
     },
@@ -2146,7 +2126,7 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
    }
   ]
  },
@@ -2238,11 +2218,7 @@
      ],
      "partly": [],
      "incorrect": [],
-     "missing": [
-      {
-       "pointer": "Look again at p. 1: Halving"
-      }
-     ],
+     "missing": [],
      "action": "wrap_up",
      "outcome": "explained"
     },
@@ -2259,7 +2235,7 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
    }
   ]
  },
@@ -2306,11 +2282,7 @@
      ],
      "partly": [],
      "incorrect": [],
-     "missing": [
-      {
-       "pointer": "Look again at p. 2: Gear ratio"
-      }
-     ],
+     "missing": [],
      "action": "wrap_up",
      "outcome": "explained"
     },
@@ -2322,7 +2294,7 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
    }
   ]
  },
@@ -2516,11 +2488,7 @@
      ],
      "partly": [],
      "incorrect": [],
-     "missing": [
-      {
-       "pointer": "Look again at p. 2: Growth factor"
-      }
-     ],
+     "missing": [],
      "action": "wrap_up",
      "outcome": "explained"
     },
@@ -2537,7 +2505,7 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
    }
   ]
  },
@@ -2669,11 +2637,7 @@
      ],
      "partly": [],
      "incorrect": [],
-     "missing": [
-      {
-       "pointer": "Look again at p. 1: Halving"
-      }
-     ],
+     "missing": [],
      "action": "wrap_up",
      "outcome": "explained"
     },
@@ -2690,7 +2654,7 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
    }
   ]
  },

@@ -203,6 +203,7 @@ dbTest('explanation after two probes is level 2', async () => {
   assert.equal(four.action, 'wrap_up')
   assert.equal(four.outcome, 'taught')
   assert.deepEqual(four.look_again, ['p. 5'])
+  assert.equal(four.next_idea.concept_id, w.load.id, 'the idea to ask next comes with the result that closes this one')
 
   const rows = await teachEvents(w)
   assert.deepEqual(rows.map((row) => row.assistance), [0, 2])
@@ -327,7 +328,9 @@ dbTest('full coverage asks one new example before marking explained', async () =
   // Until the example is answered, the same idea is the current one.
   assert.equal(out(await run(w, undefined, 'get_concept_to_explain')).concept_id, w.collision.id)
 
-  const checked = await run(w, all.grade, 'record_check', {
+  // The example is about chaining only, so the grader finds nothing in it about the other claim.
+  const example = grader({ 'Chaining': COVERED, 'Two keys': { verdict: 'missing', pointer: 'Look again at p. 4: What is a collision?' } })
+  const checked = await run(w, example.grade, 'record_check', {
     concept_id: w.collision.id,
     question: 'If a third key lands in a bucket with two others, what does chaining do?',
     answer: 'It adds it to the list of that bucket.',
@@ -335,8 +338,22 @@ dbTest('full coverage asks one new example before marking explained', async () =
   assert.equal(checked.isError, false)
   assert.equal(out(checked).passed, true)
   assert.equal(out(checked).outcome, 'explained')
-  assert.equal(all.asked.at(-1)?.prompt, 'If a third key lands in a bucket with two others, what does chaining do?')
+  // Bug: the claim the example did not touch came back as "missing", and the coach told a student who passed that they had left something out.
+  assert.deepEqual(out(checked).missing, [])
+  assert.equal(example.asked.at(-1)?.prompt, 'If a third key lands in a bucket with two others, what does chaining do?')
   assert.equal((await stateOf(w)).teach.concepts[w.collision.id].outcome, 'explained')
+  // Bug: closing an idea said only "wrap up"; the coach had to ask for the next idea in a second model call and summed up
+  // twice. The result that closes an idea now carries the next one, and the board moves to it.
+  assert.deepEqual(out(checked).next_idea, {
+    done: false,
+    concept_id: w.load.id,
+    concept_name: 'Load factor',
+    prompt: 'Explain "Load factor" in your own words, as if you were teaching it to a classmate.',
+    ideas_left: 1,
+  })
+  assert.deepEqual(checked.events.map((event) => event.type), ['idea_done', 'board'])
+  assert.equal(checked.sessionComplete, false)
+  assert.equal((await stateOf(w)).teach.current, w.load.id)
 
   const checks = await voiceEvents(w)
   assert.equal(checks.length, 1)
@@ -344,8 +361,17 @@ dbTest('full coverage asks one new example before marking explained', async () =
   assert.equal(checks[0].score, 1)
   assert.equal(checks[0].conceptId, w.collision.id)
 
-  // The next idea is a different one.
+  // The next idea is a different one, and asking for it again gives the same.
   assert.equal(out(await run(w, undefined, 'get_concept_to_explain')).concept_id, w.load.id)
+
+  // The last idea: its closing result says the session is over, and the session is ended with it.
+  const last = grader({ 'The load': COVERED })
+  assert.equal(out(await run(w, last.grade, 'assess_explanation', { concept_id: w.load.id, explanation: 'Entries divided by buckets.' })).action, 'ask_new_example')
+  const closing = await run(w, last.grade, 'record_check', { concept_id: w.load.id, question: 'Ten entries in five buckets: what is it?', answer: 'Two.' })
+  assert.equal(out(closing).next_idea.done, true)
+  assert.deepEqual(closing.events.map((event) => event.type), ['idea_done', 'session_complete'])
+  assert.equal(closing.sessionComplete, true)
+  assert.ok((await prisma.voiceDrillSession.findUniqueOrThrow({ where: { id: w.session.id } })).endedAt)
 })
 
 dbTest('an unclear explanation stores nothing and spends no probe', async () => {
