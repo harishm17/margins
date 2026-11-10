@@ -293,10 +293,15 @@ async def test_reader_v1_still_uses_v1_schemas(v1):
 
 @pytest.mark.asyncio
 async def test_the_mock_provider_serves_the_v2_schemas(v2_tutor):
-    out = await reader_reply(reader_request(claims=[]))
-    assert out.reply and out.check_question
-    out = await tutor_reply(practice_request())
-    assert out.reply
+    with use(MockProvider()):
+        out = await reader_reply(reader_request(claims=[]))
+        assert out.reply and out.check_question
+        out = await reader_reply(check_request(claims=[]))
+        assert out.verdict in ("right", "partly", "not_yet")
+        out = await tutor_reply(practice_request())
+        assert out.reply
+        graded = await recall_grader.grade_recall(recall_request())
+        assert graded.status in ("graded", "ungraded")
 
 
 # ---------------------------------------------------------------- recall grader
