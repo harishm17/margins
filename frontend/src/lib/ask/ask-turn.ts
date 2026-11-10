@@ -5,6 +5,7 @@
  * state and the evidence. Only the route's own words are read from the model; the level is decided here.
  */
 
+import { ownedConcepts } from '@/server/owned'
 import { prisma } from '@/lib/db/prisma'
 import { recordEvidence } from '@/lib/learning/evidence'
 import { itemKey } from '@/lib/learning/item-key'
@@ -244,17 +245,6 @@ export function replyTaught(plan: AskPlan, route: AskRoute, stopReason: string):
   return false
 }
 
-/** The routed concepts that are the student's own, active, with their topics, in routed order. */
-async function ownConcepts(userId: string, projectId: string, ids: readonly string[]) {
-  if (ids.length === 0) return []
-  const found = await prisma.concept.findMany({
-    where: { id: { in: [...ids] }, projectId, status: 'active', project: { userId } },
-    select: { id: true, topicId: true },
-  })
-  const byId = new Map(found.map((concept) => [concept.id, concept]))
-  return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []))
-}
-
 /** Level 3 on the concepts a reply taught: the AI carried it, so no review and no score; the next review is pulled to tomorrow. */
 export async function recordExplained(input: {
   userId: string
@@ -267,7 +257,7 @@ export async function recordExplained(input: {
   surrendered: boolean
   timeZone: string
 }): Promise<boolean> {
-  const concepts = await ownConcepts(input.userId, input.projectId, input.conceptIds)
+  const concepts = await ownedConcepts(input.userId, input.projectId, input.conceptIds)
   if (concepts.length === 0) return false
   await recordEvidence(
     [
