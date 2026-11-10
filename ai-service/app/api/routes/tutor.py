@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.api.disconnect import run_unless_disconnected
 from app.services import ai_status
 from app.services.budget import over_budget_message, record_usage_event
 from app.services.llm.base import LLMUsage
@@ -61,7 +62,7 @@ async def practice(payload: PracticeTutorRequest, request: Request) -> Union[Pra
             )
     with track_llm_usage() as usages:
         try:
-            reply = await tutor_reply(payload)
+            reply = await run_unless_disconnected(request, tutor_reply(payload))
             if request.headers.get(EVAL_HEADER) == "1":
                 # The tutoring eval reads the rung the model claimed, which the reply clamps, and the drafts held back.
                 return JSONResponse(
@@ -94,7 +95,7 @@ class ReaderCheckAnswer(BaseModel):
 
 
 @router.post("/reader", response_model=Union[ReaderCheckAnswer, ReaderReply])
-async def reader(payload: ReaderTutorRequest) -> Union[ReaderCheckAnswer, ReaderReply, JSONResponse]:
+async def reader(payload: ReaderTutorRequest, request: Request) -> Union[ReaderCheckAnswer, ReaderReply, JSONResponse]:
     """One reply about one passage after the student's own take, with one check question.
 
     A question the passage's source claims answer is held to the leak check (see app/services/tutor/reader.py).
@@ -113,7 +114,7 @@ async def reader(payload: ReaderTutorRequest) -> Union[ReaderCheckAnswer, Reader
             )
     with track_llm_usage() as usages:
         try:
-            out = await reader_reply(payload)
+            out = await run_unless_disconnected(request, reader_reply(payload))
             if isinstance(out, ReaderCheckReply):
                 return ReaderCheckAnswer(verdict=out.verdict, reply=out.reply, follow_up_question=out.follow_up_question, from_fallback=out.from_fallback)
             return ReaderReply(reply=out.reply, check_question=out.check_question)

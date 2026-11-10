@@ -7,7 +7,8 @@ route, and nothing here reads keys from anywhere else.
 import math
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from app.api.disconnect import run_unless_disconnected
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -96,14 +97,14 @@ class GradeQuizResponse(BaseModel):
 
 
 @router.post("/quiz", response_model=GradeQuizResponse)
-async def grade_quiz(payload: GradeQuizRequest) -> GradeQuizResponse:
+async def grade_quiz(payload: GradeQuizRequest, request: Request) -> GradeQuizResponse:
     """Grade answers against the supplied questions: by rule where possible, Claude for short answers."""
-    result = await ExamGrader().grade_submission(
+    result = await run_unless_disconnected(request, ExamGrader().grade_submission(
         "quiz",
         [question.model_dump() for question in payload.questions],
         payload.plain_answers(),
         payload.thinking(),
-    )
+    ))
     return GradeQuizResponse(
         graded_questions=result["graded_questions"],
         total_points=result["total_points"],
@@ -115,7 +116,7 @@ async def grade_quiz(payload: GradeQuizRequest) -> GradeQuizResponse:
 
 
 @router.post("/recall", response_model=RecallGradeResult, response_model_exclude={"analysis"})
-async def grade_recall_answer(payload: RecallGradeRequest) -> Union[RecallGradeResult, JSONResponse]:
+async def grade_recall_answer(payload: RecallGradeRequest, request: Request) -> Union[RecallGradeResult, JSONResponse]:
     """Verdicts on what a student recalled, claim by claim, or one clarifying question when the answer can't be graded.
 
     Model failures and an AI marked unavailable are typed errors (main.py); a user over the daily budget gets
@@ -133,7 +134,7 @@ async def grade_recall_answer(payload: RecallGradeRequest) -> Union[RecallGradeR
             )
     with track_llm_usage() as usages:
         try:
-            return await grade_recall(payload)
+            return await run_unless_disconnected(request, grade_recall(payload))
         finally:
             if payload.user_id and usages:
                 await record_usage_event(

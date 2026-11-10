@@ -10,10 +10,11 @@ import re
 import time
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.api.disconnect import run_unless_disconnected
 from app.config import settings
 from app.db.connection import execute_one
 from app.services import ai_status
@@ -227,6 +228,7 @@ async def purge_transcripts():
 @router.post("/generate-drill")
 async def generate_concept_drill(
     payload: DrillGenerateRequest,
+    request: Request,
 ):
     """Generate concept-only oral drill questions from notes."""
     llm = LLMFactory.get_provider()
@@ -262,12 +264,12 @@ For each, give 2-4 key points a listener can check, a short sample answer, and t
         LLMMessage(role="user", content=user_prompt),
     ]
 
-    result = await llm.generate_structured(
+    result = await run_unless_disconnected(request, llm.generate_structured(
         messages,
         DrillQuestionSet,
         max_tokens=8000,
         purpose="voice_drill",
-    )
+    ))
 
     cleaned: List[Dict[str, Any]] = []
     for q in result.questions:

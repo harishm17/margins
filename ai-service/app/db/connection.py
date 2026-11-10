@@ -31,16 +31,18 @@ _pool: asyncpg.Pool | None = None
 _pool_lock = asyncio.Lock()
 
 
+class _TimedPool(asyncpg.Pool):
+    """A pool whose `acquire()` (and so every `fetch`, `execute` and the like, which acquire through it) gives up
+    after DB_ACQUIRE_TIMEOUT_SECONDS instead of waiting for a free connection for ever. An explicit `timeout=` wins."""
+
+    __slots__ = ()
+
+    def acquire(self, *, timeout=None):
+        return super().acquire(timeout=settings.DB_ACQUIRE_TIMEOUT_SECONDS if timeout is None else timeout)
+
+
 def _with_acquire_timeout(pool: asyncpg.Pool) -> asyncpg.Pool:
-    """Make every `pool.acquire()` (and so every `pool.fetch`, `pool.execute` and the like, which acquire through it)
-    give up after DB_ACQUIRE_TIMEOUT_SECONDS instead of waiting for a free connection for ever. An explicit
-    `timeout=` still wins."""
-    acquire = pool.acquire
-
-    def acquire_with_timeout(*, timeout=None):
-        return acquire(timeout=settings.DB_ACQUIRE_TIMEOUT_SECONDS if timeout is None else timeout)
-
-    pool.acquire = acquire_with_timeout  # type: ignore[method-assign]
+    pool.__class__ = _TimedPool  # same slots, so the swap is allowed; asyncpg offers no pool_class argument
     return pool
 
 

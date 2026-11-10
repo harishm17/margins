@@ -1,5 +1,6 @@
 """Generators tag their items with the topic's concepts, practice steps carry three hints, and a
 wrong multiple-choice option names the idea behind it."""
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -107,7 +108,7 @@ class TestConceptIds:
         with patch.object(voice.LLMFactory, "get_provider", return_value=llm), \
              patch.object(voice, "fetch_concepts", concepts):
             result = await voice.generate_concept_drill(
-                voice.DrillGenerateRequest(topic_id="t1", notes="n", count=3)
+                voice.DrillGenerateRequest(topic_id="t1", notes="n", count=3), SimpleNamespace(is_disconnected=AsyncMock(return_value=False))
             )
         assert [q["concept_ids"] for q in result["questions"]] == [["k-var"], ["k-mean"]]
         assert '<concept id="k-var">' in llm.generate_structured.call_args.args[0][-1].content
@@ -193,7 +194,7 @@ class TestDegradation:
 
         with patch.object(voice.LLMFactory, "get_provider", return_value=llm), \
              patch.object(voice, "fetch_concepts", broken):
-            result = await voice.generate_concept_drill(voice.DrillGenerateRequest(topic_id="bad", notes="n", count=3))
+            result = await voice.generate_concept_drill(voice.DrillGenerateRequest(topic_id="bad", notes="n", count=3), SimpleNamespace(is_disconnected=AsyncMock(return_value=False)))
         assert result["total"] == 1
         assert result["questions"][0]["concept_ids"] == []
         assert "<concept id=" not in llm.generate_structured.call_args.args[0][-1].content
