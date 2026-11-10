@@ -13,11 +13,15 @@ ALTER TABLE "margin_notes" ADD COLUMN "quote" TEXT;
 UPDATE "margin_notes" n SET "project_id" = t."project_id" FROM "topics" t WHERE t."id" = n."topic_id";
 UPDATE "margin_notes" n SET "quote" = c."chunk_text" FROM "material_chunks" c WHERE c."id" = n."chunk_id";
 
--- Old web app instances still running during the deploy insert without project_id; fill it from the topic.
+-- Old web app instances still running during the deploy insert without project_id or quote; fill them as the backfill
+-- above does (the course from the topic, the passage from the chunk).
 CREATE OR REPLACE FUNCTION margin_notes_fill_project() RETURNS trigger AS $$
 BEGIN
   IF NEW."project_id" IS NULL AND NEW."topic_id" IS NOT NULL THEN
     SELECT "project_id" INTO NEW."project_id" FROM "topics" WHERE "id" = NEW."topic_id";
+  END IF;
+  IF NEW."quote" IS NULL AND NEW."chunk_id" IS NOT NULL THEN
+    SELECT "chunk_text" INTO NEW."quote" FROM "material_chunks" WHERE "id" = NEW."chunk_id";
   END IF;
   RETURN NEW;
 END;

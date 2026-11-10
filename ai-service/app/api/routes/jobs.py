@@ -36,7 +36,7 @@ from app.services.embeddings.generator import embedding_text, generate_embedding
 from app.services.course_planner import NoPlannableMaterialError, StalePlanError, plan_course, write_plan
 from app.services.concepts.extractor import extract_concepts
 from app.services.concepts.linker import link_unit
-from app.services.concepts.requote import requote_concepts
+from app.services.concepts.requote import RequoteSummary, concepts_without_claims, requote_concepts
 from app.services.content_generator import NotesGenerator, ExamplesGenerator, QuizGenerator
 from app.services.content_generator.context import NoSourceMaterialError
 from app.services.content_generator.examples import ExampleType
@@ -57,6 +57,7 @@ from app.services.dispatch import (
 )
 from app.services.generation_chain import (
     OPTIONAL_TYPES,
+    PlannedJob,
     content_exists,
     continue_chain,
     dispatch as dispatch_job,
@@ -962,23 +963,50 @@ async def extract_concepts_job(payload: JobPayload, job: JobContext) -> JobOutco
     label="Concept re-quoting",
     default_error_code="CONCEPT_REQUOTE_FAILED",
     stage="generating",
-    uses_llm=True,
+    # Off, the job makes no model call, so the AI status and the allowance do not apply to it.
+    uses_llm=lambda: settings.CLAIM_REQUOTE,
+    # Its only trigger is a file delete, so a job that cannot run now waits for the AI instead of failing for good.
+    wait_for_ai=True,
 )
 async def requote_concepts_job(payload: JobPayload, job: JobContext) -> JobOutcome:
     """Give the concepts of one topic that lost all their claims (a file was deleted) new claims from the topic's
     remaining files, keeping their ids. It holds the topic lock exclusive, like the extraction. With CLAIM_REQUOTE off
-    it completes without a model call."""
+    it completes at once, without the lock or a model call.
+
+    A file deleted while the job runs finds this job active and starts none, so once the job is completed it looks
+    again: a concept that lost its claims after the job started gets a new job. Concepts the job was given and could
+    not quote are not retried by this (the repair script covers them), so this never loops."""
     input_data = parse_input(ConceptRequoteInput, payload.data)
 
     # The job runner has already checked that the job's user owns topicId and projectId (assert_job_owns_payload).
     topic = await execute_one("SELECT id, project_id FROM topics WHERE id = $1", input_data.topicId)
     if not topic or topic["project_id"] != input_data.projectId:
         raise PermanentJobError("Topic not found", code="NOT_FOUND")
+    if not settings.CLAIM_REQUOTE:
+        return JobOutcome(result=RequoteSummary(topic_id=topic["id"], skipped="CLAIM_REQUOTE is off").as_result())
 
     async with topic_lock(f"topic:{topic['id']}", exclusive=True):
+        before = {row["id"] for row in await concepts_without_claims(topic["id"])}
         summary = await requote_concepts(topic["id"])
     logger.info("Re-quoted concepts for topic %s: %s", topic["id"], summary.as_result())
-    return JobOutcome(result=summary.as_result())
+
+    async def requote_newly_orphaned() -> None:
+        now = {row["id"] for row in await concepts_without_claims(topic["id"])}
+        if not now - before:
+            return
+        data = {"topicId": topic["id"], "projectId": topic["project_id"]}
+        job_id, created = await create_job(
+            user_id=job.user_id,
+            project_id=topic["project_id"],
+            job_type="requote_concepts",
+            stage="generating",
+            input_data=data,
+            target_key=f"requote:{topic['id']}",
+        )
+        if created:
+            await dispatch_job(PlannedJob(job_id, data, job_type="requote_concepts"))
+
+    return JobOutcome(result=summary.as_result(), after=requote_newly_orphaned)
 
 
 @router.post("/jobs/link-concepts")

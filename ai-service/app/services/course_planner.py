@@ -859,13 +859,21 @@ async def plan_course(project_id: str) -> PlanJob:
 
 
 # A topic the planner never deletes or replaces: confirmed by the student, or with study activity
-# (content, progress, attempts, a review date), whatever its flag says. Used as a column of `topics t`.
+# (content, progress, attempts, a review date, evidence, or the student's own notes and tutor chats in the reader),
+# whatever its flag says. Used as a column of `topics t`. Deleting a topic the student has worked in would cascade
+# their recall attempts away and leave reader tutor states keyed by its id (the cleanup rules of
+# frontend/src/lib/topics/topic-references.ts are the web app's and do not run here), so such a topic is kept.
 KEPT_TOPIC = """(t.user_confirmed
     OR EXISTS (SELECT 1 FROM topic_content x WHERE x.topic_id = t.id)
     OR EXISTS (SELECT 1 FROM topic_progress x WHERE x.topic_id = t.id)
     OR EXISTS (SELECT 1 FROM quiz_attempts x WHERE x.topic_id = t.id)
     OR EXISTS (SELECT 1 FROM practice_progress x WHERE x.topic_id = t.id)
-    OR EXISTS (SELECT 1 FROM review_schedules x WHERE x.topic_id = t.id))"""
+    OR EXISTS (SELECT 1 FROM review_schedules x WHERE x.topic_id = t.id)
+    OR EXISTS (SELECT 1 FROM recall_attempts x WHERE x.topic_id = t.id)
+    OR EXISTS (SELECT 1 FROM voice_drill_attempts x WHERE x.topic_id = t.id)
+    OR EXISTS (SELECT 1 FROM evidence_events x WHERE x.topic_id = t.id)
+    OR EXISTS (SELECT 1 FROM margin_notes x WHERE x.topic_id = t.id)
+    OR EXISTS (SELECT 1 FROM tutor_states x WHERE x.scope = 'reader' AND left(x.scope_key, length(t.id) + 1) = t.id || ':'))"""
 
 
 class StalePlanError(Exception):

@@ -93,6 +93,20 @@ dbTest('merging a topic keeps notes, recall, practice, drafts and the idea with 
   assert.equal(schedule.dueAt.toISOString(), due.toISOString())
 })
 
+dbTest('merging a topic whose history was not converted yet into a converted one leaves the target to be converted again', async () => {
+  // Review of PR 1.6: the moved quizzes and practice were never replayed, because conversion only runs for an unconverted topic.
+  const { POST } = await import('@/app/api/projects/[projectId]/topics/merge/route')
+  const source = await prisma.topic.create({ data: { projectId: ids.project, name: 'D', orderIndex: 9, userConfirmed: true } })
+  const target = await prisma.topic.create({ data: { projectId: ids.project, name: 'E', orderIndex: 10, userConfirmed: true, evidenceBackfilledAt: new Date() } })
+  await prisma.concept.create({ data: { projectId: ids.project, topicId: source.id, name: 'Median', summary: 's', kind: 'concept', orderIndex: 0 } })
+  const response = await POST(
+    new NextRequest('http://localhost/x', { method: 'POST', body: JSON.stringify({ sourceTopicId: source.id, targetTopicId: target.id }), headers: { 'content-type': 'application/json' } }),
+    { params: Promise.resolve({ projectId: ids.project }) }
+  )
+  assert.equal(response.status, 200)
+  assert.equal((await prisma.topic.findUniqueOrThrow({ where: { id: target.id } })).evidenceBackfilledAt, null)
+})
+
 dbTest('deleting a topic keeps its notes under no topic and clears its tutor states (78)', async () => {
   const { DELETE } = await import('@/app/api/topics/[topicId]/route')
   const response = await DELETE(new NextRequest('http://localhost/x', { method: 'DELETE' }), { params: Promise.resolve({ topicId: ids.c }) })

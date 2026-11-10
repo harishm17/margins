@@ -211,6 +211,12 @@ export async function POST(
         const ownConcepts = await tx.concept.count({ where: { topicId: target.id, status: 'active', id: { notIn: movedConceptIds } } })
         if (ownConcepts === 0) await tx.topic.update({ where: { id: target.id }, data: { evidenceBackfilledAt: source.evidenceBackfilledAt } })
       }
+      // The other way round, the source's history (quizzes, practice, voice) moved with it but was never replayed into
+      // evidence, and the conversion only runs for an unconverted topic: the target is unconverted again, so the next view
+      // replays the history it does not have yet (the replay skips rows that already have evidence).
+      if (target.evidenceBackfilledAt && !source.evidenceBackfilledAt && movedConceptIds.length > 0) {
+        await tx.topic.update({ where: { id: target.id }, data: { evidenceBackfilledAt: null } })
+      }
       await recomputeTopicFromConcepts(tx, session.user.id, target.id)
 
       // What is left on the source (its own progress and schedule rows that lost to the

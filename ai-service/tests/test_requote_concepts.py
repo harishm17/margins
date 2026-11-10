@@ -110,7 +110,10 @@ async def test_a_quote_that_is_not_in_the_excerpt_is_dropped(db, world, monkeypa
 async def test_the_job_checks_the_topic_belongs_to_the_course_and_runs_off_by_default(db, world):
     job_id = await seed_job(db, world.user_id, "requote_concepts", project_id=world.project_id)
     data = {"topicId": world.topic_id, "projectId": world.project_id}
-    await jobs.requote_concepts_job(JobPayload(jobId=job_id, jobType="requote_concepts", data=data))
+    # Off, the job makes no model call, so an AI outage or a used-up allowance must not fail it (review of PR 1.6).
+    refuse = patch("app.services.job_runner._enforce_ai_ready", side_effect=RuntimeError("AI is down"))
+    with refuse, patch.object(jobs, "topic_lock", side_effect=AssertionError("no lock when off")):
+        await jobs.requote_concepts_job(JobPayload(jobId=job_id, jobType="requote_concepts", data=data))
     job = await get_job(db, job_id)
     assert job["status"] == "completed" and "CLAIM_REQUOTE is off" in job["result_data"]
 
@@ -121,3 +124,42 @@ async def test_the_job_checks_the_topic_belongs_to_the_course_and_runs_off_by_de
             JobPayload(jobId=wrong, jobType="requote_concepts", data={"topicId": world.topic_id, "projectId": other})
         )
     assert (await get_job(db, wrong))["error_code"] == "NOT_FOUND"
+
+
+async def test_a_concept_orphaned_while_the_job_runs_gets_a_new_job_and_an_unquotable_one_does_not_loop(db, world, monkeypatch):
+    """Review of PR 1.6: a second file delete during the job found the job active and started none, so the concepts it
+    orphaned were never re-quoted."""
+    monkeypatch.setattr(settings, "CLAIM_REQUOTE", True)
+    data = {"topicId": world.topic_id, "projectId": world.project_id}
+    real = jobs.requote_concepts
+    sent = []
+
+    async def and_another_file_goes(topic_id):
+        summary = await real(topic_id)
+        await db.execute("DELETE FROM concept_claims WHERE concept_id = $1", world.ids["Kept concept"])
+        return summary
+
+    async def record(planned):
+        sent.append(planned)
+        return planned.job_id
+
+    first = await seed_job(db, world.user_id, "requote_concepts", project_id=world.project_id)
+    with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()), \
+            patch.object(jobs, "requote_concepts", and_another_file_goes), patch.object(jobs, "dispatch_job", record):
+        await jobs.requote_concepts_job(JobPayload(jobId=first, jobType="requote_concepts", data=data))
+    assert (await get_job(db, first))["status"] == "completed"
+    assert [p.data for p in sent] == [data]
+    follow_up = await get_job(db, sent[0].job_id)
+    assert follow_up["job_type"] == "requote_concepts" and follow_up["status"] == "pending"
+
+    # The follow-up cannot quote it either (nothing found): the concept was claimless when it started, so no third job.
+    await db.execute("UPDATE processing_jobs SET status = 'completed' WHERE id = $1", sent[0].job_id)
+    second = await seed_job(db, world.user_id, "requote_concepts", project_id=world.project_id)
+    sent.clear()
+
+    async def finds_nothing(topic_id):
+        return jobs.RequoteSummary(topic_id=topic_id)
+
+    with patch.object(jobs, "requote_concepts", finds_nothing), patch.object(jobs, "dispatch_job", record):
+        await jobs.requote_concepts_job(JobPayload(jobId=second, jobType="requote_concepts", data=data))
+    assert sent == []

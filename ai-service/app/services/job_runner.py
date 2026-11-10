@@ -33,7 +33,7 @@ import logging
 import math
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional, Type, TypeVar
+from typing import Any, AsyncIterator, Awaitable, Callable, Dict, Optional, Type, TypeVar, Union
 
 from fastapi import HTTPException
 from pydantic import BaseModel, ValidationError
@@ -592,7 +592,7 @@ def job_handler(
     label: str,
     default_error_code: str,
     stage: Optional[str] = None,
-    uses_llm: bool = False,
+    uses_llm: Union[bool, Callable[[], bool]] = False,
     lease_seconds: Optional[float] = None,
     wait_for_ai: bool = False,
     after_failure: Optional[Callable[[JobPayload, JobContext, Exception], Awaitable[None]]] = None,
@@ -601,7 +601,8 @@ def job_handler(
 
     `job_type` picks the default lease length. `label` names the job in error messages
     ("Content generation failed: ...").
-    `uses_llm` makes the handler subject to the AI status and the per-user daily budget.
+    `uses_llm` makes the handler subject to the AI status and the per-user daily budget. A callable is asked on each
+    run, for a job that calls the model only when a flag is on.
     `wait_for_ai` makes it wait (see `_defer`) instead of failing when the AI cannot run.
     `after_failure` runs once the job is marked failed (its errors are logged), the failure
     counterpart of `JobOutcome.after`.
@@ -634,7 +635,7 @@ def job_handler(
                 async with _job_scope(job) as usages:
                     try:
                         await assert_job_owns_payload(job.user_id, payload.data, job.job_type)
-                        if uses_llm:
+                        if uses_llm() if callable(uses_llm) else uses_llm:
                             await _enforce_ai_ready(job)
                         outcome = await _run_handler(handler(payload, job), job)
                     except Exception as exc:
