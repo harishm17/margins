@@ -69,24 +69,22 @@ test('later try right without help is 0.6', () => {
 test('locate hint keeps level 0 capped at 0.6', () => {
   const locate = { ...step, firstTryCorrect: true, maxRung: AUTHORED_HINT_RUNG[0] as 1 }
   assert.deepEqual(practiceStepEvidence(locate), { score: 0.6, assistance: 0 })
+  // Was level 1 before v3.1: the order of trying and asking for a pointer no longer changes the score.
   assert.deepEqual(practiceStepEvidence({ ...locate, firstTryCorrect: false }), { score: 0.6, assistance: 0 })
 })
 
-test('connect hint is a failed first try', () => {
-  assert.deepEqual(practiceStepEvidence({ ...step, firstTryCorrect: true, maxRung: AUTHORED_HINT_RUNG[1] as 3 }), { score: 0, assistance: 1 })
-})
-
-test('structure hint is a failed first try', () => {
-  assert.deepEqual(practiceStepEvidence({ ...step, firstTryCorrect: true, maxRung: AUTHORED_HINT_RUNG[2] as 4 }), { score: 0, assistance: 1 })
+test('connect and structure hints are a failed first try', () => {
+  for (const [firstTryCorrect, maxRung] of [
+    [true, AUTHORED_HINT_RUNG[1] as 3],
+    [true, AUTHORED_HINT_RUNG[2] as 4],
+    [false, 3 as const],
+  ] as const) {
+    assert.deepEqual(practiceStepEvidence({ ...step, firstTryCorrect, maxRung }), { score: 0, assistance: 1 }, `${firstTryCorrect} ${maxRung}`)
+  }
 })
 
 test('wrong then revealed is level 1 score 0', () => {
   assert.deepEqual(practiceStepEvidence({ ...step, solved: false, revealed: true }), { score: 0, assistance: 1 })
-})
-
-test('legacy single hint counts as connect', () => {
-  assert.deepEqual(AUTHORED_HINT_RUNG, [1, 3, 4])
-  assert.deepEqual(assistanceFromRung(AUTHORED_HINT_RUNG[1]), { assistance: 1, scoreCap: 0 })
 })
 
 test('unfinished step gives null', () => {
@@ -127,12 +125,6 @@ test('available hints are the ones with text', () => {
   assert.deepEqual(availableHints(['look', 'idea', 'form']), [0, 1, 2])
   assert.deepEqual(availableHints(['', 'idea', '']), [1])
   assert.deepEqual(availableHints(['look', '', 'form']), [0, 2])
-})
-
-test('a wrong first check followed by a locate hint is still level 0 at 0.6; Connect makes it level 1', () => {
-  // Was level 1 before v3.1: the order of trying and asking for a pointer no longer changes the score.
-  assert.deepEqual(practiceStepEvidence({ ...step, maxRung: 1 }), { score: 0.6, assistance: 0 })
-  assert.deepEqual(practiceStepEvidence({ ...step, maxRung: 3 }), { score: 0, assistance: 1 })
 })
 
 test('third check success, second check on two options, and an IDK are level 1', () => {

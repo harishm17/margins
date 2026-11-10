@@ -26,9 +26,7 @@ test('public questions carry no answer key', () => {
   assert.deepEqual(publicQuestion.options, [{ id: 'A', text: 'x' }, { id: 'B', text: 'y' }])
   assert.equal(publicQuestion.question_text, 'Pick one')
   assert.equal(publicQuestion.points, 2)
-})
-
-test('no key text survives anywhere in the serialised payload', () => {
+  // No key text survives anywhere in the serialised payload.
   const payload = JSON.stringify(toPublicQuestions([full]))
   assert.equal(payload.includes('Because y.'), false)
   assert.equal(payload.includes('is_correct'), false)

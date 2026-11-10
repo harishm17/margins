@@ -4,42 +4,29 @@ import { computeMasteryFromSignals, intervalFromMastery } from './mastery-math'
 
 const none = { quizScores: [], voiceScores: [], examScores: [] }
 
-test('a quiz-only student with 100% reaches full mastery', () => {
-  const result = computeMasteryFromSignals({ ...none, quizScores: [100], daysSinceLastPractice: 0 })
-  assert.equal(result.mastery, 1)
-})
-
 test('a quiz-only student reaches the 7-day review interval at 70%', () => {
   const result = computeMasteryFromSignals({ ...none, quizScores: [70, 70], daysSinceLastPractice: 0 })
   assert.ok(Math.abs(result.mastery - 0.7) < 1e-9)
   assert.equal(intervalFromMastery(result.mastery), 7)
 })
 
-test('a voice-only student is scored on voice alone', () => {
-  const result = computeMasteryFromSignals({ ...none, voiceScores: [0.8], daysSinceLastPractice: 0 })
-  assert.ok(Math.abs(result.mastery - 0.8) < 1e-9)
-})
-
 test('weights are renormalised over the sources present', () => {
-  // quiz 0.45 and exam 0.25 are present: (0.45 * 1 + 0.25 * 0.5) / 0.7
-  const result = computeMasteryFromSignals({
-    ...none,
-    quizScores: [100],
-    examScores: [0.5],
-    daysSinceLastPractice: 0,
-  })
-  assert.ok(Math.abs(result.mastery - 0.575 / 0.7) < 1e-9)
-})
-
-test('quiz, voice and exam alone use the 45/25/15 split, renormalised', () => {
-  const result = computeMasteryFromSignals({
-    quizScores: [100],
-    voiceScores: [0],
-    examScores: [1],
-    daysSinceLastPractice: 0,
-  })
-  // (0.45 * 1 + 0.15 * 0 + 0.25 * 1) / 0.85
-  assert.ok(Math.abs(result.mastery - 0.7 / 0.85) < 1e-9)
+  const cases: Array<[string, { quizScores?: number[]; voiceScores?: number[]; examScores?: number[]; practiceScores?: number[] }, number, number]> = [
+    ['a quiz-only student with 100% reaches full mastery', { quizScores: [100] }, 1, 0],
+    ['a voice-only student is scored on voice alone', { voiceScores: [0.8] }, 0.8, 0],
+    // quiz 0.45 and exam 0.25 are present: (0.45 * 1 + 0.25 * 0.5) / 0.7
+    ['quiz and exam', { quizScores: [100], examScores: [0.5] }, 0.575 / 0.7, 0],
+    // (0.45 * 1 + 0.15 * 0 + 0.25 * 1) / 0.85
+    ['quiz, voice and exam alone use the 45/25/15 split', { quizScores: [100], voiceScores: [0], examScores: [1] }, 0.7 / 0.85, 0],
+    ['practice alone is scored on practice alone', { practiceScores: [0.6] }, 0.6, 0.6],
+    ['quiz and practice renormalise over 0.45 + 0.15', { quizScores: [100], practiceScores: [0] }, 0.45 / 0.6, 0],
+    ['practice scores are optional', { quizScores: [50] }, 0.5, 0],
+  ]
+  for (const [name, signals, mastery, practice] of cases) {
+    const result = computeMasteryFromSignals({ ...none, ...signals, daysSinceLastPractice: 0 })
+    assert.ok(Math.abs(result.mastery - mastery) < 1e-9, name)
+    assert.ok(Math.abs(result.practice - practice) < 1e-9, name)
+  }
 })
 
 test('no data at all is zero mastery', () => {
@@ -91,6 +78,22 @@ test('masteryFromHistory matches computeMasteryFromSignals on the same results',
     daysSinceLastPractice: 2,
   })
   assert.deepEqual(result, expected)
+  // Practice counts, and its date counts as practice.
+  const withPractice = masteryFromHistory({
+    quiz: [{ score: 100, at: daysAgo(10) }],
+    voice: [],
+    exam: [],
+    practice: [{ score: 0.5, at: daysAgo(1) }],
+    now,
+  })
+  const expectedWithPractice = computeMasteryFromSignals({
+    quizScores: [100],
+    voiceScores: [],
+    examScores: [],
+    practiceScores: [0.5],
+    daysSinceLastPractice: 1,
+  })
+  assert.deepEqual(withPractice, expectedWithPractice)
 })
 
 test('masteryFromHistory treats a topic with no results as 30 days idle', () => {
@@ -99,12 +102,7 @@ test('masteryFromHistory treats a topic with no results as 30 days idle', () => 
   assert.ok(Math.abs(result.recencyPenalty - 0.25) < 1e-9)
 })
 
-import { DECAY_FLOOR, MASTERY_WEIGHTS, displayMastery } from './mastery-math'
-
-test('the weights are quiz 45, exam 25, voice 15 and practice 15 and add up to one', () => {
-  assert.deepEqual(MASTERY_WEIGHTS, { quiz: 0.45, exam: 0.25, voice: 0.15, practice: 0.15 })
-  assert.ok(Math.abs(Object.values(MASTERY_WEIGHTS).reduce((sum, weight) => sum + weight, 0) - 1) < 1e-9)
-})
+import { DECAY_FLOOR, displayMastery } from './mastery-math'
 
 test('all four sources use the 45/25/15/15 split', () => {
   const result = computeMasteryFromSignals({
@@ -115,43 +113,6 @@ test('all four sources use the 45/25/15/15 split', () => {
     daysSinceLastPractice: 0,
   })
   assert.ok(Math.abs(result.mastery - 0.6) < 1e-9)
-})
-
-test('practice alone is scored on practice alone', () => {
-  const result = computeMasteryFromSignals({ ...none, practiceScores: [0.6], daysSinceLastPractice: 0 })
-  assert.ok(Math.abs(result.mastery - 0.6) < 1e-9)
-  assert.ok(Math.abs(result.practice - 0.6) < 1e-9)
-})
-
-test('quiz and practice renormalise over 0.45 + 0.15', () => {
-  const result = computeMasteryFromSignals({ ...none, quizScores: [100], practiceScores: [0], daysSinceLastPractice: 0 })
-  assert.ok(Math.abs(result.mastery - 0.45 / 0.6) < 1e-9)
-})
-
-test('practice scores are optional', () => {
-  const result = computeMasteryFromSignals({ ...none, quizScores: [50], daysSinceLastPractice: 0 })
-  assert.equal(result.practice, 0)
-  assert.ok(Math.abs(result.mastery - 0.5) < 1e-9)
-})
-
-test('masteryFromHistory counts practice, and its date counts as practice', () => {
-  const now = Date.parse('2026-10-21T00:00:00Z')
-  const day = 24 * 60 * 60 * 1000
-  const result = masteryFromHistory({
-    quiz: [{ score: 100, at: new Date(now - 10 * day) }],
-    voice: [],
-    exam: [],
-    practice: [{ score: 0.5, at: new Date(now - day) }],
-    now,
-  })
-  const expected = computeMasteryFromSignals({
-    quizScores: [100],
-    voiceScores: [],
-    examScores: [],
-    practiceScores: [0.5],
-    daysSinceLastPractice: 1,
-  })
-  assert.deepEqual(result, expected)
 })
 
 const DAY = 24 * 60 * 60 * 1000

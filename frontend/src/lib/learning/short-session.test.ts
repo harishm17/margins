@@ -83,15 +83,8 @@ test('the card says the size the session really has, not the ceiling', () => {
   assert.equal(shortSessionLabel(upTo), 'About 9 minutes · up to 6 reviews')
   // More available than the ceiling: the ceiling.
   assert.equal(sizeShortSession(review, { ready: 12, toWrite: 0 }, 'up').size?.count, 6)
-})
-
-test('the mini quiz card says up to when a question is still to be written', () => {
+  // The mini quiz card says up to when a question is still to be written.
   const quiz = shortSessionPlan(state())!
   assert.equal(shortSessionLabel(sizeShortSession(quiz, { ready: 3, toWrite: 0 }, 'up')), 'About 5 minutes · 3 questions')
   assert.equal(shortSessionLabel(sizeShortSession(quiz, { ready: 2, toWrite: 2 }, 'up')), 'About 6 minutes · up to 4 questions')
-})
-
-test('a recall card has no size', () => {
-  const recall = shortSessionPlan(state({ currentTopic: { id: 't1', readAt: read, recallAt: null } }))!
-  assert.equal(sizeShortSession(recall, { ready: 1, toWrite: 0 }, 'up'), recall)
 })

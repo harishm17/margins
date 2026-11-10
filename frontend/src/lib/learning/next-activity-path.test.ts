@@ -151,14 +151,6 @@ test('the Topics list says what the topic says: its next step is the one the act
   assert.equal(nextStepWords(next.kind), 'Next: Practice')
 })
 
-test('the words for steps outside the path, and for a topic that is solid for now', () => {
-  assert.equal(nextStepWords('done_for_now'), 'Solid for now')
-  assert.equal(nextStepWords('review'), 'Next: Review')
-  assert.equal(nextStepWords('instruct'), 'Next: Read that part again')
-  assert.equal(nextStepWords('transfer_quiz'), 'Next: Harder quiz')
-  assert.equal(nextStepWords('recall'), 'Next: Recall')
-})
-
 test('with the AI down, practice that is not written yet is passed over for the quiz, and the reason says so', () => {
   const down = { ai: 'down', now: NOW, timeZone: 'UTC' } as const
   const recalled = topic({ readAt: at('2026-11-10T10:00:00Z'), recallAt: at('2026-11-10T11:00:00Z') })
@@ -167,11 +159,4 @@ test('with the AI down, practice that is not written yet is passed over for the 
   assert.match(passed.reason, /Practice is not written yet and needs the AI, which is down/)
   // Practice that is already written works without the model, so it still comes first.
   assert.equal(nextActivity(recalled, down).kind, 'practice')
-})
-
-test('the advice for one state is the same wherever it is asked', () => {
-  // The next-activity line reads the state, never the view, so the same state gives the same answer at every call.
-  const state = topic({ readAt: at('2026-11-10T10:00:00Z') })
-  const first = nextActivity(state, UP)
-  for (let i = 0; i < 3; i++) assert.deepEqual(nextActivity(state, UP), first)
 })

@@ -285,26 +285,21 @@ test('warm-up idk scores 0 and steps down', { skip: !process.env.DATABASE_URL },
   const memories = await prisma.conceptMemory.findMany({ where: { userId: w.user.id } })
   assert.ok(memories.every((m) => m.card === null))
   assert.ok(memories.every((m) => (m.derived as Record<string, unknown>).lastIdkAt == null))
-})
 
-test('idk carries no confidence', { skip: !process.env.DATABASE_URL }, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('wu-idk-confidence')
-  let state = await warmup.startWarmup({ userId: w.user.id, topicId: w.topic.id })
-  // Every answer is an "I don't know", sent with no confidence (a normal answer without one is refused).
+  // An IDK carries no confidence: every answer is an "I don't know", sent with no confidence (a normal answer without one is refused).
   while (state.status === 'asking') {
-    const result = await warmup.answerWarmup({ userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, answer: IDK, timeZone: ZONE })
-    if (result.status !== 'ok') throw new Error(result.status)
-    state = result.state
+    const next = await warmup.answerWarmup({ userId: w.user.id, topicId: w.topic.id, sessionId: state.sessionId, index: state.index, answer: IDK, timeZone: ZONE })
+    if (next.status !== 'ok') throw new Error(next.status)
+    state = next.state
   }
   assert.equal(state.status, 'done')
   if (state.status !== 'done') return
   assert.ok(state.items.every((item) => item.idk === true && item.correct === false && item.confidence === undefined && item.answer === ''))
   assert.ok(state.items.every((item) => item.correctAnswer === 'True'))
   assert.equal(state.testOut, false)
-  const events = await prisma.evidenceEvent.findMany({ where: { userId: w.user.id } })
-  assert.ok(events.length >= 3)
-  assert.ok(events.every((e) => e.confidence === null))
+  const allEvents = await prisma.evidenceEvent.findMany({ where: { userId: w.user.id } })
+  assert.ok(allEvents.length >= 3)
+  assert.ok(allEvents.every((e) => e.confidence === null))
   // The session holds an idk flag, not an answer, and the results still mark every concept as a miss.
   const row = await prisma.itemSession.findFirstOrThrow({ where: { userId: w.user.id, kind: 'warmup' } })
   const graded = Object.values((row.results as { graded: Record<string, { idk?: boolean; confidence?: number }> }).graded)

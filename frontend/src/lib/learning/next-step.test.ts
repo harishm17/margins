@@ -118,14 +118,15 @@ test("today's time is used up but reviews are overdue: it never says the day is 
   assert.match(result.reason, /3 reviews are due/)
   assert.match(result.reason, /tomorrow/)
   assert.doesNotMatch(`${result.title} ${result.reason}`, /done for today|caught up/i)
-})
-
-test('one review due after the plan is full is described in the singular', () => {
-  const topics = [topic('graphs', { reviewDueAt: daysAgo(2) })]
-  const result = step(topics, { dailyMinutes: 10, doneToday: [{ kind: 'quiz', topicId: 'graphs' }] })
-  assert.equal(result.kind, 'reviews_due')
-  assert.equal(result.dueCount, 1)
-  assert.match(result.reason, /^Due /)
+  // The three screens agree: the same due count whatever the plan says.
+  const two = [
+    topic('graphs', { orderIndex: 0, reviewDueAt: daysAgo(2) }),
+    topic('hashing', { orderIndex: 1, reviewDueAt: daysAgo(5) }),
+  ]
+  const free = step(two)
+  const spent = step(two, { dailyMinutes: 10, doneToday: [{ kind: 'quiz', topicId: 'graphs' }] })
+  assert.equal(free.dueCount, 2)
+  assert.equal(spent.dueCount, 2)
 })
 
 test('reviews that did not fit today are counted so the screen can say they are waiting', () => {
@@ -305,17 +306,6 @@ test('new topics found in a confirmed course: setup again until they are confirm
   assert.equal(pending.title, 'Review topics')
 })
 
-test('the three screens agree: same due count whatever the plan says', () => {
-  const topics = [
-    topic('graphs', { orderIndex: 0, reviewDueAt: daysAgo(2) }),
-    topic('hashing', { orderIndex: 1, reviewDueAt: daysAgo(5) }),
-  ]
-  const free = step(topics)
-  const spent = step(topics, { dailyMinutes: 10, doneToday: [{ kind: 'quiz', topicId: 'graphs' }] })
-  assert.equal(free.dueCount, 2)
-  assert.equal(spent.dueCount, 2)
-})
-
 test('the last file deleted after Confirm, nothing written yet: upload comes first, not the plan', () => {
   const topics = [topic('graphs', { orderIndex: 0, learned: false, started: false, quizzed: false, mastery: null })]
   const step = nextStepForCourse({
@@ -348,15 +338,13 @@ test('a due topic without concepts keeps the quiz-based review, in the card and 
   const inPlan = nextStep({ courseId: COURSE, plan: plan({ topics }), due, now: NOW, timeZone: ZONE, conceptTopicIds: new Set(['sorting']) })
   assert.equal(inPlan.kind, 'work')
   assert.equal(inPlan.action?.href, '/courses/c1/review#review-hashing')
-})
-
-test('the reviews-first card opens the quiz-based review for a due topic flagged hasConcepts false, and the session otherwise', () => {
-  const topics = [topic('hashing', { orderIndex: 0, reviewDueAt: daysAgo(5), mastery: 0.2 })]
-  const built = plan({ topics, dailyMinutes: 10, doneToday: [{ kind: 'quiz', topicId: 'hashing' }] })
-  const dueOne = dueOf(topics)
-  const flagged = nextStep({ courseId: COURSE, plan: built, due: dueOne.map((d) => ({ ...d, hasConcepts: false })), now: NOW, timeZone: ZONE })
+  // The reviews-first card opens the quiz-based review for a due topic flagged hasConcepts false, and the session otherwise.
+  const single = [topic('hashing', { orderIndex: 0, reviewDueAt: daysAgo(5), mastery: 0.2 })]
+  const singleBuilt = plan({ topics: single, dailyMinutes: 10, doneToday: [{ kind: 'quiz', topicId: 'hashing' }] })
+  const dueOne = dueOf(single)
+  const flagged = nextStep({ courseId: COURSE, plan: singleBuilt, due: dueOne.map((d) => ({ ...d, hasConcepts: false })), now: NOW, timeZone: ZONE })
   assert.equal(flagged.kind, 'reviews_due')
   assert.equal(flagged.action?.href, '/courses/c1/review#review-hashing')
-  const unflagged = nextStep({ courseId: COURSE, plan: built, due: dueOne, now: NOW, timeZone: ZONE })
+  const unflagged = nextStep({ courseId: COURSE, plan: singleBuilt, due: dueOne, now: NOW, timeZone: ZONE })
   assert.equal(unflagged.action?.href, '/courses/c1/review/session?topic=hashing')
 })

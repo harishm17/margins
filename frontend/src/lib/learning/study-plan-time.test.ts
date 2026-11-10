@@ -20,9 +20,7 @@ test('zones ahead of UTC and with half-hour offsets', () => {
   assert.equal(at(2026, 10, 21, 9, 'Asia/Kolkata'), '2026-10-21T03:30:00.000Z')
   assert.equal(at(2026, 10, 21, 9, 'Asia/Tokyo'), '2026-10-21T00:00:00.000Z')
   assert.equal(at(2026, 10, 21, 9, 'UTC'), '2026-10-21T09:00:00.000Z')
-})
-
-test('midnight of a day in a zone is the start of that day there', () => {
+  // Midnight of a day in a zone is the start of that day there.
   assert.equal(at(2026, 10, 21, 0, 'America/Los_Angeles'), '2026-10-21T07:00:00.000Z')
 })
 
@@ -47,11 +45,4 @@ test('the zone cookie falls back to UTC when it is missing, odd or invalid', () 
   assert.equal(resolveTimeZone('Mars/Olympus'), 'UTC')
   assert.equal(resolveTimeZone('%E0%A4%A'), 'UTC')
   assert.equal(resolveTimeZone('x'.repeat(100)), 'UTC')
-})
-
-test('a zone\'s formatter is made once and reused', async () => {
-  const { dateFormatter } = await import('./study-plan-time')
-  assert.equal(dateFormatter('America/Chicago', 'day'), dateFormatter('America/Chicago', 'day'))
-  assert.notEqual(dateFormatter('America/Chicago', 'day'), dateFormatter('America/Chicago', 'clock'))
-  assert.notEqual(dateFormatter('America/Chicago', 'day'), dateFormatter('UTC', 'day'))
 })

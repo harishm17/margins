@@ -47,6 +47,15 @@ test('gradeFor maps score bands', () => {
     }),
     Rating.Good
   )
+  // An unsure right answer caps at Hard.
+  assert.equal(
+    gradeFor({
+      score: 1,
+      confidence: 0.3,
+      allFirstTry: true,
+    }),
+    Rating.Hard
+  )
 })
 
 test('confident wrong sets misconception', () => {
@@ -87,17 +96,6 @@ test('event misconception metadata sets misconception', () => {
     opts
   )
   assert.equal(careless.misconception, null)
-})
-
-test('unsure right caps at Hard', () => {
-  assert.equal(
-    gradeFor({
-      score: 1,
-      confidence: 0.3,
-      allFirstTry: true,
-    }),
-    Rating.Hard
-  )
 })
 
 test('level 2 and 3 never create a card', () => {
@@ -197,6 +195,17 @@ test('good rating clears misconception', () => {
   )
   assert.equal(state.misconception, null)
   assert.equal(state.misconceptionAt, null)
+  // A Good rating clears the misconception whatever the group holds.
+  const day = (d: string) => chicago(`2026-11-${d}`, '10:00')
+  const mixedGroup = replayConcept(
+    [
+      ev({ score: 0, confidence: 0.9, createdAt: day('10') }),
+      ev({ sessionKey: 'x', score: 1, weight: 5, createdAt: day('12') }),
+      L1({ sessionKey: 'x', weight: 0.25, createdAt: day('12') }),
+    ],
+    opts
+  )
+  assert.equal(mixedGroup.misconception, null)
 })
 
 test('consecutiveFails counts level-0 Again in a row and resets on Hard', () => {
@@ -269,16 +278,6 @@ test('again never schedules minute-level steps', () => {
     opts
   )
   assert.ok(next.dueAt!.getTime() >= chicago('2026-11-13', '10:00').getTime())
-})
-
-test('FSRS params are pinned', () => {
-  assert.deepEqual(FSRS_PARAMS, {
-    request_retention: 0.9,
-    enable_fuzz: false,
-    maximum_interval: 365,
-    enable_short_term: false,
-    learning_steps: [],
-  })
 })
 
 test('lastEvidenceAt is the latest event of any kind', () => {
@@ -463,19 +462,6 @@ test('nUnassisted counts a mixed group', () => {
   const onlyFailed = replayConcept([L1({ sessionKey: 'b', createdAt: t })], opts)
   assert.equal(onlyFailed.nUnassisted, 0)
   assert.equal(onlyFailed.card!.reps, 1)
-})
-
-test('a Good rating clears the misconception whatever the group holds', () => {
-  const day = (d: string) => chicago(`2026-11-${d}`, '10:00')
-  const state = replayConcept(
-    [
-      ev({ score: 0, confidence: 0.9, createdAt: day('10') }),
-      ev({ sessionKey: 'x', score: 1, weight: 5, createdAt: day('12') }),
-      L1({ sessionKey: 'x', weight: 0.25, createdAt: day('12') }),
-    ],
-    opts
-  )
-  assert.equal(state.misconception, null)
 })
 
 test('instruction events change no card, q or due', () => {

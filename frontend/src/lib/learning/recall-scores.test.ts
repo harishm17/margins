@@ -43,6 +43,9 @@ test('incorrect sets misconception', () => {
   ])
   assert.equal(score.missKind, 'misconception')
   assert.equal(score.misconception, 'A new key overwrites the old one')
+  // An incorrect claim without a stated kind is a misconception.
+  const [unstated] = conceptRecallScores([claim('a', 'incorrect', { misconception: 'Keys never collide' })])
+  assert.equal(unstated.missKind, 'misconception')
 })
 
 test('the strongest kind of miss names the concept: misconception, then discrimination, then the rest', () => {
@@ -54,11 +57,6 @@ test('the strongest kind of miss names the concept: misconception, then discrimi
   assert.equal(kinds('careless').missKind, 'careless')
   // The wrong idea comes from the claim that named the kind.
   assert.equal(kinds('careless', 'discrimination').misconception, 'idea discrimination')
-})
-
-test('an incorrect claim without a stated kind is a misconception', () => {
-  const [score] = conceptRecallScores([claim('a', 'incorrect', { misconception: 'Keys never collide' })])
-  assert.equal(score.missKind, 'misconception')
 })
 
 test('a concept that was only left out is a cue miss, and sets no misconception', () => {

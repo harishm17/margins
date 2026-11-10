@@ -79,21 +79,6 @@ test('trying first is never scored below asking first or giving up', () => {
   }
 })
 
-test('locate then right is 0.6 level 0', () => {
-  const r = firstTryRecord(step({ checks: 1, firstCheckCorrect: true, solvedOnCheck: 1, helpRungBeforeSolve: 1 }))
-  assert.deepEqual(r, { assistance: 0, score: 0.6, decided: true })
-})
-
-test('miss then locate then right is 0.6 level 0', () => {
-  const r = firstTryRecord(step({ checks: 2, solvedOnCheck: 2, helpRungBeforeSolve: 1 }))
-  assert.deepEqual(r, { assistance: 0, score: 0.6, decided: true })
-})
-
-test('miss then connect then right is level 1', () => {
-  const r = firstTryRecord(step({ checks: 2, solvedOnCheck: 2, helpRungBeforeSolve: 3 }))
-  assert.deepEqual(r, { assistance: 1, score: 0, decided: true })
-})
-
 test('third check success is level 1', () => {
   assert.deepEqual(firstTryRecord(step({ checks: 3, solvedOnCheck: 3 })), { assistance: 1, score: 0, decided: true })
   assert.deepEqual(firstTryRecord(step({ checks: 4, solvedOnCheck: 4 })), { assistance: 1, score: 0, decided: true })

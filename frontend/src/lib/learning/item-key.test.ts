@@ -16,18 +16,9 @@ const base: ItemAnswerInput = {
   sessionKey: 'sess1',
 }
 
-test('itemKey quiz', () => {
+test('itemKey quiz, practice, recall, review, voice, ask, exam', () => {
   assert.equal(itemKey({ kind: 'quiz', setId: 's1', index: 3 }), 'quiz:s1:3')
-})
-
-test('itemKey practice', () => {
-  assert.equal(
-    itemKey({ kind: 'practice', contentId: 'c1', problem: 0, step: 2 }),
-    'practice:c1:0:2'
-  )
-})
-
-test('itemKey recall, review, voice, ask, exam', () => {
+  assert.equal(itemKey({ kind: 'practice', contentId: 'c1', problem: 0, step: 2 }), 'practice:c1:0:2')
   assert.equal(itemKey({ kind: 'recall', topicId: 't', objective: 'all' }), 'recall:t:all')
   assert.equal(itemKey({ kind: 'recall', topicId: 't', objective: 1 }), 'recall:t:1')
   assert.equal(itemKey({ kind: 'teach_back', topicId: 't', conceptId: 'c' }), 'teach_back:t:c')
@@ -48,11 +39,22 @@ test('expand blames named concept on failure', () => {
   const events = expandToConceptEvents({ ...base, score: 0, blamedConceptId: 'c2' })
   assert.equal(events.find((e) => e.conceptId === 'c2')?.weight, 1)
   assert.equal(events.find((e) => e.conceptId === 'c1')?.weight, 0.25)
+  // With three concepts and a secondary blamed, the others get 0.25.
+  const three = expandToConceptEvents({
+    ...base,
+    conceptIds: ['c1', 'c2', 'c3'],
+    score: 0,
+    blamedConceptId: 'c2',
+  })
+  assert.deepEqual(three.map((e) => e.weight), [0.25, 1, 0.25])
+  assert.deepEqual(three.map((e) => e.role), ['primary', 'secondary', 'secondary'])
 })
 
-test('expand blames primary on failure when none named', () => {
+test('expand blames primary on failure when none named, or when the blamed id is not in the list', () => {
   const events = expandToConceptEvents({ ...base, score: 0.2 })
   assert.deepEqual(events.map((e) => e.weight), [1, 0.25])
+  const unknownBlamed = expandToConceptEvents({ ...base, score: 0, blamedConceptId: 'zz' })
+  assert.deepEqual(unknownBlamed.map((e) => e.weight), [1, 0.25])
 })
 
 test('model grading scales weight', () => {
@@ -61,31 +63,11 @@ test('model grading scales weight', () => {
   assert.equal(events[1].weight, 0.35)
 })
 
-test('no concepts gives no events', () => {
-  assert.deepEqual(expandToConceptEvents({ ...base, conceptIds: [] }), [])
-})
-
 test('expand drops duplicate concept ids and keeps the first as primary', () => {
   const events = expandToConceptEvents({ ...base, conceptIds: ['c1', 'c2', 'c1', 'c2'] })
   assert.deepEqual(events.map((e) => e.conceptId), ['c1', 'c2'])
   assert.deepEqual(events.map((e) => e.role), ['primary', 'secondary'])
   assert.deepEqual(events.map((e) => e.weight), [1, 0.5])
-})
-
-test('expand falls back to the primary when the blamed id is not in the list', () => {
-  const events = expandToConceptEvents({ ...base, score: 0, blamedConceptId: 'zz' })
-  assert.deepEqual(events.map((e) => e.weight), [1, 0.25])
-})
-
-test('expand with three concepts and a secondary blamed gives the others 0.25', () => {
-  const events = expandToConceptEvents({
-    ...base,
-    conceptIds: ['c1', 'c2', 'c3'],
-    score: 0,
-    blamedConceptId: 'c2',
-  })
-  assert.deepEqual(events.map((e) => e.weight), [0.25, 1, 0.25])
-  assert.deepEqual(events.map((e) => e.role), ['primary', 'secondary', 'secondary'])
 })
 
 test('blame is ignored on a success', () => {

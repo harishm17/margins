@@ -181,15 +181,10 @@ test('every edge a path walked is listed, in order', () => {
   assert.equal(byTarget.c.pathEdgeIds.length, 2)
   assert.equal(byTarget.c.pathEdgeIds[1], byTarget.c.edgeId)
   assert.equal(byTarget.c.pathEdgeIds[0], byTarget.b.edgeId)
-})
-
-test('the strongest path is the one listed', () => {
-  const out = implicitEventsFor('a', Rating.Good, [edge('a', 'z', 0.4), edge('a', 'm', 0.9), edge('m', 'z', 0.9)])
-  const z = out.find((o) => o.targetId === 'z')!
-  assert.equal(z.pathEdgeIds.length, 2)
-})
-
-test('a penalty lists its one edge', () => {
-  const out = implicitEventsFor('b', Rating.Again, [edge('a', 'b', 0.9)])
-  assert.deepEqual(out[0].pathEdgeIds, [out[0].edgeId])
+  // The strongest path is the one listed.
+  const strongest = implicitEventsFor('a', Rating.Good, [edge('a', 'z', 0.4), edge('a', 'm', 0.9), edge('m', 'z', 0.9)])
+  assert.equal(strongest.find((o) => o.targetId === 'z')!.pathEdgeIds.length, 2)
+  // A penalty lists its one edge.
+  const penalty = implicitEventsFor('b', Rating.Again, [edge('a', 'b', 0.9)])
+  assert.deepEqual(penalty[0].pathEdgeIds, [penalty[0].edgeId])
 })

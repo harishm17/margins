@@ -197,11 +197,7 @@ test('no discrimination mode without a confusable', () => {
   assert.equal(pick({ modeReached: 'discrimination', lastMissKind: 'misconception' }), 'recall')
   assert.equal(pick({ modeReached: 'composition' }), 'composition')
   assert.equal(pick({ modeReached: 'recall' }), 'recall')
-})
-
-test('a cue miss serves recall and a discrimination miss serves discrimination', () => {
-  const bank = (['recall', 'discrimination', 'composition'] as const).map((m) => item(m, ['a'], { mode: m }))
-  const pick = (d: Partial<DueConcept>) => select([due('a', d)], bank).items[0].mode
+  // A cue miss serves recall and a discrimination miss serves discrimination.
   assert.equal(pick({ modeReached: 'composition', lastMissKind: 'cue_miss' }), 'recall')
   assert.equal(pick({ modeReached: 'composition', lastMissKind: 'discrimination', confusableId: 'b' }), 'discrimination')
 })

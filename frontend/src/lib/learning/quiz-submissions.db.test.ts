@@ -410,11 +410,10 @@ dbTest('strong first quiz sets testedOutAt', async () => {
   const submission = await strongSubmission(w)
   await applyQuizSubmission(w.user.id, submission.id)
   assert.ok(await testedOutAt(w))
-})
 
-dbTest('a quiz under the bar leaves testedOutAt empty', async () => {
-  const w = await world()
-  const submission = await gradedSubmission(w, {
+  // A quiz under the bar leaves testedOutAt empty.
+  const under = await world()
+  const underSubmission = await gradedSubmission(under, {
     questions: [QUESTIONS[0], QUESTIONS[0]],
     answers: { '0': 'true', '1': 'false' },
     aiGrading: {
@@ -427,17 +426,16 @@ dbTest('a quiz under the bar leaves testedOutAt empty', async () => {
       ],
     },
   })
-  await applyQuizSubmission(w.user.id, submission.id)
-  assert.equal(await testedOutAt(w), null)
-})
+  await applyQuizSubmission(under.user.id, underSubmission.id)
+  assert.equal(await testedOutAt(under), null)
 
-dbTest('guessed right answers do not count for testedOut', async () => {
-  const w = await world()
-  const submission = await strongSubmission(w, {
+  // Guessed right answers do not count for testedOut.
+  const guessed = await world()
+  const guessedSubmission = await strongSubmission(guessed, {
     answers: { '0': { answer: 'true', confidence: 0.5, confidenceLevel: 'guess' }, '1': { answer: 'true', confidence: 0.5, confidenceLevel: 'guess' } },
   })
-  await applyQuizSubmission(w.user.id, submission.id)
-  assert.equal(await testedOutAt(w), null)
+  await applyQuizSubmission(guessed.user.id, guessedSubmission.id)
+  assert.equal(await testedOutAt(guessed), null)
 })
 
 dbTest('testedOut not set after recall', async () => {

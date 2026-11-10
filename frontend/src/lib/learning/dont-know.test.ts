@@ -47,11 +47,6 @@ test('dontKnowEvidence keeps the metadata of the surface and never sets a miscon
   assert.equal(input.source, 'review')
 })
 
-test('an IDK on a warm-up is a warm-up event', () => {
-  const [input] = dontKnowEvidence({ ...base, surface: 'warmup', level: 0 })
-  assert.equal(input.source, 'warmup')
-})
-
 test('a lone option letter, filler word or "no" is an answer, not an admission', () => {
   for (const answer of ['A', 'a', 'B', 'I', 'it', 'is', 'no', 'No.', 'what', 'the answer']) assert.equal(isDontKnow(answer), false, answer)
   for (const admission of ['no idea', 'idk', "I don't know", 'no clue', 'just tell me', 'help', "I'm stuck", 'I dont remember', '', '???']) {

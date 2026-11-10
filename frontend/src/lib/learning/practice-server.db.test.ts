@@ -94,6 +94,12 @@ dbTest('help of the connect rung after a miss records a failed first try with ma
   const rows = await events(w)
   assert.deepEqual(rows.map((row) => [row.assistance, row.score]), [[1, 0]])
   assert.ok(rows.every((row) => (row.metadata as { maxRung: number }).maxRung === 3))
+
+  // Connect after a miss decides the step before it is finished.
+  const open = await world()
+  await seen(open, 0, { checks: 1, wrongChecks: 1, hintsOpened: 2, helpRung: 3, firstMissRung: 0 })
+  await save(open, { attemptedSteps: [0], maxRungs: { '0': 3 }, hintedSteps: [0] })
+  assert.deepEqual((await events(open)).map((row) => [row.assistance, row.score]), [[1, 0]])
 })
 
 dbTest('a shown answer after an attempt is a level-1 failure; before one it is refused', async () => {
@@ -107,14 +113,19 @@ dbTest('a shown answer after an attempt is a level-1 failure; before one it is r
   assert.equal((await save(w, { revealedSteps: [0], attemptedSteps: [0] })).status, 'saved')
   const rows = await events(w)
   assert.deepEqual(rows.map((row) => [row.assistance, row.score]), [[1, 0]])
-})
 
-dbTest('every hint opened no longer allows the reveal: it needs an attempt', async () => {
+  // Every hint opened does not allow the reveal either: it needs an attempt.
   const all = await world()
   assert.equal((await save(all, { revealedSteps: [0], maxRungs: { '0': 4 }, attemptedSteps: [], hintedSteps: [0] })).status, 'attempt_first')
   const old = await world({ hints: undefined, hint: 'Only hint' })
   assert.equal((await save(old, { revealedSteps: [0], maxRungs: { '0': 3 }, attemptedSteps: [], hintedSteps: [0] })).status, 'attempt_first')
   assert.equal((await events(all)).length + (await events(old)).length, 0)
+
+  // Connect or a shown answer with no attempt is the gate, not a validation error.
+  const gate = await world()
+  assert.equal((await save(gate, { revealedSteps: [0], attemptedSteps: [], maxRungs: {} })).status, 'attempt_first')
+  assert.equal((await save(gate, { attemptedSteps: [], maxRungs: { '1': 3 }, hintedSteps: [1] })).status, 'attempt_first')
+  assert.equal((await save(gate, { attemptedSteps: [], maxRungs: { '1': 1 }, hintedSteps: [1] })).status, 'saved')
 })
 
 dbTest('rungs cannot go down and solved steps cannot un-solve, but Start over is accepted', async () => {
@@ -211,6 +222,12 @@ dbTest('a locate hint after the first wrong check scores the same as one before 
   await seen(before, 0, { checks: 2, wrongChecks: 1, checkedCorrect: true, hintsOpened: 2, helpRung: 3, firstMissRung: 3 })
   await save(before, { solvedSteps: [0], attemptedSteps: [0], firstTrySteps: [], maxRungs: { '0': 3 }, missRungs: { '0': 3 }, hintedSteps: [0] })
   assert.deepEqual((await events(before)).map((row) => [row.assistance, row.score]), [[1, 0]])
+
+  // Miss then locate then right, with no save in between, writes level 0 at 0.6.
+  const unsaved = await world()
+  await seen(unsaved, 0, { checks: 2, wrongChecks: 1, checkedCorrect: true, hintsOpened: 1, helpRung: 1, firstMissRung: 0 })
+  await save(unsaved, { solvedSteps: [0], attemptedSteps: [0], firstTrySteps: [], maxRungs: { '0': 1 }, missRungs: { '0': 0 }, hintedSteps: [0] })
+  assert.deepEqual((await events(unsaved)).map((row) => [row.assistance, row.score]), [[0, 0.6]])
 })
 
 dbTest('start over and solving again the same day is one review, not two', async () => {
@@ -334,13 +351,6 @@ async function backdate(w: Awaited<ReturnType<typeof world>>, days: number) {
 
 const day = (at: Date) => at.toISOString().slice(0, 10)
 
-dbTest('miss then locate then right writes level 0 at 0.6', async () => {
-  const w = await world()
-  await seen(w, 0, { checks: 2, wrongChecks: 1, checkedCorrect: true, hintsOpened: 1, helpRung: 1, firstMissRung: 0 })
-  await save(w, { solvedSteps: [0], attemptedSteps: [0], firstTrySteps: [], maxRungs: { '0': 1 }, missRungs: { '0': 0 }, hintedSteps: [0] })
-  assert.deepEqual((await events(w)).map((row) => [row.assistance, row.score]), [[0, 0.6]])
-})
-
 dbTest('dont know writes level 1 at once, flagged, and the later solve adds no second record', async () => {
   const w = await world()
   await seen(w, 0, { checks: 1, wrongChecks: 1, dontKnowAt: new Date() })
@@ -353,13 +363,6 @@ dbTest('dont know writes level 1 at once, flagged, and the later solve adds no s
   await seen(w, 0, { checks: 2, wrongChecks: 1, checkedCorrect: true, hintsOpened: 2, helpRung: 3 })
   await save(w, { solvedSteps: [0], attemptedSteps: [0], maxRungs: { '0': 3 }, hintedSteps: [0] })
   assert.equal((await events(w)).length, 1)
-})
-
-dbTest('Connect after a miss decides the step before it is finished', async () => {
-  const w = await world()
-  await seen(w, 0, { checks: 1, wrongChecks: 1, hintsOpened: 2, helpRung: 3, firstMissRung: 0 })
-  await save(w, { attemptedSteps: [0], maxRungs: { '0': 3 }, hintedSteps: [0] })
-  assert.deepEqual((await events(w)).map((row) => [row.assistance, row.score]), [[1, 0]])
 })
 
 dbTest('one wrong check with at most the locate hint stays open: nothing is written yet', async () => {
@@ -375,6 +378,9 @@ dbTest('open miss settles as level 1 next day', async () => {
   await seen(w, 0, { checks: 1, wrongChecks: 1 })
   await save(w, { attemptedSteps: [0], maxRungs: {} })
   assert.equal((await events(w)).length, 0)
+  // Not settled the same day.
+  assert.equal((await mod.settleOpenMisses(w.user.id, w.topic.id, 'UTC')).settled, 0)
+  assert.equal((await events(w)).length, 0)
   const missedOn = await backdate(w, 2)
   const result = await mod.settleOpenMisses(w.user.id, w.topic.id, 'UTC')
   assert.equal(result.settled, 1)
@@ -382,14 +388,6 @@ dbTest('open miss settles as level 1 next day', async () => {
   assert.deepEqual(rows.map((row) => [row.assistance, row.score]), [[1, 0]])
   // The session is the local day of the step's first check.
   assert.equal(rows[0].sessionKey.endsWith(day(missedOn)), true, `${rows[0].sessionKey} ${day(missedOn)}`)
-})
-
-dbTest('open miss not settled the same day', async () => {
-  const w = await world()
-  await seen(w, 0, { checks: 1, wrongChecks: 1 })
-  await save(w, { attemptedSteps: [0], maxRungs: {} })
-  assert.equal((await mod.settleOpenMisses(w.user.id, w.topic.id, 'UTC')).settled, 0)
-  assert.equal((await events(w)).length, 0)
 })
 
 dbTest('settle is idempotent, and a later save does not write the step again', async () => {
@@ -412,11 +410,4 @@ dbTest('loading the progress settles the open misses of an earlier day', async (
   await backdate(w, 3)
   await mod.loadPracticeProgress(w.user.id, w.topic.id, 'UTC')
   assert.equal((await events(w)).length, 1)
-})
-
-dbTest('Connect or a shown answer with no attempt is the gate, not a validation error', async () => {
-  const w = await world()
-  assert.equal((await save(w, { revealedSteps: [0], attemptedSteps: [], maxRungs: {} })).status, 'attempt_first')
-  assert.equal((await save(w, { attemptedSteps: [], maxRungs: { '1': 3 }, hintedSteps: [1] })).status, 'attempt_first')
-  assert.equal((await save(w, { attemptedSteps: [], maxRungs: { '1': 1 }, hintedSteps: [1] })).status, 'saved')
 })

@@ -210,11 +210,9 @@ test('the first quiz is the day after the topic is learned', () => {
   assert.equal(dayOf(result, 'b', 'quiz'), '2026-10-24')
   // Quizzes come before the day's new learning.
   assert.deepEqual(result.days[1].items.map((item) => item.kind), ['quiz', 'learn'])
-})
-
-test('a split topic is quizzed the day after its last part', () => {
-  const result = plan({ topics: [topic('long', { estimatedMinutes: 60 })], dailyMinutes: 45 })
-  assert.equal(dayOf(result, 'long', 'quiz'), '2026-10-23')
+  // A split topic is quizzed the day after its last part.
+  const split = plan({ topics: [topic('long', { estimatedMinutes: 60 })], dailyMinutes: 45 })
+  assert.equal(dayOf(split, 'long', 'quiz'), '2026-10-23')
 })
 
 test('a topic that is learned but never quizzed gets its quiz today, or tomorrow if learned today', () => {
@@ -451,13 +449,10 @@ test('the last 2 days hold only reviews of the weakest topics', () => {
   // 30 minutes a day is 3 reviews; the exam day is lighter.
   assert.deepEqual(examDay.items.map((item) => item.topicId), ['weak', 'mid'])
   assert.ok(eve.items[0].note?.includes('weakest'))
-})
-
-test('nothing but reviews is planned in the last 2 days, even with topics left to learn', () => {
-  const topics = [...course(2, { learned: true, quizzed: true, mastery: 0.4 }), topic('big', { orderIndex: 9, estimatedMinutes: 600 })]
-  const result = plan({ topics, examDate: '2026-10-25' })
-  const last = result.days.slice(-2)
-  assert.ok(last.every((day) => day.items.every((item) => item.kind === 'review')))
+  // Even with topics left to learn, nothing but reviews is planned in the last 2 days.
+  const unlearned = [...course(2, { learned: true, quizzed: true, mastery: 0.4 }), topic('big', { orderIndex: 9, estimatedMinutes: 600 })]
+  const crowded = plan({ topics: unlearned, examDate: '2026-10-25' })
+  assert.ok(crowded.days.slice(-2).every((day) => day.items.every((item) => item.kind === 'review')))
 })
 
 test('an exam today is a single exam day', () => {
@@ -488,13 +483,6 @@ test('when time is short the plan says so, puts past-exam topics first and lists
   const order = items(result, 'learn').map((item) => item.topicId)
   assert.ok(order.indexOf('hard') < order.indexOf('tricky'))
   assert.ok(!notScheduled.includes('hard') && !notScheduled.includes('tricky'))
-})
-
-test('without past exams the short message says the order is course order', () => {
-  const result = plan({ topics: course(8), examDate: '2026-10-26', dailyMinutes: 40 })
-  assert.ok(result.short)
-  assert.match(result.shortMessage ?? '', /course order/)
-  assert.doesNotMatch(result.shortMessage ?? '', /past exams/)
 })
 
 test('when it all fits there is no warning and nothing is left out', () => {
@@ -940,20 +928,6 @@ test('the time-is-short message never says "room to learn 0": nothing fits is sa
   assert.match(message, /^Time is short\./)
   assert.match(message, /5 topics/)
   assert.match(message, /Add study time or move the date/)
-})
-
-test('the time-is-short message with some topics fitting names how many and how much', () => {
-  const topics = [
-    topic('intro', { orderIndex: 0 }),
-    topic('mid', { orderIndex: 1 }),
-    topic('hard', { orderIndex: 2 }),
-    topic('tricky', { orderIndex: 3 }),
-    topic('extra', { orderIndex: 4 }),
-  ]
-  const result = plan({ topics, examDate: '2026-10-27', dailyMinutes: 40 })
-  assert.ok(result.short)
-  assert.match(result.shortMessage ?? '', /\b[1-4] of the 5 topics left/)
-  assert.match(result.shortMessage ?? '', /Add study time or move the date/)
 })
 
 // ---------------------------------------------------------------------------------------

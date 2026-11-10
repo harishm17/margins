@@ -18,15 +18,11 @@ test('warm-up starts medium, goes up on confident right and down on wrong or gue
   // The ends hold.
   assert.equal(nextWarmupDifficulty({ difficulty: 'hard', correct: true, ...certain }), 'hard')
   assert.equal(nextWarmupDifficulty({ difficulty: 'easy', correct: false }), 'easy')
-})
-
-test('right but unsure, or right with no confidence, stays at the same level', () => {
+  // Right but unsure, or right with no confidence, stays at the same level.
   assert.equal(nextWarmupDifficulty({ difficulty: 'medium', correct: true, confidence: 0.5, confidenceLevel: 'unsure' }), 'medium')
   assert.equal(nextWarmupDifficulty({ difficulty: 'medium', correct: true }), 'medium')
   assert.equal(nextWarmupDifficulty({ difficulty: 'easy', correct: true, confidence: 0.5, confidenceLevel: 'unsure' }), 'easy')
-})
-
-test('a confidence stored without its level reads by its value', () => {
+  // A confidence stored without its level reads by its value.
   assert.equal(nextWarmupDifficulty({ difficulty: 'medium', correct: true, confidence: 0.75 }), 'hard')
   assert.equal(nextWarmupDifficulty({ difficulty: 'medium', correct: true, confidence: 0.25 }), 'easy')
 })
@@ -100,6 +96,10 @@ test('test all correct and confident offers test-out', () => {
   assert.equal(offersTestOut([{ conceptIds: [], correct: true, ...sure }, { conceptIds: [], correct: true, confidence: 0.5, confidenceLevel: 'unsure' }]), false)
   assert.equal(offersTestOut([{ conceptIds: [], correct: true }]), false)
   assert.equal(offersTestOut([]), false)
+  // A right answer marked Guessing does not offer the test-out.
+  const right = { conceptIds: ['a'], correct: true }
+  assert.equal(offersTestOut([{ ...right, ...sure }, { ...right, ...certain }]), true)
+  assert.equal(offersTestOut([{ ...right, ...sure }, { ...right, confidence: 0.25, confidenceLevel: 'guess' }]), false)
 })
 
 test('sureCorrect is right with confidence of Fairly sure or higher; knownCorrect is right and not a guess', () => {
@@ -113,10 +113,4 @@ test('sureCorrect is right with confidence of Fairly sure or higher; knownCorrec
   assert.equal(knownCorrect({ conceptIds: ['a'], correct: true, ...unsure }), true)
   assert.equal(knownCorrect({ conceptIds: ['a'], correct: true, ...guess }), false)
   assert.equal(knownCorrect({ conceptIds: ['a'], correct: false, ...certain }), false)
-})
-
-test('a right answer marked Guessing does not offer the test-out', () => {
-  const right = { conceptIds: ['a'], correct: true }
-  assert.equal(offersTestOut([{ ...right, ...sure }, { ...right, ...certain }]), true)
-  assert.equal(offersTestOut([{ ...right, ...sure }, { ...right, confidence: 0.25, confidenceLevel: 'guess' }]), false)
 })

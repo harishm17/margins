@@ -252,15 +252,16 @@ test('ai down opens a gap explainer only when it is already written', () => {
   assert.equal(nextActivity({ ...state, gapExplainerReadyFor: [] }).kind, 'explainer')
 })
 
-test('warmup offered only when ready and not read', () => {
-  assert.equal(nextActivity(fresh()).kind, 'warmup')
-  assert.equal(nextActivity(fresh({ warmupReady: false })).kind, 'read')
-  assert.equal(nextActivity(fresh({ readAt: READ })).kind, 'recall')
-})
-
-test('warmup is skipped once taken or once there is evidence', () => {
-  assert.equal(nextActivity(fresh({ warmupAt: READ })).kind, 'read')
-  assert.equal(nextActivity(fresh({ hasAnyEvidence: true })).kind, 'read')
+test('warmup is offered only when ready and not read, and skipped once taken or once there is evidence', () => {
+  for (const [state, kind] of [
+    [fresh(), 'warmup'],
+    [fresh({ warmupReady: false }), 'read'],
+    [fresh({ readAt: READ }), 'recall'],
+    [fresh({ warmupAt: READ }), 'read'],
+    [fresh({ hasAnyEvidence: true }), 'read'],
+  ] as const) {
+    assert.equal(nextActivity(state).kind, kind)
+  }
 })
 
 test('read comes before recall and beats a due review', () => {
@@ -332,11 +333,9 @@ test('stretch picks the kind with the oldest evidence', () => {
   assert.equal(nextActivity(state).kind, 'transfer_quiz')
   assert.equal(nextActivity({ ...state, lastExamAt: d('2026-10-01T00:00:00Z') }).kind, 'mock_exam')
   assert.equal(nextActivity({ ...state, lastTeachBackAt: d('2026-10-01T00:00:00Z') }).kind, 'teach_back')
-})
-
-test('a kind never done is the oldest', () => {
-  const state = solid({ lastTeachBackAt: d('2026-10-20T00:00:00Z'), lastHardQuizAt: d('2026-10-10T00:00:00Z'), lastExamAt: null })
-  assert.equal(nextActivity(state).kind, 'mock_exam')
+  // A kind never done is the oldest.
+  const neverExam = solid({ lastTeachBackAt: d('2026-10-20T00:00:00Z'), lastHardQuizAt: d('2026-10-10T00:00:00Z'), lastExamAt: null })
+  assert.equal(nextActivity(neverExam).kind, 'mock_exam')
 })
 
 test('stretch ties go teach_back first', () => {

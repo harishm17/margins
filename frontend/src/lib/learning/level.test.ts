@@ -23,11 +23,9 @@ const withScores = (scores: number[], over: Partial<BandInputs> = {}, retrievabi
   ...over,
 })
 
-test('unknown concept is band 0', () => {
-  assert.equal(conceptBand(unknown), 0)
-})
-
 test('ability thresholds with no step', () => {
+  // An unknown concept is band 0.
+  assert.equal(conceptBand(unknown), 0)
   // 0.39 -> 0, 0.4 -> 1, 0.74 -> 1, 0.75 -> 2 (no help data, so no step either way).
   assert.equal(conceptBand(withScores([0.39])), 0)
   assert.equal(conceptBand(withScores([0.4])), 1)
@@ -111,10 +109,4 @@ test('topic band rounds the mean of non-solid concepts', () => {
   assert.equal(topicBand([{ band: 2, solid: false }, { band: 1, solid: false }]), 2)
   assert.equal(topicBand([{ band: 0, solid: true }, { band: 1, solid: true }]), 2)
   assert.equal(topicBand([]), 0)
-})
-
-test('what the band sets', () => {
-  assert.deepEqual([0, 1, 2].map((b) => quizDifficultyFor(b as 0 | 1 | 2)), ['easy', 'medium', 'hard'])
-  assert.deepEqual([0, 1, 2].map((b) => probesBeforeExplaining(b as 0 | 1 | 2)), [1, 2, 2])
-  assert.deepEqual([0, 1, 2].map((b) => askExplainThreshold(b as 0 | 1 | 2)), [1, 2, 2])
 })

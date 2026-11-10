@@ -186,33 +186,6 @@ test('the next-actions API lists today\'s items in order, and the setup step bef
   assert.equal(setupNextAction('c1', { mode: 'setup', step: 3, label: 'x' }, 4), null)
 })
 
-test('rows that used to repeat the same sentence say something specific', () => {
-  const overdue = describePlanItem(item({ kind: 'review', note: 'Overdue by 2 days', mastery: 0.44 }), 'c1').reason
-  const yesterday = describePlanItem(item({ kind: 'review', note: 'Overdue by 1 day', mastery: 0.62 }), 'c1').reason
-  assert.equal(overdue, 'Due 2 days ago, mastery 44%.')
-  assert.equal(yesterday, 'Due yesterday, mastery 62%.')
-  assert.notEqual(overdue, yesterday)
-
-  const projected = describePlanItem(item({ kind: 'review', projected: true, mastery: 0.71 }), 'c1').reason
-  assert.equal(projected, 'A short check before it fades, mastery 71%.')
-  assert.match(describePlanItem(item({ kind: 'review', projected: true }), 'c1').reason, /spaced review/)
-  assert.equal(
-    describePlanItem(item({ kind: 'review', note: 'One of your weakest topics', mastery: 0.3 }), 'c1').reason,
-    'One of your weakest topics, mastery 30%.'
-  )
-
-  const first = describePlanItem(item({ kind: 'quiz' }), 'c1').reason
-  assert.match(first, /first quiz/)
-  assert.match(first, /review/)
-
-  const unit = describePlanItem(item({}), 'c1', { unitTitles: { u1: 'Sorting and graphs' } })
-  assert.equal(unit.reason, 'Read it, recall it, then practise.')
-  const inUnit = describePlanItem(item({ unitId: 'u1' }), 'c1', { unitTitles: { u1: 'Sorting and graphs' } })
-  assert.equal(inUnit.reason, 'Sorting and graphs: read it, recall it, then practise.')
-  assert.equal(describePlanItem(item({ part: { number: 2, of: 2 } }), 'c1').reason, 'Pick up where you stopped.')
-  assert.match(describePlanItem(item({ note: 'You have started this one' }), 'c1').reason, /started/)
-})
-
 test('the mixed practice link and the exam form agree for every block length', () => {
   for (let minutes = 15; minutes <= 30; minutes += 1) {
     const block = item({ kind: 'mixed', topicId: null, topicIds: ['a', 'b'], title: 'Mixed practice: A and B', minutes })

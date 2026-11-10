@@ -143,10 +143,8 @@ test('same-day identical submission is level 2', () => {
     assert.equal(event.assistance, 2)
     assert.equal(event.metadata?.repeat, 'same_day')
   }
-})
-
-test('a first attempt is level 0 with no repeat mark', () => {
-  const [event] = buildQuizEvidence({ ...base, answers: { '0': { answer: 'A' } }, graded: [graded(0, 'multiple_choice', 1)] })
-  assert.equal(event.assistance, 0)
-  assert.equal(event.metadata?.repeat, undefined)
+  // As a contrast, a first attempt is level 0 with no repeat mark.
+  const [first] = buildQuizEvidence({ ...base, answers: { '0': { answer: 'A' } }, graded: [graded(0, 'multiple_choice', 1)] })
+  assert.equal(first.assistance, 0)
+  assert.equal(first.metadata?.repeat, undefined)
 })

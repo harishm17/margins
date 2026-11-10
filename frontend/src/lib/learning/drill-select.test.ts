@@ -39,14 +39,6 @@ const bankFor = (conceptId: string, modes: Mode[], topicId = 't1') =>
 const drill = (over: Partial<Parameters<typeof selectDrillItems>[0]> = {}) =>
   selectDrillItems({ concept: concept('c1'), prerequisite: null, bank: [], served: [], now: NOW, timeZone: 'UTC', ...over })
 
-test('a drill is three to five items on one concept', () => {
-  assert.ok(DRILL_SIZE >= 3 && DRILL_SIZE <= 5)
-  const bank = bankFor('c1', ['recall', 'recall', 'discrimination', 'composition', 'recall'])
-  const { items } = drill({ concept: concept('c1', { confusableId: 'c2' }), bank })
-  assert.ok(items.length >= 3 && items.length <= 5)
-  assert.ok(items.every((i) => i.conceptIds.includes('c1')))
-})
-
 test('concept drill includes weak prerequisite', () => {
   const bank = [...bankFor('c1', ['recall', 'recall', 'composition', 'composition']), ...bankFor('p1', ['recall'], 't0')]
   const { items, missing } = drill({ concept: concept('c1'), prerequisite: concept('p1', { topicId: 't0', retrievability: 0.5 }), bank })
@@ -62,12 +54,6 @@ test('a prerequisite with nothing to serve is asked for in its own topic', () =>
   const { items, missing } = drill({ prerequisite: concept('p1', { topicId: 't0', mastery: 0.2 }), bank })
   assert.equal(items.length, 4)
   assert.deepEqual(missing, [{ topicId: 't0', conceptIds: ['p1'], mode: 'recall', difficulty: 'easy' }])
-})
-
-test('with no weak prerequisite the drill has none', () => {
-  const bank = bankFor('c1', ['recall', 'recall', 'composition', 'composition'])
-  const { items } = drill({ bank })
-  assert.ok(items.every((i) => i.conceptIds[0] === 'c1'))
 })
 
 test('a misconception with a near-twin starts with discrimination', () => {

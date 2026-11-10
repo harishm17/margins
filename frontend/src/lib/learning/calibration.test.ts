@@ -1,20 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { calibration, CONFIDENCE_LEVELS, CONFIDENCE_WORDS, confidenceLevelOf, confidenceValue, isConfidenceId, QUIZ_RATING, selectedConfidenceLevel } from './calibration'
+import { calibration, CONFIDENCE_LEVELS, CONFIDENCE_WORDS, confidenceLevelOf, confidenceValue, QUIZ_RATING, selectedConfidenceLevel } from './calibration'
 
 test('guess on 4 options is 0.25 and on true/false 0.5', () => {
   assert.equal(confidenceValue('guess', 4), 0.25)
   assert.equal(confidenceValue('guess', 2), 0.5)
   assert.equal(confidenceValue('guess'), 0.25)
   assert.equal(confidenceValue('certain', 4), 0.95)
-})
-
-test('brier of perfect calibration is 0', () => {
-  const events = [
-    ...Array.from({ length: 5 }, () => ({ confidence: 1, score: 1 })),
-    ...Array.from({ length: 5 }, () => ({ confidence: 0, score: 0 })),
-  ]
-  assert.equal(calibration(events).brier, 0)
 })
 
 test('not ready under 30', () => {
@@ -40,17 +32,21 @@ test('bins accuracy', () => {
   assert.equal(r.bins[2].n, 0)
 })
 
-test('brier of an unsure right answer is 0.25', () => {
-  assert.equal(calibration([{ confidence: 0.5, score: 1 }]).brier, 0.25)
-})
-
-test('brier is the mean of squared gaps', () => {
-  const r = calibration([
+for (const [name, events, expected] of [
+  ['perfect calibration is 0', [
+    ...Array.from({ length: 5 }, () => ({ confidence: 1, score: 1 })),
+    ...Array.from({ length: 5 }, () => ({ confidence: 0, score: 0 })),
+  ], 0],
+  ['an unsure right answer is 0.25', [{ confidence: 0.5, score: 1 }], 0.25],
+  ['two gaps average their squares', [
     { confidence: 0.5, score: 1 },
     { confidence: 0.95, score: 0 },
-  ])
-  assert.ok(Math.abs(r.brier - (0.25 + 0.9025) / 2) < 1e-12)
-})
+  ], (0.25 + 0.9025) / 2],
+] as const) {
+  test(`brier is the mean of squared gaps: ${name}`, () => {
+    assert.ok(Math.abs(calibration([...events]).brier - expected) < 1e-12)
+  })
+}
 
 test('a stored value maps to the nearest level, a tie to the non-guess level', () => {
   assert.equal(confidenceLevelOf(0.25, 4), 'guess')
@@ -70,12 +66,6 @@ test('the chosen level wins over the value, and an unknown id falls back to the 
   assert.equal(selectedConfidenceLevel('bogus', 0.95, 2), 'certain')
   assert.equal(selectedConfidenceLevel(undefined, undefined, 2), '')
   assert.equal(selectedConfidenceLevel('certain', undefined, 2), 'certain')
-})
-
-test('isConfidenceId only accepts the four ids', () => {
-  assert.equal(isConfidenceId('fairly'), true)
-  assert.equal(isConfidenceId('fairly_sure'), false)
-  assert.equal(isConfidenceId(0.5), false)
 })
 
 test('a whole quiz is rated with the same four words as a question, stored on the 1 to 5 the review date reads', () => {

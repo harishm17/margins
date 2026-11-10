@@ -477,12 +477,7 @@ test("I don't remember writes level 1 on every card concept", { skip: !process.e
     assert.equal(result.feedback.help?.pointers.length, 2)
     assert.ok(result.feedback.help?.pointers.every((p) => p.href.includes('view=read&focus=')))
   }
-})
-
-test("I don't remember sets recallAt once", { skip: !process.env.DATABASE_URL }, async (t) => {
-  if (!available) return t.skip('no database')
-  const w = await world('rc-idk-recallat')
-  await submit(w, fakeGrader(w, good).grade, { idk: true, answer: '' })
+  // It sets recallAt once.
   const first = await prisma.topicProgress.findUniqueOrThrow({ where: { topicId_userId: { topicId: w.topic.id, userId: w.user.id } } })
   assert.ok(first.recallAt)
   await new Promise((resolve) => setTimeout(resolve, 15))

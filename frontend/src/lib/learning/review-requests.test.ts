@@ -17,6 +17,9 @@ test('one job per topic, each concept in its mode and difficulty', () => {
     { conceptIds: ['a', 'b'], mode: 'recall', difficulty: 'medium' },
     { conceptIds: ['d'], mode: 'recall', difficulty: 'easy' },
   ])
+  // Nothing missing means no requests.
+  assert.equal(requestsByTopic([]).size, 0)
+  assert.equal(requestsByTopic([group('t1', [])]).size, 0)
 })
 
 test('a concept reported twice in one mode is asked for once, easy when one of the reports is the opener', () => {
@@ -25,17 +28,10 @@ test('a concept reported twice in one mode is asked for once, easy when one of t
     { conceptIds: ['a'], mode: 'recall', difficulty: 'easy' },
     { conceptIds: ['b'], mode: 'recall', difficulty: 'medium' },
   ])
-})
-
-test('a concept reported twice at the same level keeps the first, and other modes stay separate requests', () => {
-  const byTopic = requestsByTopic([group('t1', ['a'], 'recall', 'hard'), group('t1', ['a'], 'recall', 'medium'), group('t1', ['a'], 'discrimination', 'hard')])
-  assert.deepEqual(byTopic.get('t1'), [
+  // At the same level the first report is kept, and other modes stay separate requests.
+  const sameLevel = requestsByTopic([group('t1', ['a'], 'recall', 'hard'), group('t1', ['a'], 'recall', 'medium'), group('t1', ['a'], 'discrimination', 'hard')])
+  assert.deepEqual(sameLevel.get('t1'), [
     { conceptIds: ['a'], mode: 'recall', difficulty: 'hard' },
     { conceptIds: ['a'], mode: 'discrimination', difficulty: 'hard' },
   ])
-})
-
-test('nothing missing means no requests', () => {
-  assert.equal(requestsByTopic([]).size, 0)
-  assert.equal(requestsByTopic([group('t1', [])]).size, 0)
 })
