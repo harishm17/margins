@@ -90,7 +90,7 @@ type World = Awaited<ReturnType<typeof world>>
 /** One student turn as the route runs it: store the words, choose the step, run it. */
 async function turn(w: World, utterance: string, history: VoiceMessage[] = [], grade?: Parameters<typeof server.runPreRun>[1]['grade'], steps: import('./tools').StepCache = new Map()) {
   const number = await teach.beginVoiceTurn(w.session.id, utterance)
-  const plan = await server.planPreRunForSession({ sessionId: w.session.id, language: 'en', utterance, history })
+  const plan = await server.planPreRunForSession({ userId: w.session.userId, sessionId: w.session.id, language: 'en', utterance, history })
   const ctx = { sessionId: w.session.id, userId: w.user.id, timeZone: 'UTC', turn: number, steps, grade }
   return { number, plan, steps, ctx, ran: plan ? await server.runPreRun(plan, ctx) : null }
 }
@@ -236,7 +236,7 @@ dbTest('a graded teach-back utterance makes one model call (it made two), and a 
     const number = await teach.beginVoiceTurn(w.session.id, utterance)
     const steps: import('./tools').StepCache = new Map()
     let messages: VoiceMessage[] = [{ role: 'user', content: utterance }]
-    const plan = await server.planPreRunForSession({ sessionId: w.session.id, language: 'en', utterance, history: [] })
+    const plan = await server.planPreRunForSession({ userId: w.session.userId, sessionId: w.session.id, language: 'en', utterance, history: [] })
     const ctx = { sessionId: w.session.id, userId: w.user.id, timeZone: 'UTC', turn: number, steps, grade: g.grade }
     if (plan) messages = (await server.startWithPreRun(plan, ctx, messages, (event) => emitted.push(event))).messages
     const outcome = await runTurn(

@@ -25,8 +25,8 @@ export function listenFor(style: CoachStyle, state: CoachState, ended: boolean):
 }
 
 /** The wait for the session as it is now, after the turn's tools have written their state. */
-export async function listenForSession(sessionId: string): Promise<ListenFor> {
-  const session = await prisma.voiceDrillSession.findUnique({ where: { id: sessionId }, select: { style: true, coachState: true, endedAt: true } })
+export async function listenForSession(userId: string, sessionId: string): Promise<ListenFor> {
+  const session = await prisma.voiceDrillSession.findFirst({ where: { id: sessionId, userId }, select: { style: true, coachState: true, endedAt: true } })
   if (!session) return 'short_answer'
   return listenFor(coachStyleOf(session.style), readCoachState(session.coachState), session.endedAt !== null)
 }

@@ -3,6 +3,7 @@ import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
+import { ownedProject, ownedTopic } from '@/server/owned'
 import { VoiceQuestion } from '@/lib/voice/concept'
 import { courseTermsForTopics, sessionTopicIds } from '@/lib/voice/course-terms'
 import { normalizeFocus } from '@/lib/voice/coach-prompt'
@@ -55,48 +56,33 @@ async function handlePOST(request: NextRequest) {
       return apiInvalidInput('topicId is required for topic drills')
     }
 
-    // Verify project ownership
-    const project = await prisma.project.findFirst({
-      where: {
-        id: payload.projectId,
-        userId: session.user.id,
-      },
-    })
-
-    if (!project) {
+    if (!(await ownedProject(session.user.id, payload.projectId))) {
       return apiNotFound('Project not found')
     }
 
-    if (payload.mode === 'topic_drill' && payload.topicId) {
-      const topic = await prisma.topic.findFirst({
-        where: {
-          id: payload.topicId,
-          projectId: payload.projectId,
-          project: { userId: session.user.id },
-        },
-        select: { id: true },
-      })
-
-      if (!topic) {
-        return apiNotFound('Topic not found')
-      }
+    // A sprint is over the whole course: it belongs to no topic, whatever the body says. A topic drill's topic is the
+    // student's own and in this course.
+    const topic = payload.mode === 'sprint' || !payload.topicId ? null : await ownedTopic(session.user.id, payload.topicId, payload.projectId)
+    if (payload.mode !== 'sprint' && payload.topicId && !topic) {
+      return apiNotFound('Topic not found')
     }
+    const topicId = topic?.id ?? null
 
     const readsClaims = payload.style === 'teach_back' || payload.style === 'guided_reading'
-    if (readsClaims && (payload.mode === 'sprint' || !payload.topicId)) {
+    if (readsClaims && (payload.mode === 'sprint' || !topicId)) {
       return apiInvalidInput('Teach it back and guided reading work on one topic at a time')
     }
     // The idea must be an active one of this topic with claims; anything else is ignored (the coach picks the weakest).
     const startConcept =
-      payload.style === 'teach_back' && payload.conceptId && payload.topicId
+      payload.style === 'teach_back' && payload.conceptId && topicId
         ? await prisma.concept.findFirst({
-            where: { id: payload.conceptId, topicId: payload.topicId, status: 'active', claims: { some: {} } },
+            where: { id: payload.conceptId, topicId, status: 'active', claims: { some: {} } },
             select: { id: true },
           })
         : null
     // Both styles are grounded in the topic's claims from the student's own pages.
-    if (readsClaims && payload.topicId) {
-      const claims = await prisma.conceptClaim.count({ where: { concept: { topicId: payload.topicId, status: 'active' } } })
+    if (readsClaims && topicId) {
+      const claims = await prisma.conceptClaim.count({ where: { concept: { topicId, status: 'active' } } })
       if (claims === 0) {
         return NextResponse.json(
           { error: { code: 'CONFLICT', message: 'This topic has no claims from your pages yet' }, requiresClaims: true },
@@ -109,8 +95,8 @@ async function handlePOST(request: NextRequest) {
 
     if (readsClaims) {
       // These styles read the topic's claims through their tools; there is no question bank.
-    } else if (payload.mode === 'topic_drill' && payload.topicId) {
-      questionSet = await buildTopicQuestionSet(payload.topicId, session.user.id)
+    } else if (payload.mode === 'topic_drill' && topicId) {
+      questionSet = await buildTopicQuestionSet(topicId, session.user.id)
     } else {
       questionSet = await buildSprintQuestionSet(payload.projectId, session.user.id)
     }
@@ -127,7 +113,7 @@ async function handlePOST(request: NextRequest) {
       data: {
         userId: session.user.id,
         projectId: payload.projectId,
-        topicId: payload.topicId ?? null,
+        topicId,
         mode: payload.mode,
         language: payload.language || 'en',
         voice: payload.voice || 'marin',
@@ -141,7 +127,7 @@ async function handlePOST(request: NextRequest) {
     })
 
     // The topic's key terms, for the coach prompt (the turn route builds the same list) and for on-device recognition (spec 19.5).
-    const courseTerms = await courseTermsForTopics(sessionTopicIds({ topicId: payload.topicId ?? null, questionSet }))
+    const courseTerms = await courseTermsForTopics(session.user.id, sessionTopicIds({ topicId, questionSet }))
 
     return NextResponse.json({
       sessionId: voiceSession.id,

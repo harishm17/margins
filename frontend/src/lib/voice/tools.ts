@@ -9,6 +9,7 @@ import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
  */
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
+import { ownedTopic } from '@/server/owned'
 import { createRateLimiter } from '@/lib/api/rate-limit'
 import { voiceTurnsPerMinute } from './turn-limit'
 import { gradeAnswers, GradingRejectedError, GradingUnavailableError } from '@/lib/ai-service/grading'
@@ -308,7 +309,7 @@ async function runVoiceTool(
       sessionId,
       userId,
       projectId: session.projectId,
-      topicId: session.topicId,
+      topic: session.topicId ? await ownedTopic(userId, session.topicId, session.projectId) : null,
       timeZone: ctx.timeZone ?? 'UTC',
       grade: ctx.grade,
       allowGrading: () => answerLimiter.check(userId).ok,
@@ -387,9 +388,14 @@ async function runVoiceTool(
     const userAnswer = heardSince(quizState, quizState.quiz.askedTurn)
     if (!userAnswer) return finish({ error: NOBODY_SPOKE })
 
-    const inferredTopicId =
+    // The topic this answer is written to (attempt, signal, review schedule, evidence) is the question's own topic, or
+    // the session's, and only when it is the student's and in this course: a question set is stored data, never trusted
+    // for a write (SEC-L1).
+    const claimedTopicId =
       (typeof question.topic_id === 'string' && question.topic_id.length > 0 ? question.topic_id : null) ||
       session.topicId
+    const questionTopic = claimedTopicId ? await ownedTopic(userId, claimedTopicId, session.projectId) : null
+    const inferredTopicId = questionTopic?.id ?? null
 
     // "I don't know" has one detector (lib/learning/dont-know.ts), applied to what the student said as well as to the coach's flag.
     const dontKnow = parsed.data.idk === true || isDontKnow(userAnswer)

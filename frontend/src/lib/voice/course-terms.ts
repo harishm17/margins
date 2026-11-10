@@ -89,11 +89,14 @@ export function selectCourseTerms(input: { conceptNames: string[]; claimTexts: s
   return terms
 }
 
-/** The terms of the active concepts of these topics, in the order of the course. */
-export async function courseTermsForTopics(topicIds: string[]): Promise<string[]> {
+/**
+ * The terms of the active concepts of these topics, in the order of the course. Only the student's own topics count: the
+ * ids come from a stored session and its question set, so the query filters through the course's owner (SEC-L1).
+ */
+export async function courseTermsForTopics(userId: string, topicIds: string[]): Promise<string[]> {
   if (topicIds.length === 0) return []
   const concepts = await prisma.concept.findMany({
-    where: { topicId: { in: topicIds }, status: 'active' },
+    where: { topicId: { in: topicIds }, status: 'active', project: { userId } },
     orderBy: [{ topic: { orderIndex: 'asc' } }, { orderIndex: 'asc' }],
     select: { name: true, claims: { orderBy: { orderIndex: 'asc' }, select: { text: true } } },
   })

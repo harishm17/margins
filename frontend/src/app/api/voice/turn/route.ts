@@ -87,8 +87,8 @@ function voiceFailure(code: string, extraDetails: Record<string, unknown> = {}, 
 }
 
 /** What the coach needs to know about the session's topic or sprint, read fresh each turn. */
-async function loadPromptContext(session: { mode: string; topicId: string | null; questionSet: Prisma.JsonValue }) {
-  const courseTerms = await courseTermsForTopics(sessionTopicIds(session))
+async function loadPromptContext(userId: string, session: { mode: string; topicId: string | null; questionSet: Prisma.JsonValue }) {
+  const courseTerms = await courseTermsForTopics(userId, sessionTopicIds(session))
   if (session.mode === 'sprint') {
     const ids = new Set<string>()
     if (Array.isArray(session.questionSet)) {
@@ -98,7 +98,7 @@ async function loadPromptContext(session: { mode: string; topicId: string | null
     }
     const topics = ids.size
       ? await prisma.topic.findMany({
-          where: { id: { in: [...ids] } },
+          where: { id: { in: [...ids] }, project: { userId } },
           select: { name: true },
           orderBy: { orderIndex: 'asc' },
         })
@@ -106,8 +106,8 @@ async function loadPromptContext(session: { mode: string; topicId: string | null
     return { topicName: null, topicDescription: null, notes: null, sprintTopics: topics.map((topic) => topic.name), courseTerms }
   }
   const topic = session.topicId
-    ? await prisma.topic.findUnique({
-        where: { id: session.topicId },
+    ? await prisma.topic.findFirst({
+        where: { id: session.topicId, project: { userId } },
         select: {
           name: true,
           description: true,
@@ -159,9 +159,9 @@ async function handlePost(request: NextRequest) {
   if (session.status !== 'active' || session.endedAt) return voiceFailure('SESSION_ENDED')
 
   // One turn at a time per session, across server processes (a conditional update on the session row).
-  if (!(await claimVoiceTurn(session.id))) return voiceFailure('TURN_IN_PROGRESS')
+  if (!(await claimVoiceTurn(userId, session.id))) return voiceFailure('TURN_IN_PROGRESS')
   let claimedHere = false
-  const releaseTurn = () => releaseVoiceTurn(session.id)
+  const releaseTurn = () => releaseVoiceTurn(userId, session.id)
   // Aborted when the browser leaves: the model call stops instead of finishing an answer nobody will hear.
   const turnAbort = new AbortController()
   // A failed first turn must not leave the session counted as connected.
@@ -190,7 +190,7 @@ async function handlePost(request: NextRequest) {
 
     // A session from before teach-back and guided reading carries on in the style it began with.
     const style: CoachStyle = coachStyleOf(session.style)
-    const context = await loadPromptContext(session)
+    const context = await loadPromptContext(userId, session)
     const system = buildCoachSystemPrompt({
       mode: session.mode === 'sprint' ? 'sprint' : 'topic_drill',
       style,
@@ -213,7 +213,7 @@ async function handlePost(request: NextRequest) {
     // The step the session is waiting for runs before the model speaks (spec 19.1), in the stream below so the browser can be
     // told at once; the model is then called once, with the result in the student's message.
     const steps: StepCache = new Map()
-    const preRun = await planPreRunForSession({ sessionId: session.id, language: session.language, utterance, history })
+    const preRun = await planPreRunForSession({ userId, sessionId: session.id, language: session.language, utterance, history })
 
     const modelRequest = (messages: VoiceMessage[]) =>
       requestModelTurn({ userId, projectId: session.projectId, sessionId: session.id, system, messages, tools }, turnAbort.signal)
@@ -329,7 +329,7 @@ async function handlePost(request: NextRequest) {
             if (outcome.ok) {
               if (saved) {
                 // What the session waits for next, so the browser can set its end-of-turn wait.
-                send({ type: 'listen', for: await listenForSession(session.id).catch(() => 'short_answer' as const) })
+                send({ type: 'listen', for: await listenForSession(userId, session.id).catch(() => 'short_answer' as const) })
                 send({ type: 'done', text: outcome.text })
               } else sendError('VOICE_NOT_SAVED')
             }

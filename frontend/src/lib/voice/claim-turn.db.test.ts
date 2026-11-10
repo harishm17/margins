@@ -28,14 +28,14 @@ test('a second turn is refused until the first ends, a dead claim expires, and t
   const project = await prisma.project.create({ data: { userId: user.id, name: 'P' } })
   const session = await prisma.voiceDrillSession.create({ data: { userId: user.id, projectId: project.id, style: 'teach_back', questionSet: [] } })
 
-  const results = await Promise.all([claim.claimVoiceTurn(session.id), claim.claimVoiceTurn(session.id)])
+  const results = await Promise.all([claim.claimVoiceTurn(session.userId, session.id), claim.claimVoiceTurn(session.userId, session.id)])
   assert.deepEqual(results.filter(Boolean).length, 1, 'two simultaneous turns: one wins')
 
-  await claim.releaseVoiceTurn(session.id)
-  assert.equal(await claim.claimVoiceTurn(session.id), true)
+  await claim.releaseVoiceTurn(session.userId, session.id)
+  assert.equal(await claim.claimVoiceTurn(session.userId, session.id), true)
 
   // A server that died mid-turn left its claim behind: it stops counting after VOICE_TURN_MAX_MS.
   const later = new Date(Date.now() + claim.VOICE_TURN_MAX_MS + 1000)
-  assert.equal(await claim.claimVoiceTurn(session.id), false)
-  assert.equal(await claim.claimVoiceTurn(session.id, later), true)
+  assert.equal(await claim.claimVoiceTurn(session.userId, session.id), false)
+  assert.equal(await claim.claimVoiceTurn(session.userId, session.id, later), true)
 })

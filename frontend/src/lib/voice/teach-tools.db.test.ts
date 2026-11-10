@@ -9,6 +9,7 @@ import type { RecallClaimVerdict, RecallGradeAnswer, RecallGradeRequest } from '
 let prisma: typeof import('@/lib/db/prisma').prisma
 let tools: typeof import('./tools')
 let teachModule: typeof import('./teach-tools')
+let ownedTopic: typeof import('@/server/owned').ownedTopic
 let available = false
 const userIds: string[] = []
 
@@ -16,6 +17,7 @@ before(async () => {
   ;({ prisma } = await import('@/lib/db/prisma'))
   tools = await import('./tools')
   teachModule = await import('./teach-tools')
+  ;({ ownedTopic } = await import('@/server/owned'))
   available = await prisma.$queryRaw`SELECT coach_state FROM voice_drill_sessions LIMIT 1`.then(
     () => true,
     () => false
@@ -224,7 +226,7 @@ dbTest('the say-back grade is a second grader call and counts against the per-us
     sessionId: w.session.id,
     userId: w.user.id,
     projectId: w.project.id,
-    topicId: w.topic.id,
+    topic: (await ownedTopic(w.user.id, w.topic.id))!,
     timeZone: 'UTC',
     grade: async (request: RecallGradeRequest) => {
       asked.push(request)
