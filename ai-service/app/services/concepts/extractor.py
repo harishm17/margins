@@ -18,6 +18,7 @@ from app.services.llm.factory import LLMFactory
 from app.prompt_revision import prompts_v2
 from app.services.llm import untrusted
 from app.services.llm.schemas import EDGE_TYPE_DEFINITIONS, ConceptExtraction, ConceptExtractionV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +230,7 @@ async def extract_concepts(topic_id: str) -> ExtractionSummary:
     raw = await LLMFactory.get_provider().generate_structured(
         extraction_messages(topic, chunks, context.course_map, objectives, prior),
         ConceptExtractionV2 if v2 else ConceptExtraction,
-        max_tokens=16000,
+        max_tokens=output_cap("concept_extraction", 16000),
         purpose="extract_concepts",
     )
     # More than the maximum: keep the first ones. Their claims and edges follow from validation.

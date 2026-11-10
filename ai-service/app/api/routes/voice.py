@@ -38,6 +38,7 @@ from app.services.llm.base import (
 from app.services.llm import untrusted
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import DrillQuestionSet, DrillQuestionSetV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -341,7 +342,7 @@ For each, give 2-4 key points a listener can check, a short sample answer, and t
         work = LLMFactory.get_provider().generate_structured(
             messages,
             schema,
-            max_tokens=8000,
+            max_tokens=output_cap("voice_drill", 8000),
             purpose="voice_drill",
         )
         # A topic's set is kept below and reused by the next session, so it is finished even when the web app has given

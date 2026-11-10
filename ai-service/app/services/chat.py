@@ -57,6 +57,7 @@ from app.services.llm.schemas import CheckQuestion, RouteDecision
 from app.services.llm.usage import estimate_cost_usd, track_llm_usage
 from app.services.tutor.leak import judge_leak, reuses_problem_numbers
 from app.services.tutor.practice import ASK_WHAT_IS_UNCLEAR
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,8 @@ Set has_attempt to true when the conversation already holds the student's own at
 
 # A router that is slow is as good as a router that failed: the reply is the lookup answer, but it is leak-judged.
 ROUTER_TIMEOUT_S = 8.0
-# Room for the model's private reasoning as well as the few fields of the decision: at 300 the live eval saw 8 of 113 cut off.
+# Room for thinking as well as the few fields of the decision (thinking shares the cap): at 300 the live eval saw 8 of 113
+# cut off. The v2 cap is in llm/caps.py.
 ROUTER_MAX_TOKENS = 1000
 ROUTER_TURNS = 6
 ROUTER_TURN_CHARS = 600
@@ -473,7 +475,7 @@ async def _route_turn(question: str, history: Sequence[LLMMessage], names: List[
             LLMFactory.get_provider().generate_structured(
                 [LLMMessage(role="system", content=ROUTER_SYSTEM_PROMPT), LLMMessage(role="user", content="\n\n".join(parts))],
                 RouteDecision,
-                max_tokens=ROUTER_MAX_TOKENS,
+                max_tokens=output_cap("ask_router", ROUTER_MAX_TOKENS),
                 purpose="router",
             ),
             ROUTER_TIMEOUT_S,

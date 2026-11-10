@@ -25,6 +25,7 @@ from app.services.llm.base import LLMMessage, LLMOutputError
 from app.services.llm import untrusted
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import GapExplanationSet, GapExplanationSetV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,7 @@ async def generate_gap_explainer(attempt_id: str, user_id: str) -> Dict[str, Any
     set_ = await LLMFactory.get_provider().generate_structured(
         _messages(attempt["topic_name"], gaps, chunks, index_of),
         gap_schema(),
-        max_tokens=GAP_MAX_TOKENS,
+        max_tokens=output_cap("gap_explainer", GAP_MAX_TOKENS),
         purpose="gap_explainer",
     )
 

@@ -87,6 +87,34 @@ class TestRequestShape:
         assert params["betas"] == ["server-side-fallback-2026-07-01"]
         assert "thinking" not in params and "temperature" not in params
 
+    @pytest.mark.asyncio
+    async def test_a_call_capped_above_the_stream_threshold_is_streamed(self):
+        # Prompt audit R7: a non-streamed request with a large cap can outlast the HTTP timeout.
+        provider, create = _provider(_response('{"ok": true, "reason": "fine"}'))
+        streamed = []
+
+        class Stream:
+            request_id = "req_1"
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get_final_message(self):
+                return _response('{"ok": true, "reason": "long"}')
+
+        def stream(**params):
+            streamed.append(params)
+            return Stream()
+
+        provider.client.beta.messages.stream = stream
+        assert (await provider.generate_structured(MESSAGES, Verdict, max_tokens=16000, purpose="topic_quiz")).reason == "fine"
+        assert (await provider.generate_structured(MESSAGES, Verdict, max_tokens=24000, purpose="topic_quiz")).reason == "long"
+        assert create.call_count == 1
+        assert [p["max_tokens"] for p in streamed] == [24000]
+
 class TestResponses:
     @pytest.mark.asyncio
     async def test_schema_mismatch_is_an_output_error(self):

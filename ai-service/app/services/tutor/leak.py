@@ -12,6 +12,7 @@ from typing import List, Optional, Sequence, Set
 
 from app.config import settings
 from app.prompt_revision import prompts_v2
+from app.services.llm.caps import OUTPUT_CAPS
 from app.services.llm import untrusted
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import LLMFactory
@@ -49,7 +50,8 @@ WORD_FORM_LEAK = "word_form"
 _NUMERIC_START = re.compile(r"\s*[-−]?\.?\d")
 _SPACE = re.compile(r"\s+")
 _TIGHT = 1e-9
-# Room for the judge's private reasoning as well as its verdict: at 300 the live Ask eval saw a judge cut off.
+# Room for the judge's thinking as well as its verdict (thinking shares the cap): at 300 the live Ask eval saw a judge
+# cut off. The v2 cap is OUTPUT_CAPS["leak_judge"] in llm/caps.py.
 JUDGE_MAX_TOKENS = 1000
 
 
@@ -302,7 +304,8 @@ async def judge_leak(
     own_note = OWN_ANSWER_NOTE_NO_KEY if no_key else OWN_ANSWER_NOTE
     # `v2` is the caller's prompt area (tutor by default; Ask passes its own). Under v2 the one untrusted-text rule
     # (llm/untrusted.py) replaces the `&lt;` escape, which turned `x<3` in an answer into text the judge could not match.
-    if prompts_v2("tutor") if v2 is None else v2:
+    v2 = prompts_v2("tutor") if v2 is None else v2
+    if v2:
         def block(name: str, text: str) -> str:
             return untrusted.tag(name, text) + "\n\n"
     else:
@@ -326,7 +329,7 @@ async def judge_leak(
     return await LLMFactory.get_provider().generate_structured(
         [LLMMessage(role="system", content=JUDGE_SYSTEM_PROMPT), LLMMessage(role="user", content=user)],
         LeakVerdict,
-        max_tokens=JUDGE_MAX_TOKENS,
+        max_tokens=OUTPUT_CAPS["leak_judge"].tokens if v2 else JUDGE_MAX_TOKENS,
         purpose="router",
     )
 

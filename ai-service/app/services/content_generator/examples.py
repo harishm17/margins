@@ -21,6 +21,7 @@ from app.services.content_generator.refill import refill_figures, refill_wanted
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
 from app.prompt_revision import prompts_v2
+from app.services.llm.caps import output_cap
 from app.services.llm.schemas import (
     InteractiveExampleSet,
     InteractiveExampleSetV2,
@@ -141,7 +142,9 @@ Difficulty: {difficulty_level}. {guidance}
 
         messages = content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map)
         schema = SolvedExampleSetV2 if v2 else SolvedExampleSet
-        result = await self.llm.generate_structured(messages, schema, max_tokens=16000, purpose="solved_examples")
+        result = await self.llm.generate_structured(
+            messages, schema, max_tokens=output_cap("solved_examples", 16000), purpose="solved_examples"
+        )
         examples = [stored for example in result.examples if (stored := example.stored()) is not None]
         if refill_wanted(len(examples), 1):
             examples = await self._refill(messages, schema, "solved_examples", examples, count, lambda e: e.stored())
@@ -155,7 +158,9 @@ Difficulty: {difficulty_level}. {guidance}
     async def _refill(self, messages, schema, purpose, examples, count, store) -> List[Dict]:
         """Finding 102: the first answer left nothing usable. Ask once more, with the same instructions, and keep what
         passes the same checks (the model call runs in the job's billing scope like the first)."""
-        result = await self.llm.generate_structured(messages, schema, max_tokens=16000, purpose=purpose)
+        result = await self.llm.generate_structured(
+            messages, schema, max_tokens=output_cap(purpose, 16000), purpose=purpose
+        )
         more = [stored for example in result.examples if (stored := store(example)) is not None]
         if purpose == "interactive_examples":
             more = await _clear_word_form_hints(more)
@@ -199,7 +204,9 @@ Difficulty: {difficulty_level}. {guidance}
 
         messages = content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map)
         schema = InteractiveExampleSetV2 if v2 else InteractiveExampleSet
-        result = await self.llm.generate_structured(messages, schema, max_tokens=16000, purpose="interactive_examples")
+        result = await self.llm.generate_structured(
+            messages, schema, max_tokens=output_cap("interactive_examples", 16000), purpose="interactive_examples"
+        )
         examples = [stored for example in result.examples if (stored := example.stored()) is not None]
         examples = await _clear_word_form_hints(examples)
         if refill_wanted(len(examples), 1):

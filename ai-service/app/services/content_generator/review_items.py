@@ -34,6 +34,7 @@ from app.services.content_generator.support_check import check_support
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import ReviewItemSet, ReviewItemSetV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -296,7 +297,7 @@ async def generate_review_items(topic_id: str, requests: Sequence[Dict[str, Any]
                     cache_excerpts=cache_excerpts or start > 0, course_map=context.course_map,
                 ),
                 review_schema(),
-                max_tokens=16000,
+                max_tokens=output_cap("review_items", 16000),
                 purpose="review_items",
             )
             asked = len(batch) * ITEMS_PER_CONCEPT + SPARE_ITEMS

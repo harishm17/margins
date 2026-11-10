@@ -28,6 +28,7 @@ from app.services.content_generator.support_check import check_support
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import WarmupSet, WarmupSetV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ async def generate_warmup(topic_id: str) -> Dict:
                 course_map=context.course_map,
             ),
             warmup_schema(),
-            max_tokens=8000,
+            max_tokens=output_cap("warmup", 8000),
             purpose="warmup",
         )
         return await check_support([q for q in result.usable() if q["question_type"] in WARMUP_TYPES], chunks)

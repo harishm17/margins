@@ -24,6 +24,7 @@ from app.services.llm import LLMFactory, untrusted
 from app.services.llm.base import LLMMessage
 from app.prompt_revision import prompts_v2
 from app.services.llm.schemas import EXAM_QUESTION_KINDS, ExamStyleProfile, ExamStyleProfileV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -159,14 +160,14 @@ async def extract_style_profile(exam_text: str, filename: str, material_id: str 
     the logs name the material by its id (a filename is the student's text)."""
     llm = LLMFactory.get_provider()
     result = await llm.generate_structured(
-        _messages(exam_text, filename), style_schema(), max_tokens=4000, purpose="exam_style"
+        _messages(exam_text, filename), style_schema(), max_tokens=output_cap("exam_style", 4000), purpose="exam_style"
     )
     bad = copying_stems(result.example_stems, exam_text)
     if bad:
         logger.info("Style profile for material %s: %d stem(s) copy the exam, asking again", material_id, len(bad))
         try:
             retry = await llm.generate_structured(
-                _messages(exam_text, filename, rejected=bad), style_schema(), max_tokens=4000, purpose="exam_style"
+                _messages(exam_text, filename, rejected=bad), style_schema(), max_tokens=output_cap("exam_style", 4000), purpose="exam_style"
             )
             result = retry
         except Exception as exc:  # the first answer is still usable without its stems

@@ -33,6 +33,7 @@ from app.services.llm.base import LLMMessage
 from app.prompt_revision import prompts_v2
 from app.services.llm import untrusted
 from app.services.llm.schemas import CoursePlan, CoursePlanV2, UnitOrder
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -563,7 +564,7 @@ async def _plan_call(messages: List[LLMMessage]) -> CoursePlan:
     llm = LLMFactory.get_provider()
     if prompts_v2("ingest"):
         # The largest plans run to about 50 topics of roughly 250 tokens, and thinking counts toward the cap.
-        return await llm.generate_structured(messages, CoursePlanV2, max_tokens=32000, purpose="extract_topics")
+        return await llm.generate_structured(messages, CoursePlanV2, max_tokens=output_cap("course_plan", 16000), purpose="extract_topics")
     return await llm.generate_structured(messages, CoursePlan, max_tokens=16000, purpose="extract_topics")
 
 
@@ -642,7 +643,7 @@ async def order_units(units: List[ValidUnit], syllabus_text: str) -> List[ValidU
     result = await llm.generate_structured(
         [LLMMessage(role="system", content=ORDER_SYSTEM), LLMMessage(role="user", content=prompt)],
         UnitOrder,
-        max_tokens=2000,
+        max_tokens=output_cap("unit_order", 2000),
         purpose="order_units",
     )
     ordered: List[int] = []

@@ -33,6 +33,7 @@ from app.services.exam_style import copying_stems
 from app.services.llm import LLMFactory, untrusted
 from app.services.llm.base import LLMMessage
 from app.services.llm.schemas import ExamTopicMap, ExamTopicMapV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +213,7 @@ async def classify_questions(
     """One model call (two if a summary copies the exam): the question maps per exam file id.
     Summaries that still copy after the retry are blanked, so none is ever stored."""
     llm = LLMFactory.get_provider()
-    result = await llm.generate_structured(_messages(topics, files), relevance_schema(), max_tokens=8000, purpose="exam_style")
+    result = await llm.generate_structured(_messages(topics, files), relevance_schema(), max_tokens=output_cap("exam_relevance", 8000), purpose="exam_style")
     maps = build_maps(result, topics, files)
     copied = _copied(maps, files)
     if copied:
@@ -220,7 +221,7 @@ async def classify_questions(
         labels = [maps[file_id][position]["label"] or f"#{position + 1}" for file_id, position in copied]
         try:
             retry = await llm.generate_structured(
-                _messages(topics, files, rejected=labels), relevance_schema(), max_tokens=8000, purpose="exam_style"
+                _messages(topics, files, rejected=labels), relevance_schema(), max_tokens=output_cap("exam_relevance", 8000), purpose="exam_style"
             )
             maps = build_maps(retry, topics, files)
         except Exception as exc:  # the first answer is still usable without its summaries

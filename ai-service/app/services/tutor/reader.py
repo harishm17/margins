@@ -34,6 +34,7 @@ from app.services.llm.schemas import (
 )
 from app.services.tutor.leak import blocks_alone, judge_leak, string_leak
 from app.services.tutor.practice import JudgeUnavailable, _sentences, limit_reply
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -405,7 +406,7 @@ async def _check_reply(req: ReaderTutorRequest) -> ReaderCheckReply:
         out = await provider.generate_structured(
             build_messages(req, reason),
             ReaderCheckReplyV2 if prompts_v2("tutor") else ReaderCheckReply,
-            max_tokens=READER_MAX_TOKENS,
+            max_tokens=output_cap("reader_tutor", READER_MAX_TOKENS),
             purpose="tutor",
         )
         out = as_v1_reply(out, ReaderCheckReply)  # the v2 class has no analysis
@@ -440,7 +441,7 @@ async def reader_reply(req: ReaderTutorRequest) -> Union[ReaderTutorReply, Reade
         out = await provider.generate_structured(
             build_messages(req, reason),
             ReaderTutorReplyV2 if prompts_v2("tutor") else ReaderTutorReply,
-            max_tokens=READER_MAX_TOKENS,
+            max_tokens=output_cap("reader_tutor", READER_MAX_TOKENS),
             purpose="tutor",
         )
         out = as_v1_reply(out, ReaderTutorReply)  # the v2 class has no analysis

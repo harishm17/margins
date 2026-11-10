@@ -27,6 +27,7 @@ from app.prompt_revision import prompts_v2
 from app.services.llm.schemas import ClaimVerdict, RecallClaim, RecallGradeRequest, RecallGradeResult, RecallGradeResultV2
 from app.services.tutor.leak import blocks_alone, string_leak
 from app.services.tutor.practice import limit_reply
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +258,7 @@ async def grade_recall(req: RecallGradeRequest) -> RecallGradeResult:
         logger.info("event=recall_abstained session=%s reason=unreadable", req.session_id)
         return _abstain(None, 0.0)
     out = await LLMFactory.get_provider().generate_structured(
-        build_messages(req), RecallGradeResultV2 if prompts_v2("tutor") else RecallGradeResult, max_tokens=RECALL_MAX_TOKENS, purpose="recall_grading"
+        build_messages(req), RecallGradeResultV2 if prompts_v2("tutor") else RecallGradeResult, max_tokens=output_cap("recall_grader", RECALL_MAX_TOKENS), purpose="recall_grading"
     )
     confidence = min(1.0, max(0.0, out.confidence))
     if confidence < MIN_CONFIDENCE:

@@ -16,6 +16,7 @@ from app.services.llm.base import LLMMessage, LLMUnavailableError
 from app.services.llm import untrusted
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import SupportReport
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,7 @@ async def check_support(items: List[Dict[str, Any]], chunks: List[Dict[str, Any]
         return [], 0
     cited = [_cited(item, len(chunks)) for item in items]
     report = await LLMFactory.get_provider().generate_structured(
-        _messages(items, cited, chunks), SupportReport, max_tokens=8000, purpose="router"
+        _messages(items, cited, chunks), SupportReport, max_tokens=output_cap("support_check", 8000), purpose="router"
     )
     verdicts = {verdict.id: verdict for verdict in report.items}
     if len(report.items) != len(items) or set(verdicts) != set(range(1, len(items) + 1)):

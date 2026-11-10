@@ -28,6 +28,7 @@ from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import QuestionSet, QuestionSetV2
 from app.prompt_revision import prompts_v2
+from app.services.llm.caps import output_cap
 
 
 logger = logging.getLogger(__name__)
@@ -286,7 +287,7 @@ Use only these question types, spread across them: {types_str}.
             result = await self.llm.generate_structured(
                 content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map),
                 question_set_schema(),
-                max_tokens=16000,
+                max_tokens=output_cap("quiz", 16000),
                 purpose="topic_quiz",
             )
             usable = [q for q in result.usable() if q["question_type"] in allowed][:asked]

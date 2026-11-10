@@ -34,6 +34,7 @@ from app.services.llm.base import (
     TurnToolUse,
 )
 from app.prompt_revision import prompts_v2
+from app.services.llm.caps import STREAM_ABOVE
 from app.services.llm.limiter import llm_slot
 from app.services.llm.models import resolve_model
 from app.services.llm.usage import estimate_cost_usd, note_partial_usage, record_usage
@@ -347,7 +348,14 @@ class AnthropicProvider(LLMProvider):
 
         try:
             async with llm_slot():
-                response = await self.client.beta.messages.create(**params)
+                if max_tokens > STREAM_ABOVE:
+                    # A non-streamed request this long can outlast the HTTP timeout (only v2 caps are this high).
+                    async with self.client.beta.messages.stream(**params) as stream:
+                        response = await stream.get_final_message()
+                    request_id = getattr(stream, "request_id", None)
+                else:
+                    response = await self.client.beta.messages.create(**params)
+                    request_id = getattr(response, "_request_id", None)
         except anthropic.APIError as exc:
             raise _translate_api_error(exc) from exc
 
@@ -362,16 +370,19 @@ class AnthropicProvider(LLMProvider):
         record_usage(usage)
         cost = estimate_cost_usd(usage)
         logger.info(
-            "llm call purpose=%s model=%s stop=%s in=%s out=%s cache_read=%s cache_write=%s cost_usd=%s request_id=%s",
+            "llm call purpose=%s model=%s stop=%s in=%s out=%s cap=%s share=%.2f cache_read=%s cache_write=%s cost_usd=%s "
+            "request_id=%s",
             purpose or "-",
             usage.model,
             response.stop_reason,
             usage.input_tokens,
             usage.output_tokens,
+            max_tokens,
+            usage.output_tokens / max_tokens,  # the share of the cap used: near 1.0 means the cap is too tight
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
             _cost_text(cost),
-            getattr(response, "_request_id", None),
+            request_id,
         )
 
         stop_reason = response.stop_reason or ""
@@ -510,16 +521,17 @@ class AnthropicProvider(LLMProvider):
         record_usage(usage)
         cost = estimate_cost_usd(usage)
         logger.info(
-            "llm stream purpose=%s model=%s stop=%s in=%s out=%s cache_read=%s cache_write=%s "
-            "max_tokens=%s excerpts=%s citations=%s cost_usd=%s request_id=%s",
+            "llm stream purpose=%s model=%s stop=%s in=%s out=%s cap=%s share=%.2f cache_read=%s cache_write=%s "
+            "excerpts=%s citations=%s cost_usd=%s request_id=%s",
             purpose or "-",
             usage.model,
             final.stop_reason,
             usage.input_tokens,
             usage.output_tokens,
+            max_tokens,
+            usage.output_tokens / max_tokens,
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
-            max_tokens,
             len(excerpts),
             len(citations),
             _cost_text(cost),
@@ -605,13 +617,15 @@ class AnthropicProvider(LLMProvider):
         record_usage(usage)
         cost = estimate_cost_usd(usage)
         logger.info(
-            "llm turn purpose=%s model=%s stop=%s in=%s out=%s cache_read=%s cache_write=%s "
+            "llm turn purpose=%s model=%s stop=%s in=%s out=%s cap=%s share=%.2f cache_read=%s cache_write=%s "
             "tools=%s cost_usd=%s request_id=%s",
             purpose or "-",
             usage.model,
             final.stop_reason,
             usage.input_tokens,
             usage.output_tokens,
+            max_tokens,
+            usage.output_tokens / max_tokens,
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
             len(tools),

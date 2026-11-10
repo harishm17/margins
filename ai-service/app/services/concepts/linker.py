@@ -15,6 +15,7 @@ from app.prompt_revision import prompts_v2
 from app.services.llm import untrusted
 from app.services.concepts.validate import MIN_LINK_CONFIDENCE
 from app.services.llm.schemas import EDGE_TYPE_DEFINITIONS, ConceptLinks, ConceptLinksV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ async def link_unit(unit_id: str) -> int:
     raw = await LLMFactory.get_provider().generate_structured(
         link_messages(concepts, {row["id"]: row["name"] for row in topics}, quotes, pairs),
         ConceptLinksV2 if prompts_v2("ingest") else ConceptLinks,
-        max_tokens=8000,
+        max_tokens=output_cap("concept_links", 8000),
         purpose="link_concepts",
     )
     existing = await execute_query(

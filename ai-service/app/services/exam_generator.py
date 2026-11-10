@@ -30,6 +30,7 @@ from app.services.exam_style import project_style_profile, style_guidance
 from app.services.llm.base import LLMError, LLMOutputError
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import content_rng
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +253,7 @@ Difficulty: {difficulty}. {guidance}
                 content_messages(topic['name'], topic.get('description') or '', chunks, instructions,
                                  course_map=context.course_map),
                 question_set_schema(),
-                max_tokens=16000,
+                max_tokens=output_cap("exam_questions", 16000),
                 purpose="exam_questions",
             )
 

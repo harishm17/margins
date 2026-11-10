@@ -17,6 +17,7 @@ from app.services.llm import untrusted
 from app.services.llm.factory import LLMFactory
 from app.prompt_revision import prompts_v2
 from app.services.llm.schemas import ShortAnswerChecksV2, ShortAnswerGrade, ShortAnswerGradeV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -385,7 +386,7 @@ If the answer states a specific wrong idea, give it in misconception as the idea
             grade = await self.llm.generate_structured(
                 messages,
                 (ShortAnswerChecksV2 if key_points else ShortAnswerGradeV2) if v2 else ShortAnswerGrade,
-                max_tokens=2000,
+                max_tokens=output_cap("short_answer_grader", 2000),
                 purpose="grade_short_answer",
             )
         except DailyBudgetExceeded:

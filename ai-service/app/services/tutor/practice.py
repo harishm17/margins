@@ -32,6 +32,7 @@ from app.services.llm.schemas import (
     as_v1_reply,
 )
 from app.services.tutor.leak import answers_stated, judge_leak, reuses_problem_numbers, string_leak
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -493,7 +494,7 @@ async def tutor_reply(req: PracticeTutorRequest) -> PracticeTutorReply:
     rejected: List[RejectedDraft] = []
     for attempt in range(1, MAX_ATTEMPTS + 1):
         out = await provider.generate_structured(
-            build_messages(req, rejection), reply_schema(), max_tokens=TUTOR_MAX_TOKENS, purpose="tutor"
+            build_messages(req, rejection), reply_schema(), max_tokens=output_cap("practice_tutor", TUTOR_MAX_TOKENS), purpose="tutor"
         )
         out = as_v1_reply(out, PracticeTutorReply)  # the v2 class has no analysis; the rest of the turn uses one shape
         out.reply = limit_reply(out.reply)

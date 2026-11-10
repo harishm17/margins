@@ -27,6 +27,7 @@ from app.services.document_processor.sandbox import parse_document
 from app.services.document_processor.storage import local_copy
 
 from app.errors import VALIDATION_NOTES, describe_exception
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +205,7 @@ Set kind to what the file is: content (lecture notes, slides, a textbook chapter
         check = await llm.generate_structured(
             [LLMMessage(role="user", content=prompt)],
             schema,
-            max_tokens=2000,
+            max_tokens=output_cap("upload_check", 2000),
             purpose="validate_material",
         )
         is_valid = check.is_valid
