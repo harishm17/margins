@@ -7,11 +7,13 @@ import assert from 'node:assert/strict'
 
 let prisma: typeof import('@/lib/db/prisma').prisma
 let mod: typeof import('./practice-server')
+let ownedTopic: typeof import('@/server/owned').ownedTopic
 let available = false
 
 before(async () => {
   ;({ prisma } = await import('@/lib/db/prisma'))
   mod = await import('./practice-server')
+  ;({ ownedTopic } = await import('@/server/owned'))
   available = await prisma.$queryRaw`SELECT max_rungs FROM practice_progress LIMIT 1`.then(
     () => true,
     () => false
@@ -51,8 +53,8 @@ async function world(stepExtra: Record<string, unknown> = {}) {
 }
 
 const base = { problemIndex: 0, problemTitle: 'P1', hintedSteps: [] as number[], timeZone: 'UTC' }
-const save = (w: Awaited<ReturnType<typeof world>>, input: Record<string, unknown>) =>
-  mod.savePracticeProgress(w.user.id, { id: w.topic.id, projectId: w.project.id }, { ...base, solvedSteps: [], revealedSteps: [], ...input })
+const save = async (w: Awaited<ReturnType<typeof world>>, input: Record<string, unknown>) =>
+  mod.savePracticeProgress(w.user.id, (await ownedTopic(w.user.id, w.topic.id))!, { ...base, solvedSteps: [], revealedSteps: [], ...input })
 
 /** What the server's own record of a step says (the tutor state the check and hint events write). */
 async function seen(

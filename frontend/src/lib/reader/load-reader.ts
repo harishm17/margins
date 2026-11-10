@@ -9,6 +9,7 @@
  * - A topic with no concepts (before v3, or extraction failed) reads the same, with no marks and no checks.
  */
 
+import { ownedTopic, type OwnedTopic } from '@/server/owned'
 import { prisma } from '@/lib/db/prisma'
 import { latestWarmupResults } from '@/lib/learning/warmup-session'
 import { focusChunks } from '@/lib/learning/warmup-bracket'
@@ -119,7 +120,8 @@ const byDocument = (a: ChunkRow, b: ChunkRow) =>
   a.material.uploadedAt.getTime() - b.material.uploadedAt.getTime() || a.materialId.localeCompare(b.materialId) || a.chunkIndex - b.chunkIndex
 
 /** The chunks a topic is read from, in document order. */
-export async function loadTopicChunks(topicId: string): Promise<Chunk[]> {
+export async function loadTopicChunks(topic: OwnedTopic): Promise<Chunk[]> {
+  const topicId = topic.id
   const sources = await prisma.topicSource.findMany({
     where: { topicId, role: 'primary', material: { validationStatus: 'valid', role: { notIn: NON_CONTENT_ROLES } } },
     select: { materialId: true, chunkIndexStart: true, chunkIndexEnd: true },
@@ -151,7 +153,8 @@ export async function loadTopicChunks(topicId: string): Promise<Chunk[]> {
 export type ChunkRef = { id: string; materialId: string; chunkIndex: number }
 
 /** The same chunks as `loadTopicChunks`, in the same order, as ids and positions only. */
-export async function loadTopicChunkRefs(topicId: string): Promise<ChunkRef[]> {
+export async function loadTopicChunkRefs(topic: OwnedTopic): Promise<ChunkRef[]> {
+  const topicId = topic.id
   const sources = await prisma.topicSource.findMany({
     where: { topicId, role: 'primary', material: { validationStatus: 'valid', role: { notIn: NON_CONTENT_ROLES } } },
     select: { materialId: true, chunkIndexStart: true, chunkIndexEnd: true },
@@ -228,7 +231,8 @@ export function mergeOverlap(chunks: Chunk[]): { kept: { chunk: Chunk; text: str
   return { kept, resolve: (chunkId) => (chunkId && merged.has(chunkId) ? (merged.get(chunkId) as string) : chunkId) }
 }
 
-async function loadClaims(topicId: string): Promise<ReaderClaimRef[]> {
+async function loadClaims(topic: OwnedTopic): Promise<ReaderClaimRef[]> {
+  const topicId = topic.id
   const rows = await prisma.conceptClaim.findMany({
     where: { concept: { topicId, status: 'active' } },
     orderBy: [{ concept: { orderIndex: 'asc' } }, { orderIndex: 'asc' }],
@@ -239,7 +243,8 @@ async function loadClaims(topicId: string): Promise<ReaderClaimRef[]> {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
 
-async function loadFocusQuestions(topicId: string): Promise<ReaderFocusQuestion[]> {
+async function loadFocusQuestions(topic: OwnedTopic): Promise<ReaderFocusQuestion[]> {
+  const topicId = topic.id
   const row = await prisma.topicContent.findUnique({ where: { topicId_contentType: { topicId, contentType: 'concept_prompts' } }, select: { contentData: true } })
   const questions: unknown[] = isRecord(row?.contentData) && Array.isArray(row.contentData.focus_questions) ? row.contentData.focus_questions : []
   return questions.filter(isRecord).flatMap((q) =>
@@ -293,12 +298,12 @@ async function gradedChecks(userId: string, claimIds: string[]): Promise<Map<str
  * text to read (the page then falls back to the generated notes).
  */
 export async function loadReader(userId: string, topicId: string): Promise<ReaderData | null> {
-  const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true } })
+  const topic = await ownedTopic(userId, topicId)
   if (!topic) return null
   const [chunks, claims, focusQuestions, notes, warmup] = await Promise.all([
-    loadTopicChunks(topicId),
-    loadClaims(topicId),
-    loadFocusQuestions(topicId),
+    loadTopicChunks(topic),
+    loadClaims(topic),
+    loadFocusQuestions(topic),
     loadMarginNotes(userId, topicId),
     latestWarmupResults(userId, topicId),
   ])
@@ -339,6 +344,6 @@ export async function loadReader(userId: string, topicId: string): Promise<Reade
 }
 
 /** The topic's claims on one chunk, for the tutor and for the evidence an explanation writes. */
-export async function claimsOnChunk(topicId: string, chunkId: string): Promise<ReaderClaimRef[]> {
-  return (await loadClaims(topicId)).filter((claim) => claim.chunkId === chunkId)
+export async function claimsOnChunk(topic: OwnedTopic, chunkId: string): Promise<ReaderClaimRef[]> {
+  return (await loadClaims(topic)).filter((claim) => claim.chunkId === chunkId)
 }

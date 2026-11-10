@@ -5,6 +5,7 @@
  * GET /api/topics/[topicId]/quiz-attempts - Get quiz history
  */
 
+import { ownedTopic } from '@/server/owned'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -73,14 +74,7 @@ async function handlePOST(
     const { topicId } = await params
 
     // Verify topic ownership
-    const topic = await prisma.topic.findFirst({
-      where: {
-        id: topicId,
-        project: {
-          userId: session.user.id,
-        },
-      },
-    })
+    const topic = await ownedTopic(session.user.id, topicId)
 
     if (!topic) {
       return NextResponse.json(
@@ -108,7 +102,7 @@ async function handlePOST(
     }
 
     const quizSetId = validation.data.quizSetId || null
-    const questions = await loadQuizQuestions(topicId, quizSetId)
+    const questions = await loadQuizQuestions(topic, quizSetId)
     if (!questions) {
       return NextResponse.json({ error: 'Quiz not found' }, { status: 404 })
     }
@@ -263,14 +257,7 @@ export async function GET(
       : {}
 
     // Verify topic ownership
-    const topic = await prisma.topic.findFirst({
-      where: {
-        id: topicId,
-        project: {
-          userId: session.user.id,
-        },
-      },
-    })
+    const topic = await ownedTopic(session.user.id, topicId)
 
     if (!topic) {
       return NextResponse.json(
@@ -349,7 +336,7 @@ export async function GET(
 
     // Past attempts are already graded, so the review (answer key included) can be sent.
     // The history list shows the five most recent, so only those carry one.
-    const questionSets = await loadAllQuizQuestionSets(topicId)
+    const questionSets = await loadAllQuizQuestionSets(topic)
     const attemptsWithReview = attempts.map((attempt, index) => {
       const questions = questionSets.get(attempt.quizSetId ?? null)
       return {

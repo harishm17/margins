@@ -8,6 +8,7 @@
  *   writes the evidence of misses left open on an earlier day.
  */
 
+import { ownedTopic } from '@/server/owned'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -43,13 +44,6 @@ const saveSchema = z.object({
   // Progress that was kept in the browser before the server stored it, uploaded once.
   migrated: z.boolean().optional(),
 })
-
-async function ownedTopic(userId: string, topicId: string) {
-  return prisma.topic.findFirst({
-    where: { id: topicId, project: { userId } },
-    select: { id: true, projectId: true },
-  })
-}
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {

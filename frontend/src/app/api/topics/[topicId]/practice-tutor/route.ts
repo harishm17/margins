@@ -9,6 +9,7 @@
  *   the body says why (error.details.code). A miss comes back with what to read next (`help`).
  */
 
+import { ownedTopic } from '@/server/owned'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -55,10 +56,7 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
     const session = await requireAuth()
     const userId = session.user.id
     const { topicId } = await params
-    const topic = await prisma.topic.findFirst({
-      where: { id: topicId, project: { userId } },
-      select: { id: true, projectId: true },
-    })
+    const topic = await ownedTopic(userId, topicId)
     if (!topic) return apiNotFound('Topic not found')
 
     const body = await request.json().catch(() => null)
@@ -112,7 +110,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const session = await requireAuth()
     const { topicId } = await params
-    const topic = await prisma.topic.findFirst({ where: { id: topicId, project: { userId: session.user.id } }, select: { id: true } })
+    const topic = await ownedTopic(session.user.id, topicId)
     if (!topic) return apiNotFound('Topic not found')
     const parsed = stateQuery.safeParse(Object.fromEntries(new URL(request.url).searchParams))
     if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
