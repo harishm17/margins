@@ -483,7 +483,7 @@ class AnthropicProvider(LLMProvider):
         cost = estimate_cost_usd(usage)
         logger.info(
             "llm stream purpose=%s model=%s stop=%s in=%s out=%s cache_read=%s cache_write=%s "
-            "excerpts=%s citations=%s cost_usd=%s request_id=%s",
+            "max_tokens=%s excerpts=%s citations=%s cost_usd=%s request_id=%s",
             purpose or "-",
             usage.model,
             final.stop_reason,
@@ -491,6 +491,7 @@ class AnthropicProvider(LLMProvider):
             usage.output_tokens,
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
+            max_tokens,
             len(excerpts),
             len(citations),
             _cost_text(cost),

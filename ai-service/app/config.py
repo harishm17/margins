@@ -133,6 +133,8 @@ class Settings(BaseSettings):
     PROMPTS_V2: str = ""
 
     CHAT_MAX_TOKENS: int = 4000
+    # Under PROMPTS_V2=ask. Thinking counts toward the cap, and a cut-off shows half an answer and then an error.
+    CHAT_MAX_TOKENS_V2: int = 8000
     # Excerpts offered to the model per question, and the cosine similarity below which a chunk
     # is not offered at all. A question is shorter than a topic query, so its floor is lower
     # than retrieval's MIN_SIMILARITY. When nothing clears it the answer is "not in your
