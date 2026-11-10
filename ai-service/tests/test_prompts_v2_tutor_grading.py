@@ -28,6 +28,7 @@ from app.services.llm.schemas import (
     RecallGradeRequest,
     RecallGradeResult,
     RecallGradeResultV2,
+    ShortAnswerChecksV2,
     ShortAnswerGrade,
     ShortAnswerGradeV2,
     TutorMistake,
@@ -392,16 +393,18 @@ def test_grade_v2_schema_puts_the_checks_before_the_score():
     assert order.index("key_point_checks") < order.index("points_earned") < order.index("feedback")
     assert "agrees with key_point_checks" in str(anthropic.transform_schema(ShortAnswerGradeV2))
     assert list(anthropic.transform_schema(ShortAnswerGrade)["properties"])[0] == "points_earned"
+    # R5: with key points the app computes the score, so the model-facing schema has none.
+    assert "points_earned" not in ShortAnswerChecksV2.model_json_schema()["properties"]
 
 
 @pytest.mark.asyncio
 async def test_grade_v2_prompt(v2_grading):
     _, call = await grade(
-        SimpleNamespace(points_earned=5, feedback="ok", key_point_checks=[]),
+        ShortAnswerChecksV2(feedback="ok", key_point_checks=checks("met", "met", "met", "met")),
         thinking="I used the chain rule",
     )
     messages, schema = call.args[0], call.args[1]
-    assert schema is ShortAnswerGradeV2
+    assert schema is ShortAnswerChecksV2
     system, user = messages[0].content, messages[1].content
     assert "untrusted" in system.lower()
     assert "clarity" not in user.lower() and "70" not in user and "70" not in system
@@ -413,7 +416,7 @@ async def test_grade_v2_prompt(v2_grading):
     assert "2-3 sentences" not in user
     assert user.rstrip().endswith("a gap or a slip is not a misconception.")
     assert user.index("<key_points>") < user.index("<student_answer>")
-    assert user.index("key_point_checks") > user.index("</concepts>")
+    assert "points_earned" not in user and "key_point_checks" not in user  # the checks are the schema's; no score asked
 
 
 @pytest.mark.asyncio
@@ -427,9 +430,7 @@ async def test_grade_v1_prompt_unchanged(v1):
 
 @pytest.mark.asyncio
 async def test_grade_v2_points_come_from_the_checks_when_there_is_one_per_key_point(v2_grading):
-    reply = SimpleNamespace(
-        points_earned=10, feedback="ok", key_point_checks=checks("met", "partly", "not_met", "met")
-    )
+    reply = ShortAnswerChecksV2(feedback="ok", key_point_checks=checks("met", "partly", "not_met", "met"))
     result, _ = await grade(reply)
     assert result["points_earned"] == pytest.approx(6.25)  # (1 + 0.5 + 0 + 1) / 4 of 10
     assert result["is_correct"] is False
@@ -438,22 +439,21 @@ async def test_grade_v2_points_come_from_the_checks_when_there_is_one_per_key_po
 
 @pytest.mark.asyncio
 async def test_grade_v2_seventy_percent_is_correct_and_all_met_is_full_marks(v2_grading):
-    result, _ = await grade(SimpleNamespace(points_earned=0, feedback="ok", key_point_checks=checks("met", "met", "met", "met")))
+    result, _ = await grade(ShortAnswerChecksV2(feedback="ok", key_point_checks=checks("met", "met", "met", "met")))
     assert result["points_earned"] == 10 and result["is_correct"] is True
     q = dict(QUESTION, key_points=["a", "b"], points=4)
-    result, _ = await grade(SimpleNamespace(points_earned=4, feedback="ok", key_point_checks=checks("not_met", "not_met")), question=q)
+    result, _ = await grade(ShortAnswerChecksV2(feedback="ok", key_point_checks=checks("not_met", "not_met")), question=q)
     assert result["points_earned"] == 0 and result["is_correct"] is False
 
 
 @pytest.mark.asyncio
-async def test_grade_v2_falls_back_to_the_models_points_without_matching_checks(v2_grading):
-    for bad in ([], checks("met", "met"), checks("met", "met", "met", "met", "met")):
-        result, _ = await grade(SimpleNamespace(points_earned=999, feedback="ok", key_point_checks=bad))
-        assert result["points_earned"] == 10, bad
-    result, _ = await grade(SimpleNamespace(points_earned=3, feedback="ok", key_point_checks=checks("met", "met")))
-    assert result["points_earned"] == 3 and result["criteria"] == []
-    result, _ = await grade(SimpleNamespace(points_earned=3, feedback="ok"))
-    assert result["points_earned"] == 3
+async def test_grade_v2_checks_that_do_not_line_up_score_from_the_checks_given(v2_grading):
+    result, _ = await grade(ShortAnswerChecksV2(feedback="ok", key_point_checks=checks("met", "not_met")))
+    assert result["points_earned"] == 5 and result["criteria"] == []  # 4 key points, 2 checks: no per-point marks
+    # Without key points the model's own score is used, clamped.
+    no_points = dict(QUESTION, key_points=[])
+    result, call = await grade(ShortAnswerGradeV2(points_earned=999, feedback="ok"), question=no_points)
+    assert call.args[1] is ShortAnswerGradeV2 and result["points_earned"] == 10
 
 
 @pytest.mark.asyncio

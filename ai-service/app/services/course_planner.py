@@ -474,10 +474,8 @@ PLANNER_SYSTEM_V2 = (
         "whose ideas this topic uses directly, because the app shows those ideas to the student as already "
         "known.\n",
     )
-    .replace(
-        "an estimate of the study minutes (10 to 90).",
-        "an estimate of the study minutes (10 to 90) at about 110 tokens of source per minute.",
-    )
+    # R5: the app computes study minutes from the sections' token counts (default_minutes), so none is asked for.
+    .replace(", 3 to 8 search keywords and an estimate of the study minutes (10 to 90).", " and 3 to 8 search keywords.")
     .replace(
         "that this topic really builds on. Most topics have one or two; use none when there is no real dependency.",
         "whose ideas this topic uses directly. Many topics have none; a topic that builds on its immediate "

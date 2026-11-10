@@ -132,7 +132,7 @@ def test_pick_model_switches_to_sonnet_only_for_a_clear_gain(scores, pick):
     assert run_a5.pick_model(_summary(*scores))[0] == pick
 
 
-@pytest.mark.parametrize("flag, schema, grader_prompt", [("", "ShortAnswerGrade", "v1"), ("grading", "ShortAnswerGradeV2", "v2")])
+@pytest.mark.parametrize("flag, schema, grader_prompt", [("", "ShortAnswerGrade", "v1"), ("grading", "ShortAnswerChecksV2", "v2")])
 def test_the_captured_request_follows_the_grading_flag(monkeypatch, flag, schema, grader_prompt):
     from app.config import settings
     from app.services.exam_grader import GRADER_SYSTEM_PROMPT, GRADER_SYSTEM_PROMPT_V2

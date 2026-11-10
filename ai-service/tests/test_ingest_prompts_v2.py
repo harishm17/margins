@@ -134,7 +134,7 @@ class TestPlannerPrompt:
         assert "Each topic becomes one lesson" in system
         assert "Most topics have one or two" not in system
         assert "Many topics have none" in system
-        assert "110 tokens of source per minute" in system
+        assert "minutes" not in system  # R5: the app computes study minutes
         # the real constraints stay
         assert "Every section id must appear in exactly one topic" in system
         assert "There is no limit on the number of topics" in system
@@ -184,7 +184,7 @@ class TestPlannerPrompt:
         await planner._plan_call([])
         assert (provider.schema, provider.kwargs["max_tokens"]) == (CoursePlanV2, 32000)
 
-    def test_v2_schema_drops_the_one_or_two_anchor_and_gives_the_minutes_rate(self):
+    def test_v2_schema_drops_the_one_or_two_anchor_and_the_minutes(self):
         def topic_props(model):
             defs = model.model_json_schema()["$defs"]
             return defs["PlannedTopicV2" if model is CoursePlanV2 else "PlannedTopic"]["properties"]
@@ -192,7 +192,9 @@ class TestPlannerPrompt:
         old, new = topic_props(CoursePlan), topic_props(CoursePlanV2)
         assert "usually one or two" in old["prerequisite_keys"]["description"]
         assert "usually one or two" not in new["prerequisite_keys"]["description"]
-        assert "110 tokens per minute" in new["estimated_minutes"]["description"]
+        # R5: the app computes the minutes from the sections' tokens; the model is not asked.
+        assert "estimated_minutes" in old and "estimated_minutes" not in new
+        assert "minutes" not in planner.PLANNER_SYSTEM_V2 and "minutes" in planner.PLANNER_SYSTEM
 
     def test_the_mock_still_plans_every_section_with_the_v2_schema(self, v2):
         user = last_user(planner.plan_messages("Stats", [section(1), section(2), section(3), section(4)]))

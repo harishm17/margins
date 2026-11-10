@@ -13,6 +13,7 @@ from html import unescape
 from typing import Any, Dict, List, Literal, Optional, Sequence, Type, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 QuestionType = Literal["multiple_choice", "short_answer", "numerical", "true_false"]
 
@@ -1225,6 +1226,38 @@ class ShortAnswerGradeV2(BaseModel):
         return cls(points_earned=0, feedback="Mock grading: no model call was made.")
 
 
+class ShortAnswerChecksV2(BaseModel):
+    """Prompt audit R5 (grading area), for a question with key points: the model gives one check per key point and
+    no score. The service computes the points from the checks (met 1, partly 0.5, not met 0), so there is no sum
+    for the model to get wrong or to make agree."""
+
+    key_point_checks: List[KeyPointCheck] = Field(
+        min_length=1, description="One entry for each key point, in the order they were listed"
+    )
+    feedback: str = Field(description="2-3 sentences on what was good and what was missing")
+    blamed_concept_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "When the answer falls short and the gap is clearly in one concept of the "
+            "<concepts> list, that concept's id; otherwise leave out"
+        ),
+    )
+    misconception: Optional[str] = Field(
+        default=None,
+        description=(
+            "Only when the answer states a specific wrong idea: that idea, in one sentence, "
+            "written as the idea itself. Leave out for gaps and slips"
+        ),
+    )
+
+    @classmethod
+    def example(cls) -> "ShortAnswerChecksV2":
+        return cls(
+            key_point_checks=[KeyPointCheck(point="(mock)", result="not_met")],
+            feedback="Mock grading: no model call was made.",
+        )
+
+
 class ShortAnswerGrade(BaseModel):
     points_earned: float
     feedback: str = Field(description="2-3 sentences on what was good and what was missing")
@@ -2151,12 +2184,9 @@ class PlannedTopicV2(PlannedTopic):
             "needs nothing earlier"
         )
     )
-    estimated_minutes: int = Field(
-        description=(
-            "Minutes to study the topic, 10-90: its sections' token counts in the outline at about "
-            "110 tokens per minute"
-        )
-    )
+    # R5: computed by the app from the sections' token counts (course_planner.default_minutes); not in the schema the
+    # model fills, so 0 here means "use the default".
+    estimated_minutes: SkipJsonSchema[int] = 0
 
 
 class PlannedUnitV2(PlannedUnit):
@@ -2231,16 +2261,22 @@ _CONFUSABLE_V2_HELP = (
 )
 
 
-def _with_descriptions(base: type, name: str, edits: Sequence[tuple]) -> type:
+def _with_descriptions(base: type, name: str, edits: Sequence[tuple], hidden: Sequence[tuple] = ()) -> type:
     """`base` with field descriptions replaced in its JSON schema. Each edit is
     (definition name or None for the model itself, field, description). A field that is not
-    in the schema raises, so a renamed field cannot silently lose its description."""
+    in the schema raises, so a renamed field cannot silently lose its description. Each `hidden`
+    (definition, field) is left out of the schema the model fills; the field must have a default."""
 
     def model_json_schema(cls, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         schema = super(variant, cls).model_json_schema(*args, **kwargs)
         for definition, field, text in edits:
             holder = schema if definition is None else schema["$defs"][definition]
             holder["properties"][field]["description"] = text
+        for definition, field in hidden:
+            holder = schema if definition is None else schema["$defs"][definition]
+            del holder["properties"][field]
+            if field in holder.get("required", []):
+                holder["required"].remove(field)
         return schema
 
     variant = type(name, (base,), {"model_json_schema": classmethod(model_json_schema), "__module__": __name__})
@@ -2279,8 +2315,9 @@ InteractiveExampleSetV2 = _with_descriptions(
     (
         ("InteractiveExample", "key_concepts", _CHIP_HELP),
         ("InteractiveExample", "difficulty", _DIFFICULTY_BY_APP_HELP),
-        ("InteractiveExample", "estimated_time_minutes", "Minutes a student needs to work through the problem"),
     ),
+    # R5: the minutes are computed by the app from the step count (examples.py), not asked of the model.
+    hidden=(("InteractiveExample", "estimated_time_minutes"),),
 )
 ExamStyleProfileV2 = _with_descriptions(
     ExamStyleProfile, "ExamStyleProfileV2",

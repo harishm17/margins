@@ -114,7 +114,7 @@ def test_v2_excerpts_escape_attributes_neutralise_closing_tags_and_tag_the_cours
     assert '<excerpt index="1" source="ml&amp;&quot;&lt;x&gt;.pdf"' in text
     assert 'section="Chapter &quot;1&quot;"' in text
     assert text.count("</excerpt>") == 1  # the one in the chunk text is neutralised
-    assert "<\\/excerpt>" in text
+    assert "&lt;/excerpt>" in text  # R2: the one rule (llm/untrusted.py)
     assert "<course_map>" in text and "</course_map>" in text
     assert "Course map: units" in text.split("</course_map>")[0]
     assert "Topic: T" in text.split("</course_map>")[0]
@@ -232,7 +232,7 @@ def test_v2_schema_descriptions():
     assert s["SolutionStep"]["properties"]["description"]["description"] == "One line naming what this step does"
     i = schemas.InteractiveExampleSetV2.model_json_schema()["$defs"]
     assert "no LaTeX" in i["InteractiveExample"]["properties"]["key_concepts"]["description"]
-    assert "estimated_time_minutes" in i["InteractiveExample"]["properties"]
+    assert "estimated_time_minutes" not in i["InteractiveExample"]["properties"]  # R5: computed from the step count
     assert "hint" not in i["InteractiveStep"]["properties"]
     # warm-up difficulty stays the model's
     w = schemas.WarmupSetV2.model_json_schema()["$defs"]["GeneratedQuestion"]["properties"]["difficulty"]

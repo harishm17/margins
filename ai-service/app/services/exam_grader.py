@@ -16,7 +16,7 @@ from app.services.llm.base import LLMBusyError, LLMError, LLMMessage
 from app.services.llm import untrusted
 from app.services.llm.factory import LLMFactory
 from app.prompt_revision import prompts_v2
-from app.services.llm.schemas import ShortAnswerGrade, ShortAnswerGradeV2
+from app.services.llm.schemas import ShortAnswerChecksV2, ShortAnswerGrade, ShortAnswerGradeV2
 
 logger = logging.getLogger(__name__)
 
@@ -132,11 +132,12 @@ def _short_answer_prompt_v2(
             "name it in blamed_concept_id. Otherwise leave it out."
         )
     if key_points:
+        # R5: the app computes the points from the checks (met 1, partly 0.5, not met 0), so the model gives no score.
         task = (
-            f"Award points from 0 to {max_points} in proportion to the key points the answer meets: a met point counts in full, "
-            "a partly met point in part, a missed or wrong point not at all. Accept correct answers worded differently from the "
-            "sample answer. Judge against this question and its key points, not outside knowledge. Fill key_point_checks first, "
-            "one entry per key point in the listed order, then set points_earned to agree with them."
+            "Check the answer against each key point, one entry per key point in the listed order: met when the answer states "
+            "it, partly when it is touched on or incomplete, not_met when it is missing or wrong. The app scores the answer from "
+            "these checks. Accept correct answers worded differently from the sample answer. Judge against this question and "
+            "its key points, not outside knowledge."
         )
     else:
         task = (
@@ -383,7 +384,7 @@ If the answer states a specific wrong idea, give it in misconception as the idea
         try:
             grade = await self.llm.generate_structured(
                 messages,
-                ShortAnswerGradeV2 if v2 else ShortAnswerGrade,
+                (ShortAnswerChecksV2 if key_points else ShortAnswerGradeV2) if v2 else ShortAnswerGrade,
                 max_tokens=2000,
                 purpose="grade_short_answer",
             )
@@ -413,12 +414,20 @@ If the answer states a specific wrong idea, give it in misconception as the idea
             }
 
         criteria = _criteria_from_checks(key_points, getattr(grade, 'key_point_checks', None))
-        points = _clamp_points(grade.points_earned, max_points)
-        if v2:
-            # One check per key point: the score is computed from them, not taken from the model's own sum.
-            from_checks = _points_from_criteria(criteria, max_points)
-            if from_checks is not None:
-                points = from_checks
+        if isinstance(grade, ShortAnswerChecksV2):
+            # R5: the score is computed from the checks; the model gave none. A reply whose checks do not line up with
+            # the key points is scored from the checks it gave, and shows no per-point marks.
+            points = _points_from_criteria(criteria, max_points)
+            if points is None:
+                given = [{'result': check.result} for check in grade.key_point_checks]
+                points = _points_from_criteria(given, max_points) or 0.0
+        else:
+            points = _clamp_points(grade.points_earned, max_points)
+            if v2:
+                # One check per key point: the score is computed from them, not taken from the model's own sum.
+                from_checks = _points_from_criteria(criteria, max_points)
+                if from_checks is not None:
+                    points = from_checks
         return {
             'points_earned': points,
             # Derived from the clamped score, not the model's own verdict.
