@@ -27,7 +27,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -118,11 +118,13 @@ def drill(args) -> list[str]:
     report: list[str] = []
     problems: list[str] = []
 
-    backups = sorted(line.rstrip("/") for line in run(["rclone", "lsf", "--dirs-only", "safe:daily"], env).split())
-    if not backups:
-        raise DrillFailed("No backups under daily/")
+    # A run that died after its dump has no manifest: it is not a backup. The manifest is written last.
+    listed = run(["rclone", "lsf", "-R", "--files-only", "--include", "*/manifest.json", "safe:daily"], env)
+    backups = sorted(line.split("/")[0] for line in listed.split())
+    if not backups and not args.backup:
+        raise DrillFailed("No complete backups under daily/")
     name = args.backup or f"daily/{backups[-1]}"
-    report.append(f"backup {name} (newest of {len(backups)} daily)")
+    report.append(f"backup {name} (newest of {len(backups)} complete daily)")
 
     with tempfile.TemporaryDirectory(prefix="margins-restore-") as tmp:
         dump, manifest_path = Path(tmp) / "db.dump", Path(tmp) / "manifest.json"
@@ -177,11 +179,17 @@ def drill(args) -> list[str]:
             sample = random.sample(paths, min(args.samples, len(paths)))
             mirrored = set(run(["rclone", "lsf", "-R", "--files-only", "--fast-list", "safe:uploads/current"],
                                env).splitlines())
-            missing = [key for key in (path.split("/", 3)[3] for path in sample) if key not in mirrored]
+            # A file deleted after the dump was taken left the mirror for uploads/deleted/<run time>/.
+            deleted = {line.split("/", 1)[1] for line in run(
+                ["rclone", "lsf", "-R", "--files-only", "--fast-list", "safe:uploads/deleted"], env).splitlines()
+                if "/" in line}
+            keys = [path.split("/", 3)[3] for path in sample]
+            missing = [key for key in keys if key not in mirrored and key not in deleted]
+            only_deleted = sum(1 for key in keys if key not in mirrored and key in deleted)
             if missing:
                 problems.append(f"{len(missing)} of {len(sample)} sampled files missing from the mirror: {missing[:3]}")
             report.append(f"files: {len(sample) - len(missing)} of {len(sample)} sampled found "
-                          f"({len(paths)} in the bucket)")
+                          f"({only_deleted} among the deleted copies; {len(paths)} in the bucket)")
 
             records = run(["rclone", "lsf", "--files-only", "safe:uploads/current/ops/deletions"], env).split()
             ids = [r.removesuffix(".json") for r in records if re.fullmatch(r"[A-Za-z0-9-]+\.json", r)]
@@ -205,7 +213,7 @@ def main() -> int:
                                                               "postgresql://postgres@127.0.0.1:5544/postgres"),
                         help="a Postgres 18 server with pgvector where the scratch database is made")
     parser.add_argument("--into", help="restore into this empty database and keep it (a real restore)")
-    parser.add_argument("--backup", help="daily/<run time> or weekly/<run time>, as listed in R2 (default: the newest daily)")
+    parser.add_argument("--backup", help="daily/<run time> or weekly/<run time>, as listed in R2 (default: the newest complete daily)")
     parser.add_argument("--samples", type=int, default=20, help="material files to look for in the mirror")
     parser.add_argument("--keep", action="store_true", help="keep the scratch database")
     parser.add_argument("--safe-remote", help=argparse.SUPPRESS)  # tests: a local folder instead of R2
@@ -216,8 +224,8 @@ def main() -> int:
         print(f"RESTORE DRILL FAILED: {exc}")
         return 1
     print("\n".join(report))
-    print(f"\nFor docs/deployment/RAILWAY.md:\n- {date.today().isoformat()}: restore drill passed ({report[0]}; "
-          f"{report[1]})")
+    today = datetime.now(UTC).date().isoformat()
+    print(f"\nFor docs/deployment/RAILWAY.md:\n- {today}: restore drill passed ({report[0]}; {report[1]})")
     return 0
 
 

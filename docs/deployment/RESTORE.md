@@ -14,10 +14,26 @@ The `backup` service (`backup/backup.sh`, a Railway cron job at 10:30 UTC) write
 | `daily/<run time>/manifest.json` | Row count of every table (same snapshot as the dump), newest migration, embedding model, dump checksum, uploads bucket name | 35 days |
 | `weekly/<run time>/…` | Sunday's dump and manifest | 120 days |
 | `uploads/current/` | Mirror of the uploads bucket as of the last run, including `ops/deletions/` | Until the next run |
-| `uploads/deleted/<date>/` | Files deleted or replaced in the bucket since the run before | 35 days |
+| `uploads/deleted/<run time>/` | Files deleted or replaced in the bucket since the run before | 35 days |
 
-A bucket lock rule keeps every object under `daily/` and `weekly/` for at least 7 days, so a leaked R2 key cannot
-delete the recent backups. After a successful run the service writes `ops_state.backup_last_success`; the AI
+A bucket lock rule keeps every object under `daily/`, `weekly/` and `uploads/deleted/` for at least 7 days, so a
+leaked R2 key cannot delete the recent backups. `uploads/current/` cannot be locked, since each run rewrites it: a
+leaked key could empty the mirror, and the files would then come back only from the deleted copies of the last 35
+days.
+
+The bucket's rules (Cloudflare dashboard, R2, `margins-backups`, Settings; set them again on a new bucket):
+
+| Rule | Prefix | Setting |
+|---|---|---|
+| Lock `keep-daily-7-days` | `daily/` | Age, 7 days |
+| Lock `keep-weekly-7-days` | `weekly/` | Age, 7 days |
+| Lock `keep-deleted-uploads-7-days` | `uploads/deleted/` | Age, 7 days |
+| Lifecycle `daily-35d` | `daily/` | Delete after 35 days |
+| Lifecycle `weekly-120d` | `weekly/` | Delete after 120 days |
+| Lifecycle `uploads-deleted-35d` | `uploads/deleted/` | Delete after 35 days |
+| Lifecycle `abort-multipart-7d` | all | Abort incomplete multipart uploads after 7 days |
+
+ After a successful run the service writes `ops_state.backup_last_success`; the AI
 service's watchdog alerts when that is older than 36 hours, and a failed run records `backup_failed`, which the
 watchdog reports within 5 minutes.
 
@@ -58,10 +74,12 @@ Needs a machine with `rclone`, and the Postgres 18 client (`psql`, `pg_restore`)
    python3 scripts/restore_drill.py --into "$NEW_DATABASE_PUBLIC_URL"
    ```
 
-   The database must be empty. The script runs the same checks as the drill and keeps the result. Use
-   `--backup daily/<run time>` for an older backup.
+   The database must be empty. The script runs the same checks as the drill and keeps the result. It takes the
+   newest complete backup (a run that died before writing its manifest is skipped). Use
+   `--backup daily/<run time>` for an older one.
 3. **Files.** Copy the mirror into the new uploads bucket, with the same rclone settings as `backup/backup.sh`
-   (`safe:` is the decrypted view of R2, `uploads:` the new bucket):
+   (`safe:` is the decrypted view of R2, `uploads:` the new bucket). A file deleted after the backup's dump is in
+   `uploads/deleted/<run time>/` instead; copy it back from there if its material is in the restored database:
 
    ```bash
    rclone copy safe:uploads/current uploads:<new bucket name>
@@ -92,7 +110,7 @@ On the box, against the scratch Postgres 18 with pgvector (any server works: `--
 python3 scripts/restore_drill.py
 ```
 
-It restores the newest daily backup into a scratch database, compares every table's row count with the manifest,
+It restores the newest complete daily backup into a scratch database, compares every table's row count with the manifest,
 checks the migration and the embedding model, runs a nearest-neighbour query, looks for 20 sampled material files in
 the mirror, replays the deletion records, and drops the scratch database. It prints a line to add under "Restore
 drills" in `docs/deployment/RAILWAY.md`. A failure prints what did not match and exits 1.

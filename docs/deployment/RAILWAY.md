@@ -109,7 +109,9 @@ These are read by `ai` and have working defaults. None is declared in `.railway/
 The AI service's watchdog (`ai-service/app/services/watchdog.py`) runs every 5 minutes. It reads what went wrong
 from the database and posts to `OPS_ALERT_WEBHOOK_URL`, titled "Margins: …", at most once per kind every 6 hours.
 The box checks `https://studymargins.com/api/health/ready` every 15 minutes and alerts on the same ntfy topic when it
-fails, which also covers a watchdog that stopped.
+fails, which also covers a watchdog that stopped. An alert carries counts, kinds and error codes only: ids, file
+paths and error text are in the `ai` log line "Watchdog: <kind>: …", since the ntfy topic is a third party.
+A post the webhook does not take is tried again on the next run.
 
 | Alert | What it means | What to do |
 |---|---|---|
@@ -121,12 +123,12 @@ fails, which also covers a watchdog that stopped.
 | evidence lost | Quiz or exam results whose concept evidence was given up after 5 tries. The student's score stands; mastery missed it. | The web logs for "Giving up writing"; usually a database error at the time. |
 | backup missing, backup failed | No successful nightly backup in 36 hours, or the last run failed. | The `backup` service's last run on Railway; [RESTORE.md](RESTORE.md). |
 | embedding model mismatch | The stored vectors were made by another model than `EMBEDDING_MODEL`. Search results are meaningless. | Re-embed (Database, below) or set `EMBEDDING_MODEL` back. |
-| orphaned files | Files in the bucket that no material points to, over a day old. | Usually a delete that failed; the alert gives the count and one key. Delete them after checking. |
+| orphaned files | Files in the bucket that no material points to, over a day old. | Usually a delete that failed; the `ai` log names up to five keys. Delete them after checking. |
 | storage delete failed | The web app could not delete a stored file (a deleted course or account, a failed upload). | The web logs name the path; delete it from the bucket by hand. |
 | account delete failed | An account deletion stopped part way. The student can retry, and the account still exists. | The web logs for `[ACCOUNT]`; usually storage. |
 | deletion record failed | An account was deleted but `ops/deletions/<id>.json` could not be written, so a restore would bring it back. | Write the record by hand (`{"userId": "<id>", "deletedAt": "<time>"}`). |
 | dispatch failed, lease renewal failed, ledger write failed, job write failed, reaper failed, ai status read/write failed | A database or network error where the code carries on. The spend ledger one means spend went unrecorded. | The `ai` logs at that time; usually the database was briefly unreachable. |
-| errors logged | The AI service logged more than 20 errors between two watchdog runs. | The `ai` logs; the alert quotes the first. |
+| errors logged | The AI service logged more than 20 errors between two watchdog runs. | The `ai` logs; the watchdog log line quotes the first. |
 | watchdog check failed | One of the checks above raised. | The `ai` logs for "Watchdog check"; the other checks still ran. |
 
 ## Backups and restore drills

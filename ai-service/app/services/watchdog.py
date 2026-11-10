@@ -43,15 +43,19 @@ EVENT_THRESHOLDS = {"dispatch_failed": 5, "lease_renewal_failed": 5}
 ERRORS_PER_INTERVAL = 20
 ORPHAN_SCAN_EVERY = timedelta(days=1)
 EVENTS_KEPT = timedelta(days=30)
-# Storage prefixes that hold no materials (the account-deletion log, see lib/account/deletion-log.ts).
+# Storage prefixes that hold no materials (ops/deletions/, the account-deletion records: writeDeletionRecord in frontend/src/lib/storage/files.ts).
 NON_MATERIAL_PREFIXES = ("ops/",)
 
 
 @dataclass
 class Finding:
+    """One problem. `text` goes to the alert webhook, a third party: counts, kinds and codes only. `detail` (user ids,
+    file paths, error text) goes only to the log."""
+
     kind: str
     title: str
     text: str
+    detail: str = ""
 
 
 class ErrorCounter(logging.Handler):
@@ -238,7 +242,6 @@ async def check_storage_orphans(now: datetime) -> list[Finding]:
     last = _parse_time(await ops.get_state("orphan_scan_at"))
     if last is not None and now - last < ORPHAN_SCAN_EVERY:
         return []
-    await ops.set_state("orphan_scan_at", now.isoformat())
     rows = await execute_query("SELECT gcs_path FROM materials WHERE gcs_path LIKE 's3://%'")
     known = {path.split("/", 3)[3] for path in (row["gcs_path"] for row in rows) if path.count("/") >= 3}
     cutoff = now - timedelta(days=1)
@@ -247,11 +250,14 @@ async def check_storage_orphans(now: datetime) -> list[Finding]:
         for key, modified in await storage.list_bucket_objects()
         if key not in known and not key.startswith(NON_MATERIAL_PREFIXES) and _utc(modified) < cutoff
     ]
+    # Recorded only after a scan that finished, so a failed one is tried again on the next run.
+    await ops.set_state("orphan_scan_at", now.isoformat())
     if not orphans:
         return []
     return [Finding("storage_orphans", "orphaned files",
-                    f"{len(orphans)} files in the bucket belong to no material (e.g. {orphans[0]}): a delete that "
-                    "failed. Remove them once the account or project is confirmed deleted.")]
+                    f"{len(orphans)} files in the bucket belong to no material: a delete that failed. The watchdog "
+                    "log names them. Remove them once the account or project is confirmed deleted.",
+                    detail=f"e.g. {', '.join(orphans[:5])}")]
 
 
 async def check_ops_events(since: datetime) -> list[Finding]:
@@ -274,9 +280,9 @@ def _event_findings(counts: dict[str, int], samples: dict[str, str]) -> list[Fin
     for kind, n in sorted(counts.items()):
         if n < EVENT_THRESHOLDS.get(kind, 1):
             continue
-        sample = f" Latest: {samples[kind][:200]}" if kind in samples else ""
         findings.append(Finding(f"event:{kind}", kind.replace("_", " "),
-                                f"{n} × {kind} since the last watchdog run.{sample}"))
+                                f"{n} × {kind} since the last watchdog run.",
+                                detail=f"Latest: {samples[kind][:200]}" if kind in samples else ""))
     return findings
 
 
@@ -285,7 +291,8 @@ def check_logged_errors() -> list[Finding]:
     if count < ERRORS_PER_INTERVAL:
         return []
     return [Finding("errors_logged", "errors logged",
-                    f"The AI service logged {count} errors since the last watchdog run. First: {sample}")]
+                    f"The AI service logged {count} errors since the last watchdog run.",
+                    detail=f"First: {sample}")]
 
 
 async def run_watchdog(now: datetime | None = None) -> list[Finding]:
@@ -317,7 +324,7 @@ async def run_watchdog(now: datetime | None = None) -> list[Finding]:
     findings.extend(check_logged_errors())
 
     for finding in findings:
-        logger.warning("Watchdog: %s: %s", finding.kind, finding.text)
+        logger.warning("Watchdog: %s: %s %s", finding.kind, finding.text, finding.detail)
         await ops.alert(finding.kind, finding.title, finding.text)
 
     try:
@@ -337,4 +344,5 @@ async def _run_check(name: str, check: Callable[[], Awaitable[list[Finding]]]) -
     except Exception as exc:
         logger.warning("Watchdog check %s failed: %r", name, exc)
         return [Finding(f"check_failed:{name}", "watchdog check failed",
-                        f"The {name} check could not run: {type(exc).__name__}: {str(exc)[:200]}")]
+                        f"The {name} check could not run: {type(exc).__name__}.",
+                        detail=str(exc)[:200])]

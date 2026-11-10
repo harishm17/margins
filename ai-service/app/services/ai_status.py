@@ -213,7 +213,7 @@ async def _mark_unavailable(reason: str, detail: str) -> None:
         reason, since, changed, detail[:500],
     )
     if changed:
-        _alert(f"Margins: AI is unavailable ({reason}) since {since:%Y-%m-%d %H:%M} UTC. {detail[:300]}")
+        _alert(f"Margins: AI is unavailable ({reason}) since {since:%Y-%m-%d %H:%M} UTC; the AI service log has the error.")
 
 
 def _alert(text: str) -> None:

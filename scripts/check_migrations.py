@@ -27,7 +27,9 @@ UNSAFE = [
     (re.compile(r"\bSET\s+NOT\s+NULL\b", re.IGNORECASE), "makes a column NOT NULL"),
     (re.compile(r"\bALTER\s+COLUMN\s+\S+\s+(SET\s+DATA\s+)?TYPE\b", re.IGNORECASE), "changes a column type"),
 ]
-ADD_COLUMN = re.compile(r"\bADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\"?\w+\"?)([^,;]*)", re.IGNORECASE)
+ADD_COLUMN = re.compile(
+    r"\bADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\"?\w+\"?)((?:\([^)]*\)|[^,;(])*)", re.IGNORECASE
+)  # the rest of the column: up to a comma or semicolon outside parentheses, as in NUMERIC(10,2)
 REQUIRED = re.compile(r'^REQUIRED_MIGRATION\s*=\s*"([^"]+)"', re.MULTILINE)
 
 

@@ -7,8 +7,9 @@
 #    also to weekly/<run time>/. R2 keeps daily copies 35 days and weekly ones 120, and a lock rule keeps every object
 #    under daily/ and weekly/ for at least 7 days, so a leaked key cannot delete recent backups.
 # 3. The uploads bucket is mirrored to uploads/current/. Objects deleted or replaced since the last run move to
-#    uploads/deleted/<date>/ (kept 35 days). The mirror includes ops/deletions/, the record of deleted accounts a
-#    restore replays.
+#    uploads/deleted/<run time>/ (kept 35 days, and locked for 7 like the dumps). The mirror includes ops/deletions/,
+#    the record of deleted accounts a restore replays. uploads/current/ itself cannot be locked (each run rewrites
+#    it), so a leaked R2 key could empty the mirror; the database dumps and the deleted copies stay.
 # 4. Success is written to ops_state.backup_last_success; the AI service's watchdog alerts when it is over
 #    BACKUP_MAX_AGE_HOURS old. A failure is also recorded in ops_events, which the watchdog reports on its next run.
 #
@@ -64,7 +65,6 @@ export RCLONE_CONFIG_SAFE_PASSWORD
 
 # One folder per run (the R2 lock forbids overwriting a recent object, so a second run on the same day needs its own).
 run="$(date -u +%FT%H%MZ)"
-day="${run%%T*}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -89,6 +89,7 @@ read -r -t 600 counts <&"${SNAP[0]}"
 read -r -t 60 migration <&"${SNAP[0]}"
 read -r -t 60 embedding_model <&"${SNAP[0]}"
 
+[ -n "$counts" ] || counts='{}'  # an empty schema still gives valid JSON
 pg_dump --format=custom --compress=6 --no-owner --no-privileges --snapshot="$snapshot" \
   --file="$work/db.dump" "$DATABASE_URL"
 printf '%s\n' "COMMIT;" "\\q" >&"${SNAP[1]}"
@@ -110,7 +111,7 @@ if [ "$(date -u +%u)" = 7 ]; then
 fi
 
 # --- 3. Mirror the uploads bucket ----------------------------------------------------------------------------------
-rclone sync "uploads:$S3_BUCKET" "safe:uploads/current" --backup-dir "safe:uploads/deleted/$day" \
+rclone sync "uploads:$S3_BUCKET" "safe:uploads/current" --backup-dir "safe:uploads/deleted/$run" \
   --fast-list --transfers 8 --stats-one-line --stats 0
 log "uploads mirrored"
 

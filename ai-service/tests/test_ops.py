@@ -90,3 +90,38 @@ def test_without_the_cooldown_table_the_cooldown_is_kept_in_process(client, monk
     assert asyncio.run(ops.alert("database", "database down", "x")) is False
     assert len(client.posts) == 1
     ops.reset_local_state()
+
+
+@pytest.mark.parametrize("failure", ["status", "raise"])
+def test_a_post_that_fails_reports_it(client, monkeypatch, failure):
+    async def failing(self, url, **kwargs):
+        if failure == "raise":
+            raise ConnectionError("unreachable")
+        return type("Response", (), {"status_code": 503})()
+
+    monkeypatch.setattr(settings, "OPS_ALERT_WEBHOOK_URL", "https://ntfy.sh/margins-ops")
+    monkeypatch.setattr(FakeClient, "post", failing)
+    assert asyncio.run(ops.post("AI", "down")) is False
+
+
+def test_a_successful_post_reports_it(client, monkeypatch):
+    monkeypatch.setattr(settings, "OPS_ALERT_WEBHOOK_URL", "https://ntfy.sh/margins-ops")
+    assert asyncio.run(ops.post("AI", "down")) is True
+
+
+def test_an_alert_the_webhook_did_not_take_keeps_no_cooldown_in_process(client, monkeypatch):
+    async def broken(*args, **kwargs):
+        raise RuntimeError("database went away")
+
+    results = iter([False, True])
+
+    async def post(title, text):
+        return next(results)
+
+    ops.reset_local_state()
+    monkeypatch.setattr(settings, "OPS_ALERT_WEBHOOK_URL", "https://ntfy.sh/margins-ops")
+    monkeypatch.setattr(ops, "execute_one", broken)
+    monkeypatch.setattr(ops, "post", post)
+    assert asyncio.run(ops.alert("database", "database down", "x")) is False
+    assert asyncio.run(ops.alert("database", "database down", "x")) is True
+    ops.reset_local_state()

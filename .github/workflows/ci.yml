@@ -13,6 +13,12 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Every run step under bash with pipefail: without `shell:`, GitHub runs `bash -e`, where a failing command piped into
+# another (npm test | tee) does not fail the step.
+defaults:
+  run:
+    shell: bash
+
 permissions:
   contents: read
 
@@ -26,7 +32,7 @@ jobs:
     # test step below fails if any test skipped.
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_DB: margins
           POSTGRES_USER: dev
@@ -73,7 +79,7 @@ jobs:
     # they skip.
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_DB: margins
           POSTGRES_USER: dev
@@ -113,7 +119,7 @@ jobs:
     timeout-minutes: 40
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_DB: margins
           POSTGRES_USER: dev
@@ -201,7 +207,7 @@ jobs:
             -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db \
             -e NEXTAUTH_SECRET=ci-secret -e NEXTAUTH_URL=http://127.0.0.1:3000 \
             margins-frontend
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             curl -fsS -o /dev/null http://127.0.0.1:3000/login && exit 0
             sleep 1
           done
@@ -215,7 +221,7 @@ jobs:
                 -e NEXTAUTH_URL=https://studymargins.com "$@" margins-frontend 2>&1)"; then
               echo "started, but should have refused: $*"; echo "$out"; exit 1
             fi
-            echo "$out" | grep -q "Refusing to start" || { echo "no refusal message: $*"; echo "$out"; exit 1; }
+            grep -q "Refusing to start" <<<"$out" || { echo "no refusal message: $*"; echo "$out"; exit 1; }
           }
           refuses
           refuses -e GOOGLE_OAUTH_CLIENT_ID=your-google-client-id -e GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
@@ -245,7 +251,7 @@ jobs:
           docker run -d --name ai -p 8000:8000 \
             -e DATABASE_URL=postgresql://u:p@127.0.0.1:1/db -e ANTHROPIC_API_KEY=test-key \
             margins-ai
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8000/; then
               code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)"
               echo "/health: $code"

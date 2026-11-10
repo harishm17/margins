@@ -139,6 +139,12 @@ class TestRecoveryAlert:
         assert "available again after 2 h 5 min" in alerts[1][1]
         assert "LLM_CREDIT_EXHAUSTED" in alerts[1][1]
 
+    async def test_the_alert_names_the_reason_but_not_the_providers_error_text(self, db, alerts, caplog):
+        await ai_status.record_failure(LLMCreditError("credit balance too low for request req_abc"))
+        await ops.wait_for_alerts()
+        assert "LLM_CREDIT_EXHAUSTED" in alerts[0][1]
+        assert "req_abc" not in alerts[0][1] and "req_abc" in caplog.text
+
     async def test_only_the_process_that_makes_the_change_alerts(self, db, alerts):
         await ai_status.record_failure(LLMCreditError("credit"))
         await ops.wait_for_alerts()

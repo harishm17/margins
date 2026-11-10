@@ -29,6 +29,7 @@ def posts(monkeypatch):
 
     async def post(title, text):
         sent.append((title, text))
+        return True
 
     monkeypatch.setattr(ops, "post", post)
     monkeypatch.setattr(settings, "OPS_ALERT_WEBHOOK_URL", "https://ntfy.sh/margins-test")
@@ -164,7 +165,7 @@ async def test_vectors_from_another_embedding_model(db, posts):
 
 
 @pytest.mark.asyncio
-async def test_orphaned_files_are_found_once_a_day(db, posts, monkeypatch):
+async def test_orphaned_files_are_found_once_a_day(db, posts, monkeypatch, caplog):
     from app.services.document_processor import storage
 
     monkeypatch.setattr(settings, "S3_BUCKET", "uploads")
@@ -178,7 +179,8 @@ async def test_orphaned_files_are_found_once_a_day(db, posts, monkeypatch):
 
     monkeypatch.setattr(storage, "list_bucket_objects", list_objects)
     assert await kinds_after_two_runs(posts) == {"storage_orphans"}
-    assert "1 files" in posts[0][1] and "u/p/lost.pdf" in posts[0][1]
+    assert "1 files" in posts[0][1] and "u/p/lost.pdf" not in posts[0][1]
+    assert "u/p/lost.pdf" in caplog.text
 
     # Not scanned again within the day, even with the alert's cooldown cleared.
     await db.execute("DELETE FROM ops_alerts")
@@ -186,19 +188,21 @@ async def test_orphaned_files_are_found_once_a_day(db, posts, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_handled_failures_counted_where_they_happen(db, posts):
+async def test_handled_failures_counted_where_they_happen(db, posts, caplog):
     await ops.note("ledger_write_failed", "grade_quiz $0.0100 not in the ledger")
     for _ in range(4):  # under the dispatch threshold
         await ops.note("dispatch_failed", "job x")
     assert await kinds_after_two_runs(posts) == {"event:ledger_write_failed"}
-    assert "grade_quiz" in posts[0][1]
+    assert "grade_quiz" not in posts[0][1] and "grade_quiz" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_web_app_failures_count_too(db, posts):
+async def test_web_app_failures_count_too(db, posts, caplog):
     await db.execute("INSERT INTO ops_events (kind, source, detail) VALUES ('storage_delete_failed', 'web', 'u/p/x')")
     assert await kinds_after_two_runs(posts) == {"event:storage_delete_failed"}
-    assert "web: u/p/x" in posts[0][1]
+    assert "1 × storage_delete_failed" in posts[0][1]
+    # Paths and ids name users and their files: they stay in the log, not in the third-party alert.
+    assert "u/p/x" not in posts[0][1] and "web: u/p/x" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -220,23 +224,24 @@ async def test_unrecorded_failures_reach_the_alert(db, posts):
 
 
 @pytest.mark.asyncio
-async def test_many_logged_errors_alert(db, posts):
+async def test_many_logged_errors_alert(db, posts, caplog):
     import logging
 
     for _ in range(watchdog.ERRORS_PER_INTERVAL):
         watchdog.error_counter.emit(logging.makeLogRecord({"name": "app.x", "msg": "boom", "levelno": 40}))
     assert {f.kind for f in await watchdog.run_watchdog(NOW)} == {"errors_logged"}
-    assert "app.x: boom" in posts[0][1]
+    assert "boom" not in posts[0][1] and "app.x: boom" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_a_check_that_raises_is_itself_a_finding(db, posts, monkeypatch):
+async def test_a_check_that_raises_is_itself_a_finding(db, posts, monkeypatch, caplog):
     async def broken():
         raise RuntimeError("column does not exist")
 
     monkeypatch.setattr(watchdog, "check_leases", broken)
     assert {f.kind for f in await watchdog.run_watchdog(NOW)} == {"check_failed:leases"}
-    assert "column does not exist" in posts[0][1]
+    assert "RuntimeError" in posts[0][1] and "column does not exist" not in posts[0][1]
+    assert "column does not exist" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -284,3 +289,37 @@ async def test_without_a_webhook_nothing_is_posted(db, posts, monkeypatch):
     await ops.set_state("embedding_model", "some/other-model")
     assert [f.kind for f in await watchdog.run_watchdog(NOW)] == ["embedding_model"]
     assert posts == []
+
+
+@pytest.mark.asyncio
+async def test_an_alert_the_webhook_did_not_take_is_sent_on_the_next_run(db, posts, monkeypatch):
+    results = iter([False, True])
+
+    async def post(title, text):
+        posts.append((title, text))
+        return next(results)
+
+    monkeypatch.setattr(ops, "post", post)
+    await ops.set_state("embedding_model", "some/other-model")
+    await watchdog.run_watchdog(NOW)
+    await watchdog.run_watchdog(NOW + timedelta(minutes=5))
+    assert len(posts) == 2, "the failed post left no cooldown, so the next run tried again"
+    await watchdog.run_watchdog(NOW + timedelta(minutes=10))
+    assert len(posts) == 2, "the delivered one did"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_orphan_scan_is_tried_again_on_the_next_run(db, posts, monkeypatch):
+    from app.services.document_processor import storage
+
+    monkeypatch.setattr(settings, "S3_BUCKET", "uploads")
+    calls = []
+
+    async def list_objects():
+        calls.append(1)
+        raise RuntimeError("bucket unreachable")
+
+    monkeypatch.setattr(storage, "list_bucket_objects", list_objects)
+    await watchdog.run_watchdog(NOW)
+    await watchdog.run_watchdog(NOW + timedelta(minutes=5))
+    assert len(calls) == 2

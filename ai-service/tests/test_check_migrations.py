@@ -24,6 +24,8 @@ def test_the_repository_passes():
         ('ALTER TABLE "jobs" ALTER COLUMN "x" SET NOT NULL;', "makes a column NOT NULL"),
         ('ALTER TABLE "jobs" ALTER COLUMN "x" TYPE BIGINT;', "changes a column type"),
         ('ALTER TABLE "jobs" ADD COLUMN "flag" BOOLEAN NOT NULL;', 'adds NOT NULL column "flag" without a DEFAULT'),
+        ('ALTER TABLE "jobs" ADD COLUMN "cost" DECIMAL(10,2) NOT NULL;', 'adds NOT NULL column "cost" without a DEFAULT'),
+        ('ALTER TABLE "jobs" ADD COLUMN "a" TEXT, ADD COLUMN "b" INT NOT NULL;', 'adds NOT NULL column "b" without a DEFAULT'),
     ],
 )
 def test_changes_that_break_the_other_service_are_caught(sql, problem):

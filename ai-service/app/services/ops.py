@@ -69,11 +69,16 @@ async def get_state(key: str) -> str | None:
 
 
 async def alert(kind: str, title: str, text: str, cooldown_seconds: float | None = None) -> bool:
-    """Send `text` unless an alert of this kind went out within the cooldown. Returns whether it was sent."""
+    """Send `text` unless an alert of this kind went out within the cooldown. Returns whether it was sent.
+
+    The cooldown is claimed before posting, so two processes never both send. A post the webhook does not take
+    gives the claim back, so the next watchdog run tries again instead of staying quiet for the whole cooldown.
+    """
     if not settings.OPS_ALERT_WEBHOOK_URL.strip():
         logger.warning("Ops alert (no webhook set) %s: %s", kind, text)
         return False
     cooldown = settings.OPS_ALERT_COOLDOWN_SECONDS if cooldown_seconds is None else cooldown_seconds
+    claimed_in_db = False
     try:
         claimed = await execute_one(
             f"""
@@ -88,14 +93,23 @@ async def alert(kind: str, title: str, text: str, cooldown_seconds: float | None
         )
         if claimed is None:
             return False
+        claimed_in_db = True
     except Exception as exc:
         logger.warning("Could not read the alert cooldown for %s, keeping it in this process: %s", kind, exc)
         sent_at = _local_cooldown.get(kind)
         if sent_at is not None and time.monotonic() - sent_at < cooldown:
             return False
         _local_cooldown[kind] = time.monotonic()
-    await post(title, text)
-    return True
+    if await post(title, text):
+        return True
+    if claimed_in_db:
+        try:
+            await execute_update("DELETE FROM ops_alerts WHERE kind = $1", kind)
+        except Exception as exc:
+            logger.warning("Could not give back the alert cooldown for %s: %s", kind, exc)
+    else:
+        _local_cooldown.pop(kind, None)
+    return False
 
 
 def post_in_background(title: str, text: str) -> None:
@@ -107,11 +121,15 @@ def post_in_background(title: str, text: str) -> None:
     task.add_done_callback(_background.discard)
 
 
-async def post(title: str, text: str) -> None:
-    """Post one message to OPS_ALERT_WEBHOOK_URL, titled "Margins: <title>". Never raises."""
+async def post(title: str, text: str) -> bool:
+    """Post one message to OPS_ALERT_WEBHOOK_URL, titled "Margins: <title>". Returns whether the webhook took it.
+
+    Never raises. The webhook is a third party (an ntfy topic): callers send counts and kinds, never user ids, file
+    paths or error text, which stay in the logs.
+    """
     url = settings.OPS_ALERT_WEBHOOK_URL.strip()
     if not url:
-        return
+        return False
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             if "ntfy" in httpx.URL(url).host:
@@ -125,8 +143,11 @@ async def post(title: str, text: str) -> None:
                 response = await client.post(url, json={"content": message, "text": message})
         if response.status_code >= 400:
             logger.error("The ops alert webhook answered %s", response.status_code)
+            return False
     except Exception as exc:
         logger.error("Could not post the ops alert: %r", exc)
+        return False
+    return True
 
 
 async def ping_deadman() -> None:
