@@ -120,7 +120,7 @@ class BatchedCalls:
 
 
 class _BatchedStream:
-    """The part of the SDK's message stream the provider uses: `async with`, `get_final_message()`, `request_id`."""
+    """The part of the SDK's message stream the provider uses: `async with`, `async for` over its events, `get_final_message()`, `request_id`."""
 
     request_id = None
 
@@ -133,6 +133,14 @@ class _BatchedStream:
     async def __aexit__(self, *exc) -> None:
         if asyncio.iscoroutine(self._reply):
             self._reply.close()
+
+    def __aiter__(self) -> "_BatchedStream":
+        # A batched reply arrives whole, so there are no events: the provider's loop over them ends at once and
+        # get_final_message() gives the reply (and its usage).
+        return self
+
+    async def __anext__(self) -> Any:
+        raise StopAsyncIteration
 
     async def get_final_message(self) -> Any:
         reply, self._reply = self._reply, None
