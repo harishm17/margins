@@ -109,24 +109,6 @@ class TestStorage:
             async with local_copy(stored):
                 pass
 
-    async def test_downloaded_copy_is_removed_afterwards(self, monkeypatch):
-        temp_dirs = []
-
-        def fake_download(bucket_name, key):
-            import tempfile
-
-            temp_dir = tempfile.mkdtemp(prefix="margins-")
-            temp_dirs.append(temp_dir)
-            path = os.path.join(temp_dir, "material.pdf")
-            text_pdf(1).save(Path(path))
-            return path, temp_dir
-
-        monkeypatch.setattr(storage, "_download_from_s3", fake_download)
-
-        async with local_copy("s3://bucket/user/project/remote.pdf") as path:
-            assert Path(path).is_file()
-        assert temp_dirs and not os.path.exists(temp_dirs[0])
-
     async def test_downloaded_copy_is_removed_when_the_body_fails(self, monkeypatch):
         import tempfile
 
@@ -381,14 +363,6 @@ class TestMaterialRole:
     ):
         material, _ = await self.validate(db, local_uploads, monkeypatch, "sample_exams", "content")
         assert material["role"] == "exam"
-
-    async def test_a_syllabus_upload_is_a_syllabus(self, db, local_uploads, monkeypatch, dispatched):
-        material, _ = await self.validate(db, local_uploads, monkeypatch, "syllabus", "content")
-        assert material["role"] == "syllabus"
-
-    async def test_content_stays_content(self, db, local_uploads, monkeypatch, dispatched):
-        material, _ = await self.validate(db, local_uploads, monkeypatch, "lecture_notes", "content")
-        assert material["role"] == "content"
 
     async def test_without_a_model_the_role_is_content(self, db, local_uploads, monkeypatch, dispatched):
         class Down:

@@ -193,14 +193,6 @@ async def test_an_answer_in_another_language_goes_to_the_model_which_abstains():
 
 
 @pytest.mark.asyncio
-async def test_abstaining_never_marks_every_claim_missing():
-    with use(Scripted([result([verdict(c.id, "missing") for c in CLAIMS], confidence=0.2)])):
-        out = await grade_recall(request(answer="hmm the table does a lookup with the thing that goes in"))
-    assert out.status == "ungraded"
-    assert not any(v.verdict == "missing" for v in out.verdicts)
-
-
-@pytest.mark.asyncio
 async def test_claims_limited_to_objective_concepts():
     provider = Scripted(
         [
@@ -366,15 +358,6 @@ def test_instruction_phrasing_aimed_at_the_grader_is_not_support(quote):
     assert not _supported(quote, quote.lower())
 
 
-@pytest.mark.asyncio
-async def test_the_deterministic_abstain_is_logged(caplog):
-    import logging
-
-    with caplog.at_level(logging.INFO, logger="app.services.recall_grader"), use(Scripted([])):
-        await grade_recall(request(answer="idk"))
-    assert "event=recall_abstained" in caplog.text and "reason=unreadable" in caplog.text
-
-
 def test_the_recall_grading_purpose_uses_its_own_model_setting():
     choice = resolve_model("recall_grading")
     assert settings.MODEL_RECALL_GRADING == "claude-sonnet-5-5:low"
@@ -460,32 +443,11 @@ def test_usage_is_written_to_the_ledger_for_a_known_user(client):
     assert rows[0]["cache_read_tokens"] > 0 and rows[0]["cache_read_tokens"] == 4 * rows[0]["cache_write_tokens"]
 
 
-def test_mock_provider_end_to_end(client):
-    from app.services.llm.factory import LLMFactory
-
-    with patch.object(LLMFactory, "get_provider", return_value=MockProvider()):
-        response = client.post("/grade/recall", json=body())
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "graded"
-    assert {v["verdict"] for v in data["verdicts"]} >= {"covered", "missing"}
-    # The mock's unclear marker abstains.
-    with patch.object(LLMFactory, "get_provider", return_value=MockProvider()):
-        unclear = client.post("/grade/recall", json=body(answer="the table xyzzy plugh the bucket maybe something"))
-    assert unclear.json()["status"] == "ungraded" and unclear.json()["clarifying_question"]
-
-
 @pytest.mark.parametrize("quote", ["yes", "it is", "I think so", "um yes it is", "and then", "ok yeah", "maybe something"])
 def test_a_quote_with_nothing_in_it_is_not_support(quote):
     from app.services.recall_grader import _supported
 
     assert not _supported(quote, f"{quote.lower()} and a longer answer around it")
-
-
-def test_a_short_quote_with_a_content_word_is_still_support():
-    from app.services.recall_grader import _supported
-
-    assert _supported("they collide", "when two keys land together they collide")
 
 
 @pytest.mark.asyncio

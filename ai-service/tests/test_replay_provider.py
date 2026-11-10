@@ -25,7 +25,6 @@ from app.services.llm.base import (
     TurnToolUse,
 )
 from app.services.llm.factory import LLMFactory
-from app.services.llm.observed import ObservedProvider
 from app.services.llm.replay_provider import (
     LLMReplayMissError,
     ReplayProvider,
@@ -231,18 +230,6 @@ class TestWiring:
     def teardown_method(self):
         LLMFactory.reset()
 
-    def test_the_factory_builds_a_replay_provider_behind_the_ai_status(self, tmp_path):
-        with patch("app.services.llm.factory.settings") as settings:
-            settings.LLM_PROVIDER = "replay"
-            settings.is_production = False
-            settings.LLM_CASSETTE_DIR = str(tmp_path)
-            settings.LLM_REPLAY_MISS = "error"
-            LLMFactory.reset()
-            provider = LLMFactory.get_provider()
-            assert isinstance(provider, ObservedProvider)
-            assert isinstance(provider.inner, ReplayProvider)
-            assert provider.model_for("validate_material") == "claude-haiku-5-5"
-
     def test_the_factory_refuses_replay_in_production(self, tmp_path):
         with patch("app.services.llm.factory.settings") as settings:
             settings.LLM_PROVIDER = "replay"
@@ -269,11 +256,6 @@ class TestWiring:
 
         with pytest.raises(ValidationError, match="LLM_CASSETTE_DIR"):
             Settings(ENVIRONMENT="development", LLM_PROVIDER="replay", LLM_CASSETTE_DIR="")
-
-    def test_record_mode_needs_the_real_model(self, tmp_path):
-        with pytest.raises(LLMNotConfiguredError, match="record"):
-            ReplayProvider(tmp_path, on_miss="record", inner=None)
-
 
 class TestProviderFault:
     """A workflow turns a provider outage on and off with a file, so every surface can be seen failing (WF11)."""

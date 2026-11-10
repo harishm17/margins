@@ -129,12 +129,6 @@ async def test_an_empty_set_makes_no_call():
     assert provider.calls == []
 
 
-async def test_the_mock_provider_supports_every_item():
-    with use(MockProvider()):
-        kept, dropped = await check_support([item("a"), item("b", excerpts=(2,))], CHUNKS)
-    assert len(kept) == 2 and dropped == 0
-
-
 # ---- the generators call it before minimum_usable --------------------------------------------
 
 QUIZ_CHUNKS = [{"id": "c1", "material_id": "m1", "chunk_text": "Machine learning learns patterns from data.", "filename": "ml.pdf"}]

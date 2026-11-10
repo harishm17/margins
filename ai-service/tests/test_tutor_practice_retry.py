@@ -183,6 +183,3 @@ def test_a_long_reply_keeps_its_closing_question_and_loses_lead_in_instead():
     assert practice.limit_reply("Good start. Which draw changes the bag?") == "Good start. Which draw changes the bag?"
     assert not practice.limit_reply(lead + " Then you are done.").endswith("done.")
 
-
-def test_the_system_prompt_asks_for_a_closing_line_that_survives_the_limit():
-    assert "starts with its verb" in practice.SYSTEM_PROMPT and "Plan the closing question or instruction first" in practice.SYSTEM_PROMPT

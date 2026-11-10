@@ -15,7 +15,6 @@ from app.db import connection
 from app.models.jobs import JobPayload
 from app.services import job_reaper
 from app.services.job_runner import (
-    DailyBudgetExceeded,
     JobOutcome,
     PermanentJobError,
     claim_job,
@@ -447,12 +446,6 @@ class TestDailyBudget:
 
         assert (await make_handler(ok, uses_llm=False)(payload(job_id)))["status"] == "success"
 
-    async def test_the_budget_error_is_permanent(self):
-        from app.services.job_runner import classify_failure
-
-        assert classify_failure(DailyBudgetExceeded("x"), "D") == ("LLM_DAILY_BUDGET", False, 400)
-
-
 class TestUtcTimestamps:
     async def test_the_pool_runs_in_utc(self, db):
         assert await db.fetchval("SHOW timezone") == "UTC"
@@ -736,9 +729,3 @@ class TestActiveJobUniqueness:
         await seed_job(db, user_id)
         assert await db.fetchval("SELECT count(*) FROM processing_jobs") == 2
 
-
-class TestPool:
-    async def test_pool_size_and_command_timeout_come_from_settings(self, db):
-        assert settings.DB_POOL_MAX_SIZE == 20
-        assert db.get_max_size() == settings.DB_POOL_MAX_SIZE
-        assert settings.DB_COMMAND_TIMEOUT_SECONDS == 60

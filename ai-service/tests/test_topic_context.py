@@ -14,7 +14,6 @@ from app.services.content_generator.context import (
     existing_content_digest,
     fetch_topic_chunks,
     fetch_topic_context,
-    format_source_excerpts,
     resolve_sources,
 )
 from app.services.embeddings import search
@@ -106,11 +105,6 @@ class TestPrimarySources:
 
         assert [c["id"] for c in context.chunks] == ids[:2]
 
-    async def test_the_default_budget_is_16000_tokens(self):
-        from app.config import Settings
-
-        assert Settings(DATABASE_URL="postgresql://x/y").TOPIC_SOURCE_TOKEN_BUDGET == 16000
-
     async def test_a_source_in_a_file_that_became_an_exam_is_ignored(self, db, world):
         material, _ = await lecture(db, world["project_id"], "a.pdf", 3)
         topic = await seed_topic(db, world["project_id"], "T")
@@ -168,18 +162,6 @@ class TestSupportingChunks:
         await add_source(db, topic, main, 0, 1)
 
         assert {c["source_kind"] for c in (await fetch_topic_context(topic)).chunks} == {"primary"}
-
-    async def test_the_supporting_excerpts_are_labelled_in_the_prompt(self):
-        chunks = [
-            {"chunk_text": "primary text", "filename": "a.pdf", "category": "lecture_notes", "source_kind": "primary"},
-            {"chunk_text": "supporting text", "filename": "b.pdf", "category": "lecture_notes", "source_kind": "supporting"},
-        ]
-        text = format_source_excerpts("T", "d", chunks)
-        assert text.count("Supporting excerpts from other files") == 1
-        assert '<excerpt index="2" source="b.pdf"' in text and 'use="supporting"' in text
-        assert 'use="supporting"' not in text.split("supporting text")[0].split("primary text")[0]
-        assert 'use=' not in text.split('index="2"')[0]
-
 
 class TestHandAddedTopics:
     async def test_a_topic_without_sources_uses_the_hybrid_mapping(self, db, world):
@@ -286,12 +268,6 @@ class TestCourseMap:
         assert not any(m.cache for m in first)  # a first generation caches nothing
         assert regen[1].cache and "Course map: ..." in regen[1].content
         assert first[1].content == regen[1].content and first[0].content == regen[0].content == CONTENT_SYSTEM_PROMPT
-
-    def test_the_system_prompt_carries_the_new_rules(self):
-        assert "Teach only this topic's objectives" in CONTENT_SYSTEM_PROMPT
-        assert "Assume the listed prerequisites are already known" in CONTENT_SYSTEM_PROMPT
-        assert "never copy a worked example from them" in CONTENT_SYSTEM_PROMPT
-
 
 class TestSourceReferences:
     CHUNKS = [

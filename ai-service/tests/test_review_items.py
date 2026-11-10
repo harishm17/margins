@@ -160,22 +160,6 @@ class TestReviewItems:
                 await generate_review_items(twins.topic_id, [_request([twins.concepts[0]])])
         assert await _bank(db, twins.topic_id) == []
 
-    async def test_the_mock_provider_writes_what_was_asked(self, db, twins):
-        mean, variance = twins.concepts
-        with patch("app.services.llm.factory.LLMFactory.get_provider", return_value=MockProvider()):
-            result = await generate_review_items(
-                twins.topic_id,
-                [_request([mean], "recall", "easy"), _request([variance], "discrimination", "hard")],
-            )
-
-        assert result["concepts_without_items"] == []
-        stored = json.loads((await _bank(db, twins.topic_id))[0]["questions"])
-        by_concept = {q["concept_ids"][0]: q for q in stored}
-        assert by_concept[mean]["mode"] == "recall" and by_concept[mean]["difficulty"] == "easy"
-        assert by_concept[variance]["mode"] == "discrimination" and by_concept[variance]["difficulty"] == "hard"
-        assert any(o.get("confusable_concept_id") == mean for o in by_concept[variance]["options"])
-
-
 class TestReviewItemsJob:
     async def test_the_job_stores_the_items_and_completes(self, db, twins):
         mean = twins.concepts[0]

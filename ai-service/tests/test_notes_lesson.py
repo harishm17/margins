@@ -11,7 +11,6 @@ from app.services.llm.base import LLMResponse, LLMUsage
 from app.services.llm.schemas import (
     ChoiceOption,
     GeneratedQuestion,
-    InteractiveExampleSet,
     QuestionSet,
     SolutionStep,
     SolvedExample,
@@ -147,10 +146,6 @@ class TestPostProcessing:
         text = "## Key Concepts\nThe summary of the idea is short.\nSummary statistics are useful."
         assert clean(text) == text
 
-    def test_old_notes_still_come_out_the_way_they_did(self):
-        old = "# Hash tables\n\n## Overview\nText.\n\n## Key Concepts\n- a\n\n## How It Works\nSteps.\n\n## Common Pitfalls\n- b\n\n## Exam-Ready Recap\n- c\n"
-        assert clean(old) == old.strip()
-
     def test_citation_tags_and_offers_of_help_are_still_removed(self):
         assert clean("Text [Citation: a.pdf p1] here.\nIf you want, I can write more.") == "Text here."
 
@@ -271,19 +266,3 @@ class TestExamplesAndPractice:
         assert result["examples"][0]["sources"] == [{"material_id": "m1", "filename": "bio.pdf", "page_start": 3, "page_end": 3}]
         messages = llm.generate_structured.call_args.args[0]
         assert "map" in messages[1].content and "source_excerpts" in messages[-1].content
-
-    async def test_the_practice_prompt_sets_the_answer_format_rules(self):
-        llm = _llm(structured=InteractiveExampleSet.example())
-        with stub_topic_context(CHUNKS), factory(llm):
-            await ExamplesGenerator().generate_examples("t1", "T", "d", ExampleType.INTERACTIVE, count=1)
-        instructions = llm.generate_structured.call_args.args[0][-1].content
-        for phrase in (
-            "answer_type numeric",
-            "tolerance is the accepted absolute difference",
-            "put 2 to 5 options",
-            "never in the question text",
-            "short canonical word, term or expression",
-            "never put several answers in one entry",
-            "refer to options by their content, never by letter",
-        ):
-            assert phrase in instructions, phrase

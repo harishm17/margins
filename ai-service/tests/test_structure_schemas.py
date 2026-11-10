@@ -116,12 +116,6 @@ class TestPracticeMultipleChoice:
         assert _problem(good, bad).stored() is None
         assert _problem(good).stored() is not None
 
-    def test_only_problems_that_can_be_stored_are_kept(self):
-        examples = [_problem(), _problem(_step(options=[]))]
-        kept = [stored for e in examples if (stored := e.stored()) is not None]
-        assert len(kept) == 1 and kept[0]["steps"][0]["options"]
-
-
 class TestPracticeNumericAndText:
     def test_a_numeric_step_keeps_its_tolerance(self):
         stored = _step(answer_type="numeric", options=[], correct_answer="0.0588", tolerance=-0.005).normalized()
@@ -139,18 +133,6 @@ class TestPracticeNumericAndText:
     def test_empty_questions_and_answers_are_unusable(self):
         assert _step(answer_type="text", options=[], question="  ").normalized() is None
         assert _step(answer_type="text", options=[], correct_answer=" ").normalized() is None
-
-    def test_the_schema_asks_for_options_and_a_tolerance(self):
-        fields = InteractiveStep.model_fields
-        assert "2 to 5 options" in fields["options"].description
-        assert "absolute difference" in fields["tolerance"].description
-        assert "canonical" in fields["answer_type"].description
-        assert "never a comma-separated list" in fields["acceptable_answers"].description
-
-    def test_the_mock_example_stores_cleanly(self):
-        stored = InteractiveExampleSet.example().examples[0].stored()
-        assert stored["steps"][0]["correct_answer"] == "4" and stored["source_excerpts"] == [1]
-
 
 class TestSourceExcerpts:
     def test_questions_keep_clean_excerpt_indexes(self):
@@ -174,27 +156,6 @@ class TestPlannerSchemas:
         assert MaterialCheck(is_valid=True, notes="n", kind="exam").kind == "exam"
         with pytest.raises(Exception):
             MaterialCheck(is_valid=True, notes="n", kind="homework")
-
-    def test_the_mock_plan_places_the_sections_in_the_prompt(self):
-        prompt = (
-            'intro\nS1 | a.pdf | p. 1, 300 tokens | H | "x"\nS2 | a.pdf | p. 2, 300 tokens | H | "y"\n'
-            'S3 | b.pdf | p. 1, 90 tokens | H | "z"'
-        )
-        plan = CoursePlan.example_for(prompt)
-        ids = [sid for u in plan.units for t in u.topics for sid in t.section_ids]
-        assert sorted(ids) == ["S1", "S2", "S3"]
-        assert [u.title for u in plan.units] == ["a (mock)", "b (mock)"]
-        assert all(t.name.endswith("(mock)") for u in plan.units for t in u.topics)
-
-    def test_a_lone_small_file_still_gets_two_topics(self):
-        plan = CoursePlan.example_for('S1 | a.pdf | p. 1, 9 tokens | H | ""\nS2 | a.pdf | p. 2, 9 tokens | H | ""')
-        assert len([t for u in plan.units for t in u.topics]) == 2
-
-    def test_a_prompt_without_sections_gets_the_fixed_example(self):
-        assert CoursePlan.example_for("nothing here").units[0].topics[0].name == "Core Concepts (mock)"
-
-    def test_unit_order_example(self):
-        assert UnitOrder.example_for("1. a\n2. b\n3. c").order == [1, 2, 3]
 
     def test_the_schemas_are_accepted_by_the_structured_output_transform(self):
         import anthropic

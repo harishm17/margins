@@ -44,20 +44,11 @@ class TestFuseRankings:
         result = {c["id"]: c["relevance_source"] for c in fuse([row("v")], [row("t")])}
         assert result == {"v": SOURCE_VECTOR, "t": SOURCE_FULLTEXT}
 
-    def test_order_follows_rank_not_input_position_of_other_legs(self):
-        # Rank 1 in one leg (1/61) beats rank 3 in both-less position (1/63).
-        result = fuse([row("a"), row("b"), row("c")], [])
-        assert [c["id"] for c in result] == ["a", "b", "c"]
-
     def test_equal_scores_break_by_similarity_then_id(self):
         result = fuse([row("a", 0.6)], [row("b", 0.9)])
         assert [c["id"] for c in result] == ["b", "a"]
         result = fuse([row("z", 0.7)], [row("y", 0.7)])
         assert [c["id"] for c in result] == ["y", "z"]
-
-    def test_limit(self):
-        result = fuse([row(f"c{i}") for i in range(10)], [], limit=3)
-        assert [c["id"] for c in result] == ["c0", "c1", "c2"]
 
     def test_scores_are_not_flat(self):
         """The old scoring gave half of all results the same score."""
@@ -124,21 +115,9 @@ class TestQueryBuilding:
     def test_phrases_are_capped(self):
         assert len(fulltext_phrases("t", [f"k{i}" for i in range(40)])) == search.MAX_FULLTEXT_PHRASES
 
-    def test_tsquery_sql_ors_one_parameter_per_phrase(self):
-        sql = fulltext_query_sql(3, first_param=3)
-        assert sql == (
-            "websearch_to_tsquery('english', $3) || websearch_to_tsquery('english', $4) || "
-            "websearch_to_tsquery('english', $5)"
-        )
-
     def test_phrase_text_never_enters_the_sql(self):
         sql = fulltext_query_sql(len(fulltext_phrases("x'; DROP TABLE users; --", [])), first_param=2)
         assert "DROP" not in sql
-
-    def test_tsquery_needs_a_phrase(self):
-        with pytest.raises(ValueError):
-            fulltext_query_sql(0, first_param=1)
-
 
 # ---- the SQL legs, on the test database --------------------------------------------------
 

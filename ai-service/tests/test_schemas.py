@@ -82,12 +82,13 @@ class TestShuffle:
             assert by_id[shuffled["correct_answer"]] == "text C"
             assert [o["id"] for o in shuffled["options"]] == ["A", "B", "C", "D"]
 
-    def test_answer_position_is_spread(self):
-        positions = {
-            shuffle_choice_options(_mcq().normalized(), random.Random(seed))["correct_answer"]
-            for seed in range(40)
-        }
-        assert positions == {"A", "B", "C", "D"}
+    @pytest.mark.parametrize("seeded", [True, False], ids=["seeded_rng", "default_generator"])
+    def test_answer_position_is_spread(self, seeded):
+        if seeded:
+            shuffled = (shuffle_choice_options(_mcq().normalized(), random.Random(seed)) for seed in range(40))
+        else:
+            shuffled = (shuffle_choice_options(_mcq(question_text=f"Question {n}").normalized()) for n in range(40))
+        assert {question["correct_answer"] for question in shuffled} == {"A", "B", "C", "D"}
 
     def test_the_same_question_is_always_shuffled_the_same_way(self):
         orders = {
@@ -95,13 +96,6 @@ class TestShuffle:
             for _ in range(10)
         }
         assert len(orders) == 1
-
-    def test_without_a_generator_the_answer_position_is_still_spread(self):
-        positions = {
-            shuffle_choice_options(_mcq(question_text=f"Question {n}").normalized())["correct_answer"]
-            for n in range(40)
-        }
-        assert positions == {"A", "B", "C", "D"}
 
     def test_other_types_unchanged(self):
         question = {"question_type": "true_false", "correct_answer": True}
@@ -129,15 +123,6 @@ class TestOptionLetterReferences:
             )
             assert shuffled["explanation"] == expected
             assert shuffled["correct_answer"] == letter_of["text D"]
-
-    def test_the_audit_case(self):
-        # Whatever the shuffle does, the key and the explanation must agree.
-        question = self._question("Option C describes disjoint events, and D is the addition rule.")
-        shuffled = shuffle_choice_options(question, random.Random(0))
-        by_id = {o["id"]: o["text"] for o in shuffled["options"]}
-        key = shuffled["correct_answer"]
-        assert by_id[key] == "text D"
-        assert f"and {key} is the addition rule" in shuffled["explanation"]
 
     def test_swaps_do_not_collide(self):
         mapping = {"A": "C", "B": "B", "C": "A", "D": "D"}
@@ -216,15 +201,6 @@ def test_a_problem_whose_hint_states_a_later_answer_is_dropped():
 def test_a_hint_may_name_an_earlier_step_answer_and_the_problems_own_numbers():
     ok = _practice_problem(["Re-read.", "Add the colours.", "total = red + blue"], ["You found 8 marbles.", "With 3 red marbles, think of the first draw.", "P = a x b"])
     assert ok.stored() is not None
-
-
-def test_the_generator_keeps_the_problems_whose_hints_are_clean():
-    from app.services.llm.schemas import InteractiveExampleSet
-
-    bad = _practice_problem(["Re-read.", "Answer: eight", "x"])
-    good = _practice_problem(["Re-read.", "Add the colours.", "total = red + blue"])
-    kept = [s for e in InteractiveExampleSet(examples=[bad, good]).examples if (s := e.stored()) is not None]
-    assert len(kept) == 1
 
 
 class TestPastExamHeader:

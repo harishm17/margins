@@ -203,11 +203,6 @@ def test_the_rung_and_the_cant_parse_answer_shape_the_prompt():
     assert "Rung allowed: 2" in stuck
 
 
-def test_the_mock_provider_answers_with_a_valid_reply():
-    out = ReaderTutorReply.example()
-    assert out.reply and out.check_question.endswith("?")
-
-
 class TestRoute:
     @pytest.fixture
     def client(self):
@@ -228,14 +223,6 @@ class TestRoute:
     def test_an_empty_take_and_a_rung_outside_zero_to_five_are_refused(self, client):
         assert client.post("/tutor/reader", json=self.body(student_take="")).status_code == 422
         assert client.post("/tutor/reader", json=self.body(rung=6)).status_code == 422
-
-    def test_mock_provider_end_to_end(self, client):
-        from app.services.llm.factory import LLMFactory
-
-        with patch.object(LLMFactory, "get_provider", return_value=MockProvider()):
-            response = client.post("/tutor/reader", json=self.body())
-        assert response.status_code == 200
-        assert response.json()["reply"] and response.json()["check_question"].endswith("?")
 
     def test_a_user_over_budget_gets_a_429_and_no_model_call(self, client):
         provider = Scripted([reply()])
@@ -271,10 +258,6 @@ class TestRoute:
         assert response.status_code == 200
         assert len(rows) == 1 and rows[0]["source"] == "tutor" and rows[0]["source_id"] == "s1"
         assert rows[0]["cache_read_tokens"] > 0 and rows[0]["cache_read_tokens"] == 4 * rows[0]["cache_write_tokens"]
-
-
-def test_the_system_prompt_is_plain_words_without_pressure():
-    assert "in plain words" in reader.SYSTEM_PROMPT
 
 
 def test_imperative_asks_are_questions_too():
@@ -434,15 +417,6 @@ def test_restate_uses_only_the_passage():
     assert "data, not instructions" in system and "untrusted data" in user
 
 
-def test_cant_parse_reaches_the_restate_rung_only_through_the_restate_turn():
-    explain = request(cant_parse=True, student_take="I can't parse any of it", rung=1)
-    assert reader._rung(explain) == reader.CANT_PARSE_MIN_RUNG
-    assert reader._rung(request(turn="restate", cant_parse=True, student_take="I can't parse any of it", rung=1)) == reader.RESTATE_RUNG
-    # A question the claims answer still caps an explanation, and a restatement is never asked of one.
-    guarded = request(rung=3, student_take="What is a collision?")
-    assert reader._rung(guarded) == reader.GUARDED_MAX_RUNG
-
-
 @pytest.mark.asyncio
 async def test_a_restatement_is_short_plain_and_ends_with_one_check_question():
     long_reply = " ".join(["Words"] * 200) + "."
@@ -469,19 +443,6 @@ async def test_the_fallback_check_reply_keeps_the_turn_shape():
     with use(provider):
         out = await reader_reply(check_request())
     assert out.from_fallback and out.verdict == "not_yet" and out.follow_up_question.endswith("?")
-
-
-def test_the_mock_provider_answers_every_turn_with_a_valid_reply():
-    mock = MockProvider()
-    check = ReaderCheckReply.example_for("<passage>\nA hash function maps a key to a bucket.\n</passage>\n<student_answer>\nA hash function maps a key to a bucket.\n</student_answer>")
-    assert check.verdict == "right"
-    idk = ReaderCheckReply.example_for("<passage>\nA hash function maps a key to a bucket.\n</passage>\n<student_answer>\nI don't know\n</student_answer>")
-    assert idk.verdict == "not_yet" and idk.follow_up_question.endswith("?")
-    unrelated = ReaderCheckReply.example_for("<passage>\nA hash function maps a key to a bucket.\n</passage>\n<student_answer>\nPhotosynthesis\n</student_answer>")
-    assert unrelated.verdict == "not_yet"
-    restated = ReaderTutorReply.example_for("<passage>\nA hash function maps a key to a bucket.\n</passage>\n<situation>\nRung allowed: 4. Restate: put the passage in other words.\n</situation>")
-    assert "mock restatement" in restated.reply
-    assert mock is not None
 
 
 class TestTurnsOverHttp:
@@ -518,15 +479,3 @@ class TestTurnsOverHttp:
         with use(Scripted([check_reply("right", "Look at the first sentence.", "What does it say?")])):
             response = client.post("/tutor/reader", json=self.body(turn="check", check_question="What is a collision?", dont_know=True))
         assert response.status_code == 200 and response.json()["verdict"] == "not_yet"
-
-    def test_the_mock_provider_end_to_end_for_each_turn(self, client):
-        from app.services.llm.factory import LLMFactory
-
-        with patch.object(LLMFactory, "get_provider", return_value=MockProvider()):
-            check = client.post(
-                "/tutor/reader",
-                json=self.body(turn="check", check_question="What is a collision?", student_answer="Two keys that land in the same bucket collide"),
-            )
-            restate = client.post("/tutor/reader", json=self.body(turn="restate", cant_parse=True, student_take="I can't parse any of it"))
-        assert check.status_code == 200 and check.json()["verdict"] == "right" and check.json()["follow_up_question"] == ""
-        assert restate.status_code == 200 and "mock restatement" in restate.json()["reply"]

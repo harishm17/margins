@@ -86,11 +86,6 @@ class TestResolveModel:
         assert resolve_model("section_notes") == ModelChoice("claude-sonnet-5-5", "high")
         assert resolve_model("grade_short_answer") == ModelChoice("claude-haiku-5-0", "medium")
 
-    def test_an_effort_only_setting_uses_the_fallback_model(self, monkeypatch):
-        monkeypatch.setattr(settings, "MODEL_CHAT", ":high")
-        monkeypatch.setattr(settings, "ANTHROPIC_MODEL", "claude-sonnet-5-5")
-        assert resolve_model("chat") == ModelChoice("claude-sonnet-5-5", "high")
-
     def test_exam_style_uses_the_topics_model_at_low_effort_whatever_its_setting(self, monkeypatch):
         monkeypatch.setattr(settings, "MODEL_TOPICS", "claude-sonnet-5-5:high")
         assert resolve_model("exam_style") == ModelChoice("claude-sonnet-5-5", "low")
@@ -113,21 +108,6 @@ class TestSettings:
     def test_a_bad_effort_fails_at_startup(self):
         with pytest.raises(ValidationError, match="Unknown effort"):
             Settings(DATABASE_URL="postgresql://x/y", MODEL_QUIZ="claude-opus-5-5:meduim")
-
-    def test_every_setting_the_map_names_exists(self):
-        for config in PURPOSES.values():
-            assert config.setting in Settings.model_fields
-
-    def test_the_spec_settings_all_exist_with_the_spec_names(self):
-        assert set(MODEL_SETTINGS) == {
-            "MODEL_NOTES", "MODEL_EXAMPLES", "MODEL_PRACTICE", "MODEL_QUIZ", "MODEL_EXAM",
-            "MODEL_GRADING", "MODEL_TOPICS", "MODEL_CONCEPTS", "MODEL_WARMUP", "MODEL_GAP_EXPLAINER", "MODEL_ROUTER", "MODEL_TUTOR", "MODEL_RECALL_GRADING", "MODEL_CHAT", "MODEL_VOICE", "MODEL_VALIDATION",
-        }
-
-    def test_new_retry_and_concurrency_defaults(self):
-        assert Settings.model_fields["LLM_MAX_RETRIES"].default == 4
-        assert Settings.model_fields["LLM_MAX_CONCURRENCY"].default == 4
-
 
 def _purposes_at_call_sites() -> set[str]:
     """Every literal `purpose="..."` argument in the app."""

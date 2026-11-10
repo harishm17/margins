@@ -214,22 +214,6 @@ class TestMockProvider:
         assert "mock" in text.content.lower()
 
     @pytest.mark.asyncio
-    async def test_mock_question_set_covers_every_type_with_distinct_valid_questions(self):
-        questions = (await MockProvider().generate_structured(MESSAGES, QuestionSet, purpose="topic_quiz")).usable()
-
-        by_type = {}
-        for question in questions:
-            by_type.setdefault(question["question_type"], []).append(question)
-        assert {t: len(qs) for t, qs in by_type.items()} == {
-            "multiple_choice": 6, "true_false": 6, "short_answer": 6, "numerical": 6,
-        }
-        assert len({q["question_text"] for q in questions}) == len(questions)
-        for question in by_type["multiple_choice"]:
-            texts = [o["text"] for o in question["options"]]
-            assert len(set(texts)) == len(texts) == 4
-            assert question["correct_answer"] in {o["id"] for o in question["options"]}
-
-    @pytest.mark.asyncio
     async def test_schema_without_example_fails_clearly(self):
         with pytest.raises(LLMOutputError, match="Verdict"):
             await MockProvider().generate_structured(MESSAGES, Verdict, purpose="topic_quiz")

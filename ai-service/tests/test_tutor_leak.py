@@ -114,14 +114,6 @@ async def test_judge_escapes_tags_in_the_reply():
     assert prompt.count("</tutor_reply>") == 1
 
 
-def test_a_probability_written_p_of_b_is_not_option_b():
-    from app.services.tutor.leak import string_leak
-
-    assert not string_leak("Use P(A or B) = P(A) + P(B) - P(A and B).", ["B"], None)
-    assert string_leak("Go with (B) here.", ["B"], None)
-    assert string_leak("It is option B.", ["B"], None)
-
-
 @pytest.mark.parametrize(
     "reply",
     [

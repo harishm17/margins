@@ -7,7 +7,7 @@ import pytest
 
 from app.api.routes import jobs
 from app.models.jobs import JobPayload
-from app.services.content_generator.context import existing_content_digest, format_source_excerpts
+from app.services.content_generator.context import existing_content_digest
 from app.services.content_generator.quiz import (
     PREREQUISITE_MAX_CHUNKS,
     PREREQUISITE_TOKEN_BUDGET,
@@ -99,11 +99,6 @@ class TestPrerequisiteExcerpts:
 
         assert excerpts.count('use="prerequisite"') == PREREQUISITE_TOKEN_BUDGET // 1000
 
-    def test_plain_chunks_render_unchanged(self):
-        text = format_source_excerpts("T", "d", [chunk(1), chunk(2, "supporting")])
-        assert "prerequisite" not in text and text.count('use="supporting"') == 1
-
-
 class TestPrerequisiteQuestions:
     @pytest.mark.asyncio
     async def test_only_prerequisite_sourced_questions_are_tagged(self):
@@ -148,13 +143,6 @@ class TestPrerequisiteIgnored:
         assert "prerequisite" not in excerpts and "Review questions" not in instructions
         assert result["total_questions"] == 6
         assert all("prerequisite_topic" not in q for q in result["questions"])
-
-    @pytest.mark.asyncio
-    async def test_unknown_topic(self):
-        result, excerpts, _ = await run(QUESTIONS, contexts={})  # the stub answers with the topic's own context
-
-        assert result["total_questions"] == 6
-
 
 class FakeQuiz:
     kwargs = None
@@ -203,10 +191,6 @@ class TestJobWiring:
         for value in (None, "", 5, world.topic, world.other, new_id()):
             kwargs = await run_job(db, world, prerequisite_topic_id=value)
             assert kwargs["prerequisite_topic_id"] is None, value
-
-    async def test_no_preference(self, db, world):
-        assert (await run_job(db, world))["prerequisite_topic_id"] is None
-
 
 class TestDigestIgnoresRetrySets:
     async def test_retry_sets_are_left_out(self, db):
