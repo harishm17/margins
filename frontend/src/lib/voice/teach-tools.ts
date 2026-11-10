@@ -116,8 +116,21 @@ export type CoachState = {
   quiz: { askedTurn: number; current: number }
   /** `askedTurn`: the turn of the last prompt, probe or question put to the student, or of the last answer taken. */
   teach: { current: string | null; askedTurn: number; concepts: Record<string, ConceptState> }
-  guided: { index: number; stage: GuidedStage; prediction: string; checkQuestion: string; askedTurn: number }
+  /**
+   * `claimId`: the claim served last. The reading finds its place by it, because the list of claims can change under a
+   * session (a file read again) and a position would then point at another claim. `index` is its position when served.
+   */
+  guided: { index: number; stage: GuidedStage; prediction: string; checkQuestion: string; askedTurn: number; claimId?: string }
+  /** Clarifying questions asked in a row since the last step that was graded (see CLARIFIES_ALLOWED). */
+  clarified: number
 }
+
+/**
+ * How many times in a row an answer too short or unclear to assess is answered with a clarifying question. There was no
+ * limit, so a student who could only mumble was asked to "say a little more" for as long as the session ran. After this
+ * many, the unclear answer is taken as showing nothing: the idea is explained, or the reading moves on. Nothing is scored.
+ */
+export const CLARIFIES_ALLOWED = 1
 
 /** Utterances kept on the session. */
 export const SAID_KEPT = 8
@@ -167,7 +180,9 @@ export function readCoachState(value: unknown): CoachState {
       stage,
       prediction: typeof guided.prediction === 'string' ? guided.prediction : '',
       checkQuestion: typeof guided.checkQuestion === 'string' ? guided.checkQuestion : '',
+      ...(typeof guided.claimId === 'string' && guided.claimId ? { claimId: guided.claimId } : {}),
     },
+    clarified: typeof raw.clarified === 'number' && raw.clarified > 0 ? Math.floor(raw.clarified) : 0,
   }
 }
 
@@ -538,8 +553,11 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
       )
       if (result.status === 'not_found' || result.status === 'not_ready') return error('Concept not found. Call get_concept_to_explain.')
       if (result.status === 'invalid') return error('There was no explanation to assess. Ask the student again.')
-      if (result.status === 'ungraded') return clarifyAfter(ctx, state, result.clarifyingQuestion)
-      verdicts = result.claims
+      if (result.status === 'ungraded') {
+        if (state.clarified < CLARIFIES_ALLOWED) return clarifyAfter(ctx, state, result.clarifyingQuestion)
+        // Unclear again: it shows nothing of the idea. Not scored, and the plan below explains instead of asking once more.
+        verdicts = nothingShown(concept)
+      } else verdicts = result.claims
     } else {
       const graded = await grade(ctx, {
         prompt: conceptTeachBackPrompt(concept.name),
@@ -551,7 +569,10 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
       })
       const sent = new Set(concept.claims.map((claim) => claim.id))
       verdicts = graded.verdicts.filter((verdict) => sent.has(verdict.claim_id)).map(toStored)
-      if (graded.status !== 'graded' || verdicts.length === 0) return clarifyAfter(ctx, state, graded.clarifying_question)
+      if (graded.status !== 'graded' || verdicts.length === 0) {
+        if (state.clarified < CLARIFIES_ALLOWED) return clarifyAfter(ctx, state, graded.clarifying_question)
+        verdicts = nothingShown(concept)
+      }
     }
   } catch (failure) {
     if (isUnavailable(failure)) return error(UNAVAILABLE)
@@ -567,6 +588,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
   state.teach.current = concept.id
   state.teach.concepts[concept.id] = next.state
   state.teach.askedTurn = ctx.turn
+  state.clarified = 0
   await saveState(ctx.sessionId, state)
 
   // The say-back: the student's own words for the one claim the coach explained, after two probes. It is judged on what was
@@ -684,9 +706,14 @@ const toStored = (verdict: RecallGradeAnswer['verdicts'][number]) => ({
 /** A clarifying question: the words just heard are used up (asking again needs new ones), nothing else is stored. */
 async function clarifyAfter(ctx: TeachToolContext, state: CoachState, question: string | null | undefined): Promise<TeachToolResult> {
   state.teach.askedTurn = ctx.turn
+  state.clarified += 1
   await saveState(ctx.sessionId, state)
   return clarify(question)
 }
+
+/** The verdicts of an answer that stayed too unclear to assess after its clarifying question: no claim shown, nothing wrong said. */
+const nothingShown = (concept: RecallConcept) =>
+  concept.claims.map((claim) => ({ claim_id: claim.id, verdict: 'missing' as const, student_quote: null, misconception: null, pointer: null, reasoning_gap: null }))
 
 function clarify(question: string | null | undefined): TeachToolResult {
   // Nothing was stored and no probe was spent: the student says it again.
@@ -814,8 +841,10 @@ async function recordExampleCheck(
   }
   const sent = new Set(concept.claims.map((claim) => claim.id))
   const verdicts = graded.verdicts.filter((verdict) => sent.has(verdict.claim_id))
-  if (graded.status !== 'graded' || verdicts.length === 0) {
+  const unclear = graded.status !== 'graded' || verdicts.length === 0
+  if (unclear && state.clarified < CLARIFIES_ALLOWED) {
     state.teach.askedTurn = ctx.turn
+    state.clarified += 1
     await saveState(ctx.sessionId, state)
     return {
       output: {
@@ -826,20 +855,24 @@ async function recordExampleCheck(
       events: [],
     }
   }
-  const claims = assessed(concept, verdicts.map(toStored))
+  // Unclear again: the example showed nothing, so the idea closes as taught and nothing is scored.
+  const claims = assessed(concept, unclear ? nothingShown(concept) : verdicts.map(toStored))
   const next = exampleResult(concept.name, claims, before)
   const passed = next.passed
   state.teach.concepts[concept.id] = next.state
   state.teach.askedTurn = ctx.turn
+  state.clarified = 0
   await saveState(ctx.sessionId, state)
 
-  await writeAssistedEvidence(ctx, {
-    itemKey: `voice:${ctx.sessionId}:check:${concept.id}`,
-    conceptId: concept.id,
-    source: 'voice',
-    score: passed ? 1 : 0,
-    metadata: { mode: 'teach_back_check' },
-  })
+  if (!unclear) {
+    await writeAssistedEvidence(ctx, {
+      itemKey: `voice:${ctx.sessionId}:check:${concept.id}`,
+      conceptId: concept.id,
+      source: 'voice',
+      score: passed ? 1 : 0,
+      metadata: { mode: 'teach_back_check' },
+    })
+  }
 
   return withWhatFollows(ctx, state, concepts, concept, next.output, next.state)
 }
@@ -895,6 +928,13 @@ export function predictionPrompt(conceptName: string): string {
   return `What do you expect your pages say about "${conceptName}"?`
 }
 
+/** Where the reading is: the claim served last, found by its id when the session has one (else by the position kept). */
+function readingPlace(claims: ReadingClaim[], guided: CoachState['guided']): { claim: ReadingClaim | undefined; index: number } {
+  const byId = guided.claimId ? claims.findIndex((claim) => claim.id === guided.claimId) : -1
+  const index = byId >= 0 ? byId : guided.index
+  return { claim: claims[index], index }
+}
+
 export async function nextClaim(
   ctx: TeachToolContext,
   state: CoachState,
@@ -904,9 +944,10 @@ export async function nextClaim(
   const claims = await loadReadingClaims(ctx.topic)
   if (claims.length === 0) return error("This topic has no claims from the student's pages to read.")
   const guided = state.guided
+  const place = readingPlace(claims, guided)
 
   if (args.reveal) {
-    const claim = claims[guided.index]
+    const claim = place.claim
     if (!claim || guided.stage !== 'predicting') {
       return error('Ask the student for a prediction first: call next_claim with no arguments, ask the prediction, and wait for the answer.')
     }
@@ -936,8 +977,15 @@ export async function nextClaim(
     }
   }
 
-  // A claim that was told but not checked is left behind when the student asks to move on.
-  if (guided.stage === 'taught') guided.index += 1
+  // A claim that was told but not checked is left behind when the student asks to move on. So is one whose prediction was
+  // asked for and not given: the rules say "call next_claim with no arguments" to skip a claim, and this served the same
+  // claim again, so a student could not skip one. The student must have spoken since the prediction was asked: a second
+  // call in the turn that asked it (the model repeating the app's first step) still gets the same claim.
+  const skipped = guided.stage === 'predicting' && heardSince(state, guided.askedTurn).trim().length > 0
+  // After a check the place is already the next claim; `idle` with a claim id means that claim is done.
+  const done = guided.stage === 'taught' || skipped || (guided.stage === 'idle' && !!guided.claimId && place.claim?.id === guided.claimId)
+  guided.index = guided.stage === 'idle' && !done ? guided.index : place.index + (done ? 1 : 0)
+  state.clarified = 0
   if (guided.index >= claims.length) {
     guided.stage = 'idle'
     await saveState(ctx.sessionId, state)
@@ -945,10 +993,13 @@ export async function nextClaim(
     return { output: { done: true, message: 'Every claim has been read. Sum up and say goodbye.' }, events: [{ type: 'session_complete' }], sessionComplete: true }
   }
   const claim = claims[guided.index]
+  // A claim served again in the turn it was asked in keeps the turn it was asked in.
+  const again = guided.stage === 'predicting' && guided.claimId === claim.id
   guided.stage = 'predicting'
+  guided.claimId = claim.id
   guided.prediction = ''
   guided.checkQuestion = ''
-  guided.askedTurn = ctx.turn
+  if (!again) guided.askedTurn = ctx.turn
   await saveState(ctx.sessionId, state)
   const prompt = predictionPrompt(claim.conceptName)
   return {
@@ -968,7 +1019,9 @@ async function recordReadingCheck(ctx: TeachToolContext, state: CoachState, args
   if (!ctx.topic) return error(NO_TOPIC)
   const claims = await loadReadingClaims(ctx.topic)
   const guided = state.guided
-  const claim = claims[args.claim_index]
+  // The claim is the one that was told (by its id); claim_index is the position it was served at, which is what the coach holds.
+  const place = readingPlace(claims, guided)
+  const claim = place.claim
   if (!claim) return error('Claim not found.')
   if (guided.stage !== 'taught' || guided.index !== args.claim_index) {
     return error('That claim has not been told yet, or was already checked. Call next_claim.')
@@ -981,10 +1034,11 @@ async function recordReadingCheck(ctx: TeachToolContext, state: CoachState, args
   // and the claim is restated before the reading moves on (spec 5.8, 18.3).
   if (args.idk === true || isDontKnow(answer)) {
     guided.stage = 'idle'
-    guided.index += 1
+    guided.index = place.index + 1
     guided.prediction = ''
     guided.checkQuestion = ''
     guided.askedTurn = ctx.turn
+    state.clarified = 0
     await saveState(ctx.sessionId, state)
     await writeIdkAssisted(ctx, {
       itemKey: itemKey({ kind: 'voice', sessionId: ctx.sessionId, index: args.claim_index }),
@@ -1019,21 +1073,42 @@ async function recordReadingCheck(ctx: TeachToolContext, state: CoachState, args
   }
   const verdict = graded.verdicts.find((entry) => entry.claim_id === claim.id)
   if (graded.status !== 'graded' || !verdict) {
-    // Nothing is scored and the claim stays open: the student answers again, in words of their own after this turn.
+    if (state.clarified < CLARIFIES_ALLOWED) {
+      // Nothing is scored and the claim stays open: the student answers again, in words of their own after this turn.
+      guided.askedTurn = ctx.turn
+      state.clarified += 1
+      await saveState(ctx.sessionId, state)
+      return {
+        output: { action: 'clarify', clarifying_question: graded.clarifying_question || 'Can you say a little more about that?', instruction: 'The answer was too short or unclear to assess. Ask the clarifying question in your own words.' },
+        events: [],
+      }
+    }
+    // Unclear again: the reading moves on. Nothing is scored, and the claim is said once more first.
+    guided.stage = 'idle'
+    guided.index = place.index + 1
+    guided.prediction = ''
+    guided.checkQuestion = ''
     guided.askedTurn = ctx.turn
+    state.clarified = 0
     await saveState(ctx.sessionId, state)
     return {
-      output: { action: 'clarify', clarifying_question: graded.clarifying_question || 'Can you say a little more about that?', instruction: 'The answer was too short or unclear to assess. Ask the clarifying question in your own words.' },
+      output: {
+        verdict: 'not yet',
+        claim: { text: tagged('source_claim', claim.text), page: claim.page },
+        claims_left: claims.length - guided.index,
+        instruction: 'The answer was still too unclear to assess. Do not ask again: restate the claim in one sentence from source_claim, with its page, then call next_claim.',
+      } satisfies ClaimCheckResult,
       events: [],
     }
   }
 
   const score = verdictScore(verdict.verdict)
   guided.stage = 'idle'
-  guided.index += 1
+  guided.index = place.index + 1
   guided.prediction = ''
   guided.checkQuestion = ''
   guided.askedTurn = ctx.turn
+  state.clarified = 0
   await saveState(ctx.sessionId, state)
 
   await writeAssistedEvidence(ctx, {
