@@ -8,6 +8,7 @@
  *   writes the evidence of misses left open on an earlier day.
  */
 
+import { record } from '@/lib/api/fields'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -38,8 +39,8 @@ const saveSchema = z.object({
   // Absent from a browser that predates rungs: the problem is stored as before and writes no evidence.
   attemptedSteps: steps.optional(),
   firstTrySteps: steps.optional(),
-  maxRungs: z.record(z.string().max(4), z.number().int().min(0).max(5)).optional(),
-  missRungs: z.record(z.string().max(4), z.number().int().min(0).max(5)).optional(),
+  maxRungs: record(z.number().int().min(0).max(5), 200, 4).optional(),
+  missRungs: record(z.number().int().min(0).max(5), 200, 4).optional(),
   trippedUp: z.string().max(500).optional(),
   // Progress that was kept in the browser before the server stored it, uploaded once.
   migrated: z.boolean().optional(),

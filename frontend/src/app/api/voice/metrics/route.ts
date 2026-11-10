@@ -15,7 +15,7 @@ const metricEntrySchema = z.object({
   toolLatencyMs: z.number().finite().nonnegative().max(600000).optional(),
   toolFailures: z.number().int().nonnegative().max(100).optional(),
   interrupts: z.number().int().nonnegative().max(50).optional(),
-  lastDetectedLanguage: z.string().regex(/^[a-z]{2,8}$/i).optional(),
+  lastDetectedLanguage: z.string().max(8).regex(/^[a-z]{2,8}$/i).optional(),
 }).strict()
 
 const metricsSchema = z.object({

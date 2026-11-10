@@ -18,7 +18,7 @@ import { apiInternal, apiNotFound, apiUnauthorized, isUnauthorizedError } from '
 
 export const dynamic = 'force-dynamic'
 
-const limiter = createRateLimiter({ name: 'instruction', limit: 30, windowMs: 60_000 })
+const instructionLimiter = createRateLimiter({ name: 'instruction', limit: 30, windowMs: 60_000 })
 
 const bodySchema = z.object({
   kind: z.enum(['pointer', 'gap_explainer', 'full_explainer', 'worked_example', 'reveal', 'restatement', 'voice_explain']),
@@ -29,7 +29,7 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
-    const rate = await limiter.check(auth.user.id)
+    const rate = await instructionLimiter.check(auth.user.id)
     if (!rate.ok) {
       return NextResponse.json({ error: 'Too many requests. Please wait a moment and try again.' }, { status: 429, headers: { 'Retry-After': String(rate.retryAfterSeconds) } })
     }

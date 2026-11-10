@@ -33,7 +33,7 @@ const sessionSchema = z.object({
   topicId: id().optional(),
   // The idea a teach-back starts with (the "Do it out loud" link names it).
   conceptId: z.string().max(100).optional(),
-  language: z.string().regex(/^[a-z]{2,8}$/i).optional().default('en'),
+  language: z.string().max(8).regex(/^[a-z]{2,8}$/i).optional().default('en'),
   // Ignored since the coach moved to Claude (the browser chooses the voice). Still accepted.
   voice: z.string().max(50).optional().default('marin'),
   // What the student wants to concentrate on; trimmed and cut to MAX_FOCUS_CHARS.
@@ -43,7 +43,7 @@ const sessionSchema = z.object({
 const patchSchema = z.object({
   sessionId: id(),
   status: z.enum(['active', 'ended', 'aborted']).optional(),
-  lastDetectedLanguage: z.string().regex(/^[a-z]{2,8}$/i).nullable().optional(),
+  lastDetectedLanguage: z.string().max(8).regex(/^[a-z]{2,8}$/i).nullable().optional(),
   incrementInterruptCount: z.number().int().min(0).max(20).optional(),
   // Sent every 30 seconds by an open call; keeps the session counted as live.
   heartbeat: z.boolean().optional(),
