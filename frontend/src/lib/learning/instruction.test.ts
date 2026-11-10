@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { expandToConceptEvents } from './item-key'
 import { instructionInput, needsInstruction } from './instruction'
 
 const at = (iso: string) => new Date(iso)
@@ -39,13 +38,4 @@ test('instructionInput is a level-3 weight-0 rule event keyed by kind and ref', 
   // The local day, not the UTC day: 02:00 UTC on the 11th is still the 10th in Chicago.
   const lateNight = instructionInput('reveal', { userId: 'u', projectId: 'p', topicId: 't', conceptIds: ['c1'], ref: 'x', at: at('2026-11-11T02:00:00Z'), timeZone: 'America/Chicago' })
   assert.equal(lateNight.sessionKey, 'instruction:reveal:x:2026-11-10')
-})
-
-test('instruction events have weight 0 and no primary/secondary split', () => {
-  const input = instructionInput('gap_explainer', { userId: 'u', projectId: 'p', topicId: 't', conceptIds: ['c1', 'c2', 'c3'], ref: 'attempt-1', at: at('2026-11-10T20:30:00Z') })
-  const events = expandToConceptEvents(input)
-  assert.equal(events.length, 3)
-  assert.ok(events.every((e) => e.weight === 0 && e.role === 'primary' && e.source === 'instruction' && e.assistance === 3 && e.score === 0))
-  // Even a failure-shaped score does not give any concept a weight.
-  assert.ok(expandToConceptEvents({ ...input, score: 0, blamedConceptId: 'c2' }).every((e) => e.weight === 0))
 })

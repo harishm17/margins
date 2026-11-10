@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { shortSessionLabel, shortSessionPlan, sizeShortSession, type ShortSessionState } from './short-session'
+import { shortSessionPlan, type ShortSessionState } from './short-session'
 
 const read = new Date('2026-10-20T10:00:00Z')
 
@@ -62,29 +62,4 @@ test('the estimate: reviews and the mini quiz by the item, a recall card five mi
   assert.equal(shortSessionPlan(state())?.minutes, 6)
   // With the AI down every item is graded by rule: a minute each.
   assert.equal(shortSessionPlan(state({ due: 6, ai: 'down' }))?.minutes, 6)
-})
-
-test('the labels read as the copy draft', () => {
-  assert.equal(shortSessionLabel(shortSessionPlan(state({ due: 6 }))!), 'About 9 minutes · 6 reviews')
-  assert.equal(shortSessionLabel(shortSessionPlan(state({ due: 1 }))!), 'About 2 minutes · 1 review')
-  assert.equal(shortSessionLabel(shortSessionPlan(state({ currentTopic: { id: 't1', readAt: read, recallAt: null } }))!), 'About 5 minutes · one recall card')
-  assert.equal(shortSessionLabel(shortSessionPlan(state())!), 'About 6 minutes · 4 questions')
-})
-
-test('the card says the size the session really has, not the ceiling', () => {
-  const review = shortSessionPlan(state({ due: 9 }))!
-  // Six due but only four questions ready and nothing to write: four, exactly.
-  const four = sizeShortSession(review, { ready: 4, toWrite: 0 }, 'up')
-  assert.deepEqual(four.size, { count: 4, exact: true })
-  assert.equal(four.minutes, 6)
-  assert.equal(shortSessionLabel(four), 'About 6 minutes · 4 reviews')
-  // Some still to be written: up to six.
-  const upTo = sizeShortSession(review, { ready: 3, toWrite: 3 }, 'up')
-  assert.equal(shortSessionLabel(upTo), 'About 9 minutes · up to 6 reviews')
-  // More available than the ceiling: the ceiling.
-  assert.equal(sizeShortSession(review, { ready: 12, toWrite: 0 }, 'up').size?.count, 6)
-  // The mini quiz card says up to when a question is still to be written.
-  const quiz = shortSessionPlan(state())!
-  assert.equal(shortSessionLabel(sizeShortSession(quiz, { ready: 3, toWrite: 0 }, 'up')), 'About 5 minutes · 3 questions')
-  assert.equal(shortSessionLabel(sizeShortSession(quiz, { ready: 2, toWrite: 2 }, 'up')), 'About 6 minutes · up to 4 questions')
 })

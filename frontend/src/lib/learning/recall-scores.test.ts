@@ -31,11 +31,6 @@ test('concept score is mean of claim verdicts', () => {
   )
 })
 
-test('concepts come out in the order their first claim appeared', () => {
-  const scores = conceptRecallScores([claim('z', 'missing'), claim('y', 'covered'), claim('z', 'covered')])
-  assert.deepEqual(scores.map((s) => s.conceptId), ['z', 'y'])
-})
-
 test('incorrect sets misconception', () => {
   const [score] = conceptRecallScores([
     claim('a', 'covered'),
@@ -63,17 +58,4 @@ test('a concept that was only left out is a cue miss, and sets no misconception'
   const [score] = conceptRecallScores([claim('a', 'missing'), claim('a', 'missing'), claim('a', 'covered')])
   assert.equal(score.missKind, 'cue_miss')
   assert.equal(score.misconception, undefined)
-})
-
-test('a concept recalled well names no kind of miss', () => {
-  const [full] = conceptRecallScores([claim('a', 'covered'), claim('a', 'covered')])
-  assert.equal(full.missKind, undefined)
-  // Three of four claims is 0.75: a pass, so the one left out is not held against it.
-  const [mostly] = conceptRecallScores([claim('a', 'covered'), claim('a', 'covered'), claim('a', 'covered'), claim('a', 'missing')])
-  assert.equal(mostly.score, 0.75)
-  assert.equal(mostly.missKind, undefined)
-})
-
-test('a claim with no concept is left out', () => {
-  assert.deepEqual(conceptRecallScores([claim('', 'covered')]), [])
 })

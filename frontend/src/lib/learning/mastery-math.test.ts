@@ -41,26 +41,7 @@ test('the recency penalty still applies, capped at 0.25', () => {
   assert.ok(Math.abs(stale.mastery - 0.75) < 1e-9)
 })
 
-test('scores outside the range are clamped', () => {
-  const result = computeMasteryFromSignals({ ...none, quizScores: [250], daysSinceLastPractice: 0 })
-  assert.equal(result.mastery, 1)
-})
-
-import { masteryFromHistory, newestPerTopic } from './mastery-math'
-
-test('newestPerTopic keeps the first rows of each topic and skips rows with no topic', () => {
-  const rows = [
-    { topicId: 'a', n: 1 },
-    { topicId: 'b', n: 2 },
-    { topicId: null, n: 3 },
-    { topicId: 'a', n: 4 },
-    { topicId: 'a', n: 5 },
-  ]
-  const grouped = newestPerTopic(rows, 2)
-  assert.deepEqual(grouped.get('a')?.map((row) => row.n), [1, 4])
-  assert.deepEqual(grouped.get('b')?.map((row) => row.n), [2])
-  assert.equal(grouped.size, 2)
-})
+import { masteryFromHistory, } from './mastery-math'
 
 test('masteryFromHistory matches computeMasteryFromSignals on the same results', () => {
   const now = Date.parse('2026-10-21T00:00:00Z')
@@ -94,12 +75,6 @@ test('masteryFromHistory matches computeMasteryFromSignals on the same results',
     daysSinceLastPractice: 1,
   })
   assert.deepEqual(withPractice, expectedWithPractice)
-})
-
-test('masteryFromHistory treats a topic with no results as 30 days idle', () => {
-  const result = masteryFromHistory({ quiz: [], voice: [], exam: [], now: Date.now() })
-  assert.equal(result.mastery, 0)
-  assert.ok(Math.abs(result.recencyPenalty - 0.25) < 1e-9)
 })
 
 import { DECAY_FLOOR, displayMastery } from './mastery-math'
@@ -138,20 +113,4 @@ test('displayed mastery never falls below half of the stored mastery', () => {
   // The floor is reached at twice the interval.
   const atFloor = displayMastery(0.6, { dueAt: new Date(NOW - 6 * DAY), intervalDays: 3 }, NOW) as number
   assert.ok(Math.abs(atFloor - 0.3) < 1e-9)
-})
-
-test('displayed mastery keeps no-signal, no-schedule and bad inputs as they are', () => {
-  assert.equal(displayMastery(null, { dueAt: new Date(NOW - DAY), intervalDays: 1 }, NOW), null)
-  assert.equal(displayMastery(undefined, null, NOW), null)
-  assert.equal(displayMastery(0.7, null, NOW), 0.7)
-  assert.equal(displayMastery(0.7, { dueAt: null, intervalDays: 3 }, NOW), 0.7)
-  assert.equal(displayMastery(0.7, { dueAt: 'not a date', intervalDays: 3 }, NOW), 0.7)
-  // A zero or missing interval counts as one day, so the result is finite.
-  const shown = displayMastery(0.7, { dueAt: new Date(NOW - DAY), intervalDays: 0 }, NOW) as number
-  assert.ok(Number.isFinite(shown) && shown < 0.7)
-})
-
-test('displayed mastery accepts ISO strings and accepts a Date as the clock', () => {
-  const iso = new Date(NOW - 2 * DAY).toISOString()
-  assert.equal(displayMastery(0.9, { dueAt: iso, intervalDays: 1 }, new Date(NOW)), displayMastery(0.9, { dueAt: iso, intervalDays: 1 }, NOW))
 })

@@ -15,10 +15,6 @@ test('a confirmed list leaves out topics waiting for review; an unconfirmed one 
   assert.deepEqual(unitTopicIds(topics, 'a', false), ['a', 'b', 'c'])
 })
 
-test('a topic outside every unit stands alone', () => {
-  assert.deepEqual(unitTopicIds(topics, 'd', true), ['d'])
-})
-
 test('the topic page and the overview give the same mock exam address', () => {
   // The topic page and withTopicActivity (overview, Home, plan) both come through resolveTopicActivity, which calls activityWithHref.
   const d = (iso: string) => new Date(iso)

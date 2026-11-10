@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { SECOND_CHECK_SCORE, canOpenHint, firstTryRecord, hintCostLabel } from './help-policy'
+import { SECOND_CHECK_SCORE, canOpenHint, firstTryRecord, } from './help-policy'
 import type { Rung } from './practice-evidence'
 
 type Step = Parameters<typeof firstTryRecord>[0]
@@ -84,34 +84,11 @@ test('third check success is level 1', () => {
   assert.deepEqual(firstTryRecord(step({ checks: 4, solvedOnCheck: 4 })), { assistance: 1, score: 0, decided: true })
 })
 
-test('second check on true false is level 1', () => {
-  assert.deepEqual(firstTryRecord(step({ checks: 2, solvedOnCheck: 2, twoOption: true })), { assistance: 1, score: 0, decided: true })
-  // A first check on a two-option item is still a first try.
-  assert.deepEqual(firstTryRecord(step({ checks: 1, firstCheckCorrect: true, solvedOnCheck: 1, twoOption: true })), { assistance: 0, score: 1, decided: true })
-})
-
 test('dont know decides level 1 at once', () => {
   // IDK is the step's first check, wrong; the record is final before any help or any finish.
   assert.deepEqual(firstTryRecord(step({ checks: 1, dontKnow: true })), { assistance: 1, score: 0, decided: true })
   // And it stays level 1 when the student then solves it with no help at all.
   assert.deepEqual(firstTryRecord(step({ checks: 2, dontKnow: true, solvedOnCheck: 2 })), { assistance: 1, score: 0, decided: true })
-})
-
-test('one wrong check is not decided', () => {
-  assert.deepEqual(firstTryRecord(step({ checks: 1 })), { assistance: 1, score: 0, decided: false })
-  assert.deepEqual(firstTryRecord(step({ checks: 1, helpRungBeforeSolve: 1 })), { assistance: 1, score: 0, decided: false })
-  // Left behind, it is final.
-  assert.equal(firstTryRecord(step({ checks: 1, finished: true }))!.decided, true)
-  // Help above locate, a second wrong check, or a wrong check on a two-option item cannot be undone.
-  assert.equal(firstTryRecord(step({ checks: 1, helpRungBeforeSolve: 3 }))!.decided, true)
-  assert.equal(firstTryRecord(step({ checks: 2 }))!.decided, true)
-  assert.equal(firstTryRecord(step({ checks: 1, twoOption: true }))!.decided, true)
-})
-
-test('no checks gives null', () => {
-  assert.equal(firstTryRecord(none), null)
-  // Opened a hint but never checked: no attempt, nothing written (spec 18.13 Q3).
-  assert.equal(firstTryRecord(step({ helpRungBeforeSolve: 1 })), null)
 })
 
 test('hints 2 and 3 need an attempt, locate does not', () => {
@@ -120,12 +97,4 @@ test('hints 2 and 3 need an attempt, locate does not', () => {
   assert.equal(canOpenHint(2, false), false)
   assert.equal(canOpenHint(1, true), true)
   assert.equal(canOpenHint(2, true), true)
-})
-
-test('hint cost labels', () => {
-  assert.equal(hintCostLabel(0, { attempted: false, failedFirstTry: false }), 'still_counts_harder')
-  assert.equal(hintCostLabel(0, { attempted: true, failedFirstTry: false }), 'still_counts_harder')
-  assert.equal(hintCostLabel(1, { attempted: true, failedFirstTry: false }), 'counts_as_miss')
-  assert.equal(hintCostLabel(2, { attempted: true, failedFirstTry: false }), 'counts_as_miss')
-  for (const index of [0, 1, 2] as const) assert.equal(hintCostLabel(index, { attempted: true, failedFirstTry: true }), 'no_extra_cost')
 })

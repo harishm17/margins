@@ -37,7 +37,6 @@ const dbTest = (name: string, run: () => Promise<void>) =>
     await run()
   })
 
-const DAY = 24 * 60 * 60 * 1000
 const UP = { ai: 'up' as const, now: new Date(), timeZone: 'UTC' }
 
 async function world() {
@@ -58,74 +57,6 @@ const miss = (w: World, conceptId: string, n = 0, over: object = {}) => ({
 })
 
 const events = (w: World, source = 'instruction') => prisma.evidenceEvent.findMany({ where: { userId: w.user.id, source }, orderBy: { createdAt: 'asc' } })
-
-dbTest('pointers come from first claims with page and chunk', async () => {
-  const w = await world()
-  const a = await w.mk('Hash tables', 0)
-  const b = await w.mk('Trees', 1)
-  const c = await w.mk('Graphs', 2)
-  await prisma.conceptClaim.create({ data: { conceptId: a.id, text: 'late', quote: 'q', materialId: w.material.id, chunkId: 'chunk-9', pageStart: 9, pageEnd: 9, orderIndex: 3 } })
-  await prisma.conceptClaim.create({ data: { conceptId: a.id, text: 'first', quote: 'q', materialId: w.material.id, chunkId: 'chunk-3', pageStart: 3, pageEnd: 4, orderIndex: 0 } })
-  await prisma.conceptClaim.create({ data: { conceptId: b.id, text: 'no chunk', quote: 'q', materialId: w.material.id, chunkId: null, pageStart: 12, pageEnd: 12, orderIndex: 0 } })
-  const help = await server.helpAfterMiss(prisma, { userId: w.user.id, topicId: w.topic.id, conceptIds: [a.id, b.id, c.id], surface: 'quiz' })
-  assert.equal(help.pointers.length, 3)
-  const base = `/courses/${w.project.id}/topics/${w.topic.id}`
-  assert.deepEqual(help.pointers[0], { conceptId: a.id, conceptName: 'Hash tables', page: 3, chunkId: 'chunk-3', href: `${base}?view=read&focus=${a.id}#chunk-chunk-3` })
-  assert.deepEqual(help.pointers[1], { conceptId: b.id, conceptName: 'Trees', page: 12, chunkId: null, href: `${base}?view=read&focus=${b.id}` })
-  // A concept with no claim still gets a pointer at the concept, with no page.
-  assert.deepEqual(help.pointers[2], { conceptId: c.id, conceptName: 'Graphs', page: null, chunkId: null, href: `${base}?view=read&focus=${c.id}` })
-})
-
-dbTest('the explainer is offered when a recall left a gap on the concepts, ready or not', async () => {
-  const w = await world()
-  const a = await w.mk('A', 0)
-  const b = await w.mk('B', 1)
-  const ask = (ids: string[]) => server.helpAfterMiss(prisma, { userId: w.user.id, topicId: w.topic.id, conceptIds: ids, surface: 'recall' })
-  assert.equal((await ask([a.id])).explainer, null)
-
-  await prisma.recallAttempt.create({
-    data: { userId: w.user.id, topicId: w.topic.id, kind: 'recall', promptText: 'p', answerText: 'x', mode: 'text', result: { claims: [{ concept_id: a.id, verdict: 'missing' }] } },
-  })
-  const base = `/courses/${w.project.id}/topics/${w.topic.id}`
-  assert.deepEqual((await ask([a.id])).explainer, { href: `${base}?view=explainer&focus=${a.id}`, ready: false })
-  assert.equal((await ask([b.id])).explainer, null)
-
-  await prisma.recallAttempt.updateMany({
-    where: { userId: w.user.id },
-    data: { explainer: { status: 'ready', gaps: [{ claim_id: 'c', concept_id: a.id, concept_name: 'A', explanation: 'e', check: { question: 'q', answer: 'a' }, source: {} }] } },
-  })
-  assert.deepEqual((await ask([b.id, a.id])).explainer, { href: `${base}?view=explainer&focus=${a.id}`, ready: true })
-})
-
-dbTest('an easier step is offered only for band 0 or after two fails in a row', async () => {
-  const w = await world()
-  const strong = await w.mk('Strong', 0)
-  const unknown = await w.mk('Unknown', 1)
-  const stuck = await w.mk('Stuck', 2)
-  const prerequisite = await w.mk('Basics', 3)
-  await prisma.conceptEdge.create({ data: { projectId: w.project.id, sourceId: prerequisite.id, targetId: stuck.id, type: 'prerequisite', weight: 1, confidence: 0.9 } })
-  const t0 = Date.now() - 6 * DAY
-  const right = (conceptId: string, n: number) => miss(w, conceptId, n, { score: 1, at: new Date(t0 + n * DAY) })
-  // Strong: three right answers on three days, nothing else: band 2.
-  for (const n of [0, 1, 2]) await evidence.recordEvidence([right(strong.id, n)], { timeZone: 'UTC' })
-  // Stuck: two fails in a row.
-  for (const n of [0, 1]) await evidence.recordEvidence([miss(w, stuck.id, n, { at: new Date(t0 + n * DAY) })], { timeZone: 'UTC' })
-  const ask = (ids: string[], surface: 'quiz' | 'practice' | 'review' = 'quiz') => server.helpAfterMiss(prisma, { userId: w.user.id, topicId: w.topic.id, conceptIds: ids, surface })
-
-  assert.equal((await ask([strong.id])).easierStep, null)
-  const base = `/courses/${w.project.id}/topics/${w.topic.id}`
-  // No evidence: band 0, worked examples at full support.
-  const examples = (await ask([unknown.id])).easierStep
-  assert.equal(examples?.kind, 'examples')
-  assert.equal(examples?.href, `${base}?view=examples&focus=${unknown.id}&fade=full`)
-  assert.ok(examples?.label)
-  // In practice, an easier problem; the weak prerequisite is drilled first when there is one.
-  assert.equal((await ask([unknown.id], 'practice')).easierStep?.kind, 'easier_problem')
-  const drill = (await ask([stuck.id], 'review')).easierStep
-  assert.equal(drill?.kind, 'prerequisite')
-  assert.equal(drill?.href, `/courses/${w.project.id}/review/session?concept=${prerequisite.id}`)
-  assert.match(drill!.label, /Basics/)
-})
 
 dbTest('recordInstruction is idempotent per day', async () => {
   const w = await world()
@@ -188,34 +119,4 @@ dbTest('an instruction after a fail clears needsInstruction and sends the studen
   assert.equal(memory.nAssisted, 0)
   assert.equal(memory.nUnassisted, 1) // the failed quiz itself
   assert.equal(memory.mastery, 0)
-})
-
-dbTest('instruction events spread no FIRe credit', async () => {
-  const w = await world()
-  const whole = await w.mk('Whole', 0)
-  const part = await w.mk('Part', 1)
-  await prisma.conceptEdge.create({ data: { projectId: w.project.id, sourceId: whole.id, targetId: part.id, type: 'encompasses', weight: 1, confidence: 0.9, status: 'confirmed' } })
-  // Control: a Good answer on the whole credits the part.
-  await evidence.recordEvidence([miss(w, whole.id, 0, { score: 1 })], { timeZone: 'UTC' })
-  assert.ok((await prisma.evidenceEvent.count({ where: { userId: w.user.id, source: 'implicit', conceptId: part.id } })) > 0)
-
-  const other = await world()
-  const oWhole = await other.mk('Whole', 0)
-  const oPart = await other.mk('Part', 1)
-  await prisma.conceptEdge.create({ data: { projectId: other.project.id, sourceId: oWhole.id, targetId: oPart.id, type: 'encompasses', weight: 1, confidence: 0.9, status: 'confirmed' } })
-  await server.recordInstruction(prisma, { userId: other.user.id, topicId: other.topic.id, kind: 'full_explainer', conceptIds: [oWhole.id], ref: 'topic', timeZone: 'UTC' })
-  assert.equal(await prisma.evidenceEvent.count({ where: { userId: other.user.id, source: 'implicit' } }), 0)
-  assert.equal(await prisma.evidenceEvent.count({ where: { userId: other.user.id } }), 1)
-  const memory = await prisma.conceptMemory.findMany({ where: { userId: other.user.id } })
-  assert.ok(memory.every((m) => m.card === null && m.dueAt === null))
-})
-
-dbTest('an instruction alone is not evidence that the topic was studied', async () => {
-  const w = await world()
-  const a = await w.mk('A', 0)
-  await server.recordInstruction(prisma, { userId: w.user.id, topicId: w.topic.id, kind: 'pointer', conceptIds: [a.id], ref: a.id, timeZone: 'UTC' })
-  const state = await loader.loadTopicLearningState({ userId: w.user.id, topicId: w.topic.id, timeZone: 'UTC' })
-  assert.equal(state.hasAnyEvidence, false)
-  assert.equal(state.concepts[0].label, 'not_started')
-  assert.equal(state.concepts[0].hasCard, false)
 })

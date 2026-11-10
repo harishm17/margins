@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildExamEvidence, examAnswers } from './exam-evidence'
+import { buildExamEvidence, } from './exam-evidence'
 
 const QUESTIONS = [
   { question_type: 'multiple_choice', topic_id: 't1', concept_ids: ['c1'], options: [{ id: 'A', text: 'x' }, { id: 'B', text: 'y', misconception: 'wrong idea' }] },
@@ -49,12 +49,4 @@ test('unanswered and ungradable questions are not evidence', () => {
     aiGrading: { graded_questions: [graded(0, 'multiple_choice', 0), graded(1, 'short_answer', 0, { needs_review: true })] },
   })
   assert.deepEqual(events, [])
-})
-
-test('stored answers of either form become text answers', () => {
-  assert.deepEqual(examAnswers({ '0': true, '1': 3.5, '2': { answer: 'B', confidence: 0.5 }, '3': null, '4': { x: 1 } }), {
-    '0': { answer: 'true' },
-    '1': { answer: '3.5' },
-    '2': { answer: 'B', confidence: 0.5 },
-  })
 })

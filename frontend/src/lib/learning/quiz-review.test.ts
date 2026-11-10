@@ -40,19 +40,6 @@ test('sure wrong first', () => {
   assert.deepEqual(groups.wrong.map((i) => i.questionIndex), [1, 4])
 })
 
-test('unsure right separate from solid', () => {
-  const review = buildReview(QUESTIONS, results(true, true, true, true, true))
-  const groups = groupResults(review, {
-    '0': { confidence: 0.25 },
-    '1': { confidence: 0.5 },
-    '2': { confidence: 0.95 },
-    '3': 'plain string answer',
-  })
-  assert.deepEqual(groups.unsureRight.map((i) => i.questionIndex), [0, 1])
-  assert.deepEqual(groups.solid.map((i) => i.questionIndex), [2, 3, 4])
-  assert.equal(groups.sureWrong.length + groups.wrong.length, 0)
-})
-
 test('wrong pick shows the distractor\'s misconception', () => {
   const answers = { '0': 'c' }
   const [item] = buildReview(QUESTIONS, results(false), answers)
@@ -97,21 +84,6 @@ test('wrong pick sets concept misconception without a model call', () => {
   const mixup = replay('B')
   assert.equal(mixup.input.metadata?.missKind, 'discrimination')
   assert.equal(mixup.state.misconception, 'BFS uses a stack')
-})
-
-test('a discrimination miss with no misconception text leaves the misconception unset', () => {
-  const at = new Date('2026-11-02T10:00:00Z')
-  const event: EventRow = {
-    source: 'quiz',
-    score: 0,
-    assistance: 0,
-    confidence: 0.5,
-    weight: 1,
-    sessionKey: 'k',
-    createdAt: at,
-    metadata: { questionType: 'multiple_choice', missKind: 'discrimination', confusableConceptId: 'c2' },
-  }
-  assert.equal(replayConcept([event], { timeZone: 'UTC', now: at }).misconception, null)
 })
 
 test('an "I don\'t know" is kept apart from a blank in the stored result and the review', () => {

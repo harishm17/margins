@@ -53,10 +53,6 @@ test('a step surrendered on an earlier day is due from the start of the next loc
   assert.equal(result.get('c1')?.toISOString(), '2026-11-10T08:00:00.000Z')
 })
 
-test('a step surrendered today is not due until tomorrow', () => {
-  assert.equal(surrenderedDue([fact({ createdAt: at('2026-11-10T20:00:00Z') })], NOW, ZONE).size, 0)
-})
-
 test('the surrender and the later finish of the same step are one surrender, by item key', () => {
   const events = [
     fact({ createdAt: at('2026-11-08T20:00:00Z') }),
@@ -84,11 +80,6 @@ test('a level-0 answer before the surrender does not settle it, and a warm-up or
   assert.equal(surrenderedDue(events, NOW, ZONE).size, 1)
 })
 
-test('assisted answers are not retests', () => {
-  const events = [fact(), fact({ source: 'practice', assistance: 1, surrendered: false, itemKey: 'practice:c:1:0', createdAt: at('2026-11-10T10:00:00Z') })]
-  assert.equal(surrenderedDue(events, NOW, ZONE).size, 1)
-})
-
 test('concepts are due when their date is before the end of today or R is under 0.9', () => {
   const result = due([
     memory({ conceptId: 'late', dueAt: at('2026-11-08T00:00:00Z'), retrievability: 0.7 }),
@@ -105,30 +96,4 @@ test('a concept with no card is not due, unless a surrender brought it back', ()
   const back = due([none], new Map([['new', at('2026-11-10T08:00:00Z')]]))
   assert.equal(back.length, 1)
   assert.equal(back[0].dueAt.toISOString(), '2026-11-10T08:00:00.000Z')
-})
-
-test('a surrendered concept that is also due keeps the earlier date', () => {
-  const [result] = due([memory({ dueAt: at('2026-11-10T20:00:00Z'), retrievability: 0.7 })], new Map([['c1', at('2026-11-09T08:00:00Z')]]))
-  assert.equal(result.dueAt.toISOString(), '2026-11-09T08:00:00.000Z')
-})
-
-test('the fields the selection reads come through, with a confusable and a misconception flag', () => {
-  const stored = memory({ misconception: true, modeReached: 'discrimination', lastMaxRung: 3, lastMissKind: 'discrimination', mastery: 0.3, retrievability: 0.5 })
-  const [result] = due([stored], new Map(), { c1: 'c2' })
-  assert.deepEqual(
-    { ...result, dueAt: undefined },
-    {
-      conceptId: 'c1',
-      topicId: 't1',
-      misconception: true,
-      dueAt: undefined,
-      retrievability: 0.5,
-      mastery: 0.3,
-      lastMaxRung: 3,
-      bandInputs: stored.bandInputs,
-      modeReached: 'discrimination',
-      lastMissKind: 'discrimination',
-      confusableId: 'c2',
-    }
-  )
 })

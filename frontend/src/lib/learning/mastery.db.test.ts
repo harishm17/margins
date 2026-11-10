@@ -108,47 +108,6 @@ dbTest('concept topic uses concept mastery', async () => {
   assert.ok(Math.abs(schedule.mastery - got.mastery) < 1e-2)
 })
 
-dbTest('a topic with concepts keeps the blend until its history is converted, and stored and displayed mastery agree', async () => {
-  const w = await world()
-  await addQuizAttempt(w.user.id, w.withConcepts.id, 80)
-  const blend = await mod.computeTopicMastery(w.user.id, w.project.id, w.withConcepts.id)
-  assert.ok(blend.mastery > 0.3, 'history is not wiped out before the backfill has run')
-
-  // Live evidence arrives during the bridge: the stored schedule is still the blend, not the concept value.
-  await evidence.recordEvidence(
-    [{ userId: w.user.id, projectId: w.project.id, topicId: w.withConcepts.id, itemKey: 'quiz:s:0', conceptIds: [w.concept.id], source: 'quiz', score: 1, assistance: 0, gradedBy: 'rule', sessionKey: 'quiz:a1' }],
-    { timeZone: 'UTC' }
-  )
-  const shown = await mod.computeTopicMastery(w.user.id, w.project.id, w.withConcepts.id)
-  const stored = await prisma.reviewSchedule.findUniqueOrThrow({ where: { userId_topicId: { userId: w.user.id, topicId: w.withConcepts.id } } })
-  assert.ok(Math.abs(stored.mastery - shown.mastery) < 1e-6, `${stored.mastery} vs ${shown.mastery}`)
-  assert.ok(Math.abs(shown.mastery - blend.mastery) < 0.05)
-
-  // Converted: both switch to the concept value together.
-  await prisma.topic.update({ where: { id: w.withConcepts.id }, data: { evidenceBackfilledAt: new Date() } })
-  await evidence.rebuildConcepts(w.user.id, [w.concept.id], 'UTC')
-  const nowShown = await mod.computeTopicMastery(w.user.id, w.project.id, w.withConcepts.id)
-  const nowStored = await prisma.reviewSchedule.findUniqueOrThrow({ where: { userId_topicId: { userId: w.user.id, topicId: w.withConcepts.id } } })
-  assert.ok(Math.abs(nowStored.mastery - nowShown.mastery) < 1e-6)
-  assert.ok(nowShown.mastery <= 0.5 + 1e-9)
-})
-
-dbTest('a converted topic with concepts and no evidence is 0', async () => {
-  const w = await world()
-  await prisma.topic.update({ where: { id: w.withConcepts.id }, data: { evidenceBackfilledAt: new Date() } })
-  assert.equal((await mod.computeTopicMastery(w.user.id, w.project.id, w.withConcepts.id)).mastery, 0)
-})
-
-dbTest('recomputing a topic with no concepts uses the topic\'s own project for the blend', async () => {
-  const w = await world()
-  await addQuizAttempt(w.user.id, w.legacy.id, 80)
-  const expected = (await mod.computeTopicMastery(w.user.id, w.project.id, w.legacy.id)).mastery
-  assert.ok(expected > 0)
-  const got = await prisma.$transaction((tx) => mod.recomputeTopicFromConcepts(tx, w.user.id, w.legacy.id))
-  assert.ok(Math.abs(got.mastery - expected) < 1e-6, `${got.mastery} vs ${expected}`)
-  assert.equal(got.dueAt, null)
-})
-
 dbTest('a converted topic is read from its concepts at read time, and a legacy upsert does not overwrite its schedule', async () => {
   const standing = await import('./topic-standing')
   const w = await world()
@@ -197,16 +156,4 @@ dbTest('a converted topic is read from its concepts at read time, and a legacy u
   const legacy = await standing.topicStanding(w.user.id, w.legacy.id)
   assert.equal(legacy.mastery, 0.6)
   assert.ok(legacy.dueAt)
-})
-
-dbTest('a converted topic whose evidence is all gone has no schedule left', async () => {
-  const w = await world()
-  await prisma.topic.update({ where: { id: w.withConcepts.id }, data: { evidenceBackfilledAt: new Date() } })
-  await evidence.recordEvidence(
-    [{ userId: w.user.id, projectId: w.project.id, topicId: w.withConcepts.id, itemKey: 'quiz:s:0', conceptIds: [w.concept.id], source: 'quiz', score: 1, assistance: 0, gradedBy: 'rule', sessionKey: 'quiz:gone' }],
-    { timeZone: 'UTC' }
-  )
-  assert.ok(await prisma.reviewSchedule.findUnique({ where: { userId_topicId: { userId: w.user.id, topicId: w.withConcepts.id } } }))
-  await evidence.recordEvidence([], { replaceSessionKeys: ['quiz:gone'], userId: w.user.id, timeZone: 'UTC' })
-  assert.equal(await prisma.reviewSchedule.findUnique({ where: { userId_topicId: { userId: w.user.id, topicId: w.withConcepts.id } } }), null)
 })

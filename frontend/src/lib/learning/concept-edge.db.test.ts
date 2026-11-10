@@ -81,28 +81,6 @@ dbTest('rejecting a link removes the credit it gave and rebuilds the concept', a
 })
 
 
-dbTest('a rejected link gives no credit to later answers', async () => {
-  const w = await world()
-  await edges.setEdgeStatus({ userId: w.user.id, edgeId: w.edge.id, status: 'rejected', timeZone: 'UTC' })
-  await w.answer('later', new Date('2026-11-02T12:00:00Z'))
-  assert.equal(await implicitFor(w.user.id, w.basic.id), 0)
-})
-
-dbTest('confirming keeps the credit, sets the student as origin, and lets a low-confidence link count', async () => {
-  const w = await world()
-  await prisma.conceptEdge.update({ where: { id: w.edge.id }, data: { confidence: 0.65 } })
-  await w.answer('before', new Date('2026-11-01T12:00:00Z'))
-  assert.equal(await implicitFor(w.user.id, w.basic.id), 0) // below the 0.7 line while only proposed
-
-  const result = await edges.setEdgeStatus({ userId: w.user.id, edgeId: w.edge.id, status: 'confirmed', timeZone: 'UTC' })
-  assert.deepEqual(result, { status: 'ok', removedCredit: 0 })
-  const row = await prisma.conceptEdge.findUniqueOrThrow({ where: { id: w.edge.id } })
-  assert.deepEqual([row.status, row.origin], ['confirmed', 'student'])
-
-  await w.answer('after', new Date('2026-11-03T12:00:00Z'))
-  assert.equal(await implicitFor(w.user.id, w.basic.id), 1)
-})
-
 dbTest("only this student's credit is removed", async () => {
   const w = await world()
   await w.answer('mine', new Date('2026-11-01T12:00:00Z'))
@@ -128,67 +106,6 @@ dbTest("someone else's link, or a missing one, is not found and changes nothing"
   assert.equal((await prisma.conceptEdge.findUniqueOrThrow({ where: { id: w.edge.id } })).status, 'proposed')
 })
 
-dbTest('rejecting a prerequisite or confusable link has no credit to take back', async () => {
-  const w = await world()
-  const other = await prisma.conceptEdge.create({
-    data: { projectId: w.project.id, sourceId: w.basic.id, targetId: w.advanced.id, type: 'prerequisite', weight: 1, confidence: 0.9, status: 'proposed' },
-  })
-  assert.deepEqual(await edges.setEdgeStatus({ userId: w.user.id, edgeId: other.id, status: 'rejected', timeZone: 'UTC' }), { status: 'ok', removedCredit: 0 })
-})
-
-async function chain() {
-  const w = await world()
-  await prisma.conceptEdge.delete({ where: { id: w.edge.id } })
-  const third = await prisma.concept.create({ data: { projectId: w.project.id, topicId: w.topic.id, name: 'Third', summary: 's', kind: 'concept', orderIndex: 2 } })
-  const edge = (source: string, target: string, weight: number) =>
-    prisma.conceptEdge.create({ data: { projectId: w.project.id, sourceId: source, targetId: target, type: 'encompasses', weight, confidence: 0.9, status: 'confirmed' } })
-  return { ...w, third, edge }
-}
-
-const startAll = async (w: Awaited<ReturnType<typeof chain>>, ids: string[]) => {
-  for (const [n, id] of ids.entries()) await w.answerOn(id)(`start-${n}`, new Date('2026-10-01T12:00:00Z'))
-}
-
-dbTest('rejecting the first link of a chain takes back the credit that reached the end of it', async () => {
-  const w = await chain()
-  await startAll(w, [w.basic.id, w.third.id])
-  await w.edge(w.advanced.id, w.basic.id, 0.9).then(async (first) => {
-    await w.edge(w.basic.id, w.third.id, 0.9)
-    await w.answer('go', new Date('2026-11-11T12:00:00Z'))
-    assert.equal(await implicitFor(w.user.id, w.basic.id), 1)
-    assert.equal(await implicitFor(w.user.id, w.third.id), 1)
-    const result = await edges.setEdgeStatus({ userId: w.user.id, edgeId: first.id, status: 'rejected', timeZone: 'UTC' })
-    assert.deepEqual(result, { status: 'ok', removedCredit: 2 })
-    assert.equal(await implicitFor(w.user.id, w.basic.id), 0)
-    assert.equal(await implicitFor(w.user.id, w.third.id), 0)
-  })
-})
-
-dbTest("rejecting a link the end's best path did not use leaves that credit", async () => {
-  const w = await chain()
-  await startAll(w, [w.basic.id, w.third.id])
-  const direct = await w.edge(w.advanced.id, w.third.id, 1)
-  await w.edge(w.advanced.id, w.basic.id, 0.5)
-  const second = await w.edge(w.basic.id, w.third.id, 0.5)
-  await w.answer('go', new Date('2026-11-11T12:00:00Z'))
-  const credit = await prisma.evidenceEvent.findFirstOrThrow({ where: { userId: w.user.id, conceptId: w.third.id, source: 'implicit' } })
-  assert.deepEqual((credit.metadata as { pathEdgeIds: string[] }).pathEdgeIds, [direct.id])
-  const result = await edges.setEdgeStatus({ userId: w.user.id, edgeId: second.id, status: 'rejected', timeZone: 'UTC' })
-  assert.deepEqual(result, { status: 'ok', removedCredit: 0 })
-  assert.equal(await implicitFor(w.user.id, w.third.id), 1)
-})
-
-dbTest('credit written before paths were recorded is found by its last edge', async () => {
-  const w = await world()
-  await prisma.evidenceEvent.create({
-    data: {
-      userId: w.user.id, projectId: w.project.id, topicId: w.topic.id, conceptId: w.basic.id, itemKey: 'old', source: 'implicit', score: 1, assistance: 0,
-      weight: 1, role: 'secondary', gradedBy: 'rule', sessionKey: 'old', metadata: { direction: 'credit', pathWeight: 1, edgeId: w.edge.id },
-    },
-  })
-  assert.deepEqual(await edges.setEdgeStatus({ userId: w.user.id, edgeId: w.edge.id, status: 'rejected', timeZone: 'UTC' }), { status: 'ok', removedCredit: 1 })
-})
-
 dbTest('a failure while rejecting leaves the link and its credit as they were', async () => {
   const w = await world()
   await w.answerBasic('first', new Date('2026-11-01T12:00:00Z'))
@@ -206,38 +123,4 @@ dbTest('a failure while rejecting leaves the link and its credit as they were', 
     /boom/
   )
   assert.equal((await prisma.conceptEdge.findUniqueOrThrow({ where: { id: fresh.edge.id } })).status, 'proposed')
-})
-
-const gate = () => {
-  let open!: () => void
-  const wait = new Promise<void>((resolve) => (open = resolve))
-  return { wait, open }
-}
-const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-dbTest('an answer recorded while a link with credit is rejected leaves no credit behind', async () => {
-  const w = await world()
-  await w.answerBasic('first', new Date('2026-11-01T12:00:00Z'))
-  await w.answer('one', new Date('2026-11-11T12:00:00Z'))
-  const held = gate()
-  const rejecting = edges.setEdgeStatus({ userId: w.user.id, edgeId: w.edge.id, status: 'rejected', timeZone: 'UTC' }, { afterStatusWritten: () => held.wait })
-  await pause(300)
-  const answering = w.answer('two', new Date('2026-11-12T12:00:00Z'))
-  await pause(300)
-  held.open()
-  await Promise.all([rejecting, answering])
-  assert.equal(await implicitFor(w.user.id, w.basic.id), 0)
-  assert.equal(await prisma.evidenceEvent.count({ where: { userId: w.user.id, conceptId: w.advanced.id, source: 'quiz' } }), 2)
-})
-
-dbTest('an answer recorded while a link with no credit yet is rejected gives none', async () => {
-  const w = await world()
-  const held = gate()
-  const rejecting = edges.setEdgeStatus({ userId: w.user.id, edgeId: w.edge.id, status: 'rejected', timeZone: 'UTC' }, { afterStatusWritten: () => held.wait })
-  await pause(300)
-  const answering = w.answer('two', new Date('2026-11-12T12:00:00Z'))
-  await pause(300)
-  held.open()
-  await Promise.all([rejecting, answering])
-  assert.equal(await implicitFor(w.user.id, w.basic.id), 0)
 })

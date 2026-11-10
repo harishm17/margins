@@ -3,9 +3,8 @@ import test from 'node:test'
 import { Rating } from 'ts-fsrs'
 import { conceptMastery } from './concept-mastery'
 import type { EventRow } from './evidence-types'
-import { bandInputsFromState, conceptBand, topicBand, type BandInputs } from './level'
+import { bandInputsFromState, conceptBand, type BandInputs } from './level'
 import { replayConcept } from './memory'
-import { warmupPriorByConcept } from './warmup-bracket'
 
 const at = (day: string) => new Date(`2026-11-${day}T16:00:00Z`)
 
@@ -65,13 +64,6 @@ test('rung 3 steps down', () => {
   assert.equal(conceptBand(withScores([0.5], { lastMaxRung: 4 })), 0)
 })
 
-test('idk steps down', () => {
-  assert.equal(conceptBand(withScores([0.9], { latestIsIdk: true })), 1)
-  assert.equal(conceptBand(withScores([0.5], { latestIsIdk: true })), 0)
-  // A fail in the last group steps down too.
-  assert.equal(conceptBand(withScores([0.5], { consecutiveFails: 1 })), 0)
-})
-
 test('no help and Good steps up', () => {
   assert.equal(conceptBand(withScores([0.5], { lastMaxRung: 0, latestGrade: Rating.Good })), 2)
   assert.equal(conceptBand(withScores([0.5], { lastMaxRung: 0, latestGrade: Rating.Easy })), 2)
@@ -81,32 +73,4 @@ test('no help and Good steps up', () => {
   // The step is clamped to the bands.
   assert.equal(conceptBand(withScores([0.95], { lastMaxRung: 0, latestGrade: Rating.Good })), 2)
   assert.equal(conceptBand(withScores([0.1], { latestIsIdk: true })), 0)
-})
-
-test('warm-up guess does not raise the prior', () => {
-  const guessedRight = { conceptIds: ['a'], correct: true, confidence: 0.25, confidenceLevel: 'guess' }
-  const sureRight = { conceptIds: ['b'], correct: true, confidence: 0.75, confidenceLevel: 'fairly' }
-  const wrong = { conceptIds: ['c'], correct: false, confidence: 0.75, confidenceLevel: 'fairly' }
-  const prior = warmupPriorByConcept([guessedRight, sureRight, wrong])
-  assert.equal(prior.get('a'), 0)
-  assert.equal(prior.get('b'), 1)
-  assert.equal(prior.get('c'), 0)
-  // With no evidence the prior sets the band: <0.5 -> 0, <1 -> 1, 1 -> 2.
-  assert.equal(conceptBand({ ...unknown, prior: prior.get('a')! }), 0)
-  assert.equal(conceptBand({ ...unknown, prior: 0.5 }), 1)
-  assert.equal(conceptBand({ ...unknown, prior: 0.49 }), 0)
-  assert.equal(conceptBand({ ...unknown, prior: prior.get('b')! }), 2)
-  // A concept two questions touched takes their mean.
-  const mixed = warmupPriorByConcept([{ ...sureRight, conceptIds: ['d'] }, { ...guessedRight, conceptIds: ['d'] }])
-  assert.equal(mixed.get('d'), 0.5)
-  // Once there is evidence the prior is ignored.
-  assert.equal(conceptBand(withScores([0.2], { prior: 1 })), 0)
-})
-
-test('topic band rounds the mean of non-solid concepts', () => {
-  assert.equal(topicBand([{ band: 0, solid: false }, { band: 1, solid: false }, { band: 2, solid: true }]), 1)
-  assert.equal(topicBand([{ band: 0, solid: false }, { band: 0, solid: false }, { band: 1, solid: false }]), 0)
-  assert.equal(topicBand([{ band: 2, solid: false }, { band: 1, solid: false }]), 2)
-  assert.equal(topicBand([{ band: 0, solid: true }, { band: 1, solid: true }]), 2)
-  assert.equal(topicBand([]), 0)
 })

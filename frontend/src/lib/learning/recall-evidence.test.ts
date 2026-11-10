@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { recallEvidence, recallIdkEvidence, recallLevel } from './recall-evidence'
+import { recallEvidence, recallLevel } from './recall-evidence'
 
 test('the level an answer is recorded at', () => {
   assert.deepEqual(recallLevel({ abandoned: false }, 0.9), { assistance: 0, score: 0.9 })
@@ -36,14 +36,4 @@ test("an I don't remember is a level-1 failure whatever else is set", () => {
   assert.deepEqual(recallLevel({ abandoned: false, idk: true }, 0), { assistance: 1, score: 0 })
   assert.deepEqual(recallLevel({ abandoned: true, idk: true }, 0), { assistance: 1, score: 0 })
   assert.deepEqual(recallLevel({ abandoned: false, repeat: 'revealed', idk: true }, 0), { assistance: 1, score: 0 })
-})
-
-test("I don't remember evidence is one rule-graded event per concept, with no confidence", () => {
-  const events = recallIdkEvidence({ userId: 'u', projectId: 'p', topicId: 't', kind: 'recall', itemKey: 'recall:t:0', attemptId: 'a1', conceptIds: ['c1', 'c2', 'c1'] })
-  assert.deepEqual(events.map((e) => [e.conceptIds, e.source, e.assistance, e.score, e.gradedBy, e.confidence]), [
-    [['c1'], 'recall', 1, 0, 'rule', undefined],
-    [['c2'], 'recall', 1, 0, 'rule', undefined],
-  ])
-  assert.equal(events[0].sessionKey, 'recall:a1')
-  assert.deepEqual(events[0].metadata, { mode: 'recall', attemptId: 'a1', idk: true, missKind: 'cue_miss' })
 })

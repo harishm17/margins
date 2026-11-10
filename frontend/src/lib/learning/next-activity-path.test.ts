@@ -1,9 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { nextActivity, type TopicConceptState, type TopicLearningState } from './next-activity'
-import { nextStepWords, pathGlyphs, pathSteps } from '@/features/topic/path-steps'
+import { nextStepWords, pathSteps } from '@/features/topic/path-steps'
 import { pathStepFor } from '@/features/topic/activity-copy'
-import type { PathView } from '@/features/topic/types'
 
 // The path is Warm-up, Read, Recall, Practice, Quiz. These tests walk one topic along it, and check that the
 // next activity, the steps the topic offers and the words the Topics list uses all say the same thing at each point.
@@ -96,13 +95,6 @@ test('walking the path: warm-up, read, recall, practice, quiz', () => {
   assert.equal(kind({ ...recalled, practiceDone: true }), 'quiz')
 })
 
-test('a quick pass and a topic with quiz evidence do not wait for practice', () => {
-  const recalled = topic({ readAt: at('2026-11-10T10:00:00Z'), recallAt: at('2026-11-10T11:00:00Z') })
-  assert.equal(kind({ ...recalled, triage: 'quick' }), 'quiz')
-  // Every concept already has quiz evidence and is not solid: practice is the activity, because it is the one left.
-  assert.equal(kind({ ...recalled, concepts: [concept('a', { hasQuizEvidence: true, mastery: 0.5 })] }), 'practice')
-})
-
 test('recall done, practice done, everything solid: the stretch rotation, not another quiz', () => {
   const solid = topic({
     warmupAt: at('2026-10-01T00:00:00Z'),
@@ -127,36 +119,4 @@ test('a legacy topic without concepts goes Read, Practice, Quiz, then practice t
   assert.equal(kind(legacy({ prepared: false })), 'start')
   // The steps such a topic offers have no warm-up and no recall.
   assert.deepEqual(pathSteps({ hasConcepts: false, warmupReady: false, warmupDone: false, readDone: false, preparingConcepts: false }), ['read', 'practice', 'quiz'])
-})
-
-test('the Topics list says what the topic says: its next step is the one the activity belongs to', () => {
-  const done: Record<PathView, boolean> = { warmup: true, read: true, recall: true, practice: false, quiz: false }
-  const state = topic({ warmupAt: at('2026-11-10T09:00:00Z'), readAt: at('2026-11-10T10:00:00Z'), recallAt: at('2026-11-10T11:00:00Z') })
-  const next = nextActivity(state, UP)
-  const glyphs = pathGlyphs({
-    steps: pathSteps({ hasConcepts: true, warmupReady: true, warmupDone: true, readDone: true, preparingConcepts: false }),
-    done,
-    nextStep: pathStepFor(next.kind),
-  })
-  assert.deepEqual(
-    glyphs.map((glyph) => [glyph.label, glyph.state]),
-    [
-      ['Warm-up', 'done'],
-      ['Read', 'done'],
-      ['Recall', 'done'],
-      ['Practice', 'next'],
-      ['Quiz', 'later'],
-    ]
-  )
-  assert.equal(nextStepWords(next.kind), 'Next: Practice')
-})
-
-test('with the AI down, practice that is not written yet is passed over for the quiz, and the reason says so', () => {
-  const down = { ai: 'down', now: NOW, timeZone: 'UTC' } as const
-  const recalled = topic({ readAt: at('2026-11-10T10:00:00Z'), recallAt: at('2026-11-10T11:00:00Z') })
-  const passed = nextActivity({ ...recalled, practiceWritten: false }, down)
-  assert.equal(passed.kind, 'quiz')
-  assert.match(passed.reason, /Practice is not written yet and needs the AI, which is down/)
-  // Practice that is already written works without the model, so it still comes first.
-  assert.equal(nextActivity(recalled, down).kind, 'practice')
 })

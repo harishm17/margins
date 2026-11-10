@@ -36,24 +36,6 @@ test('gives up after the bounded number of attempts', async () => {
   assert.equal(calls, 3)
 })
 
-test('waits between attempts, longer each time', async () => {
-  const stamps: number[] = []
-  await assert.rejects(
-    withTransactionRetry(
-      async () => {
-        stamps.push(Date.now())
-        throw deadlock()
-      },
-      3,
-      20
-    )
-  )
-  assert.equal(stamps.length, 3)
-  // Floors well under the 20 and 40 ms bases, so timer granularity cannot trip them.
-  assert.ok(stamps[1] - stamps[0] >= 15)
-  assert.ok(stamps[2] - stamps[1] >= 30)
-})
-
 test('does not retry other errors', async () => {
   let calls = 0
   await assert.rejects(

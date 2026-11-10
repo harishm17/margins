@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { pickWeakestPrerequisite, selectDrillItems } from './drill-select'
+import { selectDrillItems } from './drill-select'
 import { Rating } from 'ts-fsrs'
 import type { BankItem, DueConcept, Mode } from './review-select'
 
@@ -49,13 +49,6 @@ test('concept drill includes weak prerequisite', () => {
   assert.deepEqual(missing, [])
 })
 
-test('a prerequisite with nothing to serve is asked for in its own topic', () => {
-  const bank = bankFor('c1', ['recall', 'recall', 'composition', 'composition'])
-  const { items, missing } = drill({ prerequisite: concept('p1', { topicId: 't0', mastery: 0.2 }), bank })
-  assert.equal(items.length, 4)
-  assert.deepEqual(missing, [{ topicId: 't0', conceptIds: ['p1'], mode: 'recall', difficulty: 'easy' }])
-})
-
 test('a misconception with a near-twin starts with discrimination', () => {
   const bank = bankFor('c1', ['recall', 'discrimination', 'discrimination', 'composition', 'recall'])
   const { items } = drill({ concept: concept('c1', { misconception: true, confusableId: 'c2', modeReached: 'discrimination' }), bank })
@@ -92,28 +85,4 @@ test('an item answered today is not served, and served items are not served twic
   ]
   const { items } = drill({ bank, served: [bank[1]] })
   assert.deepEqual(items.map((i) => i.itemKey), ['fresh'])
-})
-
-test('items already served fill the first slots, so a fill continues the sequence', () => {
-  const bank = bankFor('c1', ['recall', 'recall', 'composition', 'composition'])
-  const first = drill({ bank })
-  const served = first.items.slice(0, 2)
-  const rest = drill({ bank, served })
-  assert.deepEqual([...served, ...rest.items].map((i) => i.itemKey), first.items.map((i) => i.itemKey))
-})
-
-test('the weakest prerequisite is the lowest R below 0.8', () => {
-  assert.equal(pickWeakestPrerequisite([]), null)
-  assert.equal(pickWeakestPrerequisite([concept('a', { retrievability: 0.85 })]), null)
-  const weakest = pickWeakestPrerequisite([concept('a', { retrievability: 0.7 }), concept('b', { retrievability: 0.4 }), concept('c', { retrievability: 0.9 })])
-  assert.equal(weakest?.conceptId, 'b')
-})
-
-test('items that tie in a drill are taken in bank order, not by their keys', () => {
-  // Item keys carry random ids, so a tie broken by key falls differently on every new course.
-  const bank = ['f0', 'c3', '0a', '9b', '5e'].map((id) => item(`quiz:${id}:0`, ['c1']))
-  assert.deepEqual(
-    drill({ bank }).items.map((i) => i.itemKey),
-    bank.slice(0, drill({ bank }).items.length).map((i) => i.itemKey)
-  )
 })

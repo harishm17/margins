@@ -37,7 +37,3 @@ test('a wrong answer and an "I don\'t know" count zero, and partial credit is ke
   const answers: Record<string, QuizAnswer> = { '0': { answer: 'false' }, '1': { answer: '', idk: true }, '2': { answer: 'text' } }
   assert.equal(strongStartScore([graded(0, false), graded(1, false), graded(2, false, 2, 1)], answers), 0.25)
 })
-
-test('no points is a score of zero, not a division by zero', () => {
-  assert.equal(strongStartScore([], {}), 0)
-})

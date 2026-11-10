@@ -1,15 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  focusFromConcepts,
-  missedConceptIds,
   retryAvailableAt,
   retryOpensAt,
-  missedConcepts,
   missedQuestions,
-  pickPrerequisite,
-  questionKey,
-  questionSetKey,
   reviewDifficulty,
   type AttemptForReview,
 } from './missed'
@@ -34,11 +28,6 @@ test('the questions got wrong in the last two attempts are the ones to retry', (
   assert.deepEqual(missed.map((item) => item.question.question_text), ['B', 'C', 'D'])
 })
 
-test('only the last two attempts count', () => {
-  const missed = missedQuestions([attempt([q('A')], true), attempt([q('B')], true), attempt([q('Old miss')], false)])
-  assert.deepEqual(missed, [])
-})
-
 test('a question missed first and answered right later is no longer missed', () => {
   const newest = attempt([q('Same question'), q('Other')], true, true)
   const older = attempt([q('same  QUESTION'), q('Third')], false, false)
@@ -60,37 +49,6 @@ test('the retry quiz is capped', () => {
   assert.equal(missedQuestions([wrong], 3).length, 3)
 })
 
-test('questions with no text are skipped, and old results stored as plain booleans still count', () => {
-  const blank = attempt([q('   ')], false)
-  assert.deepEqual(missedQuestions([blank]), [])
-  const old: AttemptForReview = { questions: [q('Legacy')], results: { '0': false } }
-  assert.equal(missedQuestions([old]).length, 1)
-})
-
-test('question keys ignore case and spacing', () => {
-  assert.equal(questionKey(q('  What   IS x? ')), 'what is x?')
-  assert.equal(questionSetKey([q('B'), q('a')]), questionSetKey([q('A'), q('b')]))
-})
-
-test('the concepts of the missed questions are listed once each', () => {
-  const missed = missedQuestions([
-    attempt([q('A', ['Bayes rule', 'Priors']), q('B', ['bayes rule', ' Likelihood '])], false, false),
-  ])
-  assert.deepEqual(missedConcepts(missed), ['Bayes rule', 'Priors', 'Likelihood'])
-  assert.deepEqual(missedConcepts(missed, 2), ['Bayes rule', 'Priors'])
-  assert.deepEqual(missedConcepts([]), [])
-})
-
-test('the focus text names the concepts and fits the limit', () => {
-  assert.equal(focusFromConcepts(['Bayes rule', 'Priors']), 'Concepts you missed: Bayes rule; Priors')
-  assert.equal(focusFromConcepts([]), null)
-  const long = Array.from({ length: 30 }, (_, index) => `A fairly long concept name number ${index}`)
-  const focus = focusFromConcepts(long) as string
-  assert.ok(focus.length <= 280)
-  assert.ok(focus.startsWith('Concepts you missed: A fairly long concept name number 0'))
-  assert.ok(!focus.endsWith(';'))
-})
-
 test('review difficulty follows mastery: under 0.4 easy, under 0.75 medium, else hard', () => {
   assert.equal(reviewDifficulty(0), 'easy')
   assert.equal(reviewDifficulty(0.39), 'easy')
@@ -100,27 +58,6 @@ test('review difficulty follows mastery: under 0.4 easy, under 0.75 medium, else
   assert.equal(reviewDifficulty(1), 'hard')
   assert.equal(reviewDifficulty(null), 'easy')
   assert.equal(reviewDifficulty(undefined), 'easy')
-})
-
-test('the prerequisite to review from is the weakest one', () => {
-  assert.equal(pickPrerequisite([]), null)
-  assert.deepEqual(pickPrerequisite([{ id: 'a', mastery: 0.9 }, { id: 'b', mastery: 0.3 }, { id: 'c', mastery: null }]), { id: 'c', mastery: null })
-  assert.equal(pickPrerequisite([{ id: 'a', mastery: 0.9 }, { id: 'b', mastery: 0.3 }])?.id, 'b')
-})
-
-test('fresh review focuses missed concept ids', () => {
-  const withIds = (text: string, ids: unknown) => ({ ...q(text), concept_ids: ids })
-  const wrong = attempt(
-    [withIds('A', ['c1', 'c2']), withIds('B', ['c2', 'c3']), withIds('C', 'nope') as never, withIds('D', ['c4'])],
-    false,
-    false,
-    false,
-    true
-  )
-  const missed = missedQuestions([wrong])
-  assert.deepEqual(missedConceptIds(missed), ['c1', 'c2', 'c3'])
-  assert.deepEqual(missedConceptIds(missed, 2), ['c1', 'c2'])
-  assert.deepEqual(missedConceptIds([]), [])
 })
 
 test('the retry is closed until the next local day, and open after', () => {

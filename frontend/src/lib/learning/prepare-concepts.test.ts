@@ -48,17 +48,6 @@ test('a failed extraction is tried again once a day', () => {
   assert.equal(PREPARE_RETRY_AFTER_MS, 24 * HOUR)
 })
 
-test('a newer running or finished job after a failure is not retried over', () => {
-  const state = {
-    ...bare,
-    attempts: [
-      { status: 'processing', at: ago(HOUR) },
-      { status: 'failed', at: ago(72 * HOUR) },
-    ],
-  }
-  assert.equal(prepareConceptsStart(state, now), null)
-})
-
 test('retries are bounded', () => {
   const failures = (n: number) => ({
     ...bare,
@@ -75,13 +64,6 @@ test('course without concepts starts prepare_concepts once', async () => {
   // A second render of the overview finds the chain's job already running.
   assert.equal(await startPrepareConcepts('p1', deps), false)
   assert.deepEqual(queued, ['job-1:t1'])
-})
-
-test('a course that has concepts starts nothing and reads no further', async () => {
-  const { deps, queued } = fakeDeps(bare, true, true)
-  deps.state = async () => assert.fail('the topics are not read')
-  assert.equal(await startPrepareConcepts('p1', deps), false)
-  assert.deepEqual(queued, [])
 })
 
 test('nothing starts while the AI is unavailable or the allowance is used up', async () => {

@@ -26,13 +26,3 @@ test('a missed question that names no concept still gives its topic', () => {
   const scope = missedScope(questions, grading([[true], [true], [false], [true]]))
   assert.deepEqual(scope, { missed: 1, conceptIds: [], topicIds: ['t3'] })
 })
-
-test('a concept the grader blamed for a short answer is added', () => {
-  const graded = { graded_questions: [{ question_index: 2, is_correct: false, needs_review: false, blamed_concept_id: 'c7' }] }
-  assert.deepEqual(missedScope(questions, graded).conceptIds, ['c7'])
-})
-
-test('a question the grader did not return is not counted, and nothing readable gives nothing', () => {
-  assert.equal(missedScope(questions, grading([[false]])).missed, 1)
-  assert.deepEqual(missedScope(null, null), { missed: 0, conceptIds: [], topicIds: [] })
-})

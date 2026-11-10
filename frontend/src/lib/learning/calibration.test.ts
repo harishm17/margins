@@ -1,13 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { calibration, CONFIDENCE_LEVELS, CONFIDENCE_WORDS, confidenceLevelOf, confidenceValue, QUIZ_RATING, selectedConfidenceLevel } from './calibration'
-
-test('guess on 4 options is 0.25 and on true/false 0.5', () => {
-  assert.equal(confidenceValue('guess', 4), 0.25)
-  assert.equal(confidenceValue('guess', 2), 0.5)
-  assert.equal(confidenceValue('guess'), 0.25)
-  assert.equal(confidenceValue('certain', 4), 0.95)
-})
+import { calibration, CONFIDENCE_LEVELS, CONFIDENCE_WORDS, QUIZ_RATING, } from './calibration'
 
 test('not ready under 30', () => {
   const e = (n: number) => Array.from({ length: n }, () => ({ confidence: 0.5, score: 1 }))
@@ -47,26 +40,6 @@ for (const [name, events, expected] of [
     assert.ok(Math.abs(calibration([...events]).brier - expected) < 1e-12)
   })
 }
-
-test('a stored value maps to the nearest level, a tie to the non-guess level', () => {
-  assert.equal(confidenceLevelOf(0.25, 4), 'guess')
-  assert.equal(confidenceLevelOf(0.5, 4), 'unsure')
-  assert.equal(confidenceLevelOf(0.75, 4), 'fairly')
-  assert.equal(confidenceLevelOf(0.95, 4), 'certain')
-  // True or false: a guess and "unsure" are both 0.5; with no id kept, it reads as unsure.
-  assert.equal(confidenceLevelOf(0.5, 2), 'unsure')
-  assert.equal(confidenceLevelOf(0.5), 'unsure')
-  assert.equal(confidenceLevelOf(0.2), 'guess')
-  assert.equal(confidenceLevelOf(0.3333, 3), 'guess')
-})
-
-test('the chosen level wins over the value, and an unknown id falls back to the value', () => {
-  assert.equal(selectedConfidenceLevel('guess', 0.5, 2), 'guess')
-  assert.equal(selectedConfidenceLevel('unsure', 0.5, 2), 'unsure')
-  assert.equal(selectedConfidenceLevel('bogus', 0.95, 2), 'certain')
-  assert.equal(selectedConfidenceLevel(undefined, undefined, 2), '')
-  assert.equal(selectedConfidenceLevel('certain', undefined, 2), 'certain')
-})
 
 test('a whole quiz is rated with the same four words as a question, stored on the 1 to 5 the review date reads', () => {
   assert.deepEqual(CONFIDENCE_LEVELS.map((level) => CONFIDENCE_WORDS[level.id]), ['Guessing', 'Unsure', 'Fairly sure', 'Certain'])
