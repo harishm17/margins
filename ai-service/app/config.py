@@ -6,6 +6,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # The places this service may run. ENVIRONMENT has no default and must be exactly one of these.
 ENVIRONMENTS = ("development", "test", "production")
 
+# The areas PROMPTS_V2 may list (app/prompt_revision.py reads the setting). Kept here so the setting can be checked
+# when it is read: the web app has the same list in frontend/src/lib/prompt-revision.ts.
+PROMPT_AREAS = ("generation", "support", "tutor", "grading", "ask", "ingest", "voice")
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -275,6 +279,16 @@ class Settings(BaseSettings):
         from app.model_spec import ModelChoice, parse_model_spec
 
         parse_model_spec(value, ModelChoice("placeholder", None))
+        return value
+
+    @field_validator("PROMPTS_V2")
+    @classmethod
+    def _known_prompt_areas(cls, value: str) -> str:
+        # A misspelt area ("voise") used to be ignored: the area stayed on its earlier prompts and nothing said so.
+        listed = [part.strip().lower() for part in (value or "").split(",") if part.strip()]
+        unknown = sorted({name for name in listed if name != "all" and name not in PROMPT_AREAS})
+        if unknown:
+            raise ValueError(f"PROMPTS_V2 names unknown areas: {', '.join(unknown)}. Known: all, {', '.join(PROMPT_AREAS)}")
         return value
 
     @field_validator("ENVIRONMENT")
