@@ -22,7 +22,7 @@ from app.services.llm.base import (
     LLMUnavailableError,
 )
 from app.services.llm.factory import LLMFactory
-from app.services.llm.usage import summarize_usage, track_llm_usage
+from app.services.llm.usage import billing_sink, summarize_usage, track_llm_usage
 
 
 class Verdict(BaseModel):
@@ -86,6 +86,64 @@ class TestRequestShape:
         assert params["fallbacks"] == "default"
         assert params["betas"] == ["server-side-fallback-2026-07-01"]
         assert "thinking" not in params and "temperature" not in params
+
+    @pytest.mark.asyncio
+    async def test_a_call_capped_above_the_stream_threshold_is_streamed_and_billed_when_cut_off(self):
+        # Prompt audit R7: a non-streamed request with a large cap can outlast the HTTP timeout.
+        # Review of PR #90: the streamed call never reported its usage as it went, so a stream that failed or was
+        # cancelled part way was billed nothing (or only an input estimate) though the output was already charged.
+        provider, create = _provider(_response('{"ok": true, "reason": "fine"}'))
+        streamed = []
+        cut = {"on": False}
+        start = SimpleNamespace(
+            type="message_start",
+            message=SimpleNamespace(model="claude-opus-5-5", usage=SimpleNamespace(input_tokens=900, output_tokens=1)),
+        )
+        delta = SimpleNamespace(type="message_delta", usage=SimpleNamespace(output_tokens=5000))
+
+        class Stream:
+            request_id = "req_1"
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def __aiter__(self):
+                yield start
+                yield delta
+                if cut["on"]:
+                    raise anthropic.APIConnectionError(
+                        request=httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+                    )
+
+            async def get_final_message(self):
+                return _response('{"ok": true, "reason": "long"}')
+
+        def stream(**params):
+            streamed.append(params)
+            return Stream()
+
+        provider.client.beta.messages.stream = stream
+        assert (await provider.generate_structured(MESSAGES, Verdict, max_tokens=16000, purpose="topic_quiz")).reason == "fine"
+        assert (await provider.generate_structured(MESSAGES, Verdict, max_tokens=24000, purpose="topic_quiz")).reason == "long"
+        assert create.call_count == 1
+        assert [p["max_tokens"] for p in streamed] == [24000]
+
+        class Sink:
+            seen = None
+
+            def add(self, usage):
+                pass
+
+            def partial(self, usage):
+                Sink.seen = usage
+
+        cut["on"] = True
+        with billing_sink(Sink()), pytest.raises(LLMUnavailableError):
+            await provider.generate_structured(MESSAGES, Verdict, max_tokens=24000, purpose="topic_quiz")
+        assert (Sink.seen.input_tokens, Sink.seen.output_tokens) == (900, 5000)
 
 class TestResponses:
     @pytest.mark.asyncio

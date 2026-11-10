@@ -5,6 +5,8 @@
  * messages without breaking the pairing of tool calls and tool results.
  */
 
+import { promptsV2 } from '@/lib/prompt-revision'
+
 export type VoiceBlock = { type: string; [key: string]: unknown }
 export type VoiceMessage = { role: 'user' | 'assistant'; content: string | VoiceBlock[] }
 
@@ -66,12 +68,22 @@ export function trimHistory(messages: readonly VoiceMessage[], max = MAX_HISTORY
   return messages.slice(start)
 }
 
+/** With PROMPTS_V2 the history grows to this many messages before it is cut (prompt audit M6)... */
+export const STEPPED_HIGH = 40
+/** ...and is then cut back to about this many, so the start of the conversation, and the cache prefix, stays put between cuts. */
+export const STEPPED_LOW = 20
+
+/** The history as it is, until it passes `high` messages; then the last `low` (cut at a safe start, as `trimHistory`). */
+export function trimHistorySteps(messages: readonly VoiceMessage[], high = STEPPED_HIGH, low = STEPPED_LOW): VoiceMessage[] {
+  return messages.length <= high ? [...messages] : trimHistory(messages, low)
+}
+
 /**
  * The messages as they are stored: thinking blocks are left out (a thinking block is only
  * valid in the conversation that produced it, and a trimmed history is a different one).
- * A message left with no content is dropped.
+ * A message left with no content is dropped. With `v2` the trim is in steps instead of a sliding window.
  */
-export function toStoredHistory(messages: readonly VoiceMessage[], max = MAX_HISTORY_MESSAGES): VoiceMessage[] {
+export function toStoredHistory(messages: readonly VoiceMessage[], max = MAX_HISTORY_MESSAGES, v2: boolean = promptsV2('voice')): VoiceMessage[] {
   const cleaned: VoiceMessage[] = []
   for (const message of messages) {
     if (typeof message.content === 'string') {
@@ -81,8 +93,32 @@ export function toStoredHistory(messages: readonly VoiceMessage[], max = MAX_HIS
     const blocks = message.content.filter((b) => b.type !== 'thinking' && b.type !== 'redacted_thinking')
     if (blocks.length > 0) cleaned.push({ role: message.role, content: blocks })
   }
-  return trimHistory(cleaned, max)
+  return v2 ? trimHistorySteps(cleaned) : trimHistory(cleaned, max)
 }
+
+/** Ends a reply that stopped before it was finished (the call broke, or the student left or spoke over it), for the model only. */
+export const CUT_OFF_NOTE = '[This reply was cut off here.]'
+
+/**
+ * The conversation with a reply that was streamed to the student but never finished added as the coach's last message,
+ * marked as cut off. Without it the turn would be missing from the conversation, and "what the student heard" sent with
+ * the next turn would be written over the reply before it.
+ */
+export function appendCutOffReply(messages: readonly VoiceMessage[], cutOff: string): VoiceMessage[] {
+  const text = cutOff.trim()
+  if (!text) return [...messages]
+  return [...messages, { role: 'assistant', content: [{ type: 'text', text: `${text} ${CUT_OFF_NOTE}` }] }]
+}
+
+/**
+ * Follows a reply that stopped at its token limit while the turn goes on (turn-engine.ts, v2): the words are being spoken
+ * already, so the coach is asked to finish them and not to start again. It is a user message, and still part of the
+ * coach's turn, not something the student said.
+ */
+export const FINISH_CUT_OFF_NOTE =
+  '[Your reply reached its length limit and stopped there. The student has heard all of it, so do not repeat any of it. Finish the thought in one short sentence, and ask your one question if you had not asked it yet.]'
+
+const isFinishNote = (message: VoiceMessage): boolean => message.role === 'user' && message.content === FINISH_CUT_OFF_NOTE
 
 /** Said in the stored turn after what the student heard (draft copy, for the model only). */
 export const INTERRUPTED_NOTE = '[The student interrupted here and did not hear the rest.]'
@@ -99,13 +135,14 @@ function isToolResultMessage(message: VoiceMessage): boolean {
  * The coach's last turn as the student heard it (spec 19.4). The browser says how much was spoken before the student
  * interrupted; the turn is stored as that text followed by a note, so the next model call sees only what was said and is not
  * led to think the student heard the rest. The turn is everything after the student's last words: the text of its
- * assistant messages is replaced, its tool calls and results stay so they still pair. With nothing in the conversation to
- * mark, or nothing said, the messages are returned as they are.
+ * assistant messages is replaced, its tool calls and results stay so they still pair. A reply that was cut off and
+ * finished in a second call is one reply to the student: the note between the two parts goes with the text it followed.
+ * With nothing in the conversation to mark, or nothing said, the messages are returned as they are.
  */
 export function markInterrupted(messages: readonly VoiceMessage[], heard: string): VoiceMessage[] {
   let start = -1
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i].role === 'user' && !isToolResultMessage(messages[i])) {
+    if (messages[i].role === 'user' && !isToolResultMessage(messages[i]) && !isFinishNote(messages[i])) {
       start = i
       break
     }
@@ -121,7 +158,7 @@ export function markInterrupted(messages: readonly VoiceMessage[], heard: string
   const edited: VoiceMessage[] = []
   turn.forEach((message, index) => {
     if (message.role !== 'assistant') {
-      edited.push(message)
+      if (!isFinishNote(message)) edited.push(message)
       return
     }
     const rest = blocksOf(message).filter((block) => block.type !== 'text')

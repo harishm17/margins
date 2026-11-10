@@ -309,11 +309,36 @@ _SIMULATED_FAILURES: Dict[str, type] = {
 }
 
 
-def _tutoring_parts(system: str, excerpts: List[Excerpt]) -> Optional[List[tuple[str, Optional[Excerpt]]]]:
-    """The mock's reply to a tutoring turn, read from the situation block of the system prompt: a
-    question back before an explanation, an explanation that ends with a check question card, a request
-    for the student's attempt. None for a plain lookup."""
-    if "<situation>" not in system:
+_V2_MODE_MARKERS = {
+    "entry_points": "The question is broad",
+    "commit": "has not yet said what they think",
+    "explain_short": "said twice that they do not know",
+    "explain": "",
+}
+
+
+def _turn_situation(system: str, question: str) -> Optional[str]:
+    """The text that holds the turn's situation: the system prompt (v1), or the end of the user message after
+    <student_message> (PROMPTS_V2=ask, where the system is the same for every turn). None for a plain lookup."""
+    tail = question.rsplit("</student_message>", 1)[-1] if "</student_message>" in question else ""
+    if "<situation>" in tail:
+        intent = re.search(r"Intent: (\w+)\.", tail)
+        if intent is None or intent.group(1) in ("lookup", "logistics"):
+            return None
+        mode = re.search(r"Mode: (\w+)\.", tail)
+        # Put the v1 marker sentence of the mode beside the block, so one reader serves both layouts.
+        return tail + "\n" + (_V2_MODE_MARKERS.get(mode.group(1), "") if mode else "")
+    return system if "<situation>" in system and re.search(r"^Intent: \w+\.$", system, re.M) else None
+
+
+def _tutoring_parts(
+    system: str, excerpts: List[Excerpt], question: str = ""
+) -> Optional[List[tuple[str, Optional[Excerpt]]]]:
+    """The mock's reply to a tutoring turn, read from the situation block (of the system prompt, or of the user
+    message under PROMPTS_V2=ask): a question back before an explanation, an explanation that ends with a check
+    question card, a request for the student's attempt. None for a plain lookup."""
+    system = _turn_situation(system, question)
+    if system is None:
         return None
     if "Intent: understand." in system:
         if "The question is broad" in system:
@@ -425,6 +450,7 @@ class MockProvider(LLMProvider):
         excerpts: List[Excerpt],
         max_tokens: int = 4000,
         purpose: str = "chat",
+        cache_system: bool = False,
     ) -> AsyncIterator[AnswerEvent]:
         """A fixed-shape answer that quotes the first two excerpts and cites each."""
         if not excerpts:
@@ -432,7 +458,7 @@ class MockProvider(LLMProvider):
         _raise_if_asked(question)
         async with llm_slot():  # the wait for the first token
             await self._simulate_call()
-        parts = _tutoring_parts(system, excerpts)
+        parts = _tutoring_parts(system, excerpts, question)
         if parts is None:
             parts = [(f"Mock answer to \"{question[:80]}\" (LLM_PROVIDER is mock, no model was called). ", None)]
             for index, excerpt in enumerate(excerpts[:2]):

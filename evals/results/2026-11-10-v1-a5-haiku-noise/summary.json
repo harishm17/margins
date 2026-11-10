@@ -1,0 +1,145 @@
+{
+ "arms": {
+  "haiku": {
+   "scored": 120,
+   "errors": 0,
+   "agreement": 0.9,
+   "agreement_not_borderline": 0.9292035398230089,
+   "pass_agreement": 0.9916666666666667,
+   "wrong_marked_right": {
+    "count": 1,
+    "of": 72,
+    "rate": 0.013888888888888888
+   },
+   "right_marked_wrong": {
+    "count": 0,
+    "of": 48,
+    "rate": 0.0
+   },
+   "confusion": {
+    "full": {
+     "full": 48
+    },
+    "partial": {
+     "partial": 32,
+     "none": 6,
+     "full": 1
+    },
+    "none": {
+     "none": 28,
+     "partial": 5
+    }
+   },
+   "categories": {
+    "right": {
+     "n": 24,
+     "agreement": 1.0,
+     "marked_right": 1.0,
+     "mean_fraction": 1.0
+    },
+    "other_words": {
+     "n": 24,
+     "agreement": 1.0,
+     "marked_right": 1.0,
+     "mean_fraction": 0.9444444444444445
+    },
+    "partly": {
+     "n": 24,
+     "agreement": 0.875,
+     "marked_right": 0.0,
+     "mean_fraction": 0.3524305555555556
+    },
+    "wrong": {
+     "n": 24,
+     "agreement": 0.9583333333333334,
+     "marked_right": 0.0,
+     "mean_fraction": 0.036458333333333336
+    },
+    "right_number_wrong_quantity": {
+     "n": 12,
+     "agreement": 0.75,
+     "marked_right": 0.08333333333333333,
+     "mean_fraction": 0.3819444444444444
+    },
+    "keyword_wrong": {
+     "n": 12,
+     "agreement": 0.5833333333333334,
+     "marked_right": 0.0,
+     "mean_fraction": 0.21527777777777776
+    }
+   }
+  }
+ },
+ "dataset": {
+  "questions": 24,
+  "answers": 120,
+  "by_category": {
+   "right": 24,
+   "other_words": 24,
+   "partly": 24,
+   "wrong": 24,
+   "keyword_wrong": 12,
+   "right_number_wrong_quantity": 12
+  },
+  "by_label": {
+   "full": 48,
+   "partial": 39,
+   "none": 33
+  },
+  "borderline": 7
+ },
+ "models": {
+  "haiku": {
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "app_choice": true
+  }
+ },
+ "cost": {
+  "haiku": 0.022684
+ },
+ "run": {
+  "label": "v1-a5-haiku-noise",
+  "date": "2026-11-10",
+  "commit": "3bc370b5",
+  "dirty": true,
+  "arms": {
+   "haiku": {
+    "model": "claude-haiku-5-5",
+    "effort": "low",
+    "app_choice": true
+   }
+  },
+  "prompts": {
+   "PROMPTS_V2": "",
+   "areas": {
+    "grading": "v1"
+   },
+   "revision": "v1",
+   "request": {
+    "schema": "ShortAnswerGrade",
+    "system_chars": 370,
+    "system_sha": "64f5d517a7ec"
+   }
+  },
+  "estimate_usd": {
+   "haiku": 0.0252
+  },
+  "cost_usd": {
+   "haiku": 0.022684
+  },
+  "total_cost_usd": 0.022684,
+  "price_factor": 0.5,
+  "mock": false,
+  "batches": [
+   {
+    "id": "msgbatch_01YStMxPKPuFgSVdPt9LoAdp",
+    "requests": 120,
+    "seconds": 216.6
+   }
+  ],
+  "outcomes": {
+   "haiku: ok": 120
+  }
+ }
+}

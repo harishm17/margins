@@ -15,18 +15,22 @@ from app.services.content_generator.context import (
     NoSourceMaterialError,
     attach_sources,
     content_messages,
+    do_not_repeat_block,
     fetch_concepts,
     fetch_confusable_neighbours,
     fetch_topic_context,
     format_concept_block,
+    name_in_instructions,
     resolve_concept_ids,
 )
-from app.services.content_generator.quiz import minimum_usable
+from app.prompt_revision import prompts_v2
+from app.services.content_generator.quiz import CHOICE_RULES, RULE_IN_EXCERPTS, SOURCE_EXCERPTS_RULE, minimum_usable
 from app.services.content_generator.refill import refill_figures, refill_once, refill_wanted
 from app.services.content_generator.support_check import check_support
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
-from app.services.llm.schemas import WarmupSet
+from app.services.llm.schemas import WarmupSet, WarmupSetV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +54,36 @@ WARMUP_INSTRUCTIONS = """Write {count} warm-up questions on "{topic}" from the e
 - Set `mode` to recall on every question.
 - List in source_excerpts the index of every excerpt a question is based on.
 {concepts}"""
+
+# Audited prompt (PROMPTS_V2=generation): the option rules are the shared CHOICE_RULES. A hard question is one mix-up
+# resisted, not two ideas combined: the student has not read yet, and "combined with another" contradicted "one idea per
+# question" two lines above it.
+WARMUP_INSTRUCTIONS_V2 = (
+    """Write {count} warm-up questions on "{topic}" from the excerpts above. The student answers some of them before reading, to find out what they already know and to prime what they are about to read.
+
+- Ask about the objectives of the topic, one idea per question. Use only multiple_choice and true_false questions; no calculations.
+- Tag each question's difficulty as easy, medium or hard. The set has {mix}. Easy questions ask for a definition or a plain fact, medium questions apply an idea to a small case, and hard questions turn on a common mix-up the student has to resist. A hard question still tests one idea. """
+    + RULE_IN_EXCERPTS
+    + """
+"""
+    + CHOICE_RULES
+    + """
+- true_false: correct_answer is a boolean.
+- The explanation says why the answer is right in one sentence; the student reads the material afterwards, so keep it short.
+- Set `mode` to recall on every question.
+"""
+    + SOURCE_EXCERPTS_RULE
+    + """
+{concepts}"""
+)
+
+
+def warmup_template() -> str:
+    return WARMUP_INSTRUCTIONS_V2 if prompts_v2("generation") else WARMUP_INSTRUCTIONS
+
+
+def warmup_schema():
+    return WarmupSetV2 if prompts_v2("generation") else WarmupSet
 
 
 def _usable_bank(questions: List[Dict]) -> List[Dict]:
@@ -87,16 +121,17 @@ async def generate_warmup(topic_id: str) -> Dict:
     neighbours = await fetch_confusable_neighbours(topic_id)
 
     async def ask(count: int, mix: str, avoid: str = "") -> tuple[List[Dict], int]:
-        instructions = WARMUP_INSTRUCTIONS.format(
-            count=count, topic=context.topic["name"], mix=mix, concepts=format_concept_block(concepts, neighbours)
+        instructions = warmup_template().format(
+            count=count, topic=name_in_instructions(context.topic["name"]), mix=mix,
+            concepts=format_concept_block(concepts, neighbours),
         )
         result = await LLMFactory.get_provider().generate_structured(
             content_messages(
                 context.topic["name"], context.topic.get("description") or "", chunks, instructions + avoid,
                 course_map=context.course_map,
             ),
-            WarmupSet,
-            max_tokens=8000,
+            warmup_schema(),
+            max_tokens=output_cap("warmup", 8000),
             purpose="warmup",
         )
         return await check_support([q for q in result.usable() if q["question_type"] in WARMUP_TYPES], chunks)
@@ -110,9 +145,8 @@ async def generate_warmup(topic_id: str) -> Dict:
             have = [q["difficulty"] for q in questions]
             lacking = {level: max(0, n - have.count(level)) for level, n in WARMUP_WANTED.items()}
             mix = ", ".join(f"{n} {level}" for level, n in lacking.items() if n) or f"{missing} medium"
-            avoid = "\n\nDo not repeat these questions:\n" + "\n".join(f"- {q.get('question_text')}" for q in supported)
             nonlocal dropped
-            more, more_dropped = await ask(missing, mix, avoid if supported else "")
+            more, more_dropped = await ask(missing, mix, do_not_repeat_block(supported))
             dropped += more_dropped
             return more
 

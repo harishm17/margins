@@ -45,6 +45,9 @@ DEFAULT_OUTPUT_TOKENS = {
     "voice": 250,
     # A short-answer grade (the grading eval, evals/grading): points, 2-3 sentences of feedback, one check per key point.
     "grade_short_answer": 600,
+    # A recall-answer grade (evals/grading, recall arm): a private analysis (v1) or thinking (v2), then a verdict per claim
+    # with the student's quote and a pointer.
+    "recall_grading": 1200,
 }
 FALLBACK_OUTPUT_TOKENS = 6000
 OBSERVED_MARGIN = 1.25

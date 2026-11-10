@@ -81,7 +81,7 @@ class FakeModel(LLMProvider):
         first_id = messages[-1].content.split("Topics: ")[1].split(" ")[0]
         return schema(topic_id=first_id, reason=f"call {self.calls}")
 
-    async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat") -> AsyncIterator[Any]:
+    async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat", cache_system=False) -> AsyncIterator[Any]:
         self.calls += 1
         usage = self._usage(purpose)
         yield AnswerText(text="Merge sort splits the list.")

@@ -9,6 +9,8 @@ import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
  * tool result.
  */
 import { z } from 'zod'
+import { promptsV2 } from '@/lib/prompt-revision'
+import { asksConfidence } from '@/lib/voice/pre-run'
 import { prisma } from '@/lib/db/prisma'
 import { ownedTopic } from '@/server/owned'
 import { createRateLimiter } from '@/lib/api/rate-limit'
@@ -34,6 +36,7 @@ import {
 } from '@/lib/voice/teach-tools'
 import { buildHint, toGradableQuestion } from '@/lib/voice/grading'
 import { eventsForToolOutput, type ToolOutput } from '@/lib/voice/tool-events'
+import { NO_CURRENT, type DoneResult, type ErrorResult, type HintResult, type NextQuestionResult, type RecordAnswerResult, type V2ToolName } from '@/lib/voice/tool-results'
 import { conceptPageLinks } from '@/lib/voice/page-links'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
 
@@ -100,7 +103,7 @@ export const TEACH_BACK_TOOLS: VoiceToolDefinition[] = [
   {
     name: 'assess_explanation',
     description:
-      "Assess the student's spoken explanation of an idea against the claims from their own pages. The app uses the words the student actually said since your last question, so call it only after they have answered. Returns what they covered, got wrong or left out, and an action: probe (with the kind of question to ask), explain, ask_new_example, clarify or wrap_up. Call it as soon as the student has finished explaining, and again after each answer to a probe.",
+      "Assess the student's spoken explanation of an idea against the claims from their own pages. The app uses the words the student actually said since your last question, so call it only after they have answered. Returns what they covered, got wrong or left out, and an action: probe (with the kind of question to ask), explain, ask_new_example, clarify or wrap_up. A wrap_up result also carries next_idea: what get_concept_to_explain would return now (the next idea with its concept_id and prompt, or done: true when every idea is done), so you do not call that tool after it. Call it as soon as the student has finished explaining, and again after each answer to a probe.",
     input_schema: {
       type: 'object',
       properties: {
@@ -112,7 +115,7 @@ export const TEACH_BACK_TOOLS: VoiceToolDefinition[] = [
   {
     name: 'record_check',
     description:
-      "Record the student's answer to the one new example or prediction you asked after assess_explanation said ask_new_example. The app uses the words the student actually said since you asked, so call it only after they have answered. Returns whether it held and what to do next.",
+      "Record the student's answer to the one new example or prediction you asked after assess_explanation said ask_new_example. The app uses the words the student actually said since you asked, so call it only after they have answered. Returns whether it held and what to do next; when that is wrap_up, next_idea is the next idea to ask (or done: true when every idea is done), as after assess_explanation.",
     input_schema: {
       type: 'object',
       properties: {
@@ -154,21 +157,84 @@ export const GUIDED_READING_TOOLS: VoiceToolDefinition[] = [
   },
 ]
 
-/** The tools the coach gets in a style. A topic conversation gets none. */
-export function toolsForStyle(style: CoachStyle): VoiceToolDefinition[] {
-  switch (style) {
-    case 'oral_quiz':
-      return VOICE_TOOLS
-    case 'teach_back':
-      return TEACH_BACK_TOOLS
-    case 'guided_reading':
-      return GUIDED_READING_TOOLS
-    case 'topic_conversation':
-      return []
-  }
+/**
+ * Prompt audit 2026-11-09 (H3, R5, R6): the v2 tools. Each description is written from the tool's typed result
+ * (tool-results.ts) and names every top-level key it can return, errors included; tool-contract.test.ts checks that.
+ * The model is no longer asked for values the server holds: `question_index`, `concept_id` and `claim_index` come from the
+ * coach state (the question last returned by get_next_question, the concept last returned by get_concept_to_explain,
+ * the claim last returned by next_claim). The two `record_check` tools get names of their own.
+ * `get_next_question` is described with the two flags that `quizQuestionFlags` adds to its result (H2).
+ */
+const V2_DESCRIPTIONS: Record<V2ToolName, string> = {
+  get_next_question:
+    'Get the next question of the drill. Returns done: false with question_index and question (question_text, question_type, options for multiple choice, concepts_tested), plus ask_confidence_first and ask_why_if_right; or done: true with a message when the drill is complete. Returns an error when the session cannot be found. Call it before asking every new question.',
+  record_answer:
+    "Record the student's spoken answer to the question you last got from get_next_question and get it graded. The app uses the words the student said since the question was asked, so call it only after they have answered; it returns an error otherwise. Returns is_correct, score (0 to 1), feedback (comment, explanation, and ungraded when the question has no answer key) and, for a wrong answer, where_to_look (pages for the idea). Returns an error if grading is unavailable, or error no_current_question when you have not got a question yet (call get_next_question), or done: true with a message when the drill is over.",
+  get_hint:
+    'Get a nudge for the question you last got from get_next_question, to pass on when the student is stuck. It never contains the answer. Returns hint, concepts (the ideas the question tests), a note and, when the answer has several ideas, ideas_expected. Before the student has answered the question it returns action ask_for_try with an instruction instead of a nudge: invite them to have a go first. Returns error no_current_question when you have not got a question yet.',
+  get_concept_to_explain:
+    "Get the idea the student should explain next: the weakest one of the topic that they have not worked through in this session. Returns done: false with concept_id, concept_name, the prompt to ask and ideas_left, or done: true with a message when every idea is done, or an error. Call it before asking the student to explain anything.",
+  assess_explanation:
+    "Assess the student's spoken explanation of the idea you last got from get_concept_to_explain against the claims from their own pages. The app uses the words the student said since your last question, so call it only after they have answered; it returns an error otherwise (error no_current_concept when you have not got an idea yet). Returns concept, and what they covered, partly covered (partly), got wrong (incorrect) or left out (missing), and an action: probe (with probe.type and the gap to ask about), explain or explain_first (with source_claim and its page), ask_new_example (with an instruction), clarify (with a clarifying_question) or wrap_up (with an outcome, look_again when pages need another look, and next_idea: what get_concept_to_explain would return now, so you do not call it after a wrap_up). Returns done: true with a message when the session is over. Call it when the student has finished explaining, and again after each answer to a probe.",
+  record_example_check:
+    "Record the student's answer to the one new example or prediction you asked after assess_explanation said ask_new_example, for the idea you last got from get_concept_to_explain. The app uses the words the student said since you asked, so call it only after they have answered. Returns concept and passed (whether it held), what they covered, partly covered (partly), got wrong (incorrect) or left out (missing), and the next action as assess_explanation does (probe, explain or explain_first with source_claim, ask_new_example, clarify with a clarifying_question, or wrap_up with an outcome, look_again, next_idea and an instruction). Returns an error (no_current_concept when you have not got an idea yet, or when the student has not spoken), or done: true with a message when the session is over.",
+  next_claim:
+    "Move through the claims of the student's pages. With no arguments it gives the next claim's idea and a prediction prompt, without the claim, so the student can predict first. Returns done: false with claim_index, of (the number of claims), concept_name, prediction_prompt and an instruction. With reveal true and your check_question, it returns the claim (its text and page) with an instruction, but only after the student has said their prediction: the app uses what they said since you asked. Also use it with no arguments to move on or skip. Returns done: true with a message when every claim has been read, or an error.",
+  record_claim_check:
+    "Record the student's answer to your check question about the claim you just told (the one next_claim last returned). The app uses the words the student said since you asked, so call it only after they have answered. Returns verdict (right, partly right, not right or not yet), you_said when there are student words to quote, wrong_idea (the grader's own description of the mistake, not a quotation) when it found one, the claim (its text and page), claims_left and an instruction. When the answer was too short or unclear it returns action clarify with a clarifying_question and an instruction. Returns an error (no_current_claim when you have not told a claim yet), or done: true with a message when the session is over.",
 }
 
-const TEACH_TOOL_NAMES = new Set(['get_concept_to_explain', 'assess_explanation', 'next_claim', 'record_check'])
+/** The v2 list of a style: the audited descriptions, the schemas without the values the server holds, the checks renamed. */
+function v2Tools(style: CoachStyle, tools: VoiceToolDefinition[]): VoiceToolDefinition[] {
+  const without = (tool: VoiceToolDefinition, ...names: string[]): VoiceToolDefinition['input_schema'] => ({
+    ...tool.input_schema,
+    properties: Object.fromEntries(Object.entries(tool.input_schema.properties).filter(([key]) => !names.includes(key))),
+    required: tool.input_schema.required.filter((key) => !names.includes(key)),
+  })
+  return tools.map((tool): VoiceToolDefinition => {
+    switch (tool.name) {
+      case 'record_answer':
+        return { ...tool, description: V2_DESCRIPTIONS.record_answer, input_schema: without(tool, 'question_index') }
+      case 'get_hint':
+        return { ...tool, description: V2_DESCRIPTIONS.get_hint, input_schema: without(tool, 'question_index') }
+      case 'assess_explanation':
+        return { ...tool, description: V2_DESCRIPTIONS.assess_explanation, input_schema: without(tool, 'concept_id') }
+      case 'record_check':
+        return style === 'guided_reading'
+          ? { ...tool, name: 'record_claim_check', description: V2_DESCRIPTIONS.record_claim_check, input_schema: without(tool, 'claim_index') }
+          : { ...tool, name: 'record_example_check', description: V2_DESCRIPTIONS.record_example_check, input_schema: without(tool, 'concept_id') }
+      default:
+        return tool.name in V2_DESCRIPTIONS ? { ...tool, description: V2_DESCRIPTIONS[tool.name as V2ToolName] } : tool
+    }
+  })
+}
+
+/**
+ * The tools the coach gets in a style. A topic conversation gets none. With `v2` (PROMPTS_V2, area "voice") the
+ * descriptions are the audited ones; without it the result is the v1 list, unchanged.
+ */
+export function toolsForStyle(style: CoachStyle, v2: boolean = promptsV2('voice')): VoiceToolDefinition[] {
+  const tools = ((): VoiceToolDefinition[] => {
+    switch (style) {
+      case 'oral_quiz':
+        return VOICE_TOOLS
+      case 'teach_back':
+        return TEACH_BACK_TOOLS
+      case 'guided_reading':
+        return GUIDED_READING_TOOLS
+      case 'topic_conversation':
+        return []
+    }
+  })()
+  return v2 ? v2Tools(style, tools) : tools
+}
+
+/** The two quiz steps that depend on a question's place in the drill, decided here so the model does not compute them (H2). */
+export function quizQuestionFlags(questionIndex: number): { ask_confidence_first: boolean; ask_why_if_right: boolean } {
+  return { ask_confidence_first: asksConfidence(questionIndex), ask_why_if_right: questionIndex % 2 === 1 }
+}
+
+const TEACH_TOOL_NAMES = new Set(['get_concept_to_explain', 'assess_explanation', 'next_claim', 'record_check', 'record_example_check', 'record_claim_check'])
 
 const assessArgs = z.object({
   concept_id: z.string().min(1).max(100),
@@ -189,6 +255,9 @@ const hintArgs = z.object({
   question_index: z.number().int().nonnegative(),
 })
 
+// v2 (R5): the question is the one the server last gave, so the model passes only what the server cannot know.
+const recordAnswerArgsV2 = recordAnswerArgs.omit({ question_index: true })
+
 // Each graded answer costs a model call, so one user cannot hammer them.
 const answerLimiter = createRateLimiter({ name: 'voice-grade', limit: voiceTurnsPerMinute(), windowMs: 60_000 })
 
@@ -207,7 +276,7 @@ function result(output: ToolOutput, events: VoiceEvent[] = [], extra: Partial<Vo
   return { output, events, sessionComplete: false, isError: 'error' in output, ...extra }
 }
 
-const COMPLETE: ToolOutput = { done: true, message: 'Drill complete.' }
+const COMPLETE: ToolOutput = { done: true, message: 'Drill complete.' } satisfies DoneResult
 
 /**
  * Writes one graded spoken answer as evidence (spec §5.8, §18.4): level 0, or level 1 with score 0 after a hint, source
@@ -289,6 +358,12 @@ async function runVoiceTool(
     turn: number
     /** The step runs before the model speaks (spec 19.1): a guided-reading reveal gets the server's own check question. */
     autoCheck?: boolean
+    /**
+     * Takes work the coach's reply does not wait for (a recorded answer's signal, mastery, schedule and evidence), so the
+     * feedback starts sooner. The caller must wait for it before the turn ends. Without it the work is done before the
+     * tool returns.
+     */
+    defer?: (work: Promise<void>) => void
   },
   name: string,
   args: unknown
@@ -302,8 +377,11 @@ async function runVoiceTool(
   const finish = (output: ToolOutput, extra: Partial<VoiceToolResult> = {}) =>
     result(output, eventsForToolOutput(name, output, total), extra)
 
+  const v2 = promptsV2('voice')
   if (TEACH_TOOL_NAMES.has(name)) {
     const style = coachStyleOf(session.style)
+    // v2 names the two checks apart; the pre-run step and an older client still say record_check, which means the style's own.
+    if (v2 && name === 'record_check') name = style === 'guided_reading' ? 'record_claim_check' : 'record_example_check'
     if (!toolsForStyle(style).some((tool) => tool.name === name)) return result({ error: 'Unknown tool' })
     if (session.endedAt) return result(COMPLETE, [{ type: 'session_complete' }], { sessionComplete: true })
     const teachCtx: TeachToolContext = {
@@ -322,6 +400,12 @@ async function runVoiceTool(
     if (name === 'get_concept_to_explain') {
       done = await getConceptToExplain(teachCtx, state)
     } else if (name === 'assess_explanation') {
+      // v2 (R5): the concept is the one get_concept_to_explain last returned.
+      if (v2) {
+        if (!state.teach.current) return result({ error: NO_CURRENT.concept } satisfies ErrorResult)
+        done = await assessExplanation(teachCtx, state, { concept_id: state.teach.current })
+        return result(done.output, done.events, { sessionComplete: done.sessionComplete === true })
+      }
       const parsed = assessArgs.safeParse(args)
       if (!parsed.success) return result({ error: 'Invalid arguments for assess_explanation' })
       done = await assessExplanation(teachCtx, state, parsed.data)
@@ -330,7 +414,17 @@ async function runVoiceTool(
       if (!parsed.success) return result({ error: 'Invalid arguments for next_claim' })
       done = await nextClaim(teachCtx, state, parsed.data)
     } else {
-      const input = args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {}
+      let input = args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {}
+      if (v2) {
+        // v2 (R5): the concept or claim is the one the server last gave; whatever the model passes for it is ignored.
+        if (style === 'guided_reading') {
+          if (state.guided.stage === 'idle') return result({ error: NO_CURRENT.claim } satisfies ErrorResult)
+          input = { ...input, claim_index: state.guided.index }
+        } else {
+          if (!state.teach.current) return result({ error: NO_CURRENT.concept } satisfies ErrorResult)
+          input = { ...input, concept_id: state.teach.current }
+        }
+      }
       done = await recordCheck(teachCtx, state, style === 'guided_reading' ? 'guided_reading' : 'teach_back', input)
     }
     return result(done.output, done.events, { sessionComplete: done.sessionComplete === true })
@@ -371,21 +465,28 @@ async function runVoiceTool(
         options: nextQuestion.options || [],
         concepts_tested: nextQuestion.concepts_tested || [],
       },
-    })
+      ...(promptsV2('voice') ? quizQuestionFlags(nextIndex) : {}),
+    } satisfies NextQuestionResult)
   }
 
   if (name === 'record_answer') {
-    const parsed = recordAnswerArgs.safeParse(args)
-    if (!parsed.success) return finish({ error: 'Invalid arguments for record_answer' })
-    const { question_index: questionIndex, confidence } = parsed.data
+    const parsed = v2 ? recordAnswerArgsV2.safeParse(args ?? {}) : recordAnswerArgs.safeParse(args)
+    if (!parsed.success) return finish({ error: 'Invalid arguments for record_answer' } satisfies ErrorResult)
+    const quizState = readCoachState(session.coachState)
     if (session.endedAt) return finish(COMPLETE, { sessionComplete: true })
+    // The question is the one get_next_question last returned (v2, R5: the model passes no index). The earlier prompts
+    // still ask the model for the index, and it is not trusted either: a model that miscounted had the answer graded
+    // against another question's key. Only a session from before the server kept the current question uses it.
+    if (v2 && quizState.quiz.current < 0) return finish({ error: NO_CURRENT.question } satisfies ErrorResult)
+    const questionIndex =
+      quizState.quiz.current >= 0 ? quizState.quiz.current : (parsed.data as z.infer<typeof recordAnswerArgs>).question_index
+    const { confidence } = parsed.data
 
     const question = questionSet[questionIndex]
-    if (!question) return finish({ error: 'Question not found' })
+    if (!question) return finish({ error: 'Question not found' } satisfies ErrorResult)
 
     // The answer is what the student said since the question (or the last hint) was put to them, as the server heard it.
     // Nothing said, nothing recorded: an answer cannot be made up, or taken in the turn that asked the question.
-    const quizState = readCoachState(session.coachState)
     const userAnswer = heardSince(quizState, quizState.quiz.askedTurn)
     if (!userAnswer) return finish({ error: NOBODY_SPOKE })
 
@@ -483,25 +584,28 @@ async function runVoiceTool(
 
     // An ungraded answer is not evidence of anything, so it adds no signal.
     if (inferredTopicId && !grading.ungraded) {
-      await recordLearningSignal({
-        userId,
-        projectId: session.projectId,
-        topicId: inferredTopicId,
-        source: 'voice',
-        score: grading.score,
-        metadata: { sessionId, questionIndex },
-      })
-      await applyPendingQuizResults(userId)
-      const mastery = await computeTopicMastery(userId, session.projectId, inferredTopicId)
-      await upsertReviewSchedule({
-        userId,
-        projectId: session.projectId,
-        topicId: inferredTopicId,
-        mastery: mastery.mastery,
-        wasCorrect: grading.isCorrect,
-      })
-      // After the schedule above, so the concept-derived due date is the one that stays.
-      if (firstAnswer) {
+      const bookkeeping = async () => {
+        await recordLearningSignal({
+          userId,
+          projectId: session.projectId,
+          topicId: inferredTopicId,
+          source: 'voice',
+          score: grading.score,
+          metadata: { sessionId, questionIndex },
+        })
+        await applyPendingQuizResults(userId)
+        const mastery = await computeTopicMastery(userId, session.projectId, inferredTopicId)
+        await upsertReviewSchedule({
+          userId,
+          projectId: session.projectId,
+          topicId: inferredTopicId,
+          mastery: mastery.mastery,
+          wasCorrect: grading.isCorrect,
+        })
+        // After the schedule above, so the concept-derived due date is the one that stays. Asked for on every answer,
+        // not only the one whose insert was first: the evidence writer keeps one event per question (skipIfPresent), so
+        // a second answer adds nothing, and an answer whose first try failed after the insert (bug: the evidence was
+        // then never written) gets its evidence when it is recorded again.
         await recordVoiceEvidence({
           userId,
           projectId: session.projectId,
@@ -517,6 +621,13 @@ async function runVoiceTool(
           timeZone: ctx.timeZone ?? 'UTC',
         })
       }
+      // The coach's feedback needs none of this, so a caller that will wait for it (the turn route) takes it and the
+      // reply starts while it runs. A failure there is logged: the answer itself is stored.
+      if (ctx.defer) {
+        ctx.defer(bookkeeping().catch((error) => logServerError('Voice: recording what a spoken answer showed failed', error, { sessionId, questionIndex })))
+      } else {
+        await bookkeeping()
+      }
     }
 
     const recorded = { is_correct: grading.isCorrect, score: grading.score, feedback }
@@ -524,24 +635,34 @@ async function runVoiceTool(
     const lookLinks = !grading.isCorrect && !grading.ungraded ? await conceptPageLinks(session.projectId, question.concept_ids ?? []) : []
     const events = eventsForToolOutput(name, recorded, total).map((event) => (event.type === 'evaluation' && lookLinks.length > 0 ? { ...event, lookLinks } : event))
     // The coach names where the idea is in the student's pages (the oral quiz never reveals the answer); the links go to the browser.
-    return result(lookLinks.length > 0 ? { ...recorded, where_to_look: lookLinks.map((link) => link.label) } : recorded, events)
+    return result((lookLinks.length > 0 ? { ...recorded, where_to_look: lookLinks.map((link) => link.label) } : recorded) satisfies RecordAnswerResult, events)
   }
 
   if (name === 'get_hint') {
-    const parsed = hintArgs.safeParse(args)
-    if (!parsed.success) return finish({ error: 'Invalid arguments for get_hint' })
-    const question = questionSet[parsed.data.question_index]
+    // v2 (R5): the question is the one get_next_question last returned; the model passes nothing.
+    let hintIndex: number
+    if (v2) {
+      hintIndex = readCoachState(session.coachState).quiz.current
+      if (hintIndex < 0) return finish({ error: NO_CURRENT.question } satisfies ErrorResult)
+    } else {
+      const parsed = hintArgs.safeParse(args)
+      if (!parsed.success) return finish({ error: 'Invalid arguments for get_hint' })
+      // As in record_answer: the question being asked is the server's to say, when it has kept it.
+      const current = readCoachState(session.coachState).quiz.current
+      hintIndex = current >= 0 ? current : parsed.data.question_index
+    }
+    const question = questionSet[hintIndex]
     if (!question) return finish({ error: 'Question not found' })
     // A try comes before a hint (spec 18.4): until the student has answered this question, the coach is told to ask for a go.
     // Nothing is recorded, so the question is still open for a first try.
-    const tried = await prisma.voiceDrillAttempt.count({ where: { sessionId, questionIndex: parsed.data.question_index } })
-    if (tried === 0 && !session.hintedQuestions.includes(parsed.data.question_index)) {
-      return finish({ action: 'ask_for_try', instruction: 'The student has not answered yet. Invite them to have a go first, in a few words, and give no nudge. Saying they do not know counts as a go.' })
+    const tried = await prisma.voiceDrillAttempt.count({ where: { sessionId, questionIndex: hintIndex } })
+    if (tried === 0 && !session.hintedQuestions.includes(hintIndex)) {
+      return finish({ action: 'ask_for_try', instruction: 'The student has not answered yet. Invite them to have a go first, in a few words, and give no nudge. Saying they do not know counts as a go.' } satisfies HintResult)
     }
-    if (!session.hintedQuestions.includes(parsed.data.question_index)) {
+    if (!session.hintedQuestions.includes(hintIndex)) {
       await prisma.voiceDrillSession.update({
         where: { id: sessionId },
-        data: { hintedQuestions: { push: parsed.data.question_index } },
+        data: { hintedQuestions: { push: hintIndex } },
       })
     }
     // After a hint the student answers again, in words said after this turn.
@@ -550,7 +671,7 @@ async function runVoiceTool(
     await saveState(sessionId, hintState)
     // A nudge built from the shape of the question. The sample answer and key points stay on
     // the server: this tool must not hand over the answer.
-    return finish({ ...buildHint(question) })
+    return finish({ ...buildHint(question) } satisfies HintResult)
   }
 
   return result({ error: 'Unknown tool' })
@@ -565,7 +686,24 @@ async function runVoiceTool(
 export type StepCache = Map<string, VoiceToolResult>
 
 /** The key of a step: the tool and what it is about. Null for a tool that is not a graded step. */
-export function stepKey(name: string, args: unknown): string | null {
+export function stepKey(name: string, args: unknown, v2: boolean = promptsV2('voice')): string | null {
+  // v2: the model passes no index or id (they come from the session), so a step is keyed by its tool alone; the pre-run step
+  // says record_check and the model says record_example_check or record_claim_check, and they are the same step.
+  if (v2) {
+    switch (name) {
+      case 'record_answer':
+      case 'assess_explanation':
+        return name
+      case 'next_claim':
+        return (args as { reveal?: unknown } | null)?.reveal === true ? 'next_claim:reveal' : null
+      case 'record_check':
+      case 'record_example_check':
+      case 'record_claim_check':
+        return 'record_check'
+      default:
+        return null
+    }
+  }
   const input = args && typeof args === 'object' && !Array.isArray(args) ? (args as Record<string, unknown>) : {}
   switch (name) {
     case 'record_answer':

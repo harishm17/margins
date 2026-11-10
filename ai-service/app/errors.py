@@ -30,6 +30,8 @@ PUBLIC_MESSAGES: dict[str, str] = {
     "LLM_BAD_OUTPUT": "The AI returned an answer the app could not use.",
     "LLM_REPLAY_MISS": "No recorded answer exists for this request.",
     "LLM_DAILY_BUDGET": "You've used today's AI allowance.",
+    # The voice prompt flag differs between the web app and this service (a deploy in progress, prompt audit R9).
+    "PROMPTS_MISMATCH": "Voice is being updated. Try again in a few minutes.",
     "AI_UNREACHABLE": "AI features are paused right now.",
     # Jobs.
     "JOB_FAILED": GENERIC_MESSAGE,

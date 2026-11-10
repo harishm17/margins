@@ -63,6 +63,7 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(EVALS_DIR))
 
 from common.ingest import check_db_name, git, prepare_app_environment  # noqa: E402
+from common.revision import prompt_revision  # noqa: E402
 
 
 def log(message: str = "") -> None:
@@ -153,6 +154,7 @@ def summarize_kind(kind: str, records: List[Dict[str, Any]]) -> Dict[str, Any]:
     written: List[Dict[str, Any]] = []
     stored: List[Dict[str, Any]] = []
     sent = unsupported = 0
+    unsupported_why: Counter = Counter()
     seconds = []
     for record in records:
         written += written_items(kind, record.get("calls") or [])
@@ -160,6 +162,8 @@ def summarize_kind(kind: str, records: List[Dict[str, Any]]) -> Dict[str, Any]:
         for check in record.get("support") or []:
             sent += check["sent"]
             unsupported += check["sent"] - check["kept"]
+            # Runs stored before the check gave its reasons have none.
+            unsupported_why.update(reason for reason in check.get("reasons") or [] if reason)
         if record.get("seconds") is not None:
             seconds.append(record["seconds"])
     reason_of = (lambda item: problem_drop_reason(kind, item)) if kind in PROBLEM_KINDS else question_drop_reason
@@ -176,6 +180,7 @@ def summarize_kind(kind: str, records: List[Dict[str, Any]]) -> Dict[str, Any]:
         "by_reason": dict(sorted(reasons.items())),
         "support_sent": sent,
         "unsupported": unsupported,
+        "unsupported_by_reason": dict(sorted(unsupported_why.items())),
         "other_losses": len(written) - malformed - unsupported - len(stored),
         "stored": len(stored),
         "drop_rate": (len(written) - len(stored)) / len(written) if written else None,
@@ -222,6 +227,7 @@ def render_report(summary: Dict[str, Any]) -> str:
     lines = [
         f"# A2: generated-item defects ({run['date']}, {run['label']})",
         "",
+        f"Prompts {run.get('prompts', {}).get('revision', 'v1 (not recorded)')} (PROMPTS_V2={run.get('prompts', {}).get('PROMPTS_V2', '')!r}). "
         f"Code {run['code']['commit'][:8]} on {run['code']['branch']}{' (app has uncommitted changes)' if run['code']['app_dirty'] else ''}. "
         f"{run['topics']} topics ({', '.join(f'{c} {n}' for c, n in run['topic_counts'].items())}); the app's own models; "
         f"{'Message Batches API (half price)' if run['batch'] else 'direct calls'}{'; MOCK provider' if run['mock'] else ''}. "
@@ -251,6 +257,14 @@ def render_report(summary: Dict[str, Any]) -> str:
                 ]
                 for kind, k in kinds.items()
             ],
+        ),
+        "",
+        "### Why the support check dropped items",
+        "",
+        _table(
+            ["Generator", "Reason", "Items"],
+            [[LABELS[kind], reason, str(n)] for kind, k in kinds.items() for reason, n in (k.get("unsupported_by_reason") or {}).items()]
+            or [["—", "none recorded", "0"]],
         ),
         "",
         "### Why items were malformed",
@@ -309,12 +323,14 @@ def render_report(summary: Dict[str, Any]) -> str:
             "",
             f"## Judge ({run.get('judge') or 'n/a'}, {summary['judge_groups']} topics, ${summary['judge_cost_usd']:.2f})",
             "",
-            "Stored questions with each fault the judge found (item_judge.py).",
+            "Stored questions with each fault the judge found (item_judge.py). A fault counts only with its note; "
+            "\"No note\" is the questions whose only faults came without one, which nobody can check.",
             "",
             _table(
-                ["Generator", "Judged", "Flagged", *item_judge.DEFECTS],
+                ["Generator", "Judged", "Flagged", "No note", *item_judge.DEFECTS],
                 [
-                    [LABELS.get(kind, kind), str(j["judged"]), f"{j['flagged']} ({_pct(j['rate'])})", *[str(j["by_defect"][d]) for d in item_judge.DEFECTS]]
+                    [LABELS.get(kind, kind), str(j["judged"]), f"{j['flagged']} ({_pct(j['rate'])})", str(j.get("unexplained", 0)),
+                     *[str(j["by_defect"][d]) for d in item_judge.DEFECTS]]
                     for kind, j in sorted(judge.items(), key=lambda pair: list(LABELS).index(pair[0]) if pair[0] in LABELS else len(LABELS))
                 ],
             ),
@@ -474,7 +490,11 @@ async def run(args: argparse.Namespace) -> int:
         counts = {c: len(rows) for c, rows in topics.items()}
 
         per_kind = estimate(args, tracker, counts)
+        revision = prompt_revision("generation", "support")
+        if previous.get("prompts") and previous["prompts"].get("areas") != revision["areas"]:
+            raise SystemExit(f"--resume: this folder ran with {previous['prompts']['areas']}, PROMPTS_V2 now gives {revision['areas']}. Resume with the same PROMPTS_V2.")
         log("Plan")
+        log(f"  prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> {revision['areas']}")
         log(f"  topics: {counts} (positions {', '.join(c + ' ' + ','.join(t['key'] for t in rows) for c, rows in topics.items())})")
         log(f"  generators: {', '.join(args.kind_list)}; judge: {args.judge or 'none'}; {'direct calls' if price == 1.0 else 'Message Batches API, half price'}")
         for kind, usd in per_kind.items():
@@ -529,6 +549,7 @@ async def run(args: argparse.Namespace) -> int:
                 "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
                 "app_dirty": bool(git("status", "--porcelain", "--", "ai-service/app")),
             },
+            "prompts": revision,
             "kinds": args.kind_list,
             "topics": sum(counts.values()),
             "topic_counts": counts,
@@ -540,7 +561,7 @@ async def run(args: argparse.Namespace) -> int:
             "max_usd": args.max_usd,
             "max_judge_usd": args.max_judge_usd,
             "spend": {"generation": round(tracker.spent[GENERATION], 4), "judge": round(tracker.spent[JUDGE], 4)},
-            "stopped": state.get("stopped") or previous.get("stopped"),
+            "stopped": state.get("stopped") or _stop_still_standing(previous.get("stopped"), args),
         }
         (run_dir / "run.json").write_text(json.dumps(run_info, indent=2) + "\n")
         summary = build_summary(run_dir, run_info)
@@ -558,6 +579,15 @@ def adapters_dir() -> Path:
     from common.ingest import AI_SERVICE_DIR
 
     return AI_SERVICE_DIR
+
+
+def _stop_still_standing(previous_stop: Optional[str], args: argparse.Namespace) -> Optional[str]:
+    """An earlier run's stop note, unless this run redid that part: the judge runs again on every resume that has one,
+    and generation runs again unless --no-generate. (A resume that finished the judge reported it as stopped.)"""
+    if not previous_stop:
+        return None
+    redone = (args.judge and previous_stop.startswith("judge:")) or (not args.no_generate and not previous_stop.startswith("judge:"))
+    return None if redone else previous_stop
 
 
 def item_judge_excerpts(excerpts: List[Dict[str, Any]]) -> str:

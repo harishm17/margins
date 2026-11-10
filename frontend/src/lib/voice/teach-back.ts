@@ -52,6 +52,19 @@ export const CONFRONT_PROBE: ProbeKind = {
   example: 'Try that idea on a small case: what does it predict, and does that match what your pages say?',
 }
 
+/**
+ * The same probe in the audited prompts (PROMPTS_V2, area voice): one question. The first example asked two at once
+ * ("what does it predict, and does that match..."), in the prompt and again in every result that carried it, while the
+ * rules beside it ask for one question a turn.
+ */
+export const CONFRONT_PROBE_V2: ProbeKind = {
+  ...CONFRONT_PROBE,
+  example: 'Try your idea on a small case from your pages: what does it predict there?',
+}
+
+/** How many times a student asks to be told on one idea before the coach explains without another question (v2). */
+export const HELP_ASKS_BEFORE_TELLING = 2
+
 /** Band assumed when the caller does not know the concept's (core). */
 const DEFAULT_BAND: Band = 1
 
@@ -93,6 +106,10 @@ export type PlanOptions = GapOptions & {
   dontKnow?: boolean
   /** The concept's support band (`conceptBand`): one probe before explaining a gap in band 0, two otherwise. */
   band?: Band
+  /** The student has asked to be told for the second time on this idea: the open gap is explained now, with no further probe (v2). */
+  told?: boolean
+  /** The audited wording of the probes (PROMPTS_V2, area voice). */
+  v2?: boolean
 }
 
 /**
@@ -124,8 +141,8 @@ export function findGaps(claims: AssessedClaim[], options: GapOptions = {}): Gap
 }
 
 /** The probe for a gap's n-th probe (0 for the first). An incorrect claim gets the assumption, then the confrontation. */
-export function probeFor(finding: Finding, probesSoFar: number): ProbeKind {
-  if (finding === 'incorrect' && probesSoFar >= 1) return CONFRONT_PROBE
+export function probeFor(finding: Finding, probesSoFar: number, v2 = false): ProbeKind {
+  if (finding === 'incorrect' && probesSoFar >= 1) return v2 ? CONFRONT_PROBE_V2 : CONFRONT_PROBE
   return PROBE_FOR_FINDING[finding]
 }
 
@@ -144,6 +161,8 @@ export type ConceptState = {
   exampleAsked: boolean
   /** How the concept closed: explained (every claim, and the new example held), or taught (the coach had to explain). */
   outcome: 'explained' | 'taught' | null
+  /** Times the student has asked to be told since the coach last explained on this idea (counted only with PROMPTS_V2 voice). */
+  helpAsked?: number
 }
 
 export const emptyConceptState = (): ConceptState => ({ assessments: 0, said: [], gaps: {}, sayBack: null, exampleAsked: false, outcome: null })
@@ -169,8 +188,16 @@ export type Plan =
 export function planNext(claims: AssessedClaim[], before: ConceptState, options: PlanOptions = {}): { plan: Plan; state: ConceptState } {
   const probesAllowed = probesBeforeExplaining(options.band ?? DEFAULT_BAND)
   const state: ConceptState = { ...before, assessments: before.assessments + 1, gaps: { ...before.gaps } }
+  // Being told answers the requests so far: the count starts again for the next gap.
+  if (options.told === true) state.helpAsked = 0
   // Whether anything was explained on this concept before this assessment: the say-back that this one answers counts.
   const alreadyExplained = before.sayBack !== null || Object.values(before.gaps).some((gap) => gap.explained)
+  // Asked to be told while a say-back is waiting: the same claim is explained again and the say-back still waits. The
+  // request is not an attempt at the say-back, so it does not close the claim.
+  if (options.told === true && before.sayBack) {
+    const again = findGaps(claims, options).find((gap) => gap.claimId === before.sayBack)
+    if (again) return { plan: { action: 'explain', gap: again }, state }
+  }
   if (state.sayBack) {
     const said = state.gaps[state.sayBack] ?? { probes: probesAllowed, explained: false }
     state.gaps[state.sayBack] = { ...said, explained: true }
@@ -190,18 +217,18 @@ export function planNext(claims: AssessedClaim[], before: ConceptState, options:
   }
   const gap = open[0]
   const coversNothing = !claims.some((claim) => claim.verdict === 'covered' || claim.verdict === 'partial')
-  if ((options.dontKnow === true || coversNothing) && !alreadyExplained) {
+  if ((options.dontKnow === true || options.told === true || coversNothing) && !alreadyExplained) {
     state.gaps[gap.claimId] = { probes: probesAllowed, explained: false }
     state.sayBack = gap.claimId
     return { plan: { action: 'explain_first', gap }, state }
   }
   const probes = state.gaps[gap.claimId]?.probes ?? 0
-  if (probes >= probesAllowed) {
+  if (probes >= probesAllowed || options.told === true) {
     state.sayBack = gap.claimId
     return { plan: { action: 'explain', gap }, state }
   }
   state.gaps[gap.claimId] = { probes: probes + 1, explained: false }
-  return { plan: { action: 'probe', gap, probe: probeFor(gap.finding, probes), probeNumber: probes + 1 }, state }
+  return { plan: { action: 'probe', gap, probe: probeFor(gap.finding, probes, options.v2 === true), probeNumber: probes + 1 }, state }
 }
 
 /**

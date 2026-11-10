@@ -13,6 +13,7 @@ from app.services.content_generator.context import (
     _tokens,
     attach_sources,
     content_messages,
+    do_not_repeat_block,
     do_not_reuse_block,
     existing_content_digest,
     fetch_concepts,
@@ -20,13 +21,16 @@ from app.services.content_generator.context import (
     fetch_topic_context,
     focus_line,
     format_concept_block,
+    name_in_instructions,
     resolve_concept_ids,
 )
 from app.services.content_generator.refill import refill_figures, refill_once
 from app.services.content_generator.support_check import check_support
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
-from app.services.llm.schemas import QuestionSet
+from app.services.llm.schemas import QuestionSet, QuestionSetV2
+from app.prompt_revision import prompts_v2
+from app.services.llm.caps import output_cap
 
 
 logger = logging.getLogger(__name__)
@@ -69,8 +73,70 @@ APPLICATION_RULES = """Question design:
 - Use numbers, names and scenarios that differ from the worked examples in the excerpts and in the lesson. A student who memorised the examples must not be able to answer by recall.
 - Each question tests a different concept from the excerpts."""
 
+# ---- Audited prompts (PROMPTS_V2=generation). The v1 text above stays as it is until the area has
+# run on v2 in production.
+
+DIFFICULTY_GUIDANCE_V2 = {
+    'easy': 'Test the core ideas one at a time, in simple new situations, with plain wording and small numbers.',
+    'medium': 'Test understanding and application: the student decides which idea applies and uses it, with some analysis.',
+    'hard': 'Require deep understanding and multi-step reasoning: ideas combined, edge cases, or a common mix-up resisted.',
+}
+
+# The option rules every choice question shares: quiz, exam, warm-up and review.
+OPTION_SIMILARITY_RULE = "Make the options about the same length, form and level of detail: the correct one is not the longest, the most specific or the only one with a qualification, which would give it away."
+
+CHOICE_RULES = f"""- multiple_choice: exactly 4 options with ids A, B, C, D and one correct answer. Vary which letter is correct. Keep options short and put any code in the question text. {OPTION_SIMILARITY_RULE} When a wrong option states a rule, give it the same kind of conditions the right one has.
+- Each wrong option is the answer a student would give if they held one specific wrong idea; write that idea in `misconception`. When the wrong idea is a mix-up with a concept of the <concepts> or <confusable_concepts> list, also set `confusable_concept_id` to that concept's id. The correct option has neither.
+- In explanations, refer to options by their content, never by letter, because the options are shuffled after you write them."""
+
+# Lines the quiz, review and warm-up v2 rules all send.
+EXPLANATION_AND_POINTS_RULE = "- Every question has an explanation of the correct answer and points from 1 to 5 by complexity."
+SOURCE_EXCERPTS_RULE = "- List in source_excerpts the index of every excerpt a question is based on."
+
+# P-I1: a key point that names one route ("applies the chain rule") fails a right answer that took another.
+KEY_POINTS_RULE = (
+    "Write each key point as an idea or result a right answer contains, not as one way of reaching it, because the grader "
+    "checks an answer against each key point and a right answer may get there another way."
+)
+
+QUESTION_FORMAT_RULES_V2 = f"""Question rules:
+{CHOICE_RULES}
+- short_answer: answerable in 1-3 sentences; give a sample_answer and 2-4 key_points a grader can check. {KEY_POINTS_RULE}
+- numerical: correct_answer is a plain number; give an absolute tolerance. Give `unit` only when the quantity has one (m/s, mol/L, dollars). For a probability, a count or a ratio leave `unit` empty: never put the name of the quantity there.
+- true_false: correct_answer is a boolean; the explanation says why.
+{EXPLANATION_AND_POINTS_RULE}
+- Set `mode` on every question: recall (bring the idea to mind from a cue, in a new situation), discrimination (choose between near-twin ideas; a wrong option names the twin in `confusable_concept_id`) or composition (run the idea inside a chain with other ideas). Use recall unless the concepts support another mode.
+{SOURCE_EXCERPTS_RULE}"""
+
+# One source for the application rule: quiz, exam, review and warm-up all send it, because the later
+# support check quotes the rule the key was computed with. The prompt gives the reason in the student's terms: the
+# model knows nothing of a "support check".
+RULE_IN_EXCERPTS = (
+    "For a new situation, the rule or method it applies has to be stated in the excerpts, because every answer has to be "
+    "traceable to a passage in the student's files."
+)
+
+APPLICATION_RULES_V2 = f"""Question design:
+- At least half of the questions must apply a concept to a new situation (a fresh scenario, new numbers, a case the course materials do not show) rather than recall a definition or repeat an example.
+- Use numbers, names and scenarios that differ from the worked examples in the excerpts and in the lesson. A student who memorised the examples must not be able to answer by recall.
+- Spread the questions over the topic's ideas, and come back to an idea only from a different angle.
+- Every answer key must follow from the excerpts. {RULE_IN_EXCERPTS}"""
+
+
+def question_rules():
+    """(difficulty guidance, question design rules, question format rules) for quiz and exam."""
+    if prompts_v2("generation"):
+        return DIFFICULTY_GUIDANCE_V2, APPLICATION_RULES_V2, QUESTION_FORMAT_RULES_V2
+    return DIFFICULTY_GUIDANCE, APPLICATION_RULES, QUESTION_FORMAT_RULES
+
+
+def question_set_schema():
+    return QuestionSetV2 if prompts_v2("generation") else QuestionSet
+
+
 
 def prerequisite_instructions(name: str, topic_name: str, review: int, question_count: int) -> str:
+    name, topic_name = name_in_instructions(name), name_in_instructions(topic_name)
     return f"""
 Review questions: exactly {review} of the {question_count} questions must test the prerequisite topic "{name}". Base them only on the excerpts marked use="prerequisite", list only those excerpt indexes in source_excerpts, and pitch them at a level a student who already learned "{name}" could answer. The other {question_count - review} questions are about "{topic_name}" as described above and never use the prerequisite excerpts.
 """
@@ -218,29 +284,39 @@ class QuizGenerator:
     ) -> tuple[List[Dict], int, int]:
         """Generate and validate quiz questions; return them, how many the support check dropped and how many a
         refill (SUPPORT_REFILL) added."""
-        guidance = DIFFICULTY_GUIDANCE.get(difficulty_level, DIFFICULTY_GUIDANCE['medium'])
+        v2 = prompts_v2("generation")
+        difficulties, application_rules, format_rules = question_rules()
+        guidance = difficulties.get(difficulty_level, difficulties['medium'])
         types_str = ", ".join(qt.value for qt in question_types)
+        closing = (
+            "Name the ideas each question tests in `concepts_tested`."
+            if v2
+            else f'Set difficulty to "{difficulty_level}" and list the concepts each question tests.'
+        )
 
         allowed = {qt.value for qt in question_types}
 
         async def ask(asked: int, review: str, avoid: str = "") -> tuple[List[Dict], int]:
-            instructions = f"""Write a {asked}-question quiz on "{topic_name}" from the excerpts above.
+            instructions = f"""Write a {asked}-question quiz on "{name_in_instructions(topic_name)}" from the excerpts above.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
 Use only these question types, spread across them: {types_str}.
 
-{APPLICATION_RULES}
+{application_rules}
 {already_seen}{concepts}{review}{avoid}
-{QUESTION_FORMAT_RULES}
-Set difficulty to "{difficulty_level}" and list the concepts each question tests."""
+{format_rules}
+{closing}"""
 
             result = await self.llm.generate_structured(
                 content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map),
-                QuestionSet,
-                max_tokens=16000,
+                question_set_schema(),
+                max_tokens=output_cap("quiz", 16000),
                 purpose="topic_quiz",
             )
             usable = [q for q in result.usable() if q["question_type"] in allowed][:asked]
+            if v2:
+                for question in usable:
+                    question["difficulty"] = difficulty_level  # the code knows it; the model is not asked
             return await check_support(usable, chunks)
 
         questions, dropped = await ask(question_count + SUPPORT_SPARE_QUESTIONS, review_instructions)
@@ -251,8 +327,7 @@ Set difficulty to "{difficulty_level}" and list the concepts each question tests
             # Finding 102: once, for what the check removed, with one spare. The prerequisite review questions were
             # asked for the first time; a refill is plain questions on the topic.
             nonlocal dropped
-            avoid = "\n\nDo not repeat these questions:\n" + "\n".join(f"- {q.get('question_text')}" for q in questions)
-            more, more_dropped = await ask(missing + 1, "", avoid)
+            more, more_dropped = await ask(missing + 1, "", do_not_repeat_block(questions))
             dropped += more_dropped
             return more
 

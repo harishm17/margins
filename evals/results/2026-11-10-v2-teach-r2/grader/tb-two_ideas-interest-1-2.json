@@ -1,0 +1,7 @@
+{
+  "status": "graded",
+  "verdicts": {
+    "interest-c0-k0": "covered",
+    "interest-c0-k1": "incorrect"
+  }
+}

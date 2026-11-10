@@ -1,6 +1,7 @@
 /** Calls the AI service's POST /voice/turn and reads its newline-delimited JSON reply. */
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 import { callSignal } from '@/lib/ai-service/client-signal'
+import { promptsV2 } from '@/lib/prompt-revision'
 import { createLineSplitter } from '@/lib/chat/events'
 import type { VoiceBlock, VoiceMessage } from '@/lib/voice/history'
 
@@ -48,6 +49,8 @@ export function requestModelTurn(request: ModelTurnRequest, signal?: AbortSignal
       system: request.system,
       messages: request.messages,
       tools: request.tools,
+      // R9: the AI service refuses the call (409 PROMPTS_MISMATCH) when its own voice flag differs from this one.
+      prompts_v2_voice: promptsV2('voice'),
     }),
     signal: signal ? AbortSignal.any([signal, callSignal(MODEL_CALL_TIMEOUT_MS)]) : callSignal(MODEL_CALL_TIMEOUT_MS),
   })

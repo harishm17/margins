@@ -374,6 +374,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--env-file", type=Path, default=REPO_ROOT / "ai-service" / ".env")
     parser.add_argument("--allow-any-db", action="store_true")
+    parser.add_argument("--out-dir", type=Path, default=RESULTS_DIR, help="where the report and folder go (default evals/results)")
     args = parser.parse_args(argv)
     if not args.db:
         parser.error("--db is required (or set EVAL_DATABASE_URL)")
@@ -387,6 +388,10 @@ async def run(args: argparse.Namespace) -> int:
     from common.ingest import git
     from ground_truth import resolve_topics
 
+    from common.revision import prompt_revision
+
+    revision = prompt_revision("ask")
+    log(f"Prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> ask {revision['areas']['ask']}")
     today = settings.CHAT_TOP_K
     answer_ks = [int(k) for k in args.answer_ks.split(",")] if args.answer_ks else [today]
     topics = load_topic_ids()
@@ -466,7 +471,7 @@ async def run(args: argparse.Namespace) -> int:
         await close_db_pool()
 
     date = datetime.date.today().isoformat()
-    run_dir = RESULTS_DIR / f"{date}-{args.label}"
+    run_dir = args.out_dir / f"{date}-{args.label}"
     (run_dir / "raw").mkdir(parents=True, exist_ok=True)
     (run_dir / "raw" / "retrieval.json").write_text(json.dumps(records, indent=1) + "\n")
     if rows:
@@ -484,11 +489,12 @@ async def run(args: argparse.Namespace) -> int:
         "answer_ks": answer_ks if rows else [],
         "answer_model": resolve_model("chat").model if rows else None,
         "mock": args.mock,
+        "prompts": revision,
         "cost_usd": cost,
     }
     (run_dir / "run.json").write_text(json.dumps(summary["run"], indent=2) + "\n")
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=1) + "\n")
-    report = RESULTS_DIR / f"{date}-{args.label}.md"
+    report = args.out_dir / f"{date}-{args.label}.md"
     report.write_text(render_report(summary, meta))
     log(f"Cost: ${cost:.4f}")
     log(f"Report: {report}")

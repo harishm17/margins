@@ -6,6 +6,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # The places this service may run. ENVIRONMENT has no default and must be exactly one of these.
 ENVIRONMENTS = ("development", "test", "production")
 
+# The areas PROMPTS_V2 may list (app/prompt_revision.py reads the setting). Kept here so the setting can be checked
+# when it is read: the web app has the same list in frontend/src/lib/prompt-revision.ts.
+PROMPT_AREAS = ("generation", "support", "tutor", "grading", "ask", "ingest", "voice")
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
@@ -128,7 +132,13 @@ class Settings(BaseSettings):
     # Syllabus or calendar text given to the planner, for ordering and unit names.
     PLANNER_SYLLABUS_TOKENS: int = 6000
 
+    # Areas that use the audited prompts (app/prompt_revision.py): "generation,tutor" or "all".
+    # Empty keeps every area on its earlier prompts.
+    PROMPTS_V2: str = ""
+
     CHAT_MAX_TOKENS: int = 4000
+    # Under PROMPTS_V2=ask. Thinking counts toward the cap, and a cut-off shows half an answer and then an error.
+    CHAT_MAX_TOKENS_V2: int = 8000
     # Excerpts offered to the model per question, and the cosine similarity below which a chunk
     # is not offered at all. A question is shorter than a topic query, so its floor is lower
     # than retrieval's MIN_SIMILARITY. When nothing clears it the answer is "not in your
@@ -269,6 +279,16 @@ class Settings(BaseSettings):
         from app.model_spec import ModelChoice, parse_model_spec
 
         parse_model_spec(value, ModelChoice("placeholder", None))
+        return value
+
+    @field_validator("PROMPTS_V2")
+    @classmethod
+    def _known_prompt_areas(cls, value: str) -> str:
+        # A misspelt area ("voise") used to be ignored: the area stayed on its earlier prompts and nothing said so.
+        listed = [part.strip().lower() for part in (value or "").split(",") if part.strip()]
+        unknown = sorted({name for name in listed if name != "all" and name not in PROMPT_AREAS})
+        if unknown:
+            raise ValueError(f"PROMPTS_V2 names unknown areas: {', '.join(unknown)}. Known: all, {', '.join(PROMPT_AREAS)}")
         return value
 
     @field_validator("ENVIRONMENT")

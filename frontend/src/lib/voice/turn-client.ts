@@ -149,6 +149,8 @@ export function parseVoiceEvent(line: string): VoiceEvent | null {
     }
     case 'working':
       return raw.step === 'assess' || raw.step === 'record_answer' || raw.step === 'reveal' || raw.step === 'record_check' ? { type: 'working', step: raw.step } : null
+    case 'retract':
+      return { type: 'retract' }
     case 'listen': {
       const wanted: ListenFor[] = ['short_answer', 'prediction', 'explanation', 'none']
       return wanted.includes(raw.for as ListenFor) ? { type: 'listen', for: raw.for as ListenFor } : null
@@ -172,12 +174,43 @@ export function parseVoiceEvent(line: string): VoiceEvent | null {
  * Ends when the stream ends; a well-formed turn ends with `done` or `error`, so a stream that
  * ends without either was cut off (check with `isTerminal`).
  */
-export async function* readVoiceEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<VoiceEvent> {
+/** The reply stream sent nothing for too long: the server or the connection has stalled without closing. */
+export class VoiceStreamQuietError extends Error {
+  constructor() {
+    super('The reply stream went quiet')
+    this.name = 'VoiceStreamQuietError'
+  }
+}
+
+/**
+ * The events of a reply stream. With `quietMs`, a stream that sends nothing at all for that long (the server writes a
+ * keep-alive line while a turn runs) is dropped and VoiceStreamQuietError is thrown: without it the session waited for
+ * ever on a connection that had died without closing.
+ */
+export async function* readVoiceEvents(body: ReadableStream<Uint8Array>, options: { quietMs?: number } = {}): AsyncGenerator<VoiceEvent> {
   const splitter = createLineSplitter()
   const reader = body.getReader()
+  const quietMs = options.quietMs
+  const read = async () => {
+    if (!quietMs) return reader.read()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const quiet = new Promise<'quiet'>((resolve) => {
+      timer = setTimeout(() => resolve('quiet'), quietMs)
+    })
+    const pending = reader.read()
+    const result = await Promise.race([pending, quiet])
+    clearTimeout(timer)
+    if (result === 'quiet') {
+      // The read still in flight ends with the cancel; its outcome is of no interest.
+      pending.catch(() => undefined)
+      await reader.cancel().catch(() => undefined)
+      throw new VoiceStreamQuietError()
+    }
+    return result
+  }
   try {
     while (true) {
-      const { value, done } = await reader.read()
+      const { value, done } = await read()
       if (done) break
       for (const line of splitter.push(value)) {
         const event = parseVoiceEvent(line)
@@ -203,11 +236,39 @@ export function isTerminal(event: VoiceEvent): boolean {
 /** Words that end in a period without ending the sentence (lower case, no final period). */
 const ABBREVIATIONS = new Set([
   'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st', 'vs', 'fig', 'approx', 'cf', 'al',
-  'inc', 'ltd', 'vol', 'eq', 'e.g', 'i.e', 'u.s', 'u.k',
+  'inc', 'ltd', 'vol', 'eq', 'e.g', 'i.e', 'u.s', 'u.k', 'pp',
 ])
+/** Short for a word only before a number: "no. 3", "ch. 2", "sec. 4", "p. 12". "The answer is no." still ends a sentence. */
+const NUMBER_ABBREVIATIONS = new Set(['no', 'nos', 'ch', 'sec', 'pg', 'p'])
 
-const TERMINATORS = '.!?…'
-const CLOSERS = '"\'”’)]*_`'
+/** Sentence ends that are followed by a space: Latin scripts, and the danda of Hindi and its relatives. */
+const TERMINATORS = '.!?…।॥'
+/** Sentence ends of scripts written without spaces (Chinese, Japanese): the next sentence follows at once. */
+const UNSPACED_TERMINATORS = '。！？｡'
+const CLOSERS = '"\'”’)]*_`」』）'
+
+/**
+ * Where maths that is still open starts, or -1: a `$$` or `\[` with no closing mark yet. Display maths runs over several
+ * lines, and a line break inside it is not the end of a sentence (each half would be read out as symbols).
+ */
+function openMathStart(text: string): number {
+  let open = -1
+  let from = 0
+  while (true) {
+    const at = text.indexOf('$$', from)
+    if (at < 0) break
+    open = open < 0 ? at : -1
+    from = at + 2
+  }
+  if (open >= 0) return open
+  const bracket = text.lastIndexOf('\\[')
+  return bracket >= 0 && text.indexOf('\\]', bracket) < 0 ? bracket : -1
+}
+
+/** The [start, end) ranges of closed maths spans: nothing inside one ends a sentence. */
+function mathRanges(text: string): Array<[number, number]> {
+  return [...text.matchAll(MATH_SPAN)].map((match) => [match.index ?? 0, (match.index ?? 0) + match[0].length])
+}
 
 function isSpace(char: string): boolean {
   return char === ' ' || char === '\t' || char === '\r' || char === ' '
@@ -233,22 +294,39 @@ function isAbbreviation(word: string): boolean {
  * the text confirms a boundary.
  */
 function findBoundary(text: string, final: boolean): { end: number; next: number } | null {
+  const ranges = text.includes('$') || text.includes('\\') ? mathRanges(text) : []
+  // Maths still being streamed: wait for its end. At the end of the reply it is read as it stands.
+  const open = final ? -1 : openMathStart(text)
   for (let i = 0; i < text.length; i += 1) {
+    if (open >= 0 && i >= open) return null
+    const inside = ranges.find(([start, end]) => i >= start && i < end)
+    if (inside) {
+      i = inside[1] - 1
+      continue
+    }
     const char = text[i]
     if (char === '\n') {
       let next = i + 1
       while (next < text.length && (isSpace(text[next]) || text[next] === '\n')) next += 1
       return { end: i, next }
     }
-    if (!TERMINATORS.includes(char)) continue
+    const unspaced = UNSPACED_TERMINATORS.includes(char)
+    if (!unspaced && !TERMINATORS.includes(char)) continue
 
     // The run of terminators and closing quotes or brackets that ends the sentence.
+    const ends = (c: string) => TERMINATORS.includes(c) || UNSPACED_TERMINATORS.includes(c) || CLOSERS.includes(c)
     let run = i
-    while (run + 1 < text.length && (TERMINATORS.includes(text[run + 1]) || CLOSERS.includes(text[run + 1]))) run += 1
+    while (run + 1 < text.length && ends(text[run + 1])) run += 1
     const end = run + 1
     if (end >= text.length) {
       if (final) return { end, next: end }
-      return null // more text may follow ("3." then "14")
+      return null // more text may follow ("3." then "14", or a closing quote)
+    }
+    if (unspaced) {
+      // No space is written after these: the sentence ends here.
+      let next = end
+      while (next < text.length && isSpace(text[next])) next += 1
+      return { end, next }
     }
     if (!isSpace(text[end]) && text[end] !== '\n') {
       i = run // "3.14", "e.g.," or "u.s.a": not a boundary
@@ -265,7 +343,8 @@ function findBoundary(text: string, final: boolean): { end: number; next: number
 
     const single = char === '.' && [...text.slice(i, end)].filter((c) => TERMINATORS.includes(c)).length === 1
     if (single) {
-      if (isAbbreviation(wordBefore(text, i))) {
+      const word = wordBefore(text, i)
+      if (isAbbreviation(word) || (/\d/.test(text[next]) && NUMBER_ABBREVIATIONS.has(word.toLowerCase()))) {
         i = run
         continue
       }
@@ -292,16 +371,42 @@ export function cleanForSpeech(sentence: string): string {
   return stripMarkdown(protectedSentence).replace(/\u0000(\d+)\u0000/g, (_match, index: string) => math[Number(index)] ?? '')
 }
 
+/** A web address as it is said: the site's name, not the whole address. */
+function siteOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return 'a link'
+  }
+}
+
 function stripMarkdown(sentence: string): string {
-  return sentence
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/`([^`]*)`/g, '$1')
-    .replace(/(\*\*|__|\*|_)(?=\S)([^*_]*?\S)\1/g, '$2')
-    .replace(/^\s{0,3}#{1,6}\s+/, '')
-    .replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')
-    .replace(/[*_`#]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return (
+    sentence
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/`([^`]*)`/g, '$1')
+      // A link is said by its words; an address on its own by its site.
+      .replace(/!?\[([^\]]*)\]\((?:[^()\s]|\([^()\s]*\))*\)/g, '$1')
+      .replace(/\bhttps?:\/\/[^\s<>)\]]+/g, (url) => {
+        const tail = /[.,;:!?]+$/.exec(url)?.[0] ?? ''
+        return siteOf(url.slice(0, url.length - tail.length)) + tail
+      })
+      // Emphasis marks go only where they wrap words: an underscore inside a word (snake_case) and a star between
+      // spaces (2 * 3) are not emphasis.
+      .replace(/(\*\*|__)(?=\S)([\s\S]*?\S)\1/g, '$2')
+      .replace(/(?<![\w*])\*(?=\S)([^*]*?\S)\*(?![\w*])/g, '$1')
+      .replace(/(?<![\w_])_(?=\S)([^_]*?\S)_(?![\w_])/g, '$1')
+      .replace(/^\s{0,3}#{1,6}\s+/, '')
+      .replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '')
+      // What is left of the marks: a name keeps its parts apart (snake_case is "snake case"), "C#" and "#1" keep
+      // their sign, a star with a space on each side stays for the maths reader, and stray marks go.
+      .replace(/(?<=\w)_(?=\w)/g, ' ')
+      .replace(/(?<!\s)\*|\*(?!\s)/g, '')
+      .replace(/(?<![\w#])#(?![\w#])/g, '')
+      .replace(/[_`]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
 }
 
 export type SentenceChunker = {

@@ -18,7 +18,7 @@ from app.config import settings
 from app.db.connection import execute_query
 from app.services.concepts.extractor import EXTRACTION_SYSTEM_PROMPT, format_excerpts
 from app.services.concepts.store import store_requoted_claims
-from app.services.concepts.validate import normalize, validate_claims
+from app.services.concepts.validate import validate_claims
 from app.services.content_generator.context import NoSourceMaterialError, fetch_topic_context
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import LLMFactory
@@ -102,7 +102,7 @@ async def estimate_prompt_tokens(topic_id: str) -> int:
     chunks = [chunk for chunk in context.chunks if chunk.get("source_kind") != "supporting"]
     if not chunks:
         return 0
-    text = format_excerpts(context.topic, chunks, context.course_map) + format_concepts(concepts) + REQUOTE_INSTRUCTIONS
+    text = format_excerpts(context.topic, chunks, context.course_map, v2=False) + format_concepts(concepts) + REQUOTE_INSTRUCTIONS
     return len(text) // 4
 
 
@@ -128,7 +128,7 @@ async def propose_quotes(topic_id: str) -> RequotePlan:
     raw = await LLMFactory.get_provider().generate_structured(
         [
             LLMMessage(role="system", content=EXTRACTION_SYSTEM_PROMPT),
-            LLMMessage(role="user", content=format_excerpts(context.topic, chunks, context.course_map)),
+            LLMMessage(role="user", content=format_excerpts(context.topic, chunks, context.course_map, v2=False)),
             LLMMessage(role="user", content=format_concepts(plan.concepts) + "\n\n" + REQUOTE_INSTRUCTIONS),
         ],
         ConceptRequote,
@@ -138,7 +138,7 @@ async def propose_quotes(topic_id: str) -> RequotePlan:
     plan.claims, plan.dropped_claims = validate_claims(
         raw.claims,
         {concept["id"] for concept in plan.concepts},
-        {chunk["id"]: normalize(str(chunk.get("chunk_text") or "")) for chunk in chunks},
+        {chunk["id"]: str(chunk.get("chunk_text") or "") for chunk in chunks},
     )
     return plan
 

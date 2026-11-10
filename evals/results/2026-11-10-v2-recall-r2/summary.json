@@ -1,0 +1,199 @@
+{
+ "arms": {
+  "app": {
+   "scored": 43,
+   "errors": 0,
+   "verdict_accuracy": {
+    "count": 138,
+    "of": 152,
+    "rate": 0.9078947368421053
+   },
+   "answers_all_right": {
+    "count": 26,
+    "of": 38,
+    "rate": 0.6842105263157895
+   },
+   "false_credit": {
+    "count": 0,
+    "of": 39,
+    "rate": 0.0
+   },
+   "credit_withheld": {
+    "count": 13,
+    "of": 113,
+    "rate": 0.11504424778761062
+   },
+   "ungradable_flagged": {
+    "count": 3,
+    "of": 5,
+    "rate": 0.6
+   },
+   "gradable_held_back": {
+    "count": 0,
+    "of": 38,
+    "rate": 0.0
+   },
+   "reasoning_gap_agreement": {
+    "count": 6,
+    "of": 6,
+    "rate": 1.0
+   },
+   "confusion": {
+    "covered": {
+     "covered": 100,
+     "partial": 8,
+     "missing": 5
+    },
+    "partial": {
+     "partial": 8
+    },
+    "missing": {
+     "missing": 22
+    },
+    "incorrect": {
+     "incorrect": 8,
+     "missing": 1
+    }
+   },
+   "by_kind": {
+    "full": {
+     "count": 35,
+     "of": 36,
+     "rate": 0.9722222222222222
+    },
+    "other_words": {
+     "count": 19,
+     "of": 19,
+     "rate": 1.0
+    },
+    "partial": {
+     "count": 23,
+     "of": 25,
+     "rate": 0.92
+    },
+    "contradicted": {
+     "count": 33,
+     "of": 36,
+     "rate": 0.9166666666666666
+    },
+    "one_or_more_missing": {
+     "count": 19,
+     "of": 24,
+     "rate": 0.7916666666666666
+    },
+    "reasoning_gap": {
+     "count": 9,
+     "of": 12,
+     "rate": 0.75
+    }
+   }
+  }
+ },
+ "gates": {
+  "app": [
+   {
+    "key": "false_credit",
+    "label": "Claims not covered that were marked covered",
+    "at_most": 0.06,
+    "count": 0,
+    "of": 39,
+    "rate": 0.0,
+    "passed": true
+   },
+   {
+    "key": "credit_withheld",
+    "label": "Covered claims not marked covered",
+    "at_most": 0.12,
+    "count": 13,
+    "of": 113,
+    "rate": 0.11504424778761062,
+    "passed": true
+   }
+  ]
+ },
+ "dataset": {
+  "prompts": 9,
+  "answers": 43,
+  "gradable": 38,
+  "ungradable": 5,
+  "claims": 152,
+  "by_kind": {
+   "full": 9,
+   "other_words": 5,
+   "partial": 6,
+   "contradicted": 9,
+   "noise": 5,
+   "one_or_more_missing": 6,
+   "reasoning_gap": 3
+  },
+  "by_label": {
+   "covered": 113,
+   "partial": 8,
+   "incorrect": 9,
+   "missing": 22
+  },
+  "reasoning_gap_labels": 8
+ },
+ "models": {
+  "app": {
+   "model": "claude-sonnet-5-5",
+   "effort": "low",
+   "app_choice": true
+  }
+ },
+ "prompts": {
+  "PROMPTS_V2": "tutor",
+  "areas": {
+   "tutor": "v2"
+  },
+  "revision": "v2"
+ },
+ "cost": {
+  "app": 0.1207
+ },
+ "run": {
+  "label": "v2-recall-r2",
+  "date": "2026-11-10",
+  "dataset_kind": "recall",
+  "commit": "67cdab6b",
+  "dirty": true,
+  "arms": {
+   "app": {
+    "model": "claude-sonnet-5-5",
+    "effort": "low",
+    "app_choice": true
+   }
+  },
+  "prompts": {
+   "PROMPTS_V2": "tutor",
+   "areas": {
+    "tutor": "v2"
+   },
+   "revision": "v2",
+   "request": {
+    "schema": "RecallGradeResultV2",
+    "system_chars": 2750,
+    "system_sha": "bfef1153092f"
+   }
+  },
+  "estimate_usd": {
+   "app": 0.3523
+  },
+  "cost_usd": {
+   "app": 0.1207
+  },
+  "total_cost_usd": 0.1207,
+  "price_factor": 0.5,
+  "mock": false,
+  "batches": [
+   {
+    "id": "msgbatch_01FFpQykkj8C5A86HJJxxbDW",
+    "requests": 42,
+    "seconds": 353.9
+   }
+  ],
+  "outcomes": {
+   "app: ok": 43
+  }
+ }
+}

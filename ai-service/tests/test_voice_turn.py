@@ -228,6 +228,16 @@ class TestRoute:
         response = post(client)
         assert response.status_code == 404 and response.json()["error_code"] == "PROJECT_NOT_FOUND"
 
+    @pytest.mark.parametrize("ours,theirs,status", [("", True, 409), ("voice", False, 409), ("voice", True, 200), ("", None, 200)])
+    def test_a_voice_flag_that_differs_from_the_web_apps_is_refused(self, client, wired, monkeypatch, ours, theirs, status):
+        """Prompt audit R9: a half-set voice flag would mix the web app's coach prompt with this service's handling.
+        A web app that sends no flag (mid-deploy) is served as before. The drill route shares the same check."""
+        monkeypatch.setattr(settings, "PROMPTS_V2", ours)
+        response = post(client, prompts_v2_voice=theirs)
+        assert response.status_code == status
+        if status == 409:
+            assert response.json()["error_code"] == "PROMPTS_MISMATCH" and response.json()["retryable"] is True
+
     @pytest.mark.parametrize(
         "error,code,retryable",
         [
@@ -243,3 +253,63 @@ class TestRoute:
         last = lines(response)[-1]
         assert (last["type"], last["code"], last["retryable"]) == ("error", code, retryable)
         assert last["message"]
+
+
+# ---- prompt audit 2026-11-09, area "voice" (M6): a cache breakpoint on the last message ----------------
+
+
+class TestMessageCacheBreakpoint:
+    async def test_off_by_default_the_messages_go_as_they_are(self, monkeypatch):
+        monkeypatch.setattr(settings, "PROMPTS_V2", "")
+        provider, calls = claude([delta("Hi.")], final_message([SimpleNamespace(type="text", text="Hi.")]))
+        await collect(provider)
+        assert calls[0]["messages"] == [{"role": "user", "content": "hi"}]
+
+    async def test_v2_puts_a_breakpoint_on_the_last_block_of_the_last_message_and_keeps_the_system_one(self, monkeypatch):
+        monkeypatch.setattr(settings, "PROMPTS_V2", "voice")
+        provider, calls = claude([delta("Hi.")], final_message([SimpleNamespace(type="text", text="Hi.")]))
+        messages = [
+            {"role": "user", "content": "first"},
+            {"role": "assistant", "content": [{"type": "text", "text": "ok"}]},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "t1", "content": "{}"},
+                    {"type": "text", "text": "the answer"},
+                ],
+            },
+        ]
+        original = json.loads(json.dumps(messages))
+        await collect(provider, messages=messages)
+        sent = calls[0]["messages"]
+        assert sent[-1]["content"][-1] == {"type": "text", "text": "the answer", "cache_control": {"type": "ephemeral"}}
+        assert "cache_control" not in sent[-1]["content"][0]
+        assert sent[:-1] == original[:-1]
+        assert calls[0]["system"][0]["cache_control"] == {"type": "ephemeral"}
+        assert messages == original  # the caller's list is not edited
+        marks = json.dumps(calls[0]).count("cache_control")
+        assert marks <= 4
+
+    async def test_v2_turns_a_plain_string_message_into_a_block(self, monkeypatch):
+        monkeypatch.setattr(settings, "PROMPTS_V2", "all")
+        provider, calls = claude([delta("Hi.")], final_message([SimpleNamespace(type="text", text="Hi.")]))
+        await collect(provider)
+        assert calls[0]["messages"] == [
+            {"role": "user", "content": [{"type": "text", "text": "hi", "cache_control": {"type": "ephemeral"}}]}
+        ]
+
+    async def test_v2_leaves_a_thinking_block_unmarked(self, monkeypatch):
+        monkeypatch.setattr(settings, "PROMPTS_V2", "voice")
+        provider, calls = claude([delta("Hi.")], final_message([SimpleNamespace(type="text", text="Hi.")]))
+        messages = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": [{"type": "thinking", "thinking": "x", "signature": "s"}]},
+        ]
+        await collect(provider, messages=messages)
+        assert calls[0]["messages"] == messages
+
+    async def test_a_reply_cut_by_max_tokens_is_logged(self, caplog):
+        provider, _ = claude([delta("Hi")], final_message([SimpleNamespace(type="text", text="Hi")], stop_reason="max_tokens"))
+        with caplog.at_level("WARNING"):
+            await collect(provider)
+        assert any("max_tokens" in record.getMessage() for record in caplog.records)

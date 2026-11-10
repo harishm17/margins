@@ -22,6 +22,8 @@ from tests.test_warmup import world  # noqa: F401  (fixture)
 CHUNKS = [
     {"chunk_text": "The sample mean is the sum of the values\ndivided by “how many” there are."},
     {"chunk_text": "Variance measures how far values spread from the mean."},
+    # As a PDF comes out of the markdown conversion: emphasis marks, maths italics, a superscript tag.
+    {"chunk_text": "Heap sort runs in _O_ ( _n_ lg _n_ ) time. The **complement** 𝐴<sup>𝑐</sup> is everything _not_ in 𝐴."},
 ]
 
 
@@ -85,12 +87,44 @@ async def test_item_with_no_listed_excerpt_is_checked_against_all():
     assert len(kept) == 1 and dropped == 0
 
 
-async def test_quote_matches_after_normalisation():
-    # Whitespace runs and curly quotes in the excerpt match a plain, single-spaced quote.
-    quote = 'values divided by "how many" there'
-    with use(Scripted([verdict(1, citations=((1, quote),))])):
-        kept, dropped = await check_support([item()], CHUNKS)
+@pytest.mark.parametrize(
+    "index, quote",
+    [
+        # Whitespace runs and curly quotes in the excerpt match a plain, single-spaced quote.
+        (1, 'values divided by "how many" there'),
+        # Bug (A2 runs of 2026-11-10): 39 of 44 dropped items had supported=true. The checker copied a passage without
+        # the excerpt's markdown, or with plain letters for maths italics, and the quote was "not found".
+        (3, "Heap sort runs in O(n lg n) time."),
+        (3, "The complement A^c is everything not in A".replace("^", "")),
+        (3, "The **complement** 𝐴<sup>𝑐</sup> is everything _not_ in 𝐴."),
+        # Words left out with an ellipsis: each part is in the excerpt, in order.
+        (3, "Heap sort runs in O(n lg n) time ... everything not in A."),
+    ],
+)
+async def test_quote_matches_after_normalisation(index, quote):
+    with use(Scripted([verdict(1, citations=((index, quote),))])):
+        kept, dropped = await check_support([item(excerpts=(index,))], CHUNKS)
     assert len(kept) == 1 and dropped == 0
+
+
+async def test_a_citation_may_name_any_excerpt_the_check_was_shown_and_drops_say_why(caplog):
+    # Same bug: support the checker found in a neighbouring excerpt (shown because another item lists it) was
+    # refused because the item itself listed only excerpt 1.
+    verdicts = [
+        verdict(1, citations=((2, "how far values spread"),)),
+        verdict(2, citations=((2, "how far values spread"),)),
+        verdict(3, citations=((3, "Heap sort"),)),  # excerpt 3 was not shown: no item lists it
+        verdict(4, supported=False, citations=()),
+    ]
+    items = [item("a", excerpts=(1,)), item("b", excerpts=(2,)), item("c", excerpts=(1,)), item("d", excerpts=(1,))]
+    with use(Scripted(verdicts)), caplog.at_level("INFO"), support_check.drop_reasons() as reasons:
+        kept, dropped = await check_support(items, CHUNKS)
+    assert [i["question_text"] for i in kept] == ["a", "b"] and dropped == 2
+    assert [(i["question_text"], why) for i, why in reasons] == [
+        ("c", support_check.REASON_NOT_SHOWN),
+        ("d", support_check.REASON_UNSUPPORTED),
+    ]
+    assert support_check.REASON_NOT_SHOWN in caplog.text
 
 
 async def test_mismatched_ids_treated_as_unavailable():

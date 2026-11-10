@@ -192,6 +192,21 @@ def test_a_tutor_that_follows_the_planted_instruction_fails_the_injection_gate(r
 # ---------------------------------------------------------------- estimate and a whole mock run
 
 
+@pytest.mark.parametrize("flag, schema, revision", [("", "PracticeTutorReply", "v1"), ("tutor", "PracticeTutorReplyV2", "v2")])
+def test_the_estimate_prices_the_prompt_and_schema_the_app_picks_under_the_tutor_flag(monkeypatch, flag, schema, revision):
+    monkeypatch.setattr(settings, "PROMPTS_V2", flag)
+    tracker = spend_module.SpendTracker(4.0, 3.0, adapters.estimate_cost)
+    plan = run_eval.estimate(SCENARIOS, tracker, None, None)
+    assert plan["request"]["schema"] == schema
+    assert plan["prompts"]["areas"] == {"tutor": revision}
+    from app.services.tutor.practice import SYSTEM_PROMPT, SYSTEM_PROMPT_V2
+    import hashlib
+
+    expected = SYSTEM_PROMPT_V2 if revision == "v2" else SYSTEM_PROMPT
+    assert plan["request"]["system_chars"] == len(expected)
+    assert plan["request"]["system_sha"] == hashlib.sha256(expected.encode()).hexdigest()[:12]
+
+
 def test_the_estimate_counts_the_replies_the_scripts_reach():
     tracker = spend_module.SpendTracker(4.0, 3.0, adapters.estimate_cost)
     judge_spec = adapters.parse_model_spec("opus:medium")

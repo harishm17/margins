@@ -11,6 +11,9 @@ from html import escape
 from typing import List, Optional, Sequence, Set
 
 from app.config import settings
+from app.prompt_revision import prompts_v2
+from app.services.llm.caps import OUTPUT_CAPS
+from app.services.llm import untrusted
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import LeakVerdict
@@ -47,7 +50,8 @@ WORD_FORM_LEAK = "word_form"
 _NUMERIC_START = re.compile(r"\s*[-−]?\.?\d")
 _SPACE = re.compile(r"\s+")
 _TIGHT = 1e-9
-# Room for the judge's private reasoning as well as its verdict: at 300 the live Ask eval saw a judge cut off.
+# Room for the judge's thinking as well as its verdict (thinking shares the cap): at 300 the live Ask eval saw a judge
+# cut off. The v2 cap is OUTPUT_CAPS["leak_judge"] in llm/caps.py.
 JUDGE_MAX_TOKENS = 1000
 
 
@@ -288,6 +292,7 @@ async def judge_leak(
     no_key: bool = False,
     passages: str = "",
     transfer_question: bool = False,
+    v2: Optional[bool] = None,
 ) -> LeakVerdict:
     """Ask the router model whether `reply` gives away `answer` in a form a string check misses.
 
@@ -297,25 +302,34 @@ async def judge_leak(
     `transfer_question` the tutor was asked to pose a transfer question after a solved step (the
     confirm move), and a new case with new numbers is not read as a worked example."""
     own_note = OWN_ANSWER_NOTE_NO_KEY if no_key else OWN_ANSWER_NOTE
-    note = f"<student_answer_note>\n{escape(own_note.format(own=own_answer), quote=False)}\n</student_answer_note>\n\n" if own_answer else ""
-    if no_key:
-        key = f"<source_passages>\n{escape(passages, quote=False)}\n</source_passages>\n\n" if passages else ""
+    # `v2` is the caller's prompt area (tutor by default; Ask passes its own). Under v2 the one untrusted-text rule
+    # (llm/untrusted.py) replaces the `&lt;` escape, which turned `x<3` in an answer into text the judge could not match.
+    v2 = prompts_v2("tutor") if v2 is None else v2
+    if v2:
+        def block(name: str, text: str) -> str:
+            return untrusted.tag(name, text) + "\n\n"
     else:
-        key = f"<authored_answer>\n{escape(answer, quote=False)}\n</authored_answer>\n\n"
+        def block(name: str, text: str) -> str:
+            return f"<{name}>\n{escape(text, quote=False)}\n</{name}>\n\n"
+    note = block("student_answer_note", own_note.format(own=own_answer)) if own_answer else ""
+    if no_key:
+        key = block("source_passages", passages) if passages else ""
+    else:
+        key = block("authored_answer", answer)
     transfer = f"<transfer_note>\n{TRANSFER_NOTE}\n</transfer_note>\n\n" if transfer_question else ""
     user = (
-        f"<problem>\n{escape(problem, quote=False)}\n</problem>\n\n"
-        f"<step_question>\n{escape(question, quote=False)}\n</step_question>\n\n"
-        f"{key}"
+        block("problem", problem)
+        + block("step_question", question)
+        + f"{key}"
         f"{note}"
         f"{transfer}"
-        f"<tutor_reply>\n{escape(reply, quote=False)}\n</tutor_reply>\n\n"
-        f"{JUDGE_INSTRUCTIONS_NO_KEY if no_key else JUDGE_INSTRUCTIONS}"
+        + block("tutor_reply", reply)
+        + f"{JUDGE_INSTRUCTIONS_NO_KEY if no_key else JUDGE_INSTRUCTIONS}"
     )
     return await LLMFactory.get_provider().generate_structured(
         [LLMMessage(role="system", content=JUDGE_SYSTEM_PROMPT), LLMMessage(role="user", content=user)],
         LeakVerdict,
-        max_tokens=JUDGE_MAX_TOKENS,
+        max_tokens=OUTPUT_CAPS["leak_judge"].tokens if v2 else JUDGE_MAX_TOKENS,
         purpose="router",
     )
 

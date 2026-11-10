@@ -62,7 +62,7 @@ class ScriptedAsk(LLMProvider):
             return RouteDecision(intent=route["intent"], has_attempt=route.get("has_attempt", False), wants_answer=route.get("wants_answer", False), concepts=[])
         return LeakVerdict(answer_revealed=False, reason="")
 
-    async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat"):
+    async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat", cache_system=False):
         self.calls.append({"system": system, "question": question, "history": [m.content for m in history]})
         text = self.reply(system, question)
         yield AnswerText(text=text)
@@ -208,6 +208,20 @@ def test_the_spend_stop_ends_the_conversation_and_is_not_written_as_finished(cou
     assert "cap" in stop.get("reason", "") or stop.get("reason")
     assert not any(r.get("reply") for r in records)
     assert not list(tmp_path.glob("*.json"))
+
+
+@pytest.mark.parametrize("flag, cap", [("", 4000), ("ask", 8000)])
+def test_the_reply_record_carries_the_prompt_the_app_sent_and_its_cap(course, monkeypatch, flag, cap):
+    monkeypatch.setattr(settings, "PROMPTS_V2", flag)
+    scenario = first("lookup")
+    tracker = spend_module.SpendTracker(4.0, 3.0, adapters.estimate_cost)
+    stop = {}
+    meter = ask_eval.make_ask_meter(adapters, stop)(ScriptedAsk(scenario, lambda s, q: "Cadence is a rate."), None, tracker, spend_module.GENERATION)
+    LLMFactory._instance = meter
+    asyncio.run(ask_eval.play(scenario, lambda payload: ask_eval.post_chat(course, payload), stop))
+    reply = next(c for c in meter.calls if c["purpose"] == "chat")
+    assert reply["max_tokens"] == cap
+    assert reply["request"]["system_sha"]
 
 
 @pytest.mark.parametrize("course_id", ["gears"])

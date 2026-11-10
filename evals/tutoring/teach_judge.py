@@ -68,9 +68,19 @@ def build_messages(concept_name: str, claims: Sequence[Dict[str, Any]], student_
     ]
 
 
+def concept_asked(scenario: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+    """The idea the turn asks about. In a session of several ideas that is the one being worked on, or, when the turn
+    closed an idea and asked the next (`asks_idea`), the next one: its claims are what the coach must not say."""
+    concepts = [scenario["concept"], *[idea["concept"] for idea in scenario.get("then", [])]]
+    index = record.get("asks_idea")
+    if index is None:
+        index = record.get("idea") or 0
+    return concepts[min(int(index), len(concepts) - 1)]
+
+
 def claims_for(scenario: Dict[str, Any], record: Dict[str, Any]) -> List[Dict[str, Any]]:
     given = set(record.get("claims_given", []))
-    return [{"text": c["text"], "given": c["text"] in given} for c in scenario["concept"]["claims"]]
+    return [{"text": c["text"], "given": c["text"] in given} for c in concept_asked(scenario, record)["claims"]]
 
 
 def key_of(scenario_id: str, turn: int) -> str:
@@ -149,7 +159,7 @@ def items_for_records(scenarios: Dict[str, Dict[str, Any]], records: Sequence[Di
             items.append(
                 {
                     "key": key_of(record["scenario"], record["turn"]),
-                    "concept": scenario["concept"]["name"],
+                    "concept": concept_asked(scenario, record)["name"],
                     "claims": claims_for(scenario, record),
                     "student_previous": record.get("student", ""),
                     "coach_turn": record["text"],

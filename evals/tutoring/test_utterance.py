@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from utterance import app_result_text, classify_utterance, has_substance, is_dont_know
+from utterance import app_result_text, asks_for_help, classify_utterance, has_substance, is_dont_know
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "utterance_parity.json"
 
@@ -14,6 +14,7 @@ def test_the_mirror_reads_every_case_the_way_the_real_rules_do():
         kind = classify_utterance(case["text"])
         assert kind == case["kind"], case["text"]
         assert has_substance(case["text"], kind) == case["substance"], case["text"]
+        assert asks_for_help(case["text"]) == case["help"], case["text"]
 
 
 def test_the_scripted_i_dont_know_turns_are_what_the_detector_hears():

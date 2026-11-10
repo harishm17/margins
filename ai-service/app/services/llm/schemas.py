@@ -10,9 +10,10 @@ import math
 import random
 import re
 from html import unescape
-from typing import Any, Dict, List, Literal, Optional, Sequence, Union
+from typing import Any, Dict, List, Literal, Optional, Sequence, Type, TypeVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 QuestionType = Literal["multiple_choice", "short_answer", "numerical", "true_false"]
 
@@ -1194,6 +1195,81 @@ class KeyPointCheck(BaseModel):
     )
 
 
+# The graders' v2 wording for "the answer has it" (short answers under PROMPTS_V2 "grading", recall under "tutor"). A rubric
+# line or a source claim is written from one way of saying or reaching the idea; an answer that gets there another valid
+# way has it too. One phrase, so the two graders cannot drift apart.
+IN_ANY_WORDING_OR_METHOD = "in any wording or by an equivalent valid method"
+
+
+class KeyPointCheckV2(KeyPointCheck):
+    """Prompt revision (grading area): a key point is an idea, met by any wording or valid method that gives it."""
+
+    result: Literal["met", "partly", "not_met"] = Field(
+        description=(
+            f"met: the answer gives the key point's idea, {IN_ANY_WORDING_OR_METHOD}. partly: the idea is touched on or "
+            "incomplete. not_met: it is missing or wrong, also when the answer uses the key point's words in a wrong statement."
+        )
+    )
+
+
+class ShortAnswerGradeV2(BaseModel):
+    """Prompt revision (grading area), for a question with no key points: the model gives the score. A question with
+    key points uses ShortAnswerChecksV2."""
+
+    points_earned: float = Field(description="Points from 0 to the maximum given")
+    feedback: str = Field(description="2-3 sentences on what was good and what was missing")
+    blamed_concept_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "When the answer falls short and the gap is clearly in one concept of the "
+            "<concepts> list, that concept's id; otherwise leave out"
+        ),
+    )
+    misconception: Optional[str] = Field(
+        default=None,
+        description=(
+            "Only when the answer states a specific wrong idea: that idea, in one sentence, "
+            "written as the idea itself. Leave out for gaps and slips"
+        ),
+    )
+
+    @classmethod
+    def example(cls) -> "ShortAnswerGradeV2":
+        return cls(points_earned=0, feedback="Mock grading: no model call was made.")
+
+
+class ShortAnswerChecksV2(BaseModel):
+    """Prompt audit R5 (grading area), for a question with key points: the model gives one check per key point and
+    no score. The service computes the points from the checks (met 1, partly 0.5, not met 0), so there is no sum
+    for the model to get wrong or to make agree."""
+
+    key_point_checks: List[KeyPointCheckV2] = Field(
+        min_length=1, description="One entry for each key point, in the order they were listed"
+    )
+    feedback: str = Field(description="2-3 sentences on what was good and what was missing")
+    blamed_concept_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "When the answer falls short and the gap is clearly in one concept of the "
+            "<concepts> list, that concept's id; otherwise leave out"
+        ),
+    )
+    misconception: Optional[str] = Field(
+        default=None,
+        description=(
+            "Only when the answer states a specific wrong idea: that idea, in one sentence, "
+            "written as the idea itself. Leave out for gaps and slips"
+        ),
+    )
+
+    @classmethod
+    def example(cls) -> "ShortAnswerChecksV2":
+        return cls(
+            key_point_checks=[KeyPointCheckV2(point="(mock)", result="not_met")],
+            feedback="Mock grading: no model call was made.",
+        )
+
+
 class ShortAnswerGrade(BaseModel):
     points_earned: float
     feedback: str = Field(description="2-3 sentences on what was good and what was missing")
@@ -1232,6 +1308,15 @@ class DrillQuestion(BaseModel):
     concept_ids: List[str] = Field(default_factory=list, description=CONCEPT_IDS_HELP)
 
 
+class DrillQuestionV2(DrillQuestion):
+    """DrillQuestion with a description on each field (prompt audit 2026-11-09, C5; used with PROMPTS_V2)."""
+
+    question_text: str = Field(description="One question answerable aloud in under a minute")
+    key_points: List[str] = Field(description="2-4 points a listener can check in the spoken answer")
+    sample_answer: str = Field(description="What a good spoken answer sounds like, in 2-4 sentences")
+    explanation: str = Field(description="Why the answer is right, in a sentence or two")
+
+
 class DrillQuestionSet(BaseModel):
     questions: List[DrillQuestion]
 
@@ -1249,6 +1334,14 @@ class DrillQuestionSet(BaseModel):
                 for n in range(1, 6)
             ]
         )
+
+
+class DrillQuestionSetV2(DrillQuestionSet):
+    questions: List[DrillQuestionV2]
+
+    @classmethod
+    def example(cls) -> "DrillQuestionSetV2":
+        return cls(questions=[DrillQuestionV2(**q.model_dump()) for q in DrillQuestionSet.example().questions])
 
 
 # ---------------------------------------------------------------- concept graph
@@ -1526,6 +1619,10 @@ class PracticeConfusable(BaseModel):
     summary: str = Field(default="", max_length=1000)
 
 
+# The highest rung of the hint ladder (structure). Rung 5 is the worked analogue, a move of its own.
+HIGHEST_LADDER_RUNG = 4
+
+
 class PracticeTutorRequest(BaseModel):
     """What the app knows when the student asks the tutor for something (spec 6.1)."""
 
@@ -1561,6 +1658,16 @@ class PracticeTutorRequest(BaseModel):
             raise ValueError("step_index is outside the steps")
         if self.first_wrong_step is not None and self.first_wrong_step >= len(self.steps):
             raise ValueError("first_wrong_step is outside the steps")
+        return self
+
+    @model_validator(mode="after")
+    def _rung_fits_the_move(self) -> "PracticeTutorRequest":
+        # Rung 5 is the worked analogue, which only the worked_analogue move gives. The app keeps the rung at 5 once the
+        # student has opened a worked example, so the next ladder reply was told "rung allowed: 5", a rung the ladder
+        # does not have (and one the audited prompt says belongs to another move). Every other move is held to
+        # structure (rung 4) at most, here, so the prompt, the rung reported back and the authored fallback agree.
+        if self.move != "worked_analogue" and self.rung_allowed > HIGHEST_LADDER_RUNG:
+            self.rung_allowed = HIGHEST_LADDER_RUNG
         return self
 
 
@@ -1631,7 +1738,39 @@ class PracticeTutorReply(BaseModel):
         )
 
 
+class PracticeTutorReplyV2(BaseModel):
+    """Prompt revision (tutor area): the model-written fields of PracticeTutorReply, without the
+    `analysis` scratchpad (thinking replaces it). The word limit is stated once, in the system prompt."""
+
+    reply: str = Field(description="What the student reads")
+    rung_used: int = Field(
+        description="The rung (0 to 5) of the help the reply gives, on the ladder's scale: 1 locate, 2 narrow, 3 name, 4 structure, "
+        "5 only for a worked analogue. Never above the rung allowed, which is a limit, not a target"
+    )
+    mistake: TutorMistake
+    reveals_answer: bool = Field(
+        description="Your own check: true when the reply states the answer, or lets a calculator finish it, or hides it in a question or an option"
+    )
+
+    @classmethod
+    def example(cls) -> "PracticeTutorReplyV2":
+        return cls.model_validate(PracticeTutorReply.example().model_dump(exclude={"analysis"}))
+
+
+V1ReplyT = TypeVar("V1ReplyT", bound=BaseModel)
+
+
+def as_v1_reply(out: BaseModel, v1_class: Type[V1ReplyT]) -> V1ReplyT:
+    """A reply of a v1 class, from the v1 or the v2 (no `analysis`) class the model was asked for, so the code
+    after the model call is the same for both."""
+    if isinstance(out, v1_class):
+        return out
+    return v1_class(analysis="", **out.model_dump())
+
+
 class LeakVerdict(BaseModel):
+    # Prompt audit R1 (2026-11-10): `reason` stays. It is a pointer (which kind of leak, which sentence), not the
+    # judge's reasoning, and the rewrite is told it so the next draft fixes that sentence. No student reads it.
     answer_revealed: bool = Field(description="True when the reply is any of the four kinds of leak")
     reason: str = Field(description="One short clause naming which kind and where; empty when nothing is revealed")
 
@@ -1784,6 +1923,24 @@ class ReaderTutorReply(BaseModel):
         )
 
 
+class ReaderTutorReplyV2(BaseModel):
+    """Prompt revision (tutor area): ReaderTutorReply without `analysis`. The word limit is stated once, in the system prompt."""
+
+    reply: str = Field(description="What the student reads: statements only, no question")
+    check_question: str = Field(description="Exactly one short question the student can answer from the passage; it ends the reply")
+    reveals_answer: bool = Field(
+        description="Your own check: true when the reply states what a source claim answers to the student's question, in any form"
+    )
+
+    @classmethod
+    def example(cls) -> "ReaderTutorReplyV2":
+        return cls.model_validate(ReaderTutorReply.example().model_dump(exclude={"analysis", "from_fallback"}))
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "ReaderTutorReplyV2":
+        return cls.model_validate(ReaderTutorReply.example_for(prompt).model_dump(exclude={"analysis", "from_fallback"}))
+
+
 ReaderVerdict = Literal["right", "partly", "not_yet"]
 
 
@@ -1825,6 +1982,23 @@ class ReaderCheckReply(BaseModel):
         if shared == 1:
             return cls(analysis="", verdict="partly", reply="Part of that is in the passage; the second sentence adds the rest. (mock)", follow_up_question="What does the second sentence add?", reveals_answer=False)
         return cls(analysis="", verdict="right", reply="Your answer uses the passage's own idea. (mock)", follow_up_question="", reveals_answer=False)
+
+
+class ReaderCheckReplyV2(BaseModel):
+    """Prompt revision (tutor area): ReaderCheckReply without `analysis`. The word limit is stated once, in the system prompt."""
+
+    verdict: ReaderVerdict = Field(description="right: the answer holds the idea. partly: it holds some of it. not_yet: it does not")
+    reply: str = Field(description="What the student reads: statements only. One line on what made the answer right, or the sentence of the passage to look at")
+    follow_up_question: str = Field(description="One short question the student can answer from the passage; empty when the verdict is right")
+    reveals_answer: bool = Field(description="Your own check: true when the reply states the idea the check question asks for and the student did not")
+
+    @classmethod
+    def example(cls) -> "ReaderCheckReplyV2":
+        return cls.model_validate(ReaderCheckReply.example().model_dump(exclude={"analysis", "from_fallback"}))
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "ReaderCheckReplyV2":
+        return cls.model_validate(ReaderCheckReply.example_for(prompt).model_dump(exclude={"analysis", "from_fallback"}))
 
 
 # ---------------------------------------------------------------- recall grader (spec 5.3)
@@ -1881,6 +2055,26 @@ class ClaimVerdict(BaseModel):
         default=None,
         description="For covered only. true when the answer states the idea as a bare conclusion, without the support or reason the source gives for it; false when the reason is there. Leave out for other verdicts",
     )
+
+
+class RecallGradeResultV2(BaseModel):
+    """Prompt revision (tutor area): the model-written fields of RecallGradeResult, without `analysis`."""
+
+    confidence: float = Field(
+        description="0 to 1: how sure you are that you understood the answer well enough to grade it. Under 0.8 when it is too short, in a language you cannot grade, noise, or unclear"
+    )
+    clarifying_question: Optional[str] = Field(
+        default=None, description="When your confidence is under 0.8: one short question that would make the answer gradable"
+    )
+    verdicts: List[ClaimVerdict] = Field(description="One per claim given; empty when your confidence is under 0.8")
+
+    @classmethod
+    def example(cls) -> "RecallGradeResultV2":
+        return cls.model_validate(RecallGradeResult.example().model_dump(exclude={"analysis", "status"}))
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "RecallGradeResultV2":
+        return cls.model_validate(RecallGradeResult.example_for(prompt).model_dump(exclude={"analysis", "status"}))
 
 
 def _without_recall_service_fields(schema: Dict[str, Any]) -> None:
@@ -1989,3 +2183,223 @@ class GapExplanationSet(BaseModel):
                 )
             )
         return cls(gaps=gaps)
+
+
+# ---------------------------------------------------------------- ingest area, audited (v2) schemas
+# Picked by `prompts_v2("ingest")`. Only field descriptions differ from the v1 models above, which
+# stay byte-identical for the default path. Delete the v1 models once the area has run on v2.
+
+# One definition of the three edge types, shared by the extractor and linker instructions and by
+# both `type` field descriptions, so the direction of `encompasses` is stated the same way everywhere.
+EDGE_TYPE_DEFINITIONS = """- prerequisite: the source must be known before the target is understood.
+- encompasses: the target is the larger idea and contains the source, so practising the target also exercises the source. weight is how much of the source the target exercises: 0.25, 0.5, 0.75 or 1.
+- confusable: students are likely to mix the two up, because they sound alike, look alike or are easily swapped in an answer. Direction does not matter."""
+
+_EDGE_TYPE_DESCRIPTION_V2 = "How the two concepts relate. " + " ".join(
+    line.lstrip("- ") for line in EDGE_TYPE_DEFINITIONS.splitlines()
+)
+_LINK_TYPE_DESCRIPTION_V2 = "How the two concepts relate. " + " ".join(
+    line.lstrip("- ") for line in EDGE_TYPE_DEFINITIONS.splitlines() if not line.startswith("- prerequisite")
+)
+
+
+class MaterialCheckV2(MaterialCheck):
+    is_valid: bool = Field(description="True when the file is readable material a student could study from")
+
+
+class PlannedTopicV2(PlannedTopic):
+    prerequisite_keys: List[str] = Field(
+        description=(
+            "Keys of EARLIER topics in this plan whose ideas this topic uses directly (for example "
+            "Bayes' theorem builds on conditional probability). Empty for the first topic or one that "
+            "needs nothing earlier"
+        )
+    )
+    # R5: computed by the app from the sections' token counts (course_planner.default_minutes); not in the schema the
+    # model fills, so 0 here means "use the default".
+    estimated_minutes: SkipJsonSchema[int] = 0
+
+
+class PlannedUnitV2(PlannedUnit):
+    topics: List[PlannedTopicV2]
+
+
+class CoursePlanV2(CoursePlan):
+    units: List[PlannedUnitV2]
+
+    @classmethod
+    def example(cls) -> "CoursePlanV2":
+        return cls.model_validate(CoursePlan.example().model_dump())
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "CoursePlanV2":
+        return cls.model_validate(CoursePlan.example_for(prompt).model_dump())
+
+
+class ExtractedClaimV2(ExtractedClaim):
+    text: str = Field(
+        description=(
+            "One thing a student who knows the concept can state, in your own words. A recall grader checks "
+            "a student's answer against it, so make it a full statement that makes sense without the excerpt"
+        )
+    )
+
+
+class ExtractedEdgeV2(ExtractedEdge):
+    type: EdgeType = Field(description=_EDGE_TYPE_DESCRIPTION_V2)
+
+
+class ConceptExtractionV2(ConceptExtraction):
+    claims: List[ExtractedClaimV2] = Field(description="2-5 claims per concept")
+    edges: List[ExtractedEdgeV2] = Field(default_factory=list)
+
+    @classmethod
+    def example(cls) -> "ConceptExtractionV2":
+        return cls.model_validate(ConceptExtraction.example().model_dump())
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "ConceptExtractionV2":
+        return cls.model_validate(ConceptExtraction.example_for(prompt).model_dump())
+
+
+class ProposedLinkV2(ProposedLink):
+    type: Literal["confusable", "encompasses"] = Field(description=_LINK_TYPE_DESCRIPTION_V2)
+
+
+class ConceptLinksV2(ConceptLinks):
+    edges: List[ProposedLinkV2] = Field(default_factory=list, description="Only pairs from the candidate list")
+
+    @classmethod
+    def example(cls) -> "ConceptLinksV2":
+        return cls.model_validate(ConceptLinks.example().model_dump())
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "ConceptLinksV2":
+        return cls.model_validate(ConceptLinks.example_for(prompt).model_dump())
+
+
+# ---------------------------------------------------------------- audited (v2) schema descriptions
+#
+# With PROMPTS_V2 listing an area, its calls use these subclasses: the same fields, parsing and
+# mock examples, with the audited field descriptions in the JSON schema the model sees. The v1
+# classes above stay as they are until the area has run on v2 in production.
+
+_CHIP_HELP = "Short plain-text names of the ideas tested, shown as chips; no LaTeX or markdown"
+_CONFUSABLE_V2_HELP = (
+    "Wrong options only: when the wrong idea is a mix-up with a concept of the <concepts> or "
+    "<confusable_concepts> list, that concept's id"
+)
+
+
+def _with_descriptions(
+    base: type, name: str, edits: Sequence[tuple], hidden: Sequence[tuple] = (), moved: Sequence[tuple] = ()
+) -> type:
+    """`base` with field descriptions replaced in its JSON schema. Each edit is
+    (definition name or None for the model itself, field, description). A field that is not
+    in the schema raises, so a renamed field cannot silently lose its description. Each `hidden`
+    (definition, field) is left out of the schema the model fills; the field must have a default.
+    Each `moved` (definition, field, after) puts the field right after another one: the model writes
+    the fields in the schema's order, so this decides what it has written before what."""
+
+    def model_json_schema(cls, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        schema = super(variant, cls).model_json_schema(*args, **kwargs)
+        for definition, field, text in edits:
+            holder = schema if definition is None else schema["$defs"][definition]
+            holder["properties"][field]["description"] = text
+        for definition, field in hidden:
+            holder = schema if definition is None else schema["$defs"][definition]
+            del holder["properties"][field]
+            if field in holder.get("required", []):
+                holder["required"].remove(field)
+        for definition, field, after in moved:
+            holder = schema if definition is None else schema["$defs"][definition]
+            properties = dict(holder["properties"])
+            value = properties.pop(field)
+            if after not in properties:
+                raise KeyError(after)
+            holder["properties"] = {
+                key: item
+                for existing, prop in properties.items()
+                for key, item in ((existing, prop), *(((field, value),) if existing == after else ()))
+            }
+        return schema
+
+    variant = type(name, (base,), {"model_json_schema": classmethod(model_json_schema), "__module__": __name__})
+    return variant
+
+
+_QUESTION_V2_EDITS = (
+    ("ChoiceOption", "confusable_concept_id", _CONFUSABLE_V2_HELP),
+    ("GeneratedQuestion", "concepts_tested", _CHIP_HELP),
+)
+
+# The excerpts an item rests on are named before its answer is written, so the answer is written from them and
+# the list is not filled in afterwards to fit.
+_QUESTION_SOURCES_FIRST = (("GeneratedQuestion", "source_excerpts", "question_text"),)
+# The app sets the difficulty of a quiz, exam or review question and of an example after generation (the request
+# names it), so the model is not shown the field: "leave out" on a field it can see was asking for it to be filled.
+_QUESTION_DIFFICULTY_BY_APP = (("GeneratedQuestion", "difficulty"),)
+
+QuestionSetV2 = _with_descriptions(
+    QuestionSet, "QuestionSetV2", _QUESTION_V2_EDITS, hidden=_QUESTION_DIFFICULTY_BY_APP, moved=_QUESTION_SOURCES_FIRST
+)
+ReviewItemSetV2 = _with_descriptions(
+    ReviewItemSet, "ReviewItemSetV2", _QUESTION_V2_EDITS, hidden=_QUESTION_DIFFICULTY_BY_APP, moved=_QUESTION_SOURCES_FIRST
+)
+# Warm-up difficulty is the model's: the bank is bracketed on it.
+WarmupSetV2 = _with_descriptions(WarmupSet, "WarmupSetV2", _QUESTION_V2_EDITS, moved=_QUESTION_SOURCES_FIRST)
+
+SolvedExampleSetV2 = _with_descriptions(
+    SolvedExampleSet, "SolvedExampleSetV2",
+    (
+        ("SolutionStep", "description", "One line naming what this step does"),
+        ("SolutionStep", "work", "The math or reasoning that carries out the step"),
+        ("SolutionStep", "explanation", "Why the step is taken"),
+        ("SolvedExample", "final_answer", "2-5 markdown bullets"),
+        ("SolvedExample", "key_concepts", _CHIP_HELP),
+    ),
+    hidden=(("SolvedExample", "difficulty"),),
+    moved=(("SolvedExample", "source_excerpts", "problem_statement"),),
+)
+InteractiveExampleSetV2 = _with_descriptions(
+    InteractiveExampleSet, "InteractiveExampleSetV2",
+    (
+        ("InteractiveExample", "key_concepts", _CHIP_HELP),
+    ),
+    # R5: the minutes are computed by the app from the step count (examples.py), not asked of the model.
+    hidden=(("InteractiveExample", "estimated_time_minutes"), ("InteractiveExample", "difficulty")),
+    moved=(("InteractiveExample", "source_excerpts", "problem_statement"),),
+)
+ExamStyleProfileV2 = _with_descriptions(
+    ExamStyleProfile, "ExamStyleProfileV2",
+    (
+        (
+            None,
+            "example_stems",
+            "Exactly 3 short example question stems in new words about a different situation than the "
+            "exam's, showing the voice and shape of its questions without reproducing its text",
+        ),
+    ),
+)
+ExamTopicMapV2 = _with_descriptions(
+    ExamTopicMap, "ExamTopicMapV2",
+    (
+        (
+            "ExamQuestionTopics",
+            "summary",
+            "What the question tests, in your own words, in 12 words or fewer (summaries are stored, "
+            "so they must not reproduce the exam's wording)",
+        ),
+    ),
+)
+GapExplanationSetV2 = _with_descriptions(
+    GapExplanationSet, "GapExplanationSetV2",
+    (
+        (
+            "GapExplanation",
+            "explanation",
+            "A short paragraph, in plain words, that states the idea as the excerpt does and, if there is "
+            "a misconception, where it goes wrong",
+        ),
+    ),
+)

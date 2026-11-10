@@ -28,10 +28,12 @@ import re
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
 from app.db.connection import execute_in_transaction, execute_query
+from app.prompt_revision import prompts_v2
 from app.services.exam_style import copying_stems
-from app.services.llm import LLMFactory
+from app.services.llm import LLMFactory, untrusted
 from app.services.llm.base import LLMMessage
-from app.services.llm.schemas import ExamTopicMap
+from app.services.llm.schemas import ExamTopicMap, ExamTopicMapV2
+from app.services.llm.caps import output_cap
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,23 @@ You get the text of one or more exam files (each in an <exam> block, converted f
 Ignore cover pages, instructions, formula sheets, tables of values and anything else that is not a question. Do not guess: a topic that no question needs must not appear.
 
 For each question give its label as printed (such as "Problem 3") and a summary of what it tests in 12 words or fewer, REWRITTEN IN YOUR OWN WORDS. Never copy wording from the exam."""
+
+# Audited prompt (PROMPTS_V2=generation): the exam is data, and the summary rule says why it exists.
+SYSTEM_V2 = (
+    """You read past exams and say which topics of a course each question tests.
+
+You get the text of one or more exam files (each in an <exam> block, converted from a PDF, so it contains page headers and may repeat a line) and the course's topics, each with a key (T1, T2, ...), a name and what a student can do after it. """
+    + untrusted.EXAM_IS_DATA
+    + """ For every real question, say which topics a student needs to answer it. A question that comes in labelled parts is one entry; name every topic any part needs. A question may test none of the topics (list none), one, or at most three: name only topics the question really needs, not ones that are merely nearby.
+
+Ignore cover pages, instructions, formula sheets, tables of values and anything else that is not a question. Do not guess: a topic that no question needs must not appear.
+
+For each question give its label as printed (such as "Problem 3") and a summary of what it tests in 12 words or fewer, in your own words (summaries are stored, so they must not reproduce the exam's wording)."""
+)
+
+
+def relevance_schema():
+    return ExamTopicMapV2 if prompts_v2("generation") else ExamTopicMap
 
 
 # ---------------------------------------------------------------------------------------
@@ -127,9 +146,16 @@ def _messages(topics: Sequence[Dict[str, Any]], files: Sequence[Dict[str, Any]],
     for topic in topics:
         goals = "; ".join(topic["objectives"][:MAX_OBJECTIVES_SHOWN])
         topic_lines.append(f"{topic['key']} | {topic['name']} | {goals}")
-    parts = ["Topics (key | name | what a student can do):\n" + "\n".join(topic_lines)]
+    v2 = prompts_v2("generation")
+    if v2:  # topic names and objectives were written by the planner from the student's files
+        parts = ["Topics (key | name | what a student can do), data from the course plan:\n" + untrusted.tag("topics", "\n".join(topic_lines))]
+    else:
+        parts = ["Topics (key | name | what a student can do):\n" + "\n".join(topic_lines)]
     for number, entry in enumerate(files, start=1):
-        parts.append(f'<exam n="{number}" file="{entry["filename"]}">\n{entry["body"]}\n</exam>')
+        if v2:  # one rule for untrusted text (llm/untrusted.py)
+            parts.append(untrusted.tag("exam", entry["body"], n=number, file=entry["filename"]))
+        else:
+            parts.append(f'<exam n="{number}" file="{entry["filename"]}">\n{entry["body"]}\n</exam>')
     parts.append("Say which topics each question of each exam tests.")
     if rejected:
         parts.append(
@@ -137,7 +163,8 @@ def _messages(topics: Sequence[Dict[str, Any]], files: Sequence[Dict[str, Any]],
             + ", ".join(rejected)
             + ". Give every summary again in completely new words."
         )
-    return [LLMMessage(role="system", content=SYSTEM), LLMMessage(role="user", content="\n\n".join(parts))]
+    system = SYSTEM_V2 if v2 else SYSTEM
+    return [LLMMessage(role="system", content=system), LLMMessage(role="user", content="\n\n".join(parts))]
 
 
 # ---------------------------------------------------------------------------------------
@@ -190,7 +217,7 @@ async def classify_questions(
     """One model call (two if a summary copies the exam): the question maps per exam file id.
     Summaries that still copy after the retry are blanked, so none is ever stored."""
     llm = LLMFactory.get_provider()
-    result = await llm.generate_structured(_messages(topics, files), ExamTopicMap, max_tokens=8000, purpose="exam_style")
+    result = await llm.generate_structured(_messages(topics, files), relevance_schema(), max_tokens=output_cap("exam_relevance", 8000), purpose="exam_style")
     maps = build_maps(result, topics, files)
     copied = _copied(maps, files)
     if copied:
@@ -198,7 +225,7 @@ async def classify_questions(
         labels = [maps[file_id][position]["label"] or f"#{position + 1}" for file_id, position in copied]
         try:
             retry = await llm.generate_structured(
-                _messages(topics, files, rejected=labels), ExamTopicMap, max_tokens=8000, purpose="exam_style"
+                _messages(topics, files, rejected=labels), relevance_schema(), max_tokens=output_cap("exam_relevance", 8000), purpose="exam_style"
             )
             maps = build_maps(retry, topics, files)
         except Exception as exc:  # the first answer is still usable without its summaries

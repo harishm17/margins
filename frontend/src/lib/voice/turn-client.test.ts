@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  cleanForSpeech,
   createSentenceChunker,
   parseVoiceEvent,
   readVoiceEvents,
+  VoiceStreamQuietError,
   type VoiceEvent,
 } from './turn-client'
 
@@ -103,6 +105,42 @@ describe('readVoiceEvents', () => {
       { type: 'done', text: 'Hello there' },
     ])
   })
+
+  it('gives up on a stream that stays open and silent, but not on one kept alive (the session waited for ever)', async () => {
+    const encoder = new TextEncoder()
+    const line = (event: object) => encoder.encode(JSON.stringify(event) + '\n')
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+    let cancelled = false
+    const stalled = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(line({ type: 'text', delta: 'Let me think' }))
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    const seen: VoiceEvent[] = []
+    await assert.rejects(async () => {
+      for await (const event of readVoiceEvents(stalled, { quietMs: 40 })) seen.push(event)
+    }, VoiceStreamQuietError)
+    assert.deepEqual(seen, [{ type: 'text', delta: 'Let me think' }])
+    assert.equal(cancelled, true, 'the connection is dropped')
+
+    // A long step: nothing to say for longer than the limit, but the server's keep-alive lines keep arriving.
+    const alive = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        for (let i = 0; i < 4; i += 1) {
+          await wait(25)
+          controller.enqueue(line({ type: 'alive' }))
+        }
+        controller.enqueue(line({ type: 'done', text: 'Here it is.' }))
+        controller.close()
+      },
+    })
+    const events: VoiceEvent[] = []
+    for await (const event of readVoiceEvents(alive, { quietMs: 40 })) events.push(event)
+    assert.deepEqual(events, [{ type: 'done', text: 'Here it is.' }])
+  })
 })
 
 /** Feed `text` through a chunker `size` characters at a time. */
@@ -127,6 +165,46 @@ describe('createSentenceChunker', () => {
       'Use e.g. a hash map, i.e. a table.',
       'Then J. K. Rowling vs. Tolkien.',
     ])
+    // "pp. 12" was cut in two; "no." and "ch." are short for a word only before a number.
+    assert.deepEqual(chunk('See pp. 12 to 14, ch. 3 and no. 5. Is it done? The answer is no. Go on.', 4), [
+      'See pp. 12 to 14, ch. 3 and no. 5.',
+      'Is it done?',
+      'The answer is no.',
+      'Go on.',
+    ])
   })
 
+  it('ends a sentence in Chinese, Japanese and Hindi (a whole reply was held back until its end, then said in one piece)', () => {
+    const cases: Array<[string, string[]]> = [
+      ['熵永远不会减少。这是第二定律！明白吗？好的。', ['熵永远不会减少。', '这是第二定律！', '明白吗？', '好的。']],
+      ['エントロピーは減らない。「はい。」それが第二法則です。', ['エントロピーは減らない。', '「はい。」', 'それが第二法則です。']],
+      ['एन्ट्रॉपी कभी कम नहीं होती। यह दूसरा नियम है। ठीक है?', ['एन्ट्रॉपी कभी कम नहीं होती।', 'यह दूसरा नियम है।', 'ठीक है?']],
+    ]
+    for (const [text, expected] of cases) {
+      for (const size of [1, 3, 100]) assert.deepEqual(chunk(text, size), expected, `${text} at size ${size}`)
+    }
+    // The first sentence is ready before the reply ends: nothing waits for the flush.
+    assert.deepEqual(createSentenceChunker().push('熵永远不会减少。这是'), ['熵永远不会减少。'])
+  })
+
+  it('keeps display maths written over several lines in one piece (each line was read out as loose symbols)', () => {
+    const text = 'So we have\n$$\nx = 1\n\\\\ y = 2.\n$$\nand that is all. Next.'
+    for (const size of [1, 5, 100]) {
+      assert.deepEqual(chunk(text, size), ['So we have', '$$\nx = 1\n\\\\ y = 2.\n$$', 'and that is all.', 'Next.'], `size ${size}`)
+    }
+  })
+})
+
+describe('cleanForSpeech', () => {
+  it('drops emphasis marks and keeps the signs that are said (a star, a hash and an underscore were removed wherever they stood)', () => {
+    assert.equal(cleanForSpeech('Use **bold**, *stars* and _under_ here.'), 'Use bold, stars and under here.')
+    assert.equal(cleanForSpeech('In C# it is 2 * 3, at #1, with snake_case.'), 'In C# it is 2 * 3, at #1, with snake case.')
+    assert.equal(cleanForSpeech('## A heading'), 'A heading')
+    assert.equal(cleanForSpeech('Maths keeps its marks: $x_i * y_i$.'), 'Maths keeps its marks: $x_i * y_i$.')
+  })
+
+  it('says a link by its words and an address by its site (the whole address was read out)', () => {
+    assert.equal(cleanForSpeech('See [the notes](https://example.com/a/b?c=d) first.'), 'See the notes first.')
+    assert.equal(cleanForSpeech('It is at https://www.mit.edu/courses/6-006/x.html.'), 'It is at mit.edu.')
+  })
 })

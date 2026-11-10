@@ -33,6 +33,8 @@ from app.services.llm.base import (
     TurnText,
     TurnToolUse,
 )
+from app.prompt_revision import prompts_v2
+from app.services.llm.caps import STREAM_ABOVE
 from app.services.llm.limiter import llm_slot
 from app.services.llm.models import resolve_model
 from app.services.llm.usage import estimate_cost_usd, note_partial_usage, record_usage
@@ -197,6 +199,32 @@ def _answer_conversation(
     return conversation
 
 
+def _with_message_breakpoint(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """`messages` with a cache breakpoint on the last content block of the last message (prompt audit M6).
+
+    The system block already carries one, so a request has two of the four allowed. Everything up to the
+    last block is then read from the cache by the next call, which is the next call of the same turn's
+    tool loop or the next turn. The caller's list is not edited. A last block that cannot carry a
+    breakpoint (thinking) leaves the messages as they were.
+    """
+    if not messages:
+        return messages
+    last = messages[-1]
+    content = last.get("content")
+    if isinstance(content, str):
+        if not content:
+            return messages
+        blocks: List[Dict[str, Any]] = [{"type": "text", "text": content}]
+    elif isinstance(content, list) and content and isinstance(content[-1], dict):
+        blocks = [dict(block) for block in content]
+    else:
+        return messages
+    if blocks[-1].get("type") in ("thinking", "redacted_thinking"):
+        return messages
+    blocks[-1]["cache_control"] = {"type": "ephemeral"}
+    return [*messages[:-1], {**last, "content": blocks}]
+
+
 def _content_block_param(block: Any) -> Optional[Dict[str, Any]]:
     """An assistant content block as the request format wants it back, or None to leave it out.
 
@@ -320,7 +348,18 @@ class AnthropicProvider(LLMProvider):
 
         try:
             async with llm_slot():
-                response = await self.client.beta.messages.create(**params)
+                if max_tokens > STREAM_ABOVE:
+                    # A non-streamed request this long can outlast the HTTP timeout (only v2 caps are this high).
+                    # Its events go through _partial_usage, so a stream cut off part way is billed for what it used.
+                    partial: Optional[LLMUsage] = None
+                    async with self.client.beta.messages.stream(**params) as stream:
+                        async for event in stream:
+                            partial = _partial_usage(event, partial, model, purpose)
+                        response = await stream.get_final_message()
+                    request_id = getattr(stream, "request_id", None)
+                else:
+                    response = await self.client.beta.messages.create(**params)
+                    request_id = getattr(response, "_request_id", None)
         except anthropic.APIError as exc:
             raise _translate_api_error(exc) from exc
 
@@ -335,16 +374,19 @@ class AnthropicProvider(LLMProvider):
         record_usage(usage)
         cost = estimate_cost_usd(usage)
         logger.info(
-            "llm call purpose=%s model=%s stop=%s in=%s out=%s cache_read=%s cache_write=%s cost_usd=%s request_id=%s",
+            "llm call purpose=%s model=%s stop=%s in=%s out=%s cap=%s share=%.2f cache_read=%s cache_write=%s cost_usd=%s "
+            "request_id=%s",
             purpose or "-",
             usage.model,
             response.stop_reason,
             usage.input_tokens,
             usage.output_tokens,
+            max_tokens,
+            usage.output_tokens / max_tokens,  # the share of the cap used: near 1.0 means the cap is too tight
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
             _cost_text(cost),
-            getattr(response, "_request_id", None),
+            request_id,
         )
 
         stop_reason = response.stop_reason or ""
@@ -404,6 +446,7 @@ class AnthropicProvider(LLMProvider):
         excerpts: List[Excerpt],
         max_tokens: int = 4000,
         purpose: str = "chat",
+        cache_system: bool = False,
     ) -> AsyncIterator[AnswerEvent]:
         if not excerpts:
             raise LLMRequestError("A cited answer needs at least one excerpt")
@@ -416,7 +459,7 @@ class AnthropicProvider(LLMProvider):
             "messages": _answer_conversation(history, question, excerpts),
         }
         if system:
-            params["system"] = [{"type": "text", "text": system}]
+            params["system"] = [_text_block(system, cache_system)]
         if choice.effort:
             params["output_config"] = {"effort": choice.effort}
         if _supports_server_fallback(model):
@@ -482,13 +525,15 @@ class AnthropicProvider(LLMProvider):
         record_usage(usage)
         cost = estimate_cost_usd(usage)
         logger.info(
-            "llm stream purpose=%s model=%s stop=%s in=%s out=%s cache_read=%s cache_write=%s "
+            "llm stream purpose=%s model=%s stop=%s in=%s out=%s cap=%s share=%.2f cache_read=%s cache_write=%s "
             "excerpts=%s citations=%s cost_usd=%s request_id=%s",
             purpose or "-",
             usage.model,
             final.stop_reason,
             usage.input_tokens,
             usage.output_tokens,
+            max_tokens,
+            usage.output_tokens / max_tokens,
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
             len(excerpts),
@@ -536,7 +581,7 @@ class AnthropicProvider(LLMProvider):
         params: Dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens,
-            "messages": messages,
+            "messages": _with_message_breakpoint(messages) if prompts_v2("voice") else messages,
         }
         if system:
             # Tools render before the system prompt, so this one breakpoint caches both.
@@ -576,13 +621,15 @@ class AnthropicProvider(LLMProvider):
         record_usage(usage)
         cost = estimate_cost_usd(usage)
         logger.info(
-            "llm turn purpose=%s model=%s stop=%s in=%s out=%s cache_read=%s cache_write=%s "
+            "llm turn purpose=%s model=%s stop=%s in=%s out=%s cap=%s share=%.2f cache_read=%s cache_write=%s "
             "tools=%s cost_usd=%s request_id=%s",
             purpose or "-",
             usage.model,
             final.stop_reason,
             usage.input_tokens,
             usage.output_tokens,
+            max_tokens,
+            usage.output_tokens / max_tokens,
             usage.cache_read_input_tokens,
             usage.cache_creation_input_tokens,
             len(tools),
@@ -591,6 +638,16 @@ class AnthropicProvider(LLMProvider):
         )
 
         stop_reason = final.stop_reason or ""
+        if stop_reason == "max_tokens":
+            # Counts the replies (or tool calls) the budget cut off, to judge whether max_tokens is too small.
+            logger.warning(
+                "llm turn cut by max_tokens purpose=%s model=%s max_tokens=%s out=%s tools=%s",
+                purpose or "-",
+                usage.model,
+                max_tokens,
+                usage.output_tokens,
+                len(tools),
+            )
         if stop_reason == "refusal":
             details = final.stop_details
             category = getattr(details, "category", None) if details else None

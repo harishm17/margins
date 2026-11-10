@@ -1,0 +1,7 @@
+{
+  "status": "graded",
+  "verdicts": {
+    "gears-c0-k0": "missing",
+    "gears-c0-k1": "incorrect"
+  }
+}

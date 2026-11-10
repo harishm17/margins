@@ -15,13 +15,27 @@ from app.services.content_generator.context import (
     fetch_topic_context,
     focus_line,
     format_concept_block,
+    name_in_instructions,
     resolve_concept_ids,
 )
+from app.services.content_generator.quiz import OPTION_SIMILARITY_RULE
 from app.services.content_generator.refill import refill_figures, refill_wanted
 from app.services.llm.base import LLMOutputError
 from app.services.llm.factory import LLMFactory
-from app.services.llm.schemas import InteractiveExampleSet, SolvedExampleSet, word_form_hints
+from app.prompt_revision import prompts_v2
+from app.services.llm.caps import output_cap
+from app.services.llm.schemas import (
+    InteractiveExampleSet,
+    InteractiveExampleSetV2,
+    SolvedExampleSet,
+    SolvedExampleSetV2,
+    word_form_hints,
+)
 from app.services.tutor.leak import judge_leak
+
+
+# Prompt audit R5: under PROMPTS_V2=generation an interactive example's time comes from its step count, not the model.
+MINUTES_PER_STEP = 3
 
 
 class ExampleType(str, Enum):
@@ -120,7 +134,9 @@ class ExamplesGenerator:
     ) -> List[Dict]:
         """Fully solved examples with step-by-step solutions."""
         guidance = SOLVED_GUIDANCE.get(difficulty_level, SOLVED_GUIDANCE['medium'])
-        instructions = f"""Write {count} distinct solved example problems on "{topic_name}" from the excerpts above.
+        v2 = prompts_v2("generation")
+        difficulty_line = "" if v2 else f'- Set difficulty to "{difficulty_level}".\n'
+        instructions = f"""Write {count} distinct solved example problems on "{name_in_instructions(topic_name)}" from the excerpts above.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
 {concepts}
@@ -128,26 +144,30 @@ Difficulty: {difficulty_level}. {guidance}
 - Give complete step-by-step solutions. Each step has a one-line description, the work (math or reasoning), and why the step is taken.
 - Name the key principle or formula used in each step.
 - Keep final_answer short: 2-5 markdown bullets.
-- Set difficulty to "{difficulty_level}".
-- List in source_excerpts the index of every excerpt an example is based on."""
+{difficulty_line}- List in source_excerpts the index of every excerpt an example is based on."""
 
         messages = content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map)
-        result = await self.llm.generate_structured(
-            messages, SolvedExampleSet, max_tokens=16000, purpose="solved_examples",
-        )
+        schema = SolvedExampleSetV2 if v2 else SolvedExampleSet
+        cap = output_cap("solved_examples", 16000)
+        result = await self.llm.generate_structured(messages, schema, max_tokens=cap, purpose="solved_examples")
         examples = [stored for example in result.examples if (stored := example.stored()) is not None]
         if refill_wanted(len(examples), 1):
-            examples = await self._refill(messages, SolvedExampleSet, "solved_examples", examples, count, lambda e: e.stored())
+            examples = await self._refill(
+                messages, schema, cap, "solved_examples", examples, count, lambda e: e.stored()
+            )
         if not examples:
             raise LLMOutputError("No usable solved examples were generated")
+        if v2:
+            for example in examples:
+                example["difficulty"] = difficulty_level  # the code knows it; the model is not asked
         return examples[:count]
 
-    async def _refill(self, messages, schema, purpose, examples, count, store) -> List[Dict]:
+    async def _refill(self, messages, schema, max_tokens, purpose, examples, count, store) -> List[Dict]:
         """Finding 102: the first answer left nothing usable. Ask once more, with the same instructions, and keep what
         passes the same checks (the model call runs in the job's billing scope like the first)."""
-        result = await self.llm.generate_structured(messages, schema, max_tokens=16000, purpose=purpose)
+        result = await self.llm.generate_structured(messages, schema, max_tokens=max_tokens, purpose=purpose)
         more = [stored for example in result.examples if (stored := store(example)) is not None]
-        if schema is InteractiveExampleSet:
+        if purpose == "interactive_examples":
             more = await _clear_word_form_hints(more)
         self._refilled = len(more)
         return (examples + more)[:count]
@@ -166,7 +186,11 @@ Difficulty: {difficulty_level}. {guidance}
     ) -> List[Dict]:
         """Problems the student solves one step at a time."""
         guidance = INTERACTIVE_GUIDANCE.get(difficulty_level, INTERACTIVE_GUIDANCE['medium'])
-        instructions = f"""Write {count} interactive practice problems on "{topic_name}" from the excerpts above. The student solves each one step by step.
+        v2 = prompts_v2("generation")
+        difficulty_line = "" if v2 else f'- Set difficulty to "{difficulty_level}".\n'
+        # v2 adds the similar-length rule the other question types have.
+        option_rule = f" {OPTION_SIMILARITY_RULE}" if v2 else ""
+        instructions = f"""Write {count} interactive practice problems on "{name_in_instructions(topic_name)}" from the excerpts above. The student solves each one step by step.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
 {concepts}
@@ -174,23 +198,26 @@ Difficulty: {difficulty_level}. {guidance}
 - Give three hints that get gradually more specific: where to look, which idea applies, then the general form of the step. None of them contains the answer. Put them in `hints`, in that order.
 - Each step builds on the one before.
 - Give an explanation, feedback for a correct answer, and guidance for a wrong one.
-- Answer types. Anything whose answer is a number (a count, a probability, a fraction, the result of arithmetic) is answer_type numeric: correct_answer is the number as a plain decimal or fraction, with no units or words, and tolerance is the accepted absolute difference (for example 0.005 for a probability to 3 decimals; 0 only for exact integers). Use multiple_choice when the student picks from options: put 2 to 5 options (ids A, B, C...) in `options`, never in the question text, and give the option id as correct_answer. Use text only for a short canonical word, term or expression (for example "independent" or "(1-p)^k p"); write it in one standard form. acceptable_answers lists other forms of the same answer, one form per entry; never put several answers in one entry.
+- Answer types. Anything whose answer is a number (a count, a probability, a fraction, the result of arithmetic) is answer_type numeric: correct_answer is the number as a plain decimal or fraction, with no units or words, and tolerance is the accepted absolute difference (for example 0.005 for a probability to 3 decimals; 0 only for exact integers). Use multiple_choice when the student picks from options: put 2 to 5 options (ids A, B, C...) in `options`, never in the question text, and give the option id as correct_answer.{option_rule} Use text only for a short canonical word, term or expression (for example "independent" or "(1-p)^k p"); write it in one standard form. acceptable_answers lists other forms of the same answer, one form per entry; never put several answers in one entry.
 - In explanations and feedback, refer to options by their content, never by letter. The options are shuffled after you write them.
-- Set difficulty to "{difficulty_level}".
-- List in source_excerpts the index of every excerpt a problem is based on."""
+{difficulty_line}- List in source_excerpts the index of every excerpt a problem is based on."""
 
         messages = content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map)
-        result = await self.llm.generate_structured(
-            messages, InteractiveExampleSet, max_tokens=16000, purpose="interactive_examples",
-        )
+        schema = InteractiveExampleSetV2 if v2 else InteractiveExampleSet
+        cap = output_cap("interactive_examples", 16000)
+        result = await self.llm.generate_structured(messages, schema, max_tokens=cap, purpose="interactive_examples")
         examples = [stored for example in result.examples if (stored := example.stored()) is not None]
         examples = await _clear_word_form_hints(examples)
         if refill_wanted(len(examples), 1):
             examples = await self._refill(
-                messages, InteractiveExampleSet, "interactive_examples", examples, count, lambda e: e.stored()
+                messages, schema, cap, "interactive_examples", examples, count, lambda e: e.stored()
             )
         if not examples:
             raise LLMOutputError("No usable practice problems were generated")
+        if v2:
+            for example in examples:
+                example["difficulty"] = difficulty_level  # the code knows it; the model is not asked
+                example["estimated_time_minutes"] = max(5, MINUTES_PER_STEP * len(example["steps"]))
         return examples[:count]
 
 
@@ -202,7 +229,10 @@ async def _clear_word_form_hints(examples: List[Dict]) -> List[Dict]:
     for example in examples:
         leaked = False
         for hint in word_form_hints(f"{example['title']}\n{example['problem_statement']}", example["steps"]):
-            verdict = await judge_leak(hint["hint"], hint["answers"], problem=hint["problem"], question=hint["question"])
+            # The judge's prompt revision follows this caller's area, as Ask's does (it used to follow the tutor's flag).
+            verdict = await judge_leak(
+                hint["hint"], hint["answers"], problem=hint["problem"], question=hint["question"], v2=prompts_v2("generation")
+            )
             if verdict.answer_revealed:
                 leaked = True
                 break

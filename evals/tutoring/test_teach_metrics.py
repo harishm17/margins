@@ -135,9 +135,81 @@ def test_summary_gates_pass_for_a_calm_run_and_name_the_failures():
     assert not summary["passed"]
     assert {f["check"] for f in summary["failures"]} == {"one_question"}
     keys = [g["key"] for g in summary["gates"]]
-    assert keys == ["teaches_before_probe", "spoken_length", "one_question", "claim_leak", "injection"]
-    # The explain-first row is only there in a run that has such turns.
-    assert {g["key"] for g in summary["gates"]} == {row[0] for row in teach_metrics.GATE_ROWS} - {"explain_first"}
+    assert keys == ["teaches_before_probe", "spoken_length", "one_question", "question_form", "claim_leak", "injection"]
+    # The explain-first and closing-turn rows are only there in a run that has such turns.
+    assert {g["key"] for g in summary["gates"]} == {row[0] for row in teach_metrics.GATE_ROWS} - {"explain_first", "wrap_up"}
+
+
+def test_a_question_that_is_two_joined_or_names_its_answers_fails_the_form_gate():
+    """Voice review of PR #90: the one-question gate counts question marks, so the stored runs of 2026-11-10 passed it
+    with a second question joined to the first in 15 (v1) and 21 (v2) of 76 turns, and an either-or choice was not
+    looked for at all. The coach turns below are from those runs."""
+    scenario = first("wrong_wrong_right")
+    form = teach_metrics.question_form
+    joined = "Let's test that idea on a small case. Using your rule, how much would it hold after two years, and does that match what your page 2 says?"
+    assert form(joined)["compound"] and score_turn(scenario, record(scenario, joined))["one_question"] is True
+    assert form("Which would feel harder to pedal, and why?")["compound"]
+    either = "If the chainring has more teeth than the cog, does the pedal turn once make the back wheel turn more or less than once?"
+    assert form(either) == {"compound": False, "either_or": True, "yes_no": False}
+    assert form("Which is it, the hash or the table size?")["either_or"]
+    # One open question, with a setup or an "and" that joins no second question, is fine.
+    for fine in (
+        "Good start. What are you assuming about the ratio?",
+        "Take a sorted list of eight numbers, and say you check the first and last items. How much of the list have you ruled out?",
+        "If the ratio is 2 and what you said holds, what happens to the wheel?",
+        "Can you say that back in your own words?",
+    ):
+        assert form(fine) == {"compound": False, "either_or": False, "yes_no": False}, fine
+    # A question the student can answer with yes or no is told apart (reported, not gated).
+    assert form("So is a higher ratio a harder gear?") == {"compound": False, "either_or": False, "yes_no": True}
+
+    good = [record(scenario, "Good start. What are you assuming about the ratio?", turn=n) for n in range(1, 20)]
+    gate = gate_of(summarize(BY_ID, good + [record(scenario, joined, turn=20)]), "question_form")
+    assert gate["passed"] is True and gate["count"] == 1 and gate["n"] == 20
+    summary = summarize(BY_ID, good[:18] + [record(scenario, joined, turn=19), record(scenario, either, turn=20, action="ask_new_example")])
+    assert gate_of(summary, "question_form")["passed"] is False
+    assert [(f["check"], f["detail"]) for f in summary["failures"]] == [("question_form", "two questions joined"), ("question_form", "an either-or choice")]
+    # An explanation's say-back is not a turn that asks for the student's thinking: its wording is not gated here.
+    assert score_turn(scenario, record(scenario, either, action="explain"))["question_form_ok"] is None
+
+
+def test_a_closing_turn_is_short_asks_the_next_idea_once_and_nothing_after_the_last():
+    """Voice review of PR #90 (V-1): when an idea closed, the coach said "let's move on", fetched the next idea and then
+    summed up a second time; more than half the closing turns of the stored 2026-11-10 runs were over 60 words, and no
+    gate read a closing turn. Every scenario also ended with its one idea, so a closing turn with another idea waiting
+    was never played: the two_ideas scenarios do that."""
+    scenario = first("two_ideas")
+    second = scenario["then"][0]["concept"]
+
+    def closing(text, **more):
+        return {**record(scenario, text, turn=2, action="wrap_up"), "idea": 0, "asks_idea": 1, "finished": False, **more}
+
+    good = "You have gear ratio, and page 2 is worth one more look. Next: how would you explain development to a classmate?"
+    assert score_turn(scenario, closing(good))["wrap_up_faults"] == []
+    assert score_turn(scenario, closing("You have gear ratio. Now explain development in your own words."))["wrap_up_faults"] == []
+    assert score_turn(scenario, closing(" ".join(["word"] * 60) + "?"))["wrap_up_faults"] == []
+    assert score_turn(scenario, closing(" ".join(["word"] * 61) + "?"))["wrap_up_faults"] == ["61 words"]
+    assert score_turn(scenario, closing(good, asked_again=True))["wrap_up_faults"] == ["fetched the next idea a second time"]
+    assert score_turn(scenario, closing("You have gear ratio. Well done."))["wrap_up_faults"] == ["did not ask the next idea"]
+    last = {"idea": 1, "asks_idea": None, "finished": True}
+    assert score_turn(scenario, closing("You have both ideas. That is all for today, goodbye.", **last))["wrap_up_faults"] == []
+    assert score_turn(scenario, closing("You have both ideas. Shall we do another?", **last))["wrap_up_faults"] == ["a question after the last idea"]
+    assert score_turn(scenario, record(scenario, good))["wrap_up_faults"] is None  # not a closing turn
+
+    # The idea that is finished holds nothing back; the one being opened still does.
+    first_claim, next_claim = scenario["concept"]["claims"][0]["text"], second["claims"][0]["text"]
+    assert score_turn(scenario, closing(f"{first_claim} Now, how would you explain development?"))["leaks"] == [first_claim]  # idea 0 is the record's own
+    on_second = {**record(scenario, f"As you said: {first_claim} What moves when the pedals turn once?", turn=3), "idea": 1, "asks_idea": 1}
+    assert score_turn(scenario, on_second)["leaks"] == []
+    assert score_turn(scenario, closing(f"You have gear ratio. {next_claim} Can you explain development?"))["leaks"] == [next_claim]
+
+    turns = [closing(good), closing("You have gear ratio. Well done.")]
+    summary = summarize(BY_ID, turns)
+    assert gate_of(summary, "wrap_up")["passed"] is False and gate_of(summary, "wrap_up")["count"] == 1
+    assert ("wrap_up", "did not ask the next idea") in [(f["check"], f["detail"]) for f in summary["failures"]]
+    # A closing turn that asks the next idea is read by the judge too: with one of the two judged, the gate is incomplete.
+    judged = summarize(BY_ID, turns, {f"{scenario['id']}#2": verdict(False)})
+    assert gate_of(judged, "teaches_before_probe")["n"] == 2
 
 
 def test_refusing_the_planted_praise_is_not_giving_it():

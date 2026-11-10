@@ -62,9 +62,10 @@ def make_ask_meter(adapters, stop: Dict[str, str]):
                     # MeteredProvider appends its record right before returning, with no await between.
                     sink.append(self.calls[-1])
 
-        async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat"):
+        async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat", cache_system=False):
             from app.services.llm.base import LLMMessage
             from app.services.llm.usage import track_llm_usage
+            from common.revision import request_summary
 
             messages = [
                 LLMMessage(role="system", content=system),
@@ -79,7 +80,8 @@ def make_ask_meter(adapters, stop: Dict[str, str]):
             with track_llm_usage() as usages:
                 try:
                     async for event in self.inner.stream_cited_answer(
-                        system=system, history=history, question=question, excerpts=excerpts, max_tokens=max_tokens, purpose=purpose
+                        system=system, history=history, question=question, excerpts=excerpts, max_tokens=max_tokens, purpose=purpose,
+                        cache_system=cache_system,
                     ):
                         events.append(event)
                 except Exception as exc:  # recorded, then raised
@@ -94,7 +96,12 @@ def make_ask_meter(adapters, stop: Dict[str, str]):
                 "estimate_usd": round(estimate, 5),
                 "cost_usd": round(cost, 6),
                 "input_tokens": sum(u.input_tokens for u in usages),
+                # Prompt audit R8: Ask v2 caches its fixed system prompt; reads show the breakpoint works.
+                "cache_read_tokens": sum(u.cache_read_input_tokens for u in usages),
+                "cache_write_tokens": sum(u.cache_creation_input_tokens for u in usages),
                 "output_tokens": output_tokens,
+                "max_tokens": max_tokens,
+                "request": request_summary(messages, None),
                 "error": f"{type(error).__name__}: {error}" if error else None,
             }
             self.calls.append(record)
@@ -372,8 +379,12 @@ def estimate(scenarios: List[Dict[str, Any]], tracker) -> Dict[str, Any]:
 
 
 def print_plan(args, plan: Dict[str, Any], log) -> None:
+    from common.revision import prompt_revision
+
+    revision = prompt_revision("ask")
     total = plan["chat_usd"] + plan["router_usd"]
     log("Plan")
+    log(f"  prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> {revision['areas']}")
     log(f"  surface: ask   scenarios: {plan['scenarios']}   replies from the model: {plan['replies']}")
     log(f"  replies {plan['chat_model']}: about ${plan['chat_usd']:.2f}   router and leak judge {plan['router_model']}: about ${plan['router_usd']:.2f}")
     log(f"  estimated total: ${total:.2f}. Cap: --max-usd {args.max_usd}")
@@ -418,7 +429,12 @@ async def run(args, host) -> int:
         previous = json.loads((run_dir / "run.json").read_text())
         date, args.label = previous["date"], previous["label"]
     (run_dir / "raw").mkdir(parents=True, exist_ok=True)
-    run_info = {"label": args.label, "date": date, "surface": "ask", "patterns": args.patterns, "limit": args.limit, "repeats": args.repeats, "scenarios": str(scenario_path.resolve())}
+    from common.revision import prompt_revision
+
+    revision = prompt_revision("ask")
+    if previous.get("prompts") and previous["prompts"].get("areas") != revision["areas"]:
+        raise SystemExit(f"--resume: this folder ran with {previous['prompts']['areas']}, PROMPTS_V2 now gives {revision['areas']}. Resume with the same PROMPTS_V2.")
+    run_info = {"label": args.label, "date": date, "prompts": revision, "surface": "ask", "patterns": args.patterns, "limit": args.limit, "repeats": args.repeats, "scenarios": str(scenario_path.resolve())}
     if not args.resume:  # written at the start, so a run that dies can be resumed
         (run_dir / "run.json").write_text(json.dumps(run_info, indent=2) + "\n")
     for kind, usd in host.existing_spend(run_dir).items():
@@ -467,6 +483,7 @@ async def run(args, host) -> int:
             "branch": host.git("rev-parse", "--abbrev-ref", "HEAD"),
             "app_dirty": bool(host.git("status", "--porcelain", "--", "ai-service/app")),
         },
+        "prompts": revision,
         "config": {
             "surface": "ask",
             "scenarios": len(scenarios),

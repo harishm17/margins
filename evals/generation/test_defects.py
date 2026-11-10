@@ -2,6 +2,7 @@
 No database, no network; app code is imported as in test_pipeline.py.
 """
 import asyncio
+import json
 import os
 import sys
 import types
@@ -105,6 +106,11 @@ def fake_module():
     module = types.ModuleType("fake_generator")
 
     async def check_support(items, chunks):
+        from app.services.content_generator import support_check
+
+        sink = support_check._DROP_SINK.get()
+        if sink is not None:  # the app's check reports why it dropped an item; the last one here has no reason
+            sink.append((items[1], support_check.REASON_QUOTE_MISSING))
         return items[:1], len(items) - 1
 
     module.check_support = check_support
@@ -124,7 +130,7 @@ def test_the_support_recorder_keeps_what_each_check_sent_and_dropped():
 
     kept, dropped, records = asyncio.run(go())
     assert (kept, dropped) == ([items[0]], 2)
-    assert records == [{"sent": 3, "kept": 1, "dropped": [items[1], items[2]]}]
+    assert records == [{"sent": 3, "kept": 1, "dropped": [items[1], items[2]], "reasons": ["a quote is not in the excerpt it names", ""]}]
     # Outside a sink the check runs as before and nothing is kept.
     assert asyncio.run(module.check_support(items, [])) == ([items[0]], 2)
 
@@ -169,6 +175,23 @@ def test_each_task_gets_its_own_calls_and_the_batch_price_is_half():
     assert halved[0]["cost_usd"] == pytest.approx(full / 2)
 
 
+def test_a_call_record_names_the_schema_and_system_prompt_that_were_sent():
+    from app.services.llm.schemas import QuestionSet, QuestionSetV2
+
+    tracker = SpendTracker(1.0, 1.0, adapters.estimate_cost)
+    provider = adapters.MeteredProvider(FakeProvider(), adapters.parse_model_spec("haiku:low"), tracker, GENERATION)
+    messages = [LLMMessage(role="system", content="rules"), LLMMessage(role="user", content="go")]
+    schemas = {}
+    for schema in (QuestionSet, QuestionSetV2):
+        with adapters.call_sink() as calls:
+            try:
+                asyncio.run(provider.generate_structured(messages, schema, purpose="quiz"))
+            except Exception:  # FakeProvider need not support structured output; the request is recorded either way
+                pass
+        schemas[schema.__name__] = calls[0]["request"]["schema"]
+    assert schemas == {"QuestionSet": "QuestionSet", "QuestionSetV2": "QuestionSetV2"}
+
+
 # ---------------------------------------------------------------- the item judge
 
 import item_judge  # noqa: E402
@@ -177,15 +200,70 @@ import item_judge  # noqa: E402
 def test_verdicts_go_back_to_their_items_and_are_tallied_per_generator():
     items = [{"ref": "quiz-1", "item": {}}, {"ref": "quiz-2", "item": {}}, {"ref": "exam-1", "item": {}}]
     result = {"items": [
-        {"number": 1, "defects": ["wrong_key", "made_up"], "note": "B is right."},
-        {"number": 3, "defects": [], "note": ""},
+        {"number": 1, "faults": [{"kind": "wrong_key", "note": "B is right."}, {"kind": "made_up", "note": "The stem names no unit."}]},
+        {"number": 3, "faults": []},
     ]}
     verdicts = item_judge.verdicts_by_ref(items, result)
-    assert verdicts == {"quiz-1": {"defects": ["other", "wrong_key"], "note": "B is right."}, "exam-1": {"defects": [], "note": ""}}
+    assert verdicts == {
+        "quiz-1": {"defects": ["other", "wrong_key"], "unexplained": [], "note": "B is right. The stem names no unit."},
+        "exam-1": {"defects": [], "unexplained": [], "note": ""},
+    }
     kinds = item_judge.tally([{"verdicts": verdicts}])
     assert (kinds["quiz"]["judged"], kinds["quiz"]["flagged"], kinds["quiz"]["rate"]) == (1, 1, 1.0)
     assert kinds["quiz"]["by_defect"]["wrong_key"] == 1 and kinds["quiz"]["by_defect"]["other"] == 1
     assert (kinds["exam"]["judged"], kinds["exam"]["flagged"]) == (1, 0)
+
+
+def test_a_fault_without_a_note_is_not_a_flag():
+    """Review of the PR 1.7 A2 run: 6 of its 8 flags had no note ("other" with nothing said), so nobody could check
+    them and they were counted like the two that could be. A fault now counts only with its note; the rest are shown
+    apart. Verdicts stored before this (one note for all of a question's faults) are read the same way."""
+    items = [{"ref": f"quiz-{n}", "item": {}} for n in (1, 2, 3)]
+    result = {"items": [
+        {"number": 1, "faults": [{"kind": "other", "note": "  "}]},
+        {"number": 2, "faults": [{"kind": "two_correct", "note": "A and C both hold."}, {"kind": "guessable", "note": ""}]},
+        {"number": 3, "faults": []},
+    ]}
+    verdicts = item_judge.verdicts_by_ref(items, result)
+    assert verdicts["quiz-1"] == {"defects": [], "unexplained": ["other"], "note": ""}
+    assert verdicts["quiz-2"] == {"defects": ["two_correct"], "unexplained": ["guessable"], "note": "A and C both hold."}
+    stored_before = {"quiz-4": {"defects": ["other"], "note": ""}, "quiz-5": {"defects": ["wrong_key"], "note": "B is right."}}
+    quiz = item_judge.tally([{"verdicts": {**verdicts, **stored_before}}])["quiz"]
+    assert (quiz["judged"], quiz["flagged"], quiz["unexplained"], quiz["rate"]) == (5, 2, 2, 0.4)
+    assert quiz["by_defect"]["other"] == 0 and quiz["by_defect"]["guessable"] == 0
+    assert quiz["by_defect"]["two_correct"] == 1 and quiz["by_defect"]["wrong_key"] == 1
+
+
+def test_a_resumed_run_judges_a_topic_again_when_it_has_items_the_judge_did_not_see(tmp_path):
+    # PR 1.7 A2: the first run stored only warm-up items; the resume stored the rest, but each topic's judge file
+    # already held a result, so the judge never saw them.
+    class Judge:
+        spec = types.SimpleNamespace(label="judge:test")
+
+        def __init__(self):
+            self.seen = []
+
+        async def generate_structured(self, messages, schema, **kwargs):
+            self.seen.append(messages[-2].content.count("<question "))
+            return schema(items=[])
+
+    warmup = {"ref": "warmup-1", "item": {"question_text": "Q1"}}
+    quiz = {"ref": "quiz-1", "item": {"question_text": "Q2"}}
+    (tmp_path / "t1.json").write_text(json.dumps({"group": "t1", "refs": ["warmup-1"], "result": {"items": []}, "calls": [{"cost_usd": 0.1}]}))
+    judge = Judge()
+
+    def run(items):
+        return asyncio.run(item_judge.judge_topics(
+            provider=judge, groups={"t1": {"excerpts": "", "items": items}}, judge_dir=tmp_path, log=lambda _: None
+        ))
+
+    run([warmup])
+    assert judge.seen == []  # the same items: kept
+    run([warmup, quiz])
+    assert judge.seen == [2]
+    record = json.loads((tmp_path / "t1.json").read_text())
+    assert record["refs"] == ["warmup-1", "quiz-1"]
+    assert record["calls"][0] == {"cost_usd": 0.1}  # the earlier judgment's spend still counts
 
 
 # ---------------------------------------------------------------- what each generator wrote, dropped and stored
@@ -205,7 +283,7 @@ def test_a_generator_summary_counts_written_dropped_by_rule_unsupported_and_stor
             "status": "ok",
             "seconds": 10.0,
             "calls": [call("topic_quiz", {"questions": [good, question(correct_answer="E"), good, good]}, 0.10), call("router", {"items": []}, 0.01)],
-            "support": [{"sent": 3, "kept": 2, "dropped": [stored_good]}],
+            "support": [{"sent": 3, "kept": 2, "dropped": [stored_good], "reasons": ["a quote is not in the excerpt it names"]}],
             "output": [stored_good],
         },
         {   # a run that failed after writing 2 questions with no misconception: nothing stored
@@ -223,6 +301,7 @@ def test_a_generator_summary_counts_written_dropped_by_rule_unsupported_and_stor
     assert summary["by_reason"] == {"answer_not_in_options": 1, "missing_misconception": 2}
     assert summary["drop_rate"] == pytest.approx(5 / 6)
     assert summary["unsupported_rate"] == pytest.approx(1 / 3)
+    assert summary["unsupported_by_reason"] == {"a quote is not in the excerpt it names": 1}
     assert summary["cost_usd"] == pytest.approx(0.16)
     assert summary["checks"]["items"] == 1
 

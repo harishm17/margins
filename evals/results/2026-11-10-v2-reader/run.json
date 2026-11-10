@@ -1,0 +1,20 @@
+{
+  "label": "v2-reader",
+  "date": "2026-11-10",
+  "prompts": {
+    "PROMPTS_V2": "tutor",
+    "areas": {
+      "tutor": "v2"
+    },
+    "revision": "v2"
+  },
+  "surface": "reader",
+  "patterns": null,
+  "limit": null,
+  "scenarios": "/home/harish/code/study_buddy-prompt-audit/evals/tutoring/scenarios/reader-original.jsonl",
+  "stopped": null,
+  "spend": {
+    "generation": 0.1926,
+    "max_usd": 0.45
+  }
+}

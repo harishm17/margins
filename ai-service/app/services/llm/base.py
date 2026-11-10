@@ -234,6 +234,7 @@ class LLMProvider(ABC):
         excerpts: List[Excerpt],
         max_tokens: int = 4000,
         purpose: str = "chat",
+        cache_system: bool = False,
     ) -> AsyncIterator[AnswerEvent]:
         """Answer `question` from `excerpts`, streaming the answer and the citations.
 
@@ -241,7 +242,8 @@ class LLMProvider(ABC):
         AnswerDone. An AnswerReset means a fallback model took over: discard what came
         before. Raises LLMRefusalError when the model declines and LLMOutputError when the
         answer is empty or cut off (both with `usage` set). Free text only: search result
-        citations cannot be combined with structured outputs.
+        citations cannot be combined with structured outputs. `cache_system` puts a cache
+        breakpoint on the system prompt (Ask v2's is the same for every turn, prompt audit R8).
         """
 
     async def stream_turn(

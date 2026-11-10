@@ -55,6 +55,14 @@ def _words(text: str) -> List[str]:
     return [word for word in normalize(text).split(" ") if word]
 
 
+def asks_for_help(text: str) -> bool:
+    """A short request for a hint or for the answer, and not a word that steers the session (utterance.ts asksForHelp)."""
+    normalized = normalize(text)
+    if not normalized or any(p.search(normalized) for p in _CONTROL):
+        return False
+    return len(_words(text)) <= 14 and any(p.search(normalized) for p in _HELP)
+
+
 def classify_utterance(text: str) -> str:
     """'control', 'idk', 'meta' or 'answer', in the order the app applies the rules."""
     normalized = normalize(text)
@@ -63,7 +71,7 @@ def classify_utterance(text: str) -> str:
     if any(p.search(normalized) for p in _CONTROL):
         return "control"
     count = len(_words(text))
-    if count <= 14 and any(p.search(normalized) for p in _HELP):
+    if asks_for_help(text):
         return "meta"
     if is_dont_know(text):
         return "idk"

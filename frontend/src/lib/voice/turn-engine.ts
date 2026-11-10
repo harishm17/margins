@@ -11,7 +11,7 @@ import { logServerError } from '@/lib/ops/log'
 import type { ModelEvent } from '@/lib/voice/ai-turn'
 import { VoiceModelError } from '@/lib/voice/ai-turn'
 import { voiceErrorMessage } from '@/lib/voice/errors'
-import type { VoiceBlock, VoiceMessage } from '@/lib/voice/history'
+import { FINISH_CUT_OFF_NOTE, type VoiceBlock, type VoiceMessage } from '@/lib/voice/history'
 import type { VoiceToolResult } from '@/lib/voice/tools'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
 import type { VoiceStreamExtra } from '@/lib/voice/turn-contract'
@@ -30,6 +30,11 @@ export type TurnDeps = {
   /** When model call `call` was started, if that was before the engine was asked for it (the route opens the first one early). */
   callStartedAt?: (call: number) => number | undefined
   log?: (message: string, error?: unknown) => void
+  /**
+   * PROMPTS_V2 (area voice, R7): a call that ends at max_tokens is cut off mid-reply. What it said has been streamed and is
+   * being spoken, so it stays said; the coach is asked to finish in a sentence without repeating it.
+   */
+  retryCutOff?: boolean
 }
 
 /** One model call: milliseconds to its first token (null when it said and asked for nothing) and in all. */
@@ -40,6 +45,8 @@ export type TurnOutcome = {
   messages: VoiceMessage[]
   /** Everything the coach said this turn. */
   text: string
+  /** The text of a reply that was streamed to the student but did not finish (the model call broke or the browser left). It is not in `messages`. */
+  cutOff: string
   ok: boolean
   error: { code: string; retryable: boolean } | null
   /** At least one tool ran, so the conversation must be kept even though the turn failed. */
@@ -70,12 +77,15 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
   let toolsRan = false
   let sessionComplete = false
 
-  const fail = (code: string, retryable?: boolean): TurnOutcome => {
+  /** `cutOff` is what the unfinished model call had streamed: the student may have heard it, so it counts as said. */
+  const fail = (code: string, retryable?: boolean, cutOff = ''): TurnOutcome => {
     const info = voiceErrorMessage(code)
     deps.emit({ type: 'error', code, message: info.message, retryable: retryable ?? info.retryable })
+    if (cutOff.trim()) spoken.push(cutOff.trim())
     return {
       messages,
       text: spoken.join(' '),
+      cutOff: cutOff.trim(),
       ok: false,
       error: { code, retryable: retryable ?? info.retryable },
       toolsRan,
@@ -146,21 +156,30 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
         } else if (event.type === 'error') {
           log(`The AI service reported ${event.code}: ${event.message}`)
           timed()
-          if (segment.trim()) spoken.push(segment.trim())
-          return fail(event.code, event.retryable)
+          return fail(event.code, event.retryable, segment)
         }
         // tool_use events are only a preview: the blocks in `done` are what counts.
       }
     } catch (error) {
       log(`The AI service stream broke (call ${call})`, error)
       timed()
-      if (segment.trim()) spoken.push(segment.trim())
-      return fail('VOICE_INTERRUPTED')
+      return fail('VOICE_INTERRUPTED', undefined, segment)
     }
     timed()
-    if (!done) {
-      if (segment.trim()) spoken.push(segment.trim())
-      return fail('VOICE_INTERRUPTED')
+    if (!done) return fail('VOICE_INTERRUPTED', undefined, segment)
+    if (deps.retryCutOff && done.stopReason === 'max_tokens') {
+      // The reply was cut off, and any tool call in it is incomplete. Its words went to the browser as they came and are
+      // being spoken: taking them back and asking again from the same conversation made the coach say the same opening
+      // twice. They stay in the conversation, and the coach is asked to finish without repeating them. With no call left
+      // the turn fails, and what was said is stored as a reply that did not finish.
+      log(`Model call ${call} ended at max_tokens`)
+      if (call === max) return fail('VOICE_TURN_FAILED', undefined, segment)
+      const said = segment.trim()
+      if (said) {
+        spoken.push(said)
+        messages = [...messages, { role: 'assistant', content: [{ type: 'text', text: said }] }, { role: 'user', content: FINISH_CUT_OFF_NOTE }]
+      }
+      continue
     }
     if (segment.trim()) spoken.push(segment.trim())
 
@@ -177,7 +196,7 @@ export async function runTurn(deps: TurnDeps, start: VoiceMessage[]): Promise<Tu
         const results = await runTools(toolCalls)
         messages = [...messages, { role: 'user', content: results }]
       }
-      return { messages, text: spoken.join(' '), ok: true, error: null, toolsRan, sessionComplete, calls, toolMs }
+      return { messages, text: spoken.join(' '), cutOff: '', ok: true, error: null, toolsRan, sessionComplete, calls, toolMs }
     }
 
     const results = await runTools(toolCalls)

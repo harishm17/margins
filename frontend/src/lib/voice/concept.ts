@@ -2,10 +2,12 @@
  * Working that cannot be asked or answered out loud: an expression with operators between numbers, an equation, a math symbol,
  * or a word that asks for a calculation. A bare number is not math ("step 2", "O(1) lookup", "a tree with 5 nodes"), and a word
  * counts only whole ("assume", "summary" and "resolve" are not "sum" and "solve"). The first version of this matched any digit and
- * any substring, which dropped most questions of a real quiz and left Quiz me with "no questions".
+ * any substring, which dropped most questions of a real quiz and left Quiz me with "no questions". A percentage is working
+ * only when it is taken of a number ("15% of 80"): "a 95% confidence interval" and "a 5% significance level" are said as
+ * easily as any other words, and a statistics quiz lost most of its questions to them.
  */
 export const MATH_PATTERN =
-  /(\d\s*[-+*/^×÷±<>]\s*\d|\d\s*%|[\w)\]]\s*[=≈≠≤≥]\s*[\w(\[-]|[±√∫∑∆]|\\[a-z]+|\$[^$]+\$|\b(sqrt|integral|derivative|derive|calculate|solve|equation|formula|compute)\b)/i
+  /(\d\s*[-+*/^×÷±<>]\s*\d|\d\s*%\s*of\s+\$?\d|[\w)\]]\s*[=≈≠≤≥]\s*[\w(\[-]|[±√∫∑∆]|\\[a-z]+|\$[^$]+\$|\b(sqrt|integral|derivative|derive|calculate|solve|equation|formula|compute)\b)/i
 
 export type VoiceQuestion = {
   question_type: string

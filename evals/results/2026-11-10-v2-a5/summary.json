@@ -1,0 +1,232 @@
+{
+ "arms": {
+  "haiku": {
+   "scored": 120,
+   "errors": 0,
+   "agreement": 0.8666666666666667,
+   "agreement_not_borderline": 0.911504424778761,
+   "pass_agreement": 0.9666666666666667,
+   "wrong_marked_right": {
+    "count": 2,
+    "of": 72,
+    "rate": 0.027777777777777776
+   },
+   "right_marked_wrong": {
+    "count": 2,
+    "of": 48,
+    "rate": 0.041666666666666664
+   },
+   "confusion": {
+    "full": {
+     "full": 46,
+     "partial": 2
+    },
+    "partial": {
+     "partial": 30,
+     "none": 7,
+     "full": 2
+    },
+    "none": {
+     "none": 28,
+     "partial": 5
+    }
+   },
+   "categories": {
+    "right": {
+     "n": 24,
+     "agreement": 1.0,
+     "marked_right": 1.0,
+     "mean_fraction": 0.9895833333333334
+    },
+    "other_words": {
+     "n": 24,
+     "agreement": 0.9166666666666666,
+     "marked_right": 0.9166666666666666,
+     "mean_fraction": 0.919826388888889
+    },
+    "partly": {
+     "n": 24,
+     "agreement": 0.7916666666666666,
+     "marked_right": 0.0,
+     "mean_fraction": 0.38524305555555555
+    },
+    "wrong": {
+     "n": 24,
+     "agreement": 1.0,
+     "marked_right": 0.0,
+     "mean_fraction": 0.04027777777777778
+    },
+    "right_number_wrong_quantity": {
+     "n": 12,
+     "agreement": 0.75,
+     "marked_right": 0.16666666666666666,
+     "mean_fraction": 0.4865277777777777
+    },
+    "keyword_wrong": {
+     "n": 12,
+     "agreement": 0.5,
+     "marked_right": 0.0,
+     "mean_fraction": 0.24645833333333333
+    }
+   }
+  },
+  "sonnet": {
+   "scored": 120,
+   "errors": 0,
+   "agreement": 0.9083333333333333,
+   "agreement_not_borderline": 0.9380530973451328,
+   "pass_agreement": 0.9833333333333333,
+   "wrong_marked_right": {
+    "count": 1,
+    "of": 72,
+    "rate": 0.013888888888888888
+   },
+   "right_marked_wrong": {
+    "count": 1,
+    "of": 48,
+    "rate": 0.020833333333333332
+   },
+   "confusion": {
+    "full": {
+     "full": 47,
+     "partial": 1
+    },
+    "partial": {
+     "partial": 34,
+     "none": 4,
+     "full": 1
+    },
+    "none": {
+     "none": 28,
+     "partial": 5
+    }
+   },
+   "categories": {
+    "right": {
+     "n": 24,
+     "agreement": 1.0,
+     "marked_right": 1.0,
+     "mean_fraction": 1.0
+    },
+    "other_words": {
+     "n": 24,
+     "agreement": 0.9583333333333334,
+     "marked_right": 0.9583333333333334,
+     "mean_fraction": 0.9565625
+    },
+    "partly": {
+     "n": 24,
+     "agreement": 0.8333333333333334,
+     "marked_right": 0.0,
+     "mean_fraction": 0.37461805555555555
+    },
+    "wrong": {
+     "n": 24,
+     "agreement": 0.9583333333333334,
+     "marked_right": 0.0,
+     "mean_fraction": 0.04878472222222222
+    },
+    "right_number_wrong_quantity": {
+     "n": 12,
+     "agreement": 0.9166666666666666,
+     "marked_right": 0.08333333333333333,
+     "mean_fraction": 0.43756944444444446
+    },
+    "keyword_wrong": {
+     "n": 12,
+     "agreement": 0.6666666666666666,
+     "marked_right": 0.0,
+     "mean_fraction": 0.2638888888888889
+    }
+   }
+  }
+ },
+ "dataset": {
+  "questions": 24,
+  "answers": 120,
+  "by_category": {
+   "right": 24,
+   "other_words": 24,
+   "partly": 24,
+   "wrong": 24,
+   "keyword_wrong": 12,
+   "right_number_wrong_quantity": 12
+  },
+  "by_label": {
+   "full": 48,
+   "partial": 39,
+   "none": 33
+  },
+  "borderline": 7
+ },
+ "models": {
+  "haiku": {
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "app_choice": true
+  },
+  "sonnet": {
+   "model": "claude-sonnet-5-5",
+   "effort": "low"
+  }
+ },
+ "cost": {
+  "haiku": 0.020004,
+  "sonnet": 0.394119
+ },
+ "pick": {
+  "arm": "haiku",
+  "reason": "Sonnet marks +1 points fewer wrong answers right and agrees +4 points more: under the bar, so the cheaper, faster model stays"
+ },
+ "run": {
+  "label": "v2-a5",
+  "date": "2026-11-10",
+  "commit": "143dcb0d",
+  "dirty": true,
+  "arms": {
+   "haiku": {
+    "model": "claude-haiku-5-5",
+    "effort": "low",
+    "app_choice": true
+   },
+   "sonnet": {
+    "model": "claude-sonnet-5-5",
+    "effort": "low"
+   }
+  },
+  "prompts": {
+   "PROMPTS_V2": "grading",
+   "areas": {
+    "grading": "v2"
+   },
+   "revision": "v2",
+   "request": {
+    "schema": "ShortAnswerChecksV2",
+    "system_chars": 561,
+    "system_sha": "b31f47bc9739"
+   }
+  },
+  "estimate_usd": {
+   "haiku": 0.0258,
+   "sonnet": 0.5165
+  },
+  "cost_usd": {
+   "haiku": 0.020004,
+   "sonnet": 0.394119
+  },
+  "total_cost_usd": 0.414123,
+  "price_factor": 0.5,
+  "mock": false,
+  "batches": [
+   {
+    "id": "msgbatch_01KVaFV96AmgZgciiKW4DdMy",
+    "requests": 240,
+    "seconds": 139.9
+   }
+  ],
+  "outcomes": {
+   "haiku: ok": 120,
+   "sonnet: ok": 120
+  }
+ }
+}

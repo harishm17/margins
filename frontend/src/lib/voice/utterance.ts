@@ -68,13 +68,20 @@ export const UTTERANCE_RULES = {
   interrogative: INTERROGATIVE.source,
 }
 
+/** A short request for a hint or for the answer ("just tell me", "I'm stuck"), and not a word that steers the session. */
+export function asksForHelp(text: string): boolean {
+  const normalized = normalize(text)
+  if (!normalized || CONTROL.some((pattern) => pattern.test(normalized))) return false
+  return words(text).length <= 14 && HELP.some((pattern) => pattern.test(normalized))
+}
+
 export function classifyUtterance(text: string): UtteranceKind {
   const normalized = normalize(text)
   if (!normalized) return 'meta'
   if (CONTROL.some((pattern) => pattern.test(normalized))) return 'control'
   const count = words(text).length
   // A request for help is a request, however the detector reads it ("hint" alone is an "I don't know" to it).
-  if (count <= 14 && HELP.some((pattern) => pattern.test(normalized))) return 'meta'
+  if (asksForHelp(text)) return 'meta'
   if (isDontKnow(text)) return 'idk'
   if (count <= 14 && REPEAT.some((pattern) => pattern.test(normalized))) return 'meta'
   if (ACKNOWLEDGE.some((pattern) => pattern.test(normalized))) return 'meta'

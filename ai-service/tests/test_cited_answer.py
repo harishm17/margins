@@ -134,6 +134,9 @@ class TestRequest:
         assert params["model"] == "claude-opus-5-5"
         assert params["max_tokens"] == 4000
         assert params["system"] == [{"type": "text", "text": "Answer from the excerpts."}]
+        provider, calls = provider_with([text_start(), text_delta("Hashing maps keys."), cite("chunk:aaa", 0)])
+        await collect(provider, cache_system=True)  # Ask v2 (prompt audit R8): a breakpoint on the fixed system prompt
+        assert calls[0]["system"] == [{"type": "text", "text": "Answer from the excerpts.", "cache_control": {"type": "ephemeral"}}]
         assert params["output_config"] == {"effort": "low"}  # MODEL_CHAT: the main model at low effort
         assert params["fallbacks"] == "default"
         # Citations cannot be combined with structured outputs.

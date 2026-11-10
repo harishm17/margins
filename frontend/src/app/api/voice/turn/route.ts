@@ -32,7 +32,7 @@ import {
   readModelEvents,
   requestModelTurn,
 } from '@/lib/voice/ai-turn'
-import { claimVoiceSession, claimVoiceTurn, isSerializationConflict, releaseVoiceTurn } from '@/lib/voice/claim'
+import { claimVoiceSession, claimVoiceTurn, isSerializationConflict, keepVoiceTurn, releaseVoiceTurn } from '@/lib/voice/claim'
 import {
   coachStyleOf,
   CONTINUE_MESSAGE,
@@ -44,12 +44,14 @@ import {
 import { courseTermsForTopics, sessionTopicIds } from '@/lib/voice/course-terms'
 import { extractTextFromNotes } from '@/lib/voice/concept'
 import { voiceErrorMessage } from '@/lib/voice/errors'
-import { MAX_HEARD_CHARS, appendUserText, markInterrupted, parseHistory, toStoredHistory, type VoiceMessage } from '@/lib/voice/history'
+import { MAX_HEARD_CHARS, appendCutOffReply, appendUserText, markInterrupted, parseHistory, toStoredHistory, type VoiceMessage } from '@/lib/voice/history'
 import { listenForSession } from '@/lib/voice/listen'
 import { attachClientTiming, clientTimingSchema, recordTurnTiming } from '@/lib/voice/turn-timing'
 import { planPreRunForSession, startWithPreRun } from '@/lib/voice/pre-run-server'
 import { beginVoiceTurn } from '@/lib/voice/teach-tools'
 import { executeVoiceTool, toolsForStyle, type StepCache } from '@/lib/voice/tools'
+import { promptsV2 } from '@/lib/prompt-revision'
+import { neutralizeAppResultTags } from '@/lib/voice/pre-run'
 import type { VoiceStreamExtra } from '@/lib/voice/turn-contract'
 import { getTimeZone } from '@/server/timezone'
 import { runTurn } from '@/lib/voice/turn-engine'
@@ -71,6 +73,8 @@ const bodySchema = z.object({
   interruptedHeard: z.string().max(MAX_HEARD_CHARS).optional(),
   // What the browser measured for the previous turn (spec 19.10).
   timing: clientTimingSchema.optional(),
+  // The same words again after a turn that failed before the coach said or did anything: they are not counted twice.
+  retry: z.boolean().optional(),
 })
 
 /** A JSON error in the B shape, with the friendly message for `code` and the code in details. */
@@ -145,7 +149,7 @@ async function handlePost(request: NextRequest) {
 
   const parsed = await readJson(request, bodySchema)
   if (!parsed.ok) return parsed.response
-  const { sessionId, utterance, interruptedHeard, timing } = parsed.data
+  const { sessionId, utterance, interruptedHeard, timing, retry } = parsed.data
 
   const session = await prisma.voiceDrillSession.findFirst({ where: { id: sessionId, userId } })
   if (!session) return apiNotFound('Session not found')
@@ -154,7 +158,13 @@ async function handlePost(request: NextRequest) {
   // One turn at a time per session, across server processes (a conditional update on the session row).
   if (!(await claimVoiceTurn(userId, session.id))) return voiceFailure('TURN_IN_PROGRESS')
   let claimedHere = false
-  const releaseTurn = () => releaseVoiceTurn(userId, session.id)
+  // The claim is renewed while the turn runs, and the reply stream (once there is one) gets a keep-alive line each time.
+  let keepAlive: (() => void) | null = null
+  const stopRenewing = keepVoiceTurn(userId, session.id, () => keepAlive?.())
+  const releaseTurn = () => {
+    stopRenewing()
+    return releaseVoiceTurn(userId, session.id)
+  }
   // Aborted when the browser leaves: the model call stops instead of finishing an answer nobody will hear.
   const turnAbort = new AbortController()
   // A failed first turn must not leave the session counted as connected.
@@ -167,19 +177,16 @@ async function handlePost(request: NextRequest) {
   }
 
   try {
-    // First turn: one live session per user and the daily cap. Later turns: stay live.
-    if (!session.connectedAt) {
-      const claim = await claimVoiceSession(session)
-      if (!claim.ok) {
-        await releaseTurn()
-        return claim.reason === 'busy'
-          ? voiceFailure('ACTIVE_SESSION')
-          : voiceFailure('VOICE_DAILY_LIMIT', { remainingSeconds: 0, dailyMinutes: claim.capMinutes })
-      }
-      claimedHere = true
-    } else {
-      await prisma.voiceDrillSession.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } })
+    // Every turn: one live session per user and the daily cap, checked again as the session's own minutes run (a cap read
+    // only on the first turn let a student with a minute left talk for an hour). The same call keeps the session live.
+    const claim = await claimVoiceSession(session)
+    if (!claim.ok) {
+      await releaseTurn()
+      return claim.reason === 'busy'
+        ? voiceFailure('ACTIVE_SESSION')
+        : voiceFailure('VOICE_DAILY_LIMIT', { remainingSeconds: 0, dailyMinutes: claim.capMinutes })
     }
+    claimedHere = !session.connectedAt
 
     // A session from before teach-back and guided reading carries on in the style it began with.
     const style: CoachStyle = coachStyleOf(session.style)
@@ -198,14 +205,28 @@ async function handlePost(request: NextRequest) {
     // An interrupted reply is stored as what the student heard and a note, so the model does not take the rest as said.
     const stored = parseHistory(session.history)
     const history = interruptedHeard !== undefined ? markInterrupted(stored, interruptedHeard) : stored
-    const userText = utterance || (history.length === 0 ? startMessage(style, context.topicName) : CONTINUE_MESSAGE)
+    // Kept at once: the browser reports an interruption one time, and a turn that fails before anything is said stores
+    // nothing, which would lose the mark and leave the model thinking the whole reply was heard.
+    if (interruptedHeard !== undefined) {
+      await prisma.voiceDrillSession.update({
+        where: { id: session.id },
+        data: { history: toStoredHistory(history) as unknown as Prisma.InputJsonValue },
+      })
+    }
+    // With PROMPTS_V2 the student's words cannot pass for an app_result (prompt audit L3).
+    const spoken = promptsV2('voice') ? neutralizeAppResultTags(utterance) : utterance
+    const userText = spoken || (history.length === 0 ? startMessage(style, context.topicName, promptsV2('voice')) : CONTINUE_MESSAGE)
     // The server keeps what the student said, with this turn's number: the tools take an answer from there, not from the model.
-    const turn = await beginVoiceTurn(session.id, utterance)
+    const turn = await beginVoiceTurn(session.id, utterance, { retry: retry === true })
     if (timing) void attachClientTiming(session.id, turn, timing)
     let startMessages: VoiceMessage[] = appendUserText(history, userText)
     // The step the session is waiting for runs before the model speaks (spec 19.1), in the stream below so the browser can be
     // told at once; the model is then called once, with the result in the student's message.
     const steps: StepCache = new Map()
+    // Work a step leaves for later (what a recorded answer does to mastery and the schedule): the reply does not wait for
+    // it, the end of the turn does.
+    const deferred: Promise<void>[] = []
+    const defer = (work: Promise<void>) => void deferred.push(work)
     const preRun = await planPreRunForSession({ userId, sessionId: session.id, language: session.language, utterance, history })
 
     const modelRequest = (messages: VoiceMessage[]) =>
@@ -254,6 +275,7 @@ async function handlePost(request: NextRequest) {
           const info = voiceErrorMessage(code)
           send({ type: 'error', code, message: info.message, retryable: info.retryable })
         }
+        keepAlive = () => send({ type: 'alive' })
 
         void (async () => {
           try {
@@ -261,7 +283,7 @@ async function handlePost(request: NextRequest) {
             let preRunMs = 0
             if (preRun) {
               const stepStarted = performance.now()
-              startMessages = (await startWithPreRun(preRun, { sessionId: session.id, userId, timeZone, turn, steps }, startMessages, send)).messages
+              startMessages = (await startWithPreRun(preRun, { sessionId: session.id, userId, timeZone, turn, steps, defer }, startMessages, send)).messages
               preRunMs = performance.now() - stepStarted
               preRan = true
             }
@@ -279,19 +301,21 @@ async function handlePost(request: NextRequest) {
                   if (!response.ok || !response.body) throw await modelErrorFromResponse(response)
                   return readModelEvents(response.body)
                 },
-                runTool: (name, input) => executeVoiceTool({ sessionId: session.id, userId, timeZone, turn, steps }, name, input),
+                runTool: (name, input) => executeVoiceTool({ sessionId: session.id, userId, timeZone, turn, steps, defer }, name, input),
                 emit: send,
+                retryCutOff: promptsV2('voice'),
                 callStartedAt: (call) => (call === 1 ? firstCallStarted : undefined),
               },
               startMessages
             )
+            await Promise.all(deferred)
             await recordTurnTiming({
               sessionId: session.id,
               userId,
               turn,
               style,
               preRun: preRun?.step ?? null,
-              graded: preRan || steps.size > 0,
+              graded: (preRan && preRun?.step !== 'start') || steps.size > 0,
               calls: outcome.calls,
               stepMs: preRunMs + outcome.toolMs,
               firstTextMs: firstTextAt === null ? null : firstTextAt - requestStarted,
@@ -299,15 +323,17 @@ async function handlePost(request: NextRequest) {
               ok: outcome.ok,
             })
 
-            // Keep the conversation when the turn worked, or when it failed after tools had
-            // already recorded something (a retry must not record it twice).
+            // Keep the conversation when the turn worked, when it failed after tools had already recorded something (a
+            // retry must not record it twice), and when it failed or was interrupted after the coach had started to
+            // speak: the student heard that, so it is part of the conversation. A reply that did not finish is stored
+            // as cut off, where the next turn's "what the student heard" finds it.
             let saved = true
-            if (outcome.ok || outcome.toolsRan || preRan) {
+            if (outcome.ok || outcome.toolsRan || preRan || outcome.text) {
               try {
                 await prisma.voiceDrillSession.update({
                   where: { id: session.id },
                   data: {
-                    history: toStoredHistory(outcome.messages) as unknown as Prisma.InputJsonValue,
+                    history: toStoredHistory(appendCutOffReply(outcome.messages, outcome.cutOff)) as unknown as Prisma.InputJsonValue,
                     lastSeenAt: new Date(),
                   },
                 })
@@ -315,7 +341,7 @@ async function handlePost(request: NextRequest) {
                 logServerError('Voice: Could not store the conversation', error)
                 saved = false
               }
-            } else if (!outcome.text) {
+            } else {
               await releaseClaim()
             }
 
@@ -331,6 +357,8 @@ async function handlePost(request: NextRequest) {
             logServerError('Voice: The turn crashed', error)
             sendError('VOICE_TURN_FAILED')
           } finally {
+            // Deferred work catches its own failures; a turn that crashed still waits for it before the next may start.
+            await Promise.allSettled(deferred)
             await releaseTurn()
             try {
               controller.close()

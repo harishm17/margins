@@ -7,6 +7,10 @@ right, whether two options are right, whether the excerpts teach enough to answe
 whether the writer thinks aloud, and whether the answer can be guessed. These are the faults Q1's second stage will
 judge, so A2's counts are its baseline. Questions are shown without the generator that wrote them.
 
+A fault counts only with its note (the words at fault and what is right): without one nobody can check the flag, and
+the 2026-11-10 v2 run had 6 of its 8 flags with none. Each fault is an object with its own note, and a fault whose note
+is empty is tallied apart as `unexplained`, not as a flag.
+
 Rendering, the prompt and the tally are plain functions and are unit tested; `judge_topics` makes the calls through a
 MeteredProvider, so the spend caps apply.
 """
@@ -21,10 +25,14 @@ DEFECTS = ("wrong_key", "two_correct", "not_answerable", "ungrammatical", "think
 Defect = Literal["wrong_key", "two_correct", "not_answerable", "ungrammatical", "thinking_aloud", "guessable", "other"]
 
 
+class Fault(BaseModel):
+    kind: Defect
+    note: str = Field(description="The words at fault and what is right, in one or two sentences")
+
+
 class ItemVerdict(BaseModel):
     number: int = Field(description="The question's number")
-    defects: List[Defect] = Field(default_factory=list, description="Every fault the question has; empty when it has none")
-    note: str = Field(default="", description="For each fault, the words at fault and what is right; empty when there is none")
+    faults: List[Fault] = Field(default_factory=list, description="Every fault the question has, each with its note; empty when it has none")
 
 
 class ItemJudgeResult(BaseModel):
@@ -76,9 +84,9 @@ For each question, list every fault it has from this set, or none:
 - ungrammatical: a sentence in the question, its options or its explanation is ungrammatical or garbled enough that a student has to reread it.
 - thinking_aloud: the text shows its writer working something out or correcting itself, such as "wait", "let me recompute", or an answer that changes partway through.
 - guessable: a student who does not know the material can still pick the answer, because the question gives it away or only one option fits its wording.
-- other: any other fault a student would notice; say what it is in the note.
+- other: any other fault a student would notice; its note says what the fault is.
 
-For each fault you list, the note names the words at fault and what is right, in one or two sentences. Leave the note empty when there is no fault; most good questions have none. Return one verdict for every question number from 1 to {count}."""
+Give each fault its own note that names the words at fault and what is right, in one or two sentences. A person checks every fault against its note, so a fault without one cannot be checked and is not counted. Most good questions have no fault. Return one verdict for every question number from 1 to {count}."""
 
 
 def build_messages(excerpts_text: str, items: List[Dict[str, Any]]):
@@ -96,31 +104,60 @@ def build_messages(excerpts_text: str, items: List[Dict[str, Any]]):
 # ---------------------------------------------------------------------------- results
 
 
+def _faults(verdict: Dict[str, Any]) -> List[tuple]:
+    """(kind, note) for each fault of a raw verdict. A verdict judged before faults carried their own notes has a list
+    of `defects` and one `note` for all of them."""
+    if "faults" in verdict:
+        return [(fault.get("kind"), str(fault.get("note") or "")) for fault in verdict.get("faults") or []]
+    note = str(verdict.get("note") or "")
+    return [(defect, note) for defect in verdict.get("defects") or []]
+
+
 def verdicts_by_ref(items: List[Dict[str, Any]], result: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """The judge's verdicts keyed by each item's `ref` (such as "quiz-3"); a question it gave no verdict is absent,
-    and a fault outside the set is kept as "other"."""
+    and a fault outside the set is kept as "other". `defects` are the faults that have a note; one without is in
+    `unexplained`."""
     by_number = {v.get("number"): v for v in result.get("items") or []}
     out: Dict[str, Dict[str, Any]] = {}
     for n, entry in enumerate(items, 1):
         verdict = by_number.get(n)
         if verdict is None:
             continue
-        defects = [d if d in DEFECTS else "other" for d in verdict.get("defects") or []]
-        out[entry["ref"]] = {"defects": sorted(set(defects)), "note": verdict.get("note", "")}
+        faults = [(kind if kind in DEFECTS else "other", note.strip()) for kind, note in _faults(verdict)]
+        out[entry["ref"]] = {
+            "defects": sorted({kind for kind, note in faults if note}),
+            "unexplained": sorted({kind for kind, note in faults if not note}),
+            "note": " ".join(dict.fromkeys(note for _, note in faults if note)),
+        }
     return out
 
 
+def explained(verdict: Dict[str, Any]) -> tuple:
+    """(faults with a note, faults without) of a stored verdict. One stored before `unexplained` existed has every
+    fault in `defects`: with an empty note none of them can be checked."""
+    if "unexplained" in verdict:
+        return list(verdict["defects"]), list(verdict["unexplained"])
+    if str(verdict.get("note") or "").strip():
+        return list(verdict["defects"]), []
+    return [], list(verdict["defects"])
+
+
 def tally(judged: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Per kind (the part of `ref` before its number): questions judged, questions with any fault, and each fault's count."""
+    """Per kind (the part of `ref` before its number): questions judged, questions with a fault that has its note,
+    each such fault's count, and the questions whose only faults came without a note (`unexplained`: not flags,
+    because nobody can check them, but shown so a judge that stops explaining is seen)."""
     kinds: Dict[str, Dict[str, Any]] = {}
     for record in judged:
         for ref, verdict in (record.get("verdicts") or {}).items():
             kind = ref.rsplit("-", 1)[0]
-            entry = kinds.setdefault(kind, {"judged": 0, "flagged": 0, "by_defect": {d: 0 for d in DEFECTS}})
+            entry = kinds.setdefault(kind, {"judged": 0, "flagged": 0, "unexplained": 0, "by_defect": {d: 0 for d in DEFECTS}})
             entry["judged"] += 1
-            if verdict["defects"]:
+            noted, bare = explained(verdict)
+            if noted:
                 entry["flagged"] += 1
-            for defect in verdict["defects"]:
+            elif bare:
+                entry["unexplained"] += 1
+            for defect in noted:
                 entry["by_defect"][defect] += 1
     for entry in kinds.values():
         entry["rate"] = round(entry["flagged"] / entry["judged"], 3) if entry["judged"] else None
@@ -145,11 +182,15 @@ async def judge_topics(*, provider, groups: Dict[str, Dict[str, Any]], judge_dir
 
     async def one(key: str, group: Dict[str, Any]) -> None:
         path = judge_dir / f"{key}.json"
-        if path.exists() and json.loads(path.read_text()).get("result") is not None:
+        refs = [entry["ref"] for entry in group["items"]]
+        earlier = json.loads(path.read_text()) if path.exists() else {}
+        # A resumed run can store more of a topic's items after the topic was judged (the PR 1.7 A2 resume judged only
+        # warm-up): the topic is judged again whenever its items differ from the ones the record judged.
+        if earlier.get("result") is not None and earlier.get("refs") == refs:
             return
         if not group["items"]:
             return
-        record: Dict[str, Any] = {"group": key, "refs": [entry["ref"] for entry in group["items"]], "judge_model": provider.spec.label}
+        record: Dict[str, Any] = {"group": key, "refs": refs, "judge_model": provider.spec.label}
         with call_sink() as calls:
             try:
                 result = await provider.generate_structured(
@@ -165,7 +206,8 @@ async def judge_topics(*, provider, groups: Dict[str, Dict[str, Any]], judge_dir
                 record["error"] = f"{type(exc).__name__}: {exc}"
                 failed.append(key)
                 log(f"  judge failed for {key}: {record['error'][:160]}")
-        record["calls"] = calls
+        # The earlier judgment's calls stay in the record: they were spent, and a resumed run's budget counts them.
+        record["calls"] = (earlier.get("calls") or []) + calls
         path.write_text(json.dumps(record, indent=2) + "\n")
         if "error" not in record:
             log(f"  judged {key}: {len(group['items'])} questions")

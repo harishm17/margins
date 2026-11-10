@@ -200,6 +200,21 @@ export type SpeakerOptions = {
 
 const START_TIMEOUT_MS = 3000
 
+/** Scripts written without spaces between words (Chinese, Japanese, Thai, Lao, Khmer, Burmese): length is counted in characters. */
+const UNSPACED_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/gu
+
+/**
+ * How long a sentence may take to say before the queue stops waiting for its end event (some browsers never send one).
+ * A sentence in a script without spaces is one "word" to a split on spaces: it was given four seconds whatever its
+ * length, and the next sentence started over it. Each of its characters counts as half a word.
+ */
+export function speechTimeLimitMs(text: string, rate: number): number {
+  const unspaced = text.match(UNSPACED_SCRIPT)?.length ?? 0
+  const spaced = text.replace(UNSPACED_SCRIPT, ' ').split(/\s+/).filter(Boolean).length
+  const words = spaced + unspaced / 2
+  return Math.max(4000, (words * 700 + 2000) / rate)
+}
+
 /**
  * Speaks queued sentences one after another. Chrome and Safari are known to drop `end` events
  * (a cancelled tab, no voices installed), so every sentence has a watchdog: a sentence that
@@ -275,8 +290,7 @@ export function createSpeaker(options: SpeakerOptions): Speaker {
       started = true
       timers.forEach(clearTimeout)
       timers.length = 0
-      const words = text.split(/\s+/).length
-      timers.push(setTimeout(() => settle(), Math.max(4000, (words * 700 + 2000) / rate)))
+      timers.push(setTimeout(() => settle(), speechTimeLimitMs(text, rate)))
       options.onEvent?.({ type: 'start', item })
       options.onStart?.(item)
     }

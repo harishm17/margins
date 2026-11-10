@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { INTERRUPTED_NOTE, appendUserText, markInterrupted, parseHistory, trimHistory, type VoiceMessage } from './history'
+import { FINISH_CUT_OFF_NOTE, INTERRUPTED_NOTE, appendUserText, markInterrupted, parseHistory, trimHistory, type VoiceMessage } from './history'
 
 const user = (text: string): VoiceMessage => ({ role: 'user', content: text })
 const say = (text: string): VoiceMessage => ({ role: 'assistant', content: [{ type: 'text', text }] })
@@ -71,6 +71,19 @@ describe('markInterrupted', () => {
     assert.equal(marked.length, 4)
     assert.deepEqual(marked[1].content, [{ type: 'tool_use', id: 't1', name: 'assess_explanation', input: {} }])
     assert.deepEqual(marked[3].content, [{ type: 'text', text: `Let me check. You have part ${INTERRUPTED_NOTE}` }])
+  })
+
+  it('a reply cut off and finished in a second call is one reply: the heard text is not added to its first part', () => {
+    const turn: VoiceMessage[] = [
+      { role: 'user', content: 'it is a list' },
+      { role: 'assistant', content: [{ type: 'text', text: 'Each bucket holds a li' }] },
+      { role: 'user', content: FINISH_CUT_OFF_NOTE },
+      { role: 'assistant', content: [{ type: 'text', text: 'st of the keys that landed there. What follows?' }] },
+    ]
+    assert.deepEqual(markInterrupted(turn, 'Each bucket holds a li st of the keys'), [
+      turn[0],
+      { role: 'assistant', content: [{ type: 'text', text: `Each bucket holds a li st of the keys ${INTERRUPTED_NOTE}` }] },
+    ])
   })
 
 })

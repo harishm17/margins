@@ -1,0 +1,73 @@
+{
+  "label": "v2-a2-r2",
+  "date": "2026-11-10",
+  "code": {
+    "commit": "4c5fcf70d1f2dd7a5d545710b30ea84dc1de229a",
+    "branch": "prompt-fixes",
+    "app_dirty": false
+  },
+  "prompts": {
+    "PROMPTS_V2": "generation,support",
+    "areas": {
+      "generation": "v2",
+      "support": "v2"
+    },
+    "revision": "v2"
+  },
+  "kinds": [
+    "warmup",
+    "quiz",
+    "review",
+    "solved",
+    "interactive",
+    "exam"
+  ],
+  "topics": 10,
+  "topic_counts": {
+    "mit-18.05": 6,
+    "mit-6.006": 4
+  },
+  "params": {
+    "questions": 10,
+    "examples": 3,
+    "exam_questions": 20,
+    "difficulty": "medium"
+  },
+  "judge": "opus:medium",
+  "batch": true,
+  "batches": [
+    {
+      "id": "msgbatch_016ZrazPtGBM4N397u9DtbZH",
+      "requests": 58,
+      "seconds": 170.9
+    },
+    {
+      "id": "msgbatch_01UWoyL1s7MtX2RhcH5LhAcu",
+      "requests": 38,
+      "seconds": 185.4
+    },
+    {
+      "id": "msgbatch_018ddNn4wvT9APYpr9BiR51N",
+      "requests": 2,
+      "seconds": 124.0
+    },
+    {
+      "id": "msgbatch_01Y3UzjZYfgR36WZUYRSr3HT",
+      "requests": 2,
+      "seconds": 124.6
+    },
+    {
+      "id": "msgbatch_01LruH5DQGjvK2LbheuitjmN",
+      "requests": 10,
+      "seconds": 109.5
+    }
+  ],
+  "mock": false,
+  "max_usd": 9.0,
+  "max_judge_usd": 3.0,
+  "spend": {
+    "generation": 5.394,
+    "judge": 0.438
+  },
+  "stopped": null
+}

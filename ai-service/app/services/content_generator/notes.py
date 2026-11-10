@@ -207,7 +207,7 @@ class NotesGenerator:
         )
 
         instructions = f"""Write a lesson for the topic "{topic_name}" from the excerpts above.
-{focus_line(focus)}
+{focus_line(focus, v2=False)}
 {detail_instruction}
 Teach this topic's objectives only and assume its prerequisites. Build understanding: intuition first, concrete before abstract, then the precise statement.
 
@@ -230,7 +230,7 @@ Use exactly this structure:
 Return only the markdown."""
 
         response = await self.llm.generate_text(
-            content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map),
+            content_messages(topic_name, topic_description, chunks, instructions, cache_excerpts, course_map, v2=False),
             max_tokens=12000,
             purpose="section_notes",
         )
