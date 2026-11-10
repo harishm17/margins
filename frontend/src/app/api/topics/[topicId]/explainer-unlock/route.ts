@@ -6,6 +6,7 @@
  * (a recall was done, or there is no recall to do), changes nothing.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -27,7 +28,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     }
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('Explainer unlock error:', error)
+    logServerError('Explainer unlock error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Could not open the explainer')
   }

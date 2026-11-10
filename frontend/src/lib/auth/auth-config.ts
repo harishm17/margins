@@ -2,6 +2,7 @@
  * NextAuth configuration
  */
 
+import { logServerError } from '@/lib/ops/log'
 import type { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
@@ -178,7 +179,7 @@ export const authOptions: NextAuthOptions = {
       ) {
         return
       }
-      console.error(`[next-auth][error][${code}]`, metadata)
+      logServerError('Auth: next-auth reported an error', metadata instanceof Error ? metadata : undefined, { code: String(code) })
     },
   },
   secret: nextAuthSecret,

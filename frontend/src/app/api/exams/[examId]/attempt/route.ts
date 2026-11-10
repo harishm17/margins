@@ -8,6 +8,7 @@
  * Submitting is POST /api/exams/[examId]/submit.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -38,8 +39,8 @@ export const dynamic = 'force-dynamic'
 
 type Context = { params: Promise<{ examId: string }> }
 
-const handleError = (error: unknown, label: string) => {
-  console.error(label, error)
+const handleError = (error: unknown) => {
+  logServerError('Exam attempt error', error)
   if (isUnauthorizedError(error)) return apiUnauthorized()
   return apiInternal('Internal server error')
 }
@@ -62,7 +63,7 @@ export async function GET(_request: NextRequest, { params }: Context) {
     }
     return NextResponse.json({ attempt: null })
   } catch (error) {
-    return handleError(error, 'Error loading exam attempt:')
+    return handleError(error)
   }
 }
 
@@ -82,7 +83,7 @@ export async function POST(_request: NextRequest, { params }: Context) {
     const attempt = await startAttempt(session.user.id, exam)
     return NextResponse.json({ attempt: toAttemptView(attempt, new Date()) })
   } catch (error) {
-    return handleError(error, 'Error starting exam attempt:')
+    return handleError(error)
   }
 }
 
@@ -145,6 +146,6 @@ export async function PUT(request: NextRequest, { params }: Context) {
       remainingSeconds: remainingSeconds(attempt.deadlineAt, now),
     })
   } catch (error) {
-    return handleError(error, 'Error saving exam answers:')
+    return handleError(error)
   }
 }

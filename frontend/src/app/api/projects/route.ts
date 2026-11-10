@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const refused = quotaErrorResponse(error);
     if (refused) return refused;
-    console.error('Error creating project:', error);
+    logServerError('Error creating project', error);
     return NextResponse.json(
       { error: 'Failed to create project' },
       { status: 500 }

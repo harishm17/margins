@@ -6,6 +6,7 @@
  * service's stream: the model call stops (the AI service records what was spent so far) and the question is
  * removed through the usual failure path, so a closed tab leaves no unanswered turn and nothing keeps running.
  */
+import { logServerError } from '@/lib/ops/log'
 import { createLineSplitter, parseChatEvent } from './events'
 import { chatErrorMessage } from './errors'
 import type { ChatSource, CitationMark } from './citations'
@@ -73,7 +74,7 @@ export function relayChatStream(args: {
 }): ReadableStream<Uint8Array> {
   const { head, upstream, storage } = args
   const hooks = args.hooks ?? {}
-  const log = args.log ?? ((message, error) => console.error(`[CHAT] ${message}`, error ?? ''))
+  const log = args.log ?? ((_message, error) => logServerError('Chat: the answer stream reported a problem', error))
   const encoder = new TextEncoder()
   let clientGone = false
   let upstreamReader: ReadableStreamDefaultReader<Uint8Array> | null = null

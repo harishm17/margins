@@ -9,6 +9,7 @@
  * Both are best effort: a student's role change or delete never fails because a job could not start.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { prisma } from '@/lib/db/prisma'
 import { createJobOrFindActive } from '@/lib/jobs/active-jobs'
 import { enqueueTask } from '@/lib/tasks/dispatch'
@@ -53,7 +54,7 @@ async function start(
     }
     return { jobId: job.id }
   } catch (error) {
-    console.error(`Could not start ${jobType}:`, error)
+    logServerError('Could not start a past-exam job', error, { jobType })
     return null
   }
 }

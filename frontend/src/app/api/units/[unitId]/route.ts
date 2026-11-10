@@ -10,6 +10,7 @@
  *   200: { success: true }
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -78,7 +79,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       unit: { id: updated.id, title: updated.title, summary: updated.summary, weekLabel: updated.weekLabel, orderIndex: updated.orderIndex },
     })
   } catch (error) {
-    console.error('Update unit error:', error)
+    logServerError('Update unit error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof SyntaxError) return apiError(ApiErrorCode.INVALID_INPUT, 'Invalid JSON body', undefined, 400)
     return apiInternal('Failed to update unit')
@@ -104,7 +105,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     })
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Delete unit error:', error)
+    logServerError('Delete unit error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to delete unit')
   }

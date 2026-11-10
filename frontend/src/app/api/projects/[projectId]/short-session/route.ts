@@ -10,6 +10,7 @@
  * a quiz attempt.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -59,7 +60,7 @@ async function handlePOST(_request: NextRequest, { params }: { params: Promise<{
       { status: 201 }
     )
   } catch (error) {
-    console.error('Start short session error:', error)
+    logServerError('Start short session error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to start the short session')
   }

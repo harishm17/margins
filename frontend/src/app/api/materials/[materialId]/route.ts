@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server';
@@ -81,7 +82,7 @@ export async function PATCH(
 
     return NextResponse.json({ material: { id: materialId, role, removedSources } });
   } catch (error) {
-    console.error('Error updating material:', error);
+    logServerError('Error updating material', error);
     return NextResponse.json({ error: 'Failed to update material' }, { status: 500 });
   }
 }
@@ -133,7 +134,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting material:', error);
+    logServerError('Error deleting material', error);
     return NextResponse.json(
       { error: 'Failed to delete material' },
       { status: 500 }

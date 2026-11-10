@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
@@ -95,7 +96,7 @@ export async function POST(
 
     return NextResponse.json({ progress })
   } catch (error) {
-    console.error('Update progress error:', error)
+    logServerError('Update progress error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -158,7 +159,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Fetch progress error:', error)
+    logServerError('Fetch progress error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

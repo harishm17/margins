@@ -19,6 +19,7 @@
  * A user only ever reaches their own drafts: every query filters on the signed-in user.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ draft: draft ? wire(draft) : null })
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('Draft load error:', error)
+    logServerError('Draft load error', error)
     return apiInternal('Could not load the draft')
   }
 }
@@ -109,7 +110,7 @@ export async function PUT(request: NextRequest) {
     }
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('Draft save error:', error)
+    logServerError('Draft save error', error)
     return apiInternal('Could not save the draft')
   }
 }
@@ -125,7 +126,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('Draft delete error:', error)
+    logServerError('Draft delete error', error)
     return apiInternal('Could not delete the draft')
   }
 }

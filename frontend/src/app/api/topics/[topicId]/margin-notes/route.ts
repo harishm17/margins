@@ -5,6 +5,7 @@
  * DELETE /api/topics/[topicId]/margin-notes?id= - removes one of their notes.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { assertQuota, quotaErrorResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -38,7 +39,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (!(await topicOf(auth.user.id, topicId))) return apiNotFound('Topic not found')
     return NextResponse.json({ notes: await loadMarginNotes(auth.user.id, topicId) })
   } catch (error) {
-    console.error('Margin notes error:', error)
+    logServerError('Margin notes error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load your notes')
   }
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   } catch (error) {
     const refused = quotaErrorResponse(error)
     if (refused) return refused
-    console.error('Margin note create error:', error)
+    logServerError('Margin note create error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save the note')
   }
@@ -90,7 +91,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (removed.count === 0) return apiNotFound('Note not found')
     return NextResponse.json({ ok: true })
   } catch (error) {
-    console.error('Margin note delete error:', error)
+    logServerError('Margin note delete error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to delete the note')
   }

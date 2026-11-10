@@ -1,5 +1,7 @@
 // How often owed concept evidence is written again after a failure (quiz attempts and exam submissions).
 
+import { logServerError } from '@/lib/ops/log'
+
 /** A write that failed is not tried again for this long. */
 export const EVIDENCE_RETRY_AFTER_MS = 60 * 60 * 1000
 /** After this many failed tries the write is given up on (and logged), so it costs nothing on later visits. */
@@ -16,6 +18,6 @@ export function dueForEvidenceRetry(now: Date = new Date()) {
 /** Logs when a failure used up the last try. */
 export function logIfGivenUp(kind: string, id: string, attemptsAfter: number) {
   if (attemptsAfter >= EVIDENCE_MAX_ATTEMPTS) {
-    console.error(`Giving up writing ${kind} evidence for ${id} after ${attemptsAfter} tries; its result is unaffected.`)
+    logServerError('Giving up writing evidence; its result is unaffected', undefined, { kind, id, tries: attemptsAfter })
   }
 }

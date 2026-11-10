@@ -8,6 +8,7 @@
  *   "You'll find this on p. N", the test-out offer, how many passages are marked Focus here) after the last.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!state) return apiNotFound('Topic not found')
     return NextResponse.json(await withFocusCount(auth.user.id, topicId, state))
   } catch (error) {
-    console.error('Warm-up state error:', error)
+    logServerError('Warm-up state error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the warm-up')
   }
@@ -78,7 +79,7 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
     if (state.status === 'not_found') return apiNotFound('Topic not found')
     return NextResponse.json(await withFocusCount(auth.user.id, topicId, state))
   } catch (error) {
-    console.error('Warm-up start error:', error)
+    logServerError('Warm-up start error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to start the warm-up')
   }
@@ -121,7 +122,7 @@ async function handlePATCH(request: NextRequest, { params }: { params: Promise<{
       throw error
     }
   } catch (error) {
-    console.error('Warm-up answer error:', error)
+    logServerError('Warm-up answer error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save the answer')
   }

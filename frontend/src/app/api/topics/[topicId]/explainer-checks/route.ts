@@ -6,6 +6,7 @@
  * the topic to file it under.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (result.status === 'not_found') return apiNotFound('Topic not found')
     return NextResponse.json({ ok: true, recorded: result.recorded })
   } catch (error) {
-    console.error('Explainer check error:', error)
+    logServerError('Explainer check error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save your answer')
   }

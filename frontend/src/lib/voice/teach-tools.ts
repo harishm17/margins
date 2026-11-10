@@ -19,6 +19,7 @@
  * turn number (`beginVoiceTurn`), and a tool that takes an answer reads the words spoken after the question was asked.
  * With none, the tool refuses, so an answer cannot be made up, nor taken in the turn that asked the question.
  */
+import { logServerError } from '@/lib/ops/log'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { viewerUrl } from '@/lib/chat/citations'
@@ -502,7 +503,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
       conceptIds: [concept.id],
       ref: `${concept.id}:${next.plan.gap.claimId}`,
       timeZone: ctx.timeZone,
-    }).catch((failure) => console.error('Recording the voice explanation failed:', failure))
+    }).catch((failure) => logServerError('Recording the voice explanation failed', failure))
   }
 
   return { output: next.output, events: await ideaDone(concept, next.output, next.state) }
@@ -633,7 +634,7 @@ async function writeIdkAssisted(ctx: TeachToolContext, input: { itemKey: string;
       { timeZone: ctx.timeZone, userId: ctx.userId, skipIfPresent: true }
     )
   } catch (failure) {
-    console.error('Recording voice evidence failed:', failure)
+    logServerError('Recording voice evidence failed', failure)
   }
 }
 
@@ -656,7 +657,7 @@ async function writeIdkEvidence(ctx: TeachToolContext, conceptId: string): Promi
       { timeZone: ctx.timeZone, userId: ctx.userId, skipIfPresent: true }
     )
   } catch (failure) {
-    console.error('Recording voice evidence failed:', failure)
+    logServerError('Recording voice evidence failed', failure)
   }
 }
 
@@ -690,7 +691,7 @@ async function writeAssistedEvidence(
       { timeZone: ctx.timeZone, userId: ctx.userId, skipIfPresent: true }
     )
   } catch (failure) {
-    console.error('Recording voice evidence failed:', failure)
+    logServerError('Recording voice evidence failed', failure)
   }
 }
 

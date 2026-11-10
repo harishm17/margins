@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -126,7 +127,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Project health error:', error)
+    logServerError('Project health error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load project health')
   }

@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 /**
  * The voice coach's three tools, run on the server inside the turn loop.
@@ -267,7 +268,7 @@ async function recordVoiceEvidence(input: {
       { timeZone: input.timeZone, userId: input.userId, skipIfPresent: true }
     )
   } catch (error) {
-    console.error('Recording voice evidence failed:', error)
+    logServerError('Recording voice evidence failed', error)
   }
 }
 

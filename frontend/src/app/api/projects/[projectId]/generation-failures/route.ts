@@ -6,6 +6,7 @@
  * with POST /api/topics/[topicId]/generate-content.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -64,7 +65,7 @@ export async function GET(
 
     return NextResponse.json({ failures })
   } catch (error) {
-    console.error('Generation failures error:', error)
+    logServerError('Generation failures error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load generation failures')
   }

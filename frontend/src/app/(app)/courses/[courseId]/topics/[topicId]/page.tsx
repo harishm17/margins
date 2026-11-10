@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { notFound, redirect } from 'next/navigation'
 import { ChatsCircle, Hourglass } from '@phosphor-icons/react/dist/ssr'
 import { bareTopicRedirect } from '@/features/topic/activity-copy'
@@ -158,7 +159,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
       // The student's own pages as text (spec §5.2). A topic with no text to read from shows its notes instead.
       const reader = await loadReader(user.id, topicId)
       // Opening a pointer (the reader at a concept) is an instruction event (spec 18.5); once per concept per day.
-      if (focusConceptId) await recordInstruction(prisma, { userId: user.id, topicId, kind: 'pointer', conceptIds: [focusConceptId], ref: focusConceptId }).catch((error) => console.error('Recording a pointer failed:', error))
+      if (focusConceptId) await recordInstruction(prisma, { userId: user.id, topicId, kind: 'pointer', conceptIds: [focusConceptId], ref: focusConceptId }).catch((error) => logServerError('Recording a pointer failed', error))
       if (reader && reader.files.length > 0) {
         // Whether the student closed the "About this reading" row before, on any device.
         const noteDismissed = (await prisma.user.findUnique({ where: { id: user.id }, select: { seenReaderNoteAt: true } }))?.seenReaderNoteAt != null
@@ -180,7 +181,7 @@ export default async function TopicPage({ params, searchParams }: { params: Para
       // (spec 18.5): the gap explainer when there are gaps, else the full lesson. Once per concept per day.
       if (focusConceptId) {
         const kind = gaps.status === 'none' ? 'full_explainer' : 'gap_explainer'
-        await recordInstruction(prisma, { userId: user.id, topicId, kind, conceptIds: [focusConceptId], ref: focusConceptId }).catch((error) => console.error('Recording an explainer visit failed:', error))
+        await recordInstruction(prisma, { userId: user.id, topicId, kind, conceptIds: [focusConceptId], ref: focusConceptId }).catch((error) => logServerError('Recording an explainer visit failed', error))
       }
       return (
         <ExplainerView

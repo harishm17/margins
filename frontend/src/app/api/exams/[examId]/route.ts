@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -42,7 +43,7 @@ export async function GET(
     // No answer key: it is released only in a graded submission's results.
     return NextResponse.json({ exam: { ...exam, questions: toPublicQuestions(exam.questions) } });
   } catch (error) {
-    console.error('Error fetching exam:', error);
+    logServerError('Error fetching exam', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

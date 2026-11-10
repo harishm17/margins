@@ -3,6 +3,7 @@
  * GET /api/jobs/[jobId]
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -37,7 +38,7 @@ export async function GET(
 
     return NextResponse.json(serializeJob(job))
   } catch (error) {
-    console.error('Job status error:', error)
+    logServerError('Job status error', error)
 
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()

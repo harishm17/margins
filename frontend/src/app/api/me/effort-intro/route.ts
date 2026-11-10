@@ -3,6 +3,7 @@
  * (spec §5). Stored on the user, so it stays closed on every device. Closing it twice changes nothing.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -22,7 +23,7 @@ export async function POST() {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    console.error('Effort intro error:', error)
+    logServerError('Effort intro error', error)
     return NextResponse.json({ error: 'Failed to save that' }, { status: 500 })
   }
 }

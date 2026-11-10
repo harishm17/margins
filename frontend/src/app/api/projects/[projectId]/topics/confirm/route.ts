@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -72,7 +73,7 @@ export async function POST(
       totalTopics: topicCount,
     })
   } catch (error) {
-    console.error('Confirm topics error:', error)
+    logServerError('Confirm topics error', error)
 
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()

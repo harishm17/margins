@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { getVoiceUsage } from '@/lib/voice/usage-query'
@@ -14,7 +15,7 @@ export async function GET() {
     const cloudProviders = cloudSpeechProviders()
     return NextResponse.json({ ...usage, cloudSpeech: cloudProviders.length > 0, cloudProviders })
   } catch (error) {
-    console.error('Voice usage error:', error)
+    logServerError('Voice usage error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load voice usage')
   }

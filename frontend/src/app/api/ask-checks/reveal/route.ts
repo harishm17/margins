@@ -4,6 +4,7 @@
  * answer and explanation. Without an attempt (or one stored earlier) the answer is not returned (spec P1).
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
     if (revealed.status === 'attempt_required') return apiInvalidInput(ANSWER_FIRST)
     return NextResponse.json({ answer: revealed.answer, explanation: revealed.explanation })
   } catch (error) {
-    console.error('Ask check reveal error:', error)
+    logServerError('Ask check reveal error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the answer')
   }

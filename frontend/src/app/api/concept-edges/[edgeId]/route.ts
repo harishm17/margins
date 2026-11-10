@@ -5,6 +5,7 @@
  *   gave this student (lib/learning/concept-edge.ts). Only the owner of the course can answer; anyone else gets a 404.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -32,7 +33,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ status: parsed.data.status })
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('Concept edge error:', error)
+    logServerError('Concept edge error', error)
     return apiInternal('Could not save your answer')
   }
 }

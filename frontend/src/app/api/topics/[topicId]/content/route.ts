@@ -3,6 +3,7 @@
  * GET /api/topics/[topicId]/content?type=section_notes
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -90,7 +91,7 @@ export async function GET(
     // Otherwise return all content types
     return NextResponse.json({ content })
   } catch (error) {
-    console.error('Fetch content error:', error)
+    logServerError('Fetch content error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

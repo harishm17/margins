@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { id, list, record } from '@/lib/api/fields'
 import { NextRequest, NextResponse } from 'next/server'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
@@ -59,7 +60,7 @@ async function handleGET(request: NextRequest) {
       preview,
     })
   } catch (error) {
-    console.error('Fetch drill pack error:', error)
+    logServerError('Fetch drill pack error', error)
 
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Invalid query parameters' }, { status: 400 })

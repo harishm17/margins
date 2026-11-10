@@ -9,6 +9,7 @@
  * concept, in reading order. The reader opened for an idea (`?focus=`) marks them "Focus here" and scrolls to the first.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
@@ -36,7 +37,7 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
     if (result.status === 'not_found') return apiNotFound('Check not found')
     return NextResponse.json({ ok: true, recorded: result.recorded })
   } catch (error) {
-    console.error('Reader check error:', error)
+    logServerError('Reader check error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save your answer')
   }
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!source) return apiNotFound('Check not found')
     return NextResponse.json(source)
   } catch (error) {
-    console.error('Reader check source error:', error)
+    logServerError('Reader check source error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the source')
   }

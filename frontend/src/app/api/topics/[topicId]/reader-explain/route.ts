@@ -11,6 +11,7 @@
  * says why.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
@@ -93,7 +94,7 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof TutorUnavailableError) return tutorFailure(error)
-    console.error('Reader explain error:', error)
+    logServerError('Reader explain error', error)
     return apiInternal('The tutor could not answer')
   }
 }

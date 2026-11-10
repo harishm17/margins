@@ -6,6 +6,7 @@
  * grace, the last autosave is what gets graded.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -87,7 +88,7 @@ export async function POST(
       estimatedSeconds: 90,
     })
   } catch (error) {
-    console.error('Error submitting exam:', error)
+    logServerError('Error submitting exam', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Internal server error')
   }

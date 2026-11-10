@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { id, list, record } from '@/lib/api/fields'
@@ -166,7 +167,7 @@ async function handlePOST(request: NextRequest) {
   } catch (error) {
     const refused = quotaErrorResponse(error)
     if (refused) return refused
-    console.error('Create voice session error:', error)
+    logServerError('Create voice session error', error)
 
     if (error instanceof z.ZodError) {
       return apiInvalidInput('Invalid input', zodDetails(error))
@@ -240,7 +241,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ session: updated })
   } catch (error) {
-    console.error('Patch voice session error:', error)
+    logServerError('Patch voice session error', error)
 
     if (error instanceof z.ZodError) {
       return apiInvalidInput('Invalid input', zodDetails(error))

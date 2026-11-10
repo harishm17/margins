@@ -3,6 +3,7 @@
  * while they have voice time left today. `exclude` names providers whose stream refused this session (spent credit, an
  * outage): the next one is tried.
  */
+import { logServerError } from '@/lib/ops/log'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof CloudSpeechError) return unavailable(error.status)
-    console.error('Speech token error:', error)
+    logServerError('Speech token error', error)
     return unavailable(502)
   }
 }

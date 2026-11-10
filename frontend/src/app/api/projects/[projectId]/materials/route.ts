@@ -8,6 +8,7 @@
  * from Content-Length before any of the body is read.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { Readable } from 'stream'
@@ -251,7 +252,7 @@ export async function POST(
   } catch (error) {
     const refused = quotaErrorResponse(error)
     if (refused) return refused
-    console.error('Material upload error:', error)
+    logServerError('Material upload error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -319,7 +320,7 @@ export async function GET(
       })),
     })
   } catch (error) {
-    console.error('Fetch materials error:', error)
+    logServerError('Fetch materials error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

@@ -9,6 +9,7 @@
  * student's attempt or "I don't know".
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     if (result.status === 'attempt_required') return apiInvalidInput(ANSWER_FIRST)
     return NextResponse.json({ ok: true, recorded: result.recorded, grade: result.grade })
   } catch (error) {
-    console.error('Ask check error:', error)
+    logServerError('Ask check error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save your answer')
   }
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
     if (revealed.status === 'attempt_required') return apiInvalidInput(ANSWER_FIRST)
     return NextResponse.json({ answer: revealed.answer, explanation: revealed.explanation })
   } catch (error) {
-    console.error('Ask check reveal error:', error)
+    logServerError('Ask check reveal error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the answer')
   }

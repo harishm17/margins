@@ -7,6 +7,7 @@
  *   one it is last in the course and belongs to no unit.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { id, list, record } from '@/lib/api/fields'
@@ -68,7 +69,7 @@ export async function GET(
 
     return NextResponse.json({ topics })
   } catch (error) {
-    console.error('Fetch topics error:', error)
+    logServerError('Fetch topics error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -156,7 +157,7 @@ export async function POST(
   } catch (error) {
     const refused = quotaErrorResponse(error)
     if (refused) return refused
-    console.error('Create topic error:', error)
+    logServerError('Create topic error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

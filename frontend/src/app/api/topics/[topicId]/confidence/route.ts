@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
@@ -84,7 +85,7 @@ export async function POST(
       nextReviewAt: schedule?.dueAt ?? null,
     })
   } catch (error) {
-    console.error('Confidence save error:', error)
+    logServerError('Confidence save error', error)
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()
     }

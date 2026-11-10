@@ -12,6 +12,7 @@
  * declined without a model call. Otherwise the thread's tutor state goes to the AI service with the
  * question, and once the reply is stored the state moves and a reply that taught records level 3.
  */
+import { logServerError } from '@/lib/ops/log'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
@@ -181,12 +182,12 @@ async function handlePOST(
     try {
       response = await requestChatAnswer({ projectId, userId, threadId: thread?.id, question, history, topicId, tutor: plan.tutor })
     } catch (error) {
-      console.error('[CHAT] The AI service is not reachable:', error)
+      logServerError('Chat: The AI service is not reachable', error)
       return chatFailure('CHAT_UNAVAILABLE')
     }
     if (!response.ok || !response.body) {
       const code = await errorCodeFromResponse(response)
-      console.error(`[CHAT] The AI service answered ${response.status} (${code})`)
+      logServerError('Chat: the AI service answered with an error', undefined, { status: response.status, code })
       return chatFailure(code)
     }
     upstream = response.body
@@ -221,14 +222,14 @@ async function handlePOST(
       if (isNewThread && thread && thread.id !== taken?.threadId) await prisma.chatThread.delete({ where: { id: thread.id } }).catch(() => {})
       return NextResponse.json({ duplicate: true, threadId: taken?.threadId ?? null })
     }
-    console.error('[CHAT] Could not store the question:', error)
+    logServerError('Chat: Could not store the question', error)
     await upstream.cancel().catch(() => {})
     return apiError(ApiErrorCode.INTERNAL_ERROR, 'Could not save your question. Try again.', undefined, 500)
   }
   const activeThread = thread
   if (isNewThread && seedConceptId) {
     // The conversation works without it, so a failed write is logged, not shown.
-    await seedTutorConcepts(userId, 'ask', activeThread.id, [seedConceptId]).catch((error) => console.error('[CHAT] Could not seed the concept:', error))
+    await seedTutorConcepts(userId, 'ask', activeThread.id, [seedConceptId]).catch((error) => logServerError('Chat: Could not seed the concept', error))
   }
   const storage = createChatStorage(prisma, {
     userId,

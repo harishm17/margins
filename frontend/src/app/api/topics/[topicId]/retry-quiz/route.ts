@@ -6,6 +6,7 @@
  * The set is taken and graded like any other (POST /quiz-attempts with its quizSetId).
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -39,7 +40,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     if (!set) return apiNotFound('There are no missed questions to retry')
     return NextResponse.json(set)
   } catch (error) {
-    console.error('Retry quiz error:', error)
+    logServerError('Retry quiz error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to prepare the retry quiz')
   }

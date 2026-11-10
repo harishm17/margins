@@ -3,6 +3,7 @@
  * POST /api/topics/[topicId]/generate-content
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { quotaErrorResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
@@ -168,7 +169,7 @@ export async function POST(
   } catch (error) {
     const refused = quotaErrorResponse(error)
     if (refused) return refused
-    console.error('Content generation error:', error)
+    logServerError('Content generation error', error)
 
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()

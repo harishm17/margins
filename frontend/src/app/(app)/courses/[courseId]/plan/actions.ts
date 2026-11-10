@@ -1,5 +1,6 @@
 'use server'
 
+import { logServerError } from '@/lib/ops/log'
 import { revalidatePath } from 'next/cache'
 import { setQuickPass } from '@/lib/learning/short-session-server'
 import { getSessionUser } from '@/server/session'
@@ -18,7 +19,7 @@ export async function setQuickPassAction(courseId: string, topicId: string, quic
   try {
     if ((await setQuickPass(user.id, topicId, quick === true)) === 'not_found') return { ok: false, error: 'not_found' }
   } catch (error) {
-    console.error(`[PLAN] Setting a quick pass on ${topicId} failed:`, error)
+    logServerError('Plan: setting a quick pass failed', error, { topicId })
     return { ok: false, error: 'failed' }
   }
   revalidatePath(`/courses/${courseId}/plan`)

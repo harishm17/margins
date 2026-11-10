@@ -3,6 +3,7 @@
  * POST /api/topics/[topicId]/regenerate-content
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { quotaErrorResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
@@ -50,7 +51,7 @@ export async function POST(
   } catch (error) {
     const refused = quotaErrorResponse(error)
     if (refused) return refused
-    console.error('Content regeneration error:', error)
+    logServerError('Content regeneration error', error)
 
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()

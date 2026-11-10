@@ -8,6 +8,7 @@
  *   writes the evidence of misses left open on an earlier day.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { record } from '@/lib/api/fields'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
@@ -60,7 +61,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (!(await ownedTopic(session.user.id, topicId))) return apiNotFound('Topic not found')
     return NextResponse.json({ problems: await loadPracticeProgress(session.user.id, topicId, await studentTimeZone()) })
   } catch (error) {
-    console.error('Practice progress read error:', error)
+    logServerError('Practice progress read error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load practice progress')
   }
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     return NextResponse.json({ completed: result.completed, completedNow: result.completedNow, score: result.score })
   } catch (error) {
-    console.error('Practice progress save error:', error)
+    logServerError('Practice progress save error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save practice progress')
   }

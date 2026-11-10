@@ -6,6 +6,7 @@
  * Not refused while the AI is unavailable: the job waits for it, like the first one.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -36,7 +37,7 @@ export async function POST(
 
     return NextResponse.json({ submissionId: submission.id, jobId: grading.jobId, status: 'queued' })
   } catch (error) {
-    console.error('Error regrading quiz:', error)
+    logServerError('Error regrading quiz', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Internal server error')
   }

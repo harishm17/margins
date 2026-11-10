@@ -15,6 +15,7 @@
  * merged chunks; regenerate it from the topic page if needed.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
@@ -226,7 +227,7 @@ export async function POST(
 
     return NextResponse.json({ topic: merged, mergedTopicId: source.id })
   } catch (error) {
-    console.error('Merge topics error:', error)
+    logServerError('Merge topics error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof SyntaxError) {
       return apiError(ApiErrorCode.INVALID_INPUT, 'Invalid JSON body', undefined, 400)

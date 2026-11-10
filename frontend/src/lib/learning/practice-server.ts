@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { prisma } from '@/lib/db/prisma'
 import { parsePracticeProblems } from '@/features/topic/content'
 import {
@@ -189,7 +190,7 @@ async function saveLocked(
       await recordEvidence(evidence.inputs, { timeZone: input.timeZone ?? 'UTC', userId, inTransaction: async (etx) => void (await writeRow(etx, settled)) })
     } catch (error) {
       // The progress is the student's: it is kept, and the steps stay unmarked so the next save writes their evidence.
-      console.error('Recording practice evidence failed:', error)
+      logServerError('Recording practice evidence failed', error)
       await writeRow(tx, input.migrated ? finishedSteps : written)
     }
   } else {
@@ -465,7 +466,7 @@ export async function settleOpenMisses(userId: string, topicId: string, timeZone
       )
     } catch (error) {
       // The next visit tries again.
-      console.error('Settling an open practice miss failed:', error)
+      logServerError('Settling an open practice miss failed', error)
     }
   }
   return { settled }
@@ -475,7 +476,7 @@ export async function settleOpenMisses(userId: string, topicId: string, timeZone
 export async function loadPracticeProgress(userId: string, topicId: string, timeZone?: string): Promise<ProblemProgress[]> {
   const practice = await currentPractice(topicId)
   if (!practice) return []
-  await settleOpenMisses(userId, topicId, timeZone ?? (await studentTimeZone())).catch((error) => console.error('Settling open practice misses failed:', error))
+  await settleOpenMisses(userId, topicId, timeZone ?? (await studentTimeZone())).catch((error) => logServerError('Settling open practice misses failed', error))
   const rows = await prisma.practiceProgress.findMany({
     where: { userId, topicId, contentId: practice.contentId },
     orderBy: { problemIndex: 'asc' },

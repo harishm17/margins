@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import type { GradedQuestion } from '@/lib/ai-service/grading'
@@ -206,7 +207,7 @@ export async function recordQuizEvidence(input: QuizEvidenceInput): Promise<bool
     )
     return true
   } catch (error) {
-    console.error('Recording quiz evidence failed:', error)
+    logServerError('Recording quiz evidence failed', error)
     return false
   }
 }
@@ -247,7 +248,7 @@ async function markQuizEvidenceRecorded(attemptId: string): Promise<void> {
       data: { evidenceRecordedAt: new Date(), evidencePending: Prisma.DbNull },
     })
   } catch (error) {
-    console.error('Marking quiz evidence as written failed:', error)
+    logServerError('Marking quiz evidence as written failed', error)
   }
 }
 
@@ -261,7 +262,7 @@ async function markQuizEvidenceFailed(attemptId: string): Promise<void> {
     })
     logIfGivenUp('quiz', attemptId, updated.evidenceAttempts)
   } catch (error) {
-    console.error('Counting a failed quiz evidence write failed:', error)
+    logServerError('Counting a failed quiz evidence write failed', error)
   }
 }
 
@@ -292,7 +293,7 @@ export async function retryPendingQuizEvidence(userId: string, limit = RETRY_LIM
       const pending = readPendingQuizEvidence(attempt.evidencePending)
       // A copy that cannot be read can never be written: stop asking for it.
       if (!pending) {
-        console.error(`Quiz attempt ${attempt.id} has an unreadable pending evidence copy; dropping it, nothing is written.`)
+        logServerError('A quiz attempt has an unreadable pending evidence copy; dropping it, nothing is written', undefined, { attemptId: attempt.id })
         await markQuizEvidenceRecorded(attempt.id)
         continue
       }
@@ -305,7 +306,7 @@ export async function retryPendingQuizEvidence(userId: string, limit = RETRY_LIM
     }
     return written
   } catch (error) {
-    console.error('Retrying quiz evidence failed:', error)
+    logServerError('Retrying quiz evidence failed', error)
     return 0
   }
 }

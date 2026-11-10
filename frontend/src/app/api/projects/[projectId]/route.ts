@@ -5,6 +5,7 @@
  * DELETE /api/projects/[projectId] - Delete project
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -59,7 +60,7 @@ export async function GET(
 
     return NextResponse.json({ project })
   } catch (error) {
-    console.error('Fetch project error:', error)
+    logServerError('Fetch project error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -110,7 +111,7 @@ export async function PATCH(
 
     return NextResponse.json({ project: updatedProject })
   } catch (error) {
-    console.error('Update project error:', error)
+    logServerError('Update project error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -175,12 +176,12 @@ export async function DELETE(
       // The local uploads folder too (uploads made before a bucket was set up); the queue covers the bucket.
       await deleteProjectFolder(session.user.id, projectId)
     } catch (storageError) {
-      console.error(`Project ${projectId} deleted, but its files could not be cleaned up yet:`, storageError)
+      logServerError('Course deleted, but its files could not be cleaned up yet', storageError, { projectId })
     }
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Delete project error:', error)
+    logServerError('Delete project error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

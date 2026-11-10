@@ -5,6 +5,7 @@
  * POST /api/topics/[topicId]/fresh-review -> the same answer as regenerate-content (a job id to follow).
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -37,7 +38,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       preferences: onDemandQuizPreferences(freshReviewPreferences(plan), band),
     })
   } catch (error) {
-    console.error('Fresh review error:', error)
+    logServerError('Fresh review error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to start the fresh review')
   }

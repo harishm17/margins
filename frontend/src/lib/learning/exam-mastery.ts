@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { prisma } from '@/lib/db/prisma'
 import { recordExamEvidence } from './exam-evidence'
 import { computeTopicMastery, upsertReviewSchedule } from './mastery'
@@ -35,7 +36,7 @@ async function recordSubmissionEvidence(userId: string, projectId: string, submi
         })
       : true
   } catch (error) {
-    console.error('Reading an exam submission for its evidence failed:', error)
+    logServerError('Reading an exam submission for its evidence failed', error)
   }
   // Marking has its own guard: the evidence is written, and a failure here must not undo the schedules
   // (the caller puts reviewAppliedAt back on an error, which would apply them again).
@@ -51,7 +52,7 @@ async function recordSubmissionEvidence(userId: string, projectId: string, submi
       logIfGivenUp('exam', submissionId, updated.evidenceAttempts)
     }
   } catch (error) {
-    console.error('Marking exam evidence failed:', error)
+    logServerError('Marking exam evidence failed', error)
   }
   return written
 }
@@ -157,7 +158,7 @@ export async function applyPendingExamResults(userId: string, projectId: string)
     try {
       if (await applyGradedExam(userId, projectId, id)) applied += 1
     } catch (error) {
-      console.error('Applying a graded exam to mastery failed:', error)
+      logServerError('Applying a graded exam to mastery failed', error)
     }
   }
   await retryPendingExamEvidence(userId, projectId)
@@ -190,7 +191,7 @@ export async function retryPendingExamEvidence(userId: string, projectId: string
     }
     return written
   } catch (error) {
-    console.error('Retrying exam evidence failed:', error)
+    logServerError('Retrying exam evidence failed', error)
     return 0
   }
 }

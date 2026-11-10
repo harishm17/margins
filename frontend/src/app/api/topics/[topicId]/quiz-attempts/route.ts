@@ -5,6 +5,7 @@
  * GET /api/topics/[topicId]/quiz-attempts - Get quiz history
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { id, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
@@ -227,7 +228,7 @@ async function handlePOST(
       outcome,
     })
   } catch (error) {
-    console.error('Save quiz attempt error:', error)
+    logServerError('Save quiz attempt error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -365,7 +366,7 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Fetch quiz attempts error:', error)
+    logServerError('Fetch quiz attempts error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

@@ -6,6 +6,7 @@
  * already written today. It never moves a card, mastery or a due date; it tells next activity that the idea was shown.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (result.status === 'invalid') return apiNotFound('Topic not found')
     return NextResponse.json({ ok: true, recorded: result.status === 'recorded' })
   } catch (error) {
-    console.error('Instruction error:', error)
+    logServerError('Instruction error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save that')
   }

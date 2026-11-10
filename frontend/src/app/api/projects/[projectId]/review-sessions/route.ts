@@ -13,6 +13,7 @@
  * today's newest unfinished review session, for "Resume today's review (5 of 12)" (spec 18.7).
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
@@ -92,7 +93,7 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
     if (result.status === 'empty') return NextResponse.json({ status: 'empty', legacyReview: result.legacyReview })
     return NextResponse.json({ status: 'created', sessionId: result.sessionId }, { status: 201 })
   } catch (error) {
-    console.error('Start review session error:', error)
+    logServerError('Start review session error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to start the review')
   }
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!project) return apiNotFound('Course not found')
     return NextResponse.json({ session: await activeSession(auth.user.id, projectId, await getTimeZone()) })
   } catch (error) {
-    console.error('Active review session error:', error)
+    logServerError('Active review session error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to look for a review in progress')
   }

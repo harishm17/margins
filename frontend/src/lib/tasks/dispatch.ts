@@ -5,6 +5,7 @@
  * one that is delivered but never claimed is picked up by the AI service's reaper.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 import { isTestLoginEnabled } from '@/lib/auth/test-login'
 import { retryDelayMs } from './retry-delay'
@@ -146,7 +147,7 @@ export async function markJobFailed(
       },
     })
   } catch (dbError) {
-    console.error('[DEV] Failed to persist enqueue failure:', dbError)
+    logServerError('Dev: Failed to persist enqueue failure', dbError)
   }
 }
 
@@ -157,7 +158,7 @@ async function dispatchDirectTask(endpoint: string, payload: TaskPayload): Promi
     const normalized = error instanceof TaskEnqueueError
       ? error
       : new TaskEnqueueError(String(error), true)
-    console.error(`[DEV] Background task dispatch failed for ${payload.jobId}:`, normalized.message)
+    logServerError('Dev: background task dispatch failed', error, { jobId: payload.jobId })
     await markJobFailed(payload, normalized)
   }
 }
@@ -175,9 +176,7 @@ async function runInlineDirectTask(endpoint: string, payload: TaskPayload): Prom
 }
 
 if (INLINE_DIRECT_JOB_TYPES.size > 0) {
-  console.warn(
-    `[DEV] Inline direct tasks enabled for: ${Array.from(INLINE_DIRECT_JOB_TYPES).join(', ')}`
-  )
+  logServerError('Dev: inline direct tasks enabled', undefined, { types: Array.from(INLINE_DIRECT_JOB_TYPES).join(',') })
 }
 
 /**

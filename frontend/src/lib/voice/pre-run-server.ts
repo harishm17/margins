@@ -2,6 +2,7 @@
  * The database side of running a step before the model speaks (spec §19.1): reading what the session is waiting for,
  * and running the step through the same `executeVoiceTool` the model's tool call goes through. The rules are in pre-run.ts.
  */
+import { logServerError } from '@/lib/ops/log'
 import { prisma } from '@/lib/db/prisma'
 import { coachStyleOf } from '@/lib/voice/coach-prompt'
 import type { VoiceBlock, VoiceMessage } from '@/lib/voice/history'
@@ -42,7 +43,7 @@ export type PreRunOutcome = { result: VoiceToolResult; block: VoiceBlock }
 export async function runPreRun(
   plan: PreRunPlan,
   ctx: { sessionId: string; userId: string; timeZone: string; turn: number; steps: import('@/lib/voice/tools').StepCache; grade?: Parameters<typeof executeVoiceTool>[0]['grade'] },
-  log: (message: string, error?: unknown) => void = (message, error) => console.error(`[VOICE] ${message}`, error ?? '')
+  log: (message: string, error?: unknown) => void = (_message, error) => logServerError('Voice: a pre-run step failed', error)
 ): Promise<PreRunOutcome> {
   let result: VoiceToolResult
   try {

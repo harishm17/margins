@@ -6,6 +6,7 @@
  * for the student: nothing moves on until the next question is asked for.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
@@ -81,7 +82,7 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
       throw error
     }
   } catch (error) {
-    console.error('Review answer error:', error)
+    logServerError('Review answer error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save the answer')
   }

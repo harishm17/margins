@@ -6,6 +6,7 @@
  * look at a graded quiz turns it into the attempt and applies it to mastery and the review date.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -47,7 +48,7 @@ export async function GET(
       ...(applied.help ?? {}),
     })
   } catch (error) {
-    console.error('Quiz submission status error:', error)
+    logServerError('Quiz submission status error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the quiz result')
   }
@@ -73,7 +74,7 @@ export async function DELETE(
     }
     return NextResponse.json({ status: 'deleted' })
   } catch (error) {
-    console.error('Quiz submission dismiss error:', error)
+    logServerError('Quiz submission dismiss error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to dismiss the quiz')
   }

@@ -12,6 +12,7 @@
  *   and level 3 on their concepts.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
@@ -89,14 +90,14 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
         // An answer given with the reading open is not a recall: nothing is written for it. An "I don't remember" always gets its explainer.
         if (parsed.data.kind === 'recall' && (result.feedback.idk || !result.feedback.abandoned)) {
           // Not awaited: the answer does not wait for the job to be created (the explainer page shows it as being written meanwhile).
-          void startGapExplainer({ userId: auth.user.id, attemptId: result.feedback.attemptId, quiet: true }).catch((error) => console.error('Gap explainer start error:', error))
+          void startGapExplainer({ userId: auth.user.id, attemptId: result.feedback.attemptId, quiet: true }).catch((error) => logServerError('Gap explainer start error', error))
         }
         return NextResponse.json({ status: 'graded', feedback: result.feedback })
     }
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof TutorUnavailableError) return tutorFailure(error)
-    console.error('Recall error:', error)
+    logServerError('Recall error', error)
     return apiInternal('Your answer could not be graded')
   }
 }
@@ -114,7 +115,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ revealed: result.revealed })
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('Recall reveal error:', error)
+    logServerError('Recall reveal error', error)
     return apiInternal('Could not show what you missed')
   }
 }

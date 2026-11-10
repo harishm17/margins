@@ -6,6 +6,7 @@
  * already running is returned instead of starting another.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -51,7 +52,7 @@ export async function POST(
 
     return NextResponse.json({ submissionId: submission.id, jobId: grading.jobId, status: 'queued' })
   } catch (error) {
-    console.error('Error regrading exam:', error)
+    logServerError('Error regrading exam', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Internal server error')
   }

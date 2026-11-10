@@ -3,6 +3,7 @@
  * POST /api/review-sessions/[sessionId]/skip { index } -> the session
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (result.status === 'invalid') return apiInvalidInput(result.message)
     return NextResponse.json(result.view)
   } catch (error) {
-    console.error('Review skip error:', error)
+    logServerError('Review skip error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to skip the question')
   }

@@ -11,6 +11,7 @@
  * DELETE /api/topics/[topicId] - Delete topic (other topics stop listing it as a prerequisite)
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -134,7 +135,7 @@ export async function PATCH(
 
     return NextResponse.json({ topic: updatedTopic })
   } catch (error) {
-    console.error('Update topic error:', error)
+    logServerError('Update topic error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -185,7 +186,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Delete topic error:', error)
+    logServerError('Delete topic error', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

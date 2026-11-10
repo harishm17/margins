@@ -8,6 +8,7 @@
  * Units are read through server queries (course shell, topics data); there is no list route.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   } catch (error) {
     const refused = quotaErrorResponse(error)
     if (refused) return refused
-    console.error('Create unit error:', error)
+    logServerError('Create unit error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof SyntaxError) return apiError(ApiErrorCode.INVALID_INPUT, 'Invalid JSON body', undefined, 400)
     return apiInternal('Failed to create unit')

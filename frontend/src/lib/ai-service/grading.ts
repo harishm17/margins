@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 import { callSignal } from '@/lib/ai-service/client-signal'
 import type { RawQuizAnswer } from '@/lib/learning/quiz-answers'
@@ -136,13 +137,13 @@ export async function gradeAnswers(
       signal: callSignal(GRADING_TIMEOUT_MS),
     })
   } catch (error) {
-    console.error('Grading request failed:', error)
+    logServerError('Grading request failed', error)
     throw new GradingUnavailableError(undefined, 'AI_UNREACHABLE')
   }
 
   if (!response.ok) {
     const code = await errorCode(response)
-    console.error('Grading request returned', response.status, code)
+    logServerError('Grading request returned an error', undefined, { status: response.status, code })
     if (!isAiUnavailableOutcome(response.status, code)) throw new GradingRejectedError(response.status)
     throw new GradingUnavailableError(undefined, code)
   }

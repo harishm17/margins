@@ -3,6 +3,7 @@
  * POST /api/projects/[projectId]/extract-topics
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { quotaErrorResponse } from '@/lib/api/quota'
 import { NextRequest, NextResponse } from 'next/server'
@@ -134,7 +135,7 @@ export async function POST(
   } catch (error) {
     const refused = quotaErrorResponse(error)
     if (refused) return refused
-    console.error('Topic extraction error:', error)
+    logServerError('Topic extraction error', error)
 
     if (isUnauthorizedError(error)) {
       return apiUnauthorized()

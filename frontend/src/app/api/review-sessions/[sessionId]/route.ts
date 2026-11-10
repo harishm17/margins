@@ -5,6 +5,7 @@
  * GET /api/review-sessions/[sessionId]
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { sessionView } from '@/lib/learning/review-session'
@@ -21,7 +22,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (!view) return apiNotFound('Session not found')
     return NextResponse.json(view)
   } catch (error) {
-    console.error('Review session error:', error)
+    logServerError('Review session error', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to load the review')
   }

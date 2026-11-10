@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { enforceMutationLimit } from '@/lib/api/rate-limit'
 import { assertQuota, quotaErrorResponse } from '@/lib/api/quota'
 import { id, list, record } from '@/lib/api/fields'
@@ -175,7 +176,7 @@ export async function POST(
         },
       });
     } catch (error) {
-      console.error('Error enqueuing job:', error);
+      logServerError('Error enqueuing job', error);
       const retryable = typeof (error as { retryable?: unknown })?.retryable === 'boolean'
         ? Boolean((error as { retryable: boolean }).retryable)
         : true
@@ -204,7 +205,7 @@ export async function POST(
   } catch (error) {
     const refused = quotaErrorResponse(error);
     if (refused) return refused;
-    console.error('Error in generate-exam:', error);
+    logServerError('Error in generate-exam', error);
     return apiInternal('Internal server error');
   }
 }

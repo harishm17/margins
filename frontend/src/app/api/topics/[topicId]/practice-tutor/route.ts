@@ -9,6 +9,7 @@
  *   the body says why (error.details.code). A miss comes back with what to read next (`help`).
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
@@ -96,7 +97,7 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof TutorUnavailableError) return tutorFailure(error)
-    console.error('Practice tutor error:', error)
+    logServerError('Practice tutor error', error)
     return apiInternal('The tutor could not answer')
   }
 }
@@ -122,7 +123,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ state: rest, contentId, ...(help ? { help } : {}) })
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('Practice tutor state error:', error)
+    logServerError('Practice tutor state error', error)
     return apiInternal('The tutor state could not be read')
   }
 }

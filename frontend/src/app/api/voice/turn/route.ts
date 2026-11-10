@@ -7,6 +7,7 @@
  * JSON events (see src/lib/voice/turn-client.ts). Problems found before the reply starts are
  * ordinary JSON errors.
  */
+import { logServerError } from '@/lib/ops/log'
 import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -131,7 +132,7 @@ async function handlePost(request: NextRequest) {
     userId = (await requireAuth()).user.id
   } catch (error) {
     if (isUnauthorizedError(error)) return apiUnauthorized()
-    console.error('[VOICE] Auth failed:', error)
+    logServerError('Voice: Auth failed', error)
     return apiInternal('Failed to start the turn')
   }
 
@@ -162,7 +163,7 @@ async function handlePost(request: NextRequest) {
     claimedHere = false
     await prisma.voiceDrillSession
       .update({ where: { id: session.id }, data: { connectedAt: null, lastSeenAt: null } })
-      .catch((error) => console.error('[VOICE] Could not release the session claim:', error))
+      .catch((error) => logServerError('Voice: Could not release the session claim', error))
   }
 
   try {
@@ -220,14 +221,14 @@ async function handlePost(request: NextRequest) {
         firstCallStarted = performance.now()
         first = await modelRequest(startMessages)
       } catch (error) {
-        console.error('[VOICE] The AI service is not reachable:', error)
+        logServerError('Voice: The AI service is not reachable', error)
         await releaseClaim()
         await releaseTurn()
         return voiceFailure('VOICE_UNAVAILABLE')
       }
       if (!first.ok || !first.body) {
         const failure = await modelErrorFromResponse(first)
-        console.error(`[VOICE] ${failure.message}`)
+        logServerError('Voice: the AI service refused the turn', undefined, { code: failure.code, retryable: failure.retryable })
         await releaseClaim()
         await releaseTurn()
         return voiceFailure(failure.code, {}, failure.retryable)
@@ -272,7 +273,7 @@ async function handlePost(request: NextRequest) {
                   try {
                     response = await modelRequest(messages)
                   } catch (error) {
-                    console.error('[VOICE] The AI service is not reachable:', error)
+                    logServerError('Voice: The AI service is not reachable', error)
                     throw new VoiceModelError('VOICE_UNAVAILABLE', 'The AI service is not reachable', true)
                   }
                   if (!response.ok || !response.body) throw await modelErrorFromResponse(response)
@@ -311,7 +312,7 @@ async function handlePost(request: NextRequest) {
                   },
                 })
               } catch (error) {
-                console.error('[VOICE] Could not store the conversation:', error)
+                logServerError('Voice: Could not store the conversation', error)
                 saved = false
               }
             } else if (!outcome.text) {
@@ -327,7 +328,7 @@ async function handlePost(request: NextRequest) {
             }
             // A failed turn has already sent its error event.
           } catch (error) {
-            console.error('[VOICE] The turn crashed:', error)
+            logServerError('Voice: The turn crashed', error)
             sendError('VOICE_TURN_FAILED')
           } finally {
             await releaseTurn()
@@ -358,7 +359,7 @@ async function handlePost(request: NextRequest) {
     await releaseTurn()
     await releaseClaim()
     if (isSerializationConflict(error)) return voiceFailure('TURN_IN_PROGRESS')
-    console.error('[VOICE] Turn failed:', error)
+    logServerError('Voice: Turn failed', error)
     return apiInternal('Failed to run the turn')
   }
 }

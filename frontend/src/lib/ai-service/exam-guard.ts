@@ -1,3 +1,4 @@
+import { logServerError } from '@/lib/ops/log'
 import { aiServiceHeaders } from '@/lib/ai-service/headers'
 
 /** Longest the meaning check may take: it runs in front of the answer, so a slow check is skipped, not waited for. */
@@ -23,7 +24,7 @@ export async function semanticExamMatch(input: { message: string; recent: readon
     const body = (await response.json()) as { match?: unknown }
     return body.match === true
   } catch (error) {
-    console.warn('[CHAT] The exam guard meaning check did not run:', error instanceof Error ? error.message : error)
+    logServerError('Chat: the exam guard meaning check did not run', error)
     return false
   }
 }

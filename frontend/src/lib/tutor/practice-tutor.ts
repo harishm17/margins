@@ -5,6 +5,7 @@
  * rung. Using the worked example surrenders the step: it is recorded at level 3 for the closing retest.
  */
 
+import { logServerError } from '@/lib/ops/log'
 import { prisma } from '@/lib/db/prisma'
 import { checkPracticeAnswer } from '@/features/topic/practice-check'
 import type { PracticeProblem, PracticeStep } from '@/features/topic/types'
@@ -64,7 +65,7 @@ async function helpFor(userId: string, topicId: string, step: PracticeStep): Pro
   try {
     return await helpAfterMiss(prisma, { userId, topicId, conceptIds: step.conceptIds, surface: 'practice' })
   } catch (error) {
-    console.error('Help after a miss failed:', error)
+    logServerError('Help after a miss failed', error)
     return undefined
   }
 }
