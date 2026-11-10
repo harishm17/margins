@@ -8,6 +8,7 @@
  * Units are read through server queries (course shell, topics data); there is no list route.
  */
 
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { title, summary, weekLabel, orderIndex } = parsed.data
 
     const unit = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, session.user, 'units', { projectId })
       const last = await tx.unit.findFirst({ where: { projectId }, orderBy: { orderIndex: 'desc' }, select: { orderIndex: true } })
       const created = await tx.unit.create({
         data: { projectId, title, summary: summary || null, weekLabel: weekLabel || null, orderIndex: (last?.orderIndex ?? -1) + 1 },
@@ -62,6 +64,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       unit: { id: unit.id, title: unit.title, summary: unit.summary, weekLabel: unit.weekLabel, orderIndex: unit.orderIndex },
     })
   } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
     console.error('Create unit error:', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     if (error instanceof SyntaxError) return apiError(ApiErrorCode.INVALID_INPUT, 'Invalid JSON body', undefined, 400)

@@ -3,6 +3,7 @@
  * POST /api/topics/[topicId]/regenerate-content
  */
 
+import { quotaErrorResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -44,6 +45,8 @@ export async function POST(
     const { contentType, preferences } = validation.data
     return await startRegeneration({ userId: session.user.id, topic, contentType, preferences })
   } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
     console.error('Content regeneration error:', error)
 
     if (isUnauthorizedError(error)) {

@@ -5,6 +5,7 @@
  * DELETE /api/topics/[topicId]/margin-notes?id= - removes one of their notes.
  */
 
+import { assertQuota, quotaErrorResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -13,8 +14,6 @@ import { prisma } from '@/lib/db/prisma'
 import { createRateLimiter } from '@/lib/api/rate-limit'
 import { loadMarginNotes, toNoteView } from '@/lib/reader/load-reader'
 import {
-  apiError,
-  ApiErrorCode,
   apiInternal,
   apiInvalidInput,
   apiNotFound,
@@ -25,7 +24,6 @@ import {
 export const dynamic = 'force-dynamic'
 
 const MAX_NOTE = 4000
-const MAX_NOTES_PER_TOPIC = 500
 
 const createSchema = z.object({ chunkId: z.string().min(1).max(100), text: z.string().trim().min(1).max(MAX_NOTE) })
 
@@ -62,15 +60,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // A note belongs to a passage of this course's files; the chunk id is not a foreign key, so it is checked here.
     const chunk = await prisma.materialChunk.findFirst({ where: { id: parsed.data.chunkId, material: { projectId: topic.projectId } }, select: { materialId: true } })
     if (!chunk) return apiNotFound('Passage not found')
-    if ((await prisma.marginNote.count({ where: { userId: auth.user.id, topicId } })) >= MAX_NOTES_PER_TOPIC) {
-      return apiError(ApiErrorCode.CONFLICT, 'This topic has as many notes as it can hold. Delete one to add another.', { code: 'TOO_MANY_NOTES' }, 409)
-    }
-    const note = await prisma.marginNote.create({
-      data: { userId: auth.user.id, topicId, materialId: chunk.materialId, chunkId: parsed.data.chunkId, kind: 'note', text: parsed.data.text },
-      select: { id: true, chunkId: true, kind: true, text: true, reply: true, createdAt: true },
+    const note = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, auth.user, 'notes', { topicId })
+      return tx.marginNote.create({
+        data: { userId: auth.user.id, topicId, materialId: chunk.materialId, chunkId: parsed.data.chunkId, kind: 'note', text: parsed.data.text },
+        select: { id: true, chunkId: true, kind: true, text: true, reply: true, createdAt: true },
+      })
     })
     return NextResponse.json({ note: toNoteView(note) }, { status: 201 })
   } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
     console.error('Margin note create error:', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to save the note')

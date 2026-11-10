@@ -12,6 +12,7 @@
  * generation job running.
  */
 
+import { quotaErrorResponse } from '@/lib/api/quota'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -160,6 +161,8 @@ export async function POST(
       message: `Writing content for ${missing.length} topic${missing.length === 1 ? '' : 's'}, one at a time.`,
     })
   } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
     console.error('Prepare all topics error:', error)
     if (isUnauthorizedError(error)) return apiUnauthorized()
     return apiInternal('Failed to queue missing content generation')

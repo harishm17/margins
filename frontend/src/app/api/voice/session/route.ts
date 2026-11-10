@@ -1,3 +1,4 @@
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -126,21 +127,24 @@ async function handlePOST(request: NextRequest) {
       )
     }
 
-    const voiceSession = await prisma.voiceDrillSession.create({
-      data: {
-        userId: session.user.id,
-        projectId: payload.projectId,
-        topicId: payload.topicId ?? null,
-        mode: payload.mode,
-        language: payload.language || 'en',
-        voice: payload.voice || 'marin',
-        style: payload.style,
-        focus: normalizeFocus(payload.focus),
-        questionSet,
-        ...(startConcept ? { coachState: { teach: { current: startConcept.id, concepts: {} } } } : {}),
-        metrics: { entries: [] },
-        status: 'active',
-      },
+    const voiceSession = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, session.user, 'voiceSessions')
+      return tx.voiceDrillSession.create({
+        data: {
+          userId: session.user.id,
+          projectId: payload.projectId,
+          topicId: payload.topicId ?? null,
+          mode: payload.mode,
+          language: payload.language || 'en',
+          voice: payload.voice || 'marin',
+          style: payload.style,
+          focus: normalizeFocus(payload.focus),
+          questionSet,
+          ...(startConcept ? { coachState: { teach: { current: startConcept.id, concepts: {} } } } : {}),
+          metrics: { entries: [] },
+          status: 'active',
+        },
+      })
     })
 
     // The topic's key terms, for the coach prompt (the turn route builds the same list) and for on-device recognition (spec 19.5).
@@ -157,6 +161,8 @@ async function handlePOST(request: NextRequest) {
       focus: voiceSession.focus,
     })
   } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
     console.error('Create voice session error:', error)
 
     if (error instanceof z.ZodError) {

@@ -7,6 +7,7 @@
  *   one it is last in the course and belongs to no unit.
  */
 
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
@@ -127,6 +128,7 @@ export async function POST(
 
     // Create topic
     const topic = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, session.user, 'topics', { projectId })
       const created = await tx.topic.create({
         data: {
           projectId,
@@ -149,6 +151,8 @@ export async function POST(
 
     return NextResponse.json({ topic })
   } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
     console.error('Create topic error:', error)
 
     if (error instanceof Error && error.message === 'Unauthorized') {

@@ -1,3 +1,4 @@
+import { assertQuota, quotaErrorResponse } from '@/lib/api/quota'
 import { id, list, record } from '@/lib/api/fields'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server';
@@ -139,20 +140,23 @@ export async function POST(
     }
 
     // Create processing job
-    const job = await prisma.processingJob.create({
-      data: {
-        userId: session.user.id,
-        projectId,
-        jobType: 'generate_exam',
-        status: 'pending',
-        stage: 'generating',
-        inputData: {
+    const job = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, session.user, 'generationJobs');
+      return tx.processingJob.create({
+        data: {
+          userId: session.user.id,
           projectId,
-          topicIds: uniqueTopicIds,
-          config,
-          idempotencyKey,
+          jobType: 'generate_exam',
+          status: 'pending',
+          stage: 'generating',
+          inputData: {
+            projectId,
+            topicIds: uniqueTopicIds,
+            config,
+            idempotencyKey,
+          },
         },
-      },
+      });
     });
 
     // Send the job to the AI service
@@ -195,6 +199,8 @@ export async function POST(
       estimatedSeconds: 90,
     });
   } catch (error) {
+    const refused = quotaErrorResponse(error);
+    if (refused) return refused;
     console.error('Error in generate-exam:', error);
     return apiInternal('Internal server error');
   }

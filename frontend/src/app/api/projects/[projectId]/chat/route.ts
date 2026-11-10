@@ -12,6 +12,7 @@
  * declined without a model call. Otherwise the thread's tutor state goes to the AI service with the
  * question, and once the reply is stored the state moves and a reply that taught records level 3.
  */
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
@@ -134,6 +135,11 @@ async function handlePOST(
   if (threadId && !thread) return apiNotFound('Conversation not found')
 
   const isNewThread = !thread
+  // Refuse a new conversation past the cap before the model is asked; the create below checks again under the lock.
+  if (isNewThread) {
+    const refused = await prisma.$transaction((tx) => quota(tx, { id: userId }, 'chatThreads', { projectId }))
+    if (refused) return quotaResponse(refused)
+  }
 
   const history = thread
     ? toHistoryTurns(
@@ -189,9 +195,12 @@ async function handlePOST(
   let userMessageId: string
   try {
     if (!thread) {
-      thread = await prisma.chatThread.create({
-        data: { userId, projectId, title: declined ? EXAM_GUARD_TITLE : titleFromQuestion(question) },
-        select: { id: true, title: true },
+      thread = await prisma.$transaction(async (tx) => {
+        await assertQuota(tx, { id: userId }, 'chatThreads', { projectId })
+        return tx.chatThread.create({
+          data: { userId, projectId, title: declined ? EXAM_GUARD_TITLE : titleFromQuestion(question) },
+          select: { id: true, title: true },
+        })
       })
     }
     const userMessage = await prisma.chatMessage.create({
@@ -200,6 +209,11 @@ async function handlePOST(
     })
     userMessageId = userMessage.id
   } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) {
+      await upstream.cancel().catch(() => {})
+      return refused
+    }
     // The same send arrived twice at once and the other one stored it first: no second question, and no empty conversation left behind.
     if (clientRequestId && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       await upstream.cancel().catch(() => {})

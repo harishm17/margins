@@ -3,6 +3,7 @@
  * POST /api/topics/[topicId]/generate-content
  */
 
+import { quotaErrorResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -162,6 +163,8 @@ export async function POST(
       replacingExisting: existingContent,
     })
   } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
     console.error('Content generation error:', error)
 
     if (isUnauthorizedError(error)) {

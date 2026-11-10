@@ -1,3 +1,4 @@
+import { assertQuota, quota, quotaErrorResponse, quotaResponse } from '@/lib/api/quota'
 import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -72,10 +73,20 @@ export async function POST(
   const parsed = await readJson(req, createSchema.default({}))
   if (!parsed.ok) return parsed.response
 
-  const thread = await prisma.chatThread.create({
-    data: { userId, projectId, title: parsed.data.title ?? null },
-    select: { id: true, title: true, createdAt: true, updatedAt: true },
-  })
+  let thread
+  try {
+    thread = await prisma.$transaction(async (tx) => {
+      await assertQuota(tx, { id: userId }, 'chatThreads', { projectId })
+      return tx.chatThread.create({
+        data: { userId, projectId, title: parsed.data.title ?? null },
+        select: { id: true, title: true, createdAt: true, updatedAt: true },
+      })
+    })
+  } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
+    throw error
+  }
   return NextResponse.json(
     {
       thread: {

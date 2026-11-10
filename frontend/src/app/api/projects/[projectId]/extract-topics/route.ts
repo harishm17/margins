@@ -3,6 +3,7 @@
  * POST /api/projects/[projectId]/extract-topics
  */
 
+import { quotaErrorResponse } from '@/lib/api/quota'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -128,6 +129,8 @@ export async function POST(
       estimatedSeconds: 45,
     })
   } catch (error) {
+    const refused = quotaErrorResponse(error)
+    if (refused) return refused
     console.error('Topic extraction error:', error)
 
     if (isUnauthorizedError(error)) {
