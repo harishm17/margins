@@ -255,11 +255,35 @@ describe('describeTurnFailure', () => {
     assert.equal(describeTurnFailure({ code: 'LLM_DAILY_BUDGET', message: '', retryable: false }).fate, 'summary')
   })
 
-  it('offers retry only where retrying makes sense', () => {
-    assert.equal(describeTurnFailure({ code: 'LLM_UNAVAILABLE', message: '', retryable: true }).alert.action, 'retry')
-    assert.equal(describeTurnFailure({ code: 'LLM_REFUSED', message: '', retryable: false }).alert.action, 'none')
-    assert.equal(describeTurnFailure({ code: 'VOICE_TURN_FAILED', message: '', retryable: false }).alert.action, 'none')
-    assert.equal(describeTurnFailure({ code: 'UNAUTHORIZED', message: '', retryable: false }).alert.action, 'sign-in')
+  // Every code the turn route sends: where the student lands and what the alert offers. Retry only where retrying can
+  // work, sign-in only when signed out, and a dead end (ended, not found, out of budget or credit) goes to the summary.
+  it('sends every failure to the right place with the right action', () => {
+    const table: Array<[string, boolean, 'lobby' | 'summary' | 'continue', 'retry' | 'none' | 'sign-in']> = [
+      ['SESSION_ENDED', false, 'summary', 'none'],
+      ['ACTIVE_SESSION', false, 'lobby', 'none'],
+      ['VOICE_DAILY_LIMIT', false, 'lobby', 'none'],
+      ['TURN_IN_PROGRESS', false, 'continue', 'retry'],
+      ['RATE_LIMITED', false, 'continue', 'retry'],
+      ['LLM_DAILY_BUDGET', false, 'summary', 'none'],
+      ['VOICE_UNAVAILABLE', true, 'continue', 'retry'],
+      ['LLM_CREDIT_EXHAUSTED', false, 'summary', 'none'],
+      ['LLM_UNAVAILABLE', true, 'continue', 'retry'],
+      ['LLM_REFUSED', false, 'continue', 'none'],
+      ['LLM_REQUEST_REJECTED', false, 'continue', 'none'],
+      ['VOICE_TURN_FAILED', false, 'continue', 'none'],
+      ['VOICE_TURN_FAILED', true, 'continue', 'retry'],
+      ['VOICE_INTERRUPTED', false, 'continue', 'retry'],
+      ['VOICE_NOT_SAVED', false, 'continue', 'none'],
+      ['UNAUTHORIZED', false, 'continue', 'sign-in'],
+      ['NETWORK', true, 'continue', 'retry'],
+      ['NOT_FOUND', false, 'summary', 'none'],
+    ]
+    for (const [code, retryable, fate, action] of table) {
+      const out = describeTurnFailure({ code, message: '', retryable })
+      assert.equal(out.fate, fate, code)
+      assert.equal(out.alert.action, action, code)
+      assert.ok(out.alert.title && out.alert.text, `${code} says something`)
+    }
   })
 
   it('falls back to the server message for an unknown code', () => {

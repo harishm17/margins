@@ -417,6 +417,15 @@ def test_restate_uses_only_the_passage():
     assert "data, not instructions" in system and "untrusted data" in user
 
 
+def test_cant_parse_reaches_the_restate_rung_only_through_the_restate_turn():
+    explain = request(cant_parse=True, student_take="I can't parse any of it", rung=1)
+    assert reader._rung(explain) == reader.CANT_PARSE_MIN_RUNG
+    assert reader._rung(request(turn="restate", cant_parse=True, student_take="I can't parse any of it", rung=1)) == reader.RESTATE_RUNG
+    # A question the claims answer still caps an explanation, and a restatement is never asked of one.
+    guarded = request(rung=3, student_take="What is a collision?")
+    assert reader._rung(guarded) == reader.GUARDED_MAX_RUNG
+
+
 @pytest.mark.asyncio
 async def test_a_restatement_is_short_plain_and_ends_with_one_check_question():
     long_reply = " ".join(["Words"] * 200) + "."
