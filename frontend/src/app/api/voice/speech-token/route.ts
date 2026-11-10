@@ -3,6 +3,7 @@
  * while they have voice time left today. `exclude` names providers whose stream refused this session (spent credit, an
  * outage): the next one is tried.
  */
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -22,7 +23,7 @@ const bodySchema = z.object({
 
 // A session opens one recognition stream, and a new one after a dropped connection, a paused mic or a provider that
 // refused. Twenty in ten minutes is far past that; it stops a runaway loop from minting tokens.
-const tokenLimiter = createRateLimiter({ limit: 20, windowMs: 10 * 60_000 })
+const tokenLimiter = createRateLimiter({ name: 'speech-token', limit: 20, windowMs: 10 * 60_000 })
 
 const unavailable = (status: number) => apiError(ApiErrorCode.UPSTREAM_ERROR, 'Cloud speech is not available', undefined, status)
 
@@ -30,10 +31,10 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth()
     if (!cloudSpeechConfigured()) return unavailable(503)
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('sessionId is required')
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
 
-    const limit = tokenLimiter.check(auth.user.id)
+    const limit = await tokenLimiter.check(auth.user.id)
     if (!limit.ok) {
       const response = apiError(ApiErrorCode.RATE_LIMITED, 'Too many speech sessions; try again shortly', undefined, 429)
       response.headers.set('Retry-After', String(limit.retryAfterSeconds))

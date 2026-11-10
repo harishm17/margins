@@ -9,6 +9,7 @@
  * concept, in reading order. The reader opened for an idea (`?focus=`) marks them "Focus here" and scrolls to the first.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -26,8 +27,8 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const auth = await requireAuth()
     const { topicId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const result = await recordReaderCheck({ userId: auth.user.id, topicId, claimId: parsed.data.claimId, grade: parsed.data.grade, timeZone: await studentTimeZone() })
     if (result.status === 'not_found') return apiNotFound('Check not found')
     return NextResponse.json({ ok: true, recorded: result.recorded })

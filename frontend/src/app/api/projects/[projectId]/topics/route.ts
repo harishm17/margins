@@ -7,6 +7,7 @@
  *   one it is last in the course and belongs to no unit.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -103,15 +104,8 @@ export async function POST(
       )
     }
 
-    const body = await request.json()
-    const validation = createTopicSchema.safeParse(body)
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error },
-        { status: 400 }
-      )
-    }
+    const validation = await readJson(request, createTopicSchema)
+    if (!validation.ok) return validation.response
 
     // Get next order index
     const maxOrder = await prisma.topic.findFirst({

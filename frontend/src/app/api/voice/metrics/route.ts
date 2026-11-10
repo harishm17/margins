@@ -1,3 +1,4 @@
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -23,8 +24,9 @@ const metricsSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth()
-    const body = await request.json()
-    const payload = metricsSchema.parse(body)
+    const parsed = await readJson(request, metricsSchema)
+    if (!parsed.ok) return parsed.response
+    const payload = parsed.data
 
     const session = await prisma.voiceDrillSession.findFirst({
       where: {

@@ -8,6 +8,7 @@
  *   writes the evidence of misses left open on an earlier day.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -71,9 +72,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const topic = await ownedTopic(session.user.id, topicId)
     if (!topic) return apiNotFound('Topic not found')
 
-    const body = await request.json().catch(() => null)
-    const parsed = saveSchema.safeParse(body)
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, saveSchema)
+    if (!parsed.ok) return parsed.response
 
     const result = await savePracticeProgress(session.user.id, topic, { ...parsed.data, timeZone: await studentTimeZone() })
     if (result.status === 'invalid') return apiInvalidInput(result.reason)

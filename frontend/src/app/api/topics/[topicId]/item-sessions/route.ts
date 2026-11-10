@@ -8,6 +8,7 @@
  *   "You'll find this on p. N", the test-out offer, how many passages are marked Focus here) after the last.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -43,7 +44,7 @@ const answerSchema = z.object({
 })
 
 // A choice answer is graded by rule, but each one writes evidence.
-const answerLimiter = createRateLimiter({ limit: 40, windowMs: 60_000 })
+const answerLimiter = createRateLimiter({ name: 'item-answer', limit: 40, windowMs: 60_000 })
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
@@ -70,8 +71,8 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const auth = await requireAuth()
     const { topicId } = await params
-    const parsed = startSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, startSchema)
+    if (!parsed.ok) return parsed.response
     const state = await startWarmup({ userId: auth.user.id, topicId })
     if (state.status === 'not_found') return apiNotFound('Topic not found')
     return NextResponse.json(await withFocusCount(auth.user.id, topicId, state))
@@ -86,10 +87,10 @@ async function handlePATCH(request: NextRequest, { params }: { params: Promise<{
   try {
     const auth = await requireAuth()
     const { topicId } = await params
-    const parsed = answerSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, answerSchema)
+    if (!parsed.ok) return parsed.response
 
-    const rate = answerLimiter.check(auth.user.id)
+    const rate = await answerLimiter.check(auth.user.id)
     if (!rate.ok) {
       return NextResponse.json(
         { error: 'Too many answers. Please wait a moment and try again.' },

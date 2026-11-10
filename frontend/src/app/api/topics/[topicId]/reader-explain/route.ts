@@ -11,6 +11,7 @@
  * says why.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -34,7 +35,7 @@ import {
 export const dynamic = 'force-dynamic'
 
 // A model call, and often two.
-const explainLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 })
+const explainLimiter = createRateLimiter({ name: 'reader-explain', limit: 10, windowMs: 60_000 })
 
 const explainSchema = z.object({
   chunkId: z.string().min(1).max(100),
@@ -54,11 +55,11 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const auth = await requireAuth()
     const { topicId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
 
     const cantParse = 'cantParse' in parsed.data && parsed.data.cantParse === true
-    const rate = explainLimiter.check(auth.user.id)
+    const rate = await explainLimiter.check(auth.user.id)
     if (!rate.ok) {
       const response = apiError(ApiErrorCode.RATE_LIMITED, 'You are asking quickly. Wait a moment, then try again.', { code: 'RATE_LIMITED', retryable: true }, 429)
       response.headers.set('Retry-After', String(rate.retryAfterSeconds))

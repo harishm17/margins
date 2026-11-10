@@ -24,7 +24,7 @@ import { getTimeZone } from '@/server/timezone'
 
 export const dynamic = 'force-dynamic'
 
-const startLimiter = createRateLimiter({ limit: 20, windowMs: 60_000 })
+const startLimiter = createRateLimiter({ name: 'short-session-start', limit: 20, windowMs: 60_000 })
 
 async function handlePOST(_request: NextRequest, { params }: { params: Promise<{ projectId: string }> }) {
   try {
@@ -33,7 +33,7 @@ async function handlePOST(_request: NextRequest, { params }: { params: Promise<{
     const project = await prisma.project.findFirst({ where: { id: projectId, userId: auth.user.id }, select: { id: true } })
     if (!project) return apiNotFound('Course not found')
 
-    const limit = startLimiter.check(auth.user.id)
+    const limit = await startLimiter.check(auth.user.id)
     if (!limit.ok) {
       const response = apiError(ApiErrorCode.RATE_LIMITED, 'You are asking quickly. Wait a moment, then try again.', { code: 'RATE_LIMITED', retryable: true }, 429)
       response.headers.set('Retry-After', String(limit.retryAfterSeconds))

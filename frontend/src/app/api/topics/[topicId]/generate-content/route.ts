@@ -3,6 +3,7 @@
  * POST /api/topics/[topicId]/generate-content
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -74,12 +75,8 @@ export async function POST(
       return preflightError
     }
 
-    const body = await request.json()
-    const validation = generateContentSchema.safeParse(body)
-
-    if (!validation.success) {
-      return apiInvalidInput('Invalid input', zodDetails(validation.error))
-    }
+    const validation = await readJson(request, generateContentSchema)
+    if (!validation.ok) return validation.response
 
     const { contentType: requestedType, preferences: requested } = validation.data
     const { only_if_missing: onlyIfMissing, ...preferences } = requested ?? {}

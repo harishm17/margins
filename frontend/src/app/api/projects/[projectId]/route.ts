@@ -5,6 +5,7 @@
  * DELETE /api/projects/[projectId] - Delete project
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -96,15 +97,8 @@ export async function PATCH(
       )
     }
 
-    const body = await request.json()
-    const validation = updateProjectSchema.safeParse(body)
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error },
-        { status: 400 }
-      )
-    }
+    const validation = await readJson(request, updateProjectSchema)
+    if (!validation.ok) return validation.response
 
     const updatedProject = await prisma.project.update({
       where: { id: projectId },

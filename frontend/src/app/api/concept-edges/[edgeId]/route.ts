@@ -5,6 +5,7 @@
  *   gave this student (lib/learning/concept-edge.ts). Only the owner of the course can answer; anyone else gets a 404.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -20,8 +21,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     const auth = await requireAuth()
     const { edgeId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
 
     const result = await setEdgeStatus({ userId: auth.user.id, edgeId, status: parsed.data.status, timeZone: await studentTimeZone() })
     if (result.status === 'not_found') return apiNotFound('Link not found')

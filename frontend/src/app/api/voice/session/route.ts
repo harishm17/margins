@@ -1,3 +1,4 @@
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { z } from 'zod'
@@ -48,8 +49,9 @@ const patchSchema = z.object({
 async function handlePOST(request: NextRequest) {
   try {
     const session = await requireAuth()
-    const body = await request.json()
-    const payload = sessionSchema.parse(body)
+    const parsed = await readJson(request, sessionSchema)
+    if (!parsed.ok) return parsed.response
+    const payload = parsed.data
 
     if (payload.mode === 'topic_drill' && !payload.topicId) {
       return apiInvalidInput('topicId is required for topic drills')
@@ -171,8 +173,9 @@ async function handlePOST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const auth = await requireAuth()
-    const body = await request.json()
-    const payload = patchSchema.parse(body)
+    const parsed = await readJson(request, patchSchema)
+    if (!parsed.ok) return parsed.response
+    const payload = parsed.data
 
     const session = await prisma.voiceDrillSession.findFirst({
       where: {

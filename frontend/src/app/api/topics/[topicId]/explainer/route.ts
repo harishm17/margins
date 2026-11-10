@@ -17,6 +17,7 @@
  *   The name of that concept of this topic ({ conceptName }, null when it is not one), so the full explainer can scroll to it.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
@@ -66,8 +67,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const auth = await requireAuth()
     const { topicId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const access = await explainerAccess(auth.user.id, topicId)
     if (!access) return apiNotFound('Topic not found')
     if (!access.open) return locked()

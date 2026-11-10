@@ -5,6 +5,7 @@
  * DELETE /api/topics/[topicId]/margin-notes?id= - removes one of their notes.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -29,7 +30,7 @@ const MAX_NOTES_PER_TOPIC = 500
 
 const createSchema = z.object({ chunkId: z.string().min(1).max(100), text: z.string().trim().min(1).max(MAX_NOTE) })
 
-const noteLimiter = createRateLimiter({ limit: 60, windowMs: 60_000 })
+const noteLimiter = createRateLimiter({ name: 'margin-notes', limit: 60, windowMs: 60_000 })
 
 const topicOf = (userId: string, topicId: string) => prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true, projectId: true } })
 
@@ -52,9 +53,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { topicId } = await params
     const topic = await topicOf(auth.user.id, topicId)
     if (!topic) return apiNotFound('Topic not found')
-    const parsed = createSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
-    const rate = noteLimiter.check(auth.user.id)
+    const parsed = await readJson(request, createSchema)
+    if (!parsed.ok) return parsed.response
+    const rate = await noteLimiter.check(auth.user.id)
     if (!rate.ok) {
       return NextResponse.json({ error: 'Too many notes. Please wait a moment and try again.' }, { status: 429, headers: { 'Retry-After': String(rate.retryAfterSeconds) } })
     }

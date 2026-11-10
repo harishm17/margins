@@ -1,3 +1,4 @@
+import { readJson } from '@/lib/api/read-json'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 /**
  * API route for topic progress tracking
@@ -44,15 +45,8 @@ export async function POST(
       )
     }
 
-    const body = await request.json()
-    const validation = updateProgressSchema.safeParse(body)
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error },
-        { status: 400 }
-      )
-    }
+    const validation = await readJson(request, updateProgressSchema)
+    if (!validation.ok) return validation.response
 
     // Upsert progress
     const { readAt: markRead, ...fields } = validation.data

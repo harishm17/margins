@@ -15,6 +15,7 @@
  * merged chunks; regenerate it from the topic page if needed.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
@@ -47,10 +48,8 @@ export async function POST(
     const session = await requireAuth()
     const { projectId } = await params
 
-    const parsed = mergeSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) {
-      return apiInvalidInput('Invalid input', zodDetails(parsed.error))
-    }
+    const parsed = await readJson(request, mergeSchema)
+    if (!parsed.ok) return parsed.response
     const { sourceTopicId, targetTopicId, name } = parsed.data
     if (sourceTopicId === targetTopicId) {
       return apiInvalidInput('Choose two different topics to merge')

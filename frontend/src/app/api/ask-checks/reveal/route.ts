@@ -4,6 +4,7 @@
  * answer and explanation. Without an attempt (or one stored earlier) the answer is not returned (spec P1).
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -21,8 +22,8 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth()
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const revealed = await revealAskCheck({ userId: auth.user.id, messageId: parsed.data.messageId, attempt: parsed.data.attempt, dontKnow: parsed.data.idk === true })
     if (revealed.status === 'not_found') return apiNotFound('Question not found')
     if (revealed.status === 'attempt_required') return apiInvalidInput(ANSWER_FIRST)

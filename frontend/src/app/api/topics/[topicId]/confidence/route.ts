@@ -1,3 +1,4 @@
+import { readJson } from '@/lib/api/read-json'
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -26,11 +27,8 @@ export async function POST(
     const auth = await requireAuth()
     await applyPendingQuizResults(auth.user.id)
     const { topicId } = await params
-    const body = await request.json()
-    const parsed = confidenceSchema.safeParse(body)
-    if (!parsed.success) {
-      return apiInvalidInput('Invalid input', zodDetails(parsed.error))
-    }
+    const parsed = await readJson(request, confidenceSchema)
+    if (!parsed.ok) return parsed.response
 
     const topic = await prisma.topic.findFirst({
       where: {

@@ -11,6 +11,7 @@
  * DELETE /api/topics/[topicId] - Delete topic (other topics stop listing it as a prerequisite)
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -55,15 +56,8 @@ export async function PATCH(
       )
     }
 
-    const body = await request.json()
-    const validation = updateTopicSchema.safeParse(body)
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error },
-        { status: 400 }
-      )
-    }
+    const validation = await readJson(request, updateTopicSchema)
+    if (!validation.ok) return validation.response
 
     const { orderIndex, unitId, prerequisiteIds, ...fields } = validation.data
 

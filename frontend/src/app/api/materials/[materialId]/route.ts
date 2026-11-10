@@ -1,3 +1,4 @@
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { getServerSession } from 'next-auth';
@@ -37,10 +38,8 @@ export async function PATCH(
     }
     const { materialId } = await params;
 
-    const parsed = roleSchema.safeParse(await req.json().catch(() => null));
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
-    }
+    const parsed = await readJson(req, roleSchema);
+    if (!parsed.ok) return parsed.response;
     const role = parsed.data.role as 'content' | 'syllabus' | 'exam' | 'other';
 
     const material = await prisma.material.findFirst({

@@ -1,3 +1,4 @@
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -20,15 +21,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await req.json();
-    const validation = createProjectSchema.safeParse(body);
-
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error.errors },
-        { status: 400 }
-      );
-    }
+    const validation = await readJson(req, createProjectSchema)
+    if (!validation.ok) return validation.response
 
     const { name, description, examDate, dailyMinutes } = validation.data;
 

@@ -5,6 +5,7 @@
  * GET /api/topics/[topicId]/quiz-attempts - Get quiz history
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
@@ -43,7 +44,7 @@ const saveQuizAttemptSchema = z.object({
 })
 
 // Each submission can cost model calls for short answers.
-const submitLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 })
+const submitLimiter = createRateLimiter({ name: 'quiz-submit', limit: 10, windowMs: 60_000 })
 
 function isMissingQuizSetColumnError(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
@@ -89,17 +90,10 @@ async function handlePOST(
       )
     }
 
-    const body = await request.json()
-    const validation = saveQuizAttemptSchema.safeParse(body)
+    const validation = await readJson(request, saveQuizAttemptSchema)
+    if (!validation.ok) return validation.response
 
-    if (!validation.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: validation.error },
-        { status: 400 }
-      )
-    }
-
-    const rate = submitLimiter.check(session.user.id)
+    const rate = await submitLimiter.check(session.user.id)
     if (!rate.ok) {
       return NextResponse.json(
         { error: 'Too many quiz submissions. Please wait a moment and try again.' },

@@ -8,6 +8,7 @@
  * Units are read through server queries (course shell, topics data); there is no list route.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
@@ -40,8 +41,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const project = await prisma.project.findFirst({ where: { id: projectId, userId: session.user.id }, select: { id: true } })
     if (!project) return apiNotFound('Project not found')
 
-    const parsed = createUnitSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, createUnitSchema)
+    if (!parsed.ok) return parsed.response
     const { title, summary, weekLabel, orderIndex } = parsed.data
 
     const unit = await prisma.$transaction(async (tx) => {

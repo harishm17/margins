@@ -7,6 +7,7 @@
  * JSON events (see src/lib/voice/turn-client.ts). Problems found before the reply starts are
  * ordinary JSON errors.
  */
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
@@ -60,7 +61,7 @@ export const dynamic = 'force-dynamic'
 const MAX_UTTERANCE_CHARS = 2000
 
 // Every turn is at least one model call.
-const turnLimiter = createRateLimiter({ limit: voiceTurnsPerMinute(), windowMs: 60_000 })
+const turnLimiter = createRateLimiter({ name: 'voice-turn', limit: voiceTurnsPerMinute(), windowMs: 60_000 })
 
 const bodySchema = z.object({
   sessionId: z.string().min(1),
@@ -135,23 +136,15 @@ async function handlePost(request: NextRequest) {
     return apiInternal('Failed to start the turn')
   }
 
-  const limit = turnLimiter.check(userId)
+  const limit = await turnLimiter.check(userId)
   if (!limit.ok) {
     const response = voiceFailure('RATE_LIMITED')
     response.headers.set('Retry-After', String(limit.retryAfterSeconds))
     return response
   }
 
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return apiInvalidInput('The request body must be JSON')
-  }
-  const parsed = bodySchema.safeParse(body)
-  if (!parsed.success) {
-    return apiInvalidInput(parsed.error.issues[0]?.message ?? 'Invalid input', zodDetails(parsed.error))
-  }
+  const parsed = await readJson(request, bodySchema)
+  if (!parsed.ok) return parsed.response
   const { sessionId, utterance, interruptedHeard, timing } = parsed.data
 
   const session = await prisma.voiceDrillSession.findFirst({ where: { id: sessionId, userId } })

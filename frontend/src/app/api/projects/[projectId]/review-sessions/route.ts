@@ -13,6 +13,7 @@
  * today's newest unfinished review session, for "Resume today's review (5 of 12)" (spec 18.7).
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -29,7 +30,7 @@ import { getTimeZone } from '@/server/timezone'
 export const dynamic = 'force-dynamic'
 
 // Starting a session can send a job that writes new items (a model call), so a script cannot start them without end.
-const startLimiter = createRateLimiter({ limit: 20, windowMs: 60_000 })
+const startLimiter = createRateLimiter({ name: 'review-start', limit: 20, windowMs: 60_000 })
 
 const bodySchema = z
   .object({
@@ -44,13 +45,13 @@ async function handlePOST(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const auth = await requireAuth()
     const { projectId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => ({})))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema.default({}))
+    if (!parsed.ok) return parsed.response
 
     const project = await prisma.project.findFirst({ where: { id: projectId, userId: auth.user.id }, select: { id: true } })
     if (!project) return apiNotFound('Course not found')
 
-    const limit = startLimiter.check(auth.user.id)
+    const limit = await startLimiter.check(auth.user.id)
     if (!limit.ok) {
       const response = apiError(ApiErrorCode.RATE_LIMITED, 'You are asking quickly. Wait a moment, then try again.', { code: 'RATE_LIMITED', retryable: true }, 429)
       response.headers.set('Retry-After', String(limit.retryAfterSeconds))

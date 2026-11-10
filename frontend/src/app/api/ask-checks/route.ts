@@ -9,6 +9,7 @@
  * student's attempt or "I don't know".
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -29,8 +30,8 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth()
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const result = await recordAskCheck({
       userId: auth.user.id,
       messageId: parsed.data.messageId,

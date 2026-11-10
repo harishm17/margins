@@ -70,7 +70,7 @@ export type TeachToolContext = {
   /** Replaced by tests; the recall grader of the AI service otherwise. */
   grade?: (request: RecallGradeRequest) => Promise<RecallGradeAnswer>
   /** True when one more model-graded call is allowed now (the per-user limit). */
-  allowGrading: () => boolean
+  allowGrading: () => boolean | Promise<boolean>
   /** The number of the student turn this call belongs to (`beginVoiceTurn`). */
   turn: number
   /** The step runs before the model speaks (spec 19.1): a guided-reading reveal without a check question from the model gets the server's own. */
@@ -375,7 +375,7 @@ async function scoreSayBack(ctx: TeachToolContext, concept: RecallConcept, claim
   if (!claim) return
   // A second grader call for the same answer: it counts against the per-user limit like the first. Over the limit there
   // is no grade, so nothing is written (as when the grader is unavailable), and the coach goes on.
-  if (!ctx.allowGrading()) return
+  if (!(await ctx.allowGrading())) return
   let score = 0
   try {
     const graded = await grade(ctx, {
@@ -434,7 +434,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
   const dontKnow = isDontKnow(explanation)
   const first = before.assessments === 0
   const skipGrader = dontKnow && first
-  if (!skipGrader && !ctx.allowGrading()) return error(TOO_FAST)
+  if (!skipGrader && !(await ctx.allowGrading())) return error(TOO_FAST)
 
   const said = [...before.said, explanation]
   let verdicts: Pick<StoredClaim, 'claim_id' | 'verdict' | 'student_quote' | 'misconception' | 'pointer' | 'reasoning_gap'>[]
@@ -710,7 +710,7 @@ async function recordExampleCheck(
   if (!before.exampleAsked) return error('The new example is asked after assess_explanation says ask_new_example.')
   const answer = heardSince(state, state.teach.askedTurn)
   if (!answer) return error(NOBODY_SPOKE)
-  if (!ctx.allowGrading()) return error(TOO_FAST)
+  if (!(await ctx.allowGrading())) return error(TOO_FAST)
 
   let graded: RecallGradeAnswer
   try {
@@ -915,7 +915,7 @@ async function recordReadingCheck(ctx: TeachToolContext, state: CoachState, args
       events: [{ type: 'evaluation', isCorrect: false, score: 0, comment: '', explanation: '' }],
     }
   }
-  if (!ctx.allowGrading()) return error(TOO_FAST)
+  if (!(await ctx.allowGrading())) return error(TOO_FAST)
 
   let graded: RecallGradeAnswer
   try {

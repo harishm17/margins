@@ -1,3 +1,4 @@
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getServerSession } from 'next-auth'
@@ -68,9 +69,8 @@ export async function POST(
   if (!userId) return apiUnauthorized()
   if (!project) return apiNotFound('Project not found')
 
-  const body = await req.json().catch(() => ({}))
-  const parsed = createSchema.safeParse(body ?? {})
-  if (!parsed.success) return apiInvalidInput('Invalid title')
+  const parsed = await readJson(req, createSchema.default({}))
+  if (!parsed.ok) return parsed.response
 
   const thread = await prisma.chatThread.create({
     data: { userId, projectId, title: parsed.data.title ?? null },

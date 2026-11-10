@@ -8,6 +8,7 @@
  * Submitting is POST /api/exams/[examId]/submit.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
@@ -30,7 +31,7 @@ import {
   startAttempt,
   toAttemptView,
 } from '@/lib/exams/attempts'
-import { acceptsAnswers, remainingSeconds, sanitizeAnswers } from '@/lib/exams/attempt-timing'
+import { EXAM_ANSWERS_MAX_BYTES, acceptsAnswers, examAnswersSchema, remainingSeconds, sanitizeAnswers } from '@/lib/exams/attempt-timing'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,8 +90,9 @@ export async function PUT(request: NextRequest, { params }: Context) {
     const exam = await findExamForUser(session.user.id, examId)
     if (!exam) return apiNotFound('Exam not found')
 
-    const body = await request.json().catch(() => null)
-    const answers = sanitizeAnswers(body?.answers, await countQuestions(examId))
+    const body = await readJson(request, examAnswersSchema, { maxBytes: EXAM_ANSWERS_MAX_BYTES })
+    if (!body.ok) return body.response
+    const answers = sanitizeAnswers(body.data.answers, await countQuestions(examId))
     if (!answers) return apiInvalidInput('answers must be an object')
 
     const attempt = await findInProgressAttempt(session.user.id, examId)

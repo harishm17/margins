@@ -22,7 +22,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
-import { createRateLimiter } from '@/lib/api/rate-limit'
+import { createRateLimiter, enforceLimit } from '@/lib/api/rate-limit'
+import { readJson } from '@/lib/api/read-json'
 import { studentTimeZone } from '@/lib/learning/student-time-zone'
 import { clearDraft, loadDraft, saveDraft, type StoredDraft } from '@/lib/drafts/draft-store'
 import { isDraftSurface, MAX_DRAFT_BYTES, parseDraftKey, type DraftSurface, type DraftWire } from '@/lib/drafts/draft-contract'
@@ -30,10 +31,10 @@ import { ApiErrorCode, apiError, apiInternal, apiInvalidInput, apiNotFound, apiU
 
 export const dynamic = 'force-dynamic'
 
-const limiter = createRateLimiter({ limit: 120, windowMs: 60_000 })
+const limiter = createRateLimiter({ name: 'drafts', limit: 120, windowMs: 60_000 })
 
-/** A request body may carry a payload of the cap plus its frame; anything past this is not read further. */
-const MAX_BODY_CHARS = MAX_DRAFT_BYTES * 2 + 1024
+/** A request body may carry a payload of the cap plus its frame; anything past this is not read further (413). */
+const MAX_BODY_BYTES = MAX_DRAFT_BYTES * 2 + 1024
 
 const putSchema = z.object({
   payload: z.unknown(),
@@ -56,20 +57,14 @@ function target(request: NextRequest): { surface: DraftSurface; key: string } | 
   return { surface, key }
 }
 
-function rateLimited(userId: string) {
-  const rate = limiter.check(userId)
-  if (rate.ok) return null
-  const response = apiError(ApiErrorCode.RATE_LIMITED, 'Saving is going too fast. Wait a moment.', { code: 'RATE_LIMITED', retryable: true }, 429)
-  response.headers.set('Retry-After', String(rate.retryAfterSeconds))
-  return response
-}
+const rateLimited = (userId: string) => enforceLimit(limiter, userId, 'Saving is going too fast. Wait a moment.')
 
 export async function GET(request: NextRequest) {
   try {
     const auth = await requireAuth()
     const slot = target(request)
     if (!slot) return apiInvalidInput('Invalid surface or key')
-    const limited = rateLimited(auth.user.id)
+    const limited = await rateLimited(auth.user.id)
     if (limited) return limited
     const draft = await loadDraft(auth.user.id, slot.surface, slot.key)
     return NextResponse.json({ draft: draft ? wire(draft) : null })
@@ -85,19 +80,11 @@ export async function PUT(request: NextRequest) {
     const auth = await requireAuth()
     const slot = target(request)
     if (!slot) return apiInvalidInput('Invalid surface or key')
-    const limited = rateLimited(auth.user.id)
+    const limited = await rateLimited(auth.user.id)
     if (limited) return limited
 
-    const text = await request.text()
-    if (text.length > MAX_BODY_CHARS) return apiError(ApiErrorCode.INVALID_INPUT, 'Draft is too large', { code: 'PAYLOAD_TOO_LARGE' }, 413)
-    let body: unknown = null
-    try {
-      body = JSON.parse(text)
-    } catch {
-      body = null
-    }
-    const parsed = putSchema.safeParse(body)
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, putSchema, { maxBytes: MAX_BODY_BYTES })
+    if (!parsed.ok) return parsed.response
 
     const result = await saveDraft(
       auth.user.id,
@@ -132,7 +119,7 @@ export async function DELETE(request: NextRequest) {
     const auth = await requireAuth()
     const slot = target(request)
     if (!slot) return apiInvalidInput('Invalid surface or key')
-    const limited = rateLimited(auth.user.id)
+    const limited = await rateLimited(auth.user.id)
     if (limited) return limited
     await clearDraft(auth.user.id, slot.surface, slot.key)
     return NextResponse.json({ ok: true })

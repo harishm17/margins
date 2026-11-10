@@ -12,6 +12,7 @@
  * declined without a model call. Otherwise the thread's tutor state goes to the AI service with the
  * question, and once the reply is stored the state moves and a reply that taught records level 3.
  */
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -41,7 +42,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 // Every question is a model call.
-const chatLimiter = createRateLimiter({ limit: 10, windowMs: 60_000 })
+const chatLimiter = createRateLimiter({ name: 'chat', limit: 10, windowMs: 60_000 })
 
 const bodySchema = z.object({
   question: z
@@ -78,7 +79,7 @@ async function handlePOST(
   const userId = session?.user?.id
   if (!userId) return apiUnauthorized()
 
-  const limit = chatLimiter.check(userId)
+  const limit = await chatLimiter.check(userId)
   if (!limit.ok) {
     const response = apiError(
       ApiErrorCode.RATE_LIMITED,
@@ -90,16 +91,8 @@ async function handlePOST(
     return response
   }
 
-  let body: unknown
-  try {
-    body = await req.json()
-  } catch {
-    return apiInvalidInput('The request body must be JSON')
-  }
-  const parsed = bodySchema.safeParse(body)
-  if (!parsed.success) {
-    return apiInvalidInput(parsed.error.issues[0]?.message ?? 'Invalid input', zodDetails(parsed.error))
-  }
+  const parsed = await readJson(req, bodySchema)
+  if (!parsed.ok) return parsed.response
   const { threadId, topicId, conceptId, clientRequestId } = parsed.data
   const showWorked = parsed.data.event === 'show_worked'
   const question = showWorked ? WORKED_EXAMPLE_REQUEST : parsed.data.question

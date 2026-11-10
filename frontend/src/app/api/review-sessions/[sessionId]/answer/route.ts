@@ -6,6 +6,7 @@
  * for the student: nothing moves on until the next question is asked for.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { withClientSignal } from '@/lib/ai-service/client-signal'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -43,16 +44,16 @@ const bodySchema = z.object({
 })
 
 // A short answer costs a model call.
-const answerLimiter = createRateLimiter({ limit: 40, windowMs: 60_000 })
+const answerLimiter = createRateLimiter({ name: 'review-answer', limit: 40, windowMs: 60_000 })
 
 async function handlePOST(request: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   try {
     const auth = await requireAuth()
     const { sessionId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
 
-    const rate = answerLimiter.check(auth.user.id)
+    const rate = await answerLimiter.check(auth.user.id)
     if (!rate.ok) {
       return NextResponse.json(
         { error: 'Too many answers. Please wait a moment and try again.' },

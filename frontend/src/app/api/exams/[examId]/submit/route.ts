@@ -6,6 +6,7 @@
  * grace, the last autosave is what gets graded.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/auth/get-session'
 import {
@@ -23,7 +24,7 @@ import {
   findExamForUser,
   findInProgressAttempt,
 } from '@/lib/exams/attempts'
-import { sanitizeAnswers, type AnswerMap } from '@/lib/exams/attempt-timing'
+import { EXAM_ANSWERS_MAX_BYTES, examAnswersSchema, sanitizeAnswers, type AnswerMap } from '@/lib/exams/attempt-timing'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,10 +49,11 @@ export async function POST(
       )
     }
 
-    const body = await req.json().catch(() => ({}))
+    const body = await readJson(req, examAnswersSchema.partial().default({}), { maxBytes: EXAM_ANSWERS_MAX_BYTES })
+    if (!body.ok) return body.response
     let submitted: AnswerMap | null = null
-    if (body?.answers !== undefined) {
-      submitted = sanitizeAnswers(body.answers, await countQuestions(examId))
+    if (body.data.answers !== undefined) {
+      submitted = sanitizeAnswers(body.data.answers, await countQuestions(examId))
       if (!submitted) return apiInvalidInput('answers must be an object')
     }
 

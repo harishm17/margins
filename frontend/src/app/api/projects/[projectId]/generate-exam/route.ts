@@ -1,3 +1,4 @@
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -74,17 +75,8 @@ export async function POST(
       return preflightError;
     }
 
-    const body = await req.json();
-    const validation = generateExamSchema.safeParse(body);
-
-    if (!validation.success) {
-      return apiError(
-        ApiErrorCode.INVALID_INPUT,
-        'Invalid input',
-        zodDetails(validation.error),
-        400
-      );
-    }
+    const validation = await readJson(req, generateExamSchema)
+    if (!validation.ok) return validation.response
 
     const uniqueTopicIds = Array.from(new Set(validation.data.topicIds));
     const { totalQuestions, durationMinutes, difficultyLevel, questionTypeDistribution, matchPastExams, name } = validation.data;

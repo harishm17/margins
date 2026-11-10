@@ -3,6 +3,7 @@
  * POST /api/topics/[topicId]/regenerate-content
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest } from 'next/server'
 import { prisma } from '@/lib/db/prisma'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -39,12 +40,8 @@ export async function POST(
       return apiNotFound('Topic not found')
     }
 
-    const body = await request.json()
-    const validation = regenerateContentSchema.safeParse(body)
-
-    if (!validation.success) {
-      return apiInvalidInput('Invalid input', zodDetails(validation.error))
-    }
+    const validation = await readJson(request, regenerateContentSchema)
+    if (!validation.ok) return validation.response
 
     const { contentType, preferences } = validation.data
     return await startRegeneration({ userId: session.user.id, topic, contentType, preferences })

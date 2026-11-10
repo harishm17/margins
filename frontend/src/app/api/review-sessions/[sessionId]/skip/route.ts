@@ -3,6 +3,7 @@
  * POST /api/review-sessions/[sessionId]/skip { index } -> the session
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth/get-session'
@@ -18,8 +19,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const auth = await requireAuth()
     const { sessionId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const result = await skipItem({ userId: auth.user.id, sessionId, index: parsed.data.index, timeZone: await getTimeZone() })
     if (result.status === 'not_found') return apiNotFound('Session not found')
     if (result.status === 'invalid') return apiInvalidInput(result.message)

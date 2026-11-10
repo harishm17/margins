@@ -10,6 +10,7 @@
  *   200: { success: true }
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
@@ -44,8 +45,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const unit = await ownedUnit(unitId, session.user.id)
     if (!unit) return apiNotFound('Unit not found')
 
-    const parsed = updateUnitSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, updateUnitSchema)
+    if (!parsed.ok) return parsed.response
     const { orderIndex, summary, weekLabel, title } = parsed.data
 
     const updated = await prisma.$transaction(async (tx) => {

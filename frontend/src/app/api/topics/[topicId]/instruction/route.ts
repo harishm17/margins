@@ -6,6 +6,7 @@
  * already written today. It never moves a card, mastery or a due date; it tells next activity that the idea was shown.
  */
 
+import { readJson } from '@/lib/api/read-json'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/prisma'
@@ -17,7 +18,7 @@ import { apiInternal, apiInvalidInput, apiNotFound, apiUnauthorized, isUnauthori
 
 export const dynamic = 'force-dynamic'
 
-const limiter = createRateLimiter({ limit: 30, windowMs: 60_000 })
+const limiter = createRateLimiter({ name: 'instruction', limit: 30, windowMs: 60_000 })
 
 const bodySchema = z.object({
   kind: z.enum(['pointer', 'gap_explainer', 'full_explainer', 'worked_example', 'reveal', 'restatement', 'voice_explain']),
@@ -28,13 +29,13 @@ const bodySchema = z.object({
 export async function POST(request: NextRequest, { params }: { params: Promise<{ topicId: string }> }) {
   try {
     const auth = await requireAuth()
-    const rate = limiter.check(auth.user.id)
+    const rate = await limiter.check(auth.user.id)
     if (!rate.ok) {
       return NextResponse.json({ error: 'Too many requests. Please wait a moment and try again.' }, { status: 429, headers: { 'Retry-After': String(rate.retryAfterSeconds) } })
     }
     const { topicId } = await params
-    const parsed = bodySchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return apiInvalidInput('Invalid input', zodDetails(parsed.error))
+    const parsed = await readJson(request, bodySchema)
+    if (!parsed.ok) return parsed.response
     const result = await recordInstruction(prisma, {
       userId: auth.user.id,
       topicId,
