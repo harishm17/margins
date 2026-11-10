@@ -228,6 +228,16 @@ class TestRoute:
         response = post(client)
         assert response.status_code == 404 and response.json()["error_code"] == "PROJECT_NOT_FOUND"
 
+    @pytest.mark.parametrize("ours,theirs,status", [("", True, 409), ("voice", False, 409), ("voice", True, 200), ("", None, 200)])
+    def test_a_voice_flag_that_differs_from_the_web_apps_is_refused(self, client, wired, monkeypatch, ours, theirs, status):
+        """Prompt audit R9: a half-set voice flag would mix the web app's coach prompt with this service's handling.
+        A web app that sends no flag (mid-deploy) is served as before. The drill route shares the same check."""
+        monkeypatch.setattr(settings, "PROMPTS_V2", ours)
+        response = post(client, prompts_v2_voice=theirs)
+        assert response.status_code == status
+        if status == 409:
+            assert response.json()["error_code"] == "PROMPTS_MISMATCH" and response.json()["retryable"] is True
+
     @pytest.mark.parametrize(
         "error,code,retryable",
         [

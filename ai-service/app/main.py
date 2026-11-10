@@ -28,6 +28,10 @@ async def _run_startup_checks() -> None:
 
     check_model_prices()
     logger.info("LLM Provider: %s", settings.LLM_PROVIDER)
+    # Voice needs the same setting in the web app, which logs its own list at start (prompt audit R9).
+    from app.prompt_revision import PROMPT_AREAS, prompts_v2
+
+    logger.info("Prompts v2 areas: %s", ", ".join(area for area in PROMPT_AREAS if prompts_v2(area)) or "none")
     if not settings.llm_configured:
         logger.warning("ANTHROPIC_API_KEY is not set: generation, grading and validation calls will fail")
     db_info = settings.DATABASE_URL.split('@')[1] if '@' in settings.DATABASE_URL else 'configured'
