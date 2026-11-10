@@ -23,5 +23,11 @@ export async function spendKeyFor(userId: string): Promise<string | null> {
   const spendKey = computeSpendKey(user)
   await recordSpendAccount(spendKey, user.createdAt)
   await prisma.user.updateMany({ where: { id: userId, spendKey: null }, data: { spendKey } })
-  return spendKey
+  // Minutes kept before the key existed are found by session id only while the session exists; stamp them now so they
+  // outlive it (the start-up backfill does the same for everyone).
+  await prisma.$executeRaw`
+    UPDATE voice_usage v SET spend_key = ${spendKey}
+    FROM voice_drill_sessions s
+    WHERE v.session_id = s.id AND s.user_id = ${userId} AND v.spend_key IS NULL`
+  return (await prisma.user.findUnique({ where: { id: userId }, select: { spendKey: true } }))?.spendKey ?? spendKey
 }

@@ -70,3 +70,14 @@ test('a drill that ended while the call stayed open keeps counting while heartbe
   assert.equal(isSessionLive(stillOpen, now), true)
   assert.equal(sessionSeconds(stillOpen, now), 600)
 })
+
+test('minutes kept for a session that no longer exists still count; a session that exists is measured live, not twice', () => {
+  const live = { ...session({ connectedAt: ago(3600), endedAt: ago(3600 - 240) }), id: 'a' }
+  const kept = [
+    { sessionId: 'a', connectedAt: ago(3600), seconds: 9999 },
+    { sessionId: 'deleted', connectedAt: ago(1800), seconds: 300 },
+    { sessionId: 'old', connectedAt: ago(25 * 3600), seconds: 500 },
+  ]
+  assert.equal(usedSeconds([live], now, kept), 240 + 300)
+  assert.equal(remainingSeconds([live], 30, now, kept), 30 * 60 - 540)
+})
