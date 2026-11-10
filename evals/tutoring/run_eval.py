@@ -310,15 +310,17 @@ def estimate(scenarios: List[Dict[str, Any]], tracker, judge_spec, judge_limit: 
     twice because it leaked would cost about double."""
     from app.model_spec import ModelChoice  # noqa: F401  (import check: the app is importable)
     from app.services.llm.models import resolve_model
-    from app.services.llm.schemas import PracticeTutorReply, PracticeTutorRequest
-    from app.services.tutor.practice import TUTOR_MAX_TOKENS, build_messages
+    from app.services.llm.schemas import PracticeTutorRequest
+    from app.services.tutor.practice import TUTOR_MAX_TOKENS, build_messages, reply_schema
 
     from app_state import Conversation
+    from common.revision import prompt_revision, request_summary
     from spend import estimate_prompt_tokens
 
     tutor_model, router_model = resolve_model("tutor").model, resolve_model("router").model
-    schema = PracticeTutorReply.model_json_schema()
+    schema = reply_schema().model_json_schema()  # the schema the app asks for (v2 has no analysis), not the v1 class
     replies = 0
+    first_request: Dict[str, Any] = {}
     tutor_usd = router_usd = 0.0
     per_scenario_replies: List[int] = []
     for scenario in scenarios:
@@ -330,7 +332,9 @@ def estimate(scenarios: List[Dict[str, Any]], tracker, judge_spec, judge_limit: 
                 continue
             conversation.commit(decision)
             count += 1
-            prompt = [m.content for m in build_messages(PracticeTutorRequest(**decision.request))]
+            messages = build_messages(PracticeTutorRequest(**decision.request))
+            first_request = first_request or request_summary(messages, reply_schema())
+            prompt = [m.content for m in messages]
             tutor_usd += tracker.estimate_call(tutor_model, "tutor", estimate_prompt_tokens(prompt, schema))
             router_usd += tracker.estimate_call(router_model, "router", LEAK_JUDGE_PROMPT_TOKENS)
         replies += count
@@ -353,6 +357,8 @@ def estimate(scenarios: List[Dict[str, Any]], tracker, judge_spec, judge_limit: 
         "router_usd": router_usd,
         "judge_usd": judge_usd,
         "judged": judged,
+        "prompts": prompt_revision("tutor"),
+        "request": first_request,
         "max_tokens": TUTOR_MAX_TOKENS,
     }
 
@@ -361,6 +367,8 @@ def print_plan(args: argparse.Namespace, plan: Dict[str, Any], judge_spec) -> No
     generation = plan["tutor_usd"] + plan["router_usd"]
     log("Plan")
     log(f"  surface: {args.surface}   scenarios: {plan['scenarios']}   tutor replies: {plan['replies']}")
+    if plan.get("prompts"):
+        log(f"  prompts: PROMPTS_V2={plan['prompts']['PROMPTS_V2']!r} -> {plan['prompts']['areas']}; tutor schema {plan['request'].get('schema')}, system prompt {plan['request'].get('system_sha')}")
     log(f"  tutor {plan['tutor_model']}: about ${plan['tutor_usd']:.2f}   leak judge {plan['router_model']}: about ${plan['router_usd']:.2f} (one call per reply)")
     if judge_spec is not None:
         log(f"  model judge {judge_spec.label}: about ${plan['judge_usd']:.2f} for {plan['judged']} scenarios")
@@ -441,7 +449,12 @@ async def run(args: argparse.Namespace) -> int:
         previous = json.loads((run_dir / "run.json").read_text())
         date, args.label = previous["date"], previous["label"]
     (run_dir / "raw").mkdir(parents=True, exist_ok=True)
-    run_info = {"label": args.label, "date": date, "patterns": args.patterns, "limit": args.limit, "scenarios": str(scenario_path.resolve())}
+    from common.revision import prompt_revision
+
+    revision = prompt_revision("tutor")
+    if previous.get("prompts") and previous["prompts"].get("areas") != revision["areas"]:
+        raise SystemExit(f"--resume: this folder ran with {previous['prompts']['areas']}, PROMPTS_V2 now gives {revision['areas']}. Resume with the same PROMPTS_V2.")
+    run_info = {"label": args.label, "date": date, "prompts": revision, "patterns": args.patterns, "limit": args.limit, "scenarios": str(scenario_path.resolve())}
     if not args.resume:  # written at the start, so a run that dies can be resumed
         (run_dir / "run.json").write_text(json.dumps(run_info, indent=2) + "\n")
     for kind, usd in existing_spend(run_dir).items():
@@ -502,6 +515,7 @@ async def run(args: argparse.Namespace) -> int:
             "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
             "app_dirty": bool(git("status", "--porcelain", "--", "ai-service/app")),
         },
+        "prompts": revision,
         "config": {
             "surface": args.surface,
             "scenarios": len(scenarios),

@@ -240,6 +240,11 @@ class Rejection:
         )
 
 
+def reply_schema():
+    """The schema the tutor's model call asks for: the one build_messages' prompt describes."""
+    return PracticeTutorReplyV2 if prompts_v2("tutor") else PracticeTutorReply
+
+
 def build_messages(req: PracticeTutorRequest, leak_reason: Optional[Rejection] = None) -> List[LLMMessage]:
     """The system prompt and one user message: the data first, then the instruction block of the move."""
     parts = _context_blocks(req)
@@ -478,9 +483,8 @@ async def tutor_reply(req: PracticeTutorRequest) -> PracticeTutorReply:
     claimed = 0
     rejected: List[RejectedDraft] = []
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        schema = PracticeTutorReplyV2 if prompts_v2("tutor") else PracticeTutorReply
         out = await provider.generate_structured(
-            build_messages(req, rejection), schema, max_tokens=TUTOR_MAX_TOKENS, purpose="tutor"
+            build_messages(req, rejection), reply_schema(), max_tokens=TUTOR_MAX_TOKENS, purpose="tutor"
         )
         out = as_v1_reply(out, PracticeTutorReply)  # the v2 class has no analysis; the rest of the turn uses one shape
         out.reply = limit_reply(out.reply)

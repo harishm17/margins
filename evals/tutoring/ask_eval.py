@@ -375,8 +375,12 @@ def estimate(scenarios: List[Dict[str, Any]], tracker) -> Dict[str, Any]:
 
 
 def print_plan(args, plan: Dict[str, Any], log) -> None:
+    from common.revision import prompt_revision
+
+    revision = prompt_revision("ask")
     total = plan["chat_usd"] + plan["router_usd"]
     log("Plan")
+    log(f"  prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> {revision['areas']}")
     log(f"  surface: ask   scenarios: {plan['scenarios']}   replies from the model: {plan['replies']}")
     log(f"  replies {plan['chat_model']}: about ${plan['chat_usd']:.2f}   router and leak judge {plan['router_model']}: about ${plan['router_usd']:.2f}")
     log(f"  estimated total: ${total:.2f}. Cap: --max-usd {args.max_usd}")
@@ -421,7 +425,12 @@ async def run(args, host) -> int:
         previous = json.loads((run_dir / "run.json").read_text())
         date, args.label = previous["date"], previous["label"]
     (run_dir / "raw").mkdir(parents=True, exist_ok=True)
-    run_info = {"label": args.label, "date": date, "surface": "ask", "patterns": args.patterns, "limit": args.limit, "repeats": args.repeats, "scenarios": str(scenario_path.resolve())}
+    from common.revision import prompt_revision
+
+    revision = prompt_revision("ask")
+    if previous.get("prompts") and previous["prompts"].get("areas") != revision["areas"]:
+        raise SystemExit(f"--resume: this folder ran with {previous['prompts']['areas']}, PROMPTS_V2 now gives {revision['areas']}. Resume with the same PROMPTS_V2.")
+    run_info = {"label": args.label, "date": date, "prompts": revision, "surface": "ask", "patterns": args.patterns, "limit": args.limit, "repeats": args.repeats, "scenarios": str(scenario_path.resolve())}
     if not args.resume:  # written at the start, so a run that dies can be resumed
         (run_dir / "run.json").write_text(json.dumps(run_info, indent=2) + "\n")
     for kind, usd in host.existing_spend(run_dir).items():
@@ -438,7 +447,6 @@ async def run(args, host) -> int:
     from app.config import settings
     from app.services.llm.factory import LLMFactory
     from app.services.llm.models import resolve_model
-    from common.revision import prompt_revision
 
     stop: Dict[str, str] = {}
     inner = adapters.build_provider(mock=args.mock, api_key=api_key, timeout=args.timeout)
@@ -471,7 +479,7 @@ async def run(args, host) -> int:
             "branch": host.git("rev-parse", "--abbrev-ref", "HEAD"),
             "app_dirty": bool(host.git("status", "--porcelain", "--", "ai-service/app")),
         },
-        "prompts": prompt_revision("ask"),
+        "prompts": revision,
         "config": {
             "surface": "ask",
             "scenarios": len(scenarios),

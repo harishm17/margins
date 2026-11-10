@@ -278,8 +278,12 @@ def estimate(scenarios: List[Dict[str, Any]], tracker) -> Dict[str, Any]:
 
 
 def print_plan(args, plan: Dict[str, Any], log) -> None:
+    from common.revision import prompt_revision
+
+    revision = prompt_revision("tutor")
     total = plan["tutor_usd"] + plan["judge_usd"]
     log("Plan")
+    log(f"  prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> {revision['areas']}")
     log(f"  surface: reader   scenarios: {plan['scenarios']}   replies from the model: {plan['replies']}")
     log(f"  replies {plan['tutor_model']}: about ${plan['tutor_usd']:.2f}   leak judge {plan['router_model']}: about ${plan['judge_usd']:.2f}")
     log(f"  estimated total: ${total:.2f}. Cap: --max-usd {args.max_usd}")
@@ -323,7 +327,12 @@ async def run(args, host) -> int:
         previous = json.loads((run_dir / "run.json").read_text())
         date, args.label = previous["date"], previous["label"]
     (run_dir / "raw").mkdir(parents=True, exist_ok=True)
-    run_info = {"label": args.label, "date": date, "surface": "reader", "patterns": args.patterns, "limit": args.limit, "scenarios": str(scenario_path.resolve())}
+    from common.revision import prompt_revision
+
+    revision = prompt_revision("tutor")
+    if previous.get("prompts") and previous["prompts"].get("areas") != revision["areas"]:
+        raise SystemExit(f"--resume: this folder ran with {previous['prompts']['areas']}, PROMPTS_V2 now gives {revision['areas']}. Resume with the same PROMPTS_V2.")
+    run_info = {"label": args.label, "date": date, "prompts": revision, "surface": "reader", "patterns": args.patterns, "limit": args.limit, "scenarios": str(scenario_path.resolve())}
     if not args.resume:  # written at the start, so a run that dies can be resumed
         (run_dir / "run.json").write_text(json.dumps(run_info, indent=2) + "\n")
     for kind, usd in host.existing_spend(run_dir).items():
@@ -369,6 +378,7 @@ async def run(args, host) -> int:
             "branch": host.git("rev-parse", "--abbrev-ref", "HEAD"),
             "app_dirty": bool(host.git("status", "--porcelain", "--", "ai-service/app")),
         },
+        "prompts": revision,
         "config": {"surface": "reader", "scenarios": len(scenarios), "scenario_file": str(scenario_path), "tutor_model": f"{tutor.model}:{tutor.effort}", "mock": args.mock},
         "spend": {"generation": spent, "max_usd": args.max_usd},
         "stopped": stop.get("reason") or previous.get("stopped"),
