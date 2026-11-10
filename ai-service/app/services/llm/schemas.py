@@ -1232,6 +1232,15 @@ class DrillQuestion(BaseModel):
     concept_ids: List[str] = Field(default_factory=list, description=CONCEPT_IDS_HELP)
 
 
+class DrillQuestionV2(DrillQuestion):
+    """DrillQuestion with a description on each field (prompt audit 2026-11-09, C5; used with PROMPTS_V2)."""
+
+    question_text: str = Field(description="One question answerable aloud in under a minute")
+    key_points: List[str] = Field(description="2-4 points a listener can check in the spoken answer")
+    sample_answer: str = Field(description="What a good spoken answer sounds like, in 2-4 sentences")
+    explanation: str = Field(description="Why the answer is right, in a sentence or two")
+
+
 class DrillQuestionSet(BaseModel):
     questions: List[DrillQuestion]
 
@@ -1249,6 +1258,14 @@ class DrillQuestionSet(BaseModel):
                 for n in range(1, 6)
             ]
         )
+
+
+class DrillQuestionSetV2(DrillQuestionSet):
+    questions: List[DrillQuestionV2]
+
+    @classmethod
+    def example(cls) -> "DrillQuestionSetV2":
+        return cls(questions=[DrillQuestionV2(**q.model_dump()) for q in DrillQuestionSet.example().questions])
 
 
 # ---------------------------------------------------------------- concept graph

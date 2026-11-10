@@ -33,6 +33,7 @@ from app.services.llm.base import (
     TurnText,
     TurnToolUse,
 )
+from app.prompt_revision import prompts_v2
 from app.services.llm.limiter import llm_slot
 from app.services.llm.models import resolve_model
 from app.services.llm.usage import estimate_cost_usd, note_partial_usage, record_usage
@@ -195,6 +196,32 @@ def _answer_conversation(
     else:
         conversation.append({"role": "user", "content": final})
     return conversation
+
+
+def _with_message_breakpoint(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """`messages` with a cache breakpoint on the last content block of the last message (prompt audit M6).
+
+    The system block already carries one, so a request has two of the four allowed. Everything up to the
+    last block is then read from the cache by the next call, which is the next call of the same turn's
+    tool loop or the next turn. The caller's list is not edited. A last block that cannot carry a
+    breakpoint (thinking) leaves the messages as they were.
+    """
+    if not messages:
+        return messages
+    last = messages[-1]
+    content = last.get("content")
+    if isinstance(content, str):
+        if not content:
+            return messages
+        blocks: List[Dict[str, Any]] = [{"type": "text", "text": content}]
+    elif isinstance(content, list) and content and isinstance(content[-1], dict):
+        blocks = [dict(block) for block in content]
+    else:
+        return messages
+    if blocks[-1].get("type") in ("thinking", "redacted_thinking"):
+        return messages
+    blocks[-1]["cache_control"] = {"type": "ephemeral"}
+    return [*messages[:-1], {**last, "content": blocks}]
 
 
 def _content_block_param(block: Any) -> Optional[Dict[str, Any]]:
@@ -537,7 +564,7 @@ class AnthropicProvider(LLMProvider):
         params: Dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens,
-            "messages": messages,
+            "messages": _with_message_breakpoint(messages) if prompts_v2("voice") else messages,
         }
         if system:
             # Tools render before the system prompt, so this one breakpoint caches both.
@@ -592,6 +619,16 @@ class AnthropicProvider(LLMProvider):
         )
 
         stop_reason = final.stop_reason or ""
+        if stop_reason == "max_tokens":
+            # Counts the replies (or tool calls) the budget cut off, to judge whether max_tokens is too small.
+            logger.warning(
+                "llm turn cut by max_tokens purpose=%s model=%s max_tokens=%s out=%s tools=%s",
+                purpose or "-",
+                usage.model,
+                max_tokens,
+                usage.output_tokens,
+                len(tools),
+            )
         if stop_reason == "refusal":
             details = final.stop_details
             category = getattr(details, "category", None) if details else None
@@ -602,7 +639,7 @@ class AnthropicProvider(LLMProvider):
             raise error
 
         content = [param for param in map(_content_block_param, final.content) if param is not None]
-        tool_uses = [block for block in content if block["type"] == "tool_use"]
+        tool_uses =[block for block in content if block["type"] == "tool_use"]
         has_text = any(block["type"] == "text" and block["text"].strip() for block in content)
         if not tool_uses and not has_text:
             error = LLMOutputError(f"Claude returned no text or tool call ({purpose})")
