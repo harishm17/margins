@@ -15,6 +15,7 @@
  * `TopicProgress.warmupAt`.
  */
 
+import { ownedTopic } from '@/server/owned'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { gradeAnswers } from '@/lib/ai-service/grading'
@@ -160,9 +161,6 @@ async function loadBank(topicId: string): Promise<WarmupItem[]> {
     ]
   })
 }
-
-const ownedTopic = (userId: string, topicId: string) =>
-  prisma.topic.findFirst({ where: { id: topicId, project: { userId } }, select: { id: true, projectId: true } })
 
 const latestSession = (userId: string, topicId: string, completed: boolean) =>
   prisma.itemSession.findFirst({

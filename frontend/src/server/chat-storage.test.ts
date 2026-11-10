@@ -15,7 +15,7 @@ function database() {
       },
       deleteMany: async () => ({ count: 1 }),
     },
-    chatThread: { update: async () => ({}), deleteMany: async () => ({ count: 0 }) },
+    chatThread: { count: async () => 1, updateMany: async () => ({ count: 1 }), deleteMany: async () => ({ count: 0 }) },
     tutorState: { deleteMany: async () => ({ count: 0 }) },
   }
   const db = { ...tx, $transaction: async (work: (client: typeof tx) => Promise<unknown>) => work(tx) }
