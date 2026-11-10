@@ -14,12 +14,14 @@ from app.services.content_generator.context import (
     NoSourceMaterialError,
     attach_sources,
     content_messages,
+    do_not_repeat_block,
     do_not_reuse_block,
     existing_content_digest,
     fetch_concepts,
     fetch_confusable_neighbours,
     fetch_topic_context,
     format_concept_block,
+    name_in_instructions,
     resolve_concept_ids,
 )
 from app.prompt_revision import prompts_v2
@@ -234,15 +236,23 @@ class ExamGenerator:
         closing = "" if v2 else f'\nSet difficulty to "{difficulty}".'
         style_block = f"{style}\n" if style else ""
         existing = do_not_reuse_block(await existing_content_digest(topic["id"]))
+        # v2 gives the reason without the pipeline's words ("spares", "a check"), which the model cannot act on.
+        stand_alone = (
+            "Each question must stand on its own and refer to no other question, because not every question written here "
+            "ends up in the exam."
+            if v2
+            else "A few extra questions of each type are spares for questions that do not pass a check, so each one must "
+            "stand on its own."
+        )
 
         async def ask(asked: Dict[str, int], avoid: str = "") -> tuple[List[Dict], int]:
             """One model call for `asked` questions (the quota plus spares), the support check over them, and the
             questions it keeps."""
             requested = sum(asked.values())
             mix = ", ".join(f"{n} {q_type}" for q_type, n in asked.items())
-            instructions = f"""Write {requested} exam questions on "{topic['name']}" from the excerpts above, for a timed practice exam.
+            instructions = f"""Write {requested} exam questions on "{name_in_instructions(topic['name'])}" from the excerpts above, for a timed practice exam.
 
-Use exactly this mix: {mix}. A few extra questions of each type are spares for questions that do not pass a check, so each one must stand on its own.
+Use exactly this mix: {mix}. {stand_alone}
 Difficulty: {difficulty}. {guidance}
 
 {application_rules}
@@ -295,8 +305,7 @@ Difficulty: {difficulty}. {guidance}
             for question in questions:
                 have[question["question_type"]] = have.get(question["question_type"], 0) + 1
             short = {t: n - have.get(t, 0) for t, n in type_counts.items() if n > have.get(t, 0)}
-            avoid = "\n\nDo not repeat these questions:\n" + "\n".join(f"- {q.get('question_text')}" for q in questions)
-            more, more_dropped = await ask(with_spares(short), avoid if questions else "")
+            more, more_dropped = await ask(with_spares(short), do_not_repeat_block(questions))
             dropped += more_dropped
             return questions + more
 

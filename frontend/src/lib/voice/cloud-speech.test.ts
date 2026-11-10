@@ -97,6 +97,11 @@ describe('mintCloudSpeechGrant', () => {
     assert.equal(excluded.provider, 'assemblyai')
   })
 
+  it('says how long the stream may run: the voice time left today (a Deepgram token cannot carry it)', async () => {
+    const grant = await mintCloudSpeechGrant({ maxSessionSeconds: 200.4, language: 'en', terms: [], fetchImpl: both, env: keys, log: quiet })
+    assert.deepEqual([grant.provider, grant.maxSeconds], ['deepgram', 201])
+  })
+
 })
 
 describe('sessionCapSeconds', () => {

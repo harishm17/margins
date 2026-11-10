@@ -106,6 +106,25 @@ def test_aggregate_counts_agreement_and_both_kinds_of_wrong_mark():
     assert arm["categories"]["right"]["n"] == 2
 
 
+def test_each_kind_of_wrong_mark_fails_its_own_gate():
+    """P-I1: the v2 grader failed right answers that took another route. A looser prompt could fix that by passing wrong
+    ones, so each direction has its own gate and neither can be bought with the other."""
+    right = [row("full", 1.0) for _ in range(40)]
+    wrong = [row("none", 0.0, category="wrong") for _ in range(40)]
+
+    def verdicts(rows):
+        summary = run_a5.aggregate(rows)
+        return {gate["key"]: gate["passed"] for gate in summary["gates"]["haiku"]}, run_a5.gates_passed(summary)
+
+    assert verdicts(right + wrong) == ({"wrong_marked_right": True, "right_marked_wrong": True}, True)
+    too_strict = right[:-2] + [row("full", 0.5), row("full", 0.5)] + wrong  # 2 of 40 right answers failed
+    assert verdicts(too_strict) == ({"wrong_marked_right": True, "right_marked_wrong": False}, False)
+    too_lenient = right + wrong[:-2] + [row("none", 0.8, category="keyword_wrong"), row("none", 0.8, category="keyword_wrong")]
+    assert verdicts(too_lenient) == ({"wrong_marked_right": False, "right_marked_wrong": True}, False)
+    # Nothing to count is not a pass: a run with no right answers says nothing about failing them.
+    assert verdicts(wrong) == ({"wrong_marked_right": True, "right_marked_wrong": False}, False)
+
+
 def test_the_summary_holds_counts_and_never_answer_text():
     rows = [dict(row("full", 1.0), text="Metal moves heat.")]
     summary = run_a5.aggregate(rows)
@@ -201,3 +220,6 @@ def test_recall_aggregate_counts_agreement_confusion_and_flagged_answers():
     assert arm["reasoning_gap_agreement"] == {"count": 1, "of": 2, "rate": pytest.approx(0.5)}
     assert arm["confusion"]["incorrect"] == {"covered": 1}
     assert arm["by_kind"]["full"]["of"] == 2
+    # Both directions are gated here too: 1 of 1 false credit and 1 of 3 withheld both fail.
+    summary = run_a5.aggregate_recall(rows)
+    assert {gate["key"]: gate["passed"] for gate in summary["gates"]["app"]} == {"false_credit": False, "credit_withheld": False}

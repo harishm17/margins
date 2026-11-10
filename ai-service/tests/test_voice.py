@@ -14,6 +14,10 @@ from app.services.llm.schemas import DrillQuestion, DrillQuestionSet
         ("Summarize the role of layer 4 in the OSI model", True),
         ("Calculate the area of a circle", False),
         ("If x = 3, what is y?", False),
+        # A percentage that is only named was dropped as working (a statistics drill came back short).
+        ("Why is a 95% confidence interval wider than a 90% one?", True),
+        ("What percentage of the variance does the first component explain, and why does that matter?", True),
+        ("What is 15% of 80?", False),
     ],
 )
 def test_math_filter_uses_word_boundaries(text, conceptual):

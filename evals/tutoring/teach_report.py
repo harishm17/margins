@@ -42,6 +42,31 @@ def latency_lines(latency: Dict[str, Any]) -> List[str]:
     ]
 
 
+def yes_no_lines(yes_no) -> List[str]:
+    if not yes_no or not yes_no[1]:
+        return []
+    return [
+        f"- Probes the student could answer with yes or no: {yes_no[0]} of {yes_no[1]}. Read by wording alone; such a question is a fault "
+        "only when it carries the answer, which the teaches-before-probe judge decides."
+    ]
+
+
+def grader_lines(grader) -> List[str]:
+    """--grader: the app's recall grader on the scripted answers, against the verdicts the script gives the coach."""
+    if not grader:
+        return []
+    lines = [
+        f"- The app's recall grader (`{grader['model']}`, {usd(grader['cost_usd'], 2)}) graded {grader['graded']} of {grader['turns']} scripted answers"
+        f" ({grader['abstained']} it asked to clarify, {grader['errors']} failed, {grader['not_run']} not run) and gave the script's verdict for "
+        f"{grader['agree']} of {grader['claims']} claims ({pct(grader['agreement'])}). Where it differs, the coach in the app would have been told something else than here:"
+    ]
+    for item in grader["differences"][:20]:
+        lines.append(f"  - {item['key']} ({item['kind']}): script `{item['scripted']}`, grader `{item['grader']}` for the claim {item['claim']!r}; the student said {item['answer']!r}")
+    if len(grader["differences"]) > 20:
+        lines.append(f"  - and {len(grader['differences']) - 20} more in summary.json")
+    return lines
+
+
 def render_markdown(summary: Dict[str, Any]) -> str:
     config, spend, metrics = summary["config"], summary["spend"], summary["metrics"]
     code = summary.get("code", {})
@@ -50,8 +75,9 @@ def render_markdown(summary: Dict[str, Any]) -> str:
     lines: List[str] = [f"# Teach-back eval: {summary['label']}", ""]
     lines += [
         f"- Date: {summary['date']}. Code: `{commit}`{dirty}, branch `{code.get('branch', '')}`.",
-        f"- {config['scenarios']} scenarios, {metrics['turns']} coach turns spoken.",
-        f"- Coach model `{config['coach_model']}` (the app's voice purpose). The recall grader is not part of this run: its verdicts are scripted."
+        f"- {config['scenarios']} scenarios ({metrics.get('ideas', config['scenarios'])} ideas), {metrics['turns']} coach turns spoken.",
+        f"- Coach model `{config['coach_model']}` (the app's voice purpose). The coach is told the scripted verdicts, not the recall grader's"
+        + ("; the grader was run beside the script (below)." if metrics.get("grader") else " (the grader is not part of this run; --grader runs it beside the script).")
         + (" **Mock provider: no model was called, the turns and scores are placeholders.**" if config.get("mock") else ""),
         f"- Spend: {usd(spend['generation'], 2)} on the coach"
         + (f" and {usd(spend.get('judge', 0.0), 2)} on the teaches-before-probe judge `{config['judge']}`" if config.get("judge") else "; the teaches-before-probe judge was not run (no --judge)")
@@ -77,6 +103,8 @@ def render_markdown(summary: Dict[str, Any]) -> str:
         f"- A graded step ran after a student message in {assessed[0]} of {assessed[1]} turns: before the model spoke in {metrics.get('latency', {}).get('pre_run', 0)} of them, at the coach's request in the rest.",
         f"- The app let the coach explain {metrics['explanations']} times (only ever after two probes on the gap).",
         f"- Mean sentences per coach turn: {metrics['mean_sentences']:.1f}. Mean words per asking turn: {metrics['mean_words_asking']:.1f}.",
+        *yes_no_lines(metrics.get("yes_no_probes")),
+        *grader_lines(metrics.get("grader")),
         *latency_lines(metrics.get("latency", {})),
         "",
         "## By pattern",

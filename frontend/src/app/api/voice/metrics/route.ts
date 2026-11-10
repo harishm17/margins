@@ -33,34 +33,35 @@ export async function POST(request: NextRequest) {
     if (!parsed.ok) return parsed.response
     const payload = parsed.data
 
-    const session = await prisma.voiceDrillSession.findFirst({
-      where: {
-        id: payload.sessionId,
-        userId: auth.user.id,
-      },
+    // Read and written under a lock on the session row: two entries posted at once are both kept.
+    const stored = await prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<{ metrics: unknown }[]>`
+        SELECT metrics FROM voice_drill_sessions
+        WHERE id = ${payload.sessionId} AND user_id = ${auth.user.id}
+        FOR UPDATE`
+      if (rows.length === 0) return false
+      const existing = rows[0].metrics as { entries?: Prisma.JsonObject[]; total?: number } | null
+      const nextEntries = [...(existing?.entries || []), payload.entry].slice(-200)
+      const totalCount = (existing?.total || existing?.entries?.length || 0) + 1
+      await tx.voiceDrillSession.update({
+        where: { id: payload.sessionId },
+        data: {
+          metrics: {
+            entries: nextEntries,
+            last: payload.entry,
+            total: totalCount,
+          },
+          ...(payload.entry.lastDetectedLanguage
+            ? { lastDetectedLanguage: payload.entry.lastDetectedLanguage }
+            : {}),
+        },
+      })
+      return true
     })
 
-    if (!session) {
+    if (!stored) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
-
-    const existing = session.metrics as { entries?: Prisma.JsonObject[]; total?: number } | null
-    const nextEntries = [...(existing?.entries || []), payload.entry].slice(-200)
-    const totalCount = (existing?.total || existing?.entries?.length || 0) + 1
-
-    await prisma.voiceDrillSession.update({
-      where: { id: payload.sessionId },
-      data: {
-        metrics: {
-          entries: nextEntries,
-          last: payload.entry,
-          total: totalCount,
-        },
-        ...(payload.entry.lastDetectedLanguage
-          ? { lastDetectedLanguage: payload.entry.lastDetectedLanguage }
-          : {}),
-      },
-    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

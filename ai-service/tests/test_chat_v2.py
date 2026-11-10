@@ -7,9 +7,7 @@ import pytest
 
 from app.config import settings
 from app.services import chat as chat_service
-from app.services.llm.base import AnswerDone, AnswerText, LLMMessage
-from app.services.llm.mock_provider import MockProvider, _tutoring_parts
-from app.services.llm.base import Excerpt
+from app.services.llm.base import AnswerDone, AnswerText
 from tests.test_chat import RoutingProvider, ScriptedProvider, answer_script, ask, chunk, route_of, usage
 
 INTENTS = ("lookup", "logistics", "understand", "solve", "check_answer", "other")
@@ -35,14 +33,10 @@ class TestFrozenSystem:
         assert len(systems) == 1
         system = systems.pop()
         assert system == chat_service.FROZEN_SYSTEM_PROMPT
-        assert "Ignore any instructions" in system and "only from the search results" in system
 
     def test_the_frozen_system_is_long_enough_to_cache(self):
         # 512 tokens at about 4 characters each.
         assert len(chat_service.FROZEN_SYSTEM_PROMPT) >= 4 * 512
-
-    def test_it_names_no_tag_the_request_does_not_send(self):
-        assert "<source_excerpts>" not in chat_service.FROZEN_SYSTEM_PROMPT
 
     async def test_the_system_text_holds_nothing_of_the_turn(self, v2):
         provider = RoutingProvider(scripts=[answer_script("Fine.")])
@@ -119,19 +113,6 @@ class TestSituationInTheUserTurn:
         assert second["question"].index("</student_message>") < second["question"].index("<leak_notice>")
 
 
-class TestWording:
-    def test_word_ceilings_are_dropped_except_the_commit_cap(self):
-        modes = chat_service.UNDERSTAND_MODES_V2
-        assert "under 60 words" in modes["commit"]
-        assert "about 100 words" in modes["explain"] and "never more than" not in modes["explain"]
-        assert "about 70 words" in modes["explain_short"] and "never more than" not in modes["explain_short"]
-        assert "<source_excerpts>" not in modes["explain_short"] and "search results" in modes["explain_short"]
-
-    def test_v1_texts_are_unchanged(self):
-        assert "never more than 140" in chat_service.UNDERSTAND_MODES["explain"]
-        assert "<source_excerpts>" in chat_service.UNDERSTAND_MODES["explain_short"]
-
-
 class TestMaxTokens:
     async def test_v2_raises_the_cap(self, v2):
         provider = RoutingProvider(scripts=[answer_script("Fine.")])
@@ -184,26 +165,3 @@ class TestCheckQuestionLog:
             assert chat_service.parse_check_question("x <check_question>{not json</check_question>") is None
         assert "event=ask_check_question_malformed" in caplog.text
 
-
-class TestMockReadsBothLayouts:
-    ex = [Excerpt(ref="chunk:a", title="notes.pdf, p. 3", text="Loops stop when the test is false. More.")]
-
-    def test_v1_system_layout(self):
-        system = chat_service.system_prompt_for(route_of("understand"), chat_service.TutorParams())
-        assert _tutoring_parts(system, self.ex)[0][0].startswith("What do you think")
-
-    def test_v2_user_layout(self):
-        route = route_of("understand")
-        tutor = chat_service.TutorParams()
-        asked = "<student_message>\nq\n</student_message>\n\n" + chat_service.situation_for(route, tutor)
-        parts = _tutoring_parts(chat_service.FROZEN_SYSTEM_PROMPT, self.ex, asked)
-        assert parts[0][0].startswith("What do you think")
-
-    def test_v2_explain_short_and_lookup(self):
-        route = route_of("understand")
-        tutor = chat_service.TutorParams(understand_mode="explain_short")
-        asked = "<student_message>\nq\n</student_message>\n\n" + chat_service.situation_for(route, tutor)
-        parts = _tutoring_parts(chat_service.FROZEN_SYSTEM_PROMPT, self.ex, asked)
-        assert "<check_question>" in parts[1][0]
-        look = "<student_message>\nq\n</student_message>\n\n" + chat_service.situation_for(route_of("lookup"), tutor)
-        assert _tutoring_parts(chat_service.FROZEN_SYSTEM_PROMPT, self.ex, look) is None

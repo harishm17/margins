@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { promptsV2 } from './prompt-revision'
+import { checkPromptAreas, promptsV2 } from './prompt-revision'
 
 describe('promptsV2', () => {
   it('is off when the variable is empty or missing', () => {
@@ -22,5 +22,12 @@ describe('promptsV2', () => {
 
   it('refuses an area it does not know', () => {
     assert.throws(() => promptsV2('nope' as never, 'all'))
+  })
+
+  it('a misspelt area in the variable is an error at start, not an area quietly left on v1', () => {
+    // Whole-PR review of #90: PROMPTS_V2=voise was ignored.
+    assert.throws(() => checkPromptAreas('tutor, voise'), /voise/)
+    assert.doesNotThrow(() => checkPromptAreas(' Tutor, ALL ,'))
+    assert.doesNotThrow(() => checkPromptAreas(undefined))
   })
 })

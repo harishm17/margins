@@ -1195,16 +1195,28 @@ class KeyPointCheck(BaseModel):
     )
 
 
-class ShortAnswerGradeV2(BaseModel):
-    """Prompt revision (grading area): the per-point checks come first, so the score is written after
-    the evidence for it. When there is one check per key point the service computes the points from the
-    checks and `points_earned` is only the fallback."""
+# The graders' v2 wording for "the answer has it" (short answers under PROMPTS_V2 "grading", recall under "tutor"). A rubric
+# line or a source claim is written from one way of saying or reaching the idea; an answer that gets there another valid
+# way has it too. One phrase, so the two graders cannot drift apart.
+IN_ANY_WORDING_OR_METHOD = "in any wording or by an equivalent valid method"
 
-    key_point_checks: List[KeyPointCheck] = Field(
-        default_factory=list,
-        description="One entry for each key point, in the order they were listed",
+
+class KeyPointCheckV2(KeyPointCheck):
+    """Prompt revision (grading area): a key point is an idea, met by any wording or valid method that gives it."""
+
+    result: Literal["met", "partly", "not_met"] = Field(
+        description=(
+            f"met: the answer gives the key point's idea, {IN_ANY_WORDING_OR_METHOD}. partly: the idea is touched on or "
+            "incomplete. not_met: it is missing or wrong, also when the answer uses the key point's words in a wrong statement."
+        )
     )
-    points_earned: float = Field(description="Points from 0 to the maximum given; agrees with key_point_checks")
+
+
+class ShortAnswerGradeV2(BaseModel):
+    """Prompt revision (grading area), for a question with no key points: the model gives the score. A question with
+    key points uses ShortAnswerChecksV2."""
+
+    points_earned: float = Field(description="Points from 0 to the maximum given")
     feedback: str = Field(description="2-3 sentences on what was good and what was missing")
     blamed_concept_id: Optional[str] = Field(
         default=None,
@@ -1231,7 +1243,7 @@ class ShortAnswerChecksV2(BaseModel):
     no score. The service computes the points from the checks (met 1, partly 0.5, not met 0), so there is no sum
     for the model to get wrong or to make agree."""
 
-    key_point_checks: List[KeyPointCheck] = Field(
+    key_point_checks: List[KeyPointCheckV2] = Field(
         min_length=1, description="One entry for each key point, in the order they were listed"
     )
     feedback: str = Field(description="2-3 sentences on what was good and what was missing")
@@ -1253,7 +1265,7 @@ class ShortAnswerChecksV2(BaseModel):
     @classmethod
     def example(cls) -> "ShortAnswerChecksV2":
         return cls(
-            key_point_checks=[KeyPointCheck(point="(mock)", result="not_met")],
+            key_point_checks=[KeyPointCheckV2(point="(mock)", result="not_met")],
             feedback="Mock grading: no model call was made.",
         )
 
@@ -1607,6 +1619,10 @@ class PracticeConfusable(BaseModel):
     summary: str = Field(default="", max_length=1000)
 
 
+# The highest rung of the hint ladder (structure). Rung 5 is the worked analogue, a move of its own.
+HIGHEST_LADDER_RUNG = 4
+
+
 class PracticeTutorRequest(BaseModel):
     """What the app knows when the student asks the tutor for something (spec 6.1)."""
 
@@ -1642,6 +1658,16 @@ class PracticeTutorRequest(BaseModel):
             raise ValueError("step_index is outside the steps")
         if self.first_wrong_step is not None and self.first_wrong_step >= len(self.steps):
             raise ValueError("first_wrong_step is outside the steps")
+        return self
+
+    @model_validator(mode="after")
+    def _rung_fits_the_move(self) -> "PracticeTutorRequest":
+        # Rung 5 is the worked analogue, which only the worked_analogue move gives. The app keeps the rung at 5 once the
+        # student has opened a worked example, so the next ladder reply was told "rung allowed: 5", a rung the ladder
+        # does not have (and one the audited prompt says belongs to another move). Every other move is held to
+        # structure (rung 4) at most, here, so the prompt, the rung reported back and the authored fallback agree.
+        if self.move != "worked_analogue" and self.rung_allowed > HIGHEST_LADDER_RUNG:
+            self.rung_allowed = HIGHEST_LADDER_RUNG
         return self
 
 
@@ -2259,18 +2285,21 @@ class ConceptLinksV2(ConceptLinks):
 # classes above stay as they are until the area has run on v2 in production.
 
 _CHIP_HELP = "Short plain-text names of the ideas tested, shown as chips; no LaTeX or markdown"
-_DIFFICULTY_BY_APP_HELP = "Filled in by the app after generation; leave out"
 _CONFUSABLE_V2_HELP = (
     "Wrong options only: when the wrong idea is a mix-up with a concept of the <concepts> or "
     "<confusable_concepts> list, that concept's id"
 )
 
 
-def _with_descriptions(base: type, name: str, edits: Sequence[tuple], hidden: Sequence[tuple] = ()) -> type:
+def _with_descriptions(
+    base: type, name: str, edits: Sequence[tuple], hidden: Sequence[tuple] = (), moved: Sequence[tuple] = ()
+) -> type:
     """`base` with field descriptions replaced in its JSON schema. Each edit is
     (definition name or None for the model itself, field, description). A field that is not
     in the schema raises, so a renamed field cannot silently lose its description. Each `hidden`
-    (definition, field) is left out of the schema the model fills; the field must have a default."""
+    (definition, field) is left out of the schema the model fills; the field must have a default.
+    Each `moved` (definition, field, after) puts the field right after another one: the model writes
+    the fields in the schema's order, so this decides what it has written before what."""
 
     def model_json_schema(cls, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         schema = super(variant, cls).model_json_schema(*args, **kwargs)
@@ -2282,6 +2311,17 @@ def _with_descriptions(base: type, name: str, edits: Sequence[tuple], hidden: Se
             del holder["properties"][field]
             if field in holder.get("required", []):
                 holder["required"].remove(field)
+        for definition, field, after in moved:
+            holder = schema if definition is None else schema["$defs"][definition]
+            properties = dict(holder["properties"])
+            value = properties.pop(field)
+            if after not in properties:
+                raise KeyError(after)
+            holder["properties"] = {
+                key: item
+                for existing, prop in properties.items()
+                for key, item in ((existing, prop), *(((field, value),) if existing == after else ()))
+            }
         return schema
 
     variant = type(name, (base,), {"model_json_schema": classmethod(model_json_schema), "__module__": __name__})
@@ -2293,16 +2333,21 @@ _QUESTION_V2_EDITS = (
     ("GeneratedQuestion", "concepts_tested", _CHIP_HELP),
 )
 
+# The excerpts an item rests on are named before its answer is written, so the answer is written from them and
+# the list is not filled in afterwards to fit.
+_QUESTION_SOURCES_FIRST = (("GeneratedQuestion", "source_excerpts", "question_text"),)
+# The app sets the difficulty of a quiz, exam or review question and of an example after generation (the request
+# names it), so the model is not shown the field: "leave out" on a field it can see was asking for it to be filled.
+_QUESTION_DIFFICULTY_BY_APP = (("GeneratedQuestion", "difficulty"),)
+
 QuestionSetV2 = _with_descriptions(
-    QuestionSet, "QuestionSetV2",
-    (*_QUESTION_V2_EDITS, ("GeneratedQuestion", "difficulty", _DIFFICULTY_BY_APP_HELP)),
+    QuestionSet, "QuestionSetV2", _QUESTION_V2_EDITS, hidden=_QUESTION_DIFFICULTY_BY_APP, moved=_QUESTION_SOURCES_FIRST
 )
 ReviewItemSetV2 = _with_descriptions(
-    ReviewItemSet, "ReviewItemSetV2",
-    (*_QUESTION_V2_EDITS, ("GeneratedQuestion", "difficulty", _DIFFICULTY_BY_APP_HELP)),
+    ReviewItemSet, "ReviewItemSetV2", _QUESTION_V2_EDITS, hidden=_QUESTION_DIFFICULTY_BY_APP, moved=_QUESTION_SOURCES_FIRST
 )
 # Warm-up difficulty is the model's: the bank is bracketed on it.
-WarmupSetV2 = _with_descriptions(WarmupSet, "WarmupSetV2", _QUESTION_V2_EDITS)
+WarmupSetV2 = _with_descriptions(WarmupSet, "WarmupSetV2", _QUESTION_V2_EDITS, moved=_QUESTION_SOURCES_FIRST)
 
 SolvedExampleSetV2 = _with_descriptions(
     SolvedExampleSet, "SolvedExampleSetV2",
@@ -2312,17 +2357,18 @@ SolvedExampleSetV2 = _with_descriptions(
         ("SolutionStep", "explanation", "Why the step is taken"),
         ("SolvedExample", "final_answer", "2-5 markdown bullets"),
         ("SolvedExample", "key_concepts", _CHIP_HELP),
-        ("SolvedExample", "difficulty", _DIFFICULTY_BY_APP_HELP),
     ),
+    hidden=(("SolvedExample", "difficulty"),),
+    moved=(("SolvedExample", "source_excerpts", "problem_statement"),),
 )
 InteractiveExampleSetV2 = _with_descriptions(
     InteractiveExampleSet, "InteractiveExampleSetV2",
     (
         ("InteractiveExample", "key_concepts", _CHIP_HELP),
-        ("InteractiveExample", "difficulty", _DIFFICULTY_BY_APP_HELP),
     ),
     # R5: the minutes are computed by the app from the step count (examples.py), not asked of the model.
-    hidden=(("InteractiveExample", "estimated_time_minutes"),),
+    hidden=(("InteractiveExample", "estimated_time_minutes"), ("InteractiveExample", "difficulty")),
+    moved=(("InteractiveExample", "source_excerpts", "problem_statement"),),
 )
 ExamStyleProfileV2 = _with_descriptions(
     ExamStyleProfile, "ExamStyleProfileV2",

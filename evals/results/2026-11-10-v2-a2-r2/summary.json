@@ -1,0 +1,327 @@
+{
+  "run": {
+    "label": "v2-a2-r2",
+    "date": "2026-11-10",
+    "code": {
+      "commit": "4c5fcf70d1f2dd7a5d545710b30ea84dc1de229a",
+      "branch": "prompt-fixes",
+      "app_dirty": false
+    },
+    "prompts": {
+      "PROMPTS_V2": "generation,support",
+      "areas": {
+        "generation": "v2",
+        "support": "v2"
+      },
+      "revision": "v2"
+    },
+    "kinds": [
+      "warmup",
+      "quiz",
+      "review",
+      "solved",
+      "interactive",
+      "exam"
+    ],
+    "topics": 10,
+    "topic_counts": {
+      "mit-18.05": 6,
+      "mit-6.006": 4
+    },
+    "params": {
+      "questions": 10,
+      "examples": 3,
+      "exam_questions": 20,
+      "difficulty": "medium"
+    },
+    "judge": "opus:medium",
+    "batch": true,
+    "batches": [
+      {
+        "id": "msgbatch_016ZrazPtGBM4N397u9DtbZH",
+        "requests": 58,
+        "seconds": 170.9
+      },
+      {
+        "id": "msgbatch_01UWoyL1s7MtX2RhcH5LhAcu",
+        "requests": 38,
+        "seconds": 185.4
+      },
+      {
+        "id": "msgbatch_018ddNn4wvT9APYpr9BiR51N",
+        "requests": 2,
+        "seconds": 124.0
+      },
+      {
+        "id": "msgbatch_01Y3UzjZYfgR36WZUYRSr3HT",
+        "requests": 2,
+        "seconds": 124.6
+      },
+      {
+        "id": "msgbatch_01LruH5DQGjvK2LbheuitjmN",
+        "requests": 10,
+        "seconds": 109.5
+      }
+    ],
+    "mock": false,
+    "max_usd": 9.0,
+    "max_judge_usd": 3.0,
+    "spend": {
+      "generation": 5.394,
+      "judge": 0.438
+    },
+    "stopped": null
+  },
+  "kinds": {
+    "warmup": {
+      "runs": 10,
+      "failed": 0,
+      "errors": [],
+      "written": 50,
+      "malformed": 0,
+      "by_reason": {},
+      "support_sent": 50,
+      "unsupported": 1,
+      "unsupported_by_reason": {
+        "a quote is not in the excerpt it names": 1
+      },
+      "other_losses": 0,
+      "stored": 49,
+      "drop_rate": 0.02,
+      "malformed_rate": 0.0,
+      "unsupported_rate": 0.02,
+      "checks": {
+        "items": 49,
+        "flagged": 2,
+        "flagged_rate": 0.04081632653061224,
+        "by_defect": {
+          "longest_option_tell": 2
+        },
+        "multiple_choice": 37,
+        "correct_longest": 6,
+        "chance_longest": 9.25,
+        "true_false": 12,
+        "true_false_share": 0.24489795918367346
+      },
+      "cost_usd": 0.503689,
+      "cost_per_run_usd": 0.050369,
+      "median_seconds": 367.9
+    },
+    "quiz": {
+      "runs": 10,
+      "failed": 0,
+      "errors": [],
+      "written": 120,
+      "malformed": 0,
+      "by_reason": {},
+      "support_sent": 120,
+      "unsupported": 4,
+      "unsupported_by_reason": {
+        "the check said the excerpts do not support it": 4
+      },
+      "other_losses": 16,
+      "stored": 100,
+      "drop_rate": 0.16666666666666666,
+      "malformed_rate": 0.0,
+      "unsupported_rate": 0.03333333333333333,
+      "checks": {
+        "items": 100,
+        "flagged": 2,
+        "flagged_rate": 0.02,
+        "by_defect": {
+          "longest_option_tell": 2
+        },
+        "multiple_choice": 36,
+        "correct_longest": 7,
+        "chance_longest": 9.0,
+        "true_false": 17,
+        "true_false_share": 0.17
+      },
+      "cost_usd": 1.057552,
+      "cost_per_run_usd": 0.105755,
+      "median_seconds": 367.9
+    },
+    "review": {
+      "runs": 10,
+      "failed": 0,
+      "errors": [],
+      "written": 118,
+      "malformed": 0,
+      "by_reason": {},
+      "support_sent": 118,
+      "unsupported": 3,
+      "unsupported_by_reason": {
+        "a quote is not in the excerpt it names": 2,
+        "the check said the excerpts do not support it": 1
+      },
+      "other_losses": 0,
+      "stored": 115,
+      "drop_rate": 0.025423728813559324,
+      "malformed_rate": 0.0,
+      "unsupported_rate": 0.025423728813559324,
+      "checks": {
+        "items": 115,
+        "flagged": 3,
+        "flagged_rate": 0.02608695652173913,
+        "by_defect": {
+          "longest_option_tell": 3
+        },
+        "multiple_choice": 67,
+        "correct_longest": 18,
+        "chance_longest": 16.75,
+        "true_false": 48,
+        "true_false_share": 0.41739130434782606
+      },
+      "cost_usd": 0.981497,
+      "cost_per_run_usd": 0.09815,
+      "median_seconds": 368.0
+    },
+    "solved": {
+      "runs": 10,
+      "failed": 0,
+      "errors": [],
+      "written": 30,
+      "malformed": 0,
+      "by_reason": {},
+      "support_sent": 0,
+      "unsupported": 0,
+      "unsupported_by_reason": {},
+      "other_losses": 0,
+      "stored": 30,
+      "drop_rate": 0.0,
+      "malformed_rate": 0.0,
+      "unsupported_rate": null,
+      "checks": {
+        "items": 30,
+        "flagged": 0,
+        "flagged_rate": 0.0,
+        "by_defect": {}
+      },
+      "cost_usd": 0.835704,
+      "cost_per_run_usd": 0.08357,
+      "median_seconds": 177.3
+    },
+    "interactive": {
+      "runs": 10,
+      "failed": 0,
+      "errors": [],
+      "written": 30,
+      "malformed": 0,
+      "by_reason": {},
+      "support_sent": 0,
+      "unsupported": 0,
+      "unsupported_by_reason": {},
+      "other_losses": 0,
+      "stored": 30,
+      "drop_rate": 0.0,
+      "malformed_rate": 0.0,
+      "unsupported_rate": null,
+      "checks": {
+        "items": 30,
+        "flagged": 0,
+        "flagged_rate": 0.0,
+        "by_defect": {}
+      },
+      "cost_usd": 1.123744,
+      "cost_per_run_usd": 0.112374,
+      "median_seconds": 177.3
+    },
+    "exam": {
+      "runs": 2,
+      "failed": 0,
+      "errors": [],
+      "written": 71,
+      "malformed": 0,
+      "by_reason": {},
+      "support_sent": 69,
+      "unsupported": 3,
+      "unsupported_by_reason": {
+        "a quote is not in the excerpt it names": 1,
+        "the check said the excerpts do not support it": 2
+      },
+      "other_losses": 28,
+      "stored": 40,
+      "drop_rate": 0.43661971830985913,
+      "malformed_rate": 0.0,
+      "unsupported_rate": 0.043478260869565216,
+      "checks": {
+        "items": 40,
+        "flagged": 0,
+        "flagged_rate": 0.0,
+        "by_defect": {},
+        "multiple_choice": 24,
+        "correct_longest": 3,
+        "chance_longest": 6.0,
+        "true_false": 0,
+        "true_false_share": 0.0
+      },
+      "cost_usd": 0.891805,
+      "cost_per_run_usd": 0.445902,
+      "median_seconds": 497.1
+    }
+  },
+  "judge": {
+    "quiz": {
+      "judged": 100,
+      "flagged": 0,
+      "unexplained": 0,
+      "by_defect": {
+        "wrong_key": 0,
+        "two_correct": 0,
+        "not_answerable": 0,
+        "ungrammatical": 0,
+        "thinking_aloud": 0,
+        "guessable": 0,
+        "other": 0
+      },
+      "rate": 0.0
+    },
+    "review": {
+      "judged": 115,
+      "flagged": 0,
+      "unexplained": 0,
+      "by_defect": {
+        "wrong_key": 0,
+        "two_correct": 0,
+        "not_answerable": 0,
+        "ungrammatical": 0,
+        "thinking_aloud": 0,
+        "guessable": 0,
+        "other": 0
+      },
+      "rate": 0.0
+    },
+    "warmup": {
+      "judged": 49,
+      "flagged": 1,
+      "unexplained": 0,
+      "by_defect": {
+        "wrong_key": 0,
+        "two_correct": 0,
+        "not_answerable": 0,
+        "ungrammatical": 0,
+        "thinking_aloud": 0,
+        "guessable": 0,
+        "other": 1
+      },
+      "rate": 0.02
+    },
+    "exam": {
+      "judged": 40,
+      "flagged": 0,
+      "unexplained": 0,
+      "by_defect": {
+        "wrong_key": 0,
+        "two_correct": 0,
+        "not_answerable": 0,
+        "ungrammatical": 0,
+        "thinking_aloud": 0,
+        "guessable": 0,
+        "other": 0
+      },
+      "rate": 0.0
+    }
+  },
+  "judge_groups": 10,
+  "judge_cost_usd": 0.438026
+}

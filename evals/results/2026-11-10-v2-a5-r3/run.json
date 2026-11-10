@@ -1,0 +1,51 @@
+{
+  "label": "v2-a5-r3",
+  "date": "2026-11-10",
+  "commit": "67cdab6b",
+  "dirty": true,
+  "arms": {
+    "haiku": {
+      "model": "claude-haiku-5-5",
+      "effort": "low",
+      "app_choice": true
+    },
+    "sonnet": {
+      "model": "claude-sonnet-5-5",
+      "effort": "low"
+    }
+  },
+  "prompts": {
+    "PROMPTS_V2": "grading",
+    "areas": {
+      "grading": "v2"
+    },
+    "revision": "v2",
+    "request": {
+      "schema": "ShortAnswerChecksV2",
+      "system_chars": 561,
+      "system_sha": "b31f47bc9739"
+    }
+  },
+  "estimate_usd": {
+    "haiku": 0.0266,
+    "sonnet": 0.5327
+  },
+  "cost_usd": {
+    "haiku": 0.020645,
+    "sonnet": 0.409814
+  },
+  "total_cost_usd": 0.430459,
+  "price_factor": 0.5,
+  "mock": false,
+  "batches": [
+    {
+      "id": "msgbatch_01ASaru3qRdqbk6KGmtJx6bV",
+      "requests": 240,
+      "seconds": 139.5
+    }
+  ],
+  "outcomes": {
+    "haiku: ok": 120,
+    "sonnet: ok": 120
+  }
+}

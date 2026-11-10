@@ -1,0 +1,21 @@
+{
+  "label": "v1-a6-r2",
+  "date": "2026-11-10",
+  "prompts": {
+    "PROMPTS_V2": "",
+    "areas": {
+      "tutor": "v1"
+    },
+    "revision": "v1"
+  },
+  "patterns": null,
+  "limit": null,
+  "scenarios": "/home/harish/code/study_buddy-prompt-audit/evals/tutoring/scenarios/practice-original.jsonl",
+  "stopped": null,
+  "spend": {
+    "generation": 0.2496,
+    "judge": 0.0,
+    "max_usd": 2.0,
+    "max_judge_usd": 3.0
+  }
+}

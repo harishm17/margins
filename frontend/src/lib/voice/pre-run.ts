@@ -21,16 +21,17 @@
 import type { CoachStyle } from '@/lib/voice/coach-prompt'
 import type { VoiceBlock, VoiceMessage } from '@/lib/voice/history'
 import { heardSince, type CoachState } from '@/lib/voice/teach-tools'
-import { classifyUtterance, hasSubstance, type UtteranceKind } from '@/lib/voice/utterance'
+import { HELP_ASKS_BEFORE_TELLING } from '@/lib/voice/teach-back'
+import { asksForHelp, classifyUtterance, hasSubstance, type UtteranceKind } from '@/lib/voice/utterance'
 import type { VoiceStreamExtra } from '@/lib/voice/turn-contract'
 
 export type PreRunStep = Extract<VoiceStreamExtra, { type: 'working' }>['step']
 
 export type PreRunPlan = {
-  /** The name sent to the browser (`working` event). */
-  step: PreRunStep
+  /** The name sent to the browser (`working` event); `start` for the first step of a session, which grades nothing and is not announced. */
+  step: PreRunStep | 'start'
   /** The tool whose code runs, and its arguments. */
-  tool: 'record_answer' | 'assess_explanation' | 'next_claim' | 'record_check'
+  tool: 'record_answer' | 'assess_explanation' | 'next_claim' | 'record_check' | 'get_next_question' | 'get_concept_to_explain'
   input: Record<string, unknown>
   /** A guided-reading reveal asks the server's own check question (the coach has not chosen one). */
   autoCheck?: boolean
@@ -46,6 +47,20 @@ export type PreRunFacts = {
   currentAnswered: boolean
   /** What the coach said last, as the student heard it: the question of a new example is those words. */
   lastCoachText: string
+  /** The audited prompts are on (PROMPTS_V2, area voice): a second request to be told runs the assessment that explains. */
+  v2?: boolean
+}
+
+/**
+ * v2: the first step of a session, run before the model's first call. Every session with tools opens the same way (the
+ * start message used to tell the model to call this tool, and the student waited for two model calls before the first
+ * word). Each of these returns the same thing when the model asks for it again before the student has answered.
+ */
+export function planStart(style: CoachStyle): PreRunPlan | null {
+  if (style === 'oral_quiz') return { step: 'start', tool: 'get_next_question', input: {} }
+  if (style === 'teach_back') return { step: 'start', tool: 'get_concept_to_explain', input: {} }
+  if (style === 'guided_reading') return { step: 'start', tool: 'next_claim', input: {} }
+  return null
 }
 
 /** Every third question (index 2, 5, 8) asks "How sure are you?" before it is recorded; see the quiz rules in coach-prompt.ts. */
@@ -58,6 +73,14 @@ export function planPreRun(facts: PreRunFacts): PreRunPlan | null {
   const { style, state, utterance } = facts
   if (!isEnglish(facts.language) || !utterance.trim()) return null
   const kind: UtteranceKind = classifyUtterance(utterance)
+  // v2: the second time a student asks to be told on an idea, the assessment runs and answers with the explanation
+  // (teach-tools.ts `told`); the first time the coach puts them off once, with no step.
+  if (facts.v2 && style === 'teach_back' && asksForHelp(utterance)) {
+    const conceptId = state.teach.current
+    const concept = conceptId ? state.teach.concepts[conceptId] : undefined
+    if (!conceptId || !concept || concept.outcome || concept.exampleAsked || state.teach.askedTurn < 0) return null
+    return (concept.helpAsked ?? 0) >= HELP_ASKS_BEFORE_TELLING ? { step: 'assess', tool: 'assess_explanation', input: { concept_id: conceptId } } : null
+  }
   if (kind !== 'answer' && kind !== 'idk') return null
 
   if (style === 'oral_quiz') {
@@ -108,6 +131,9 @@ export const neutralizeAppResultTags = (text: string): string => text.replace(/<
 /** The name the model knows a planned step by: with v2 the checks are record_example_check (teach-back) and record_claim_check (guided reading). */
 export const appResultStep = (plan: Pick<PreRunPlan, 'tool' | 'input'>, v2: boolean): string =>
   v2 && plan.tool === 'record_check' ? ('claim_index' in plan.input ? 'record_claim_check' : 'record_example_check') : plan.tool
+
+/** The same for teach-back's example check when it is named directly (the eval's parity fixture). */
+export const exampleCheckStep = (v2: boolean): string => appResultStep({ tool: 'record_check', input: {} }, v2)
 
 /** The text block that carries a step's result to the model, after the student's words. */
 /** `step` is the tool name the model knows the step by (v2 names the two checks apart; see `appResultStep`). */

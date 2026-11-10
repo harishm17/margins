@@ -91,17 +91,28 @@ def test_the_judge_loop_stops_at_the_spend_cap(tmp_path):
 
 
 def test_only_spoken_asking_turns_are_judged():
-    scenario = {"id": "s", "concept": {"name": "Gear ratio", "claims": [{"text": CLAIMS[0]["text"]}]}}
+    scenario = {
+        "id": "s",
+        "concept": {"name": "Gear ratio", "claims": [{"text": CLAIMS[0]["text"]}]},
+        "then": [{"concept": {"name": "Development", "claims": [{"text": "Development is the distance for one turn of the pedals."}]}, "turns": []}],
+    }
     records = [
         {"scenario": "s", "turn": 0, "text": "Welcome.", "last_action": "ask", "student": "", "claims_given": []},
         {"scenario": "s", "turn": 1, "text": "Your pages say it.", "last_action": "explain", "student": "no", "claims_given": []},
         {"scenario": "s", "turn": 2, "text": "", "last_action": "probe", "student": "x", "claims_given": []},
         {"scenario": "s", "turn": 3, "text": "What do you mean?", "last_action": None, "student": "y", "claims_given": []},
+        # An idea closes and the coach asks the next one in the same reply: judged against the next idea's claims.
+        {"scenario": "s", "turn": 4, "idea": 0, "asks_idea": 1, "text": "You have it. Now, what is development?", "last_action": "wrap_up", "student": "z", "claims_given": []},
+        {"scenario": "s", "turn": 5, "idea": 1, "asks_idea": 1, "text": "What moves when the pedals turn once?", "last_action": "probe", "student": "w", "claims_given": []},
+        # The last idea closes: a goodbye asks nothing, so there is nothing to judge.
+        {"scenario": "s", "turn": 6, "idea": 1, "asks_idea": None, "finished": True, "text": "That is all. Goodbye.", "last_action": "wrap_up", "student": "v", "claims_given": []},
     ]
     import teach_metrics
 
-    items = teach_judge.items_for_records({"s": scenario}, records, lambda r: r.get("last_action") in teach_metrics.ASKING_ACTIONS)
-    assert [i["key"] for i in items] == ["s#0", "s#3"] and items[1]["student_previous"] == "y"
+    items = teach_judge.items_for_records({"s": scenario}, records, teach_metrics.is_judged)
+    assert [i["key"] for i in items] == ["s#0", "s#3", "s#4", "s#5"] and items[1]["student_previous"] == "y"
+    assert [i["concept"] for i in items] == ["Gear ratio", "Gear ratio", "Development", "Development"]
+    assert items[2]["claims"] == [{"text": "Development is the distance for one turn of the pedals.", "given": False}]
 
 
 def labels():

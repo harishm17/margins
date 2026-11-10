@@ -186,3 +186,87 @@ These were taken outside the v3 spec and are recorded so the reasons are public.
 - **Mock exams longer than the daily time sit alone on their day,** marked as longer; every other day stays within the daily minutes.
 - **Cloud speech recognition (2026-11-03).** Deepgram Nova-3 is streamed from the browser with a short-lived token the server mints per session, and the browser's recognizer is the fallback. AssemblyAI is built as an optional second provider and is off by default, because it trains on audio unless a paid account opts out. Speech output stays in the browser. Voice transcripts are deleted after 180 days; evidence events stay.
 - **One model call per graded voice utterance (v3.2).** The server runs the grading step itself and gives the result to the coach as data, which cut the first spoken sentence from 2.8 s to about 1.1 s at the median in the baseline measurement.
+
+## Rulings made while fixing the prompt and voice review findings (2026-11-10)
+
+The reviews of the prompt audit (PR #90) listed bugs and prompt changes. Where a fix changed what a student or an operator would notice, or two findings pulled apart, the call made is recorded here. "v1" is the prompts in production; "v2" is the audited prompts behind `PROMPTS_V2`, off by default. Nothing here was measured against a model: the eval runs that would check the prompt changes are listed in the PR and wait for approval.
+
+**Voice session and turns (both prompt revisions)**
+
+- **The daily cap and the one-live-session rule are checked on every turn,** not only the first. A refusal in the middle of a call ends the call into its summary with the limit shown. Alternative: let the running call finish. Rejected because a student with one minute left could talk for an hour.
+- **Ending a call ends it at once,** and a heartbeat does not bring back a call that is closed or has gone quiet. It used to count as live, and use minutes, for 90 seconds more.
+- **A reply the student talks over is kept,** marked as cut off, so the note about what the student heard lands on that reply. Before, nothing was stored and the note was written on the reply before it.
+- **A turn's claim on the session is a lease that the running turn renews** (every 10 s; stale after 45 s, where it was a flat three minutes). The browser waits 50 s for a busy session and drops a reply stream that has sent nothing for 35 s. The numbers are judgment, not measured: a turn that is slow but alive keeps its claim, and a dead one blocks the next turn for under a minute.
+- **A cloud speech stream that does not open in 6 s is given up on** and the browser's own recognizer takes over.
+- **A cloud speech stream is closed when the granted voice time runs out.** The browser enforces this; a student who changes the page's code can keep a stream open until the next turn is refused. A hard limit needs the audio to pass through our server, which was not built.
+- **Screen readers hear each coach reply once:** the transcript is no longer a live region, and finished replies are announced only when the app is not reading them aloud.
+- **Speech text:** "pp. 12" and similar are not sentence ends; multi-line display maths is one unit; I/O and A/B are read as letters; a link is read by its words and a bare address by its site; `*`, `#` and `_` survive when they are part of the text (C#, #1, snake_case).
+
+**Oral quiz and Quiz me**
+
+- **The server decides which question an answer belongs to** (v1). The model's `question_index` is ignored when the server knows the question. Cost if wrong: none seen; the model could only disagree by being wrong.
+- **Evidence is written by whichever recording succeeds,** once. A recording that failed after its attempt row was inserted used to lose the evidence for good.
+- **The bookkeeping after a recorded answer runs after the coach's feedback starts,** and the turn waits for it before it ends. A failure there is logged and does not stop the reply.
+- **A failed question generation is an error the student can retry (503),** not "this topic has no quiz". A sprint goes on with the other topics.
+- **`GET /api/voice/drill-pack` is rate limited and answers 404 for a topic outside the course named.**
+- **A percentage counts as working only when it is taken of a number** ("15% of 240"). "Why is a 95% interval wider?" is a concept question again. Some questions with light arithmetic now reach the voice drill.
+
+**Teach it back and guided reading**
+
+- **The result that closes an idea carries the next idea** (`next_idea`), so the coach wraps up once and asks the next idea in the same reply. The v1 prompt rule and tool descriptions changed with it and shipped without an eval run; the teach-back eval now plays this and gates it.
+- **A new example that held reports nothing as missed.**
+- **An unclear answer gets one clarifying question,** then the coach explains or moves on (teach-back and guided reading). It could loop without limit.
+- **Guided reading: `next_claim` with no argument while a prediction is waiting skips the prediction when the student has said something;** the claim told is found by its id, not its position.
+- **v2 only: the second time a student asks to be told, the server answers with the explanation.** The count reads English phrases in short utterances (14 words or fewer); a student asking in another language is not counted and gets the earlier behaviour.
+- **v2 only: a request to be told while a say-back is waiting explains the same claim again and is not scored.**
+- **v2 only: a reply cut at the token limit stays said and is finished in the next reply,** not said again from the start.
+- **v2 only: the session's first tool runs before the model is called,** so the first reply does not spend a round trip asking for it.
+- **v2 only: each kind of turn has a length** (about forty words for a question, sixty for an explanation with its request to say it back, forty for a new example, fifty for a closing turn) and the confront example asks one question. The v1 prompt still models a double question and is expected to fail the new `question_form` gate.
+- **v2 only: the grader's note on a wrong idea is tagged as the grader's** (`<grader_note>`), so the coach does not read it as the student's words.
+
+**Practice tutor (both revisions)**
+
+- **Rung 5 goes only with the worked-analogue move;** any other move is held to rung 4 even after a worked example was shown.
+
+**Grading**
+
+- **v2: a key point is met "in any wording or by an equivalent valid method",** for the short-answer grader and the recall grader alike, and generated key points name ideas, not one method. A student who solves it another valid way is no longer marked down. Cost if wrong: more lenient marks; the A5 run measures both kinds of wrong mark.
+- **A5 gates:** short answers fail above 3% wrongly passed or 3% wrongly failed; recall above 6% and 12%. A failed gate exits 1. The lines are a first setting from the stored runs, not a studied threshold.
+- **The v2 short-answer schema without key points has no `key_point_checks` field** (the branch that scored from it could not be reached).
+- **Not done: grading short answers on the recall-grading model as a fallback.** The review offered it as an option; it changes cost and marks and needs its own eval.
+
+**Support check and quotes (both revisions, no flag)**
+
+- **One quote matcher for every quote-in-source check,** which reads past PDF markdown (`**`, `_x_`, `<sup>`) and maths italics, and a citation may name any excerpt the check was shown. 39 of 44 items dropped in the stored v2 run were supported and lost to this. Cost if wrong: a quote that matches only after normalising is accepted where it was dropped; the rule still needs the words in order.
+
+**Generation (v2 unless said)**
+
+- **Rules about the course map are said after `<course_map>`;** inside the tag the lines only name what they list. The same for the gap explainer, recall grader, reader and practice tutor notes.
+- **A topic whose later sources did not fit the budget says so above the excerpts.**
+- **`difficulty` is hidden from the model in the quiz, exam, review and example schemas** (the app sets it), and `source_excerpts` comes right after the question.
+- **A hard warm-up question is one mix-up resisted, still one idea.**
+- **A refill's list of questions already written is tagged data** (`written_questions`). On v1 the empty "Do not repeat" header is no longer sent when there is nothing to list.
+- **`<diagnosis>` stays as a tag** and is registered with the others.
+- **The leak judge for generated examples follows the generation flag,** not the tutor flag.
+- **Not changed: the voice drill's key-point generator,** which is not under the grading wording.
+
+**Caching (both revisions)**
+
+- **The practice tutor's and recall grader's system prompts are cached,** and review batches cache the excerpts from the first batch when there is more than one.
+- **Not done: caching the refill's excerpts.** A refill is one call per topic and seldom repeats inside the cache's lifetime, so the write would cost more than it saves.
+
+**Operations**
+
+- **`PROMPTS_V2` naming an unknown area stops both services at start.** A misspelt area was ignored silently. Cost: a typo in a deploy fails the health check and the old version keeps serving, which is the point.
+
+**Evals**
+
+- **A2 judge: a fault counts only with its note.** Faults without one are reported apart. Judge counts from earlier runs are not comparable; replayed, the stored v2 run has 2 checkable flags, not 8.
+- **Teach-back eval: 29 scenarios, three of them sessions of two ideas.** Earlier numbers are over 26 scenarios.
+- **`question_form` gate (95% of turns that ask for the student's thinking):** a question joined to a second one, including "…, and why?", or one that names its answers, fails. It reads wording only. Probes answerable with yes or no are reported, not gated. On the stored runs v1 scores 80% and v2 (before its wording fix) 72%.
+- **`wrap_up` gate (95% of closing turns):** 60 words or fewer (the prompt asks for about fifty), the next idea not fetched twice, the next idea asked, nothing asked after the last.
+- **The judge reads a closing turn that opens the next idea against the next idea's claims.** Claims of an idea already finished are no longer leaks.
+- **The eval keeps the conversation as the app does** (no thinking blocks, the app's trimming limits, which the prompt fixtures carry).
+- **`--grader` runs the app's recall grader beside the script and reports agreement;** it does not gate and does not steer the conversation. Claims are sent without a source quote.
+- **Not simulated:** interruptions and turn retries (the app's own tests cover them).
+- **Tests that only read prompt wording or the mock provider were removed** from the test files PR #90 added.

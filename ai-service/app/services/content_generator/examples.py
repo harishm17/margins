@@ -15,6 +15,7 @@ from app.services.content_generator.context import (
     fetch_topic_context,
     focus_line,
     format_concept_block,
+    name_in_instructions,
     resolve_concept_ids,
 )
 from app.services.content_generator.quiz import OPTION_SIMILARITY_RULE
@@ -135,7 +136,7 @@ class ExamplesGenerator:
         guidance = SOLVED_GUIDANCE.get(difficulty_level, SOLVED_GUIDANCE['medium'])
         v2 = prompts_v2("generation")
         difficulty_line = "" if v2 else f'- Set difficulty to "{difficulty_level}".\n'
-        instructions = f"""Write {count} distinct solved example problems on "{topic_name}" from the excerpts above.
+        instructions = f"""Write {count} distinct solved example problems on "{name_in_instructions(topic_name)}" from the excerpts above.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
 {concepts}
@@ -189,7 +190,7 @@ Difficulty: {difficulty_level}. {guidance}
         difficulty_line = "" if v2 else f'- Set difficulty to "{difficulty_level}".\n'
         # v2 adds the similar-length rule the other question types have.
         option_rule = f" {OPTION_SIMILARITY_RULE}" if v2 else ""
-        instructions = f"""Write {count} interactive practice problems on "{topic_name}" from the excerpts above. The student solves each one step by step.
+        instructions = f"""Write {count} interactive practice problems on "{name_in_instructions(topic_name)}" from the excerpts above. The student solves each one step by step.
 {focus_line(focus)}
 Difficulty: {difficulty_level}. {guidance}
 {concepts}
@@ -228,7 +229,10 @@ async def _clear_word_form_hints(examples: List[Dict]) -> List[Dict]:
     for example in examples:
         leaked = False
         for hint in word_form_hints(f"{example['title']}\n{example['problem_statement']}", example["steps"]):
-            verdict = await judge_leak(hint["hint"], hint["answers"], problem=hint["problem"], question=hint["question"])
+            # The judge's prompt revision follows this caller's area, as Ask's does (it used to follow the tutor's flag).
+            verdict = await judge_leak(
+                hint["hint"], hint["answers"], problem=hint["problem"], question=hint["question"], v2=prompts_v2("generation")
+            )
             if verdict.answer_revealed:
                 leaked = True
                 break

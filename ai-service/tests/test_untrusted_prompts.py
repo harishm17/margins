@@ -17,19 +17,22 @@ import pytest
 from app.config import settings
 from app.services import chat, course_planner, exam_relevance, exam_style, recall_grader
 from app.services.concepts import extractor, linker
-from app.services.content_generator import context, gap_explainer, review_items, support_check
+from app.services.content_generator import context, gap_explainer, quiz, review_items, support_check
 from app.services.document_processor import validator
 from app.services.exam_grader import ExamGrader
 from app.services.llm import untrusted
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import (
+    PracticeClaim,
+    PracticeConfusable,
     PracticeStep,
     PracticeTutorRequest,
     ReaderClaim,
     ReaderTutorRequest,
     RecallClaim,
     RecallGradeRequest,
+    WeakPrerequisite,
 )
 from app.services.tutor import leak, practice, reader
 
@@ -83,7 +86,11 @@ def practice_request(p: str) -> PracticeTutorRequest:
     return PracticeTutorRequest(
         **IDS, problem=p, working=p, attempts=[p], hints_shown=[p], rung_allowed=1, move="ladder",
         steps=[PracticeStep(question=p, answer="8", hints=[p, p, p]), PracticeStep(question=p, answer="3/28")],
-        step_index=1, final_allowed=False, ask_what_is_unclear=False, claims=[],
+        step_index=1, final_allowed=False, ask_what_is_unclear=False,
+        # Every optional block of the request (P-B5: <diagnosis> and <weak_prerequisite> were rendered by no test, and
+        # neither name was in the registry).
+        claims=[PracticeClaim(text=p[:900], quote=p, page=2)], first_wrong_step=0,
+        weak_prerequisite=WeakPrerequisite(name=p[:300], page=3), confusable=PracticeConfusable(name=p[:300], summary=p[:1000]),
     )
 
 
@@ -107,8 +114,18 @@ async def b_support(p, mp):
 async def b_generation(p, mp):
     parts = render(context.content_messages(p, p, [CHUNK(p)], "Write.", course_map=p))
     concepts = [{"id": "k1", "name": p[:300], "summary": p, "prerequisite_names": [p]}]
+    # P-B5: a topic's name in the instruction sentence, the prerequisite review instructions and a refill's list of
+    # the questions already written all went into the prompt as they were.
+    asked = await captured(
+        mp,
+        lambda: quiz.QuizGenerator()._generate_questions(
+            p, p, [CHUNK(p)], 2, [quiz.QuestionType.MULTIPLE_CHOICE], "medium",
+            review_instructions=quiz.prerequisite_instructions(p, p, 1, 3),
+        ),
+    )
     return "\n\n".join([
         parts, context.focus_line(p), context.format_concept_block(concepts), context.do_not_reuse_block(p),
+        asked, context.do_not_repeat_block([{"question_text": p}]),
     ])
 
 
@@ -132,7 +149,9 @@ async def b_exam_relevance(p, mp):
 
 
 async def b_exam_style(p, mp):
-    return await captured(mp, lambda: exam_style.extract_style_profile(p, p))
+    # The stored profile is model text written from a past exam; it goes into the exam generator's prompt.
+    profile = {"question_count": 3, "multi_part": True, "example_stems": [p], "phrasing_conventions": [p]}
+    return await captured(mp, lambda: exam_style.extract_style_profile(p, p)) + "\n\n" + exam_style.style_guidance(profile)
 
 
 async def b_exam_grader(p, mp):

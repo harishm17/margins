@@ -38,4 +38,21 @@ test('a second turn is refused until the first ends, a dead claim expires, and t
   const later = new Date(Date.now() + claim.VOICE_TURN_MAX_MS + 1000)
   assert.equal(await claim.claimVoiceTurn(session.userId, session.id), false)
   assert.equal(await claim.claimVoiceTurn(session.userId, session.id, later), true)
+
+  // A turn that is still running renews its claim, so a long turn is never taken for a dead one...
+  await claim.releaseVoiceTurn(session.userId, session.id)
+  const startedLongAgo = new Date(Date.now() - claim.VOICE_TURN_MAX_MS + 200)
+  assert.equal(await claim.claimVoiceTurn(session.userId, session.id, startedLongAgo), true)
+  let beats = 0
+  const stop = claim.keepVoiceTurn(session.userId, session.id, () => (beats += 1), 30)
+  await new Promise((resolve) => setTimeout(resolve, 400))
+  stop()
+  assert.ok(beats >= 2, 'the reply stream is told the turn is alive at the same pace')
+  assert.equal(await claim.claimVoiceTurn(session.userId, session.id), false, 'the renewed claim still holds')
+  // ...and a renewal that lands after the turn ended does not bring the claim back.
+  await claim.releaseVoiceTurn(session.userId, session.id)
+  const late = claim.keepVoiceTurn(session.userId, session.id, undefined, 20)
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  late()
+  assert.equal(await claim.claimVoiceTurn(session.userId, session.id), true)
 })

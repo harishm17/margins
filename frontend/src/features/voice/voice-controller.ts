@@ -12,7 +12,7 @@
 import { isApiError, type ApiError } from '@/lib/api/client'
 import { createSentenceChunker, readVoiceEvents, type SentenceChunker } from '@/lib/voice/turn-client'
 import { speakable } from '@/lib/voice/speakable'
-import type { ListenFor, VoiceTurnExtras } from '@/lib/voice/turn-contract'
+import { TURN_BUSY_WAIT_MS, TURN_STREAM_QUIET_MS, type ListenFor, type VoiceTurnExtras } from '@/lib/voice/turn-contract'
 import { describeTurnFailure, type LobbyAlert, type TurnFailure } from './errors'
 import { defaultListenFor, endOfTurnWaitMs } from './end-of-turn'
 import { isBackchannel } from './backchannel'
@@ -115,7 +115,6 @@ const VOICE_SAMPLE = 'This is how I sound.'
 const HEARTBEAT_MS = 30_000
 const ECHO_GRACE_MS = 1500
 const MAX_UTTERANCE_CHARS = 2000
-const TURN_IN_PROGRESS_RETRIES = 6
 
 const isAbort = (error: unknown) => error instanceof DOMException && error.name === 'AbortError'
 
@@ -149,8 +148,12 @@ function lobbyAlertFor(error: unknown): LobbyAlert {
   if (requiresClaims(error)) return { kind: 'needs-claims' }
   if (requiresGeneration(error)) return { kind: 'needs-generation' }
   if (isApiError(error)) {
-    const text =
-      error.status >= 500
+    // A refusal with a voice code carries words written for the student (the coach is not reachable, the day's
+    // allowance is used): those are shown. A bare 500 or 429 has none.
+    const coded = typeof (error.details as { code?: unknown } | undefined)?.code === 'string'
+    const text = coded
+      ? error.message
+      : error.status >= 500
         ? "We couldn't start the voice practice. Try again in a moment."
         : error.status === 429
           ? 'Too many requests. Wait a moment and try again.'
@@ -231,6 +234,8 @@ type Ctx = {
   style: VoiceStyle
   restarts: number[]
   networkErrors: number
+  /** Counts each time the microphone is asked on or off: opening it takes a moment, and only the latest ask counts. */
+  micAsk: number
   heartbeat: ReturnType<typeof setInterval> | null
   idleTimer: ReturnType<typeof setInterval> | null
   idleSince: number
@@ -297,6 +302,7 @@ function freshCtx(generation: number): Ctx {
     style: 'oral_quiz',
     restarts: [],
     networkErrors: 0,
+    micAsk: 0,
     heartbeat: null,
     idleTimer: null,
     idleSince: 0,
@@ -405,14 +411,14 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     clearTimers()
   }
 
-  function finish(reason: EndReason, alert?: ReturnType<typeof describeTurnFailure>['alert'] | null) {
+  function finish(reason: EndReason, alert?: ReturnType<typeof describeTurnFailure>['alert'] | null, limitReached?: boolean) {
     if (ctx.ended) return
     const sessionId = ctx.sessionId
     teardown()
-    if (sessionId && reason !== 'complete' && reason !== 'ended') {
-      void patchVoiceSession({ sessionId, status: 'ended' })
-    }
-    dispatch({ type: 'finish', reason, at: Date.now(), alert: alert ?? null })
+    // Every way out closes the call on the server, a finished drill included: the session stops counting as live (and its
+    // minutes stop) now, not when its last heartbeat goes stale.
+    if (sessionId) void patchVoiceSession({ sessionId, status: 'ended' })
+    dispatch({ type: 'finish', reason, at: Date.now(), alert: alert ?? null, ...(limitReached ? { limitReached } : {}) })
     deps.onFinished?.(reason)
   }
 
@@ -427,6 +433,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
   // ---- Input mode ------------------------------------------------------------------------
 
   function switchToText(notice?: MicNotice | null) {
+    ctx.micAsk += 1
     stopRecognition()
     ctx.capture?.stop()
     meter.stop()
@@ -509,12 +516,26 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
 
   async function enableVoice(): Promise<void> {
     const generation = ctx.generation
+    const ask = ++ctx.micAsk
+    /**
+     * The student paused the microphone, or chose to type, while it was still opening: this ask is over. Without the
+     * check the microphone came on a moment later, with the button still saying it was paused. A newer ask to turn it
+     * on owns the microphone now; otherwise what just opened is closed again.
+     */
+    const overtaken = () => {
+      if (ask === ctx.micAsk) return false
+      if (ctx.micPaused || ctx.inputMode === 'text') {
+        ctx.capture?.stop()
+        meter.stop()
+      }
+      return true
+    }
     try {
       // Cloud recognition opens the microphone itself (and feeds the orb's level); otherwise the meter opens it.
       if (ctx.cloud && ctx.capture) await ctx.capture.start()
       else await meter.start()
     } catch (error) {
-      if (generation !== ctx.generation || ctx.ended) return
+      if (generation !== ctx.generation || ctx.ended || overtaken()) return
       const name = (error as { name?: string } | null)?.name
       if (name === 'NotAllowedError' || name === 'SecurityError') return switchToText('denied')
       if (name === 'NotFoundError' || name === 'OverconstrainedError') return switchToText('no-mic')
@@ -530,6 +551,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       meter.stop()
       return
     }
+    if (overtaken()) return
     ctx.inputMode = 'voice'
     ctx.micPaused = false
     ctx.networkErrors = 0
@@ -538,7 +560,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     if (!ctx.cloud && !ctx.onDeviceChecked && ctx.config) {
       ctx.onDeviceChecked = true
       ctx.onDevice = await onDeviceReady(onDeviceEnvFromWindow(), languageTag(ctx.config.language))
-      if (generation !== ctx.generation || ctx.ended) return
+      if (generation !== ctx.generation || ctx.ended || overtaken()) return
     }
     if (!startRecognition()) switchToText('unstable')
   }
@@ -652,6 +674,9 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     if (!heard) return
     meter.bump()
     ctx.idleSince = Date.now()
+    // Words arrived: the recognizer recovered. Only network errors in a row count towards giving up on the microphone
+    // (three single drops over an hour once ended voice input for the rest of the session).
+    ctx.networkErrors = 0
 
     const echoWindow = ctx.speakingNow || Date.now() - ctx.speechEndedAt < ECHO_GRACE_MS
     if (echoWindow && isEcho(heard, `${ctx.spokenText} ${speakable(ctx.spokenText)} ${ctx.echoExtra}`)) {
@@ -850,11 +875,15 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       abandonToLobby({ kind: 'turn', alert: view.alert }, view.limitReached)
       return
     }
-    if (view.fate === 'summary') {
-      finish(failure.code === 'SESSION_ENDED' || failure.code === 'NOT_FOUND' ? 'ended' : 'error', view.alert)
+    // A refusal that sends a first turn back to the lobby (the day's voice time is used, another session is open) ends a
+    // session that is under way: it cannot go on, and the summary says why.
+    if (view.fate === 'summary' || view.fate === 'lobby') {
+      finish(failure.code === 'SESSION_ENDED' || failure.code === 'NOT_FOUND' ? 'ended' : 'error', view.alert, view.limitReached)
       return
     }
-    ctx.retry = view.alert.action === 'retry' ? { utterance: ctx.toolRan ? '' : utterance } : null
+    // The server kept this turn when a step ran or the coach had started to speak: "try again" then carries on from
+    // there. Otherwise nothing was kept and the same words go again.
+    ctx.retry = view.alert.action === 'retry' ? { utterance: ctx.toolRan || ctx.spokenText.trim() ? '' : utterance } : null
     dispatch({ type: 'turn-failed', alert: view.alert })
   }
 
@@ -895,17 +924,20 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     ctx.abort = controller
 
     let response: Response | null = null
-    for (let attempt = 0; attempt <= TURN_IN_PROGRESS_RETRIES; attempt += 1) {
+    // The session's last turn may still hold it: one this browser just cut off is finishing on the server, or its
+    // server died and the claim has to go stale. Wait as long as a dead claim can last, then say so.
+    const busyUntil = Date.now() + TURN_BUSY_WAIT_MS
+    for (let attempt = 0; ; attempt += 1) {
       try {
         response = await openVoiceTurn(sessionId, utterance, controller.signal, ctx.pending)
+        // The server has taken what went with the request (it keeps an interruption mark before it answers).
         ctx.pending = {}
         break
       } catch (error) {
         if (isAbort(error) || stale()) return
         const failure = failureFrom(error as ApiError)
-        // A turn we just aborted is still finishing on the server: wait for it and try again.
-        if (failure.code === 'TURN_IN_PROGRESS' && attempt < TURN_IN_PROGRESS_RETRIES) {
-          await sleep(700 + attempt * 300, controller.signal)
+        if (failure.code === 'TURN_IN_PROGRESS' && Date.now() < busyUntil) {
+          await sleep(Math.min(3000, 700 + attempt * 300), controller.signal)
           if (stale()) return
           continue
         }
@@ -920,7 +952,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
 
     let terminal = false
     try {
-      for await (const event of readVoiceEvents(response.body)) {
+      for await (const event of readVoiceEvents(response.body, { quietMs: TURN_STREAM_QUIET_MS })) {
         if (stale()) return
         const eventAt = performance.now()
         if (ctx.timing.firstEvent === null) ctx.timing.firstEvent = eventAt
@@ -1016,6 +1048,8 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       }
     } catch (error) {
       if (isAbort(error) || stale()) return
+      // A stream that stalled is dropped for good, so the server stops the turn and frees the session for the retry.
+      controller.abort()
       failTurn({ code: 'VOICE_INTERRUPTED', message: '', retryable: true }, utterance)
       return
     }
@@ -1063,6 +1097,8 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     if (ctx.ended) return
 
     ctx.retry = null
+    // New words: a retry mark left by a "try again" that never reached the server does not apply to them.
+    if (ctx.pending.retry) ctx.pending = { ...ctx.pending, retry: undefined }
     ctx.lastRecognizer = options.via === 'voice' ? (ctx.cloud ? 'cloud' : ctx.onDevice ? 'device' : 'browser') : undefined
     ctx.endpointWaitMs = options.waitedMs ?? null
     ctx.turnEndedAt = performance.now()
@@ -1208,6 +1244,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
         void enableVoice()
       } else {
         ctx.micPaused = true
+        ctx.micAsk += 1
         stopRecognition()
         ctx.capture?.stop()
         meter.stop()
@@ -1243,6 +1280,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
       if (ctx.ended || !ctx.retry || ctx.turnActive) return
       const { utterance } = ctx.retry
       ctx.retry = null
+      if (utterance) ctx.pending = { ...ctx.pending, retry: true }
       dispatch({ type: 'dismiss-alert' })
       queueTurn(utterance)
     },

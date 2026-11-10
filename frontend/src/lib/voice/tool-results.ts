@@ -44,10 +44,10 @@ export type HintResult =
   | { action: 'ask_for_try'; instruction: string }
   | { hint: string; ideas_expected?: number; concepts: string[]; note: string }
 
-export type ConceptToExplainResult =
-  | ErrorResult
-  | DoneResult
-  | { done: false; concept_id: string; concept_name: string; prompt: string; ideas_left: number }
+/** The idea to ask next, or the end of the session (every idea done). */
+export type NextIdea = DoneResult | { done: false; concept_id: string; concept_name: string; prompt: string; ideas_left: number }
+
+export type ConceptToExplainResult = ErrorResult | NextIdea
 
 export type ClarifyResult = { action: 'clarify'; clarifying_question: string; instruction: string }
 
@@ -69,7 +69,8 @@ export type PlanFields =
   | { action: 'ask_new_example'; instruction: string }
   | { action: 'wrap_up' }
 
-type Closing = { outcome?: string | null; look_again?: string[] }
+/** With action wrap_up: how the idea closed, the pages to look at again, and what `get_concept_to_explain` would answer next. */
+type Closing = { outcome?: string | null; look_again?: string[]; next_idea?: NextIdea }
 
 export type AssessExplanationResult = ErrorResult | DoneResult | ClarifyResult | ({ concept: string } & FindingsFields & PlanFields & Closing)
 
@@ -113,10 +114,10 @@ export const TOOL_RESULT_KEYS = {
   get_hint: resultKeys<HintResult>()(['error', 'action', 'instruction', 'hint', 'ideas_expected', 'concepts', 'note']),
   get_concept_to_explain: resultKeys<ConceptToExplainResult>()(['error', 'done', 'message', 'concept_id', 'concept_name', 'prompt', 'ideas_left']),
   assess_explanation: resultKeys<AssessExplanationResult>()([
-    'error', 'done', 'message', 'action', 'clarifying_question', 'instruction', 'concept', ...FINDINGS, 'probe', 'source_claim', 'outcome', 'look_again',
+    'error', 'done', 'message', 'action', 'clarifying_question', 'instruction', 'concept', ...FINDINGS, 'probe', 'source_claim', 'outcome', 'look_again', 'next_idea',
   ]),
   record_example_check: resultKeys<ExampleCheckResult>()([
-    'error', 'done', 'message', 'action', 'clarifying_question', 'instruction', 'concept', 'passed', ...FINDINGS, 'probe', 'source_claim', 'outcome', 'look_again',
+    'error', 'done', 'message', 'action', 'clarifying_question', 'instruction', 'concept', 'passed', ...FINDINGS, 'probe', 'source_claim', 'outcome', 'look_again', 'next_idea',
   ]),
   next_claim: resultKeys<NextClaimResult>()(['error', 'done', 'message', 'claim_index', 'of', 'concept_name', 'claim', 'prediction_prompt', 'instruction']),
   record_claim_check: resultKeys<ClaimCheckResult>()([

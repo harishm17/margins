@@ -203,6 +203,7 @@ dbTest('explanation after two probes is level 2', async () => {
   assert.equal(four.action, 'wrap_up')
   assert.equal(four.outcome, 'taught')
   assert.deepEqual(four.look_again, ['p. 5'])
+  assert.equal(four.next_idea.concept_id, w.load.id, 'the idea to ask next comes with the result that closes this one')
 
   const rows = await teachEvents(w)
   assert.deepEqual(rows.map((row) => row.assistance), [0, 2])
@@ -327,7 +328,9 @@ dbTest('full coverage asks one new example before marking explained', async () =
   // Until the example is answered, the same idea is the current one.
   assert.equal(out(await run(w, undefined, 'get_concept_to_explain')).concept_id, w.collision.id)
 
-  const checked = await run(w, all.grade, 'record_check', {
+  // The example is about chaining only, so the grader finds nothing in it about the other claim.
+  const example = grader({ 'Chaining': COVERED, 'Two keys': { verdict: 'missing', pointer: 'Look again at p. 4: What is a collision?' } })
+  const checked = await run(w, example.grade, 'record_check', {
     concept_id: w.collision.id,
     question: 'If a third key lands in a bucket with two others, what does chaining do?',
     answer: 'It adds it to the list of that bucket.',
@@ -335,8 +338,22 @@ dbTest('full coverage asks one new example before marking explained', async () =
   assert.equal(checked.isError, false)
   assert.equal(out(checked).passed, true)
   assert.equal(out(checked).outcome, 'explained')
-  assert.equal(all.asked.at(-1)?.prompt, 'If a third key lands in a bucket with two others, what does chaining do?')
+  // Bug: the claim the example did not touch came back as "missing", and the coach told a student who passed that they had left something out.
+  assert.deepEqual(out(checked).missing, [])
+  assert.equal(example.asked.at(-1)?.prompt, 'If a third key lands in a bucket with two others, what does chaining do?')
   assert.equal((await stateOf(w)).teach.concepts[w.collision.id].outcome, 'explained')
+  // Bug: closing an idea said only "wrap up"; the coach had to ask for the next idea in a second model call and summed up
+  // twice. The result that closes an idea now carries the next one, and the board moves to it.
+  assert.deepEqual(out(checked).next_idea, {
+    done: false,
+    concept_id: w.load.id,
+    concept_name: 'Load factor',
+    prompt: 'Explain "Load factor" in your own words, as if you were teaching it to a classmate.',
+    ideas_left: 1,
+  })
+  assert.deepEqual(checked.events.map((event) => event.type), ['idea_done', 'board'])
+  assert.equal(checked.sessionComplete, false)
+  assert.equal((await stateOf(w)).teach.current, w.load.id)
 
   const checks = await voiceEvents(w)
   assert.equal(checks.length, 1)
@@ -344,8 +361,17 @@ dbTest('full coverage asks one new example before marking explained', async () =
   assert.equal(checks[0].score, 1)
   assert.equal(checks[0].conceptId, w.collision.id)
 
-  // The next idea is a different one.
+  // The next idea is a different one, and asking for it again gives the same.
   assert.equal(out(await run(w, undefined, 'get_concept_to_explain')).concept_id, w.load.id)
+
+  // The last idea: its closing result says the session is over, and the session is ended with it.
+  const last = grader({ 'The load': COVERED })
+  assert.equal(out(await run(w, last.grade, 'assess_explanation', { concept_id: w.load.id, explanation: 'Entries divided by buckets.' })).action, 'ask_new_example')
+  const closing = await run(w, last.grade, 'record_check', { concept_id: w.load.id, question: 'Ten entries in five buckets: what is it?', answer: 'Two.' })
+  assert.equal(out(closing).next_idea.done, true)
+  assert.deepEqual(closing.events.map((event) => event.type), ['idea_done', 'session_complete'])
+  assert.equal(closing.sessionComplete, true)
+  assert.ok((await prisma.voiceDrillSession.findUniqueOrThrow({ where: { id: w.session.id } })).endedAt)
 })
 
 dbTest('an unclear explanation stores nothing and spends no probe', async () => {
@@ -358,6 +384,15 @@ dbTest('an unclear explanation stores nothing and spends no probe', async () => 
   assert.equal((await teachEvents(w)).length, 0)
   assert.equal(await prisma.recallAttempt.count({ where: { userId: w.user.id } }), 0)
   assert.equal((await stateOf(w)).teach.concepts[w.collision.id].assessments, 0)
+  // Unclear a second time: there was no limit, so the coach asked for "a little more" for as long as the student mumbled.
+  // Now the idea is explained instead, and still nothing is scored.
+  const second = out(await run(w, unclear.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'the buckets thing, you know' }))
+  assert.equal(second.action, 'explain_first')
+  assert.equal((await teachEvents(w)).length, 0)
+  assert.equal(await prisma.recallAttempt.count({ where: { userId: w.user.id } }), 0)
+  // The count starts again for the next answer.
+  const third = out(await run(w, unclear.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'um the keys' }))
+  assert.equal(third.action, 'clarify')
 })
 
 dbTest('a grading outage is a tool error and stores nothing', async () => {
@@ -440,6 +475,46 @@ dbTest('a check after a claim is level 2 voice evidence and moves to the next cl
   const later = await voiceEvents(w)
   assert.equal(later[1].assistance, 1)
   assert.equal(later[1].score, 0)
+})
+
+dbTest('guided reading: a prediction can be skipped (the same claim came back), and a repeat of the call in the asking turn does not skip', async () => {
+  const w = await world('guided_reading')
+  const turn = await teachModule.beginVoiceTurn(w.session.id, '')
+  const ctx = { sessionId: w.session.id, userId: w.user.id, timeZone: 'UTC', turn }
+  assert.equal(out(await tools.executeVoiceTool(ctx, 'next_claim', {})).claim_index, 0)
+  assert.equal(out(await tools.executeVoiceTool(ctx, 'next_claim', {})).claim_index, 0)
+  // The student asks to skip: the rules tell the coach to call next_claim with no arguments.
+  assert.equal(out(await inTurn(w, undefined, 'skip this one', 'next_claim')).claim_index, 1)
+  // A silent turn is not a request to skip.
+  assert.equal(out(await inTurn(w, undefined, '', 'next_claim')).claim_index, 1)
+})
+
+dbTest('guided reading: the claim that was told is the one checked when the list of claims changes under the session', async () => {
+  const w = await world('guided_reading')
+  const g = grader({ 'Two keys': COVERED })
+  await run(w, undefined, 'next_claim')
+  await run(w, undefined, 'next_claim', { reveal: true, prediction: 'keys meeting', check_question: 'What do we call it?' })
+  // The file is read again and a claim lands before the one being read: position 0 is now another claim.
+  await prisma.conceptClaim.create({ data: { conceptId: w.collision.id, text: 'A hash table stores keys in buckets.', quote: 'q', materialId: w.material.id, orderIndex: -1, pageStart: 3 } })
+  const checked = await run(w, g.grade, 'record_check', { claim_index: 0, answer: 'a collision' })
+  assert.equal(g.asked[0].claims[0].text, 'Two keys that share a bucket collide.')
+  assert.equal(out(checked).verdict, 'right')
+  // The reading goes on with the claim after the one that was checked.
+  const next = await run(w, undefined, 'next_claim')
+  assert.equal(out(next).claim_index, 2)
+})
+
+dbTest('guided reading: an unclear check answer gets one clarifying question, then the reading moves on with nothing scored', async () => {
+  const w = await world('guided_reading')
+  const unclear = grader({}, { status: 'ungraded', verdicts: [], clarifying_question: 'Which part?', confidence: 0.3 })
+  await run(w, undefined, 'next_claim')
+  await run(w, undefined, 'next_claim', { reveal: true, prediction: 'keys meeting', check_question: 'What do we call it?' })
+  assert.equal(out(await run(w, unclear.grade, 'record_check', { claim_index: 0, answer: 'um the thing' })).action, 'clarify')
+  const moved = out(await run(w, unclear.grade, 'record_check', { claim_index: 0, answer: 'the buckets thing again' }))
+  assert.equal(moved.verdict, 'not yet')
+  assert.equal(moved.claims_left, 2)
+  assert.equal((await voiceEvents(w)).length, 0)
+  assert.equal(out(await run(w, undefined, 'next_claim')).claim_index, 1)
 })
 
 // ------------------------------------------------------------------------------------------ the student's own words (T9)

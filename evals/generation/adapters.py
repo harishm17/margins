@@ -557,7 +557,7 @@ _SUPPORT_SINK: ContextVar[Optional[List[Dict[str, Any]]]] = ContextVar("eval_sup
 
 def install_support_recorder(modules=SUPPORT_MODULES) -> None:
     """Wrap `check_support` where each generator module imported it, so a `support_sink` sees every check: how many
-    items were sent, how many kept, and the dropped items themselves. Behaviour is unchanged. Idempotent."""
+    items were sent, how many kept, the dropped items themselves and why each was dropped. Behaviour is unchanged. Idempotent."""
     import importlib
 
     for module in modules:
@@ -567,11 +567,17 @@ def install_support_recorder(modules=SUPPORT_MODULES) -> None:
             continue
 
         async def recorded(items, chunks, _original=original):
-            kept, dropped = await _original(items, chunks)
+            from app.services.content_generator.support_check import drop_reasons
+
+            with drop_reasons() as reasons:
+                kept, dropped = await _original(items, chunks)
             sink = _SUPPORT_SINK.get()
             if sink is not None:
                 kept_ids = {id(item) for item in kept}
-                sink.append({"sent": len(items), "kept": len(kept), "dropped": [item for item in items if id(item) not in kept_ids]})
+                why = {id(item): reason for item, reason in reasons}
+                gone = [item for item in items if id(item) not in kept_ids]
+                # `reasons` lines up with `dropped`: which rule of the check each item failed.
+                sink.append({"sent": len(items), "kept": len(kept), "dropped": gone, "reasons": [why.get(id(item), "") for item in gone]})
             return kept, dropped
 
         recorded._eval_recorder = True

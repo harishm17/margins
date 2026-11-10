@@ -187,7 +187,7 @@ export type SessionAction =
   | { type: 'speech'; output: SpeechOutput }
   | { type: 'mic-notice'; notice: MicNotice | null }
   | { type: 'dismiss-alert' }
-  | { type: 'finish'; reason: EndReason; at: number; alert?: VoiceAlert | null }
+  | { type: 'finish'; reason: EndReason; at: number; alert?: VoiceAlert | null; limitReached?: boolean }
 
 /** The newest coach entry if it is still being written. */
 function openCoachIndex(entries: TranscriptEntry[]): number {
@@ -372,6 +372,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
         interim: '',
         holding: false,
         alert: action.alert ?? null,
+        limitReached: action.limitReached ?? state.limitReached,
         entries: closeCoach(state.entries, false),
       }
 

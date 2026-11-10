@@ -46,10 +46,14 @@ router = APIRouter(prefix="/voice")
 
 # Questions that need working out on paper. Bare digits are allowed ("layer 4", "Python 3")
 # unless they form an expression; keywords need word boundaries ("sum" is not "summarize").
+# A percentage is working only when it is taken of a number ("15% of 80", "20 percent of 50"):
+# "a 95% confidence interval" or "what percentage of variance" is said aloud like any other
+# words. The web app's filter (frontend/src/lib/voice/concept.ts) reads percentages the same way.
 MATH_PATTERN = re.compile(
     r"(\d\s*[-+*/^=<>]\s*\d|[=±√∑∫]"
+    r"|\d\s*(?:%|percent)\s*of\s+\$?\d"
     r"|\b(?:sqrt|integral|integrate|derivative|differentiate|calculate|compute|solve|equation"
-    r"|formula|sum|delta|percent|percentage)\b)",
+    r"|formula|sum|delta)\b)",
     re.IGNORECASE,
 )
 

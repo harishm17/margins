@@ -116,6 +116,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--judge", nargs="?", const=DEFAULT_JUDGE, default=None, metavar="MODEL[:EFFORT]", help=f"run the model judge (default {DEFAULT_JUDGE})")
     parser.add_argument("--max-judge-usd", type=float, default=3.0, help="hard spend stop for the model judge alone")
     parser.add_argument("--judge-limit", type=int, default=None, help="judge only this many scenarios (teach_back: asking turns), spread evenly")
+    parser.add_argument("--grader", action="store_true", help="teach_back: also grade every scripted answer with the app's recall grader and report how often it agrees with the script (counted under --max-usd)")
     parser.add_argument("--labels", type=Path, default=None, help="the JSON label.html downloaded: report the judge's agreement with it")
     parser.add_argument("--label", default="run", help="name for the results folder and report")
     parser.add_argument("--out-dir", type=Path, default=RESULTS_DIR)

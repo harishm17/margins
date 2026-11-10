@@ -1,0 +1,22 @@
+{
+  "label": "v1-teach-r2",
+  "date": "2026-11-10",
+  "prompts": {
+    "PROMPTS_V2": "",
+    "areas": {
+      "voice": "v1"
+    },
+    "revision": "v1"
+  },
+  "surface": "teach_back",
+  "patterns": null,
+  "limit": null,
+  "scenarios": "/home/harish/code/study_buddy-prompt-audit/evals/tutoring/scenarios/teach-back-original.jsonl",
+  "stopped": null,
+  "spend": {
+    "generation": 0.4063,
+    "judge": 0.4997,
+    "max_usd": 4.0,
+    "max_judge_usd": 3.0
+  }
+}

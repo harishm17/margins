@@ -154,6 +154,7 @@ def summarize_kind(kind: str, records: List[Dict[str, Any]]) -> Dict[str, Any]:
     written: List[Dict[str, Any]] = []
     stored: List[Dict[str, Any]] = []
     sent = unsupported = 0
+    unsupported_why: Counter = Counter()
     seconds = []
     for record in records:
         written += written_items(kind, record.get("calls") or [])
@@ -161,6 +162,8 @@ def summarize_kind(kind: str, records: List[Dict[str, Any]]) -> Dict[str, Any]:
         for check in record.get("support") or []:
             sent += check["sent"]
             unsupported += check["sent"] - check["kept"]
+            # Runs stored before the check gave its reasons have none.
+            unsupported_why.update(reason for reason in check.get("reasons") or [] if reason)
         if record.get("seconds") is not None:
             seconds.append(record["seconds"])
     reason_of = (lambda item: problem_drop_reason(kind, item)) if kind in PROBLEM_KINDS else question_drop_reason
@@ -177,6 +180,7 @@ def summarize_kind(kind: str, records: List[Dict[str, Any]]) -> Dict[str, Any]:
         "by_reason": dict(sorted(reasons.items())),
         "support_sent": sent,
         "unsupported": unsupported,
+        "unsupported_by_reason": dict(sorted(unsupported_why.items())),
         "other_losses": len(written) - malformed - unsupported - len(stored),
         "stored": len(stored),
         "drop_rate": (len(written) - len(stored)) / len(written) if written else None,
@@ -255,6 +259,14 @@ def render_report(summary: Dict[str, Any]) -> str:
             ],
         ),
         "",
+        "### Why the support check dropped items",
+        "",
+        _table(
+            ["Generator", "Reason", "Items"],
+            [[LABELS[kind], reason, str(n)] for kind, k in kinds.items() for reason, n in (k.get("unsupported_by_reason") or {}).items()]
+            or [["—", "none recorded", "0"]],
+        ),
+        "",
         "### Why items were malformed",
         "",
         _table(
@@ -311,12 +323,14 @@ def render_report(summary: Dict[str, Any]) -> str:
             "",
             f"## Judge ({run.get('judge') or 'n/a'}, {summary['judge_groups']} topics, ${summary['judge_cost_usd']:.2f})",
             "",
-            "Stored questions with each fault the judge found (item_judge.py).",
+            "Stored questions with each fault the judge found (item_judge.py). A fault counts only with its note; "
+            "\"No note\" is the questions whose only faults came without one, which nobody can check.",
             "",
             _table(
-                ["Generator", "Judged", "Flagged", *item_judge.DEFECTS],
+                ["Generator", "Judged", "Flagged", "No note", *item_judge.DEFECTS],
                 [
-                    [LABELS.get(kind, kind), str(j["judged"]), f"{j['flagged']} ({_pct(j['rate'])})", *[str(j["by_defect"][d]) for d in item_judge.DEFECTS]]
+                    [LABELS.get(kind, kind), str(j["judged"]), f"{j['flagged']} ({_pct(j['rate'])})", str(j.get("unexplained", 0)),
+                     *[str(j["by_defect"][d]) for d in item_judge.DEFECTS]]
                     for kind, j in sorted(judge.items(), key=lambda pair: list(LABELS).index(pair[0]) if pair[0] in LABELS else len(LABELS))
                 ],
             ),

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { defaultLanguageCode, isIosPlatform, newFinalWords, pickVoice, scoreVoice, type VoiceInfo } from './speech'
+import { defaultLanguageCode, isIosPlatform, newFinalWords, pickVoice, scoreVoice, speechTimeLimitMs, type VoiceInfo } from './speech'
 
 const voices: VoiceInfo[] = [
   { name: 'Albert', lang: 'en-US', localService: true },
@@ -56,6 +56,15 @@ describe('isIosPlatform', () => {
     assert.equal(isIosPlatform({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' }), true)
     assert.equal(isIosPlatform({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)' }), true)
     assert.equal(isIosPlatform({ userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)', platform: 'MacIntel', maxTouchPoints: 5 }), true)
+  })
+
+  it('gives a long sentence without spaces time to be said (a Chinese sentence got four seconds whatever its length)', () => {
+    const sentence = '熵是系统无序程度的度量，在孤立系统中它永远不会减少，这就是热力学第二定律的内容。'
+    const english = 'Entropy measures disorder, and in an isolated system it never decreases, which is the second law.'
+    assert.ok(speechTimeLimitMs(sentence, 1) > 12_000, `${speechTimeLimitMs(sentence, 1)} ms`)
+    // A sentence with spaces is timed as before.
+    assert.equal(speechTimeLimitMs(english, 1), 16 * 700 + 2000)
+    assert.equal(speechTimeLimitMs('Yes.', 1), 4000)
   })
 
   it('does not take a Mac, Android or Windows for iOS', () => {

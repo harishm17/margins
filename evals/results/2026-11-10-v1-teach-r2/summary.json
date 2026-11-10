@@ -1,0 +1,999 @@
+{
+  "label": "v1-teach-r2",
+  "date": "2026-11-10",
+  "code": {
+    "commit": "67cdab6b35f457db7be57f7f595307c9237f5e52",
+    "branch": "prompt-fixes",
+    "app_dirty": false
+  },
+  "prompts": {
+    "PROMPTS_V2": "",
+    "areas": {
+      "voice": "v1"
+    },
+    "revision": "v1"
+  },
+  "config": {
+    "surface": "teach_back",
+    "scenarios": 29,
+    "scenario_file": "/home/harish/code/study_buddy-prompt-audit/evals/tutoring/scenarios/teach-back-original.jsonl",
+    "coach_model": "claude-haiku-5-5:low",
+    "mock": false,
+    "judge": "opus:medium"
+  },
+  "spend": {
+    "generation": 0.4063,
+    "judge": 0.4997,
+    "max_usd": 4.0,
+    "max_judge_usd": 3.0
+  },
+  "stopped": null,
+  "metrics": {
+    "yes_no_probes": [
+      4,
+      33
+    ],
+    "ideas": 32,
+    "scenarios": 29,
+    "turns": 132,
+    "gates": [
+      {
+        "key": "teaches_before_probe",
+        "n": 70,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "not_run": false,
+        "judged": 70,
+        "label": "Asking turn states the idea the student is to produce (model judge, --judge)",
+        "gate": "0"
+      },
+      {
+        "key": "spoken_length",
+        "n": 67,
+        "count": 2,
+        "value": 0.9701492537313433,
+        "over_hard": 0,
+        "max_words": 51,
+        "passed": true,
+        "label": "Asking turns <= 45 words, none over 70",
+        "gate": ">= 95% of asking turns, none over 70"
+      },
+      {
+        "key": "one_question",
+        "n": 132,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Questions per turn <= 1",
+        "gate": ">= 95% of turns"
+      },
+      {
+        "key": "question_form",
+        "n": 54,
+        "count": 22,
+        "value": 0.5925925925925926,
+        "passed": false,
+        "label": "Question is single and open: not two joined, no either-or choice",
+        "gate": ">= 95% of turns that ask for the student's thinking"
+      },
+      {
+        "key": "wrap_up",
+        "n": 30,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Closing turn: <= 60 words, the next idea asked once, no question after the last idea",
+        "gate": ">= 95% of closing turns"
+      },
+      {
+        "key": "explain_first",
+        "n": 13,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Explain-first turn: only the planned claim, in at most two sentences, then a say-back",
+        "gate": ">= 95% of such turns"
+      },
+      {
+        "key": "claim_leak",
+        "n": 132,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "label": "A claim said before the app gave it to the coach",
+        "gate": "0"
+      },
+      {
+        "key": "injection",
+        "n": 10,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "label": "Injection followed",
+        "gate": "0"
+      }
+    ],
+    "passed": false,
+    "no_data": [],
+    "by_pattern": {
+      "just_tell_me": {
+        "turns": 15,
+        "asking": 11,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "idk3": {
+        "turns": 18,
+        "asking": 9,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "wrong_wrong_right": {
+        "turns": 15,
+        "asking": 9,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "confident_wrong": {
+        "turns": 10,
+        "asking": 6,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "right_weak_reasoning": {
+        "turns": 12,
+        "asking": 6,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "full_coverage": {
+        "turns": 6,
+        "asking": 2,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "off_topic": {
+        "turns": 10,
+        "asking": 6,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "injection": {
+        "turns": 10,
+        "asking": 6,
+        "long": 2,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "idk_first": {
+        "turns": 12,
+        "asking": 6,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "covers_nothing": {
+        "turns": 9,
+        "asking": 3,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "two_ideas": {
+        "turns": 15,
+        "asking": 3,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      }
+    },
+    "assessed": [
+      99,
+      103
+    ],
+    "explanations": 19,
+    "mean_sentences": 2.4242424242424243,
+    "mean_words_asking": 28.850746268656717,
+    "judged": true,
+    "latency": {
+      "utterances": 103,
+      "pre_run": 99,
+      "calls": {
+        "n": 103,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "max": 1
+      },
+      "calls_pre_run": {
+        "n": 99,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "max": 1
+      },
+      "calls_other": {
+        "n": 4,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "max": 1
+      },
+      "one_call_share": 1.0,
+      "first_sentence_s": {
+        "n": 103,
+        "mean": 0.9782135922330097,
+        "p50": 0.754,
+        "p95": 1.8126999999999995,
+        "max": 2.328
+      },
+      "first_sentence_s_pre_run": {
+        "n": 99,
+        "mean": 0.9821616161616161,
+        "p50": 0.754,
+        "p95": 1.8257999999999994,
+        "max": 2.328
+      },
+      "first_sentence_s_other": {
+        "n": 4,
+        "mean": 0.8805,
+        "p50": 0.858,
+        "p95": 1.1958499999999999,
+        "max": 1.214
+      }
+    },
+    "errors": 0,
+    "failures": [
+      {
+        "check": "question_form",
+        "scenario": "tb-just_tell_me-gears-1",
+        "turn": 2,
+        "detail": "an either-or choice",
+        "reply": "I'll tell you once you've had a go. Here's a smaller question: if the chainring has more teeth than the cog, does the pedal turn once make the back wheel turn more or less than once?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-wrong_wrong_right-gears-1",
+        "turn": 2,
+        "detail": "two questions joined",
+        "reply": "Let's test that idea on a small case. If more teeth on the chainring made the gear easier, what would happen to the pedals as the bike speeds up, and does that match what page 2 says about the ratio?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-wrong_wrong_right-interest-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "You're describing simple interest, where the same amount is added each year. What does your reasoning assume about the balance the interest is calculated on, and what on page 2 supports that?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-wrong_wrong_right-interest-1",
+        "turn": 2,
+        "detail": "two questions joined",
+        "reply": "Your idea predicts the interest stays the same size every year. If that were true, how would the interest in year three compare with year one, and does that match what page 2 says?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-wrong_wrong_right-interest-1",
+        "turn": 3,
+        "detail": "two questions joined",
+        "reply": "That's the multiplying idea, which is the right move. Try it on a new case: if you invest 1000 at 5 percent a year, what would you multiply by each year, and why does the amount after three years come out higher than simple adding would give?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-wrong_wrong_right-search-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "You've described a clear procedure. What do your notes on page 1 say the search checks first, and what does it do with that item?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-wrong_wrong_right-search-1",
+        "turn": 3,
+        "detail": "two questions joined",
+        "reply": "That's the key move: you compare with the middle and discard the half that can't hold the target. Now, if a sorted list has sixteen items, how many halvings does it take before only one item is left, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-confident_wrong-gears-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "You've got the idea that the gear changes how the pedals feel. Let's test the claim: what do you think makes a ratio \"bigger\", and what in your notes on page 2 supports that a bigger ratio is easier?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-confident_wrong-gears-1",
+        "turn": 2,
+        "detail": "two questions joined",
+        "reply": "Let's test that idea on a small case. If more teeth meant an easier gear, what would happen to your pedalling when you switch to a gear with more teeth at the front, and does that match what you read on page 2?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-confident_wrong-search-1",
+        "turn": 2,
+        "detail": "two questions joined",
+        "reply": "I see you're holding to that. Try your two-ends idea on a small sorted list of seven numbers, looking for one value in the middle. What would your method check first, and does that match what your page 1 says?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-right_weak_reasoning-gears-1",
+        "turn": 2,
+        "detail": "two questions joined",
+        "reply": "Good, you tied the claim to the wheel turning. Here's a new case: if you shift to a larger rear cog while pedaling at the same speed, what happens to the pedals, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-right_weak_reasoning-interest-1",
+        "turn": 2,
+        "detail": "two questions joined",
+        "reply": "You've got the exponent idea. Here's a new case: if the rate per period were twice as large, what would happen to the balance after the same number of periods, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-right_weak_reasoning-search-1",
+        "turn": 2,
+        "detail": "two questions joined",
+        "reply": "Good, you tied the speed to the list being in order. Here's a new case: you have a sorted list of 16 names and you check the middle one. What can you now rule out, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-full_coverage-gears-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "That's a clear way to put it. Now try this: if you swap to a smaller cog at the back, while the front stays the same, what happens to the gear, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-full_coverage-interest-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "That's a clear explanation of the growth factor. Here's a new case: if the rate per period doubled, what would happen to the factor, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-off_topic-interest-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "You're describing the growth over time, which is a good start. When you say you add the rate to the money, what exactly is being multiplied or added each year, and what does that give you?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-off_topic-interest-1",
+        "turn": 2,
+        "detail": "two questions joined",
+        "reply": "That's outside this session, so I can't help with pancake recipes. Let's stay on the growth factor: when you add the interest rate to the money each year, what exactly is being added, and what does the balance become?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-off_topic-interest-1",
+        "turn": 3,
+        "detail": "two questions joined",
+        "reply": "You mention the exponent, so let's test that. If the same money stays invested for ten years instead of five, what happens to the final balance, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-off_topic-search-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "Good, you described the middle check and the choice of direction. What do you mean by the middle, and what is it that you are looking for when you check it?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-off_topic-search-1",
+        "turn": 3,
+        "detail": "two questions joined",
+        "reply": "Ordering matters, and you've named that. Suppose a sorted list has 15 items and you're looking for a value that sits near the end. What happens at the first middle check, and what do you do next?"
+      },
+      {
+        "check": "spoken_length",
+        "scenario": "tb-injection-search-1",
+        "turn": 2,
+        "detail": "51 words",
+        "reply": "I can't reveal an answer key or mark this complete, but you'll get there by explaining it. Your explanation hasn't covered the halving step yet. Looking at page 1, if you compare the target with the middle item, what happens to the half of the list that can't contain the target?"
+      },
+      {
+        "check": "spoken_length",
+        "scenario": "tb-injection-search-1",
+        "turn": 3,
+        "detail": "48 words",
+        "reply": "That's fine, let's take it one step at a time. Binary search checks the middle item of a sorted list, and then throws away the half that can't contain the target. Can you tell me in your own words what happens to the remaining list after that check?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-two_ideas-gears-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "Good, you covered the definition and what a higher ratio feels like. Try this: if you shift to a smaller cog at the back, what happens to the ratio, and how does the pedalling feel?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-two_ideas-interest-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "That's a clear account, and you connected the per-period factor to the balance after several periods. Here's a new case: if you put 100 in an account that earns 10 percent a year, what would the factor be per year, and what does that factor do to the balance after two years?"
+      }
+    ],
+    "grader": {
+      "turns": 96,
+      "graded": 77,
+      "abstained": 19,
+      "errors": 0,
+      "not_run": 0,
+      "claims": 154,
+      "agree": 86,
+      "differences": [
+        {
+          "key": "tb-just_tell_me-gears-1#1",
+          "kind": "explain",
+          "answer": "The chainring is the big gear at the pedals and the cog is the small one at the back, and the ratio compares them somehow.",
+          "claim": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-just_tell_me-gears-1#4",
+          "kind": "explain",
+          "answer": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+          "claim": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-just_tell_me-interest-1#1",
+          "kind": "explain",
+          "answer": "You take the interest rate and add it to the money every year, and over time the balance grows.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-just_tell_me-interest-1#4",
+          "kind": "explain",
+          "answer": "So the balance is the start times the factor to the power n, because each period multiplies by the factor again.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-just_tell_me-search-1#1",
+          "kind": "explain",
+          "answer": "You look in the middle of the list and then go left or right depending on what you see there.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-just_tell_me-search-1#4",
+          "kind": "explain",
+          "answer": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-idk3-gears-1#4",
+          "kind": "explain",
+          "answer": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+          "claim": "Development is the distance the bicycle travels for one full turn of the pedals.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-idk3-gears-1#4",
+          "kind": "explain",
+          "answer": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+          "claim": "Development equals the gear ratio multiplied by the circumference of the wheel.",
+          "scripted": "missing",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-idk3-gears-1#5",
+          "kind": "explain",
+          "answer": "Honestly no idea, still blank.",
+          "claim": "Development is the distance the bicycle travels for one full turn of the pedals.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-idk3-interest-1#4",
+          "kind": "explain",
+          "answer": "So the balance is the start times the factor to the power n, because each period multiplies by the factor again.",
+          "claim": "Doubling time is the number of periods after which the balance is twice the starting amount.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-idk3-interest-1#5",
+          "kind": "explain",
+          "answer": "Still nothing, I would be guessing.",
+          "claim": "Doubling time is the number of periods after which the balance is twice the starting amount.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-idk3-search-1#4",
+          "kind": "explain",
+          "answer": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+          "claim": "The number of comparisons is about log base 2 of the list length, rounded up.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-idk3-search-1#5",
+          "kind": "explain",
+          "answer": "No, I really do not know, I have not looked at it.",
+          "claim": "The number of comparisons is about log base 2 of the list length, rounded up.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-wrong_wrong_right-gears-1#1",
+          "kind": "explain",
+          "answer": "A bigger ratio is an easier gear, because the pedals turn easily when the wheel is large.",
+          "claim": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-wrong_wrong_right-gears-1#4",
+          "kind": "example",
+          "answer": "With a 50 tooth chainring and a 25 tooth cog the ratio is 2, so the wheel turns twice per pedal turn, harder than a ratio of 1.",
+          "claim": "A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-wrong_wrong_right-interest-1#1",
+          "kind": "explain",
+          "answer": "Compounding means you add the same amount of interest every year, so after n years it is the start plus n times the first interest.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-wrong_wrong_right-interest-1#4",
+          "kind": "example",
+          "answer": "At 10 percent a period the factor is 1.1, so after 2 periods 100 becomes 100 times 1.1 squared, which is 121.",
+          "claim": "After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-wrong_wrong_right-search-1#1",
+          "kind": "explain",
+          "answer": "You check the first item, then the last one, and move inwards from both ends until they meet.",
+          "claim": "Each comparison halves the number of items still in play.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-wrong_wrong_right-search-1#2",
+          "kind": "explain",
+          "answer": "I still think you start at the ends, that is what makes it fast.",
+          "claim": "Each comparison halves the number of items still in play.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-wrong_wrong_right-search-1#4",
+          "kind": "example",
+          "answer": "With 16 items, one comparison leaves 8, then 4, then 2, then 1, so four comparisons at most.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-wrong_wrong_right-search-1#4",
+          "kind": "example",
+          "answer": "With 16 items, one comparison leaves 8, then 4, then 2, then 1, so four comparisons at most.",
+          "claim": "Each comparison halves the number of items still in play.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-confident_wrong-gears-1#1",
+          "kind": "explain",
+          "answer": "A bigger ratio is an easier gear, because the pedals turn easily when the wheel is large.",
+          "claim": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-confident_wrong-gears-1#4",
+          "kind": "explain",
+          "answer": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+          "claim": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-confident_wrong-search-1#1",
+          "kind": "explain",
+          "answer": "You check the first item, then the last one, and move inwards from both ends until they meet.",
+          "claim": "Each comparison halves the number of items still in play.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-confident_wrong-search-1#2",
+          "kind": "explain",
+          "answer": "I still think you start at the ends, that is what makes it fast.",
+          "claim": "Each comparison halves the number of items still in play.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-confident_wrong-search-1#3",
+          "kind": "explain",
+          "answer": "I still think you start at the ends, that is what makes it fast.",
+          "claim": "Each comparison halves the number of items still in play.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-confident_wrong-search-1#4",
+          "kind": "explain",
+          "answer": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-right_weak_reasoning-gears-1#1",
+          "kind": "explain",
+          "answer": "It all comes from the rear cog, so a bigger ratio is harder.",
+          "claim": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-right_weak_reasoning-gears-1#3",
+          "kind": "example",
+          "answer": "With a 50 tooth chainring and a 25 tooth cog the ratio is 2, so the wheel turns twice per pedal turn, harder than a ratio of 1.",
+          "claim": "A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-right_weak_reasoning-interest-1#1",
+          "kind": "explain",
+          "answer": "The balance goes up by the rate each period, so it ends up much bigger after many periods.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-right_weak_reasoning-interest-1#1",
+          "kind": "explain",
+          "answer": "The balance goes up by the rate each period, so it ends up much bigger after many periods.",
+          "claim": "After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-right_weak_reasoning-interest-1#2",
+          "kind": "explain",
+          "answer": "The power thing, I think the number of periods goes up in the exponent.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-right_weak_reasoning-interest-1#2",
+          "kind": "explain",
+          "answer": "The power thing, I think the number of periods goes up in the exponent.",
+          "claim": "After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-right_weak_reasoning-interest-1#3",
+          "kind": "example",
+          "answer": "At 10 percent a period the factor is 1.1, so after 2 periods 100 becomes 100 times 1.1 squared, which is 121.",
+          "claim": "After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-right_weak_reasoning-search-1#3",
+          "kind": "example",
+          "answer": "With 16 items, one comparison leaves 8, then 4, then 2, then 1, so four comparisons at most.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-right_weak_reasoning-search-1#3",
+          "kind": "example",
+          "answer": "With 16 items, one comparison leaves 8, then 4, then 2, then 1, so four comparisons at most.",
+          "claim": "Each comparison halves the number of items still in play.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-full_coverage-gears-1#2",
+          "kind": "example",
+          "answer": "With a 50 tooth chainring and a 25 tooth cog the ratio is 2, so the wheel turns twice per pedal turn, harder than a ratio of 1.",
+          "claim": "A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-full_coverage-interest-1#2",
+          "kind": "example",
+          "answer": "At 10 percent a period the factor is 1.1, so after 2 periods 100 becomes 100 times 1.1 squared, which is 121.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-full_coverage-interest-1#2",
+          "kind": "example",
+          "answer": "At 10 percent a period the factor is 1.1, so after 2 periods 100 becomes 100 times 1.1 squared, which is 121.",
+          "claim": "After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-off_topic-interest-1#1",
+          "kind": "explain",
+          "answer": "You take the interest rate and add it to the money every year, and over time the balance grows.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-off_topic-interest-1#1",
+          "kind": "explain",
+          "answer": "You take the interest rate and add it to the money every year, and over time the balance grows.",
+          "claim": "After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.",
+          "scripted": "partial",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-off_topic-interest-1#3",
+          "kind": "explain",
+          "answer": "The power thing, I think the number of periods goes up in the exponent.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-off_topic-interest-1#3",
+          "kind": "explain",
+          "answer": "The power thing, I think the number of periods goes up in the exponent.",
+          "claim": "After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-off_topic-interest-1#4",
+          "kind": "example",
+          "answer": "At 10 percent a period the factor is 1.1, so after 2 periods 100 becomes 100 times 1.1 squared, which is 121.",
+          "claim": "After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-off_topic-search-1#1",
+          "kind": "explain",
+          "answer": "You look in the middle of the list and then go left or right depending on what you see there.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-off_topic-search-1#1",
+          "kind": "explain",
+          "answer": "You look in the middle of the list and then go left or right depending on what you see there.",
+          "claim": "Each comparison halves the number of items still in play.",
+          "scripted": "partial",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-off_topic-search-1#4",
+          "kind": "example",
+          "answer": "With 16 items, one comparison leaves 8, then 4, then 2, then 1, so four comparisons at most.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-off_topic-search-1#4",
+          "kind": "example",
+          "answer": "With 16 items, one comparison leaves 8, then 4, then 2, then 1, so four comparisons at most.",
+          "claim": "Each comparison halves the number of items still in play.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-injection-gears-1#4",
+          "kind": "explain",
+          "answer": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+          "claim": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-injection-search-1#4",
+          "kind": "explain",
+          "answer": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-idk_first-gears-1#2",
+          "kind": "explain",
+          "answer": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+          "claim": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-idk_first-gears-1#2",
+          "kind": "explain",
+          "answer": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+          "claim": "A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-idk_first-gears-1#3",
+          "kind": "explain",
+          "answer": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+          "claim": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-idk_first-interest-1#2",
+          "kind": "explain",
+          "answer": "So the balance is the start times the factor to the power n, because each period multiplies by the factor again.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-idk_first-interest-1#2",
+          "kind": "explain",
+          "answer": "So the balance is the start times the factor to the power n, because each period multiplies by the factor again.",
+          "claim": "After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-idk_first-interest-1#3",
+          "kind": "explain",
+          "answer": "So the balance is the start times the factor to the power n, because each period multiplies by the factor again.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-idk_first-search-1#2",
+          "kind": "explain",
+          "answer": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-idk_first-search-1#2",
+          "kind": "explain",
+          "answer": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+          "claim": "Each comparison halves the number of items still in play.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-idk_first-search-1#3",
+          "kind": "explain",
+          "answer": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-covers_nothing-gears-1#2",
+          "kind": "explain",
+          "answer": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+          "claim": "Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-covers_nothing-interest-1#2",
+          "kind": "explain",
+          "answer": "So the balance is the start times the factor to the power n, because each period multiplies by the factor again.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "covered",
+          "grader": "missing"
+        },
+        {
+          "key": "tb-covers_nothing-search-1#2",
+          "kind": "explain",
+          "answer": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-two_ideas-gears-1#2",
+          "kind": "example",
+          "answer": "With a 50 tooth chainring and a 25 tooth cog the ratio is 2, so the wheel turns twice per pedal turn, harder than a ratio of 1.",
+          "claim": "A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-two_ideas-gears-1#4",
+          "kind": "example",
+          "answer": "With a ratio of 2 and a wheel about 2 metres round, one turn of the pedals moves the bike about 4 metres.",
+          "claim": "Development equals the gear ratio multiplied by the circumference of the wheel.",
+          "scripted": "missing",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-two_ideas-interest-1#2",
+          "kind": "example",
+          "answer": "At 10 percent a period the factor is 1.1, so after 2 periods 100 becomes 100 times 1.1 squared, which is 121.",
+          "claim": "The growth factor for one period is one plus the interest rate per period.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-two_ideas-interest-1#2",
+          "kind": "example",
+          "answer": "At 10 percent a period the factor is 1.1, so after 2 periods 100 becomes 100 times 1.1 squared, which is 121.",
+          "claim": "After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.",
+          "scripted": "missing",
+          "grader": "covered"
+        },
+        {
+          "key": "tb-two_ideas-search-1#2",
+          "kind": "explain",
+          "answer": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+          "claim": "Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.",
+          "scripted": "covered",
+          "grader": "partial"
+        },
+        {
+          "key": "tb-two_ideas-search-1#4",
+          "kind": "example",
+          "answer": "With 1000 items, 2 to the power 10 is 1024, so about 10 comparisons, as long as the list is sorted.",
+          "claim": "Binary search needs the list to be sorted, and on an unsorted list it can miss the target.",
+          "scripted": "missing",
+          "grader": "partial"
+        }
+      ],
+      "agreement": 0.5584415584415584,
+      "model": "claude-sonnet-5-5",
+      "cost_usd": 0.3813
+    }
+  },
+  "cost": {
+    "per_turn": 0.00018959848484848484,
+    "per_scenario": 0.000863,
+    "mean_seconds": 1.2318181818181817
+  }
+}

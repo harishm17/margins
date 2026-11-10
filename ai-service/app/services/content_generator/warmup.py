@@ -15,10 +15,12 @@ from app.services.content_generator.context import (
     NoSourceMaterialError,
     attach_sources,
     content_messages,
+    do_not_repeat_block,
     fetch_concepts,
     fetch_confusable_neighbours,
     fetch_topic_context,
     format_concept_block,
+    name_in_instructions,
     resolve_concept_ids,
 )
 from app.prompt_revision import prompts_v2
@@ -53,12 +55,14 @@ WARMUP_INSTRUCTIONS = """Write {count} warm-up questions on "{topic}" from the e
 - List in source_excerpts the index of every excerpt a question is based on.
 {concepts}"""
 
-# Audited prompt (PROMPTS_V2=generation): the option rules are the shared CHOICE_RULES.
+# Audited prompt (PROMPTS_V2=generation): the option rules are the shared CHOICE_RULES. A hard question is one mix-up
+# resisted, not two ideas combined: the student has not read yet, and "combined with another" contradicted "one idea per
+# question" two lines above it.
 WARMUP_INSTRUCTIONS_V2 = (
     """Write {count} warm-up questions on "{topic}" from the excerpts above. The student answers some of them before reading, to find out what they already know and to prime what they are about to read.
 
 - Ask about the objectives of the topic, one idea per question. Use only multiple_choice and true_false questions; no calculations.
-- Tag each question's difficulty as easy, medium or hard. The set has {mix}. Easy questions ask for a definition or a plain fact, medium questions apply an idea to a small case, and hard questions need the idea combined with another or a common mix-up resisted. """
+- Tag each question's difficulty as easy, medium or hard. The set has {mix}. Easy questions ask for a definition or a plain fact, medium questions apply an idea to a small case, and hard questions turn on a common mix-up the student has to resist. A hard question still tests one idea. """
     + RULE_IN_EXCERPTS
     + """
 """
@@ -118,7 +122,8 @@ async def generate_warmup(topic_id: str) -> Dict:
 
     async def ask(count: int, mix: str, avoid: str = "") -> tuple[List[Dict], int]:
         instructions = warmup_template().format(
-            count=count, topic=context.topic["name"], mix=mix, concepts=format_concept_block(concepts, neighbours)
+            count=count, topic=name_in_instructions(context.topic["name"]), mix=mix,
+            concepts=format_concept_block(concepts, neighbours),
         )
         result = await LLMFactory.get_provider().generate_structured(
             content_messages(
@@ -140,9 +145,8 @@ async def generate_warmup(topic_id: str) -> Dict:
             have = [q["difficulty"] for q in questions]
             lacking = {level: max(0, n - have.count(level)) for level, n in WARMUP_WANTED.items()}
             mix = ", ".join(f"{n} {level}" for level, n in lacking.items() if n) or f"{missing} medium"
-            avoid = "\n\nDo not repeat these questions:\n" + "\n".join(f"- {q.get('question_text')}" for q in supported)
             nonlocal dropped
-            more, more_dropped = await ask(missing, mix, avoid if supported else "")
+            more, more_dropped = await ask(missing, mix, do_not_repeat_block(supported))
             dropped += more_dropped
             return more
 

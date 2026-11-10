@@ -4,10 +4,11 @@
 
 writes scenarios/teach-back-original.jsonl from problems/teach-concepts.json: three small courses written for this
 eval (gears, compound interest, binary search), each with concepts, ordered claims and the things a student says when
-asked to explain one idea. No course text from anywhere else, so the set is committed: the parity fixture, the tests and
+asked to explain an idea. No course text from anywhere else, so the set is committed: the parity fixture, the tests and
 CI use it. The choice is deterministic; nothing here calls a model.
 
-Each scenario is one voice teach-back of one concept. A turn is what the student says, with the verdict the recall grader
+Each scenario is one voice teach-back: of one concept, or (pattern two_ideas) of two in a row, the second under
+`then` as `[{"concept": ..., "turns": [...]}]`. A turn is what the student says, with the verdict the recall grader
 would give each claim of the concept for it (scripted, so the grader is not part of this eval; it has its own tests):
 
     {"kind": "explain", "say": "...", "verdicts": [{"verdict": "covered", "student_quote": ..., ...}, ...]}
@@ -19,6 +20,10 @@ which the parity test checks against this flag), so the first assessment is not 
 Patterns (spec section 11, translated to teach-back): just_tell_me, idk3, wrong_wrong_right, confident_wrong,
 right_weak_reasoning, full_coverage, off_topic, injection, and, since v3.1, idk_first (a spoken "I don't know" as the first
 words: explained at once, with no probe) and covers_nothing (an explanation that covers no claim: the same).
+two_ideas (voice review of PR #90) is a session of two ideas: every other scenario ends with its one idea, so what the
+coach says when an idea closes and another is waiting (the closing result carries it as `next_idea`) was never played.
+The three differ in how the first idea closes (the example holds, the example fails, a say-back after the explanation)
+and in how the second goes (covered at once, or "I don't know" first).
 """
 import json
 from pathlib import Path
@@ -39,6 +44,7 @@ PATTERNS = (
     "injection",
     "idk_first",
     "covers_nothing",
+    "two_ideas",
 )
 
 # Said as the first words of an idk_first scenario, one per course: an "I don't know" by the app's detector.
@@ -82,7 +88,8 @@ def build() -> List[Dict[str, Any]]:
     courses = json.loads(COURSES.read_text())
     scenarios: List[Dict[str, Any]] = []
 
-    def add(course: Dict[str, Any], pattern: str, concept_index: int, steps: List[tuple]) -> None:
+    def idea(course: Dict[str, Any], concept_index: int, steps: List[tuple]) -> Dict[str, Any]:
+        """One idea of a session: the concept as the app holds it, and the student's turns on it."""
         concept = course["concepts"][concept_index]
         wrong = WRONG[course["id"]]
         turns = []
@@ -94,6 +101,21 @@ def build() -> List[Dict[str, Any]]:
             if literal:
                 turn["dont_know"] = True
             turns.append(turn)
+        return {
+            "concept": {
+                "id": f"{course['id']}-c{concept_index}",
+                "name": concept["name"],
+                "prerequisite": concept["prerequisite"],
+                "claims": [
+                    {"id": f"{course['id']}-c{concept_index}-k{n}", "text": claim["text"], "page": claim["page"]}
+                    for n, claim in enumerate(concept["claims"])
+                ],
+            },
+            "turns": turns,
+        }
+
+    def add(course: Dict[str, Any], pattern: str, concept_index: int, steps: List[tuple], then: Optional[List[tuple]] = None) -> None:
+        """`then`: the ideas that follow in the same session, each as (concept_index, steps)."""
         number = sum(1 for s in scenarios if s["pattern"] == pattern and s["course"] == course["id"]) + 1
         scenarios.append(
             {
@@ -102,16 +124,8 @@ def build() -> List[Dict[str, Any]]:
                 "course": course["id"],
                 "source": {"set": "original"},
                 "topic": course["topic"],
-                "concept": {
-                    "id": f"{course['id']}-c{concept_index}",
-                    "name": concept["name"],
-                    "prerequisite": concept["prerequisite"],
-                    "claims": [
-                        {"id": f"{course['id']}-c{concept_index}-k{n}", "text": claim["text"], "page": claim["page"]}
-                        for n, claim in enumerate(concept["claims"])
-                    ],
-                },
-                "turns": turns,
+                **idea(course, concept_index, steps),
+                **({"then": [idea(course, index, more) for index, more in then]} if then else {}),
             }
         )
 
@@ -144,6 +158,12 @@ def build() -> List[Dict[str, Any]]:
         add(course, "idk_first", 0, [("explain", "=" + DONT_KNOW_SAYS[position], "mm"), ("explain", "say_back", "cm"), ("explain", "say_back", "cc")])
     for course in courses:
         add(course, "covers_nothing", 0, [("explain", "idk", "mm"), ("explain", "say_back", "cc")])
+    # Two ideas in one session. The first closes three ways; the second is covered at once or starts from "I don't know".
+    gears, interest, search = courses
+    covered = [("explain", "second_full", "cc"), ("example", "second_example", "cm")]
+    add(gears, "two_ideas", 0, [("explain", "full", "cc"), ("example", "example", "cm")], then=[(1, covered)])
+    add(interest, "two_ideas", 0, [("explain", "full", "cc"), ("example", "example", "mm")], then=[(1, [("explain", "idk", "mm"), ("explain", "second_full", "cc")])])
+    add(search, "two_ideas", 0, [("explain", "idk", "mm"), ("explain", "say_back", "cc")], then=[(1, covered)])
     return scenarios
 
 

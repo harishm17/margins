@@ -103,7 +103,7 @@ export const TEACH_BACK_TOOLS: VoiceToolDefinition[] = [
   {
     name: 'assess_explanation',
     description:
-      "Assess the student's spoken explanation of an idea against the claims from their own pages. The app uses the words the student actually said since your last question, so call it only after they have answered. Returns what they covered, got wrong or left out, and an action: probe (with the kind of question to ask), explain, ask_new_example, clarify or wrap_up. Call it as soon as the student has finished explaining, and again after each answer to a probe.",
+      "Assess the student's spoken explanation of an idea against the claims from their own pages. The app uses the words the student actually said since your last question, so call it only after they have answered. Returns what they covered, got wrong or left out, and an action: probe (with the kind of question to ask), explain, ask_new_example, clarify or wrap_up. A wrap_up result also carries next_idea: what get_concept_to_explain would return now (the next idea with its concept_id and prompt, or done: true when every idea is done), so you do not call that tool after it. Call it as soon as the student has finished explaining, and again after each answer to a probe.",
     input_schema: {
       type: 'object',
       properties: {
@@ -115,7 +115,7 @@ export const TEACH_BACK_TOOLS: VoiceToolDefinition[] = [
   {
     name: 'record_check',
     description:
-      "Record the student's answer to the one new example or prediction you asked after assess_explanation said ask_new_example. The app uses the words the student actually said since you asked, so call it only after they have answered. Returns whether it held and what to do next.",
+      "Record the student's answer to the one new example or prediction you asked after assess_explanation said ask_new_example. The app uses the words the student actually said since you asked, so call it only after they have answered. Returns whether it held and what to do next; when that is wrap_up, next_idea is the next idea to ask (or done: true when every idea is done), as after assess_explanation.",
     input_schema: {
       type: 'object',
       properties: {
@@ -175,13 +175,13 @@ const V2_DESCRIPTIONS: Record<V2ToolName, string> = {
   get_concept_to_explain:
     "Get the idea the student should explain next: the weakest one of the topic that they have not worked through in this session. Returns done: false with concept_id, concept_name, the prompt to ask and ideas_left, or done: true with a message when every idea is done, or an error. Call it before asking the student to explain anything.",
   assess_explanation:
-    "Assess the student's spoken explanation of the idea you last got from get_concept_to_explain against the claims from their own pages. The app uses the words the student said since your last question, so call it only after they have answered; it returns an error otherwise (error no_current_concept when you have not got an idea yet). Returns concept, and what they covered, partly covered (partly), got wrong (incorrect) or left out (missing), and an action: probe (with probe.type and the gap to ask about), explain or explain_first (with source_claim and its page), ask_new_example (with an instruction), clarify (with a clarifying_question) or wrap_up (with an outcome and, when pages need another look, look_again). Returns done: true with a message when the session is over. Call it when the student has finished explaining, and again after each answer to a probe.",
+    "Assess the student's spoken explanation of the idea you last got from get_concept_to_explain against the claims from their own pages. The app uses the words the student said since your last question, so call it only after they have answered; it returns an error otherwise (error no_current_concept when you have not got an idea yet). Returns concept, and what they covered, partly covered (partly), got wrong (incorrect) or left out (missing), and an action: probe (with probe.type and the gap to ask about), explain or explain_first (with source_claim and its page), ask_new_example (with an instruction), clarify (with a clarifying_question) or wrap_up (with an outcome, look_again when pages need another look, and next_idea: what get_concept_to_explain would return now, so you do not call it after a wrap_up). Returns done: true with a message when the session is over. Call it when the student has finished explaining, and again after each answer to a probe.",
   record_example_check:
-    "Record the student's answer to the one new example or prediction you asked after assess_explanation said ask_new_example, for the idea you last got from get_concept_to_explain. The app uses the words the student said since you asked, so call it only after they have answered. Returns concept and passed (whether it held), what they covered, partly covered (partly), got wrong (incorrect) or left out (missing), and the next action as assess_explanation does (probe, explain or explain_first with source_claim, ask_new_example, clarify with a clarifying_question, or wrap_up with an outcome, look_again and an instruction). Returns an error (no_current_concept when you have not got an idea yet, or when the student has not spoken), or done: true with a message when the session is over.",
+    "Record the student's answer to the one new example or prediction you asked after assess_explanation said ask_new_example, for the idea you last got from get_concept_to_explain. The app uses the words the student said since you asked, so call it only after they have answered. Returns concept and passed (whether it held), what they covered, partly covered (partly), got wrong (incorrect) or left out (missing), and the next action as assess_explanation does (probe, explain or explain_first with source_claim, ask_new_example, clarify with a clarifying_question, or wrap_up with an outcome, look_again, next_idea and an instruction). Returns an error (no_current_concept when you have not got an idea yet, or when the student has not spoken), or done: true with a message when the session is over.",
   next_claim:
     "Move through the claims of the student's pages. With no arguments it gives the next claim's idea and a prediction prompt, without the claim, so the student can predict first. Returns done: false with claim_index, of (the number of claims), concept_name, prediction_prompt and an instruction. With reveal true and your check_question, it returns the claim (its text and page) with an instruction, but only after the student has said their prediction: the app uses what they said since you asked. Also use it with no arguments to move on or skip. Returns done: true with a message when every claim has been read, or an error.",
   record_claim_check:
-    "Record the student's answer to your check question about the claim you just told (the one next_claim last returned). The app uses the words the student said since you asked, so call it only after they have answered. Returns verdict (right, partly right, not right or not yet), you_said and wrong_idea when there are student words to quote, the claim (its text and page), claims_left and an instruction. When the answer was too short or unclear it returns action clarify with a clarifying_question and an instruction. Returns an error (no_current_claim when you have not told a claim yet), or done: true with a message when the session is over.",
+    "Record the student's answer to your check question about the claim you just told (the one next_claim last returned). The app uses the words the student said since you asked, so call it only after they have answered. Returns verdict (right, partly right, not right or not yet), you_said when there are student words to quote, wrong_idea (the grader's own description of the mistake, not a quotation) when it found one, the claim (its text and page), claims_left and an instruction. When the answer was too short or unclear it returns action clarify with a clarifying_question and an instruction. Returns an error (no_current_claim when you have not told a claim yet), or done: true with a message when the session is over.",
 }
 
 /** The v2 list of a style: the audited descriptions, the schemas without the values the server holds, the checks renamed. */
@@ -358,6 +358,12 @@ async function runVoiceTool(
     turn: number
     /** The step runs before the model speaks (spec 19.1): a guided-reading reveal gets the server's own check question. */
     autoCheck?: boolean
+    /**
+     * Takes work the coach's reply does not wait for (a recorded answer's signal, mastery, schedule and evidence), so the
+     * feedback starts sooner. The caller must wait for it before the turn ends. Without it the work is done before the
+     * tool returns.
+     */
+    defer?: (work: Promise<void>) => void
   },
   name: string,
   args: unknown
@@ -468,9 +474,12 @@ async function runVoiceTool(
     if (!parsed.success) return finish({ error: 'Invalid arguments for record_answer' } satisfies ErrorResult)
     const quizState = readCoachState(session.coachState)
     if (session.endedAt) return finish(COMPLETE, { sessionComplete: true })
-    // v2 (R5): the question is the one get_next_question last returned.
+    // The question is the one get_next_question last returned (v2, R5: the model passes no index). The earlier prompts
+    // still ask the model for the index, and it is not trusted either: a model that miscounted had the answer graded
+    // against another question's key. Only a session from before the server kept the current question uses it.
     if (v2 && quizState.quiz.current < 0) return finish({ error: NO_CURRENT.question } satisfies ErrorResult)
-    const questionIndex = v2 ? quizState.quiz.current : (parsed.data as z.infer<typeof recordAnswerArgs>).question_index
+    const questionIndex =
+      quizState.quiz.current >= 0 ? quizState.quiz.current : (parsed.data as z.infer<typeof recordAnswerArgs>).question_index
     const { confidence } = parsed.data
 
     const question = questionSet[questionIndex]
@@ -575,25 +584,28 @@ async function runVoiceTool(
 
     // An ungraded answer is not evidence of anything, so it adds no signal.
     if (inferredTopicId && !grading.ungraded) {
-      await recordLearningSignal({
-        userId,
-        projectId: session.projectId,
-        topicId: inferredTopicId,
-        source: 'voice',
-        score: grading.score,
-        metadata: { sessionId, questionIndex },
-      })
-      await applyPendingQuizResults(userId)
-      const mastery = await computeTopicMastery(userId, session.projectId, inferredTopicId)
-      await upsertReviewSchedule({
-        userId,
-        projectId: session.projectId,
-        topicId: inferredTopicId,
-        mastery: mastery.mastery,
-        wasCorrect: grading.isCorrect,
-      })
-      // After the schedule above, so the concept-derived due date is the one that stays.
-      if (firstAnswer) {
+      const bookkeeping = async () => {
+        await recordLearningSignal({
+          userId,
+          projectId: session.projectId,
+          topicId: inferredTopicId,
+          source: 'voice',
+          score: grading.score,
+          metadata: { sessionId, questionIndex },
+        })
+        await applyPendingQuizResults(userId)
+        const mastery = await computeTopicMastery(userId, session.projectId, inferredTopicId)
+        await upsertReviewSchedule({
+          userId,
+          projectId: session.projectId,
+          topicId: inferredTopicId,
+          mastery: mastery.mastery,
+          wasCorrect: grading.isCorrect,
+        })
+        // After the schedule above, so the concept-derived due date is the one that stays. Asked for on every answer,
+        // not only the one whose insert was first: the evidence writer keeps one event per question (skipIfPresent), so
+        // a second answer adds nothing, and an answer whose first try failed after the insert (bug: the evidence was
+        // then never written) gets its evidence when it is recorded again.
         await recordVoiceEvidence({
           userId,
           projectId: session.projectId,
@@ -608,6 +620,13 @@ async function runVoiceTool(
           idk: dontKnow,
           timeZone: ctx.timeZone ?? 'UTC',
         })
+      }
+      // The coach's feedback needs none of this, so a caller that will wait for it (the turn route) takes it and the
+      // reply starts while it runs. A failure there is logged: the answer itself is stored.
+      if (ctx.defer) {
+        ctx.defer(bookkeeping().catch((error) => logServerError('Voice: recording what a spoken answer showed failed', error, { sessionId, questionIndex })))
+      } else {
+        await bookkeeping()
       }
     }
 
@@ -628,7 +647,9 @@ async function runVoiceTool(
     } else {
       const parsed = hintArgs.safeParse(args)
       if (!parsed.success) return finish({ error: 'Invalid arguments for get_hint' })
-      hintIndex = parsed.data.question_index
+      // As in record_answer: the question being asked is the server's to say, when it has kept it.
+      const current = readCoachState(session.coachState).quiz.current
+      hintIndex = current >= 0 ? current : parsed.data.question_index
     }
     const question = questionSet[hintIndex]
     if (!question) return finish({ error: 'Question not found' })

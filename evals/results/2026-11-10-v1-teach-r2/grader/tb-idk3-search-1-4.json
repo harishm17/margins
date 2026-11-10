@@ -1,0 +1,7 @@
+{
+  "status": "graded",
+  "verdicts": {
+    "search-c1-k0": "partial",
+    "search-c1-k1": "missing"
+  }
+}

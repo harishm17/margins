@@ -58,7 +58,7 @@ test('text mode: start, first question, answer, evaluation, end, summary', async
   // The coach greets and asks the first question.
   await expect(page.getByTestId('voice-question')).toBeVisible({ timeout: 30_000 })
   await expect(page.getByTestId('voice-progress')).toHaveText(/^Question 1 of \d+$/)
-  await expect(page.getByText('Here is your question.')).toBeVisible()
+  await expect(page.getByTestId('voice-transcript').getByText('Here is your question.')).toBeVisible()
 
   // Type an answer; the evaluation appears under the coach's reply.
   await page.getByLabel('Your answer').fill('It maps a key to a bucket with a hash function.')
@@ -67,7 +67,7 @@ test('text mode: start, first question, answer, evaluation, end, summary', async
   const evaluation = page.getByTestId('voice-evaluation').first()
   await expect(evaluation).toBeVisible({ timeout: 30_000 })
   await expect(evaluation.locator('span').first()).toHaveText(/Correct|Partly|Not quite|Noted/)
-  await expect(page.getByText(/Thanks, I have noted that/)).toBeVisible()
+  await expect(page.getByTestId('voice-transcript').getByText(/Thanks, I have noted that/)).toBeVisible()
 
   // End shows the summary.
   await page.getByRole('button', { name: 'End', exact: true }).click()
@@ -115,7 +115,7 @@ test('teach it back: the idea is on the board, the explanation is assessed again
   const board = page.getByTestId('voice-board')
   await expect(board).toHaveAttribute('data-kind', 'concept', { timeout: 30_000 })
   await expect(board).toContainText('Explain "Collision" in your own words')
-  await expect(page.getByText(/Explain it to me as if I were a classmate/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('voice-transcript').getByText(/Explain it to me as if I were a classmate/)).toBeVisible({ timeout: 30_000 })
   // No question bank in this style: no Hint or Skip.
   await expect(page.getByRole('button', { name: 'Hint' })).toHaveCount(0)
   await screenshotIfAsked(page, 'g1-teach-back-idea-1440x900')
@@ -123,7 +123,7 @@ test('teach it back: the idea is on the board, the explanation is assessed again
   // The explanation goes to the recall grader (the mock covers the first claim and misses the second): one probe, no lecture.
   await page.getByLabel('Your answer').fill('Two keys that land in the same bucket are a collision and the table has to cope with it somehow')
   await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByText(/Mock probe 1: what exactly do you mean/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('voice-transcript').getByText(/Mock probe 1: what exactly do you mean/)).toBeVisible({ timeout: 30_000 })
   await expectNoAxeViolations(page, 'teach-back session after a probe')
 
   // The first explanation of the idea is level 0 teach_back evidence, written once.
@@ -133,7 +133,7 @@ test('teach it back: the idea is on the board, the explanation is assessed again
   // A second answer is assessed with the first but is not scored again as an explanation.
   await page.getByLabel('Your answer').fill('The second claim is about lists in each bucket maybe')
   await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByText(/Mock probe 2: what exactly do you mean/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('voice-transcript').getByText(/Mock probe 2: what exactly do you mean/)).toBeVisible({ timeout: 30_000 })
   expect((await sessionEvidence('teach_back')).length).toBe(1)
   await page.getByRole('button', { name: 'End', exact: true }).click()
   await expect(page.getByTestId('voice-summary')).toBeVisible()
@@ -375,7 +375,7 @@ test("teach it back: an I-don't-know is explained at once, with no probe, and is
   await expect(page.getByTestId('voice-board')).toHaveAttribute('data-kind', 'concept', { timeout: 30_000 })
   await page.getByLabel('Your answer').fill("I don't know")
   await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByText(/Mock explain first: here is the idea from your pages/)).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('voice-transcript').getByText(/Mock explain first: here is the idea from your pages/)).toBeVisible({ timeout: 30_000 })
   await expect(page.getByText(/Mock probe/)).toHaveCount(0)
   await page.setViewportSize({ width: 1440, height: 900 })
   await screenshotIfAsked(page, 'voice-explain-first-1440x900')

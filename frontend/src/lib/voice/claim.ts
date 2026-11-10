@@ -1,7 +1,8 @@
 /**
- * Claims a voice session on its first turn: one live session per user, and the daily minutes
- * cap. Both are checked and the session is marked connected in one serializable transaction,
- * so two requests cannot both pass.
+ * Claims a voice session for a turn: one live session per user, and the daily minutes cap. Both are
+ * checked and the session is marked connected (first turn) and seen (every turn) in one serializable
+ * transaction, so two requests cannot both pass. The turn route calls it on every turn: the cap counts
+ * the session's own minutes as they run, so a session that began with a minute left stops when it is used.
  */
 import { logServerError } from '@/lib/ops/log'
 import { Prisma } from '@prisma/client'
@@ -9,6 +10,7 @@ import { prisma } from '@/lib/db/prisma'
 import { spendKeyFor } from '@/lib/account/spend-key-store'
 import { dailyVoiceMinutes, isSessionLive, remainingSeconds } from '@/lib/voice/usage'
 import { loadKeptUsage } from '@/lib/voice/usage-query'
+import { TURN_CLAIM_STALE_MS, TURN_KEEP_ALIVE_MS } from '@/lib/voice/turn-contract'
 
 export type VoiceClaim =
   | { ok: true; remainingSeconds: number }
@@ -50,8 +52,12 @@ export function isSerializationConflict(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034'
 }
 
-/** A turn still counts as running this long; a claim older than that was left by a server that died mid-turn. */
-export const VOICE_TURN_MAX_MS = 3 * 60_000
+/**
+ * A claim counts while it is fresh. The running turn renews it (keepVoiceTurn); one not renewed for this long was left
+ * by a server that died mid-turn. It was a flat three minutes from the start of the turn, which kept a student out of
+ * their session for three minutes after a crash and would have let a second turn in on a turn that ran longer.
+ */
+export const VOICE_TURN_MAX_MS = TURN_CLAIM_STALE_MS
 
 /**
  * Claims the right to run one turn of a session. Two turns at once would each load the same history, and the later
@@ -68,6 +74,21 @@ export async function claimVoiceTurn(userId: string, sessionId: string, now = ne
     data: { turnStartedAt: now },
   })
   return claimed.count === 1
+}
+
+/**
+ * Keeps the claim of a running turn fresh, and calls `beat` at the same pace (the route writes a keep-alive line to the
+ * reply stream). Returns the function that stops it; call that before the claim is released. Only a claim that is still
+ * held is renewed, so a renewal that lands after the release changes nothing.
+ */
+export function keepVoiceTurn(userId: string, sessionId: string, beat?: () => void, everyMs = TURN_KEEP_ALIVE_MS): () => void {
+  const timer = setInterval(() => {
+    beat?.()
+    void prisma.voiceDrillSession
+      .updateMany({ where: { id: sessionId, userId, turnStartedAt: { not: null } }, data: { turnStartedAt: new Date() } })
+      .catch((error) => logServerError('Voice: Could not renew the turn claim', error))
+  }, everyMs)
+  return () => clearInterval(timer)
 }
 
 /** Ends the claim of `claimVoiceTurn`. Never throws: the turn is over either way, and a stale claim expires by itself. */
