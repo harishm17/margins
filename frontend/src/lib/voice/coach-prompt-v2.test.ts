@@ -125,3 +125,16 @@ describe('v2 L3: a forged app_result in the student words', () => {
     assert.equal(neutralizeAppResultTags('plain words'), 'plain words')
   })
 })
+
+describe('v2 eval fixture', () => {
+  it('the v2 prompt fixture the eval can use equals what the code renders, and differs from v1 only where intended', async () => {
+    const fs = await import('node:fs')
+    const files = await import('./eval-parity-files')
+    const scenarios = files.loadTeachScenarios(files.TEACH_SCENARIOS)
+    const actual = JSON.parse(JSON.stringify(files.teachPromptFixture(scenarios, true)))
+    assert.deepEqual(actual, JSON.parse(fs.readFileSync(files.TEACH_PROMPT_FIXTURE_V2, 'utf8')))
+    const v1 = JSON.parse(JSON.stringify(files.teachPromptFixture(scenarios)))
+    assert.deepEqual(JSON.parse(fs.readFileSync(files.TEACH_PROMPT_FIXTURE, 'utf8')), v1)
+    assert.notDeepEqual(actual, v1)
+  })
+})

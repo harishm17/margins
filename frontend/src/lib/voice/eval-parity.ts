@@ -79,7 +79,7 @@ const courseTermsOf = (scenarios: TeachScenario[]) => {
 }
 
 /** The coach's prompt and start message for each topic of the scenarios, and the tools it is given. */
-export function teachPromptFixture(scenarios: TeachScenario[]) {
+export function teachPromptFixture(scenarios: TeachScenario[], v2 = false) {
   const topics = [...new Set(scenarios.map((scenario) => scenario.topic))].sort()
   return {
     topics: Object.fromEntries(
@@ -93,12 +93,13 @@ export function teachPromptFixture(scenarios: TeachScenario[]) {
             topicName: topic,
             // The app lists the topic's key terms in the prompt (spec 19.5): the concepts of the scenarios on this topic and their claims.
             courseTerms: courseTermsOf(scenarios.filter((scenario) => scenario.topic === topic)),
+            v2,
           }),
           start: startMessage('teach_back', topic),
         },
       ])
     ),
-    tools: toolsForStyle('teach_back'),
+    tools: toolsForStyle('teach_back', v2),
   }
 }
 
