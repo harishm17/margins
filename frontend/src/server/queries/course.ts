@@ -1,3 +1,4 @@
+import { toDetachedNoteView, type DetachedNoteView } from '@/lib/reader/detached-notes'
 import { logServerError } from '@/lib/ops/log'
 import { notFound } from 'next/navigation'
 import { areRecordIds } from '@/lib/ids'
@@ -665,13 +666,12 @@ export async function getTopicsData(userId: string, courseId: string): Promise<T
   }
 }
 
-export type RemovedTopicNote = { id: string; quote: string | null; text: string; createdAt: Date }
-
 /** The student's margin notes in this course whose topic was deleted, newest first (finding 78). */
-export async function getRemovedTopicNotes(userId: string, courseId: string): Promise<RemovedTopicNote[]> {
-  return prisma.marginNote.findMany({
+export async function getRemovedTopicNotes(userId: string, courseId: string): Promise<DetachedNoteView[]> {
+  const rows = await prisma.marginNote.findMany({
     where: { userId, projectId: courseId, topicId: null, project: { userId } },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, quote: true, text: true, createdAt: true },
+    select: { id: true, kind: true, quote: true, text: true, reply: true, createdAt: true },
   })
+  return rows.map(toDetachedNoteView)
 }
