@@ -104,6 +104,7 @@ const BODIES: Record<string, Record<string, unknown>> = {
 /** Query strings for routes that ask for one on GET or DELETE. */
 const QUERIES: Record<string, string> = {
   'DELETE topics/[topicId]/margin-notes': '?id=n1',
+  'DELETE projects/[projectId]/removed-topic-notes': '?id=n1',
   'GET projects/[projectId]/review-sessions': '?active=1',
   'GET topics/[topicId]/item-sessions': '?kind=warmup',
   'GET topics/[topicId]/reader-checks': '?claimId=c1',
@@ -398,6 +399,7 @@ const FOREIGN: Record<string, () => Record<string, Call>> = {
   'POST ask-checks/reveal': () => ({ 'messageId: A answer': { body: { messageId: A().message, attempt: 'my answer' } } }),
   'POST topics/[topicId]/margin-notes': () => ({ 'chunkId: A passage': { body: { chunkId: A().chunk, text: 'note' } } }),
   'DELETE topics/[topicId]/margin-notes': () => ({ 'id: A note': { query: `?id=${A().note}` } }),
+  'DELETE projects/[projectId]/removed-topic-notes': () => ({ 'id: A note': { query: `?id=${A().note}` } }),
   'POST topics/[topicId]/reader-explain': () => ({
     'chunkId: A passage': { body: { chunkId: A().chunk, cantParse: true } },
     'noteId: A question': { body: { noteId: A().note, answer: 'my answer' } },
