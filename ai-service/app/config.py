@@ -128,6 +128,10 @@ class Settings(BaseSettings):
     # Syllabus or calendar text given to the planner, for ordering and unit names.
     PLANNER_SYLLABUS_TOKENS: int = 6000
 
+    # Areas that use the audited prompts (app/prompt_revision.py): "generation,tutor" or "all".
+    # Empty keeps every area on its earlier prompts.
+    PROMPTS_V2: str = ""
+
     CHAT_MAX_TOKENS: int = 4000
     # Excerpts offered to the model per question, and the cosine similarity below which a chunk
     # is not offered at all. A question is shorter than a topic query, so its floor is lower
