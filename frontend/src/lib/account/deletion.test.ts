@@ -252,7 +252,7 @@ test('deleting a user removes concept memory, evidence, recall attempts, margin 
     data: { userId: user.id, topicId: topic.id, kind: 'recall', promptText: 'Say it.', answerText: 'It is.', mode: 'text', result: {} },
   })
   await prisma.marginNote.create({
-    data: { userId: user.id, topicId: topic.id, materialId: material.id, chunkId: 'chunk-1', kind: 'note', text: 'Note' },
+    data: { userId: user.id, projectId: topic.projectId, topicId: topic.id, materialId: material.id, chunkId: 'chunk-1', kind: 'note', text: 'Note' },
   })
   await prisma.tutorState.create({ data: { userId: user.id, scope: 'practice', scopeKey: 'step-1' } })
   await prisma.itemSession.create({ data: { userId: user.id, projectId: project.id, kind: 'warmup', items: [] } })

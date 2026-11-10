@@ -301,7 +301,7 @@ test('margin notes persist and belong to their owner', skip, async (t) => {
   if (!available) return t.skip('no database')
   const w = await world('rd-notes')
   const other = await world('rd-notes-other')
-  await prisma.marginNote.create({ data: { userId: w.user.id, topicId: w.topic.id, materialId: w.material.id, chunkId: w.chunks[1].id, kind: 'note', text: 'Remember the probe order.' } })
+  await prisma.marginNote.create({ data: { userId: w.user.id, projectId: w.topic.projectId, topicId: w.topic.id, materialId: w.material.id, chunkId: w.chunks[1].id, kind: 'note', text: 'Remember the probe order.' } })
   const mine = await reader.loadMarginNotes(w.user.id, w.topic.id)
   assert.deepEqual(mine.map((n) => [n.chunkId, n.kind, n.text]), [[w.chunks[1].id, 'note', 'Remember the probe order.']])
   assert.deepEqual(await reader.loadMarginNotes(other.user.id, w.topic.id), [])
@@ -432,7 +432,7 @@ test('a check answer needs its question, and belongs to its owner; a failed tuto
   assert.equal((await server.answerReaderCheck(other.user.id, w.topic.id, { noteId: question.id, answer: 'x y z w', timeZone: 'UTC' }, never)).status, 'not_found')
   assert.equal((await server.answerReaderCheck(w.user.id, w.topic.id, { noteId: crypto.randomUUID(), answer: 'x y z w', timeZone: 'UTC' }, never)).status, 'not_found')
   // A plain note has no check question; it cannot be answered.
-  const plain = await prisma.marginNote.create({ data: { userId: w.user.id, topicId: w.topic.id, materialId: w.material.id, chunkId: w.chunks[2].id, kind: 'note', text: 'mine' } })
+  const plain = await prisma.marginNote.create({ data: { userId: w.user.id, projectId: w.topic.projectId, topicId: w.topic.id, materialId: w.material.id, chunkId: w.chunks[2].id, kind: 'note', text: 'mine' } })
   assert.equal((await server.answerReaderCheck(w.user.id, w.topic.id, { noteId: plain.id, answer: 'x y z w', timeZone: 'UTC' }, never)).status, 'not_found')
   // An empty answer is neither an answer nor an "I don't know".
   assert.equal((await server.answerReaderCheck(w.user.id, w.topic.id, { noteId: question.id, answer: '   ', timeZone: 'UTC' }, never)).status, 'invalid')

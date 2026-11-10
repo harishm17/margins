@@ -183,6 +183,7 @@ before(async () => {
   const note = await prisma.marginNote.create({
     data: {
       userId: a.id,
+      projectId: topic.projectId,
       topicId: topic.id,
       materialId: material.id,
       chunkId: chunk.id,
