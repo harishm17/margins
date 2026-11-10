@@ -65,6 +65,7 @@ def make_ask_meter(adapters, stop: Dict[str, str]):
         async def stream_cited_answer(self, *, system, history, question, excerpts, max_tokens=4000, purpose="chat"):
             from app.services.llm.base import LLMMessage
             from app.services.llm.usage import track_llm_usage
+            from common.revision import request_summary
 
             messages = [
                 LLMMessage(role="system", content=system),
@@ -95,6 +96,8 @@ def make_ask_meter(adapters, stop: Dict[str, str]):
                 "cost_usd": round(cost, 6),
                 "input_tokens": sum(u.input_tokens for u in usages),
                 "output_tokens": output_tokens,
+                "max_tokens": max_tokens,
+                "request": request_summary(messages, None),
                 "error": f"{type(error).__name__}: {error}" if error else None,
             }
             self.calls.append(record)
@@ -435,6 +438,7 @@ async def run(args, host) -> int:
     from app.config import settings
     from app.services.llm.factory import LLMFactory
     from app.services.llm.models import resolve_model
+    from common.revision import prompt_revision
 
     stop: Dict[str, str] = {}
     inner = adapters.build_provider(mock=args.mock, api_key=api_key, timeout=args.timeout)
@@ -467,6 +471,7 @@ async def run(args, host) -> int:
             "branch": host.git("rev-parse", "--abbrev-ref", "HEAD"),
             "app_dirty": bool(host.git("status", "--porcelain", "--", "ai-service/app")),
         },
+        "prompts": prompt_revision("ask"),
         "config": {
             "surface": "ask",
             "scenarios": len(scenarios),

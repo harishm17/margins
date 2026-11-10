@@ -62,6 +62,7 @@ DEFAULT_JUDGE = "opus:medium"
 
 # Run with `python -I`, so nothing is importable by accident; add exactly what is needed.
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(EVALS_DIR))
 
 
 def log(message: str = "") -> None:
