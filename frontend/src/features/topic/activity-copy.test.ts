@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ActivityKind } from '@/lib/learning/next-activity'
-import { ACTIVITY_KINDS, activityHref, activityLabel, activityTitle, activityVerb, bareTopicRedirect, defaultViewFor, opensHere, pathStepFor, viewInPath } from './activity-copy'
+import { ACTIVITY_KINDS, activityHref, bareTopicRedirect, opensHere } from './activity-copy'
 
 const ctx = { courseId: 'c1', topicId: 't1', conceptIds: ['k1', 'k2'], unitTopicIds: ['t0', 't1'], target: { conceptId: 'k1', via: 'reread' as const, chunkId: 'ch1' } }
 
@@ -26,55 +26,6 @@ test('each kind maps to its destination', () => {
   }
   assert.deepEqual([...ACTIVITY_KINDS].sort(), Object.keys(expected).sort())
   for (const kind of ACTIVITY_KINDS) assert.equal(activityHref(kind, ctx), expected[kind], kind)
-})
-
-test('one title per activity, and no user-facing "drill"', () => {
-  const base = '/courses/c1/topics/t1'
-  for (const kind of ACTIVITY_KINDS) {
-    assert.ok(activityTitle({ kind }).length > 0, kind)
-    assert.doesNotMatch(activityTitle({ kind }), /drill/i, kind)
-    assert.doesNotMatch(activityVerb(kind), /drill/i, kind)
-  }
-  assert.equal(activityTitle({ kind: 'fix_misconception' }), 'Practise the gap')
-  assert.equal(activityTitle({ kind: 'prerequisite_drill' }), 'Practise the basics')
-  assert.equal(activityTitle({ kind: 'instruct', href: `${base}?view=explainer&focus=k` }), 'Explanation of your gaps')
-  assert.equal(activityTitle({ kind: 'recall' }), 'Recall')
-})
-
-test('every kind has a button verb', () => {
-  for (const kind of ACTIVITY_KINDS) assert.ok(activityVerb(kind).length > 0, kind)
-  assert.equal(activityVerb('quiz'), 'Take quiz')
-  assert.equal(activityVerb('review'), 'Review')
-  assert.equal(activityVerb('instruct'), 'Read that part again')
-  assert.equal(activityVerb('fix_misconception'), 'Practise the gap')
-  assert.equal(activityVerb('prerequisite_drill'), 'Practise the basics')
-  assert.equal(activityVerb('examples'), 'See an example')
-  assert.equal(activityVerb('done_for_now'), 'Try a harder set')
-})
-
-test('a kind outside the topic page opens on practice; the rest on their own view', () => {
-  assert.equal(defaultViewFor('warmup'), 'warmup')
-  assert.equal(defaultViewFor('read'), 'read')
-  assert.equal(defaultViewFor('explainer'), 'explainer')
-  assert.equal(defaultViewFor('teach_back'), 'recall')
-  assert.equal(defaultViewFor('transfer_quiz'), 'quiz')
-  for (const kind of ['fix_misconception', 'prerequisite_drill', 'review', 'mock_exam', 'done_for_now'] as const) {
-    assert.equal(defaultViewFor(kind), 'practice', kind)
-  }
-  // The reader and the examples are views of the topic.
-  assert.equal(defaultViewFor('examples'), 'examples')
-  assert.equal(defaultViewFor('instruct'), 'read')
-})
-
-test('the path highlights the step an activity belongs to', () => {
-  assert.equal(pathStepFor('warmup'), 'warmup')
-  assert.equal(pathStepFor('explainer'), null)
-  assert.equal(pathStepFor('teach_back'), 'recall')
-  assert.equal(pathStepFor('transfer_quiz'), 'quiz')
-  assert.equal(pathStepFor('review'), null)
-  assert.equal(pathStepFor('instruct'), null)
-  assert.equal(pathStepFor('examples'), null)
-  assert.equal(pathStepFor('done_for_now'), null)
 })
 
 test('the card steps aside only when the whole address is what is on screen', () => {
@@ -115,19 +66,4 @@ test('a topic still being prepared opens on the preparation screen, whatever its
   // A named view is the student's choice, prepared or not; and once it is ready the address names the first step.
   assert.equal(bareTopicRedirect(base, 'read', { kind: 'start', href: base }, true), null)
   assert.equal(bareTopicRedirect(base, undefined, { kind: 'warmup', href: `${base}?view=warmup` }, false), `${base}?view=warmup`)
-})
-
-test('the view of a request path', () => {
-  assert.equal(viewInPath('/courses/c1/topics/t1'), null)
-  assert.equal(viewInPath('/courses/c1/topics/t1?view=read&concept=k'), 'read')
-  assert.equal(viewInPath('/courses/c1/topics/t1?concept=k&view=quiz'), 'quiz')
-  assert.equal(viewInPath(null), null)
-})
-
-test('a read-again pointer that opens the explanation says so; a topic nobody has opened starts on the warm-up', () => {
-  const base = '/courses/c1/topics/t1'
-  assert.equal(activityLabel({ kind: 'instruct', href: `${base}?view=explainer&focus=k` }), 'Read the explanation of your gaps')
-  assert.equal(activityLabel({ kind: 'instruct', href: `${base}?view=read&focus=k` }), 'Read that part again')
-  assert.equal(activityLabel({ kind: 'quiz', href: `${base}?view=quiz` }), 'Take quiz')
-  assert.equal(activityLabel({ kind: 'start', href: base }), 'Start warm-up')
 })

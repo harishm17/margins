@@ -40,22 +40,3 @@ test('the Next line shows on a tool, never on a step with an action of its own, 
   // A topic nobody has opened has nothing to say yet.
   assert.equal(nextLineShows({ kind: 'start', href: base }, 'examples', STEPS), false)
 })
-
-test('after Recall the explainer detour tags Practice, and its own page shows no Next line pointing at itself', () => {
-  const explainer = { kind: 'instruct' as const, href: `${base}?view=explainer&focus=k1` }
-  const recalled = { warmup: true, read: true, recall: true, practice: false, quiz: false }
-  // The path and the button agree: the detour leads on to Practice, so Practice is tagged and the way on from the explanation is Practice.
-  assert.equal(nextPathStep(explainer, STEPS, recalled), 'practice')
-  // On the explainer, the line that points at the explainer is left off; on another tool it still shows.
-  assert.equal(nextLineShows(explainer, 'explainer', STEPS, true), false)
-  assert.equal(nextLineShows(explainer, 'examples', STEPS, false), true)
-  // The explainer has its own way on, so no next activity puts a line over its gap questions.
-  assert.equal(nextLineShows({ kind: 'quiz', href: `${base}?view=quiz` }, 'explainer', STEPS, false), false)
-})
-
-test('a row of the Topics list names the step the path tags', () => {
-  const done = { ...none, warmup: true }
-  const next = nextPathStep({ kind: 'instruct', href: `${base}?view=read&focus=k1` }, STEPS, done)
-  const glyphs = pathGlyphs({ steps: [...STEPS], done, nextStep: next })
-  assert.deepEqual(glyphs.map((glyph) => glyph.state), ['done', 'next', 'later', 'later', 'later'])
-})

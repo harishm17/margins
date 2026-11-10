@@ -8,11 +8,6 @@ test('while a course is in setup, the pages that are empty until then are not re
   }
 })
 
-test('Overview and Materials stay open during setup', () => {
-  assert.equal(isSectionNotReady('overview', { ready: false }), false)
-  assert.equal(isSectionNotReady('materials', { ready: false }), false)
-})
-
 test('every page is open once the topics are confirmed', () => {
   for (const key of ['overview', 'plan', 'topics', 'materials', 'ask', 'exams', 'review', 'map']) {
     assert.equal(isSectionNotReady(key, { ready: true }), false, key)

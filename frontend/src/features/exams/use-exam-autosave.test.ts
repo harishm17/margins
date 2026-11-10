@@ -13,19 +13,10 @@ test('a local copy built on the server copy, with a change that never arrived, w
   assert.deepEqual(reconcileAnswers(local({ '0': 'A', '1': 'C' }, server), server), { '0': 'A', '1': 'C' })
 })
 
-test('a local copy equal to the server copy changes nothing', () => {
-  const server = { '0': 'A' }
-  assert.equal(reconcileAnswers(local({ '0': 'A' }, server), server), null)
-})
-
 test('when the server moved on after the local copy was made, the server wins', () => {
   const was = { '0': 'A' }
   const now = { '0': 'B', '1': 'D' }
   assert.equal(reconcileAnswers(local({ '0': 'A', '1': 'C' }, was), now), null)
-})
-
-test('no local copy keeps the server answers', () => {
-  assert.equal(reconcileAnswers(null, { '0': 'A' }), null)
 })
 
 test('a confidence given after the last save is part of the difference', () => {

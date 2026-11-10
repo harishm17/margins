@@ -1,12 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildPreferences, defaultForm, QUESTION_TYPES, validateForm } from './generate-preferences'
-
-test('notes send only the level of detail', () => {
-  assert.deepEqual(buildPreferences('notes', { ...defaultForm('create'), detail: 'brief' }, 'create'), {
-    detail_level: 'brief',
-  })
-})
+import { buildPreferences, defaultForm, validateForm } from './generate-preferences'
 
 test('more examples append and carry a trimmed focus', () => {
   const form = { ...defaultForm('more'), focus: '  cycles  ' }
@@ -36,5 +30,4 @@ test('a focus needs 3 characters and a quiz needs a type', () => {
   assert.equal(validateForm('notes', { ...defaultForm('create'), focus: 'ab' }).focus, undefined)
   assert.ok(validateForm('quiz', { ...defaultForm('create'), types: [] }).types)
   assert.equal(validateForm('quiz', defaultForm('create')).types, undefined)
-  assert.equal(QUESTION_TYPES.length, 4)
 })

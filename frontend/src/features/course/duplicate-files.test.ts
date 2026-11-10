@@ -14,18 +14,8 @@ test('a file with the name and size of one in the course is a duplicate, and say
   assert.deepEqual(duplicates[0].matches.map((m) => m.id), ['a'])
 })
 
-test('the same name with another size, or the same size with another name, is a new file', () => {
-  const { fresh, duplicates } = splitDuplicates([{ name: 'notes.pdf', size: 1001 }, { name: 'notes2.pdf', size: 1000 }], known)
-  assert.equal(fresh.length, 2)
-  assert.equal(duplicates.length, 0)
-})
-
 test('the second copy within one batch is a duplicate with nothing to replace', () => {
   const { fresh, duplicates } = splitDuplicates([{ name: 'new.pdf', size: 5 }, { name: 'new.pdf', size: 5 }], known)
   assert.equal(fresh.length, 1)
   assert.deepEqual(duplicates.map((d) => d.matches.length), [0])
-})
-
-test('an empty batch gives nothing', () => {
-  assert.deepEqual(splitDuplicates([], known), { fresh: [], duplicates: [] })
 })

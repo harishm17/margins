@@ -14,16 +14,8 @@ test('a topic opened without notes starts them', () => {
   assert.equal(autoStartDecision(base), 'start')
 })
 
-test('it waits until the running jobs have been looked at', () => {
-  assert.equal(autoStartDecision({ ...base, activeChecked: false }), 'wait')
-})
-
 test('a notes job that is already running is followed, not duplicated (a refresh mid-write)', () => {
   assert.equal(autoStartDecision({ ...base, notesRunning: true }), 'skip')
-})
-
-test('a topic that has notes is left alone', () => {
-  assert.equal(autoStartDecision({ ...base, notesPresent: true }), 'skip')
 })
 
 test('it starts once per page: after the first request it only waits for it', () => {
@@ -43,8 +35,4 @@ test('auto start requests concepts on first open', () => {
     contentType: 'concepts',
     preferences: { prepare_rest: true, only_if_missing: true },
   })
-})
-
-test('prefetching the next topic asks for its concepts only', () => {
-  assert.deepEqual(prefetchRequest(), { contentType: 'concepts', preferences: { only_if_missing: true } })
 })

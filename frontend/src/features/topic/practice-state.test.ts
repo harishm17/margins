@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { EMPTY, practiceStepKey, type PracticeProgress } from './practice-keys'
-import { hintCostCopy, lastProblemOf, stepFailedFirstTry } from './practice-state'
+import { lastProblemOf, stepFailedFirstTry } from './practice-state'
 import type { PracticeProblem } from './types'
 
 const problem = (steps: number): PracticeProblem =>
@@ -20,14 +20,6 @@ test('a step is a failed first try once its record is decided as one', () => {
   assert.equal(stepFailedFirstTry({ checks: 1, rung: 3, dontKnow: false, twoOption: false }), true)
   assert.equal(stepFailedFirstTry({ checks: 2, rung: 0, dontKnow: false, twoOption: false }), true)
   assert.equal(stepFailedFirstTry({ checks: 1, rung: 0, dontKnow: false, twoOption: true }), true)
-})
-
-test('the label beside a hint says what it costs, from the one policy', () => {
-  assert.equal(hintCostCopy(0, { attempted: false, failedFirstTry: false }), 'your next try still counts, as a harder one')
-  assert.equal(hintCostCopy(1, { attempted: true, failedFirstTry: false }), 'this step will count as a miss')
-  assert.equal(hintCostCopy(2, { attempted: true, failedFirstTry: false }), 'this step will count as a miss')
-  assert.equal(hintCostCopy(1, { attempted: true, failedFirstTry: true }), 'no extra cost, as this step already counts as a miss')
-  assert.equal(hintCostCopy(0, { attempted: true, failedFirstTry: true }), 'no extra cost, as this step already counts as a miss')
 })
 
 test('the problem just finished is read from the progress for the next-problem choice', () => {

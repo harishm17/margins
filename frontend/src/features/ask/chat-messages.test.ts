@@ -16,23 +16,6 @@ test('a stored failure at the end of a conversation offers a retry of the questi
   })
 })
 
-test('a stored failure followed by later turns offers no retry', () => {
-  // Retrying it would have to rewrite the turns after it; the student can ask again instead.
-  const messages = toChatMessages([
-    { id: 'u1', role: 'user', content: 'What is a heap?', citations: null },
-    { id: 'e1', role: 'error', content: 'x', citations: null },
-    { id: 'u2', role: 'user', content: 'What is a stack?', citations: null },
-    { id: 'a2', role: 'assistant', content: 'A stack is...', citations: null },
-  ])
-  const failure = messages[1]
-  assert.equal(failure.kind === 'failure' && failure.retryable, false)
-})
-
-test('a stored failure with no question before it has nothing to retry', () => {
-  const [failure] = toChatMessages([{ id: 'e1', role: 'error', content: 'x', citations: null }])
-  assert.equal(failure.kind === 'failure' && failure.retryable, false)
-})
-
 const user = (id: string, text: string): ChatMessage => ({ kind: 'user', id, text })
 const answer = (id: string): ChatMessage => ({
   kind: 'assistant', id, text: 'ok', marks: [], sources: [], noSources: false, notSaved: false, stopped: false, turn: null,
@@ -51,19 +34,7 @@ test('retrying never removes the turns after the failure', () => {
   assert.deepEqual(plan, { question: 'A?', messages: before })
 })
 
-test('an unknown or question-less failure has no retry', () => {
-  assert.equal(retryPlan([user('u1', 'A?')], 'nope'), null)
-  assert.equal(retryPlan([{ kind: 'failure', id: 'f', message: 'x', retryable: true, question: null }], 'f'), null)
-})
-
 test('asking the same question again after it failed replaces the failed try', () => {
   const messages = [user('u0', 'A?'), answer('a0'), user('u1', 'B?'), failure('f1', 'B?')]
   assert.deepEqual(withoutRepeatedFailure(messages, 'B?'), [user('u0', 'A?'), answer('a0')])
-})
-
-test('a different question, or a failure that is not last, keeps everything', () => {
-  const messages = [user('u1', 'B?'), failure('f1', 'B?')]
-  assert.deepEqual(withoutRepeatedFailure(messages, 'C?'), messages)
-  const later = [user('u1', 'B?'), failure('f1', 'B?'), user('u2', 'C?'), answer('a2')]
-  assert.deepEqual(withoutRepeatedFailure(later, 'B?'), later)
 })

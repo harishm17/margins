@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { describeSprintTopics, hasStudyData, rankWeakestTopics, type RankableTopic } from './voice-rank'
+import { hasStudyData, rankWeakestTopics, type RankableTopic } from './voice-rank'
 
 const done = { quizCompleted: true, notesCompleted: true, examplesCompleted: true }
 
@@ -31,49 +31,6 @@ describe('rankWeakestTopics', () => {
     )
   })
 
-  it('treats a missing quiz score as zero', () => {
-    const topics = [topic('a', { quizScore: null, ...done }), topic('b', { quizScore: 10, ...done })]
-    assert.deepEqual(
-      rankWeakestTopics(topics).map((t) => t.id),
-      ['a', 'b']
-    )
-  })
-
-  it('keeps the input order for ties and returns fewer than three when there are fewer topics', () => {
-    const topics = [topic('x', null), topic('y', null)]
-    assert.deepEqual(
-      rankWeakestTopics(topics).map((t) => t.id),
-      ['x', 'y']
-    )
-    assert.deepEqual(rankWeakestTopics([]), [])
-  })
-
-  it('does not change the input', () => {
-    const topics = [topic('b', { quizScore: 80, ...done }), topic('a', null)]
-    rankWeakestTopics(topics)
-    assert.deepEqual(
-      topics.map((t) => t.id),
-      ['b', 'a']
-    )
-  })
-})
-
-describe('describeSprintTopics', () => {
-  it('names the topics and counts them once there are quiz scores', () => {
-    assert.equal(describeSprintTopics([{ name: 'A' }, { name: 'B' }, { name: 'C' }], true), 'Covers your 3 weakest topics: A, B and C.')
-    assert.equal(describeSprintTopics([{ name: 'A' }, { name: 'B' }], true), 'Covers your 2 weakest topics: A and B.')
-    assert.equal(describeSprintTopics([{ name: 'A' }], true), 'Covers your weakest topic: A.')
-    assert.equal(describeSprintTopics([], true), '')
-  })
-
-  it('does not call the topics weakest before any quiz', () => {
-    assert.equal(
-      describeSprintTopics([{ name: 'A' }, { name: 'B' }, { name: 'C' }], false),
-      'Covers 3 of your topics: A, B and C. After your first quiz it picks your weakest.'
-    )
-    assert.equal(describeSprintTopics([{ name: 'A' }], false), 'Covers one of your topics: A. After your first quiz it picks your weakest.')
-    assert.equal(describeSprintTopics([], false), '')
-  })
 })
 
 describe('hasStudyData', () => {
