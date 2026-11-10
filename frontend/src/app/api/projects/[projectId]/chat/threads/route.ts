@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { ownedProject as owned } from '@/server/owned'
 import { apiInvalidInput, apiNotFound, apiUnauthorized } from '@/lib/api/errors'
 import { MAX_THREAD_TITLE_CHARS } from '@/lib/chat/server'
 
@@ -14,8 +15,7 @@ async function ownedProject(projectId: string) {
   const session = await getServerSession(authOptions)
   const userId = session?.user?.id
   if (!userId) return { userId: null, project: null }
-  const project = await prisma.project.findFirst({ where: { id: projectId, userId }, select: { id: true } })
-  return { userId, project }
+  return { userId, project: await owned(userId, projectId) }
 }
 
 // Kept for API clients; the UI reads this through server queries.
