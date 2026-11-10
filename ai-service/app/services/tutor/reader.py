@@ -22,7 +22,7 @@ from typing import List, Optional, Union
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import ReaderCheckReply, ReaderClaim, ReaderTutorReply, ReaderTutorRequest
-from app.services.tutor.leak import judge_leak, string_leak
+from app.services.tutor.leak import blocks_alone, judge_leak, string_leak
 from app.services.tutor.practice import JudgeUnavailable, _sentences, limit_reply
 
 logger = logging.getLogger(__name__)
@@ -280,7 +280,7 @@ async def _leak_reason(req: ReaderTutorRequest, guarded: List[ReaderClaim], out:
         return "gave the answer away (your own check said so)"
     text = f"{out.reply} {out.check_question}"
     answers = [claim.text for claim in guarded]
-    if string_leak(text, answers, None, problem=req.student_take) or restates_claim(text, guarded, req.student_take):
+    if blocks_alone(string_leak(text, answers, None, problem=req.student_take)) or restates_claim(text, guarded, req.student_take):
         return "stated what the source says"
     try:
         verdict = await judge_leak(text, "\n".join(answers), problem=req.passage, question=req.student_take)
@@ -302,7 +302,7 @@ async def _check_leak_reason(req: ReaderTutorRequest, guarded: List[ReaderClaim]
         return "gave the answer away (your own check said so)"
     text = f"{out.reply} {out.follow_up_question}"
     answers = [claim.text for claim in guarded]
-    if string_leak(text, answers, None, problem=req.check_question) or restates_claim(text, guarded, req.student_answer):
+    if blocks_alone(string_leak(text, answers, None, problem=req.check_question)) or restates_claim(text, guarded, req.student_answer):
         return "stated what the source says"
     try:
         verdict = await judge_leak(text, "\n".join(answers), problem=req.passage, question=req.check_question)
@@ -324,7 +324,7 @@ async def _restate_leak_reason(req: ReaderTutorRequest, out: ReaderTutorReply) -
     if out.reveals_answer:
         return "gave the answer to the check question away (your own check said so)"
     answers = [claim.text for claim in guarded]
-    if string_leak(out.reply, answers, None, problem=out.check_question) or restates_claim(out.reply, guarded, ""):
+    if blocks_alone(string_leak(out.reply, answers, None, problem=out.check_question)) or restates_claim(out.reply, guarded, ""):
         return "stated what the check question asks for"
     try:
         verdict = await judge_leak(out.reply, "\n".join(answers), problem=req.passage, question=out.check_question)

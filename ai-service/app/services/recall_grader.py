@@ -23,7 +23,7 @@ from typing import Dict, List, Optional
 from app.services.llm.base import LLMMessage
 from app.services.llm.factory import LLMFactory
 from app.services.llm.schemas import ClaimVerdict, RecallClaim, RecallGradeRequest, RecallGradeResult
-from app.services.tutor.leak import string_leak
+from app.services.tutor.leak import blocks_alone, string_leak
 from app.services.tutor.practice import limit_reply
 
 logger = logging.getLogger(__name__)
@@ -161,7 +161,7 @@ def _shares_a_word(quote: str, claim: RecallClaim) -> bool:
 
 def _restates(pointer: str, claim: RecallClaim, prompt: str) -> bool:
     """The pointer says what the claim says: it holds a run of the claim's or its quote's own words."""
-    if string_leak(pointer, [claim.text], None, problem=prompt):
+    if blocks_alone(string_leak(pointer, [claim.text], None, problem=prompt)):
         return True
     mine = _words(pointer)
     if not mine:

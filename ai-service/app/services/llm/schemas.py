@@ -741,15 +741,9 @@ class InteractiveStep(BaseModel):
         )
 
 
-def hint_leak(problem: str, steps: Sequence[Dict[str, Any]]) -> Optional[str]:
-    """Why a stored practice problem's hints give an answer away, or None.
-
-    A hint is read before the student has the step's answer, so it must not state the answer of its
-    own step or of a later one (an earlier step's answer is the student's own result and may be
-    named). The check is the tutor's own string check, with the step's tolerance: the key and the
-    other accepted forms, a number within tolerance of them, the text of the right option, an option
-    letter. Numbers and phrases the problem statement or the questions up to that step give do not count.
-    """
+def _hint_matches(problem: str, steps: Sequence[Dict[str, Any]]):
+    """(hint, slot, step index, later step index, how it matched, the answers, text seen so far) for every hint that
+    states an answer of its own step or a later one."""
     from app.services.tutor.leak import string_leak  # leak.py imports these schemas
 
     for index, step in enumerate(steps):
@@ -761,9 +755,49 @@ def hint_leak(problem: str, steps: Sequence[Dict[str, Any]]) -> Optional[str]:
                 target = steps[later]
                 answers = [target["correct_answer"], *target.get("acceptable_answers", [])]
                 answers += [o["text"] for o in target.get("options", []) if o["id"] == target["correct_answer"]]
-                if string_leak(hint, answers, target.get("tolerance"), problem=seen):
-                    return f"hint {slot + 1} of step {index + 1} states the answer of step {later + 1}"
+                match = string_leak(hint, answers, target.get("tolerance"), problem=seen)
+                if match:
+                    yield hint, slot, index, later, match, answers, seen
+
+
+def hint_leak(problem: str, steps: Sequence[Dict[str, Any]]) -> Optional[str]:
+    """Why a stored practice problem's hints give an answer away, or None.
+
+    A hint is read before the student has the step's answer, so it must not state the answer of its
+    own step or of a later one (an earlier step's answer is the student's own result and may be
+    named). The check is the tutor's own string check, with the step's tolerance: the key and the
+    other accepted forms, a number within tolerance of them, the text of the right option, an option
+    letter. Numbers and phrases the problem statement or the questions up to that step give do not count.
+
+    With LEAK_WORD_FORMS_TO_JUDGE a hint that matches only as a number word ("add the two numbers" for 2) is not a
+    leak here; `word_form_hints` lists it for the generator to put to the leak judge (finding 99).
+    """
+    from app.services.tutor.leak import blocks_alone
+
+    for _hint, slot, index, later, match, _answers, _seen in _hint_matches(problem, steps):
+        if blocks_alone(match):
+            return f"hint {slot + 1} of step {index + 1} states the answer of step {later + 1}"
     return None
+
+
+def word_form_hints(problem: str, steps: Sequence[Dict[str, Any]]) -> List[Dict[str, str]]:
+    """The hints `hint_leak` let through only because they match as a number word: what the leak judge is asked about.
+    Empty with LEAK_WORD_FORMS_TO_JUDGE off (such a hint is then a leak)."""
+    from app.config import settings
+    from app.services.tutor.leak import WORD_FORM_LEAK
+
+    if not settings.LEAK_WORD_FORMS_TO_JUDGE:
+        return []
+    return [
+        {
+            "hint": hint,
+            "answers": "\n".join(str(a) for a in answers),
+            "problem": seen,
+            "question": str(steps[index].get("question", "")),
+        }
+        for hint, _slot, index, _later, match, answers, seen in _hint_matches(problem, steps)
+        if match == WORD_FORM_LEAK
+    ]
 
 
 class InteractiveExample(BaseModel):

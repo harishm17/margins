@@ -795,7 +795,9 @@ async def _generate_and_store_content(job: JobContext, input_data: ContentGenera
         metadata = {
             'example_type': result['example_type'],
             'difficulty_level': result['difficulty_level'],
-            'count': len(result['examples'])
+            'count': len(result['examples']),
+            'refilled': result['refilled'],
+            'short_by': result['short_by'],
         }
 
     elif content_type == "interactive_examples":
@@ -817,7 +819,9 @@ async def _generate_and_store_content(job: JobContext, input_data: ContentGenera
         metadata = {
             'example_type': result['example_type'],
             'difficulty_level': result['difficulty_level'],
-            'count': len(result['examples'])
+            'count': len(result['examples']),
+            'refilled': result['refilled'],
+            'short_by': result['short_by'],
         }
 
     elif content_type == "topic_quiz":
@@ -856,6 +860,8 @@ async def _generate_and_store_content(job: JobContext, input_data: ContentGenera
             'difficulty_level': result['difficulty_level'],
             'question_types': result['question_types'],
             'dropped_unsupported': result.get('dropped_unsupported', 0),
+            'refilled': result['refilled'],
+            'short_by': result['short_by'],
         }
 
     else:
@@ -902,7 +908,7 @@ async def _generate_support_content(job: JobContext, input_data: ContentGenerati
         result = (await extract_concepts(topic["id"])).as_result()
     else:
         warmup = await generate_warmup(topic["id"])
-        result = {key: warmup[key] for key in ("warmup_id", "total_questions", "dropped_unsupported")}
+        result = {key: warmup[key] for key in ("warmup_id", "total_questions", "dropped_unsupported", "refilled", "short_by")}
     logger.info("Completed %s for topic %s", content_type, topic["id"])
 
     next_job = await plan_next_job(
@@ -1078,6 +1084,8 @@ async def generate_exam_job(payload: JobPayload, job: JobContext) -> JobOutcome:
             "skipped_topics": result.get('skipped_topics', []),
             "matched_past_exams": result['matched_past_exams'],
             "dropped_unsupported": result.get("dropped_unsupported", 0),
+            "refilled": result["refilled"],
+            "short_by": result["short_by"],
         },
         response={
             "examId": exam_record['id'],
