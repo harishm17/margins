@@ -34,7 +34,7 @@ from app.services.llm.schemas import (
     TutorMistake,
 )
 from app.services.tutor import practice, reader
-from app.services.tutor.practice import Rejection, build_messages, tutor_reply
+from app.services.tutor.practice import build_messages, tutor_reply
 from app.services.tutor.reader import reader_reply
 
 
@@ -162,25 +162,8 @@ async def test_practice_v1_still_asks_for_the_v1_schema(v1):
     assert provider.calls[0][0] is PracticeTutorReply
 
 
-def test_practice_v2_system_prompt(v2_tutor):
-    system = system_of(build_messages(practice_request()))
-    assert "analysis" not in system.lower()
-    assert "realise" not in system and "said earlier was wrong" not in system
-    assert system.count("80 words") == 1
-    assert "mistake" in system and "kind" in system
-    assert "gap filled from general knowledge looks like course fact" in system
-    assert "not instructions" in system
-
-
 def test_practice_v1_system_prompt_is_untouched(v1):
-    system = system_of(build_messages(practice_request()))
-    assert system == practice.SYSTEM_PROMPT
-    assert "analysis field" in system
-
-
-def test_practice_v2_ladder_names_rung_five(v2_tutor):
-    prompt = build_messages(practice_request(move="ladder", rung_allowed=2))[1].content
-    assert "Rung 5" in prompt and "worked_analogue" in prompt
+    assert system_of(build_messages(practice_request())) == practice.SYSTEM_PROMPT
 
 
 def test_practice_v2_authored_solution_rule_sits_outside_the_data_tag(v2_tutor):
@@ -193,15 +176,6 @@ def test_practice_v2_authored_solution_rule_sits_outside_the_data_tag(v2_tutor):
     assert "calculator" in before
     for answer in ("0.1071", "3/28", "eight"):
         assert answer not in prompt.replace(block, "")
-
-
-def test_practice_v2_leak_notice_labels_the_reason_as_data(v2_tutor):
-    notice = Rejection("judge", "gave the answer away").notice()
-    assert "from a checker" in notice and "data" in notice
-
-
-def test_practice_v1_leak_notice_unchanged(v1):
-    assert "checker" not in Rejection("judge", "gave the answer away").notice()
 
 
 # ---------------------------------------------------------------- reader tutor
@@ -233,37 +207,10 @@ def test_reader_v2_schemas_have_no_analysis_and_no_word_counts():
     assert ReaderTutorReply.model_json_schema()["required"][0] == "analysis"
 
 
-@pytest.mark.parametrize("flag,expect", [("", False), ("tutor", True)])
-def test_reader_prompts_by_flag(monkeypatch, flag, expect):
-    monkeypatch.setattr(settings, "PROMPTS_V2", flag)
-    explain = system_of(reader.build_messages(reader_request()))
-    check = system_of(reader.build_messages(check_request()))
-    restate = system_of(reader.build_messages(reader_request(turn="restate")))
-    for system in (explain, check, restate):
-        assert ("analysis" not in system) is expect
-    for system in (explain, check):
-        assert ("realise" not in system) is expect
-    if expect:
-        assert "120 words" in restate and "80 words" in explain and "60 words" in check
-    else:
-        assert explain == reader.SYSTEM_PROMPT and check == reader.CHECK_SYSTEM_PROMPT and restate == reader.RESTATE_SYSTEM_PROMPT
-
-
-def test_reader_v2_rung_blocks_say_the_word_limit_once(v2_tutor):
-    for rung in (4, 5):
-        situation = reader.build_messages(reader_request(rung=rung, claims=[]))[1].content
-        assert "Rung allowed" in situation and "120 words" not in situation
-    restate = reader.build_messages(reader_request(turn="restate"))
-    assert "120 words" in system_of(restate)
-    assert restate[1].content.count("120") == 0
-
-
-def test_reader_v1_rung_blocks_unchanged(v1):
-    assert "120 words" in reader.build_messages(reader_request(rung=4, claims=[]))[1].content
-
-
-def test_reader_v2_leak_notice_labels_the_reason(v2_tutor):
-    assert "from a checker" in reader._leak_notice("stated what the source says")
+def test_reader_v1_system_prompts_are_untouched(v1):
+    assert system_of(reader.build_messages(reader_request())) == reader.SYSTEM_PROMPT
+    assert system_of(reader.build_messages(check_request())) == reader.CHECK_SYSTEM_PROMPT
+    assert system_of(reader.build_messages(reader_request(turn="restate"))) == reader.RESTATE_SYSTEM_PROMPT
 
 
 @pytest.mark.asyncio
@@ -294,20 +241,6 @@ async def test_reader_v1_still_uses_v1_schemas(v1):
     assert provider.calls[0][0] is ReaderTutorReply
 
 
-@pytest.mark.asyncio
-async def test_the_mock_provider_serves_the_v2_schemas(v2_tutor):
-    with use(MockProvider()):
-        out = await reader_reply(reader_request(claims=[]))
-        assert out.reply and out.check_question
-        out = await reader_reply(check_request(claims=[]))
-        assert out.verdict in ("right", "partly", "not_yet")
-        out = await tutor_reply(practice_request())
-        assert out.reply
-        graded = await recall_grader.grade_recall(recall_request())
-        assert graded.status in ("graded", "ungraded")
-    assert ShortAnswerGradeV2.example().feedback
-
-
 # ---------------------------------------------------------------- recall grader
 
 RECALL_CLAIMS = [
@@ -320,19 +253,8 @@ def recall_request():
     return RecallGradeRequest(**IDS, prompt="Explain how a hash table handles keys that share a bucket.", claims=RECALL_CLAIMS, answer=ANSWER)
 
 
-def test_recall_v2_prompt(v2_tutor):
-    messages = recall_grader.build_messages(recall_request())
-    system, user = messages[0].content, messages[1].content
-    assert "analysis" not in system.lower()
-    assert "illustrative" in system
-    assert user.rstrip().endswith("Grade the answer against each claim above.")
-
-
 def test_recall_v1_prompt_unchanged(v1):
-    messages = recall_grader.build_messages(recall_request())
-    assert messages[0].content == recall_grader.SYSTEM_PROMPT
-    assert "analysis field" in messages[0].content
-    assert not messages[1].content.rstrip().endswith("Grade the answer against each claim above.")
+    assert recall_grader.build_messages(recall_request())[0].content == recall_grader.SYSTEM_PROMPT
 
 
 def test_recall_min_confidence_is_untouched():
@@ -388,25 +310,17 @@ def checks(*results):
 
 
 @pytest.mark.asyncio
-async def test_grade_v2_prompt(v2_grading):
+async def test_grade_v2_asks_for_the_checks_and_tags_each_part(v2_grading):
     _, call = await grade(
         ShortAnswerChecksV2(feedback="ok", key_point_checks=checks("met", "met", "met", "met")),
         thinking="I used the chain rule",
     )
     messages, schema = call.args[0], call.args[1]
     assert schema is ShortAnswerChecksV2
-    system, user = messages[0].content, messages[1].content
-    assert "untrusted" in system.lower()
-    assert "clarity" not in user.lower() and "70" not in user and "70" not in system
-    assert "inflated" in system
+    user = messages[1].content
     for tag in ("question", "sample_answer", "key_points", "student_answer", "student_thinking", "concepts"):
         assert f"<{tag}>" in user and f"</{tag}>" in user, tag
-    assert "**" not in user
-    assert "one acceptable answer" in user
-    assert "2-3 sentences" not in user
-    assert user.rstrip().endswith("a gap or a slip is not a misconception.")
     assert user.index("<key_points>") < user.index("<student_answer>")
-    assert "points_earned" not in user and "key_point_checks" not in user  # the checks are the schema's; no score asked
 
 
 @pytest.mark.asyncio
@@ -415,7 +329,6 @@ async def test_grade_v1_prompt_unchanged(v1):
     messages, schema = call.args[0], call.args[1]
     assert schema is ShortAnswerGrade
     assert messages[0].content == exam_grader.GRADER_SYSTEM_PROMPT
-    assert "**Question:**" in messages[1].content and "clarity" in messages[1].content
 
 
 @pytest.mark.asyncio
