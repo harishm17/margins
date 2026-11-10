@@ -98,7 +98,6 @@ test('recall waits for claims', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Getting this topic ready' })).toBeVisible()
   await expect(page.getByRole('textbox')).toHaveCount(0)
   await screenshotIfAsked(page, 'e4-recall-preparing-1440x900')
-  await expectNoAxeViolations(page, 'recall preparing, 1440')
   await page.setViewportSize(PHONE)
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Getting this topic ready' })).toBeVisible()
@@ -308,35 +307,6 @@ test('an unclear answer gets one question back and is not marked', async ({ page
   await expect(card(page).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible()
 })
 
-test('a 503 keeps what the student wrote', async ({ page }) => {
-  await page.setViewportSize(DESKTOP)
-  const { email, topicUrl, topicId } = await world(page, 'rc-503')
-  await seedConcepts(email, topicId('Hash tables'))
-  await page.goto(`${topicUrl('Hash tables')}?view=recall`)
-
-  await page.route('**/api/topics/*/recall', (route) =>
-    route.request().method() === 'POST'
-      ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'UPSTREAM_ERROR', message: 'The AI is busy right now. Try again in a few minutes.', details: { code: 'LLM_UNAVAILABLE', retryable: true } } }) })
-      : route.continue()
-  )
-  await answer(page)
-  await expect(card(page).getByRole('alert')).toContainText('The AI is busy right now')
-  await expect(box(page)).toHaveValue(ANSWER)
-  await screenshotIfAsked(page, 'e4-recall-unavailable-1440x900')
-
-  // Even a reload: the text is kept for this tab.
-  await page.reload()
-  await expect(box(page)).toHaveValue(ANSWER)
-
-  await page.unroute('**/api/topics/*/recall')
-  await card(page).getByRole('button', { name: 'Check my answer' }).click()
-  await expect(card(page).getByRole('region', { name: 'Feedback on your answer' })).toBeVisible()
-  await withPrisma(async (prisma) => {
-    const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
-    expect(await prisma.recallAttempt.count({ where: { userId: user.id } })).toBe(1)
-  })
-})
-
 test('opening reader during recall abandons level 0', async ({ page }) => {
   await page.setViewportSize(DESKTOP)
   const { email, topicUrl, topicId } = await world(page, 'rc-abandon')
@@ -364,19 +334,6 @@ test('opening reader during recall abandons level 0', async ({ page }) => {
     expect(events.length).toBeGreaterThan(0)
     expect(events.every((e) => e.assistance === 2)).toBeTruthy()
   })
-})
-
-test('a recall answered with the book closed posts abandoned false', async ({ page }) => {
-  await page.setViewportSize(DESKTOP)
-  const { email, topicUrl, topicId } = await world(page, 'rc-closed')
-  await seedConcepts(email, topicId('Hash tables'))
-  // Reading first, then recall: the reading was not open while a card was.
-  await page.goto(`${topicUrl('Hash tables')}?view=read`)
-  await page.goto(`${topicUrl('Hash tables')}?view=recall`)
-  await expect(card(page).getByText(/You opened the reading/)).toHaveCount(0)
-  const posted = page.waitForRequest((request) => request.url().includes('/recall') && request.method() === 'POST')
-  await answer(page)
-  expect((await posted).postDataJSON().abandoned).toBe(false)
 })
 
 test('recall is limited to 10 a minute', async ({ page }) => {

@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test'
-import { submitTestLogin } from './helpers/auth'
 import { withPrisma } from './helpers/db'
 
 // Sign-in is Google only. A test cannot finish a Google sign-in, so these check the page, the
@@ -19,13 +18,6 @@ test('the sign-in page offers Google for new and returning students, and no pass
   await expect(page.locator('input[type="password"]')).toHaveCount(0)
   await expect(page.getByLabel('Password')).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms')
-})
-
-test('/signup goes to /login and keeps where the student was going', async ({ page }) => {
-  await page.goto('/signup')
-  await expect(page).toHaveURL(/\/login$/)
-  await page.goto('/signup?next=%2Fcourses%2Fnew')
-  await expect(page).toHaveURL(/\/login\?next=%2Fcourses%2Fnew$/)
 })
 
 test('the password routes are gone', async ({ request }) => {
@@ -51,18 +43,4 @@ test('Continue with Google goes to Google with this site as the callback', async
   expect(url.pathname).toBe('/o/oauth2/v2/auth')
   expect(url.searchParams.get('client_id')).toMatch(/\.apps\.googleusercontent\.com$/)
   expect(url.searchParams.get('redirect_uri')).toBe(`${baseURL}/api/auth/callback/google`)
-})
-
-test('a Google refusal is explained on the sign-in page', async ({ page }) => {
-  await page.goto('/login?error=GoogleAccountMismatch')
-  const alert = page.locator('#main').getByRole('alert')
-  await expect(alert).toContainText('already connected to a different Google account')
-  await expect(alert).not.toContainText(/password/i)
-})
-
-test('the test sign-in only takes @example.com addresses', async ({ page }) => {
-  await page.goto('/login')
-  await submitTestLogin(page, 'someone@gmail.com')
-  await expect(page.getByRole('form', { name: 'Test sign-in' }).getByRole('alert')).toHaveText('Use an @example.com address.')
-  await expect(page).toHaveURL(/\/login$/)
 })

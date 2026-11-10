@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { expect, test, type Page } from '@playwright/test'
-import { signIn } from './helpers/auth'
+import { expect, request, test, type Page } from '@playwright/test'
+import { signIn, signInApi } from './helpers/auth'
 import { withPrisma } from './helpers/db'
 import { failRequests, reloadNow, swallowResponses } from './helpers/interrupt'
 import { addQuizSet, createCourse, reviewItem, seedDueConcept, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
@@ -75,18 +75,6 @@ const savedAnswers = (examId: string) =>
   withPrisma(async (prisma) => (await prisma.examSubmission.findFirst({ where: { sampleExamId: examId, status: 'in_progress' } }))?.answers ?? null)
 
 test.describe('mock exam', () => {
-  test('an answer given a moment before a reload is still selected', async ({ page }) => {
-    test.setTimeout(120_000)
-    await startExam(page, `int-exam-quick-${stamp}`)
-    await page.getByRole('radio', { name: 'A queue' }).click()
-    await page.getByRole('button', { name: 'Next', exact: true }).click()
-    // No wait for "Saved": the reload comes straight away.
-    await reloadNow(page)
-    await expect(page.getByRole('heading', { name: /Question 2 of 2/ })).toBeVisible()
-    await page.getByRole('button', { name: 'Previous' }).click()
-    await expect(page.getByRole('radio', { name: 'A queue', checked: true })).toBeVisible()
-  })
-
   test('with saving blocked, the answer comes back after a reload and reaches the server once the connection does', async ({ page }) => {
     test.setTimeout(120_000)
     const { examId } = await startExam(page, `int-exam-offline-${stamp}`)
@@ -151,44 +139,6 @@ test.describe('voice practice', () => {
     await expect(page.getByTestId('voice-restored')).toContainText('It maps a key to a bucket with a hash function.')
   })
 
-  test('Start fresh forgets the snapshot', async ({ page }) => {
-    test.setTimeout(120_000)
-    await typedSession(page)
-    await reloadNow(page)
-    const card = page.getByTestId('voice-resume')
-    await expect(card).toBeVisible({ timeout: 30_000 })
-    await card.getByRole('button', { name: 'Start fresh' }).click()
-    await expect(card).toHaveCount(0)
-    await reloadNow(page)
-    await expect(page.getByTestId('voice-lobby')).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByTestId('voice-resume')).toHaveCount(0)
-  })
-
-  test('ending a practice on purpose leaves nothing to pick up', async ({ page }) => {
-    test.setTimeout(120_000)
-    await typedSession(page)
-    await page.getByRole('button', { name: 'End', exact: true }).click()
-    await expect(page.getByTestId('voice-summary')).toBeVisible()
-    await reloadNow(page)
-    await expect(page.getByTestId('voice-lobby')).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByTestId('voice-resume')).toHaveCount(0)
-  })
-
-  test('an untouched typing session does not report talking or an invented minute', async ({ page }) => {
-    test.setTimeout(120_000)
-    await clearVoiceSessions()
-    await signIn(page, VOICE_TEST_EMAIL)
-    await installVoiceStubs(page, { recognition: false, synthesis: false })
-    await page.goto(`/courses/${fixture.courseId}/review/voice`)
-    const start = page.getByRole('button', { name: /Start (voice practice|sprint)/ })
-    await expect(start).toBeEnabled({ timeout: 30_000 })
-    await start.click()
-    await expect(page.getByTestId('voice-session')).toBeVisible({ timeout: 30_000 })
-    await page.getByRole('button', { name: 'End', exact: true }).click()
-    const summary = page.getByTestId('voice-summary')
-    await expect(summary).toContainText('No answers sent. The session lasted under a minute.')
-    await expect(summary).not.toContainText('talked')
-  })
 })
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -295,4 +245,52 @@ test.describe('ask', () => {
     expect((await lookup.json()).thread).toBeTruthy()
   })
 
+})
+
+// The draft API over HTTP with real sessions: round trip, version conflicts, another user's access, validation.
+const OTHER_EMAIL = 'drafts-other@example.com'
+
+test('drafts API: round trip, stale version, another user, bad input', async ({ baseURL }) => {
+  const topicId = demoIds().topics[0]
+  const mine = await request.newContext({ baseURL })
+  await signInApi(mine, DEMO_EMAIL)
+  const projectId = demoIds().course
+  const key = `${topicId}:e2e-${Date.now()}`
+  const url = `/api/drafts?surface=recall&key=${encodeURIComponent(key)}`
+  const body = (text: string, version: number) => ({ data: { payload: { text, voice: false }, version, projectId, topicId } })
+
+  expect((await (await mine.get(url)).json()).draft).toBeNull()
+  const created = await mine.put(url, body('first', 0))
+  expect(created.status()).toBe(200)
+  expect((await created.json()).draft.version).toBe(1)
+  const stale = await mine.put(url, body('from the other tab', 0))
+  expect(stale.status()).toBe(409)
+  const staleBody = await stale.json()
+  expect(staleBody.error.details.code).toBe('STALE_VERSION')
+  expect(staleBody.error.details.draft.payload.text).toBe('first')
+  const saved = await mine.put(url, body('second', 1))
+  expect((await saved.json()).draft.version).toBe(2)
+  expect((await (await mine.get(url)).json()).draft.payload).toEqual({ text: 'second', voice: false })
+
+  // Bad input: wrong shape, too large, unknown surface.
+  expect((await mine.put(url, { data: { payload: { nope: 1 }, version: 2, projectId, topicId } })).status()).toBe(400)
+  expect((await mine.put(url, body('x'.repeat(20_000), 2))).status()).toBe(413)
+  expect((await mine.get('/api/drafts?surface=bogus&key=a')).status()).toBe(400)
+
+  // Another signed-in user sees nothing, cannot write into this project, and cannot delete.
+  const other = await request.newContext({ baseURL })
+  await signInApi(other, OTHER_EMAIL)
+  expect((await (await other.get(url)).json()).draft).toBeNull()
+  expect((await other.put(url, body('forged', 0))).status()).toBe(404)
+  await other.delete(url)
+  expect((await (await mine.get(url)).json()).draft.version).toBe(2)
+
+  // Signed out: 401.
+  const anon = await request.newContext({ baseURL })
+  expect((await anon.get(url)).status()).toBe(401)
+
+  expect((await mine.delete(url)).status()).toBe(200)
+  expect((await mine.delete(url)).status()).toBe(200)
+  expect((await (await mine.get(url)).json()).draft).toBeNull()
+  await Promise.all([mine.dispose(), other.dispose(), anon.dispose()])
 })

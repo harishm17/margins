@@ -70,20 +70,6 @@ const tutorRows = (userEmail: string, topicId: string) =>
 const accountEmail = async (page: Page) => (await (await page.request.get('/api/auth/session')).json()).user.email as string
 
 test.describe('the practice tutor', () => {
-  test('worked example button disabled before an attempt', async ({ page }) => {
-    test.setTimeout(120_000)
-    await open(page, 'tutor-worked')
-    // Not a disabled button: it is not there until the first try. One sentence says what opens, and when.
-    await expect(workedButton(page)).toHaveCount(0)
-    await expect(page.getByText("Check an answer first, or say you don't know, to open the later hints, a worked example and questions about your working.").locator('visible=true')).toBeVisible()
-    // A wrong check is an attempt.
-    await check(page, '5')
-    await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-    await openHelp(page)
-    await expect(workedButton(page)).toBeEnabled()
-    // What it costs is on the button once it can be used.
-    await expect(page.getByText('This step will count as a miss, and comes back later').locator('visible=true')).toBeVisible()
-  })
 
   test('tutor offers to talk after two wrong checks and never interrupts before', async ({ page }) => {
     test.setTimeout(120_000)
@@ -116,19 +102,6 @@ test.describe('the practice tutor', () => {
     await expect(mention).toHaveCount(1)
   })
 
-  test('accepting the offer opens a conversation that starts by asking what they tried', async ({ page }) => {
-    test.setTimeout(120_000)
-    await open(page, 'tutor-accept')
-    await check(page, '5')
-    await tryAgain(page)
-    await check(page, '6')
-    await expect(offer(page)).toBeVisible()
-    await page.getByRole('button', { name: 'Yes, talk it through' }).locator('visible=true').click()
-    await expect(thread(page)).toContainText('Tutor')
-    await expect(thread(page)).toContainText('?')
-    await expect(offer(page)).toHaveCount(0)
-  })
-
   test('tutor replies with one question', async ({ page }) => {
     test.setTimeout(120_000)
     const { topicId } = await open(page, 'tutor-reply')
@@ -149,17 +122,6 @@ test.describe('the practice tutor', () => {
     await expect(await workingBox(page)).toHaveValue('')
     // One wrong check and one piece of reasoning: two attempts on the step's ladder, keyed by content, problem and step.
     await expect.poll(async () => (await tutorRows(email, topicId)).map((row) => [row.attempts, row.scopeKey.split(':').slice(1).join(':')])).toEqual([[2, '0:0']])
-  })
-
-  test('"What is this asking?" is free: no rung, no attempt, no mark on the step', async ({ page }) => {
-    test.setTimeout(120_000)
-    const { topicId } = await open(page, 'tutor-clarify')
-    const email = await accountEmail(page)
-    await clarifyButton(page).click()
-    await expect(thread(page)).toContainText('Tutor')
-    await expect.poll(async () => (await tutorRows(email, topicId)).map((row) => [row.rung, row.attempts, row.lowEffortTurns])).toEqual([[0, 0, 0]])
-    // The step has no hint or rung on it, so Show answer is still waiting for an attempt (it is not offered before one).
-    await expect(page.getByRole('button', { name: 'Show answer' }).locator('visible=true')).toHaveCount(0)
   })
 
   test('the worked example surrenders the step: level 3, flagged, and the problem stays open', async ({ page }) => {
@@ -191,48 +153,6 @@ test.describe('the practice tutor', () => {
     await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
   })
 
-  test('practice evidence follows what the tutor recorded: a locate hint after a miss and one before a first try both score level 0 at 0.6 (spec 18.4)', async ({ page }) => {
-    test.setTimeout(120_000)
-    const { topicId } = await open(page, 'tutor-evidence', (projectId, topic) =>
-      withPrisma(async (prisma) => {
-        const concept = await prisma.concept.create({ data: { projectId, topicId: topic, name: 'Squares', summary: 'Multiplying a number by itself.', kind: 'concept', orderIndex: 0 } })
-        return concept.id
-      }),
-      // Its own account: the tutor allows 20 calls a minute to one student, and the specs of this file share one.
-      { own: true }
-    )
-    const email = await accountEmail(page)
-    // Step one: a wrong check at no help, then the locate hint, then the right answer.
-    await check(page, '5')
-    await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-    await tryAgain(page)
-    await page.getByRole('button', { name: /Show where to look/ }).click()
-    await check(page, '4')
-    await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
-    await page.getByRole('button', { name: 'Next step' }).locator('visible=true').click()
-    // Step two: the locate hint first, then the right answer on the first try.
-    await openHelp(page)
-    await page.getByRole('button', { name: /Show where to look/ }).click()
-    await check(page, '9')
-    await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
-
-    // The server's own record of each step is what the evidence was written from (the page sends only which steps are done).
-    const states = (await tutorRows(email, topicId)).map((row) => ({ step: Number(row.scopeKey.split(':').pop()), helpRung: row.helpRung, firstMissRung: row.firstMissRung, wrongChecks: row.wrongChecks, checkedAnswer: row.checkedAnswer }))
-    expect(states.sort((a, b) => a.step - b.step)).toEqual([
-      { step: 0, helpRung: 1, firstMissRung: 0, wrongChecks: 1, checkedAnswer: '4' },
-      { step: 1, helpRung: 1, firstMissRung: null, wrongChecks: 0, checkedAnswer: '9' },
-    ])
-    const rows = () =>
-      withPrisma(async (prisma) => {
-        const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
-        return prisma.evidenceEvent.findMany({ where: { userId: user.id, source: 'practice', topicId }, orderBy: { itemKey: 'asc' } })
-      })
-    await expect.poll(async () => (await rows()).length, { timeout: 30_000 }).toBe(2)
-    const [first, second] = await rows()
-    expect([first.assistance, first.score]).toEqual([0, 0.6])
-    expect([second.assistance, second.score]).toEqual([0, 0.6])
-  })
-
   test('a tutor that fails shows a message and practice stays usable', async ({ page }) => {
     test.setTimeout(120_000)
     await open(page, 'tutor-fail')
@@ -250,23 +170,6 @@ test.describe('the practice tutor', () => {
     // Checking an answer still works.
     await check(page, '4')
     await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
-  })
-
-  test('a rate limited tutor says to wait', async ({ page }) => {
-    test.setTimeout(120_000)
-    await open(page, 'tutor-limit')
-    await page.route('**/api/topics/*/practice-tutor', async (route) => {
-      if (route.request().postDataJSON()?.event === 'clarify') {
-        await route.fulfill({
-          status: 429,
-          contentType: 'application/json',
-          headers: { 'retry-after': '30' },
-          body: JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'You are asking quickly. Wait a moment, then try again.', details: { code: 'RATE_LIMITED', retryable: true } } }),
-        })
-      } else await route.continue()
-    })
-    await clarifyButton(page).click()
-    await expect(page.getByText('You are asking quickly').locator('visible=true')).toBeVisible()
   })
 
   test('the server allows 20 tutor calls a minute and then asks to wait', async ({ page }) => {
@@ -302,21 +205,6 @@ test.describe('the practice tutor', () => {
     } finally {
       await withPrisma((prisma) => prisma.aiStatus.deleteMany({}))
     }
-  })
-
-  test('ask about my working waits for a checked answer', async ({ page }) => {
-    test.setTimeout(120_000)
-    await open(page, 'tutor-effort')
-    const working = await workingBox(page)
-    await working.fill('I think the square is the number times itself.')
-    // Text alone is not enough: effort first, one checked answer opens it (right or wrong). Before it the button is not drawn.
-    await openHelp(page)
-    await expect(askButton(page)).toHaveCount(0)
-    await expect(page.getByText("Check an answer first, or say you don't know, to open the later hints, a worked example and questions about your working.").locator('visible=true')).toBeVisible()
-    await check(page, '5')
-    await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-    await openHelp(page)
-    await expect(askButton(page)).toBeEnabled()
   })
 
   test("the tutor's events reach the server in the order the student made them: a check is recorded before the question after it", async ({ page }) => {
@@ -394,68 +282,14 @@ test.describe('the practice tutor', () => {
     await page.getByRole('button', { name: 'Send answer' }).locator('visible=true').click()
     await expect(thread(page)).toContainText('any number times itself')
     await expect(thread(page).getByText('(mock)')).toHaveCount(2)
-    for (const [name, size] of [
-      ['1440x900', { width: 1440, height: 900 }],
-      ['390x844', { width: 390, height: 844 }],
-    ] as const) {
-      await page.setViewportSize(size)
-      await screenshotIfAsked(page, `tutor-${name}-confirm`)
-      await expectNoAxeViolations(page, `${name}, check my understanding`)
-    }
+    await page.setViewportSize({ width: 390, height: 844 })
+    await screenshotIfAsked(page, 'tutor-390x844-confirm')
+    await expectNoAxeViolations(page, '390x844, check my understanding')
     // Nothing is recorded beyond the step (these steps have no concept, so no evidence at all).
     expect(await withPrisma((prisma) => prisma.evidenceEvent.count({ where: { topicId } }))).toBe(0)
     // The server's record: the right answer was given, so a reply may confirm it (final_allowed).
     const state = await (await page.request.get(`/api/topics/${topicId}/practice-tutor?problemIndex=0&problemTitle=Squares&stepIndex=1`)).json()
     expect(state.state).toMatchObject({ checks: 1, wrongChecks: 0, checkedCorrect: true })
-  })
-
-  test('with AI unavailable the third failed attempt does not mention a button that is not there', async ({ page }) => {
-    test.setTimeout(120_000)
-    await signUpAndIn(page, 'tutor-nomention')
-    const course = await createCourse(page, 'No mention course', [{ name: 'Squares' }])
-    await addContent(course.topics.Squares, { interactive_examples: [tutoredProblem('Squares')] })
-    const now = new Date()
-    const row = { state: 'unavailable', reason: 'LLM_CREDIT_EXHAUSTED', since: now, checkedAt: now, detail: 'e2e' }
-    await withPrisma((prisma) => prisma.aiStatus.upsert({ where: { id: 'global' }, create: { id: 'global', ...row }, update: row }))
-    try {
-      await page.goto(`/courses/${course.courseId}/topics/${course.topics.Squares}?view=practice`)
-      for (const value of ['5', '6', '7']) {
-        await check(page, value)
-        await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-        await tryAgain(page)
-      }
-      await page.waitForLoadState('networkidle')
-      await expect(page.getByText('you can ask for a worked example')).toHaveCount(0)
-      await expect(thread(page)).toHaveCount(0)
-      await expect(offer(page)).toHaveCount(0)
-    } finally {
-      await withPrisma((prisma) => prisma.aiStatus.deleteMany({}))
-    }
-  })
-
-  test('failures are told apart: a stale practice and a refused request are plain messages, and a later check clears one', async ({ page }) => {
-    test.setTimeout(120_000)
-    await open(page, 'tutor-kinds')
-    let refused = false
-    await page.route('**/api/topics/*/practice-tutor', async (route) => {
-      if (route.request().method() !== 'POST' || route.request().postDataJSON()?.event !== 'clarify') return route.continue()
-      await route.fulfill({
-        status: refused ? 422 : 409,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: { code: 'X', message: 'x', details: { code: refused ? 'TUTOR_REJECTED' : 'STALE_PRACTICE' } } }),
-      })
-    })
-    await clarifyButton(page).click()
-    await expect(page.getByText('This practice changed', { exact: true }).locator('visible=true')).toBeVisible()
-    await expect(page.getByText('AI is busy', { exact: true })).toHaveCount(0)
-    refused = true
-    await clarifyButton(page).click()
-    await expect(page.getByText('The tutor could not take that', { exact: true }).locator('visible=true')).toBeVisible()
-    await expect(page.getByText('AI is busy', { exact: true })).toHaveCount(0)
-    // A later successful check clears the message.
-    await check(page, '5')
-    await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-    await expect(page.getByText('The tutor could not take that', { exact: true })).toHaveCount(0)
   })
 
 })

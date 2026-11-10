@@ -1,28 +1,7 @@
 import { expect, type Page } from '@playwright/test'
 import { withPrisma } from './db'
-import { DEMO_EMAIL, demoIds } from './seed-demo'
 
 /** Helpers of tests/e2e/v31-tutors.spec.ts: Ask on the demo course, with concepts of its own that the other specs never see. */
-
-export const TUTOR_CONCEPT = 'Probing sequence'
-
-export async function addTutorConcept() {
-  await withPrisma(async (prisma) => {
-    const topic = await prisma.topic.findFirstOrThrow({ where: { projectId: demoIds().course, name: 'Hash tables' }, select: { id: true } })
-    if (await prisma.concept.findFirst({ where: { projectId: demoIds().course, name: TUTOR_CONCEPT } })) return
-    await prisma.concept.create({
-      data: { projectId: demoIds().course, topicId: topic.id, name: TUTOR_CONCEPT, summary: `${TUTOR_CONCEPT}.`, kind: 'concept', orderIndex: -20, objectiveIndexes: [] },
-    })
-  })
-}
-
-/** The demo course goes back to what the other specs expect: no concept of ours, no thread. */
-export async function removeTutorTraces() {
-  await withPrisma(async (prisma) => {
-    await prisma.concept.deleteMany({ where: { projectId: demoIds().course, name: TUTOR_CONCEPT } })
-    await prisma.chatThread.deleteMany({ where: { projectId: demoIds().course, user: { email: DEMO_EMAIL } } })
-  })
-}
 
 export const composer = (page: Page) => page.getByLabel('Ask about your materials')
 export const lastReply = (page: Page) => page.locator('article:not([aria-busy])').last()

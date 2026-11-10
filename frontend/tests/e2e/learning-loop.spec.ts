@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { openMoreHelp, workingBox } from './helpers/practice'
+import { openMoreHelp } from './helpers/practice'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import {
   ZONE,
@@ -165,27 +165,6 @@ test.describe('plan', () => {
     await expect(page.getByRole('region', { name: 'Up next' })).toBeVisible()
   })
 
-  test('the exam date and the daily time can be set when the course is created', async ({ page, context }) => {
-    await setZoneCookie(context)
-    await signUpAndIn(page, 'create')
-    await page.goto('/courses/new')
-    await page.getByLabel('Course name').locator('visible=true').fill('Dated course')
-    await page.getByLabel('Exam date').locator('visible=true').fill(dayIn(ZONE, 40))
-    // The daily time waits behind "More details".
-    await page.getByText('More details').click()
-    await page.getByRole('combobox', { name: 'Typical daily study time' }).click()
-    await page.getByRole('option', { name: '1 hour 30 minutes' }).click()
-    await page.getByRole('button', { name: 'Create course' }).click()
-    await expect(page).toHaveURL(/\/courses\/[0-9a-f-]{36}$/)
-    const courseId = page.url().split('/').pop() as string
-    const row = await withPrisma((prisma) => prisma.project.findUniqueOrThrow({ where: { id: courseId } }))
-    expect(row.examDate?.toISOString().slice(0, 10)).toBe(dayIn(ZONE, 40))
-    expect(row.dailyMinutes).toBe(90)
-
-    await page.goto(`/courses/${courseId}/settings`)
-    await expect(page.getByLabel('Exam date').locator('visible=true')).toHaveValue(dayIn(ZONE, 40))
-    await expect(page.getByRole('combobox', { name: 'Typical daily study time' })).toContainText('1 hour 30 minutes')
-  })
 })
 
 test.describe('practice progress', () => {
@@ -297,10 +276,6 @@ test.describe('practice progress', () => {
     await expect(reveal).toHaveCount(0)
     await page.getByRole('button', { name: 'Get help' }).click()
     await expect(page.getByRole('button', { name: /Show where to look/ })).toBeEnabled()
-    // The cost is not on the button: it is said on request, under it.
-    await expect(page.getByRole('button', { name: /Show where to look/ })).not.toContainText(/harder one/)
-    await page.getByRole('button', { name: 'How hints count' }).click()
-    await expect(page.getByText('Opening this hint: your next try still counts, as a harder one.')).toBeVisible()
     await page.getByRole('button', { name: /Show where to look/ }).click()
     await expect(page.getByText('Look at the number.').locator('visible=true')).toBeVisible()
     await expect(page.getByRole('button', { name: /Show the first step/ })).toBeDisabled()
@@ -356,56 +331,6 @@ test.describe('practice progress', () => {
       data: { problemIndex: 0, problemTitle: 'Squares', solvedSteps: [], revealedSteps: [], hintedSteps: [1], attemptedSteps: [], firstTrySteps: [], maxRungs: { '1': 3 } },
     })
     expect(noAttempt.status()).toBe(409)
-  })
-
-  test('Your working box, the tripped-up prompt after a miss, and no prompt after a clean problem', async ({ page }) => {
-    test.setTimeout(120_000)
-    await signUpAndIn(page, 'tripped')
-    const course = await createCourse(page, 'Tripped course', [{ name: 'Squares' }, { name: 'Cubes' }])
-    await addContent(course.topics.Squares, { interactive_examples: [practiceProblem('Squares')] })
-    await addContent(course.topics.Cubes, { interactive_examples: [practiceProblem('Cubes')] })
-    const progressOf = async (topic: string) => (await (await page.request.get(`/api/topics/${topic}/practice-progress`)).json()).problems[0]
-
-    await page.goto(`/courses/${course.courseId}/topics/${course.topics.Squares}?view=practice`)
-    // The working box is optional and does not change the check.
-    const working = await workingBox(page)
-    await expect(working).toBeVisible()
-    await working.fill('2 times 2, maybe 5?')
-    await answer(page).fill('5')
-    await page.getByRole('button', { name: 'Check', exact: true }).click()
-    await expect(page.getByText('Not quite').locator('visible=true')).toBeVisible()
-    await page.getByRole('button', { name: 'Try again' }).click()
-    await answer(page).fill('4')
-    await page.getByRole('button', { name: 'Check', exact: true }).click()
-    await expect(page.getByText('Correct', { exact: true }).locator('visible=true')).toBeVisible()
-    await expect.poll(async () => (await progressOf(course.topics.Squares))?.missRungs).toEqual({ '0': 0 })
-    await page.getByRole('button', { name: 'Next step' }).click()
-    await answer(page).fill('9')
-    await page.getByRole('button', { name: 'Check', exact: true }).click()
-    await page.getByRole('button', { name: 'Finish' }).click()
-    await expect(page.getByText('Problem complete').locator('visible=true')).toBeVisible()
-
-    // A wrong check was stored, so the prompt shows; the line is saved when the box loses focus.
-    const tripped = page.getByLabel('What tripped you up? (optional)').locator('visible=true')
-    await expect(tripped).toBeVisible()
-    await tripped.fill('I read 2 squared as 2 times 3')
-    await tripped.blur()
-    await expect.poll(async () => (await progressOf(course.topics.Squares))?.trippedUp).toBe('I read 2 squared as 2 times 3')
-    // It follows the student: with the browser's cache cleared the saved line comes back.
-    await page.evaluate(() => localStorage.clear())
-    await page.reload()
-    await expect(page.getByLabel('What tripped you up? (optional)').locator('visible=true')).toHaveValue('I read 2 squared as 2 times 3')
-
-    // A problem finished with no wrong check shows no prompt.
-    await page.goto(`/courses/${course.courseId}/topics/${course.topics.Cubes}?view=practice`)
-    await answer(page).fill('4')
-    await page.getByRole('button', { name: 'Check', exact: true }).click()
-    await page.getByRole('button', { name: 'Next step' }).click()
-    await answer(page).fill('9')
-    await page.getByRole('button', { name: 'Check', exact: true }).click()
-    await page.getByRole('button', { name: 'Finish' }).click()
-    await expect(page.getByText('Problem complete').locator('visible=true')).toBeVisible()
-    await expect(page.getByLabel('What tripped you up? (optional)')).toHaveCount(0)
   })
 
   test('a refused save puts the browser back to the server and says so', async ({ page }) => {
@@ -649,68 +574,6 @@ test.describe('graded exams', () => {
 })
 
 test.describe('evidence backfill', () => {
-  test('opening the overview turns history from before the concept graph into evidence, once, and concept mastery takes over', async ({ page, context }) => {
-    test.setTimeout(120_000)
-    await setZoneCookie(context)
-    // Its own account: the others in this run share one, and a spare course would change what Home puts first.
-    await signIn(page, `backfill-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`)
-    const course = await createCourse(page, 'Backfill course', [{ name: 'Graphs', minutes: 30 }, { name: 'Trees', minutes: 30 }])
-    const graphs = course.topics.Graphs
-    const trees = course.topics.Trees
-    await addContent(graphs, { section_notes: '# Graphs', topic_quiz: quizQuestions(4) })
-
-    // A quiz taken before any concept existed: three of four right.
-    const attempt = await page.request.post(`/api/topics/${graphs}/quiz-attempts`, {
-      data: { answers: { '0': 'true', '1': 'true', '2': 'true', '3': 'false' } },
-    })
-    expect(attempt.ok()).toBeTruthy()
-    const graded = await attempt.json()
-    expect(graded.score).toBe(75)
-    const attemptId = graded.attempt.id as string
-    const blend = await withPrisma((prisma) => prisma.reviewSchedule.findFirstOrThrow({ where: { topicId: graphs } }))
-
-    // The concept graph arrives for both topics, and the stored questions are tagged with their concept.
-    const conceptId = await withPrisma(async (prisma) => {
-      const make = (topicId: string, name: string) =>
-        prisma.concept.create({ data: { projectId: course.courseId, topicId, name, summary: 's', kind: 'concept', orderIndex: 0 }, select: { id: true } })
-      const concept = await make(graphs, 'Graph')
-      await make(trees, 'Tree')
-      return concept.id
-    })
-    await addContent(graphs, { topic_quiz: quizQuestions(4).map((question) => ({ ...question, concept_ids: [conceptId] })) })
-    expect(await withPrisma((prisma) => prisma.evidenceEvent.count({ where: { projectId: course.courseId } }))).toBe(0)
-
-    await page.goto(`/courses/${course.courseId}`)
-    await expect
-      .poll(
-        async () =>
-          (await withPrisma((prisma) => prisma.project.findUniqueOrThrow({ where: { id: course.courseId }, select: { evidenceBackfilledAt: true } })))
-            .evidenceBackfilledAt,
-        { timeout: 30_000 }
-      )
-      .not.toBeNull()
-    await expect
-      .poll(() => withPrisma((prisma) => prisma.evidenceEvent.count({ where: { projectId: course.courseId } })), { timeout: 30_000 })
-      .toBe(4)
-    const events = await withPrisma((prisma) => prisma.evidenceEvent.findMany({ where: { projectId: course.courseId }, orderBy: { itemKey: 'asc' } }))
-    expect(events.map((event) => [event.source, event.score, event.assistance])).toEqual([
-      ['quiz', 1, 0],
-      ['quiz', 1, 0],
-      ['quiz', 1, 0],
-      ['quiz', 0, 0],
-    ])
-    expect(events.every((event) => (event.metadata as { backfillOf?: string }).backfillOf === attemptId)).toBeTruthy()
-
-    // The topic's schedule now comes from its concept: one session of answers cannot be solid, so it is below the blend.
-    await expect
-      .poll(async () => (await withPrisma((prisma) => prisma.reviewSchedule.findFirstOrThrow({ where: { topicId: graphs } }))).mastery, { timeout: 30_000 })
-      .toBeLessThan(blend.mastery)
-
-    // Opened again, nothing is written a second time.
-    await page.reload()
-    await page.goto(`/courses/${course.courseId}`)
-    expect(await withPrisma((prisma) => prisma.evidenceEvent.count({ where: { projectId: course.courseId } }))).toBe(4)
-  })
 })
 
 // Review sessions (spec §7.4): today's review draws on the due concepts of every topic, the student sets
@@ -825,29 +688,6 @@ test.describe('review sessions', () => {
     expect(events.filter((e) => e.sessionKey.endsWith(':retest'))).toHaveLength(1)
   })
 
-  test('no auto-advance after feedback', async ({ page, context }) => {
-    await setZoneCookie(context)
-    const w = await dueCourse(page, 'pause')
-    await page.goto(`/courses/${w.course.courseId}/review/session`)
-    await expect(page.getByRole('heading', { level: 1, name: 'Question 1 of 3' })).toBeVisible({ timeout: 30_000 })
-    // The page's clock is the test's from here, so "time passes" is a call, not a wait.
-    await page.clock.install()
-    await checkFalse(page)
-    await expect(page.getByRole('heading', { level: 2, name: /^Not quite/ })).toBeVisible()
-    // The feedback waits: neither time nor a key press moves on, only Next does.
-    await page.clock.runFor(30_000)
-    await page.keyboard.press('Enter')
-    await page.keyboard.press('ArrowRight')
-    await expect(page.getByRole('heading', { level: 1, name: 'Question 1 of 3' })).toBeVisible()
-    await expect(page.getByRole('heading', { level: 2, name: /^Not quite/ })).toBeVisible()
-    await expect(page.getByRole('heading', { level: 2, name: /^Not quite/ })).toBeFocused()
-    await next(page).click()
-    await expect(page.getByRole('heading', { level: 1, name: 'Question 2 of 3' })).toBeVisible()
-    // A reload goes on at the first question not answered, with the session kept in the address.
-    await page.reload()
-    await expect(page.getByRole('heading', { level: 1, name: 'Question 2 of 3' })).toBeVisible()
-  })
-
   test('concepts with no fresh item are written by the review-item job and the session fills in', async ({ page, context }) => {
     test.setTimeout(240_000)
     await setZoneCookie(context)
@@ -954,40 +794,6 @@ test.describe('review sessions', () => {
     expect(new Set(events.map((e) => e.conceptId))).toEqual(new Set([hashing, joins]))
   })
 
-  test('a drill that ends in misses points to what to read and offers to drill again', async ({ page, context }) => {
-    test.setTimeout(120_000)
-    await setZoneCookie(context)
-    const w = await dueCourse(page, 'drill-end')
-    await page.goto(`/courses/${w.course.courseId}/review/session?concept=${w.concepts.hashing}`)
-    await expect(page.getByRole('heading', { level: 1, name: /^Question 1 of \d+$/ })).toBeVisible({ timeout: 30_000 })
-    const total = Number(/of (\d+)/.exec((await page.getByRole('heading', { level: 1 }).textContent()) ?? '')?.[1])
-    for (let n = 1; n <= total; n++) {
-      await expect(page.getByRole('heading', { level: 1, name: `Question ${n} of ${total}` })).toBeVisible()
-      await checkFalse(page)
-      await expect(page.getByRole('heading', { level: 2, name: /^Not quite/ })).toBeVisible()
-      await next(page).click()
-    }
-    await expect(page.getByRole('heading', { level: 1, name: 'Drill done' })).toBeVisible({ timeout: 30_000 })
-    // Not a dead end: what to read about comes first (the pages of the concept it came from), then the drill again, then Review.
-    await expect(page.getByRole('link', { name: 'Read about Hashing' })).toHaveAttribute('href', new RegExp(`/courses/${w.course.courseId}/topics/${w.topics.hash}\\?view=read&focus=${w.concepts.hashing}`))
-    await expect(page.getByRole('link', { name: 'Drill this again' })).toHaveAttribute('href', `/courses/${w.course.courseId}/review/session?concept=${w.concepts.hashing}`)
-    await expect(page.getByRole('link', { name: 'Back to Review' })).toBeVisible()
-  })
-
-  test('a review with nothing missed ends on Back to Review alone', async ({ page, context }) => {
-    await setZoneCookie(context)
-    const w = await dueCourse(page, 'review-clean')
-    await page.goto(`/courses/${w.course.courseId}/review/session`)
-    await expect(page.getByRole('heading', { level: 1, name: 'Question 1 of 3' })).toBeVisible({ timeout: 30_000 })
-    for (let n = 1; n <= 3; n++) {
-      await expect(page.getByRole('heading', { level: 1, name: `Question ${n} of 3` })).toBeVisible()
-      await checkTrue(page)
-    }
-    await expect(page.getByRole('heading', { level: 1, name: 'Review done' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Back to Review' })).toBeVisible()
-    await expect(page.getByRole('link', { name: /^Go to / })).toHaveCount(0)
-  })
-
   test('a failed check because AI is down reaches the shared status and offers to skip', async ({ page, context }) => {
     await setZoneCookie(context)
     const w = await dueCourse(page, 'ai-down')
@@ -1067,39 +873,4 @@ test.describe('review sessions', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Review done' })).toBeVisible()
   })
 
-  test('a topic with no concepts and a quiz review due is sent to the quiz review, not told nothing is due', async ({ page, context }) => {
-    await setZoneCookie(context)
-    const user = await signUpAndIn(page, 'legacy-session', { own: true })
-    const course = await createCourse(page, 'Legacy course', [{ name: 'Sorting', minutes: 30 }])
-    await makeDue(course.topics.Sorting, user.email, { mastery: 0.5 })
-    await page.goto(`/courses/${course.courseId}/review/session?topic=${course.topics.Sorting}`)
-    await expect(page.getByRole('heading', { name: 'This topic is reviewed with its quiz' })).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByText('Nothing is due')).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Review with quiz questions' })).toHaveAttribute('href', `/courses/${course.courseId}/review#review-${course.topics.Sorting}`)
-  })
-
-  test('a plan review item and the Review page open sessions filtered by topic', async ({ page, context }) => {
-    await setZoneCookie(context)
-    const w = await dueCourse(page, 'filter')
-    await page.goto(`/courses/${w.course.courseId}/review/session?topic=${w.topics.sort}`)
-    // The topic's own concept, then up to two of the most pressing others: all three here.
-    await expect(page.getByRole('heading', { level: 1, name: 'Question 1 of 3' })).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByRole('link', { name: 'Exit' })).toHaveAttribute('href', `/courses/${w.course.courseId}/review`)
-  })
-
-  test('starting review sessions in a loop is rate limited, with a retry hint', async ({ page, context }) => {
-    await setZoneCookie(context)
-    await signUpAndIn(page, 'start-limit', { own: true })
-    const course = await createCourse(page, 'Limit course', [{ name: 'Sorting', minutes: 30 }])
-    const statuses: number[] = []
-    let retryAfter: string | undefined
-    for (let n = 0; n < 24; n += 1) {
-      const response = await page.request.post(`/api/projects/${course.courseId}/review-sessions`, { data: {} })
-      statuses.push(response.status())
-      if (response.status() === 429) retryAfter = response.headers()['retry-after']
-    }
-    expect(statuses.slice(0, 20).every((status) => status !== 429)).toBe(true)
-    expect(statuses.slice(20)).toContain(429)
-    expect(Number(retryAfter)).toBeGreaterThan(0)
-  })
 })

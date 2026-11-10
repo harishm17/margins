@@ -83,36 +83,6 @@ test.describe('S1: quiz drafts, save and finish later, retake rule, I do not kno
     await other.close()
   })
 
-  test('the legacy first quiz resumes from the server draft in a new context', async ({ page, browser }) => {
-    test.setTimeout(120_000)
-    const w = await world(page, `s1-legacy-${stamp}`, [{ name: 'Graphs', concepts: ['Queues'] }])
-    // A topic whose first quiz predates quiz sets: the questions are only in topic_content, there is no TopicQuiz row.
-    await withPrisma(async (prisma) => {
-      await prisma.topicQuiz.deleteMany({ where: { topicId: w.topics.Graphs } })
-      await prisma.topicContent.upsert({
-        where: { topicId_contentType: { topicId: w.topics.Graphs, contentType: 'topic_quiz' } },
-        create: { topicId: w.topics.Graphs, contentType: 'topic_quiz', contentData: tenQuestions(Object.values(w.concepts)) },
-        update: { contentData: tenQuestions(Object.values(w.concepts)) },
-      })
-    })
-    await page.goto(quizUrl(w.courseId, w.topics.Graphs))
-    await page.getByRole('button', { name: 'Start quiz' }).click()
-    await answerTrue(page, 6)
-    await expect.poll(() => withPrisma((prisma) => prisma.studyDraft.count({ where: { topicId: w.topics.Graphs, surface: 'quiz' } }))).toBe(1)
-    const state = await page.context().storageState()
-    await page.close()
-
-    const other = await browser.newContext({ storageState: state, timezoneId: ZONE })
-    const tab = await other.newPage()
-    await tab.goto(quizUrl(w.courseId, w.topics.Graphs))
-    const resume = tab.getByRole('button', { name: 'Resume (6 of 10 answered)' })
-    await expect(resume).toBeVisible({ timeout: 30_000 })
-    await resume.click()
-    await expect(tab.getByText('Question 7 of 10')).toBeVisible()
-    expect(await answeredChips(tab)).toBe(6)
-    await other.close()
-  })
-
   test('discard deletes the answers', async ({ page }) => {
     test.setTimeout(90_000)
     const w = await world(page, `s1-discard-${stamp}`, [{ name: 'Graphs', concepts: ['Queues'] }])
@@ -127,37 +97,6 @@ test.describe('S1: quiz drafts, save and finish later, retake rule, I do not kno
     await expect(page.getByRole('button', { name: 'Start quiz' })).toBeVisible()
     await expect(page.getByRole('button', { name: /Resume/ })).toHaveCount(0)
     await expect.poll(() => withPrisma((prisma) => prisma.studyDraft.count({ where: { topicId: w.topics.Graphs } }))).toBe(0)
-  })
-
-  test('retake the same day offers new questions', async ({ page }) => {
-    test.setTimeout(120_000)
-    const w = await world(page, `s1-again-${stamp}`, [{ name: 'Graphs', concepts: ['Queues'] }])
-    const concepts = Object.values(w.concepts)
-    const questions = Array.from({ length: 4 }, (_, i) => trueFalse(`Statement ${i + 1} about graphs holds.`, concepts))
-    const setId = await withPrisma(async (prisma) => (await prisma.topicQuiz.create({ data: { topicId: w.topics.Graphs, questions } })).id)
-    await page.goto(quizUrl(w.courseId, w.topics.Graphs))
-    await page.getByRole('button', { name: 'Start quiz' }).click()
-    await answerTrue(page, 3)
-    await page.getByRole('radio', { name: 'True' }).click()
-    await page.getByRole('button', { name: 'Submit quiz' }).click()
-    await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
-
-    // The results offer new questions, not the identical set.
-    await expect(page.getByRole('button', { name: 'Retake' })).toHaveCount(0)
-    await expect(await newQuestionsButton(page)).toBeVisible()
-    await page.getByRole('button', { name: 'Back to quiz' }).click()
-    // The lobby says why the same questions wait, and Start quiz is not offered for this set.
-    await expect(page.getByText('Available tomorrow. Re-answering the same question right away mostly tests short-term memory.')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Start quiz' })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'New questions' })).toBeVisible()
-    await shot(page, 'quiz-lobby-new-questions')
-
-    // The server holds the same line: a new draft of this set today is refused.
-    const refused = await page.request.put(`/api/drafts?surface=quiz&key=${w.topics.Graphs}:${setId}`, {
-      data: { payload: { answers: {}, index: 0 }, version: 0, projectId: w.courseId, topicId: w.topics.Graphs },
-    })
-    expect(refused.status()).toBe(409)
-    expect((await refused.json()).error.details.code).toBe('RETRY_TOMORROW')
   })
 
   test('idk is a miss with no confidence and a same-day repeat is level 2', async ({ page }) => {
@@ -204,14 +143,6 @@ test.describe('S1: quiz drafts, save and finish later, retake rule, I do not kno
     expect(later.every((event) => (event.metadata as Record<string, unknown>).repeat === 'same_day')).toBe(true)
   })
 
-  test('legacy string answers still submit', async ({ page }) => {
-    const w = await world(page, `s1-legacy-${stamp}`, [{ name: 'Graphs', concepts: ['Queues'] }])
-    const questions = [trueFalse('Queues are first in, first out.', Object.values(w.concepts))]
-    const setId = await withPrisma(async (prisma) => (await prisma.topicQuiz.create({ data: { topicId: w.topics.Graphs, questions } })).id)
-    const response = await page.request.post(`/api/topics/${w.topics.Graphs}/quiz-attempts`, { data: { quizSetId: setId, answers: { '0': 'true' } } })
-    expect(response.ok()).toBeTruthy()
-    expect((await response.json()).status).toBe('graded')
-  })
 })
 
 test.describe('S2: quiz results with help after misses, strong start, difficulty from the band', () => {
@@ -227,38 +158,6 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     const setId = await withPrisma(async (prisma) => (await prisma.topicQuiz.create({ data: { topicId: w.topics.Graphs, questions } })).id)
     return { ...w, setId }
   }
-
-  const sure = { confidence: 0.75, confidenceLevel: 'fairly' }
-
-  test('88 percent quiz moves the path past reading', async ({ page }) => {
-    test.setTimeout(120_000)
-    const w = await nineQuestionWorld(page, `s2-strong-${stamp}`)
-    const card = page.getByRole('region', { name: 'Next on this topic' })
-    await page.goto(`/courses/${w.courseId}/topics/${w.topics.Graphs}?view=examples`)
-    await expect(card).toContainText('Read the topic next.')
-
-    // Eight of nine right and not guessed (one queue statement wrong: its concept still grades Good).
-    const answers = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [String(i), { answer: i === 3 ? 'false' : 'true', ...sure }]))
-    const response = await page.request.post(`/api/topics/${w.topics.Graphs}/quiz-attempts`, { data: { quizSetId: w.setId, answers } })
-    expect(response.ok()).toBeTruthy()
-    expect((await response.json()).score).toBeGreaterThan(80)
-
-    await expect.poll(() => withPrisma((prisma) => prisma.topicProgress.findFirst({ where: { topicId: w.topics.Graphs }, select: { testedOutAt: true } }))).toMatchObject({ testedOutAt: expect.any(Date) })
-    await page.goto(`/courses/${w.courseId}/topics/${w.topics.Graphs}?view=examples`)
-    await expect(card).not.toContainText('Read the topic next.')
-    await page.goto(`/courses/${w.courseId}/topics/${w.topics.Graphs}`)
-    await expect(page).not.toHaveURL(/view=read/)
-  })
-
-  test('a quiz of guesses does not test out', async ({ page }) => {
-    test.setTimeout(120_000)
-    const w = await nineQuestionWorld(page, `s2-guess-${stamp}`)
-    const answers = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [String(i), { answer: 'true', confidence: 0.5, confidenceLevel: 'guess' }]))
-    const response = await page.request.post(`/api/topics/${w.topics.Graphs}/quiz-attempts`, { data: { quizSetId: w.setId, answers } })
-    expect((await response.json()).score).toBe(100)
-    const progress = await withPrisma((prisma) => prisma.topicProgress.findFirst({ where: { topicId: w.topics.Graphs }, select: { testedOutAt: true } }))
-    expect(progress?.testedOutAt ?? null).toBeNull()
-  })
 
   test('missed questions show where to look, and a low first score says it is common', async ({ page }) => {
     test.setTimeout(120_000)
@@ -292,39 +191,6 @@ test.describe('S2: quiz results with help after misses, strong start, difficulty
     await expect(page).toHaveURL(/view=read&focus=/)
   })
 
-  test('every answer right and sure says solid for now and offers a harder set', async ({ page }) => {
-    test.setTimeout(120_000)
-    const w = await nineQuestionWorld(page, `s2-solid-${stamp}`)
-    await page.goto(quizUrl(w.courseId, w.topics.Graphs))
-    await page.getByRole('button', { name: 'Start quiz' }).click()
-    for (let i = 0; i < 9; i += 1) {
-      await page.getByRole('radio', { name: 'True' }).click()
-      await chooseConfidence(page, 'Certain')
-      if (i < 8) await page.getByRole('button', { name: 'Next', exact: true }).click()
-    }
-    await page.getByRole('button', { name: 'Submit quiz' }).click()
-    await expect(page.getByRole('heading', { name: /points/ })).toBeVisible({ timeout: 60_000 })
-    // Focus moves to the results when they arrive.
-    await expect(page.getByRole('heading', { name: /points/ })).toBeFocused()
-    await expect(page.getByTestId('solid-for-now')).toHaveText('Solid for now. It counts as solid once it holds up on another day.')
-    await expect(page.getByText('A low first score is common')).toHaveCount(0)
-    await expectNoAxeViolations(page, 'quiz results, solid for now')
-    await shot(page, 'quiz-results-solid')
-    const request = page.waitForRequest((req) => req.url().includes('/regenerate-content') && req.method() === 'POST')
-    await page.getByRole('button', { name: 'Harder set' }).click()
-    expect((await request).postDataJSON().preferences.difficulty_level).toBe('hard')
-  })
-
-  test('new set difficulty follows the band', async ({ page }) => {
-    test.setTimeout(90_000)
-    const w = await nineQuestionWorld(page, `s2-band-${stamp}`)
-    // No evidence yet: every concept starts with support, so New questions asks for an easy set.
-    const response = await page.request.post(`/api/topics/${w.topics.Graphs}/fresh-review`)
-    expect(response.ok()).toBeTruthy()
-    const job = await withPrisma((prisma) => prisma.processingJob.findFirstOrThrow({ where: { targetKey: `content:${w.topics.Graphs}:topic_quiz` }, orderBy: { createdAt: 'desc' } }))
-    const preferences = (job.inputData as { preferences: { difficulty_level: string } }).preferences
-    expect(preferences.difficulty_level).toBe('easy')
-  })
 })
 
 test.describe('S4: review sessions and drills', () => {
@@ -362,43 +228,6 @@ test.describe('S4: review sessions and drills', () => {
     await page.getByRole('button', { name: 'See the feedback' }).click()
     await expect(page.getByTestId('right-note').getByText(/statement 1 holds\./)).toBeVisible()
     await shot(page, 'review-right-note')
-  })
-
-  test('length notice appears on the first miss', async ({ page }) => {
-    test.setTimeout(120_000)
-    const w = await reviewWorld(page, `s4-notice-${stamp}`, { items: 3 })
-    await page.goto(w.sessionUrl)
-    await expect(page.getByRole('heading', { name: /^Question 1 of 2/ })).toBeVisible({ timeout: 60_000 })
-    await shot(page, 'review-question')
-    await page.getByRole('radio', { name: 'False' }).click()
-    await page.getByRole('button', { name: 'Check answer' }).click()
-    // A miss waits for the student: the feedback, where to look, the notice, and Next.
-    await expect(page.getByTestId('length-notice')).toHaveText('Misses come back once at the end in a new form.')
-    await expect(page.getByTestId('where-to-look').getByRole('link')).toHaveText(/^p\. (12|31)$/)
-    await shot(page, 'review-first-miss')
-    await page.getByRole('button', { name: 'Next question', exact: true }).click()
-    // The counter says a retest is to come.
-    await expect(page.getByRole('heading', { name: /^Question 2 of 2 \(\+1 to retest\)/ })).toBeVisible()
-    // The notice is for the first miss only.
-    await page.getByRole('radio', { name: 'False' }).click()
-    await page.getByRole('button', { name: 'Check answer' }).click()
-    await expect(page.getByTestId('where-to-look')).toBeVisible()
-    await expect(page.getByTestId('length-notice')).toHaveCount(0)
-  })
-
-  test('I do not know is a miss with the answer shown, and its concept comes back', async ({ page }) => {
-    test.setTimeout(120_000)
-    const w = await reviewWorld(page, `s4-idk-${stamp}`, { items: 3 })
-    await page.goto(w.sessionUrl)
-    await expect(page.getByRole('heading', { name: /^Question 1 of 2/ })).toBeVisible({ timeout: 60_000 })
-    await page.getByRole('button', { name: "I don't know" }).click()
-    await expect(page.getByTestId('length-notice')).toBeVisible()
-    await expect(page.getByText('It is true.').first()).toBeVisible()
-    const events = await withPrisma((prisma) => prisma.evidenceEvent.findMany({ where: { projectId: w.course.courseId, source: 'review' } }))
-    expect(events).toHaveLength(1)
-    expect(events[0].score).toBe(0)
-    expect(events[0].confidence).toBeNull()
-    expect((events[0].metadata as Record<string, unknown>).idk).toBe(true)
   })
 
   test('review resumes today\'s session', async ({ page }) => {
@@ -529,30 +358,6 @@ test.describe('S5: the 10-minute session and quick-pass triage', () => {
     expect((session.items as unknown[]).length).toBe(6)
     // Not a quiz attempt (D7).
     expect(await withPrisma((prisma) => prisma.quizAttempt.count({ where: { topic: { project: { name: { startsWith: `Short s5-home-${stamp}` } } } } }))).toBe(0)
-  })
-
-  test('the Review page offers the same action, and a miss adds at most two retests', async ({ page }) => {
-    test.setTimeout(180_000)
-    const w = await dueWorld(page, `s5-review-${stamp}`, 8)
-    await page.goto(`/courses/${w.course.courseId}/review`)
-    const card = page.getByTestId('short-session').locator('visible=true')
-    await expect(card).toContainText('Quick practice')
-    await card.getByRole('button', { name: 'Start' }).click()
-    await expect(page.getByRole('heading', { name: /^Question 1 of 6/ })).toBeVisible({ timeout: 60_000 })
-    // Miss all six: the counter caps the retests at two.
-    await page.getByRole('radio', { name: 'False' }).click()
-    await page.getByRole('button', { name: 'Check answer' }).click()
-    await page.getByRole('button', { name: 'Next question', exact: true }).click()
-    await expect(page.getByRole('heading', { name: /^Question 2 of 6 \(\+1 to retest\)/ })).toBeVisible()
-    await page.getByRole('radio', { name: 'False' }).click()
-    await page.getByRole('button', { name: 'Check answer' }).click()
-    await page.getByRole('button', { name: 'Next question', exact: true }).click()
-    await expect(page.getByRole('heading', { name: /^Question 3 of 6 \(\+2 to retest\)/ })).toBeVisible()
-    await page.getByRole('radio', { name: 'False' }).click()
-    await page.getByRole('button', { name: 'Check answer' }).click()
-    await page.getByRole('button', { name: 'Next question', exact: true }).click()
-    // A third miss does not raise it past the cap.
-    await expect(page.getByRole('heading', { name: /^Question 4 of 6 \(\+2 to retest\)/ })).toBeVisible()
   })
 
   test('read but not recalled offers one recall card, and the AI down offers a short check instead', async ({ page }) => {

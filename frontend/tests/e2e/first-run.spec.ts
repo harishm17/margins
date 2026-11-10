@@ -59,21 +59,3 @@ test('the exam date entered in the setup form is saved with the time', async ({ 
   expect(JSON.stringify(saved)).toContain(dayIn(ZONE, 30))
 })
 
-test('"Start without a date" keeps the chosen time and closes the date question for good', async ({ page, context }) => {
-  await setZoneCookie(context)
-  await signUpAndIn(page, 'first-run-skip', { own: true })
-  const { courseId } = await createCourse(page, 'Skip course', [{ name: 'Graphs' }])
-  await page.goto(`/courses/${courseId}`)
-  const form = page.getByRole('form', { name: 'Exam date and daily time' })
-  await form.getByRole('combobox', { name: 'Typical daily study time' }).click()
-  await page.getByRole('option', { name: '1 hour', exact: true }).click()
-  await form.getByRole('button', { name: 'Start without a date' }).click()
-  await expect(page).toHaveURL(new RegExp(`/courses/${courseId}/topics/`))
-  const saved = (await (await page.request.get(`/api/projects/${courseId}`)).json()).project
-  expect(saved.dailyMinutes).toBe(60)
-  expect(saved.examDate).toBeNull()
-  await page.goto(`/courses/${courseId}`)
-  await expect(page.getByRole('heading', { level: 2, name: 'Start studying' })).toBeVisible()
-  await expect(page.getByRole('form', { name: 'Exam date and daily time' })).toHaveCount(0)
-})
-

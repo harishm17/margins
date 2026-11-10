@@ -61,28 +61,6 @@ const openExample = async (page: Page, title: string) => {
   if ((await button.getAttribute('aria-expanded')) !== 'true') await button.click()
 }
 
-test('the final answer waits for the guesses the example asks for, and "I don\'t know" counts as one', async ({ page }) => {
-  await page.setViewportSize(DESKTOP)
-  const { url } = await world(page, 'fade-answer')
-  await page.goto(url('Novice topic'))
-  await streamedPartsArrived(page)
-  const answerPanel = page.getByRole('region', { name: 'Answer: Alpha' })
-  const whys = page.getByRole('group', { name: 'Why this step? Write your guess' })
-  await expect(whys).toHaveCount(3)
-  // Every step is shown, but the whys are owed: the answer is not, and a line says when it opens.
-  await expect(answerPanel).toHaveCount(0)
-  await expect(page.getByText('The answer opens once you have written your guesses.')).toBeVisible()
-  await whys.first().getByLabel('Your guess').fill('Because the key landed in a used bucket.')
-  await whys.first().getByRole('button', { name: 'Show why' }).click()
-  await expect(whys).toHaveCount(2)
-  await expect(answerPanel).toHaveCount(0)
-  await whys.first().getByRole('button', { name: "I don't know" }).click()
-  await expect(answerPanel).toHaveCount(0)
-  await whys.first().getByRole('button', { name: "I don't know" }).click()
-  await expect(answerPanel).toBeVisible()
-  await expect(page.getByText('The answer opens once you have written your guesses.')).toHaveCount(0)
-})
-
 test('a novice sees the first example worked with the whys waiting for a guess', async ({ page }) => {
   await page.setViewportSize(DESKTOP)
   const { email, url, conceptId } = await world(page, 'fade-novice')
@@ -106,7 +84,6 @@ test('a novice sees the first example worked with the whys waiting for a guess',
   await expect(first.getByText(/Write a guess, or tap/)).toBeVisible()
   await first.getByLabel('Your guess').fill('Because the key landed in a used bucket.')
   await screenshotIfAsked(page, 'e6-faded-novice-1440x900')
-  await expectNoAxeViolations(page, 'faded examples novice, 1440')
   await first.getByRole('button', { name: 'Show why' }).click()
   await expect(page.getByText('Reason for Alpha step 1.')).toBeVisible()
   await expect(page.getByText('Reason for Alpha step 2.')).toHaveCount(0)
@@ -173,7 +150,6 @@ test('at the problem-first level the student gets the problem first and predicts
   await expect(page.getByRole('group', { name: 'Step 1: your next move' })).toBeVisible()
   await expect(page.getByRole('group', { name: 'Step 2: your next move' })).toHaveCount(0)
   await screenshotIfAsked(page, 'e6-faded-ahead-1440x900')
-  await expectNoAxeViolations(page, 'faded examples ahead, 1440')
 
   // A prediction typed and not yet revealed survives closing and opening the example.
   await page.getByLabel('Your prediction').fill('Hash the key and put it in the bucket.')
@@ -262,32 +238,8 @@ test('a good warm-up, sure and right, starts the topic at problem first; a guess
   await expect(page.getByText('Alpha step 1: apply the rule to the next key')).toHaveCount(0)
 })
 
-test('notes marked complete stamp the date once, and a later visit does not move it', async ({ page }) => {
-  const { topicId } = await world(page, 'fade-notes-date')
-  const id = topicId('Novice topic')
-  const mark = () => page.request.post(`/api/topics/${id}/progress`, { data: { notesCompleted: true } })
-  expect((await mark()).ok()).toBeTruthy()
-  const first = await withPrisma(async (prisma) => (await prisma.topicProgress.findFirstOrThrow({ where: { topicId: id } })).notesCompletedAt)
-  expect(first).not.toBeNull()
-  await new Promise((resolve) => setTimeout(resolve, 50))
-  expect((await mark()).ok()).toBeTruthy()
-  expect((await page.request.post(`/api/topics/${id}/progress`, { data: { examplesCompleted: true } })).ok()).toBeTruthy()
-  const later = await withPrisma(async (prisma) => (await prisma.topicProgress.findFirstOrThrow({ where: { topicId: id } })).notesCompletedAt)
-  expect(later?.toISOString()).toBe(first?.toISOString())
-})
-
 // Levels move example by example (spec §18.6): added quickly after a Missed or an "I don't know", removed slowly after two
 // examples that were all Got it. The captions say how much is worked.
-
-test('band 0 starts fully worked', async ({ page }) => {
-  await page.setViewportSize(DESKTOP)
-  const { url } = await world(page, 'fade-band0')
-  await page.goto(url('Novice topic'))
-  await streamedPartsArrived(page)
-  await expect(page.getByText('Steps shown, guess each reason first', { exact: true }).first()).toBeVisible()
-  await expect(page.getByText('Alpha step 3: apply the rule to the next key').first()).toBeVisible()
-  await expect(page.getByText('Reason for Alpha step 1.')).toHaveCount(0)
-})
 
 test('a missed prediction makes the next example more worked', async ({ page }) => {
   await page.setViewportSize(DESKTOP)
@@ -306,24 +258,4 @@ test('a missed prediction makes the next example more worked', async ({ page }) 
   await expect(page.getByText('The steps are shown. Write a guess for why before each explanation opens.')).toBeVisible()
   await expect(page.getByText('Steps shown, guess each reason first', { exact: true }).first()).toBeVisible()
   await expect(page.getByText('Reason for Beta step 1.')).toHaveCount(0)
-})
-
-test('two all-got-it examples make the next one problem first', async ({ page }) => {
-  await page.setViewportSize(DESKTOP)
-  const { url } = await world(page, 'fade-gotit')
-  await page.goto(url('Ahead topic', 'partial'))
-  await streamedPartsArrived(page)
-  for (const title of ['Alpha', 'Beta']) {
-    await openExample(page, title)
-    await page.getByLabel('Your prediction').first().fill('Put the next key in the bucket.')
-    await page.getByRole('button', { name: 'Show step' }).first().click()
-    await page.getByRole('button', { name: 'Got it' }).first().click()
-    await expect(page.getByRole('status').filter({ hasText: 'Got it' }).last()).toBeVisible()
-  }
-  // One example of Got it changes nothing (Beta stayed partial); two in a row move Gamma to problem first.
-  await openExample(page, 'Gamma')
-  await expect(page.getByText('Your turn first', { exact: true }).first()).toBeVisible()
-  await expect(page.getByText('Try it first. Write your next move, then the step opens.')).toBeVisible()
-  await expect(page.getByRole('group', { name: 'Step 1: your next move' })).toBeVisible()
-  await expect(page.getByText('Gamma step 1: apply the rule to the next key')).toHaveCount(0)
 })

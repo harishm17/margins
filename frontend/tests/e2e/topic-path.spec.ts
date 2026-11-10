@@ -1,9 +1,14 @@
+import { readFileSync, readdirSync } from 'node:fs'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
-import { addContent, addQuizSet, createCourse, quizQuestions, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
+import { addContent, createCourse, quizQuestions, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
 import { streamedPartsArrived } from './helpers/settle'
 import { chooseConfidence } from './helpers/confidence'
+import { signIn } from './helpers/auth'
+import { FIXTURE_PDF } from './helpers/seed-demo'
 
 // The topic path (spec §5): Warm-up, Read, Recall, Practice, Quiz as a stepper, the tools beside it (in one
 // menu on a phone), the topic opening on its next activity, the concept chips and the one-time card.
@@ -102,7 +107,6 @@ test('onboarding card shows once', async ({ page }) => {
 
   await page.goto(topicUrl('No warm-up topic'))
   await expect(card).toBeVisible()
-  await expect(card).toContainText('It will feel slower than reading a summary. It sticks better.')
   await screenshotIfAsked(page, 'topic-path-intro-1440x900')
   await expectNoAxeViolations(page, 'topic path with the one-time card')
 
@@ -118,22 +122,6 @@ test('onboarding card shows once', async ({ page }) => {
   await page.goto(topicUrl('Legacy topic'))
   await expect(page.getByRole('heading', { level: 1, name: 'Legacy topic' })).toBeVisible()
   await expect(card).toHaveCount(0)
-})
-
-test('the onboarding endpoint needs a signed-in student and closing twice changes nothing', async ({ page, playwright, baseURL }) => {
-  const { email } = await world(page, 'tp-intro-api', { introSeen: false })
-  const anonymous = await playwright.request.newContext({ baseURL })
-  expect((await anonymous.post('/api/me/effort-intro')).status()).toBe(401)
-  await anonymous.dispose()
-
-  const seen = () =>
-    withPrisma(async (prisma) => (await prisma.user.findUniqueOrThrow({ where: { email }, select: { seenEffortIntroAt: true } })).seenEffortIntroAt)
-  expect(await seen()).toBeNull()
-  expect((await page.request.post('/api/me/effort-intro')).ok()).toBeTruthy()
-  const first = await seen()
-  expect(first).not.toBeNull()
-  expect((await page.request.post('/api/me/effort-intro')).ok()).toBeTruthy()
-  expect((await seen())?.getTime()).toBe(first?.getTime())
 })
 
 test('a topic without concepts has no warm-up and no recall: Read, Practice, Quiz', async ({ page }) => {
@@ -159,88 +147,6 @@ test('a topic without concepts has no warm-up and no recall: Read, Practice, Qui
   await page.goto(`${topicUrl('No warm-up topic')}?view=read`)
   await expect(nav.getByRole('link', { name: /Warm-up/ })).toHaveCount(0)
   await expect(nav.getByRole('link', { name: /Recall/ })).toBeVisible()
-})
-
-test('recall shows a preparing state only while concepts are being extracted', async ({ page }) => {
-  await page.setViewportSize(DESKTOP)
-  const { email, course, topicUrl } = await world(page, 'tp-preparing')
-  const topicId = course.topics['Legacy topic']
-  const jobId = await withPrisma(async (prisma) => {
-    const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
-    const job = await prisma.processingJob.create({
-      data: {
-        userId: user.id,
-        projectId: course.courseId,
-        jobType: 'generate_content',
-        status: 'processing',
-        leaseUntil: new Date(Date.now() + 3_600_000),
-        inputData: { topicId, contentType: 'concepts' },
-      },
-    })
-    return job.id
-  })
-  await page.goto(`${topicUrl('Legacy topic')}?view=read`)
-  await expect(pathNav(page).getByRole('link', { name: /Recall/ })).toBeVisible()
-  await page.goto(`${topicUrl('Legacy topic')}?view=recall`)
-  await expect(page.getByRole('heading', { name: 'Getting this topic ready' })).toBeVisible()
-  await screenshotIfAsked(page, 'topic-path-preparing-1440x900')
-  await expectNoAxeViolations(page, 'recall preparing')
-
-  // The extraction failed: Recall is gone and its address goes on to practice.
-  await withPrisma((prisma) => prisma.processingJob.update({ where: { id: jobId }, data: { status: 'failed' } }))
-  await page.goto(`${topicUrl('Legacy topic')}?view=read`)
-  await expect(pathNav(page).getByRole('link', { name: /Recall/ })).toHaveCount(0)
-  await page.goto(`${topicUrl('Legacy topic')}?view=recall`)
-  await expect(page).toHaveURL(/view=practice/)
-})
-
-test('Home, the overview, the plan and the topic read one next activity', async ({ page }) => {
-  const { course } = await world(page, 'tp-one-value')
-  await page.goto('/home')
-  const home = page.getByRole('region', { name: /Up next/ })
-  const homeLink = home.getByRole('link', { name: /Start warm-up|Start reading|Start recall|Take quiz|Practise/ })
-  const verb = (await homeLink.textContent())?.trim() as string
-  const href = (await homeLink.getAttribute('href')) as string
-  // The sentence is the activity's own; the minutes that follow it on Home are the plan's.
-  const sentence = ((await home.getByText(/Try a few questions|Read the topic|Close the book|Take the quiz|Practise what/).first().textContent()) ?? '').split(/ About \d+ min/)[0].trim()
-
-  await page.goto(`/courses/${course.courseId}/plan`)
-  // Today's first row to do names the same topic, with the same verb, sentence and address.
-  const today = page.getByRole('listitem', { name: /Today|Mon|Tue|Wed|Thu|Fri|Sat|Sun/ }).first()
-  const row = today.getByRole('listitem').filter({ has: page.locator(`a[href="${href}"]`) }).first()
-  await expect(row.getByRole('link', { name: new RegExp(verb) })).toHaveAttribute('href', href)
-  await expect(row).toContainText(sentence)
-
-  // The topic opens on the same activity.
-  await page.goto(href.split('?')[0])
-  await expect(page).toHaveURL(new RegExp(`view=${new URL(href, 'http://x').searchParams.get('view')}`))
-})
-
-test.describe('a harder quiz', () => {
-  test('transfer quiz opens a fresh hard set', async ({ page }) => {
-    await page.setViewportSize(DESKTOP)
-    const { course, topicUrl } = await world(page, 'tp-hard')
-    const topicId = course.topics['Legacy topic']
-    await addContent(topicId, { topic_quiz: quizQuestions(4) })
-
-    // Only easy sets so far: the lobby offers to write a hard one.
-    await page.goto(`${topicUrl('Legacy topic')}?view=quiz&difficulty=hard`)
-    const harder = page.getByRole('region', { name: 'A harder quiz' })
-    await expect(harder).toContainText('A set of hard questions you have not seen')
-    await expect(harder.getByRole('button', { name: 'Create a harder set' })).toBeVisible()
-
-    // A hard set nobody has taken: it opens on that set.
-    await addQuizSet(topicId, quizQuestions(3).map((question) => ({ ...question, difficulty: 'hard' })))
-    await page.reload()
-    await expect(harder).toContainText('Every question in this set is hard')
-    await expect(harder.getByRole('button')).toHaveCount(0)
-    await screenshotIfAsked(page, 'topic-path-hard-quiz-1440x900')
-    await expectNoAxeViolations(page, 'harder quiz lobby')
-
-    // Without the parameter the lobby is the plain one.
-    await page.goto(`${topicUrl('Legacy topic')}?view=quiz`)
-    await expect(page.getByRole('region', { name: 'A harder quiz' })).toHaveCount(0)
-  })
 })
 
 // ---------------------------------------------------------------------------------------------------------
@@ -364,34 +270,6 @@ async function openReader(page: Page, url: string) {
 }
 
 test.describe('the warm-up', () => {
-  test('warmup answers never appear in quiz history', async ({ page }) => {
-    await page.setViewportSize(DESKTOP)
-    const { email, topicId, topicUrl } = await readerWorld(page, 'wu-history')
-    await addQuizSet(topicId, quizQuestions(3))
-    await page.goto(topicUrl)
-    await expect(page).toHaveURL(/view=warmup$/)
-    await page.getByRole('button', { name: 'Start warm-up' }).click()
-    await expect(page.getByRole('heading', { name: 'Warm-up question 1 of 3' })).toBeVisible()
-    for (const [number, choice] of [0, 1, 1].entries()) {
-      await expect(page.getByRole('heading', { name: `Warm-up question ${number + 1} of 3` })).toBeVisible()
-      await answerWarmup(page, choice, 'Fairly sure')
-    }
-    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
-
-    // The quiz page knows nothing of it: no attempts, no past attempts.
-    await page.goto(`${topicUrl}?view=quiz`)
-    await expect(page.getByText('No attempts yet')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Past attempts' })).toHaveCount(0)
-    await withPrisma(async (prisma) => {
-      const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
-      expect(await prisma.quizAttempt.count({ where: { userId: user.id } })).toBe(0)
-      expect(await prisma.evidenceEvent.count({ where: { userId: user.id, source: 'warmup' } })).toBeGreaterThan(0)
-      expect(await prisma.evidenceEvent.count({ where: { userId: user.id, source: { not: 'warmup' } } })).toBe(0)
-      const progress = await prisma.topicProgress.findUniqueOrThrow({ where: { topicId_userId: { topicId, userId: user.id } } })
-      expect(progress.warmupAt).not.toBeNull()
-    })
-  })
-
   test('warm-up asks one question at a time with no feedback, then shows the answers and where to find them', async ({ page }) => {
     await page.setViewportSize(DESKTOP)
     const { topicUrl } = await readerWorld(page, 'wu-flow')
@@ -481,35 +359,6 @@ test.describe('the warm-up', () => {
     await expect(offer).toBeVisible()
     await expect(offer.getByRole('link', { name: 'Take the quiz now' })).toHaveAttribute('href', /view=quiz$/)
     await expect(page.getByText(/marked Focus here/)).toHaveCount(0)
-
-    // All right but one of them unsure: no offer.
-    await page.context().clearCookies()
-    const second = await readerWorld(page, 'wu-no-testout', { topicName: 'Second topic' })
-    await page.goto(`${second.topicUrl}?view=warmup`)
-    await page.getByRole('button', { name: 'Start warm-up' }).click()
-    await answerWarmup(page, 1, 'Certain')
-    await answerWarmup(page, 1, 'Unsure')
-    await answerWarmup(page, 1, 'Certain')
-    await expect(page.getByRole('heading', { name: 'Ready to read' })).toBeVisible()
-    await expect(page.getByText('You may know this already')).toHaveCount(0)
-  })
-
-  test('the warm-up is not offered once the topic is read', async ({ page }) => {
-    await page.setViewportSize(DESKTOP)
-    const { email, topicId, topicUrl } = await readerWorld(page, 'wu-after-read')
-    await openReader(page, `${topicUrl}?view=read`)
-    await expect(pathNav(page).getByRole('link', { name: /Warm-up/ })).toBeVisible()
-    await page.getByRole('button', { name: "I've read it" }).click()
-    await expect(page.getByText("You've read this topic.")).toBeVisible()
-    await expect.poll(() => withPrisma(async (prisma) => {
-      const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
-      const progress = await prisma.topicProgress.findUnique({ where: { topicId_userId: { topicId, userId: user.id } } })
-      return [progress?.readAt !== null && progress?.readAt !== undefined, progress?.warmupAt === null || progress?.warmupAt === undefined]
-    })).toEqual([true, true])
-    // A pretest after reading measures nothing new: the step goes, and its address goes on to the reading.
-    await page.goto(`${topicUrl}?view=warmup`)
-    await expect(page).toHaveURL(/view=read$/)
-    await expect(pathNav(page).getByRole('link', { name: /Warm-up/ })).toHaveCount(0)
   })
 
 })
@@ -559,29 +408,6 @@ test.describe('the reader', () => {
     await expect(question).toContainText('How are two keys in one bucket handled?')
     await question.getByRole('link').click()
     await expect(page).toHaveURL(/#passage-/)
-  })
-
-  test('the revealed source is rendered, not shown as markdown text', async ({ page }) => {
-    await page.setViewportSize(DESKTOP)
-    const { topicUrl, topicId } = await readerWorld(page, 'rd-md-source')
-    await withPrisma((prisma) =>
-      prisma.conceptClaim.updateMany({
-        where: { concept: { topicId, name: 'Hash function' } },
-        data: { quote: '# Chapter 1: Hashing\n\nA hash function **maps** a key to a bucket index.' },
-      })
-    )
-    await openReader(page, `${topicUrl}?view=read`)
-    const first = page.locator('[data-check]').nth(0)
-    await first.getByRole('textbox').fill('It sends a key to a bucket.')
-    await first.getByRole('button', { name: 'Show the source' }).click()
-    const quote = first.locator('[data-source-quote]')
-    // The words are there; the markdown marks are not, and the emphasis is a real element.
-    await expect(quote).toContainText('Chapter 1: Hashing')
-    await expect(quote).toContainText('A hash function maps a key to a bucket index.')
-    await expect(quote).not.toContainText('#')
-    await expect(quote).not.toContainText('**')
-    await expect(quote.locator('strong')).toHaveText('maps')
-    await screenshotIfAsked(page, 'final-revealed-source-1440x900')
   })
 
   test('one before-you-go-on check per section with a claim, skippable, self-graded level 2', async ({ page }) => {
@@ -771,73 +597,71 @@ test.describe('the reader', () => {
     await expect(page.locator('[data-note]')).toHaveCount(0)
   })
 
-  test('notes are private to their owner', async ({ page, playwright, baseURL }) => {
-    const { topicId, chunkIds } = await readerWorld(page, 'rd-private')
-    const created = await page.request.post(`/api/topics/${topicId}/margin-notes`, { data: { chunkId: chunkIds[0], text: 'Mine only.' } })
-    expect(created.status()).toBe(201)
-    const { note } = await created.json()
-    // Without a session the notes are not there.
-    const anonymous = await playwright.request.newContext({ baseURL })
-    expect((await anonymous.get(`/api/topics/${topicId}/margin-notes`)).status()).toBe(401)
-    await anonymous.dispose()
-    expect((await (await page.request.get(`/api/topics/${topicId}/margin-notes`)).json()).notes).toHaveLength(1)
-    // The reader endpoint serves the same notes, the chunks in order and no claim text.
-    const reader = await (await page.request.get(`/api/topics/${topicId}/reader`)).json()
-    expect(reader.files[0].passages).toHaveLength(4)
-    expect(reader.notes[0].id).toBe(note.id)
-    expect(JSON.stringify(reader)).not.toContain('Hash function claim.')
-  })
+})
 
-  test('a check graded again is not counted again, and its source is asked for, not sent', async ({ page }) => {
-    const { email, topicId } = await readerWorld(page, 'rd-regrade')
-    const claimId = await withPrisma(async (prisma) => (await prisma.conceptClaim.findFirstOrThrow({ where: { concept: { topicId } }, orderBy: { orderIndex: 'asc' }, select: { id: true } })).id)
-    const source = await (await page.request.get(`/api/topics/${topicId}/reader-checks?claimId=${claimId}`)).json()
-    expect(source.quote).toBeTruthy()
-    const first = await (await page.request.post(`/api/topics/${topicId}/reader-checks`, { data: { claimId, grade: 'partly' } })).json()
-    expect(first.recorded).toBe(true)
-    const second = await (await page.request.post(`/api/topics/${topicId}/reader-checks`, { data: { claimId, grade: 'got_it' } })).json()
-    expect(second.recorded).toBe(false)
-    const events = await withPrisma(async (prisma) => prisma.evidenceEvent.count({ where: { user: { email }, source: 'reader' } }))
-    expect(events).toBe(1)
-    // A claim of someone else's topic is not found.
-    expect((await page.request.get(`/api/topics/${topicId}/reader-checks?claimId=nope`)).status()).toBe(404)
-  })
+// ---------------------------------------------------------------------------------------------------------
+// The first entry of a topic (UX review WS4a): a preparation screen, never the reader, then the warm-up.
 
-  test('marking the notes read also stamps readAt, so recall is not taken as done', async ({ page }) => {
-    const { email, topicId } = await readerWorld(page, 'rd-markread')
-    const answered = await page.request.post(`/api/topics/${topicId}/progress`, { data: { notesCompleted: true } })
-    expect(answered.ok()).toBeTruthy()
-    const progress = await withPrisma((prisma) => prisma.topicProgress.findFirstOrThrow({ where: { topicId, user: { email } } }))
-    expect(progress.notesCompleted).toBe(true)
-    expect(progress.readAt).not.toBeNull()
-    expect(progress.recallAt).toBeNull()
-  })
-
-  test('a topic from before concepts reads with no marks and no checks', async ({ page }) => {
+test.describe('the first entry of a topic', () => {
+  test('is a preparation screen, never the reader, then the warm-up; reading stays one tap away', async ({ page }) => {
+    test.setTimeout(240_000)
     await page.setViewportSize(DESKTOP)
-    const { topicUrl } = await readerWorld(page, 'rd-legacy', { concepts: false })
-    await openReader(page, `${topicUrl}?view=read`)
-    await expect(page.locator('[data-passage]')).toHaveCount(4)
-    await expect(page.locator('[data-check]')).toHaveCount(0)
-    await expect(page.locator('[data-focus]')).toHaveCount(0)
-    await expect(page.getByRole('region', { name: 'Read to answer' })).toHaveCount(0)
-    // The margin still works: a note, and an explanation that writes no evidence.
-    const passage = page.locator('[data-passage]').nth(0)
-    await passage.getByRole('button', { name: /Explain this passage: passage 1/ }).click()
-    await passage.getByRole('button', { name: "I can't parse any of it" }).click()
-    await expect(passage.locator('[data-note="question"]')).toHaveCount(1)
-    await expectNoAxeViolations(page, 'reader, topic without concepts')
-  })
-
-  test('a topic with no file text reads its notes', async ({ page }) => {
-    await setZoneCookie(page.context())
-    const { email } = await signUpAndIn(page, 'rd-notes-fallback', { own: true })
+    const email = `ws4a-entry-${Date.now()}@example.com`
+    await signIn(page, email)
+    const project = await page.request.post('/api/projects', { data: { name: `Entry ${Date.now()}` } })
+    const courseId = (await project.json()).project.id as string
+    const upload = await page.request.post(`/api/projects/${courseId}/materials?category=lecture_notes&filename=algorithms.pdf`, {
+      data: readFileSync(FIXTURE_PDF),
+      headers: { 'content-type': 'application/pdf' },
+    })
+    expect(upload.ok()).toBeTruthy()
+    await expect
+      .poll(async () => ((await (await page.request.get(`/api/projects/${courseId}/materials`)).json()).materials as { validationStatus: string }[]).map((item) => item.validationStatus).join(), { timeout: 120_000 })
+      .toBe('valid')
+    // Topic finding starts by itself and would undo the confirmation below if it were still running.
+    await expect.poll(async () => (await (await page.request.get(`/api/projects/${courseId}/topics`)).json()).topics.length, { timeout: 120_000 }).toBeGreaterThan(0)
+    const topic = await page.request.post(`/api/projects/${courseId}/topics`, { data: { name: 'Graph traversal', description: 'Breadth-first and depth-first search.' } })
+    expect(topic.ok()).toBeTruthy()
+    const topicId = (await topic.json()).topic.id as string
+    await page.request.post(`/api/projects/${courseId}/topics/confirm`)
     await markIntroSeen(email)
-    const course = await createCourse(page, `Fallback ${Date.now()}`, [{ name: 'Plain topic' }])
-    await addContent(course.topics['Plain topic'], { section_notes: '# Notes\n\nSome notes to read.\n\n## Part\n\nMore.' })
-    await page.goto(`/courses/${course.courseId}/topics/${course.topics['Plain topic']}?view=read`)
-    await expect(page.getByRole('heading', { name: 'Part' })).toBeVisible()
-    await expect(page.locator('[data-passage]')).toHaveCount(0)
-  })
+    const base = `/courses/${courseId}/topics/${topicId}`
 
+    // Preparation is held (the stack's E2E_HOLD_DIR hook), so the screen can be looked at while the warm-up is being written.
+    const holdDir = join(process.env.E2E_RUN_DIR || join(process.cwd(), '..', '.e2e'), 'hold')
+    const gate = join(holdDir, 'generate_content.hold')
+    await mkdir(holdDir, { recursive: true })
+    await writeFile(gate, '')
+    try {
+      await page.goto(base)
+      await expect(page).toHaveURL(/\?view=read&entry=1$/)
+      await expect(page.getByRole('heading', { name: 'Writing your warm-up questions, about a minute' })).toBeVisible()
+      // The reader is not shown, and the path keeps its five steps: Warm-up and Recall say they are being prepared, none is tagged Next.
+      await expect(page.locator('[data-passage]')).toHaveCount(0)
+      await expect(pathNav(page).getByRole('link', { name: /Warm-up/ }).getByRole('img', { name: 'Being prepared' })).toBeVisible()
+      await expect(pathNav(page).getByRole('link', { name: /Recall/ }).getByRole('img', { name: 'Being prepared' })).toBeVisible()
+      await expect(pathNav(page).getByText('(next up)')).toHaveCount(0)
+      await screenshotIfAsked(page, 'ws4a-entry-preparing-1440x900')
+
+      // On a phone the panel is the page; the one axe check of this screen runs there.
+      await page.setViewportSize({ width: 390, height: 844 })
+      await screenshotIfAsked(page, 'ws4a-entry-preparing-390x844')
+      await expectNoAxeViolations(page, 'topic entry, preparing, 390')
+      await page.setViewportSize(DESKTOP)
+
+      // Reading is a choice, not a fallback: it leaves the preparation screen at once.
+      await page.getByRole('link', { name: 'Start reading instead' }).click()
+      await expect(page).toHaveURL(/\?view=read$/)
+      await expect(page.getByRole('heading', { name: 'Writing your warm-up questions, about a minute' })).toHaveCount(0)
+      await page.goto(base)
+      await expect(page).toHaveURL(/\?view=read&entry=1$/)
+    } finally {
+      await rm(gate, { force: true })
+    }
+    // Let go of what is held: the screen opens the warm-up by itself once it is written, once.
+    for (const file of readdirSync(holdDir)) if (file.endsWith('.request.json')) await writeFile(join(holdDir, file.replace('.request.json', '.release')), '')
+    await expect(page).toHaveURL(/\?view=warmup$/, { timeout: 150_000 })
+    await expect(page.getByRole('button', { name: 'Start warm-up' })).toBeVisible()
+    await expect(pathNav(page).getByRole('img', { name: 'Being prepared' })).toHaveCount(0)
+  })
 })

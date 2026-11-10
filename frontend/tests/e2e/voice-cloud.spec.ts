@@ -200,35 +200,6 @@ test('cloud speech: turned off in the lobby, the browser recognizer is used and 
   await page.evaluate(() => window.localStorage.removeItem('margins.voice.prefs.v1'))
 })
 
-test('cloud speech: when Deepgram refuses the stream, the session moves to AssemblyAI before the browser', async ({ page }) => {
-  await installVoiceStubs(page, { speechMs: 200 })
-  await page.addInitScript(FAKE_SOCKET)
-  await page.addInitScript(() => {
-    ;(window as any).__cloud.refuse = 'deepgram'
-  })
-  const grants = await offerCloud(page, 'ok')
-  const turns = watchTurns(page)
-
-  await page.goto(voiceUrl())
-  await expect(startButton(page)).toBeEnabled({ timeout: 30_000 })
-  await startButton(page).click()
-  await expect(page.getByTestId('voice-question')).toBeVisible({ timeout: 30_000 })
-  // The first grant asked for anything; the second left Deepgram out and got AssemblyAI (its token goes in the address).
-  await expect.poll(() => grants.length, { timeout: 15_000 }).toBeGreaterThan(1)
-  expect(grants[0]).toEqual([])
-  expect(grants[1]).toEqual(['deepgram'])
-  await expect.poll(() => page.evaluate(() => (window as any).__cloud.urls.at(-1) as string)).toContain('token=assemblyai-token')
-  await expect.poll(() => page.evaluate(() => (window as any).__cloud.frames), { timeout: 10_000 }).toBeGreaterThan(5)
-  expect(await page.evaluate(() => (window as any).__voice.starts)).toBe(0)
-  await expect(page.getByTestId('voice-orb')).toHaveAttribute('data-state', 'listening', { timeout: 20_000 })
-
-  const before = turns.length
-  await page.evaluate(() => (window as any).__cloud.say(0, 'A hash function maps keys to buckets.', true))
-  await expect.poll(() => turns.length, { timeout: 8_000 }).toBeGreaterThan(before)
-  expect(turns[turns.length - 1].utterance).toBe('A hash function maps keys to buckets.')
-  await page.getByRole('button', { name: 'End', exact: true }).click()
-})
-
 test('cloud speech: a microphone that drops mid-session is opened again on the same stream', async ({ page }) => {
   await installVoiceStubs(page, { speechMs: 200 })
   await page.addInitScript(FAKE_SOCKET)

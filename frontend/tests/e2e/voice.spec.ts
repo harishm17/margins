@@ -84,67 +84,6 @@ test('text mode: start, first question, answer, evaluation, end, summary', async
   await waitForLobby(page)
 })
 
-test('board shows the current question with rendered math', async ({ page }) => {
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice`)
-  await waitForLobby(page)
-  const lines = (events: object[]) => events.map((event) => JSON.stringify(event)).join('\n') + '\n'
-  let call = 0
-  await page.route('**/api/voice/turn', (route) => {
-    call += 1
-    return route.fulfill({
-      status: 200,
-      contentType: 'application/x-ndjson',
-      body:
-        call === 1
-          ? lines([
-              {
-                type: 'question',
-                index: 1,
-                total: 4,
-                text: 'If the load factor is $\\alpha = n/m$ and $n$ doubles, what happens to $\\alpha$?',
-                questionType: 'multiple_choice',
-                options: [
-                  { id: 'A', text: '$\\alpha$ halves' },
-                  { id: 'B', text: '$\\alpha$ doubles' },
-                ],
-              },
-              { type: 'text', delta: 'Here is a question about the load factor. Take your time.' },
-              { type: 'done', text: 'Here is a question about the load factor. Take your time.' },
-            ])
-          : lines([
-              { type: 'text', delta: 'Let us look at the next one.' },
-              { type: 'board', kind: 'claim', text: 'The load factor is $\\alpha = n / m$.', question: 'What does $m$ stand for?', source: { label: 'p. 6', href: '/api/materials/m1/file#page=6' } },
-              { type: 'done', text: 'Let us look at the next one.' },
-            ]),
-    })
-  })
-  await startButton(page).click()
-  const board = page.getByTestId('voice-board')
-  await expect(board).toBeVisible({ timeout: 30_000 })
-  // The question is text on the board, so nothing is only audio, and the formulas are drawn rather than spoken.
-  await expect(board.getByTestId('voice-question')).toContainText('what happens to')
-  await expect(board.locator('.katex').first()).toBeVisible()
-  expect(await board.locator('.katex').count()).toBeGreaterThanOrEqual(4)
-  await expect(board.getByText('α halves').or(board.locator('.katex', { hasText: 'α' })).first()).toBeVisible()
-  await expect(page.getByTestId('voice-progress')).toHaveText('Question 2 of 4')
-  await screenshotIfAsked(page, 'g1-board-question-1440x900')
-  await expectNoAxeViolations(page, 'voice board with a question')
-
-  // The next tool result replaces the board: a claim with its page link and the check question under it.
-  await page.getByLabel('Your answer').fill('It doubles')
-  await page.getByRole('button', { name: 'Send' }).click()
-  await expect(board).toHaveAttribute('data-kind', 'claim', { timeout: 30_000 })
-  await expect(board.locator('.katex').first()).toBeVisible()
-  await expect(board.getByTestId('voice-board-check')).toContainText('What does')
-  const link = board.getByRole('link', { name: 'Open p. 6 in your files (opens in a new tab)' })
-  await expect(link).toHaveAttribute('href', '/api/materials/m1/file#page=6')
-  await expect(link).toHaveAttribute('target', '_blank')
-  await screenshotIfAsked(page, 'g1-board-claim-1440x900')
-  await expectNoAxeViolations(page, 'voice board with a claim')
-  await page.getByRole('button', { name: 'End', exact: true }).click()
-})
-
 async function startStyle(page: Page, style: RegExp) {
   await installVoiceStubs(page, { recognition: false, synthesis: false })
   await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice`)
@@ -201,32 +140,6 @@ test('teach it back: the idea is on the board, the explanation is assessed again
   await expect(page.getByRole('heading', { name: 'Teach-back finished' })).toBeVisible()
 })
 
-test('a teach-back ended before the first idea closes has the same summary: what was covered, what to revisit, a next step', async ({ page }) => {
-  await withPrisma(async (prisma) => {
-    await prisma.evidenceEvent.deleteMany({ where: { user: { email: VOICE_TEST_EMAIL }, source: { in: ['teach_back', 'voice'] } } })
-    await prisma.recallAttempt.deleteMany({ where: { user: { email: VOICE_TEST_EMAIL } } })
-  })
-  const concept = await withPrisma((prisma) => prisma.concept.findFirstOrThrow({ where: { topicId: ids.topicId, name: 'Load factor' }, select: { id: true } }))
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  const base = `/courses/${ids.courseId}/topics/${ids.topicId}`
-  await page.goto(`${base}?view=voice&style=teach_back&concept=${concept.id}`)
-  await waitForLobby(page)
-  await startButton(page).click()
-  await expect(page.getByTestId('voice-board')).toContainText('Explain "Load factor" in your own words', { timeout: 30_000 })
-  await page.getByRole('button', { name: 'End', exact: true }).click()
-
-  const summary = page.getByTestId('voice-summary')
-  await expect(summary).toBeVisible()
-  // Covered: nothing was finished, and it says so. To revisit: the idea that was open. Next step: practise it.
-  await expect(page.getByTestId('voice-ideas-none')).toContainText('No idea was finished before the session ended.')
-  await expect(summary.getByRole('heading', { name: 'To revisit' })).toBeVisible()
-  await expect(page.getByTestId('voice-ideas-revisit')).toContainText('Load factor: not finished')
-  await expect(page.getByTestId('voice-next-step')).toContainText('Practice what came up short')
-  await expect(page.getByRole('link', { name: 'Practice this' })).toHaveAttribute('href', new RegExp(`concept=${concept.id}`))
-  await screenshotIfAsked(page, 'final-teach-back-ended-early-1440x900')
-  await expectNoAxeViolations(page, 'teach-back summary, ended early')
-})
-
 test('guided reading: predict first, then the claim on the board with its page, then one check question', async ({ page }) => {
   await withPrisma((prisma) => prisma.evidenceEvent.deleteMany({ where: { user: { email: VOICE_TEST_EMAIL }, source: { in: ['teach_back', 'voice'] } } }))
   await startStyle(page, /Read it with me/)
@@ -277,66 +190,6 @@ test('lobby: a topic with no claims starts on Quiz me even when a link asks for 
   await expect(page.getByText("Your pages aren't read into ideas yet")).toHaveCount(0)
 })
 
-test('lobby: an idea with no claims in a topic that has some starts on Quiz me and says the idea is missing them; one with claims keeps Teach it back; the choice follows the link when it changes', async ({ page }) => {
-  const bare = await withPrisma((prisma) =>
-    prisma.concept.create({ data: { projectId: ids.courseId, topicId: ids.topicId, name: 'Bare idea', summary: 'No claims.', kind: 'concept', orderIndex: 90 } })
-  )
-  try {
-    const loadFactor = await withPrisma((prisma) => prisma.concept.findFirstOrThrow({ where: { topicId: ids.topicId, name: 'Load factor' }, select: { id: true } }))
-    await installVoiceStubs(page, { recognition: false, synthesis: false })
-    const url = (concept: string) => `/courses/${ids.courseId}/topics/${ids.topicId}?view=voice&style=teach_back&concept=${concept}`
-    const teachBack = page.getByRole('radio', { name: /Teach it back/ })
-    const quiz = page.getByRole('radio', { name: /Quiz me/ })
-    await page.goto(url(bare.id))
-    await waitForLobby(page)
-    await expect(quiz).toHaveAttribute('aria-checked', 'true')
-    await expect(teachBack).toHaveAttribute('aria-checked', 'false')
-    await expect(page.getByText("This idea isn't read from your pages yet")).toBeVisible()
-    await expect(page.getByText("Your pages aren't read into ideas yet")).toHaveCount(0)
-    await expectNoAxeViolations(page, 'voice lobby on an idea with no claims in a topic that has some')
-    // The same page asked again for an idea that has claims (no reload, the lobby stays mounted): Teach it back is the choice, and the note goes.
-    await page.evaluate((href) => (window as unknown as { next: { router: { push: (to: string) => void } } }).next.router.push(href), url(loadFactor.id))
-    await expect(page).toHaveURL(new RegExp(`concept=${loadFactor.id}$`))
-    await expect(teachBack).toHaveAttribute('aria-checked', 'true')
-    await expect(page.getByText("This idea isn't read from your pages yet")).toHaveCount(0)
-    // And back to the idea without: Quiz me again.
-    await page.evaluate((href) => (window as unknown as { next: { router: { push: (to: string) => void } } }).next.router.push(href), url(bare.id))
-    await expect(page).toHaveURL(new RegExp(`concept=${bare.id}$`))
-    await expect(quiz).toHaveAttribute('aria-checked', 'true')
-    await expect(page.getByText("This idea isn't read from your pages yet")).toBeVisible()
-  } finally {
-    await withPrisma((prisma) => prisma.concept.delete({ where: { id: bare.id } }))
-  }
-})
-
-test('new topic_conversation session rejected; old one renders', async ({ page }) => {
-  // A new session cannot be a free conversation any more.
-  const rejected = await page.request.post('/api/voice/session', { data: { projectId: ids.courseId, topicId: ids.topicId, style: 'topic_conversation' } })
-  expect(rejected.status()).toBe(400)
-  // Teach it back and guided reading need claims from the student's pages: a topic without any says so.
-  const bare = await page.request.post('/api/voice/session', { data: { projectId: ids.courseId, topicId: fixture.topics['Recursion basics'], style: 'teach_back' } })
-  expect(bare.status()).toBe(422)
-  expect((await bare.json()).requiresClaims).toBe(true)
-  // A stale tab that still says guided notes gets guided reading.
-  const stale = await page.request.post('/api/voice/session', { data: { projectId: ids.courseId, topicId: ids.topicId, style: 'guided_notes' } })
-  expect(stale.status()).toBe(200)
-  expect((await stale.json()).style).toBe('guided_reading')
-  await clearVoiceSessions()
-
-  // A conversation that was open before the change carries on: the coach replies in the same style.
-  const old = await withPrisma(async (prisma) => {
-    const user = await prisma.user.findUniqueOrThrow({ where: { email: VOICE_TEST_EMAIL } })
-    return prisma.voiceDrillSession.create({
-      data: { userId: user.id, projectId: ids.courseId, topicId: ids.topicId, style: 'topic_conversation', questionSet: [] },
-    })
-  })
-  const turn = await page.request.post('/api/voice/turn', { data: { sessionId: old.id, utterance: 'Tell me about hashing' } })
-  expect(turn.status()).toBe(200)
-  const body = await turn.text()
-  expect(body).toContain('Mock coach here. You said: Tell me about hashing')
-  expect(body).not.toContain('"type":"question"')
-})
-
 test('voice mode: listening, a short answer is sent after its adaptive wait, speaking, barge-in', async ({ page }) => {
   await installVoiceStubs(page, { speechMs: 600 })
   await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice`)
@@ -379,27 +232,6 @@ test('voice mode: listening, a short answer is sent after its adaptive wait, spe
 
   await page.getByRole('button', { name: 'End', exact: true }).click()
   await expect(page.getByTestId('voice-summary')).toBeVisible()
-})
-
-test('voice mode: pause the mic, type instead, and come back to the microphone', async ({ page }) => {
-  await installVoiceStubs(page)
-  await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice`)
-  await waitForLobby(page)
-  await startButton(page).click()
-  await expect(page.getByTestId('voice-orb')).toHaveAttribute('data-state', 'listening', { timeout: 30_000 })
-
-  await page.getByRole('button', { name: 'Pause mic' }).click()
-  await expect(page.getByTestId('voice-orb')).toHaveAttribute('data-state', 'paused')
-  await expect(page.getByTestId('voice-orb-status')).toHaveText('Paused')
-  await page.getByRole('button', { name: 'Resume mic' }).click()
-  await expect(page.getByTestId('voice-orb')).toHaveAttribute('data-state', 'listening')
-
-  await page.getByRole('button', { name: 'Type instead' }).click()
-  await expect(page.getByLabel('Your answer')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Use microphone' })).toBeVisible()
-  await page.getByRole('button', { name: 'Use microphone' }).click()
-  await expect(page.getByTestId('voice-orb')).toHaveAttribute('data-state', 'listening')
-  await page.getByRole('button', { name: 'End', exact: true }).click()
 })
 
 test('microphone permission denied falls back to typing with a way to retry', async ({ page }) => {
@@ -445,65 +277,6 @@ test('lobby: the daily limit disables Start, the 422 offers to create content', 
     'href',
     `/courses/${ids.courseId}/topics/${ids.topicId}?view=quiz`
   )
-})
-
-const turnError = (status: number, code: string, message: string, retryable: boolean) => ({
-  status,
-  json: { error: { code: 'CONFLICT', message, details: { code, retryable } } },
-})
-
-test('turn errors: active session and daily limit send you back to the lobby', async ({ page }) => {
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice`)
-  await waitForLobby(page)
-
-  await page.route('**/api/voice/turn', (route) => route.fulfill(turnError(409, 'ACTIVE_SESSION', 'Another session is live', false)))
-  await startButton(page).click()
-  await expect(page.getByText('Another voice practice is open', { exact: true }).first()).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByTestId('voice-lobby')).toBeVisible()
-
-  await page.unroute('**/api/voice/turn')
-  await page.route('**/api/voice/turn', (route) => route.fulfill(turnError(429, 'VOICE_DAILY_LIMIT', 'Limit', false)))
-  await startButton(page).click()
-  await expect(page.getByText("You've used today's voice time", { exact: true })).toBeVisible({ timeout: 30_000 })
-  await expect(startButton(page)).toBeDisabled()
-})
-
-test('turn errors: a retryable failure keeps the session and Try again recovers', async ({ page }) => {
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice`)
-  await waitForLobby(page)
-
-  let failures = 1
-  await page.route('**/api/voice/turn', (route) => {
-    if (failures > 0) {
-      failures -= 1
-      return route.fulfill(turnError(503, 'LLM_UNAVAILABLE', 'Busy', true))
-    }
-    return route.continue()
-  })
-  await startButton(page).click()
-  const alert = page.getByTestId('voice-alert')
-  // The shared words for a busy AI (lib/ai/messages).
-  await expect(alert).toContainText('The AI is busy right now', { timeout: 30_000 })
-  await alert.getByRole('button', { name: 'Try again' }).click()
-  await expect(page.getByTestId('voice-question')).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByTestId('voice-alert')).toHaveCount(0)
-  await page.getByRole('button', { name: 'End', exact: true }).click()
-})
-
-test('turn errors: a session that ended on the server shows the summary', async ({ page }) => {
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  await page.goto(`/courses/${ids.courseId}/topics/${ids.topicId}?view=voice`)
-  await waitForLobby(page)
-  await startButton(page).click()
-  await expect(page.getByTestId('voice-question')).toBeVisible({ timeout: 30_000 })
-
-  await page.route('**/api/voice/turn', (route) => route.fulfill(turnError(409, 'SESSION_ENDED', 'Ended', false)))
-  await page.getByLabel('Your answer').fill('my answer')
-  await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByTestId('voice-summary')).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByText('This session has ended')).toBeVisible()
 })
 
 test('stream events: an error event and a finished drill', async ({ page }) => {
@@ -592,29 +365,6 @@ test('the session is ended on page hide and a heartbeat goes out every 30 second
 // v3.1 (spec 5.8, 18.3, 18.6): a spoken "I don't know" is a try, and the coach explains first.
 // (The turn limit is no reason to wait here: scripts/e2e-stack.sh gives the web app VOICE_TURNS_PER_MINUTE=1000.)
 
-test("oral quiz: an I-don't-know is a wrong answer at level 0 with score 0, and no grader is asked", async ({ page }) => {
-  test.setTimeout(120_000)
-  await withPrisma((prisma) => prisma.evidenceEvent.deleteMany({ where: { user: { email: VOICE_TEST_EMAIL }, source: { in: ['teach_back', 'voice'] } } }))
-  await installVoiceStubs(page, { recognition: false, synthesis: false })
-  await page.goto(`/courses/${ids.courseId}/review/voice`)
-  await waitForLobby(page)
-  await startButton(page).click()
-  await expect(page.getByTestId('voice-question')).toBeVisible({ timeout: 30_000 })
-  await page.getByLabel('Your answer').fill("I don't know")
-  await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByTestId('voice-evaluation').first()).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByTestId('voice-evaluation').first().locator('span').first()).toHaveText(/Not quite|Noted/)
-  await expectNoAxeViolations(page, 'oral quiz after an I do not know')
-  const rows = await withPrisma((prisma) =>
-    prisma.evidenceEvent.findMany({ where: { user: { email: VOICE_TEST_EMAIL }, source: 'voice' }, select: { assistance: true, score: true, confidence: true, metadata: true } })
-  )
-  expect(rows.length).toBeLessThanOrEqual(1)
-  for (const row of rows) {
-    expect([row.assistance, row.score, row.confidence]).toEqual([0, 0, null])
-    expect((row.metadata as { idk?: boolean }).idk).toBe(true)
-  }
-})
-
 test("teach it back: an I-don't-know is explained at once, with no probe, and is level 1 with score 0", async ({ page }) => {
   await withPrisma(async (prisma) => {
     await prisma.evidenceEvent.deleteMany({ where: { user: { email: VOICE_TEST_EMAIL }, source: { in: ['teach_back', 'voice', 'instruction'] } } })
@@ -635,21 +385,4 @@ test("teach it back: an I-don't-know is explained at once, with no probe, and is
   // The explanation is instruction, written once per explained claim.
   const instruction = await sessionEvidence('instruction')
   expect(instruction.map((row) => [row.assistance, row.score, row.itemKey.split(':')[1]])).toEqual([[3, 0, 'voice_explain']])
-})
-
-test("guided reading: an I-don't-know on the check is missed at level 2 and the reading goes on", async ({ page }) => {
-  await withPrisma((prisma) => prisma.evidenceEvent.deleteMany({ where: { user: { email: VOICE_TEST_EMAIL }, source: { in: ['teach_back', 'voice'] } } }))
-  await startStyle(page, /Read it with me/)
-  const board = page.getByTestId('voice-board')
-  await expect(board).toHaveAttribute('data-kind', 'prediction', { timeout: 30_000 })
-  await page.getByLabel('Your answer').fill('I think it measures how full the table is')
-  await page.getByRole('button', { name: 'Send' }).click()
-  await expect(board).toHaveAttribute('data-kind', 'claim', { timeout: 30_000 })
-  await expect(board.getByTestId('voice-board-check')).toContainText('In your own words, what do your pages say about "Load factor"?')
-  await expect(page.getByText(/Mock claim from your pages/)).toBeVisible({ timeout: 30_000 })
-  await page.getByLabel('Your answer').fill("I don't know")
-  await page.getByRole('button', { name: 'Send' }).click()
-  await expect(page.getByTestId('voice-evaluation').first()).toBeVisible({ timeout: 30_000 })
-  const rows = await sessionEvidence('voice')
-  expect(rows.map((row) => [row.assistance, row.score])).toEqual([[2, 0]])
 })

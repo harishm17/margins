@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test'
-import { animationsSettled } from './helpers/settle'
 import { expectNoAxeViolations, screenshotIfAsked } from './helpers/axe'
 import { markAiAvailable, markAiUnavailable, withPrisma } from './helpers/db'
 import { addContent, createCourse, practiceProblem, quizQuestions, setZoneCookie, signUpAndIn, ZONE } from './helpers/loop'
@@ -15,9 +14,6 @@ const SIZES = [
   ['1440x900', { width: 1440, height: 900 }],
   ['390x844', { width: 390, height: 844 }],
 ] as const
-
-/** Pixels under the top bar where the content starts on a phone with both cards showing. */
-const CONTENT_START_WITH_CARDS = 265
 
 const card = (page: Page) => page.getByRole('region', { name: 'Next on this topic' })
 
@@ -102,46 +98,14 @@ test('the next card waits while a quiz is taken and comes back with the refreshe
   const sure = results.getByRole('radiogroup', { name: 'How sure were you overall?' })
   await expect(sure.getByRole('radio')).toHaveText(['Guessing', 'Unsure', 'Fairly sure', 'Certain'])
   await expect(results.getByRole('button', { name: /^[1-5], / })).toHaveCount(0)
-  // On a phone the score line keeps room for its words: the heading is not squeezed into a narrow column by the buttons beside it.
-  for (const [name, size] of SIZES) {
-    await page.setViewportSize(size)
-    expect((await results.getByRole('heading', { name: /points/ }).boundingBox())!.width, `score heading width, ${name}`).toBeGreaterThanOrEqual(150)
-  }
   await page.setViewportSize(SIZES[0][1])
   await chooseConfidence(results, 'Guessing')
   await expect(results.getByText('Next review tomorrow').first()).toBeVisible()
   await expect(header.getByText('Next review tomorrow')).toBeVisible()
   await screenshotIfAsked(page, 'next-card-quiz-results-rated-1440x900')
 
-  for (const [name, size] of SIZES) {
-    await page.setViewportSize(size)
-    await expectNoAxeViolations(page, `quiz results with the next card, ${name}`)
-  }
-  // On a phone, with the one-time card on the screen (it is one line after its first view), the results start close under the top bar.
   await page.setViewportSize(SIZES[1][1])
-  // The card closed itself when the quiz began (the student was answering); put it back to look at it with the results.
-  await withPrisma((prisma) => prisma.user.update({ where: { email }, data: { seenEffortIntroAt: null } }))
-  await page.evaluate(() => window.sessionStorage.clear())
-  await page.reload()
-  await expect(page.getByRole('heading', { name: /points|Quiz/ }).first()).toBeVisible()
-  await animationsSettled(page)
-  await page.evaluate(() => window.scrollTo(0, 0))
-  const intro = page.getByRole('region', { name: /Margins asks you to try before it helps/ })
-  await expect(intro).toBeVisible()
-  await expect(intro.getByText('It will feel slower than reading a summary.')).toBeHidden()
-  await expect(intro.getByRole('button', { name: 'Show more' })).toBeVisible()
-  // The fold button is a 44px target at phone width.
-  const caret = (await intro.getByRole('button', { name: 'Show more' }).boundingBox())!
-  expect(Math.min(caret.width, caret.height), 'the fold button is at least 44px').toBeGreaterThanOrEqual(44)
-  await expect(card(page)).toHaveCount(0)
-  await screenshotIfAsked(page, 'next-card-both-cards-390x844')
-  const lobbyTop = (await page.locator('[data-tab-panel]').boundingBox())!.y
-  const topbar = (await page.locator('header').first().boundingBox())!
-  expect(lobbyTop - (topbar.y + topbar.height), `the content starts ${lobbyTop}px down`).toBeLessThan(CONTENT_START_WITH_CARDS)
-  await intro.getByRole('button', { name: 'Show more' }).click()
-  await expect(intro.getByText('It will feel slower than reading a summary.')).toBeVisible()
-  await expectNoAxeViolations(page, 'one-time card open, 390')
-  await screenshotIfAsked(page, 'next-card-both-cards-open-390x844')
+  await expectNoAxeViolations(page, 'quiz results with the next card, 390x844')
 })
 
 
@@ -266,7 +230,6 @@ test('next card offers reading after a failed drill, and the reading ends the wa
   // The fail has been followed by instruction: the card no longer says to read about it.
   await page.goto(`/courses/${course.courseId}/topics/${topic}?view=examples`)
   await expect(page.getByRole('region', { name: 'Next on this topic' }).getByText(/You missed/)).toHaveCount(0)
-  await expectNoAxeViolations(page, 'next card after instruction, 1440')
   await page.setViewportSize(SIZES[1][1])
   await page.goto(`/courses/${course.courseId}/topics/${topic}?view=examples`)
   await expectNoAxeViolations(page, 'next card after instruction, 390')

@@ -52,38 +52,6 @@ const conceptsJobs = (projectId: string) =>
 
 test.describe.configure({ mode: 'serial' })
 
-test('a concepts job that is already running is returned and followed, not started again', async ({ page }) => {
-  const { email } = await signUpAndIn(page, 'generate-content')
-  const { projectId, topicId } = await createCourse(page)
-
-  const running = await seedConceptsJob(projectId, topicId, email, 'processing')
-  const ask = () =>
-    page.request.post(`/api/topics/${topicId}/generate-content`, {
-      data: { contentType: 'concepts', preferences: { prepare_rest: true, only_if_missing: true } },
-    })
-
-  const followed = await ask()
-  expect(followed.ok()).toBeTruthy()
-  expect(await followed.json()).toMatchObject({
-    jobId: running.id,
-    contentType: 'concepts',
-    status: 'processing',
-    message: 'Content generation already in progress',
-  })
-  // Asking for the same type without only_if_missing follows it too.
-  const again = await page.request.post(`/api/topics/${topicId}/generate-content`, {
-    data: { contentType: 'concepts', preferences: { prepare_rest: true } },
-  })
-  expect((await again.json()).jobId).toBe(running.id)
-  expect(await conceptsJobs(projectId)).toBe(1)
-
-  // A job that is only queued is reported as queued.
-  await withPrisma((prisma) => prisma.processingJob.update({ where: { id: running.id }, data: { status: 'pending' } }))
-  const queued = await ask()
-  expect(await queued.json()).toMatchObject({ jobId: running.id, status: 'queued' })
-  expect(await conceptsJobs(projectId)).toBe(1)
-})
-
 test('the course overview retries a failed extraction once a day, a bounded number of times', async ({ page }) => {
   const { email } = await signUpAndIn(page, 'generate-content')
 

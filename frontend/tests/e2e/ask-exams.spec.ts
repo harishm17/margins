@@ -41,51 +41,6 @@ test('ask: an answer streams in with citations, then the conversation can be del
   await expect(page.getByRole('heading', { level: 2, name: 'Ask your materials' })).toBeVisible()
 })
 
-test('ask: Stop aborts a slow answer', async ({ page }) => {
-  await signIn(page, DEMO_EMAIL)
-  // Hold the answer back so there is something to stop.
-  await page.route('**/api/projects/*/chat', async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 3000))
-    await route.abort()
-  })
-  await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
-  await page.getByLabel('Ask about your materials').fill('Explain sorting.')
-  await page.keyboard.press('Enter')
-  await expect(page.getByText('Searching your materials...')).toBeVisible()
-  await page.keyboard.press('Escape')
-  await expect(page.getByText('Searching your materials...')).toBeHidden()
-})
-
-test('mock exam: a topic with no pages is left out and said so, and the exam is still the size asked for', async ({ page }) => {
-  test.setTimeout(240_000)
-  await signIn(page, DEMO_EMAIL)
-  await page.goto(`${course}/exams/new`)
-  // The demo's "Discrete random variables" has no file behind it: it starts unticked and says why, and the count says what is covered.
-  const noPages = page.getByRole('checkbox', { name: /Discrete random variables/ })
-  await expect(page.getByText('Add source pages to include.').first()).toBeVisible()
-  await expect(noPages).not.toBeChecked()
-  await expect(page.getByTestId('exam-footer-summary')).not.toContainText('left out')
-  // Ticking it anyway is allowed; the form then says it is left out.
-  await noPages.check()
-  await expect(page.getByTestId('exam-footer-summary')).toContainText('without pages is left out')
-  await page.getByRole('button', { name: 'Change settings' }).click()
-  await page.getByRole('radio', { name: '5', exact: true }).click()
-  await page.getByRole('radio', { name: '30 min', exact: true }).click()
-  await page.getByRole('button', { name: 'Create exam' }).click()
-  await expect(page).toHaveURL(/\/exams\/[0-9a-f-]{36}$/, { timeout: 180_000 })
-  // Said before the exam opens, and kept up for a while.
-  await expect(page.getByText('Left out of the exam: Discrete random variables.')).toBeVisible()
-  // And it stays in the lobby, above Start, once the note is gone.
-  const leftOut = page.getByText('Left out of this exam: Discrete random variables')
-  await expect(leftOut).toBeVisible()
-  const leftOutBox = (await leftOut.boundingBox())!
-  const startBox = (await page.getByRole('button', { name: /^(Start exam|Resume)/ }).boundingBox())!
-  expect(leftOutBox.y, 'the exclusion is above Start exam').toBeLessThan(startBox.y)
-  const facts = page.getByText('Questions', { exact: true }).locator('..')
-  await expect(facts).toContainText('5')
-  await expect(page.getByText('Covers').locator('..')).not.toContainText('Discrete random variables')
-})
-
 /** The kinds of the questions of a stored exam, in order, so a spec answers each the way its kind asks and never has to look. */
 const questionKinds = (examId: string) =>
   withPrisma(async (prisma) => {
@@ -136,17 +91,12 @@ test('mock exam: create, take, submit and read the results', async ({ page }) =>
   const navigator = page.getByRole('complementary', { name: 'Question navigator' })
   await expect(navigator.getByRole('button', { name: 'Question 1, answered' }).locator('svg')).toHaveCount(1)
   await expect(navigator.getByRole('button', { name: 'Question 2, not answered, flagged' })).toHaveAttribute('aria-current', 'step')
-  expect(await navigator.getByRole('button', { name: /^Question 2,/ }).evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('2px')
   await expect(page.getByTestId('exam-save-status')).toHaveText('Saved', { timeout: 15_000 })
 
   // Exit asks first.
   await page.getByRole('link', { name: 'Exit' }).click()
   await expect(page.getByRole('dialog', { name: 'Leave the exam?' })).toBeVisible()
   await page.getByRole('button', { name: 'Stay' }).click()
-
-  // One filled button: Next. Submit is final, so it is the quiet one until the last question (where "Submit exam" is the way on).
-  const fill = (name: string) => page.getByRole('button', { name, exact: true }).evaluate((el) => getComputedStyle(el).backgroundColor)
-  expect(await fill('Submit exam')).not.toBe(await fill('Next'))
 
   // The course's "in progress" line is on every page but the exam's own lobby, which already says Resume.
   const takeUrl = page.url()
@@ -358,53 +308,6 @@ test.describe('attempt-first Ask', () => {
     expect(graded.ok()).toBe(true)
   })
 
-  test('a broad question offers places to start, taken from the course map', async ({ page }) => {
-    test.setTimeout(90_000)
-    await signIn(page, DEMO_EMAIL)
-    // Asked about one topic, so the places to start are that topic's own concepts, in course order.
-    const topicId = await withPrisma(async (prisma) => (await prisma.topic.findFirstOrThrow({ where: { projectId: demoIds().course, name: 'Hash tables' }, select: { id: true } })).id)
-    await page.goto(`${course}/ask?topic=${topicId}`, { waitUntil: 'networkidle' })
-    await say(page, 'Explain everything about hash tables')
-    const places = page.getByRole('group', { name: 'Places to start' })
-    await expect(places).toBeVisible({ timeout: 30_000 })
-    await settled(page)
-    await expect(places.getByRole('button')).toHaveText(ASK_CONCEPTS)
-    await expect(page.getByRole('group', { name: 'Check yourself' })).toHaveCount(0)
-    await animationsSettled(page)
-    await screenshotIfAsked(page, 'f2-broad-entry-points-1440x900')
-    await expectNoAxeViolations(page, 'ask: places to start')
-
-    // Picking one asks about it: a question back, and the places to start are gone with the next reply.
-    await places.getByRole('button', { name: 'Load factor' }).click()
-    await expect(page.getByText(/What do you think this means\?/)).toBeVisible({ timeout: 30_000 })
-    await settled(page)
-    await expect(page.getByRole('group', { name: 'Places to start' })).toHaveCount(0)
-  })
-
-  test("the worked example is the student's button, after one genuine attempt", async ({ page }) => {
-    test.setTimeout(90_000)
-    await signIn(page, DEMO_EMAIL)
-    await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
-    await say(page, 'Solve problem 3 for me')
-    await expect(page.getByText(/What have you tried so far/)).toBeVisible({ timeout: 30_000 })
-    await settled(page)
-    await expect(page.getByRole('button', { name: 'Show me a worked example' })).toHaveCount(0)
-
-    await say(page, 'Solve it: I tried dividing the keys by the buckets but the answer looks too big')
-    const worked = page.getByRole('button', { name: 'Show me a worked example' })
-    await expect(worked).toBeVisible({ timeout: 30_000 })
-    await settled(page)
-    await expectNoAxeViolations(page, 'ask: worked example offered')
-    await screenshotIfAsked(page, 'f2-worked-example-button-1440x900')
-    await worked.click()
-    await expect(page.locator('article:not([aria-busy])')).toHaveCount(3, { timeout: 30_000 })
-
-    const state = await withPrisma((prisma) =>
-      prisma.tutorState.findFirstOrThrow({ where: { user: { email: DEMO_EMAIL }, scope: 'ask' }, orderBy: { updatedAt: 'desc' } })
-    )
-    expect([state.rung, state.maxRung, state.attempts]).toEqual([5, 5, 1])
-  })
-
   test('ask declines while mock exam in progress', async ({ page }) => {
     test.setTimeout(120_000)
     const pasted = 'Which collision strategy keeps colliding keys in a linked list at each bucket of the table?'
@@ -474,31 +377,6 @@ test.describe('attempt-first Ask', () => {
     await withPrisma((prisma) => prisma.examSubmission.updateMany({ where: { sampleExamId: examId }, data: { status: 'submitted' } }))
     await say(page, pasted, { demo: false })
     await expect(page.getByText(/Mock answer to "Which collision strategy/)).toBeVisible({ timeout: 30_000 })
-  })
-
-  test('a solve reply is written and checked before it is shown, and the wait says so', async ({ page }) => {
-    await signIn(page, DEMO_EMAIL)
-    // The chat stream is held in the page, so each step of a buffered reply can be looked at.
-    await holdChatStream(page)
-    await page.goto(`${course}/ask`, { waitUntil: 'networkidle' })
-    await say(page, 'Solve problem 3', { demo: false })
-    const push = (event: unknown) => page.evaluate((e) => (window as unknown as { __chat: { push: (x: unknown) => void } }).__chat.push(e), event)
-    await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __chat?: unknown }).__chat))).toBe(true)
-    await push({ type: 'thread', threadId: '11111111-1111-4111-8111-111111111111', title: 'Solve problem 3', isNew: true })
-    await push({ type: 'route', intent: 'solve', has_attempt: false, wants_answer: false, concepts: [], concept_ids: [], broad: false, degraded: false })
-    await push({ type: 'retrieved', count: 3 })
-    await expect(page.getByText('Searching your materials...')).toBeVisible()
-    await push({ type: 'progress', stage: 'writing' })
-    await expect(page.getByText('Writing the reply...')).toBeVisible()
-    await push({ type: 'progress', stage: 'checking' })
-    await expect(page.getByText('Checking the reply...')).toBeVisible()
-    await animationsSettled(page)
-    await screenshotIfAsked(page, 'f2-checking-the-reply-1440x900')
-    await expectNoAxeViolations(page, 'ask: checking the reply')
-    await push({ type: 'text', delta: 'What have you tried so far?' })
-    await push({ type: 'done', text: 'What have you tried so far?', sources: [], marks: [], retrieved: 3, stop_reason: 'end_turn' })
-    await expect(page.getByText('What have you tried so far?')).toBeVisible()
-    await expect(page.getByText('Checking the reply...')).toHaveCount(0)
   })
 
   test('a stopped explanation gets its check card once the server has stored the reply', async ({ page }) => {

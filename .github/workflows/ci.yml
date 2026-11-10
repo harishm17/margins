@@ -113,9 +113,14 @@ jobs:
   e2e:
     # Playwright against the real stack: Postgres with pgvector, the AI service on the mock LLM (no
     # API calls) and the production build of the web app. scripts/e2e-stack.sh starts both services.
+    # Split across three runners, each with its own stack and database (global-setup seeds each one). Setup takes
+    # about 4 minutes of each job. The limit stays at 40: a timed-out run on main makes Railway skip the deploy, and a
+    # slow runner once cut a 25-minute limit short.
     runs-on: ubuntu-latest
-    # The whole job takes about 12 minutes since the 2026-11-09 trim (it took about 23 before). The limit stays at 40:
-    # a timed-out run on main makes Railway skip the deploy, and a slow runner once cut a 25-minute limit short.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     timeout-minutes: 40
     services:
       postgres:
@@ -180,12 +185,12 @@ jobs:
         run: scripts/e2e-stack.sh start
       - name: Playwright
         working-directory: frontend
-        run: npx playwright test
+        run: npx playwright test --shard=${{ matrix.shard }}/3
       - name: Upload the Playwright report and the service logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             frontend/playwright-report
             frontend/test-results
