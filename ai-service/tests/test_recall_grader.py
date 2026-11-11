@@ -199,6 +199,38 @@ async def test_pointers_name_the_page_and_never_state_the_claim():
     assert verdicts["cl-2"].pointer == "Look again at p. 4: What goes in each bucket when two keys share it?"
     assert verdicts["cl-3"].pointer == "Look again at p. 7: Load factor"
     assert verdicts["cl-1"].pointer is None
+    assert all(v.probe is None for v in out.verdicts)  # a typed answer gets no question to say aloud
+
+
+@pytest.mark.asyncio
+async def test_a_spoken_answer_gets_the_question_to_ask_aloud_for_each_open_claim_and_none_that_says_the_claim(monkeypatch):
+    """The voice coach (VOICE_GRADER_LED) says `probe` as it stands, so it carries a question only where one can be said."""
+    # Under the v1 tutor prompts a spoken answer is graded as a written one: no question for the ear.
+    monkeypatch.setattr(settings, "PROMPTS_V2", "")
+    with use(Scripted([result([verdict("cl-2", "missing", pointer="What goes in each bucket when two keys share it?")])])):
+        assert all(v.probe is None for v in (await grade_recall(request(spoken=True))).verdicts)
+    monkeypatch.setattr(settings, "PROMPTS_V2", "tutor")
+    graded = result(
+        [
+            verdict("cl-1", "incorrect", "they collide", misconception="Thinks a collision loses the key.", pointer="Where does the second key go?"),
+            verdict("cl-2", "missing", pointer="What goes in each bucket when two keys share it?"),
+            verdict("cl-3", "missing", pointer="The load factor is entries divided by buckets, so what is it?"),
+        ]
+    )
+    asked = [{"claim_id": "cl-2", "question": "How does the table keep two keys in one bucket?"}, {"claim_id": "other", "question": "Not about these claims?"}]
+    provider = Scripted([graded])
+    with use(provider):
+        out = await grade_recall(request(spoken=True, asked=asked))
+    verdicts = by_id(out)
+    assert verdicts["cl-1"].probe == "Where does the second key go?"
+    assert verdicts["cl-2"].probe == "What goes in each bucket when two keys share it?"
+    assert verdicts["cl-3"].probe is None
+    # The written pointer is unchanged: the stored attempt and the page show it as before.
+    assert verdicts["cl-2"].pointer == "Look again at p. 4: What goes in each bucket when two keys share it?"
+    schema, _, prompt = provider.calls[0]
+    assert "probe" not in schema.model_json_schema()["$defs"]["SpokenClaimVerdict"]["properties"]  # set by the service, not the model
+    # The grader is told which questions the student was already put, for the claims it is grading.
+    assert "How does the table keep two keys in one bucket?" in prompt and "Not about these claims?" not in prompt
 
 
 @pytest.mark.asyncio

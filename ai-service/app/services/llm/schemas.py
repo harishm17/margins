@@ -2169,22 +2169,9 @@ class RecallGradeResult(BaseModel):
         return cls(analysis="", confidence=0.9, verdicts=verdicts)
 
 
-class RecallGradeResultSpoken(RecallGradeResult):
-    """RecallGradeResult for a spoken answer (RecallGradeRequest.spoken): the verdicts' pointer is a question to say aloud."""
-
-    verdicts: List[SpokenClaimVerdict] = Field(description="One per claim given; empty when your confidence is under 0.8")
-
-    @classmethod
-    def example(cls) -> "RecallGradeResultSpoken":
-        return cls.model_validate(RecallGradeResult.example().model_dump())
-
-    @classmethod
-    def example_for(cls, prompt: str) -> "RecallGradeResultSpoken":
-        return cls.model_validate(RecallGradeResult.example_for(prompt).model_dump())
-
-
 class RecallGradeResultSpokenV2(RecallGradeResultV2):
-    """RecallGradeResultV2 for a spoken answer."""
+    """RecallGradeResultV2 for a spoken answer (RecallGradeRequest.spoken): the verdicts' pointer is a question to say
+    aloud. There is no v1 twin: under the v1 tutor prompts a spoken answer is graded as a written one."""
 
     verdicts: List[SpokenClaimVerdict] = Field(description="One per claim given; empty when your confidence is under 0.8")
 
