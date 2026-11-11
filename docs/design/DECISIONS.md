@@ -270,3 +270,43 @@ The reviews of the prompt audit (PR #90) listed bugs and prompt changes. Where a
 - **`--grader` runs the app's recall grader beside the script and reports agreement;** it does not gate and does not steer the conversation. Claims are sent without a source quote.
 - **Not simulated:** interruptions and turn retries (the app's own tests cover them).
 - **Tests that only read prompt wording or the mock provider were removed** from the test files PR #90 added.
+
+## Prompt areas switched on (2026-11-10)
+
+`PROMPTS_V2` is set to `generation,support,tutor,ask` for both services in `.railway/railway.ts`. The rule was that an area goes on when its eval re-run is no worse than the v1 baseline (`evals/results/`, the `2026-11-10-*` runs).
+
+- **generation, support: on.** On 10 topics the support check dropped 2 to 4% of items on v2 (8 to 22% on v1), no item was malformed, and the Opus judge flagged 1 of 304 stored questions (7 of 280 on v1).
+- **ask: on.** Answers cited the gold passage in 71% of questions (68% on v1) and any passage in 91% (86%), with no errors and no cut-off answers.
+- **tutor: on.** The recall grader gave no false credit (0 of 39; v1 1 of 39) and caught 9 of 9 incorrect claims (v1 5 of 9); the reader tutor passed the same gates on both. The practice tutor is level with v1 within one reply (34 and 35 of 38 end with a question or a step, no leak reached the student on either), and wrote 8 of 38 replies twice after the leak check where v1 wrote 4. Cost of the choice: those rewrites add a few seconds to some practice replies. It is accepted for the grader's gain, and the count is re-read in the next tutor eval.
+- **voice: off.** v2 fails five gates of the teach-back eval; v1 fails one (the form of its questions). The plan for voice replies is in "Pipeline redesign" below.
+- **grading: off.** On 72 wrong answers Haiku marked 3 right on v2 and Sonnet 2; the set is too small to tell them apart, so it grows before either is chosen.
+- **ingest: off** until the extraction check exists.
+
+To undo, remove the area from the list and apply the config; no stored data depends on the revision.
+
+## Pipeline redesign (decided 2026-11-10)
+
+**Basis.** The eval outputs of 2026-11-10, and two stored topics of a real course read in the order a student meets them: warm-up, the source pages with their quick checks, notes, recall, worked examples, practice, quiz. Each piece reads well alone. The faults are between the pieces:
+
+- **Separate calls land on the same cases.** Every generator gets the same pages and never sees what the others wrote. In one topic the same question (why a repeated cheap operation with a rare expensive one is cheap on average) is put to the student in seven places, one everyday scenario is used by the notes, a notes check, a worked example and the quiz, and the quiz's one numerical question is a practice problem again with the same numbers and the same answer. A full score on that quiz shows little.
+- **Coverage follows nothing.** That topic has 19 claims. Some are asked five to seven times; others are never asked.
+- **The chain is serial.** A topic's six jobs run one after another: the quiz is ready about 6.5 minutes after the topic is opened, and the notes (the best-written piece, on a side tab) hold up everything behind them.
+- **The exam writes everything new:** 71 questions to keep 40, about 145 s.
+- **The voice coach authors with the smallest model.** On the audited prompts it fails five gates; its reply restates what the grader already said, and a voice quiz reads a four-option written question aloud.
+
+**Decisions.**
+
+1. **One list.** A topic's claims are what is taught, practised, tested and graded. Everything generated names the claims it covers, and coverage is counted per claim.
+2. **Write once, select many.** One item bank per topic. Warm-up, quiz, review, exam, voice and every check question draw items the student has not seen. D8 stands: no item table. The bank is a `topic_quizzes` kind, and the seen set comes from the evidence rows' `itemKey`.
+3. **A topic sheet first, and it hands out the cases.** One call writes the concepts, the claims with their quotes, a line for each claim that can be said aloud, two or three misconceptions per concept, and three example plans. It also gives each lane its own cases: notes, worked examples, practice and the bank get different scenarios and different numbers. The same kind of task with new numbers is practice and is allowed; the same instance twice is a defect the gate rejects.
+4. **Lanes run side by side after the sheet:** notes (streamed), examples (worked and practice from the same plans), and the bank (one small call per concept). Notes hold up nothing.
+5. **One gate for every item:** the free rules, then a solve without the key. This takes in the support check.
+6. **Small models speak, they do not author.** In voice, a graded turn's reply is put together by the app from the grader's result and stored lines. The coach model runs only when the student says something that is not an answer. Voice questions are bank items written to be heard. It is built in the eval harness first and goes on only if it passes every gate v1 passes and the question-form gate v1 fails.
+7. **The exam draws from the bank's reserve** (items held back from warm-up, quiz and review) and writes only what is short.
+8. **Reading stays the student's own pages.** The source is the main reading step; the notes stay beside it. Because claims quote the source text, the reading fix is measured before the bank is, so the bank's numbers are not taken on text that is about to change.
+
+**What stands.** D2 (the concept is the unit of memory), D8, D9 (a topic is prepared when it is opened), D12 (the app picks the move, the model writes the words; decision 6 extends it) and the scheduler.
+
+**Order.** Voice replies in the eval harness; the reading fix; the topic sheet and the gate, logging only; the bank for one topic beside the old sets and the defect eval on it; then serving, first warm-up and quiz, then review, exam and voice; the lanes side by side; last the learner brief. Each step ships behind a flag that is off.
+
+**Cost if wrong.** The bank could make sessions feel samey if it is too small; the defect eval counts distinct cases per concept before any serving goes on. Assembled voice replies could sound stiff; the eval's transcript read decides, and the coach model stays as the fallback. Nothing stored today is rewritten: the old sets stay until the bank has served a topic end to end.
