@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     VOICE_RETENTION_DAYS: int = 180
     VOICE_RETENTION_INTERVAL_SECONDS: float = 86400.0
 
-    # PR 1.6 behaviour flags, all off by default.
+    # PR 1.6 behaviour flags, off by default here; production has all three on (.railway/railway.ts).
     # 99: a hint or reply whose only match with an answer is a number word ("pick any two items" for 2) goes to a leak
     # judge instead of being dropped (app/services/tutor/leak.py). A numeral or the exact answer text stays a hard leak.
     LEAK_WORD_FORMS_TO_JUDGE: bool = False
