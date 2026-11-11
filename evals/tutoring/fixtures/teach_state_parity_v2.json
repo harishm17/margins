@@ -129,10 +129,10 @@
      "concept": "Gear ratio",
      "covered": [
       {
-       "you_said": "<student_words>So a higher ratio means more wheel turns</student_words>"
+       "you_said": "<student_words>The ratio is chainring teeth over cog teeth,</student_words>"
       },
       {
-       "you_said": "<student_words>So a higher ratio means more wheel turns</student_words>"
+       "you_said": "<student_words>The ratio is chainring teeth over cog teeth,</student_words>"
       }
      ],
      "partly": [],
@@ -157,7 +157,7 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The ratio is chainring teeth over cog teeth,</student_words>\"},{\"you_said\":\"<student_words>The ratio is chainring teeth over cog teeth,</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>",
     "spoken": "That's it, you have it now. Page 2 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
     "spoken_then": "That's it, you have it now. Page 2 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
@@ -293,10 +293,10 @@
      "concept": "Growth factor",
      "covered": [
       {
-       "you_said": "<student_words>So the balance is the start times the</student_words>"
+       "you_said": "<student_words>The factor for one period is one plus</student_words>"
       },
       {
-       "you_said": "<student_words>So the balance is the start times the</student_words>"
+       "you_said": "<student_words>The factor for one period is one plus</student_words>"
       }
      ],
      "partly": [],
@@ -321,7 +321,7 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"},{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The factor for one period is one plus</student_words>\"},{\"you_said\":\"<student_words>The factor for one period is one plus</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>",
     "spoken": "That's it, you have it now. Page 2 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
     "spoken_then": "That's it, you have it now. Page 2 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
@@ -457,10 +457,10 @@
      "concept": "Halving",
      "covered": [
       {
-       "you_said": "<student_words>So every comparison cuts the remaining items in</student_words>"
+       "you_said": "<student_words>You compare with the middle item and throw</student_words>"
       },
       {
-       "you_said": "<student_words>So every comparison cuts the remaining items in</student_words>"
+       "you_said": "<student_words>You compare with the middle item and throw</student_words>"
       }
      ],
      "partly": [],
@@ -485,7 +485,7 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You compare with the middle item and throw</student_words>\"},{\"you_said\":\"<student_words>You compare with the middle item and throw</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>",
     "spoken": "That's it, you have it now. Page 1 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
     "spoken_then": "That's it, you have it now. Page 1 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
@@ -2020,10 +2020,10 @@
      "concept": "Gear ratio",
      "covered": [
       {
-       "you_said": "<student_words>The second part says something about the wheel</student_words>"
+       "you_said": "<student_words>The ratio is chainring teeth over cog teeth,</student_words>"
       },
       {
-       "you_said": "<student_words>The second part says something about the wheel</student_words>"
+       "you_said": "<student_words>The ratio is chainring teeth over cog teeth,</student_words>"
       }
      ],
      "partly": [],
@@ -2045,7 +2045,7 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The second part says something about the wheel</student_words>\"},{\"you_said\":\"<student_words>The second part says something about the wheel</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_example_check with their answer.\"}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The ratio is chainring teeth over cog teeth,</student_words>\"},{\"you_said\":\"<student_words>The ratio is chainring teeth over cog teeth,</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_example_check with their answer.\"}</app_result>",
     "spoken": null
    },
    {
@@ -2133,10 +2133,10 @@
      "concept": "Growth factor",
      "covered": [
       {
-       "you_said": "<student_words>The power thing, I think the number of</student_words>"
+       "you_said": "<student_words>The factor for one period is one plus</student_words>"
       },
       {
-       "you_said": "<student_words>The power thing, I think the number of</student_words>"
+       "you_said": "<student_words>The factor for one period is one plus</student_words>"
       }
      ],
      "partly": [],
@@ -2158,7 +2158,7 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"},{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_example_check with their answer.\"}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The factor for one period is one plus</student_words>\"},{\"you_said\":\"<student_words>The factor for one period is one plus</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_example_check with their answer.\"}</app_result>",
     "spoken": null
    },
    {
@@ -2246,10 +2246,10 @@
      "concept": "Halving",
      "covered": [
       {
-       "you_said": "<student_words>Something about the list needing to be in</student_words>"
+       "you_said": "<student_words>You compare with the middle item and throw</student_words>"
       },
       {
-       "you_said": "<student_words>Something about the list needing to be in</student_words>"
+       "you_said": "<student_words>You compare with the middle item and throw</student_words>"
       }
      ],
      "partly": [],
@@ -2271,7 +2271,7 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"},{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_example_check with their answer.\"}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You compare with the middle item and throw</student_words>\"},{\"you_said\":\"<student_words>You compare with the middle item and throw</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_example_check with their answer.\"}</app_result>",
     "spoken": null
    },
    {
@@ -2527,10 +2527,10 @@
      "concept": "Growth factor",
      "covered": [
       {
-       "you_said": "<student_words>The power thing, I think the number of</student_words>"
+       "you_said": "<student_words>The factor for one period is one plus</student_words>"
       },
       {
-       "you_said": "<student_words>The power thing, I think the number of</student_words>"
+       "you_said": "<student_words>The factor for one period is one plus</student_words>"
       }
      ],
      "partly": [],
@@ -2552,7 +2552,7 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"},{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_example_check with their answer.\"}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The factor for one period is one plus</student_words>\"},{\"you_said\":\"<student_words>The factor for one period is one plus</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_example_check with their answer.\"}</app_result>",
     "spoken": null
    },
    {
@@ -2681,10 +2681,10 @@
      "concept": "Halving",
      "covered": [
       {
-       "you_said": "<student_words>Something about the list needing to be in</student_words>"
+       "you_said": "<student_words>You compare with the middle item and throw</student_words>"
       },
       {
-       "you_said": "<student_words>Something about the list needing to be in</student_words>"
+       "you_said": "<student_words>You compare with the middle item and throw</student_words>"
       }
      ],
      "partly": [],
@@ -2706,7 +2706,7 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"},{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_example_check with their answer.\"}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You compare with the middle item and throw</student_words>\"},{\"you_said\":\"<student_words>You compare with the middle item and throw</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_example_check with their answer.\"}</app_result>",
     "spoken": null
    },
    {
@@ -3137,7 +3137,7 @@
      "concept": "Gear ratio",
      "covered": [
       {
-       "you_said": "<student_words>So a higher ratio means more wheel turns</student_words>"
+       "you_said": "<student_words>So the gear ratio is the chainring's teeth</student_words>"
       }
      ],
      "partly": [],
@@ -3173,7 +3173,7 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So the gear ratio is the chainring's teeth</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>",
     "spoken": null
    },
    {
@@ -3267,7 +3267,7 @@
      "concept": "Growth factor",
      "covered": [
       {
-       "you_said": "<student_words>So the balance is the start times the</student_words>"
+       "you_said": "<student_words>So the growth factor for one period is</student_words>"
       }
      ],
      "partly": [],
@@ -3303,7 +3303,7 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Growth factor\"}}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the growth factor for one period is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Growth factor\"}}</app_result>",
     "spoken": null
    },
    {
@@ -3397,7 +3397,7 @@
      "concept": "Halving",
      "covered": [
       {
-       "you_said": "<student_words>So every comparison cuts the remaining items in</student_words>"
+       "you_said": "<student_words>So you compare the target with the middle</student_words>"
       }
      ],
      "partly": [],
@@ -3433,7 +3433,7 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>",
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So you compare the target with the middle</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>",
     "spoken": null
    },
    {
