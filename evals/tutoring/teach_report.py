@@ -42,6 +42,18 @@ def latency_lines(latency: Dict[str, Any]) -> List[str]:
     ]
 
 
+def assembled_lines(assembled) -> List[str]:
+    """--grader-led: the turns the app answered itself, and the gates over those turns alone."""
+    if not assembled:
+        return []
+    lines = [
+        f"- The app built the reply itself, with no coach call, in {assembled['turns']} of {assembled['graded_turns']} graded turns "
+        "(a probe on a wrong claim, a second probe on a gap, the new example and a pointer that is not one question went to the coach). Over those turns alone:"
+    ]
+    lines += [f"  - {verdict(gate)}: {gate['label']}: {gate_value(gate)}" for gate in assembled["gates"]]
+    return lines
+
+
 def yes_no_lines(yes_no) -> List[str]:
     if not yes_no or not yes_no[1]:
         return []
@@ -105,6 +117,7 @@ def render_markdown(summary: Dict[str, Any]) -> str:
         f"- Mean sentences per coach turn: {metrics['mean_sentences']:.1f}. Mean words per asking turn: {metrics['mean_words_asking']:.1f}.",
         *yes_no_lines(metrics.get("yes_no_probes")),
         *grader_lines(metrics.get("grader")),
+        *assembled_lines(metrics.get("assembled")),
         *latency_lines(metrics.get("latency", {})),
         "",
         "## By pattern",

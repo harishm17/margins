@@ -2,9 +2,9 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { ideasOf, teachParityFixture, teachPromptFixture, utteranceFixture, type TeachScenario } from './eval-parity'
+import { assembledReplyFixture, ideasOf, teachParityFixture, teachPromptFixture, utteranceFixture, type TeachScenario } from './eval-parity'
 
-export { ideasOf, teachParityFixture, teachPromptFixture, utteranceFixture }
+export { assembledReplyFixture, ideasOf, teachParityFixture, teachPromptFixture, utteranceFixture }
 
 const evalDir = path.resolve(process.cwd(), '..', 'evals', 'tutoring')
 export const TEACH_SCENARIOS = path.join(evalDir, 'scenarios', 'teach-back-original.jsonl')
@@ -12,6 +12,8 @@ export const TEACH_STATE_FIXTURE = path.join(evalDir, 'fixtures', 'teach_state_p
 /** The same replay with PROMPTS_V2 naming voice: the tags, the confront example and the example check's name differ. */
 export const TEACH_STATE_FIXTURE_V2 = path.join(evalDir, 'fixtures', 'teach_state_parity_v2.json')
 export const UTTERANCE_FIXTURE = path.join(evalDir, 'fixtures', 'utterance_parity.json')
+/** The replies the app builds itself, over cases the scenarios do not reach (eval-parity.ts REPLY_CASES). */
+export const ASSEMBLED_REPLY_FIXTURE = path.join(evalDir, 'fixtures', 'assembled_reply_parity.json')
 export const TEACH_PROMPT_FIXTURE = path.join(evalDir, 'fixtures', 'teach_back_prompts.json')
 /** The same for the audited (PROMPTS_V2, area voice) prompts; the eval uses it when it runs in v2 mode. */
 export const TEACH_PROMPT_FIXTURE_V2 = path.join(evalDir, 'fixtures', 'teach_back_prompts_v2.json')

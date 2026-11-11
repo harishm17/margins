@@ -1,0 +1,1027 @@
+[
+ {
+  "name": "missing claim, grader question, part already covered",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: What does each bucket hold?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "You have part of it. Think about page 5. What does each bucket hold?"
+ },
+ {
+  "name": "missing claim, grader question, nothing covered yet",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "missing",
+     "studentQuote": null
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: What does each bucket hold?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "Let's try another piece of it. Think about page 5. What does each bucket hold?"
+ },
+ {
+  "name": "the question names its page itself",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: What does page 5 say each bucket holds?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "You have part of it. What does page 5 say each bucket holds?"
+ },
+ {
+  "name": "a pointer with no page",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again in your reading: What does each bucket hold?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "You have part of it. What does each bucket hold?"
+ },
+ {
+  "name": "a pointer that only names the idea",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: Chaining"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "a pointer holding two questions",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: What does each bucket hold? Why a list?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "two questions joined in one sentence",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: Where does a new key land at first, and what must happen when the bucket is taken?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "a question that names its answers",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: Does a bucket hold one key or several?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "a yes-or-no question with a condition in it",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: If the table is full and a key arrives, is there still room for it?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "You have part of it. Think about page 5. If the table is full and a key arrives, is there still room for it?"
+ },
+ {
+  "name": "a question too long to say",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: When a key arrives When a key arrives When a key arrives When a key arrives When a key arrives When a key arrives When a key arrives When a key arrives what happens?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "a leading question that says the claim",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: Isn't it that chaining keeps a list in each bucket?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "loose claim, a leading question, a short quote",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "vague",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "partial",
+     "pointer": "Look again at p. 5: Does chaining keep a list in each bucket?",
+     "studentQuote": "it keeps stuff"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "When you say \"it keeps stuff\", what exactly do you mean?"
+ },
+ {
+  "name": "loose claim, grader question",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "vague",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "partial",
+     "pointer": "Look again at p. 5: What does each bucket hold?",
+     "studentQuote": "it keeps stuff"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "You're close on one part. Think about page 5. What does each bucket hold?"
+ },
+ {
+  "name": "loose claim, no question, a long quote",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "vague",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "partial",
+     "studentQuote": "the bucket the bucket the bucket the bucket the bucket the bucket the bucket the bucket the bucket "
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "wrong claim",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "incorrect",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "incorrect",
+     "studentQuote": "the table doubles",
+     "pointer": "Look again at p. 5: What does each bucket hold?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "second probe on the same gap",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 2
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: What does each bucket hold?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 2
+  },
+  "reply": null
+ },
+ {
+  "name": "a quote with quotation marks in it",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "unsupported_jump",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered",
+     "studentQuote": "\"each bucket\" keeps a \"list\"."
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "You said, \"each bucket keeps a list\". What on page 5 of your notes tells you that?"
+ },
+ {
+  "name": "a quote with a question in it",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "unsupported_jump",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered",
+     "studentQuote": "is it a list? or a tree"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "a prerequisite named with a full stop, page 0",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing_prerequisite",
+     "page": 0
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "missing",
+     "studentQuote": null
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": " Hash  functions. ",
+   "turn": 1
+  },
+  "reply": "Let's step back for a moment. How would you describe Hash functions in your own words?"
+ },
+ {
+  "name": "a prerequisite named as a question",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing_prerequisite",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "missing",
+     "studentQuote": null
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": "What is a hash function?",
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "a claim on page 0",
+  "facts": {
+   "plan": {
+    "action": "explain",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 0
+    }
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 0,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 3
+  },
+  "reply": "Here is what your notes say: Chaining keeps a list in each bucket. How would you put that in your own words?"
+ },
+ {
+  "name": "a claim worded as a question",
+  "facts": {
+   "plan": {
+    "action": "explain",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    }
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "What does chaining keep in each bucket?",
+     "page": 5,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 3
+  },
+  "reply": null
+ },
+ {
+  "name": "the next idea is named as a question",
+  "facts": {
+   "plan": {
+    "action": "wrap_up"
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 2,
+   "outcome": "explained",
+   "next": {
+    "done": false,
+    "prompt": "Explain \"Why hash?\" in your own words, as if you were teaching it to a classmate."
+   }
+  },
+  "reply": null
+ },
+ {
+  "name": "a claim too long to say",
+  "facts": {
+   "plan": {
+    "action": "explain",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    }
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. Chaining keeps a list. ",
+     "page": 5,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 3
+  },
+  "reply": null
+ },
+ {
+  "name": "asked to be told",
+  "facts": {
+   "plan": {
+    "action": "explain_first",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    }
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 2,
+   "told": true
+  },
+  "reply": "No problem. Here is what your notes say on page 5: Chaining keeps a list in each bucket. Can you say that back in your own words?"
+ },
+ {
+  "name": "closed after an explanation, two pages, another idea follows",
+  "facts": {
+   "plan": {
+    "action": "wrap_up"
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 4,
+   "outcome": "taught",
+   "lookAgain": [
+    "p. 5",
+    "pp. 4-5",
+    "p. 4"
+   ],
+   "next": {
+    "done": false,
+    "prompt": "Explain \"Load factor\" in your own words, as if you were teaching it to a classmate."
+   }
+  },
+  "reply": "That's it, you have it now. Pages 4 and 5 are worth another look. Next idea. Explain \"Load factor\" in your own words, as if you were teaching it to a classmate."
+ },
+ {
+  "name": "closed with a claim still open",
+  "facts": {
+   "plan": {
+    "action": "wrap_up"
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 4,
+   "outcome": "taught",
+   "lookAgain": [
+    "p. 5"
+   ],
+   "next": {
+    "done": false,
+    "prompt": "Explain \"Load factor\" in your own words, as if you were teaching it to a classmate."
+   }
+  },
+  "reply": "Let's leave that one there for now. Page 5 is worth another look. Next idea. Explain \"Load factor\" in your own words, as if you were teaching it to a classmate."
+ },
+ {
+  "name": "the new example was passed on the last idea",
+  "facts": {
+   "plan": {
+    "action": "wrap_up"
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 2,
+   "outcome": "explained",
+   "examplePassed": true,
+   "next": {
+    "done": true
+   }
+  },
+  "reply": "Yes, that works. That was the last idea for this topic. Good work, and goodbye."
+ },
+ {
+  "name": "a closing turn with nothing known to follow",
+  "facts": {
+   "plan": {
+    "action": "wrap_up"
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 2,
+   "outcome": "explained"
+  },
+  "reply": null
+ }
+]

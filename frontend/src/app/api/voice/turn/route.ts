@@ -54,7 +54,7 @@ import { promptsV2 } from '@/lib/prompt-revision'
 import { neutralizeAppResultTags } from '@/lib/voice/pre-run'
 import type { VoiceStreamExtra } from '@/lib/voice/turn-contract'
 import { getTimeZone } from '@/server/timezone'
-import { runTurn } from '@/lib/voice/turn-engine'
+import { appSaid, runTurn } from '@/lib/voice/turn-engine'
 import type { VoiceEvent } from '@/lib/voice/turn-client'
 
 export const runtime = 'nodejs'
@@ -281,13 +281,17 @@ async function handlePost(request: NextRequest) {
           try {
             let preRan = false
             let preRunMs = 0
+            let appReply: { text: string; sessionComplete: boolean } | null = null
             if (preRun) {
               const stepStarted = performance.now()
-              startMessages = (await startWithPreRun(preRun, { sessionId: session.id, userId, timeZone, turn, steps, defer }, startMessages, send)).messages
+              const started = await startWithPreRun(preRun, { sessionId: session.id, userId, timeZone, turn, steps, defer }, startMessages, send)
+              startMessages = started.messages
+              appReply = started.result.spoken ? { text: started.result.spoken, sessionComplete: started.result.sessionComplete } : null
               preRunMs = performance.now() - stepStarted
               preRan = true
             }
-            const outcome = await runTurn(
+            // The step built the reply itself (VOICE_GRADER_LED): it is said as it stands and the model is not called.
+            const outcome = appReply ? appSaid(startMessages, appReply.text, appReply.sessionComplete, send) : await runTurn(
               {
                 async openModel(messages, callNumber) {
                   if (callNumber === 1 && firstBody) return readModelEvents(firstBody)

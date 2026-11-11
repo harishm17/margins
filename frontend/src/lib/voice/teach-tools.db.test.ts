@@ -213,6 +213,43 @@ dbTest('explanation after two probes is level 2', async () => {
   assert.equal((await stateOf(w)).teach.concepts[w.collision.id].outcome, 'taught')
 })
 
+// Redesign decision 6: after a graded step the app holds everything the reply needs, so it builds the reply and the turn
+// makes no model call. Where fixed wording would be worse (the second probe), there is none and the coach model speaks.
+dbTest('VOICE_GRADER_LED: a graded step carries the reply to say, without the claim before it is explained; off, it carries none', async () => {
+  const play = async () => {
+    const w = await world()
+    const rules: Record<string, Rule> = { 'Two keys': COVERED, 'Chaining': { verdict: 'missing', pointer: 'Look again at p. 5: What does each bucket hold?' } }
+    const g = grader(rules)
+    await run(w, undefined, 'get_concept_to_explain')
+    const say = (text: string) => run(w, g.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: text })
+    const steps = [await say('Two keys collide in a bucket.'), await say('They go in one bucket and collide, that is it.'), await say('Maybe the table grows?')]
+    Object.assign(rules, { 'Chaining': { verdict: 'covered', student_quote: 'each bucket holds a list' } })
+    steps.push(await say('Each bucket holds a list of the keys that landed in it.'))
+    return steps.map((step) => ({ action: out(step).action, spoken: step.spoken }))
+  }
+  const before = process.env.VOICE_GRADER_LED
+  try {
+    delete process.env.VOICE_GRADER_LED
+    assert.deepEqual((await play()).map((step) => step.spoken), [undefined, undefined, undefined, undefined])
+
+    process.env.VOICE_GRADER_LED = 'true'
+    const [probe, second, explain, close] = await play()
+    assert.deepEqual([probe.action, second.action, explain.action, close.action], ['probe', 'probe', 'explain', 'wrap_up'])
+    // The first probe asks the grader's question and does not give the claim away.
+    assert.ok(probe.spoken?.endsWith('What does each bucket hold?'), probe.spoken)
+    assert.equal(probe.spoken?.includes('Chaining keeps'), false)
+    assert.equal(second.spoken, undefined, 'the second probe is a smaller question, written by the coach model')
+    // The explanation says the claim, then asks for it back: one question, at the end.
+    assert.ok(explain.spoken?.includes('Chaining keeps a list in each bucket.'), explain.spoken)
+    assert.equal(explain.spoken?.split('?').length, 2)
+    // The closing turn asks the next idea, so no second turn is needed to move on.
+    assert.ok(close.spoken?.endsWith('Explain "Load factor" in your own words, as if you were teaching it to a classmate.'), close.spoken)
+  } finally {
+    if (before === undefined) delete process.env.VOICE_GRADER_LED
+    else process.env.VOICE_GRADER_LED = before
+  }
+})
+
 dbTest('the say-back grade is a second grader call and counts against the per-user limit', async () => {
   const w = await world()
   const g = grader({ 'Two keys': COVERED })

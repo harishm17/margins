@@ -74,6 +74,7 @@ import {
   type Verdict,
 } from '@/lib/voice/teach-back'
 import { asksForHelp } from '@/lib/voice/utterance'
+import { assembledReply, graderLedVoice, type ReplyFacts, type SpokenNext } from '@/lib/voice/assembled-reply'
 
 export type TeachToolContext = {
   sessionId: string
@@ -98,6 +99,8 @@ export type TeachToolResult = {
   events: VoiceEvent[]
   /** The session is finished (every idea explained, or every claim read). */
   sessionComplete?: boolean
+  /** The reply the app built for this step (assembled-reply.ts, VOICE_GRADER_LED): said as it stands, with no model call. */
+  spoken?: string
 }
 
 // ---------------------------------------------------------------------------------------------- session state
@@ -451,12 +454,23 @@ async function withWhatFollows(
   concepts: RecallConcept[],
   concept: RecallConcept,
   output: Record<string, unknown>,
-  conceptState: ConceptState
+  conceptState: ConceptState,
+  reply: Omit<ReplyFacts, 'next'>
 ): Promise<TeachToolResult> {
   const closed = await ideaDone(concept, output, conceptState)
-  if (output.action !== 'wrap_up') return { output, events: closed }
+  // With VOICE_GRADER_LED the app words the reply itself where it can (assembled-reply.ts); the turn then makes no model call.
+  const spoken = (next: SpokenNext | null) => {
+    const text = graderLedVoice() ? assembledReply({ ...reply, next }) : null
+    return text ? { spoken: text } : {}
+  }
+  if (output.action !== 'wrap_up') return { output, events: closed, ...spoken(null) }
   const next = await nextIdea(ctx, state, concepts)
-  return { output: { ...output, next_idea: next.output }, events: [...closed, ...next.events], ...(next.sessionComplete ? { sessionComplete: true } : {}) }
+  return {
+    output: { ...output, next_idea: next.output },
+    events: [...closed, ...next.events],
+    ...(next.sessionComplete ? { sessionComplete: true } : {}),
+    ...spoken(next.output.done ? { done: true } : { done: false, prompt: next.output.prompt }),
+  }
 }
 
 async function scoreSayBack(ctx: TeachToolContext, concept: RecallConcept, claimId: string, said: string): Promise<void> {
@@ -607,7 +621,16 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
     }).catch((failure) => logServerError('Recording the voice explanation failed', failure))
   }
 
-  return withWhatFollows(ctx, state, concepts, concept, next.output, next.state)
+  return withWhatFollows(ctx, state, concepts, concept, next.output, next.state, {
+    plan: next.plan,
+    claims,
+    prerequisite,
+    turn: next.state.assessments,
+    dontKnow: isDontKnow(explanation),
+    told,
+    outcome: next.state.outcome,
+    lookAgain: next.lookAgain,
+  })
 }
 
 /**
@@ -651,7 +674,7 @@ export function assessmentResult(
   before: ConceptState,
   prerequisite: string | null,
   options: { dontKnow?: boolean; band?: Band; told?: boolean } = {}
-): { output: AssessExplanationResult; state: ConceptState; plan: Plan } {
+): { output: AssessExplanationResult; state: ConceptState; plan: Plan; lookAgain: string[] } {
   const next = planNext(claims, before, { weakPrerequisite: prerequisite, dontKnow: options.dontKnow, band: options.band, told: options.told, v2: promptsV2('voice') })
   const lookAgain = Object.keys(next.state.gaps)
     .filter((claimId) => next.state.gaps[claimId].explained)
@@ -662,6 +685,7 @@ export function assessmentResult(
   return {
     plan: next.plan,
     state: next.state,
+    lookAgain,
     output: {
       concept: conceptName,
       ...findingsOutput(claims),
@@ -676,12 +700,13 @@ export function assessmentResult(
  * one small case does not touch every claim of the idea, and the claims it did not touch came back as `missing`, so the
  * coach told a student who had just passed that they had missed something.
  */
-export function exampleResult(conceptName: string, claims: AssessedClaim[], before: ConceptState): { output: ExampleCheckResult; state: ConceptState; passed: boolean } {
+export function exampleResult(conceptName: string, claims: AssessedClaim[], before: ConceptState): { output: ExampleCheckResult; state: ConceptState; passed: boolean; plan: Plan } {
   const passed = exampleHeld(claims)
   const next = afterExample(claims, before, passed, { v2: promptsV2('voice') })
   const findings = findingsOutput(claims)
   return {
     passed,
+    plan: next.plan,
     state: next.state,
     output: {
       concept: conceptName,
@@ -874,7 +899,14 @@ async function recordExampleCheck(
     })
   }
 
-  return withWhatFollows(ctx, state, concepts, concept, next.output, next.state)
+  return withWhatFollows(ctx, state, concepts, concept, next.output, next.state, {
+    plan: next.plan,
+    claims,
+    prerequisite: null,
+    turn: next.state.assessments,
+    outcome: next.state.outcome,
+    examplePassed: passed,
+  })
 }
 
 // ---------------------------------------------------------------------------------------------- guided reading

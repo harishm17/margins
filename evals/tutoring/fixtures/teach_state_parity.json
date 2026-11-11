@@ -40,7 +40,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The chainring is the big gear at the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The chainring is the big gear at the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -80,7 +81,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>Just tell me what the notes say, I</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":2,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>Just tell me what the notes say, I</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":2,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -118,7 +120,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>Just tell me what the notes say, I</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.</source_claim>\",\"page\":2},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>Just tell me what the notes say, I</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.</source_claim>\",\"page\":2},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>",
+    "spoken": "Here is what your notes say on page 2: A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -154,7 +157,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 2 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 2 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -199,7 +204,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>You take the interest rate and add it</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Growth factor\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>You take the interest rate and add it</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Growth factor\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -239,7 +245,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>Could you just tell me the formula, I</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":2,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Growth factor\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>Could you just tell me the formula, I</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":2,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Growth factor\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -277,7 +284,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>Could you just tell me the formula, I</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.</source_claim>\",\"page\":2},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>Could you just tell me the formula, I</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>After n periods the balance is the starting amount multiplied by the growth factor raised to the power n.</source_claim>\",\"page\":2},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>",
+    "spoken": "Here is what your notes say on page 2: After n periods the balance is the starting amount multiplied by the growth factor raised to the power n. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -313,7 +321,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"},{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"},{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 2 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 2 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -358,7 +368,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You look in the middle of the list</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You look in the middle of the list</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -398,7 +409,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Please just tell me how binary search works,</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":2,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Please just tell me how binary search works,</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":2,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -436,7 +448,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Please just tell me how binary search works,</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>Each comparison halves the number of items still in play.</source_claim>\",\"page\":1},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Please just tell me how binary search works,</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>Each comparison halves the number of items still in play.</source_claim>\",\"page\":1},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>",
+    "spoken": "Here is what your notes say on page 1: Each comparison halves the number of items still in play. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -472,7 +485,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 1 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 1 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -514,7 +529,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 4: Development\"},{\"pointer\":\"Look again at p. 4: Development\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Development is the distance the bicycle travels for one full turn of the pedals.</source_claim>\",\"page\":4},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 4: Development\"},{\"pointer\":\"Look again at p. 4: Development\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Development is the distance the bicycle travels for one full turn of the pedals.</source_claim>\",\"page\":4},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, let's start from your notes. Here is what your notes say on page 4: Development is the distance the bicycle travels for one full turn of the pedals. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -558,7 +574,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 4: Development\"},{\"pointer\":\"Look again at p. 4: Development\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":1,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Gear ratio\",\"page\":4}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 4: Development\"},{\"pointer\":\"Look again at p. 4: Development\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":1,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Gear ratio\",\"page\":4}}</app_result>",
+    "spoken": "Let's step back for a moment. How would you describe Gear ratio in your own words?"
    },
    {
     "kind": "explain",
@@ -602,7 +619,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 4: Development\"},{\"pointer\":\"Look again at p. 4: Development\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":2,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Gear ratio\",\"page\":4}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 4: Development\"},{\"pointer\":\"Look again at p. 4: Development\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":2,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Gear ratio\",\"page\":4}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -644,7 +662,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 4: Development\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>Development equals the gear ratio multiplied by the circumference of the wheel.</source_claim>\",\"page\":4},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 4: Development\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>Development equals the gear ratio multiplied by the circumference of the wheel.</source_claim>\",\"page\":4},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>",
+    "spoken": "Here is what your notes say on page 4: Development equals the gear ratio multiplied by the circumference of the wheel. Can you say that back in your own words?"
    },
    {
     "kind": "explain",
@@ -686,7 +705,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[{\"you_said\":\"<student_words>Honestly no idea, still blank.</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 4: Development\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 4\",\"p. 4\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[{\"you_said\":\"<student_words>Honestly no idea, still blank.</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 4: Development\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 4\",\"p. 4\"]}</app_result>",
+    "spoken": "Let's leave that one there for now. Page 4 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Let's leave that one there for now. Page 4 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -728,7 +749,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"},{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Doubling time is the number of periods after which the balance is twice the starting amount.</source_claim>\",\"page\":3},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"},{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Doubling time is the number of periods after which the balance is twice the starting amount.</source_claim>\",\"page\":3},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, let's start from your notes. Here is what your notes say on page 3: Doubling time is the number of periods after which the balance is twice the starting amount. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -772,7 +794,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"},{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":1,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Growth factor\",\"page\":3}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"},{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":1,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Growth factor\",\"page\":3}}</app_result>",
+    "spoken": "Let's step back for a moment. How would you describe Growth factor in your own words?"
    },
    {
     "kind": "explain",
@@ -816,7 +839,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"},{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":2,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Growth factor\",\"page\":3}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"},{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":2,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Growth factor\",\"page\":3}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -858,7 +882,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>The rule of 72 estimates the doubling time in years as 72 divided by the percentage rate.</source_claim>\",\"page\":3},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>The rule of 72 estimates the doubling time in years as 72 divided by the percentage rate.</source_claim>\",\"page\":3},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>",
+    "spoken": "Here is what your notes say on page 3: The rule of 72 estimates the doubling time in years as 72 divided by the percentage rate. Can you say that back in your own words?"
    },
    {
     "kind": "explain",
@@ -900,7 +925,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[{\"you_said\":\"<student_words>Still nothing, I would be guessing.</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 3\",\"p. 3\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[{\"you_said\":\"<student_words>Still nothing, I would be guessing.</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 3\",\"p. 3\"]}</app_result>",
+    "spoken": "Let's leave that one there for now. Page 3 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Let's leave that one there for now. Page 3 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -942,7 +969,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Cost of binary search\"},{\"pointer\":\"Look again at p. 2: Cost of binary search\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>The number of comparisons is about log base 2 of the list length, rounded up.</source_claim>\",\"page\":2},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Cost of binary search\"},{\"pointer\":\"Look again at p. 2: Cost of binary search\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>The number of comparisons is about log base 2 of the list length, rounded up.</source_claim>\",\"page\":2},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, let's start from your notes. Here is what your notes say on page 2: The number of comparisons is about log base 2 of the list length, rounded up. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -986,7 +1014,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Cost of binary search\"},{\"pointer\":\"Look again at p. 2: Cost of binary search\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":1,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Halving\",\"page\":2}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Cost of binary search\"},{\"pointer\":\"Look again at p. 2: Cost of binary search\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":1,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Halving\",\"page\":2}}</app_result>",
+    "spoken": "Let's step back for a moment. How would you describe Halving in your own words?"
    },
    {
     "kind": "explain",
@@ -1030,7 +1059,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Cost of binary search\"},{\"pointer\":\"Look again at p. 2: Cost of binary search\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":2,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Halving\",\"page\":2}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Cost of binary search\"},{\"pointer\":\"Look again at p. 2: Cost of binary search\"}],\"action\":\"probe\",\"probe\":{\"type\":\"source\",\"finding\":\"missing_prerequisite\",\"number\":2,\"example\":\"Before this: how would you define a conditional probability?\",\"about\":\"Halving\",\"page\":2}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1072,7 +1102,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Cost of binary search\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>Binary search needs the list to be sorted, and on an unsorted list it can miss the target.</source_claim>\",\"page\":2},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Cost of binary search\"}],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>Binary search needs the list to be sorted, and on an unsorted list it can miss the target.</source_claim>\",\"page\":2},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>",
+    "spoken": "Here is what your notes say on page 2: Binary search needs the list to be sorted, and on an unsorted list it can miss the target. Can you say that back in your own words?"
    },
    {
     "kind": "explain",
@@ -1114,7 +1145,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[{\"you_said\":\"<student_words>No, I really do not know, I have</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Cost of binary search\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\",\"p. 2\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[{\"you_said\":\"<student_words>No, I really do not know, I have</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Cost of binary search\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\",\"p. 2\"]}</app_result>",
+    "spoken": "Let's leave that one there for now. Page 2 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Let's leave that one there for now. Page 2 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -1161,7 +1194,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\",\"wrong_idea\":\"<student_words>a higher gear ratio is an easier gear</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"assumption\",\"finding\":\"incorrect\",\"number\":1,\"example\":\"What are you assuming about independence there?\",\"about\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\",\"wrong_idea\":\"<student_words>a higher gear ratio is an easier gear</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"assumption\",\"finding\":\"incorrect\",\"number\":1,\"example\":\"What are you assuming about independence there?\",\"about\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1204,7 +1238,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\",\"wrong_idea\":\"<student_words>a higher gear ratio is an easier gear</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"confront\",\"finding\":\"incorrect\",\"number\":2,\"example\":\"Try that idea on a small case: what does it predict, and does that match what your pages say?\",\"about\":\"<student_words>No, I am fairly sure it is easier,</student_words>\",\"page\":2}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\",\"wrong_idea\":\"<student_words>a higher gear ratio is an easier gear</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"confront\",\"finding\":\"incorrect\",\"number\":2,\"example\":\"Try that idea on a small case: what does it predict, and does that match what your pages say?\",\"about\":\"<student_words>No, I am fairly sure it is easier,</student_words>\",\"page\":2}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1237,7 +1272,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The ratio is chainring teeth over cog teeth,</student_words>\"},{\"you_said\":\"<student_words>The ratio is chainring teeth over cog teeth,</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The ratio is chainring teeth over cog teeth,</student_words>\"},{\"you_said\":\"<student_words>The ratio is chainring teeth over cog teeth,</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -1268,7 +1304,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -1315,7 +1353,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>Compounding means you add the same amount of</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>Compounding means you add the same amount of</student_words>\",\"wrong_idea\":\"<student_words>interest compounds by adding the same amount each period</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"assumption\",\"finding\":\"incorrect\",\"number\":1,\"example\":\"What are you assuming about independence there?\",\"about\":\"<student_words>Compounding means you add the same amount of</student_words>\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>Compounding means you add the same amount of</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>Compounding means you add the same amount of</student_words>\",\"wrong_idea\":\"<student_words>interest compounds by adding the same amount each period</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"assumption\",\"finding\":\"incorrect\",\"number\":1,\"example\":\"What are you assuming about independence there?\",\"about\":\"<student_words>Compounding means you add the same amount of</student_words>\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1358,7 +1397,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>Yes, that is what I mean, the same</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>Yes, that is what I mean, the same</student_words>\",\"wrong_idea\":\"<student_words>interest compounds by adding the same amount each period</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"confront\",\"finding\":\"incorrect\",\"number\":2,\"example\":\"Try that idea on a small case: what does it predict, and does that match what your pages say?\",\"about\":\"<student_words>Yes, that is what I mean, the same</student_words>\",\"page\":2}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>Yes, that is what I mean, the same</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>Yes, that is what I mean, the same</student_words>\",\"wrong_idea\":\"<student_words>interest compounds by adding the same amount each period</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"confront\",\"finding\":\"incorrect\",\"number\":2,\"example\":\"Try that idea on a small case: what does it predict, and does that match what your pages say?\",\"about\":\"<student_words>Yes, that is what I mean, the same</student_words>\",\"page\":2}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1391,7 +1431,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The factor for one period is one plus</student_words>\"},{\"you_said\":\"<student_words>The factor for one period is one plus</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The factor for one period is one plus</student_words>\"},{\"you_said\":\"<student_words>The factor for one period is one plus</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -1422,7 +1463,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -1469,7 +1512,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You check the first item, then the last</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>You check the first item, then the last</student_words>\",\"wrong_idea\":\"<student_words>binary search starts at both ends of the list</student_words>\",\"page\":1}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"assumption\",\"finding\":\"incorrect\",\"number\":1,\"example\":\"What are you assuming about independence there?\",\"about\":\"<student_words>You check the first item, then the last</student_words>\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You check the first item, then the last</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>You check the first item, then the last</student_words>\",\"wrong_idea\":\"<student_words>binary search starts at both ends of the list</student_words>\",\"page\":1}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"assumption\",\"finding\":\"incorrect\",\"number\":1,\"example\":\"What are you assuming about independence there?\",\"about\":\"<student_words>You check the first item, then the last</student_words>\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1512,7 +1556,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\",\"wrong_idea\":\"<student_words>binary search starts at both ends of the list</student_words>\",\"page\":1}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"confront\",\"finding\":\"incorrect\",\"number\":2,\"example\":\"Try that idea on a small case: what does it predict, and does that match what your pages say?\",\"about\":\"<student_words>I still think you start at the ends,</student_words>\",\"page\":1}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\",\"wrong_idea\":\"<student_words>binary search starts at both ends of the list</student_words>\",\"page\":1}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"confront\",\"finding\":\"incorrect\",\"number\":2,\"example\":\"Try that idea on a small case: what does it predict, and does that match what your pages say?\",\"about\":\"<student_words>I still think you start at the ends,</student_words>\",\"page\":1}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1545,7 +1590,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You compare with the middle item and throw</student_words>\"},{\"you_said\":\"<student_words>You compare with the middle item and throw</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You compare with the middle item and throw</student_words>\"},{\"you_said\":\"<student_words>You compare with the middle item and throw</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -1576,7 +1622,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -1623,7 +1671,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\",\"wrong_idea\":\"<student_words>a higher gear ratio is an easier gear</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"assumption\",\"finding\":\"incorrect\",\"number\":1,\"example\":\"What are you assuming about independence there?\",\"about\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\",\"wrong_idea\":\"<student_words>a higher gear ratio is an easier gear</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"assumption\",\"finding\":\"incorrect\",\"number\":1,\"example\":\"What are you assuming about independence there?\",\"about\":\"<student_words>A bigger ratio is an easier gear, because</student_words>\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1666,7 +1715,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\",\"wrong_idea\":\"<student_words>a higher gear ratio is an easier gear</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"confront\",\"finding\":\"incorrect\",\"number\":2,\"example\":\"Try that idea on a small case: what does it predict, and does that match what your pages say?\",\"about\":\"<student_words>No, I am fairly sure it is easier,</student_words>\",\"page\":2}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\",\"wrong_idea\":\"<student_words>a higher gear ratio is an easier gear</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"confront\",\"finding\":\"incorrect\",\"number\":2,\"example\":\"Try that idea on a small case: what does it predict, and does that match what your pages say?\",\"about\":\"<student_words>No, I am fairly sure it is easier,</student_words>\",\"page\":2}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1706,7 +1756,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\",\"wrong_idea\":\"<student_words>a higher gear ratio is an easier gear</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.</source_claim>\",\"page\":2},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>No, I am fairly sure it is easier,</student_words>\",\"wrong_idea\":\"<student_words>a higher gear ratio is an easier gear</student_words>\",\"page\":2}],\"missing\":[],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.</source_claim>\",\"page\":2},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>",
+    "spoken": "Here is what your notes say on page 2: A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -1742,7 +1793,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 2 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 2 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -1789,7 +1842,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You check the first item, then the last</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>You check the first item, then the last</student_words>\",\"wrong_idea\":\"<student_words>binary search starts at both ends of the list</student_words>\",\"page\":1}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"assumption\",\"finding\":\"incorrect\",\"number\":1,\"example\":\"What are you assuming about independence there?\",\"about\":\"<student_words>You check the first item, then the last</student_words>\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You check the first item, then the last</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>You check the first item, then the last</student_words>\",\"wrong_idea\":\"<student_words>binary search starts at both ends of the list</student_words>\",\"page\":1}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"assumption\",\"finding\":\"incorrect\",\"number\":1,\"example\":\"What are you assuming about independence there?\",\"about\":\"<student_words>You check the first item, then the last</student_words>\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1832,7 +1886,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\",\"wrong_idea\":\"<student_words>binary search starts at both ends of the list</student_words>\",\"page\":1}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"confront\",\"finding\":\"incorrect\",\"number\":2,\"example\":\"Try that idea on a small case: what does it predict, and does that match what your pages say?\",\"about\":\"<student_words>I still think you start at the ends,</student_words>\",\"page\":1}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\",\"wrong_idea\":\"<student_words>binary search starts at both ends of the list</student_words>\",\"page\":1}],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"confront\",\"finding\":\"incorrect\",\"number\":2,\"example\":\"Try that idea on a small case: what does it predict, and does that match what your pages say?\",\"about\":\"<student_words>I still think you start at the ends,</student_words>\",\"page\":1}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -1872,7 +1927,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\",\"wrong_idea\":\"<student_words>binary search starts at both ends of the list</student_words>\",\"page\":1}],\"missing\":[],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\"}],\"partly\":[],\"incorrect\":[{\"you_said\":\"<student_words>I still think you start at the ends,</student_words>\",\"wrong_idea\":\"<student_words>binary search starts at both ends of the list</student_words>\",\"page\":1}],\"missing\":[],\"action\":\"explain\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Explain in one or two sentences from source_claim, then ask the student to say it back and call assess_explanation again.\"}</app_result>",
+    "spoken": "Here is what your notes say on page 1: Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -1908,7 +1964,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 1 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 1 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -1953,7 +2011,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>It all comes from the rear cog, so</student_words>\"},{\"you_said\":\"<student_words>It all comes from the rear cog, so</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"evidence\",\"finding\":\"unsupported_jump\",\"number\":1,\"example\":\"What in your notes on p. 14 tells you that?\",\"about\":\"<student_words>It all comes from the rear cog, so</student_words>\",\"page\":2}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>It all comes from the rear cog, so</student_words>\"},{\"you_said\":\"<student_words>It all comes from the rear cog, so</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"evidence\",\"finding\":\"unsupported_jump\",\"number\":1,\"example\":\"What in your notes on p. 14 tells you that?\",\"about\":\"<student_words>It all comes from the rear cog, so</student_words>\",\"page\":2}}</app_result>",
+    "spoken": "You said, \"It all comes from the rear cog, so\". What on page 2 of your notes tells you that?"
    },
    {
     "kind": "explain",
@@ -1986,7 +2045,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The second part says something about the wheel</student_words>\"},{\"you_said\":\"<student_words>The second part says something about the wheel</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The second part says something about the wheel</student_words>\"},{\"you_said\":\"<student_words>The second part says something about the wheel</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -2017,7 +2077,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -2062,7 +2124,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The balance goes up by the rate each</student_words>\"},{\"you_said\":\"<student_words>The balance goes up by the rate each</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"evidence\",\"finding\":\"unsupported_jump\",\"number\":1,\"example\":\"What in your notes on p. 14 tells you that?\",\"about\":\"<student_words>The balance goes up by the rate each</student_words>\",\"page\":2}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The balance goes up by the rate each</student_words>\"},{\"you_said\":\"<student_words>The balance goes up by the rate each</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"evidence\",\"finding\":\"unsupported_jump\",\"number\":1,\"example\":\"What in your notes on p. 14 tells you that?\",\"about\":\"<student_words>The balance goes up by the rate each</student_words>\",\"page\":2}}</app_result>",
+    "spoken": "You said, \"The balance goes up by the rate each\". What on page 2 of your notes tells you that?"
    },
    {
     "kind": "explain",
@@ -2095,7 +2158,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"},{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"},{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -2126,7 +2190,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -2171,7 +2237,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>It is fast because it skips most of</student_words>\"},{\"you_said\":\"<student_words>It is fast because it skips most of</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"evidence\",\"finding\":\"unsupported_jump\",\"number\":1,\"example\":\"What in your notes on p. 14 tells you that?\",\"about\":\"<student_words>It is fast because it skips most of</student_words>\",\"page\":1}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>It is fast because it skips most of</student_words>\"},{\"you_said\":\"<student_words>It is fast because it skips most of</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"evidence\",\"finding\":\"unsupported_jump\",\"number\":1,\"example\":\"What in your notes on p. 14 tells you that?\",\"about\":\"<student_words>It is fast because it skips most of</student_words>\",\"page\":1}}</app_result>",
+    "spoken": "You said, \"It is fast because it skips most of\". What on page 1 of your notes tells you that?"
    },
    {
     "kind": "explain",
@@ -2204,7 +2271,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"},{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"},{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -2235,7 +2303,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -2268,7 +2338,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The ratio is chainring teeth divided by cog</student_words>\"},{\"you_said\":\"<student_words>The ratio is chainring teeth divided by cog</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The ratio is chainring teeth divided by cog</student_words>\"},{\"you_said\":\"<student_words>The ratio is chainring teeth divided by cog</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -2294,7 +2365,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -2327,7 +2400,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The factor per period is one plus the</student_words>\"},{\"you_said\":\"<student_words>The factor per period is one plus the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The factor per period is one plus the</student_words>\"},{\"you_said\":\"<student_words>The factor per period is one plus the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -2356,7 +2430,9 @@
      "exampleAsked": true,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":false,\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Growth factor\"},{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":false,\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Growth factor\"},{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\"}</app_result>",
+    "spoken": "Let's leave that one there for now. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Let's leave that one there for now. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -2401,7 +2477,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>You take the interest rate and add it</student_words>\"}],\"partly\":[{\"you_said\":\"<student_words>You take the interest rate and add it</student_words>\"}],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"clarification\",\"finding\":\"vague\",\"number\":1,\"example\":\"When you say 'it balances', what exactly is equal to what?\",\"about\":\"<student_words>You take the interest rate and add it</student_words>\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>You take the interest rate and add it</student_words>\"}],\"partly\":[{\"you_said\":\"<student_words>You take the interest rate and add it</student_words>\"}],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"clarification\",\"finding\":\"vague\",\"number\":1,\"example\":\"When you say 'it balances', what exactly is equal to what?\",\"about\":\"<student_words>You take the interest rate and add it</student_words>\"}}</app_result>",
+    "spoken": "When you say \"You take the interest rate and add it\", what exactly do you mean?"
    },
    {
     "kind": "explain",
@@ -2441,7 +2518,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>Before we go on, do you know a</student_words>\"}],\"partly\":[{\"you_said\":\"<student_words>Before we go on, do you know a</student_words>\"}],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"clarification\",\"finding\":\"vague\",\"number\":2,\"example\":\"When you say 'it balances', what exactly is equal to what?\",\"about\":\"<student_words>Before we go on, do you know a</student_words>\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>Before we go on, do you know a</student_words>\"}],\"partly\":[{\"you_said\":\"<student_words>Before we go on, do you know a</student_words>\"}],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"clarification\",\"finding\":\"vague\",\"number\":2,\"example\":\"When you say 'it balances', what exactly is equal to what?\",\"about\":\"<student_words>Before we go on, do you know a</student_words>\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -2474,7 +2552,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"},{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"},{\"you_said\":\"<student_words>The power thing, I think the number of</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -2505,7 +2584,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>At 10 percent a period the factor is</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -2550,7 +2631,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You look in the middle of the list</student_words>\"}],\"partly\":[{\"you_said\":\"<student_words>You look in the middle of the list</student_words>\"}],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"clarification\",\"finding\":\"vague\",\"number\":1,\"example\":\"When you say 'it balances', what exactly is equal to what?\",\"about\":\"<student_words>You look in the middle of the list</student_words>\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>You look in the middle of the list</student_words>\"}],\"partly\":[{\"you_said\":\"<student_words>You look in the middle of the list</student_words>\"}],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"clarification\",\"finding\":\"vague\",\"number\":1,\"example\":\"When you say 'it balances', what exactly is equal to what?\",\"about\":\"<student_words>You look in the middle of the list</student_words>\"}}</app_result>",
+    "spoken": "When you say \"You look in the middle of the list\", what exactly do you mean?"
    },
    {
     "kind": "explain",
@@ -2590,7 +2672,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Sorry, unrelated, but what is the capital of</student_words>\"}],\"partly\":[{\"you_said\":\"<student_words>Sorry, unrelated, but what is the capital of</student_words>\"}],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"clarification\",\"finding\":\"vague\",\"number\":2,\"example\":\"When you say 'it balances', what exactly is equal to what?\",\"about\":\"<student_words>Sorry, unrelated, but what is the capital of</student_words>\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Sorry, unrelated, but what is the capital of</student_words>\"}],\"partly\":[{\"you_said\":\"<student_words>Sorry, unrelated, but what is the capital of</student_words>\"}],\"incorrect\":[],\"missing\":[],\"action\":\"probe\",\"probe\":{\"type\":\"clarification\",\"finding\":\"vague\",\"number\":2,\"example\":\"When you say 'it balances', what exactly is equal to what?\",\"about\":\"<student_words>Sorry, unrelated, but what is the capital of</student_words>\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -2623,7 +2706,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"},{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"},{\"you_said\":\"<student_words>Something about the list needing to be in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -2654,7 +2738,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Halving\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 16 items, one comparison leaves 8, then</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -2696,7 +2782,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"},{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.</source_claim>\",\"page\":2},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"},{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.</source_claim>\",\"page\":2},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, let's start from your notes. Here is what your notes say on page 2: Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -2739,7 +2826,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"},{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"},{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -2782,7 +2870,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"},{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":2,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"},{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":2,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -2822,7 +2911,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 2 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 2 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -2864,7 +2955,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, let's start from your notes. Here is what your notes say on page 1: Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -2907,7 +2999,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -2950,7 +3043,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":2,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":2,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -2990,7 +3084,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 1 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 1 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -3032,7 +3128,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"},{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.</source_claim>\",\"page\":2},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"},{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.</source_claim>\",\"page\":2},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, this one takes a while to stick. Here is what your notes say on page 2: Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -3076,7 +3173,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Gear ratio\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -3116,7 +3214,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 2 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 2 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -3158,7 +3258,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Growth factor\"},{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>The growth factor for one period is one plus the interest rate per period.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Growth factor\"},{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>The growth factor for one period is one plus the interest rate per period.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, this one takes a while to stick. Here is what your notes say on page 1: The growth factor for one period is one plus the interest rate per period. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -3202,7 +3303,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Growth factor\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 2: Growth factor\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -3242,7 +3344,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"},{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"},{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 1 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 1 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -3284,7 +3388,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, this one takes a while to stick. Here is what your notes say on page 1: Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -3328,7 +3433,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"probe\",\"probe\":{\"type\":\"implication\",\"finding\":\"missing\",\"number\":1,\"example\":\"If that's true, what happens when the sample doubles?\",\"about\":\"Look again at p. 1: Halving\"}}</app_result>",
+    "spoken": null
    },
    {
     "kind": "explain",
@@ -3368,7 +3474,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 1 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 1 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -3410,7 +3518,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"},{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.</source_claim>\",\"page\":2},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 2: Gear ratio\"},{\"pointer\":\"Look again at p. 2: Gear ratio\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog.</source_claim>\",\"page\":2},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, let's start from your notes. Here is what your notes say on page 2: Gear ratio is the number of teeth on the chainring divided by the number of teeth on the rear cog. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -3446,7 +3555,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"},{\"you_said\":\"<student_words>So a higher ratio means more wheel turns</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 2\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 2 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 2 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -3488,7 +3599,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Growth factor\"},{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>The growth factor for one period is one plus the interest rate per period.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Growth factor\"},{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>The growth factor for one period is one plus the interest rate per period.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, let's start from your notes. Here is what your notes say on page 1: The growth factor for one period is one plus the interest rate per period. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -3524,7 +3636,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"},{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"},{\"you_said\":\"<student_words>So the balance is the start times the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 1 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 1 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -3566,7 +3680,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, let's start from your notes. Here is what your notes say on page 1: Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -3602,7 +3717,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 1 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 1 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -3635,7 +3752,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The ratio is chainring teeth divided by cog</student_words>\"},{\"you_said\":\"<student_words>The ratio is chainring teeth divided by cog</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Gear ratio\",\"covered\":[{\"you_said\":\"<student_words>The ratio is chainring teeth divided by cog</student_words>\"},{\"you_said\":\"<student_words>The ratio is chainring teeth divided by cog</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -3661,7 +3779,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Gear ratio\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a 50 tooth chainring and a 25</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    },
    {
     "kind": "explain",
@@ -3689,7 +3809,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[{\"you_said\":\"<student_words>Development is how far the bike travels for</student_words>\"},{\"you_said\":\"<student_words>Development is how far the bike travels for</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Development\",\"covered\":[{\"you_said\":\"<student_words>Development is how far the bike travels for</student_words>\"},{\"you_said\":\"<student_words>Development is how far the bike travels for</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -3715,7 +3836,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Development\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a ratio of 2 and a wheel</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Development\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With a ratio of 2 and a wheel</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -3748,7 +3871,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The factor per period is one plus the</student_words>\"},{\"you_said\":\"<student_words>The factor per period is one plus the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Growth factor\",\"covered\":[{\"you_said\":\"<student_words>The factor per period is one plus the</student_words>\"},{\"you_said\":\"<student_words>The factor per period is one plus the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -3777,7 +3901,9 @@
      "exampleAsked": true,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":false,\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Growth factor\"},{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Growth factor\",\"passed\":false,\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Growth factor\"},{\"pointer\":\"Look again at p. 2: Growth factor\"}],\"action\":\"wrap_up\",\"outcome\":\"taught\"}</app_result>",
+    "spoken": "Let's leave that one there for now. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Let's leave that one there for now. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    },
    {
     "kind": "explain",
@@ -3814,7 +3940,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"},{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Doubling time is the number of periods after which the balance is twice the starting amount.</source_claim>\",\"page\":3},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 3: Doubling time\"},{\"pointer\":\"Look again at p. 3: Doubling time\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Doubling time is the number of periods after which the balance is twice the starting amount.</source_claim>\",\"page\":3},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, let's start from your notes. Here is what your notes say on page 3: Doubling time is the number of periods after which the balance is twice the starting amount. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -3850,7 +3977,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[{\"you_said\":\"<student_words>Doubling time is how many periods it takes</student_words>\"},{\"you_said\":\"<student_words>Doubling time is how many periods it takes</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 3\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Doubling time\",\"covered\":[{\"you_said\":\"<student_words>Doubling time is how many periods it takes</student_words>\"},{\"you_said\":\"<student_words>Doubling time is how many periods it takes</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 3\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 3 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 3 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  },
@@ -3892,7 +4021,8 @@
      "exampleAsked": false,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[],\"partly\":[],\"incorrect\":[],\"missing\":[{\"pointer\":\"Look again at p. 1: Halving\"},{\"pointer\":\"Look again at p. 1: Halving\"}],\"action\":\"explain_first\",\"source_claim\":{\"text\":\"<source_claim>Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it.</source_claim>\",\"page\":1},\"instruction\":\"Say in a few words that it is fine not to have it yet, then explain source_claim in one or two sentences and ask the student to say it back, and call assess_explanation again. Do not ask a probing question first.\"}</app_result>",
+    "spoken": "That's okay, let's start from your notes. Here is what your notes say on page 1: Binary search compares the target with the middle item of a sorted list and discards the half that cannot hold it. How would you put that in your own words?"
    },
    {
     "kind": "explain",
@@ -3928,7 +4058,9 @@
      "exampleAsked": false,
      "outcome": "taught"
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Halving\",\"covered\":[{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"},{\"you_said\":\"<student_words>So every comparison cuts the remaining items in</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"taught\",\"look_again\":[\"p. 1\"]}</app_result>",
+    "spoken": "That's it, you have it now. Page 1 is worth another look. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "That's it, you have it now. Page 1 is worth another look. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    },
    {
     "kind": "explain",
@@ -3956,7 +4088,8 @@
      "exampleAsked": true,
      "outcome": null
     },
-    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[{\"you_said\":\"<student_words>It takes about log base 2 of the</student_words>\"},{\"you_said\":\"<student_words>It takes about log base 2 of the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>"
+    "app_result": "<app_result step=\"assess_explanation\">{\"concept\":\"Cost of binary search\",\"covered\":[{\"you_said\":\"<student_words>It takes about log base 2 of the</student_words>\"},{\"you_said\":\"<student_words>It takes about log base 2 of the</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"ask_new_example\",\"instruction\":\"The student covered every claim. Ask one small new example or prediction, then call record_check with their answer.\"}</app_result>",
+    "spoken": null
    },
    {
     "kind": "example",
@@ -3982,7 +4115,9 @@
      "exampleAsked": true,
      "outcome": "explained"
     },
-    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Cost of binary search\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 1000 items, 2 to the power 10</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>"
+    "app_result": "<app_result step=\"record_check\">{\"concept\":\"Cost of binary search\",\"passed\":true,\"covered\":[{\"you_said\":\"<student_words>With 1000 items, 2 to the power 10</student_words>\"}],\"partly\":[],\"incorrect\":[],\"missing\":[],\"action\":\"wrap_up\",\"outcome\":\"explained\"}</app_result>",
+    "spoken": "Yes, that works. That was the last idea for this topic. Good work, and goodbye.",
+    "spoken_then": "Yes, that works. Next idea. Explain \"the next idea\" in your own words, as if you were teaching it to a classmate."
    }
   ]
  }

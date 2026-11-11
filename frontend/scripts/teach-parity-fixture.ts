@@ -1,6 +1,7 @@
 /**
  * Writes evals/tutoring/fixtures/teach_state_parity.json (the real assessment logic played over the eval's committed
- * scenarios) and teach_back_prompts.json (the coach's prompt and tools), from src/lib/voice/eval-parity.ts. Run it after
+ * scenarios), teach_back_prompts.json (the coach's prompt and tools) and assembled_reply_parity.json (the replies the app
+ * builds itself), from src/lib/voice/eval-parity.ts. Run it after
  * the teach-back logic, the coach prompt or the scenarios change, from frontend/:
  *
  *   npx tsx scripts/teach-parity-fixture.ts
@@ -11,12 +12,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import {
+  ASSEMBLED_REPLY_FIXTURE,
   TEACH_PROMPT_FIXTURE,
   TEACH_PROMPT_FIXTURE_V2,
   TEACH_SCENARIOS,
   TEACH_STATE_FIXTURE,
   TEACH_STATE_FIXTURE_V2,
   UTTERANCE_FIXTURE,
+  assembledReplyFixture,
   loadTeachScenarios,
   teachParityFixture,
   teachPromptFixture,
@@ -37,4 +40,5 @@ fs.mkdirSync(path.dirname(TEACH_STATE_FIXTURE), { recursive: true })
 fs.writeFileSync(TEACH_STATE_FIXTURE, JSON.stringify(teachParityFixture(scenarios), null, 1) + '\n')
 fs.writeFileSync(TEACH_PROMPT_FIXTURE, JSON.stringify(teachPromptFixture(scenarios), null, 1) + '\n')
 fs.writeFileSync(UTTERANCE_FIXTURE, JSON.stringify(utteranceFixture(scenarios), null, 1) + '\n')
-console.log(`Wrote ${TEACH_STATE_FIXTURE}, ${TEACH_PROMPT_FIXTURE} and ${UTTERANCE_FIXTURE}: ${scenarios.length} scenarios`)
+fs.writeFileSync(ASSEMBLED_REPLY_FIXTURE, JSON.stringify(assembledReplyFixture(), null, 1) + '\n')
+console.log(`Wrote ${TEACH_STATE_FIXTURE}, ${TEACH_PROMPT_FIXTURE}, ${UTTERANCE_FIXTURE} and ${ASSEMBLED_REPLY_FIXTURE}: ${scenarios.length} scenarios`)
