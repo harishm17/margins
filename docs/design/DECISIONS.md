@@ -356,4 +356,4 @@ The grader, 43 hand-labelled answers with 152 claim labels (`run_a5.py --recall 
 
 **Cost.** $2.62 in all for this step: four grader runs on the Batch API ($0.50), four live voice runs ($2.06, of which the judge $0.95), and about 20 single grader calls to replay failing inputs ($0.06, estimated).
 
-**Decision.** The rule was that the flag goes on only if the run passes every gate v1 passes and the question-form gate v1 fails. `voice-led-final-2` does, so the flag goes on for the web service (`VOICE_GRADER_LED=true`, set on Railway once this change is deployed).
+**Decision.** The rule was that the flag goes on only if the run passes every gate v1 passes and the question-form gate v1 fails. `voice-led-final-2` does, so the flag goes on for the web service (`VOICE_GRADER_LED: "true"` in `.railway/railway.ts`, applied once this change is deployed).
