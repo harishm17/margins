@@ -14,7 +14,8 @@ describe('the voice progress line', () => {
 
 describe('the size a quick round states before it starts (V5)', () => {
   it('reads the count it states, whether the maximum or the real one', () => {
-    assert.equal(statedRoundSize('Up to 12 questions from your 3 weakest topics, about 12 minutes.'), 12)
+    assert.equal(statedRoundSize('8 questions, about 8 minutes.'), 8)
+    assert.equal(statedRoundSize('No questions to ask yet.'), 0)
     assert.equal(statedRoundSize('4 questions from Sorting and Hashing, about 4 minutes.'), 4)
   })
 

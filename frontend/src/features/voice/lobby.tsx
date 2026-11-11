@@ -1,6 +1,6 @@
 'use client'
 
-import { sprintSizeLine } from '@/lib/voice/sprint-size'
+import { sprintSizeLine, type SprintPreview } from '@/lib/voice/sprint-size'
 import * as React from 'react'
 import Link from 'next/link'
 import * as RadioGroup from '@radix-ui/react-radio-group'
@@ -17,7 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { quizIsMissing, quizMissingCopy, styleNeedsQuiz, type VoiceQuizStatus } from './quiz-status'
 import { startingStyleFor } from './starting-style'
-import type { LobbyAlert } from './errors'
+import { BUSY_ELSEWHERE, type LobbyAlert } from './errors'
 import { focusPlaceholder, minutesLeftLabel } from './format'
 import { onDeviceEnvFromWindow, onDeviceReady, speechDestination } from './on-device'
 import { CLOUD_TOGGLE_DESCRIPTION, CLOUD_TOGGLE_LABEL, PRIVACY_LINES, PRIVACY_TYPING, cloudPrivacyLine } from './privacy'
@@ -44,7 +44,13 @@ const STYLE_OPTIONS: { value: VoiceStyle; label: string; hint: string; icon: Rea
   },
 ]
 
+/** How the day's voice minutes are counted (lib/voice/usage.ts), said where the minutes left are shown. */
+const MINUTES_RULE = "Today's minutes count the time you practise. A pause of more than two minutes is not counted."
+
 const LANGUAGE_OPTIONS = VOICE_LANGUAGES.map((language) => ({ value: language.code, label: language.label }))
+
+/** The alerts shown as a box of their own; "open elsewhere" has its own box and changes the start button. */
+type ShownAlert = Exclude<LobbyAlert, { kind: 'busy' }>
 
 type LobbyProps = {
   courseId: string
@@ -70,6 +76,8 @@ type LobbyProps = {
   claimsOfIdea?: boolean
   /** Whether Quiz me can begin, known before Start. Absent: not known, and a start that finds no questions says so. */
   quiz?: VoiceQuizStatus
+  /** A quick round's size before it starts. Absent: not known, and the line is left out. */
+  sprint?: SprintPreview
   onStart: (config: StartConfig) => void
   /** A card above the controls for the session that ended when the page was hidden ("Pick up where you left off"). */
   resumeCard?: React.ReactNode
@@ -92,6 +100,7 @@ export function Lobby({
   hasClaims = true,
   claimsOfIdea = false,
   quiz,
+  sprint,
   onStart,
   resumeCard,
 }: LobbyProps) {
@@ -160,7 +169,11 @@ export function Lobby({
   // Quiz me with nothing to ask from cannot begin: said here, before Start, with what is missing.
   const quizBlocked = quizIsMissing(quiz) && styleNeedsQuiz(mode, effectiveStyle)
   // Why Teach it back is not on offer stays said even when Quiz me cannot begin either: the quiz line follows it.
-  const alert: LobbyAlert | null = lobbyAlert ?? (hasClaims || mode === 'sprint' ? null : { kind: 'needs-claims', ofIdea: claimsOfIdea })
+  // A voice practice open in another tab or on another device (the usage said so, or a start was just refused for it):
+  // starting here ends it there, and the start button says so.
+  const busyElsewhere = lobbyAlert?.kind === 'busy' || (usage !== null && usage !== 'unavailable' && usage.hasLiveSession)
+  const shownAlert = lobbyAlert?.kind === 'busy' ? null : lobbyAlert
+  const alert: ShownAlert | null = shownAlert ?? (hasClaims || mode === 'sprint' ? null : { kind: 'needs-claims', ofIdea: claimsOfIdea })
 
   // Why the start buttons are off, said to a screen reader with the button and as a tooltip.
   const startReason = outOfTime
@@ -182,6 +195,7 @@ export function Lobby({
       focus,
       ...(effectiveStyle === 'teach_back' && conceptId ? { conceptId } : {}),
       ...(typed ? { typed: true } : {}),
+      ...(busyElsewhere ? { takeOver: true } : {}),
     })
   }
 
@@ -210,12 +224,15 @@ export function Lobby({
         <p className="text-body text-fg-2">
           {recognitionSupported ? 'Answer questions out loud and get feedback, like a study partner.' : 'Answer questions and get feedback, like a study partner.'}
         </p>
-        {mode === 'sprint' ? (
-          // The size is known before the start: say it here, beside the minutes left, not only once the questions come.
+        {mode === 'sprint' && sprint ? (
+          // The round's own size, known before the start: said here, beside the minutes left.
           <p className="text-small text-fg-2" data-testid="voice-sprint-size">
-            {sprintSizeLine()}
+            {sprintSizeLine(sprint)}
           </p>
         ) : null}
+        <p className="text-small text-fg-2" data-testid="voice-minutes-rule">
+          {MINUTES_RULE}
+        </p>
         {recognitionSupported ? null : (
           <p className="mt-1 flex items-start gap-2 text-small text-fg-2" data-testid="voice-no-recognition">
             <Keyboard aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-3" />
@@ -240,9 +257,9 @@ export function Lobby({
           {quizCopy.text}
         </InlineAlert>
       ) : null}
-      {!alert && usage && usage !== 'unavailable' && usage.hasLiveSession ? (
-        <InlineAlert tone="warning" title="Another voice practice looks open">
-          If it is open in another tab or window, end it there first. It also clears by itself after about a minute.
+      {busyElsewhere ? (
+        <InlineAlert tone="warning" title={BUSY_ELSEWHERE.title} data-testid="voice-busy-elsewhere">
+          {BUSY_ELSEWHERE.text}
         </InlineAlert>
       ) : null}
 
@@ -364,7 +381,7 @@ export function Lobby({
             disabled={outOfTime || usage === null || !!blocked || quizBlocked}
             disabledReason={startReason}
           >
-            Start voice practice
+            {busyElsewhere ? 'Start here instead' : 'Start voice practice'}
           </Button>
           {note ? <p className="max-w-[34ch] text-small text-fg-2">{note}</p> : null}
         </div>
@@ -379,7 +396,7 @@ function LobbyAlertView({
   mode,
   quizWorks,
 }: {
-  alert: LobbyAlert
+  alert: ShownAlert
   createContentHref: string
   mode: 'topic' | 'sprint'
   /** Whether Quiz me can begin: the claims alert says so only when it is true. */

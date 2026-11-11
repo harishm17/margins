@@ -32,7 +32,7 @@ import {
   readModelEvents,
   requestModelTurn,
 } from '@/lib/voice/ai-turn'
-import { claimVoiceSession, claimVoiceTurn, isSerializationConflict, keepVoiceTurn, releaseVoiceTurn } from '@/lib/voice/claim'
+import { claimVoiceSession, claimVoiceTurn, isSerializationConflict, keepVoiceTurn, releaseVoiceSession, releaseVoiceTurn } from '@/lib/voice/claim'
 import {
   coachStyleOf,
   CONTINUE_MESSAGE,
@@ -161,9 +161,11 @@ async function handlePost(request: NextRequest) {
   // The claim is renewed while the turn runs, and the reply stream (once there is one) gets a keep-alive line each time.
   let keepAlive: (() => void) | null = null
   const stopRenewing = keepVoiceTurn(userId, session.id, () => keepAlive?.())
+  // True once the session's voice time is counted up to the start of this turn: the turn's own time is added at its end.
+  let counted = false
   const releaseTurn = () => {
     stopRenewing()
-    return releaseVoiceTurn(userId, session.id)
+    return releaseVoiceTurn(userId, session.id, counted)
   }
   // Aborted when the browser leaves: the model call stops instead of finishing an answer nobody will hear.
   const turnAbort = new AbortController()
@@ -171,9 +173,7 @@ async function handlePost(request: NextRequest) {
   const releaseClaim = async () => {
     if (!claimedHere) return
     claimedHere = false
-    await prisma.voiceDrillSession
-      .update({ where: { id: session.id }, data: { connectedAt: null, lastSeenAt: null } })
-      .catch((error) => logServerError('Voice: Could not release the session claim', error))
+    await releaseVoiceSession(session.id)
   }
 
   try {
@@ -187,6 +187,7 @@ async function handlePost(request: NextRequest) {
         : voiceFailure('VOICE_DAILY_LIMIT', { remainingSeconds: 0, dailyMinutes: claim.capMinutes })
     }
     claimedHere = !session.connectedAt
+    counted = true
 
     // A session from before teach-back and guided reading carries on in the style it began with.
     const style: CoachStyle = coachStyleOf(session.style)

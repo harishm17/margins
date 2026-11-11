@@ -1,11 +1,11 @@
 /**
- * Which topics a voice sprint covers. This is the selection `buildSprintQuestionSet` makes in
- * src/lib/voice/drill-pack.ts, kept here as pure code so the sprint page can say which topics
- * the coach will ask about. If the backend rule changes, change this with it.
+ * Which topics a voice sprint covers: the one rule, as pure code. The question set builder
+ * (src/lib/voice/drill-pack.ts) and the pages that name the topics (queries/voice.ts) both use it.
  *
  * Rule: score = best quiz score (0 with no quiz yet); a topic with any of notes, examples or
  * quiz not completed counts 10 points lower; the lowest three win, ties keep the input order.
  */
+import { SPRINT_TOPICS, nameList } from '@/lib/voice/sprint-size'
 
 export type RankableTopic = {
   id: string
@@ -18,9 +18,7 @@ export type RankableTopic = {
   } | null
 }
 
-export const SPRINT_TOPIC_COUNT = 3
-
-export function rankWeakestTopics<T extends RankableTopic>(topics: T[], limit = SPRINT_TOPIC_COUNT): T[] {
+export function rankWeakestTopics<T extends RankableTopic>(topics: T[], limit = SPRINT_TOPICS): T[] {
   return topics
     .map((topic, position) => {
       const progress = topic.progress
@@ -49,7 +47,7 @@ export function hasStudyData(topics: RankableTopic[]): boolean {
 export function describeSprintTopics(topics: { name: string }[], studied: boolean): string {
   const names = topics.map((topic) => topic.name)
   if (names.length === 0) return ''
-  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+  const list = nameList(names)
   if (!studied) {
     const some = names.length === 1 ? 'one of your topics' : `${names.length} of your topics`
     return `Covers ${some}: ${list}. After your first quiz it picks your weakest.`

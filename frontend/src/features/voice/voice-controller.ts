@@ -61,6 +61,8 @@ export type StartConfig = {
   conceptId?: string
   /** Start with the keyboard and the microphone off. */
   typed?: boolean
+  /** End the voice practice that is open elsewhere and start this one. */
+  takeOver?: boolean
 }
 
 export type VoiceControllerOptions = {
@@ -147,6 +149,7 @@ function failureFrom(error: unknown): TurnFailure {
 function lobbyAlertFor(error: unknown): LobbyAlert {
   if (requiresClaims(error)) return { kind: 'needs-claims' }
   if (requiresGeneration(error)) return { kind: 'needs-generation' }
+  if (isApiError(error) && (error.details as { code?: unknown } | undefined)?.code === 'ACTIVE_SESSION') return { kind: 'busy' }
   if (isApiError(error)) {
     // A refusal with a voice code carries words written for the student (the coach is not reachable, the day's
     // allowance is used): those are shown. A bare 500 or 429 has none.
@@ -872,7 +875,8 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
     }
 
     if (!ctx.firstTurnDone && view.fate !== 'continue') {
-      abandonToLobby({ kind: 'turn', alert: view.alert }, view.limitReached)
+      // Two starts at the same moment: the other one won, and the lobby offers to take over from it.
+      abandonToLobby(failure.code === 'ACTIVE_SESSION' ? { kind: 'busy' } : { kind: 'turn', alert: view.alert }, view.limitReached)
       return
     }
     // A refusal that sends a first turn back to the lobby (the day's voice time is used, another session is open) ends a
@@ -1125,6 +1129,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
         focus: config.focus.trim() ? config.focus.trim() : null,
         ...(config.conceptId ? { conceptId: config.conceptId } : {}),
         language: config.language,
+        ...(config.takeOver ? { takeOver: true } : {}),
       })
     } catch (error) {
       dispatch({ type: 'start-failed', lobbyAlert: lobbyAlertFor(error) })

@@ -76,7 +76,7 @@ async function student() {
 }
 
 /** A conversation session: the coach talks without tools, so one model call is the whole turn. */
-function conversation(userId: string, projectId: string, timing: { connectedAt?: Date; lastSeenAt?: Date } = {}) {
+function conversation(userId: string, projectId: string, timing: { connectedAt?: Date; lastSeenAt?: Date; activeMs?: number; activeAt?: Date } = {}) {
   return prisma.voiceDrillSession.create({
     data: { userId, projectId, style: 'topic_conversation', questionSet: [], ...timing },
   })
@@ -97,8 +97,8 @@ const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000)
 test('the daily cap stops a session on a later turn, not only on its first (a minute left once bought an hour)', async (t) => {
   if (!available) return t.skip('no migrated test database')
   const { user, project } = await student()
-  // Connected 31 minutes ago and still live: the day's 30 minutes are used.
-  const session = await conversation(user.id, project.id, { connectedAt: minutesAgo(31), lastSeenAt: new Date() })
+  // In use for 31 minutes and still live: the day's 30 minutes are used.
+  const session = await conversation(user.id, project.id, { connectedAt: minutesAgo(31), lastSeenAt: new Date(), activeMs: 31 * 60_000, activeAt: new Date() })
 
   const response = await sayTo(session.id, 'and another thing')
   assert.equal(response.status, 429)

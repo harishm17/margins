@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { SprintPreview } from '@/lib/voice/sprint-size'
 import type { VoiceQuizStatus } from './quiz-status'
 
 export type VoiceReviewProps = {
@@ -20,6 +21,8 @@ export type VoiceReviewProps = {
   claimsOfIdea?: boolean
   /** Whether Quiz me can begin (worked out on the server). Absent: not known, so the lobby only finds out at Start. */
   quiz?: VoiceQuizStatus
+  /** A quick round's size before it starts (worked out on the server). */
+  sprint?: SprintPreview
 }
 
 function LobbySkeleton() {
