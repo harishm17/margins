@@ -42,6 +42,8 @@ export function askScreen(page: Page) {
     /** The line under the empty page's heading that says what Ask does. */
     intro: main.getByRole('heading', { level: 2, name: 'Ask your materials' }).locator('xpath=following-sibling::p[1]'),
     send: async (text: string) => {
+      // Straight after the page loads, its streamed copy and the one on screen can both be in the document for a moment.
+      await expect(box).toHaveCount(1)
       await box.fill(text)
       await box.press('Enter')
     },
