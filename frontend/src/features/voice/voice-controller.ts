@@ -104,6 +104,8 @@ export type VoiceController = {
   previewVoice: () => void
   hint: () => void
   skip: () => void
+  /** After feedback: on to the next question (the last one ends the practice). */
+  next: () => void
   retry: () => void
   dismissAlert: () => void
   /** The page is going away (pagehide): end the session with a keepalive request. */
@@ -1006,6 +1008,7 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
                 explanation: event.explanation,
                 ungraded: event.ungraded === true,
                 ...(event.lookLinks ? { lookLinks: event.lookLinks } : {}),
+                ...(event.answer ? { answer: event.answer } : {}),
               },
             })
             break
@@ -1279,6 +1282,10 @@ export function createVoiceController(deps: VoiceControllerDeps): VoiceControlle
 
     skip() {
       submit('Skip this question and ask me the next one.', { countInterrupt: false, via: 'text' })
+    },
+
+    next() {
+      submit('Next question.', { countInterrupt: false, via: 'text' })
     },
 
     retry() {

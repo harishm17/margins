@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { ArrowCounterClockwise, Barbell } from '@phosphor-icons/react/dist/ssr'
+import { ArrowCounterClockwise, Barbell, CaretDown } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { InlineAlert } from '@/components/ui/inline-alert'
@@ -10,7 +10,7 @@ import { MathText } from '@/components/ui/math-text'
 import { ProgressRing } from '@/components/ui/progress-ring'
 import { linkForLabel } from '@/lib/voice/page-refs'
 import type { VoiceAlert } from './errors'
-import { clip, sessionLine } from './format'
+import { sessionLine } from './format'
 import type { EndReason, SessionSummary } from './session-state'
 import type { VoiceStyle } from './voice-api'
 
@@ -142,13 +142,27 @@ export function Summary({ style, summary, reason, alert, back, practiceHref, onR
             <h3 className="text-subheading text-fg">{style === 'guided_reading' ? 'Checks to revisit' : 'Questions to revisit'}</h3>
             {summary.revisit.length > 0 ? (
               <ul className="mt-2 flex flex-col gap-2" data-testid="voice-revisit">
+                {/* Each question whole, with its pages. The answer waits behind a click: the student can try once more first. */}
                 {summary.revisit.slice(0, 6).map((question) => (
                   <li key={question.text} className="text-small text-fg-2">
-                    <MathText>{clip(question.text)}</MathText>
+                    <p className="text-fg">
+                      <MathText>{question.text}</MathText>
+                    </p>
                     {question.lookLinks.length > 0 ? (
                       <span className="mt-0.5 block">
                         Look again at <PageLinks labels={question.lookLinks.map((link) => link.label)} links={question.lookLinks} />
                       </span>
+                    ) : null}
+                    {question.answer ? (
+                      <details className="group">
+                        <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-chip text-fg-2 hover:text-fg max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
+                          Show the answer
+                          <CaretDown aria-hidden="true" className="size-3.5 transition-transform duration-180 group-open:rotate-180" />
+                        </summary>
+                        <p className="mb-1 max-w-[60ch] border-l-2 border-border pl-3" data-testid="voice-revisit-answer">
+                          <MathText>{question.answer}</MathText>
+                        </p>
+                      </details>
                     ) : null}
                   </li>
                 ))}
@@ -173,11 +187,18 @@ export function Summary({ style, summary, reason, alert, back, practiceHref, onR
           </div>
         ) : null}
 
-        <div className="mt-6 flex flex-wrap items-center gap-2">
-          <Button variant={nextStep?.practice && practiceHref ? 'secondary' : 'primary'} icon={<ArrowCounterClockwise />} onClick={onRestart}>
-            Start again
-          </Button>
-          <Button asChild variant="secondary">
+        {/* One main action: Practice this when something came up short, else Start again. The rest are links. */}
+        <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+          {nextStep?.practice && practiceHref ? (
+            <Button variant="link" onClick={onRestart}>
+              Start again
+            </Button>
+          ) : (
+            <Button variant="primary" icon={<ArrowCounterClockwise />} onClick={onRestart}>
+              Start again
+            </Button>
+          )}
+          <Button asChild variant="link">
             <Link href={back.href}>{back.label}</Link>
           </Button>
         </div>
@@ -189,7 +210,9 @@ export function Summary({ style, summary, reason, alert, back, practiceHref, onR
 /** One thing to do next: practice what came up short, or explain it again later to make it stick. Null when nothing happened. */
 function nextStepFor(style: VoiceStyle, summary: SessionSummary): { text: string; practice: boolean } | null {
   if (summary.taught.length > 0 || summary.revisit.length > 0 || summary.unfinished) {
-    return { text: 'Practice what came up short while it is fresh, then check the pages above.', practice: true }
+    // The pages are named only when the lists above name some (finding 84).
+    const pages = summary.revisit.some((question) => question.lookLinks.length > 0) || summary.taught.some((idea) => idea.lookAgain.length > 0)
+    return { text: pages ? 'Practice what came up short while it is fresh, then check the pages above.' : 'Practice what came up short while it is fresh.', practice: true }
   }
   if (style === 'teach_back' && summary.explained.length > 0) {
     return { text: 'Explain it again tomorrow, from memory. Saying it twice, a day apart, is what makes it stick.', practice: false }

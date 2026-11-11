@@ -20,6 +20,9 @@ type VoiceOrbProps = {
  * The orb and its status word. While listening, a requestAnimationFrame loop reads the mic
  * level and writes it to the --orb-level CSS variable on the orb element: no React state, so
  * a 60 fps meter never re-renders anything. Under reduced motion the loop does not run.
+ *
+ * On the phone sheet (below md, the breakpoint session-view.tsx turns the session into a sheet at) the orb is a small
+ * mark beside its word, so the coach's words get the room (finding 86).
  */
 export function VoiceOrb({ state, meter, size = 'md', label, className }: VoiceOrbProps) {
   const orbRef = React.useRef<HTMLDivElement>(null)
@@ -43,8 +46,15 @@ export function VoiceOrb({ state, meter, size = 'md', label, className }: VoiceO
   }, [state, meter])
 
   return (
-    <div className={cn('flex flex-col items-center gap-3', className)}>
-      <div ref={orbRef} className="voice-orb" data-state={state} data-size={size} data-testid="voice-orb" aria-hidden="true">
+    <div className={cn('flex flex-col items-center gap-3 max-md:flex-row max-md:gap-2.5', className)}>
+      <div
+        ref={orbRef}
+        className={cn('voice-orb max-md:[--orb-size:28px]', size === 'sm' ? 'md:[--orb-size:96px]' : 'md:[--orb-size:128px]')}
+        data-state={state}
+        data-size={size}
+        data-testid="voice-orb"
+        aria-hidden="true"
+      >
         <span className="voice-orb__halo" />
         <span className="voice-orb__ring" />
         <span className="voice-orb__core" />

@@ -109,12 +109,15 @@ dbTest('a wrong answer comes back with the pages of the question\'s concepts, a 
   assert.ok(evaluation && evaluation.type === 'evaluation')
   assert.deepEqual(evaluation.lookLinks, [{ label: 'pp. 4-6', href: `/api/materials/${material.id}/file#page=4` }])
   assert.equal(JSON.stringify(wrong.output).includes('/file#page'), false, 'the links go to the browser, not to the model')
+  // Finding 84: so does the answer it was graded against, for the summary. The coach is not handed it to say.
+  assert.equal(evaluation.answer, 'The answer.')
+  assert.equal(JSON.stringify(wrong.output).includes('The answer.'), false, 'the answer goes to the browser, not to the model')
   // A question with no concepts has no pages; a right answer is not asked to look again.
   const none = await run(w, 'record_answer', { question_index: 3, user_answer: 'no idea' })
   assert.equal(none.events.find((event) => event.type === 'evaluation' && event.lookLinks) === undefined, true)
   stubGrader(1)
   const right = await run(w, 'record_answer', { question_index: 1, user_answer: 'keys map to buckets' })
-  assert.equal(right.events.find((event) => event.type === 'evaluation' && event.lookLinks) === undefined, true)
+  assert.equal(right.events.find((event) => event.type === 'evaluation' && (event.lookLinks || event.answer)) === undefined, true)
 })
 
 dbTest('a spoken answer with no hint is level 0 evidence with the session key and confidence', async () => {

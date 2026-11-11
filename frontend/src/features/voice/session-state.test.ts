@@ -5,6 +5,7 @@ import {
   initialSessionState,
   sessionReducer,
   practiceConceptOf,
+  questionAnswered,
   summarize,
   type CoachEntry,
   type Evaluation,
@@ -75,6 +76,11 @@ describe('sessionReducer', () => {
     assert.equal(coach.role, 'coach')
     assert.equal(coach.evaluation?.score, 0.5)
     assert.deepEqual(state.answered, [{ text: 'Define a hash function', isCorrect: false, score: 0.5, ungraded: false }])
+    // Finding 68: the question on the board is answered, so the screen offers Next question, until the coach asks the next one.
+    assert.equal(questionAnswered(live()), false)
+    assert.equal(questionAnswered(run([{ type: 'question', question: { index: 1, total: 2, text: 'Define a hash function' } }], live())), false)
+    assert.equal(questionAnswered(state), true)
+    assert.equal(questionAnswered(run([{ type: 'question', question: { index: 2, total: 2, text: 'What is a collision?' } }], state)), false)
   })
 })
 
@@ -85,7 +91,7 @@ describe('summarize', () => {
       answered: [
         { text: 'Q1', isCorrect: true, score: 1, ungraded: false },
         { text: 'Q2', isCorrect: false, score: 0.5, ungraded: false },
-        { text: 'Q2', isCorrect: false, score: 0, ungraded: false, lookLinks: [{ label: 'pp. 4-6', href: '/api/materials/m1/file#page=4' }] },
+        { text: 'Q2', isCorrect: false, score: 0, ungraded: false, lookLinks: [{ label: 'pp. 4-6', href: '/api/materials/m1/file#page=4' }], answer: 'The key answer.' },
         { text: 'Q3', isCorrect: false, score: 0, ungraded: true },
       ],
       entries: [{ id: 1, role: 'student', text: 'a', via: 'text' }],
@@ -97,7 +103,8 @@ describe('summarize', () => {
     assert.equal(summary.correct, 1)
     assert.equal(summary.partly, 1)
     assert.equal(summary.score, 1 / 3)
-    assert.deepEqual(summary.revisit, [{ text: 'Q2', lookLinks: [{ label: 'pp. 4-6', href: '/api/materials/m1/file#page=4' }] }])
+    // Finding 84: the answer the question was graded against comes with it, for the summary to show when asked.
+    assert.deepEqual(summary.revisit, [{ text: 'Q2', lookLinks: [{ label: 'pp. 4-6', href: '/api/materials/m1/file#page=4' }], answer: 'The key answer.' }])
     assert.equal(summary.seconds, 20)
     assert.equal(summary.minutes, 0)
     assert.equal(summary.exchanges, 1)

@@ -4,6 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  ArrowRight,
   Check,
   HandPalm,
   Keyboard,
@@ -16,14 +17,13 @@ import {
   SpeakerSlash,
 } from '@phosphor-icons/react/dist/ssr'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import { IconButton } from '@/components/ui/icon-button'
 import { InlineAlert } from '@/components/ui/inline-alert'
 import { Textarea } from '@/components/ui/textarea'
 import { Board } from './board'
 import type { VoiceAlert } from './errors'
 import { isDoneShortcut } from './shortcuts'
-import { ORB_LABEL, orbLabel, type MicNotice, type OrbState, type SessionState } from './session-state'
+import { ORB_LABEL, orbLabel, questionAnswered, type MicNotice, type OrbState, type SessionState } from './session-state'
 import { Transcript } from './transcript'
 import { useVoiceDraft } from './use-voice-draft'
 import type { VoiceController } from './voice-controller'
@@ -71,6 +71,10 @@ export function SessionView({ state, orb, controller, courseId, title, hasQuesti
   // Typing with replies read aloud keeps the orb (it shows the coach speaking); typing without speech has nothing for it to show,
   // so the field comes straight after the question and a one-line status replaces it.
   const showOrb = !textOnly && !(textMode && speech !== 'on')
+  // The answer to the question on the board is graded and the coach has not asked the next one: Next question takes the
+  // place of Hint and Skip, so nobody has to say or type "yes" (finding 68). After the last question it ends the practice.
+  const answered = hasQuestions && questionAnswered(state)
+  const lastQuestion = !!question && question.index >= question.total
 
   React.useEffect(() => {
     if (textMode) inputRef.current?.focus()
@@ -100,9 +104,13 @@ export function SessionView({ state, orb, controller, courseId, title, hasQuesti
     <section
       aria-label="Voice practice session"
       data-testid="voice-session"
+      // Below md the session is a full-screen sheet: the board, a one-line status, the conversation and the answer dock in
+      // one column as tall as the screen, with the conversation taking what is left (finding 86). A screen too short for
+      // that (a phone on its side) scrolls the whole sheet. Every `max-md:` here, in voice-orb.tsx and in transcript.tsx
+      // is this one breakpoint.
       className="max-md:fixed max-md:inset-0 max-md:z-modal max-md:overflow-y-auto max-md:bg-canvas"
     >
-      <div className="flex w-full max-w-[720px] flex-col px-4 max-md:min-h-full md:px-0">
+      <div className="flex w-full max-w-[720px] flex-col px-4 max-md:h-full max-md:min-h-[28rem] md:px-0">
         <header className="flex items-center justify-between gap-4 border-b border-border max-md:h-14 max-md:shrink-0 md:border-b-0 md:pb-2">
           <p className="tabular min-w-0 truncate text-small text-fg-2" data-testid="voice-progress">
             {question ? `Question ${question.index} of ${question.total}` : title}
@@ -112,21 +120,26 @@ export function SessionView({ state, orb, controller, courseId, title, hasQuesti
           </Button>
         </header>
 
-        <div className="flex flex-1 flex-col gap-6 pb-6 pt-5">
-          <Board board={board} />
+        <div className="flex flex-1 flex-col gap-6 pb-6 pt-5 max-md:min-h-0 max-md:gap-3 max-md:pb-0 max-md:pt-3">
+          {/* The board shows a whole question with its options when it can: the coach's reading of it is one line in the
+              conversation, so the board, not the conversation, holds the words. It keeps 24rem of the screen for the
+              header, the status line, a few lines of conversation and the dock, and never more than 55% of the height. */}
+          <Board board={board} className="max-md:max-h-[min(55dvh,calc(100dvh_-_24rem))] max-md:shrink-0 max-md:overflow-y-auto" />
 
+          {/* The status and the turn's one control: stacked and centred on a wide screen, one row on the phone sheet. */}
+          {/* The 44 px row is for the orb and its control; typed practice keeps only the status line's height. */}
+          <div className={`flex flex-col items-center gap-3 max-md:shrink-0 max-md:flex-row max-md:justify-between${showOrb ? ' max-md:min-h-11' : ''}`}>
           {!showOrb ? (
-            <p role="status" aria-live="polite" className="h-6 self-center text-body-strong text-fg-2" data-testid="voice-text-status">
+            <p role="status" aria-live="polite" className="h-6 text-body-strong text-fg-2" data-testid="voice-text-status">
               {orb === 'thinking' || orb === 'speaking' ? ORB_LABEL[orb] : ''}
             </p>
           ) : (
-            <VoiceOrb state={orb} meter={controller.meter} label={orbLabel(orb, state.holding)} className="self-center py-2" size={textMode ? 'sm' : 'md'} />
+            <VoiceOrb state={orb} meter={controller.meter} label={orbLabel(orb, state.holding)} className="py-2 max-md:py-0" size={textMode ? 'sm' : 'md'} />
           )}
-
 
           {/* Under the orb, in a slot that keeps its height: Interrupt while the coach speaks, Done while the student's words wait to be sent. */}
           {!textOnly && (!textMode || speech === 'on') ? (
-            <div className="-mt-3 flex h-9 items-center justify-center self-center" data-testid="voice-turn-control">
+            <div className="flex h-9 items-center justify-center max-md:h-11" data-testid="voice-turn-control">
               {state.speaking && speech === 'on' ? (
                 <Button variant="secondary" size="sm" icon={<HandPalm />} onClick={() => controller.interrupt()} data-testid="voice-interrupt">
                   Interrupt
@@ -148,32 +161,31 @@ export function SessionView({ state, orb, controller, courseId, title, hasQuesti
               ) : null}
             </div>
           ) : null}
+          </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 empty:hidden max-md:shrink-0">
             {micNotice && !(micNotice === 'unsupported' && textOnly) ? <MicNoticeView notice={micNotice} onRetry={() => void controller.enableMicrophone()} /> : null}
             {alert ? <TurnAlert alert={alert} onRetry={() => controller.retry()} onDismiss={() => controller.dismissAlert()} /> : null}
           </div>
 
           {restoredTranscript.length > 0 ? (
-            <div data-testid="voice-restored">
+            <div data-testid="voice-restored" className="max-md:shrink-0">
               <p className="text-caption text-fg-3">Earlier, before the page reloaded</p>
-              <Transcript entries={restoredTranscript} interim="" className="min-h-0 opacity-80" />
+              <Transcript entries={restoredTranscript} interim="" earlier className="opacity-80" />
             </div>
           ) : null}
           <Transcript entries={entries} interim={interim} announce={speech !== 'on'} />
 
           <div
-            className={cn(
-              'flex flex-col gap-3 max-md:sticky max-md:bottom-0 max-md:bg-canvas max-md:pb-[max(1rem,env(safe-area-inset-bottom))] max-md:pt-3',
-              // Typing: the field follows the question instead of sitting at the foot of an empty screen.
-              !textMode && 'max-md:mt-auto'
-            )}
+            // The answer dock: at the foot of the phone sheet, under the conversation.
+            className="flex flex-col gap-3 max-md:shrink-0 max-md:border-t max-md:border-border max-md:pb-[max(1rem,env(safe-area-inset-bottom))] max-md:pt-3"
           >
             {textMode ? (
               // A voice answer is an explanation, so the typed one is a multiline field: two lines to start, growing as it fills.
               // With a keyboard, Enter sends and Shift+Enter starts a new line; on a touch screen Enter is a new line and Send sends.
               <form onSubmit={send} className="flex flex-col gap-2">
-                <label htmlFor="voice-answer" className="text-body-strong text-fg">
+                {/* On the phone sheet the field's own placeholder says it; the label stays for a screen reader. */}
+                <label htmlFor="voice-answer" className="text-body-strong text-fg max-md:sr-only">
                   Type your answer
                 </label>
                 <div className="flex items-end gap-2">
@@ -207,7 +219,8 @@ export function SessionView({ state, orb, controller, courseId, title, hasQuesti
               {textMode ? (
                 recognitionSupported ? (
                   <Button variant="secondary" icon={<Microphone />} onClick={() => controller.toggleMic()}>
-                    Use microphone
+                    {/* The icon alone on the phone sheet, so the controls stay one row. */}
+                    <span className="max-md:sr-only">Use microphone</span>
                   </Button>
                 ) : null
               ) : (
@@ -225,7 +238,11 @@ export function SessionView({ state, orb, controller, courseId, title, hasQuesti
                   </Button>
                 </>
               )}
-              {hasQuestions ? (
+              {answered ? (
+                <Button variant="primary" icon={<ArrowRight />} disabled={turnActive} onClick={() => controller.next()} data-testid="voice-next">
+                  {lastQuestion ? 'Finish' : 'Next question'}
+                </Button>
+              ) : hasQuestions ? (
                 <>
                   <Button variant="ghost" icon={<Lightbulb />} disabled={turnActive} onClick={() => controller.hint()}>
                     Hint

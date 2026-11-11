@@ -13,20 +13,16 @@
   display: grid;
   flex-shrink: 0;
   place-items: center;
-  width: 128px;
-  height: 128px;
+  /* --orb-size is set by voice-orb.tsx: 128px, 96px for the small one, and a 28px mark on the phone sheet. */
+  width: var(--orb-size, 128px);
+  height: var(--orb-size, 128px);
   border-radius: 9999px;
   background: var(--accent-soft);
 }
 
-.voice-orb[data-size='sm'] {
-  width: 96px;
-  height: 96px;
-}
-
 .voice-orb__halo {
   position: absolute;
-  inset: -10px;
+  inset: calc(var(--orb-size, 128px) * -0.08);
   border-radius: 9999px;
   border: 2px solid var(--accent);
   opacity: 0;

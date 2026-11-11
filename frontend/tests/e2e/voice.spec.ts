@@ -44,6 +44,9 @@ test('text mode: start, first question, answer, evaluation, end, summary', async
   await installVoiceStubs(page, { recognition: false, synthesis: false })
   await page.goto(`/courses/${ids.courseId}/review/voice`)
   await waitForLobby(page)
+  // Start is on the first screen, above the optional settings (finding 128).
+  await expect(startButton(page)).toBeInViewport()
+  await screenshotIfAsked(page, 'voice-lobby-1440x900')
   await startButton(page).click()
 
   // Automatic text mode: the lobby said so already, so the session has no "Your turn" mic and no late notice, and the text box
@@ -68,11 +71,20 @@ test('text mode: start, first question, answer, evaluation, end, summary', async
   await expect(evaluation).toBeVisible({ timeout: 30_000 })
   await expect(evaluation.locator('span').first()).toHaveText(/Correct|Partly|Not quite|Noted/)
   await expect(page.getByTestId('voice-transcript').getByText(/Thanks, I have noted that/)).toBeVisible()
+  // The answer is graded and the coach waits: Next question moves on, with no "yes" to type (finding 68).
+  const next = page.getByRole('button', { name: 'Next question', exact: true })
+  await expect(next).toBeEnabled({ timeout: 30_000 })
+  await expect(page.getByRole('button', { name: 'Hint', exact: true })).toHaveCount(0)
+  await screenshotIfAsked(page, 'voice-session-answered-1440x900')
+  await next.click()
+  await expect(page.getByTestId('voice-progress')).toHaveText(/^Question 2 of \d+$/, { timeout: 30_000 })
+  await expect(page.getByRole('button', { name: 'Hint', exact: true })).toBeEnabled({ timeout: 30_000 })
 
   // End shows the summary.
   await page.getByRole('button', { name: 'End', exact: true }).click()
   await expect(page.getByTestId('voice-summary')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Practice finished' })).toBeVisible()
+  await screenshotIfAsked(page, 'voice-summary-1440x900')
   // The answer was typed, so the summary does not say "talked".
   await expect(page.getByTestId('voice-summary')).toContainText(/You typed for (under a minute|\d+ minutes?)\./)
   await expect(page.getByTestId('voice-summary')).not.toContainText('talked')
@@ -220,7 +232,8 @@ test('voice mode: listening, a short answer is sent after its adaptive wait, spe
   await page.evaluate(() => {
     ;(window as any).__voice.hold = true
   })
-  await page.getByRole('button', { name: 'Skip' }).click()
+  // The answer is graded, so Next question (not Skip) starts the coach's next turn.
+  await page.getByRole('button', { name: 'Next question', exact: true }).click()
   await expect(page.getByTestId('voice-orb')).toHaveAttribute('data-state', 'speaking', { timeout: 30_000 })
   const cancelledBefore = await page.evaluate(() => (window as any).__voice.cancelled)
   await page.evaluate(() => (window as any).__voice.interim('wait stop'))
