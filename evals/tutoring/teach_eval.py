@@ -131,15 +131,22 @@ class Session:
     A scenario is one idea, or several in order (`then`): when an idea closes, the closing result carries what
     get_concept_to_explain would answer next (`next_idea`), as the app's does."""
 
-    def __init__(self, scenario: Dict[str, Any], grader_led: bool = False):
+    def __init__(self, scenario: Dict[str, Any], grader_led: bool = False, live_questions: bool = False):
         from teach_state import empty_state, ideas_of
 
         self.scenario = scenario
-        # --grader-led (the app's VOICE_GRADER_LED): a graded step also builds the reply where it can (teach_state.assembled_reply).
+        # --grader-led (the app's VOICE_GRADER_LED): a graded step also builds the reply where it can (teach_state.assembled).
         self.grader_led = grader_led
+        # --live-questions: the app's grader writes the question to ask aloud for each claim left open, as it does in the app
+        # under VOICE_GRADER_LED. The verdicts stay the script's, so the plan is the same run to run; only the questions are live.
+        self.live_questions = grader_led and live_questions
         self.spoken: Optional[str] = None  # the reply the step of this turn built, if it built one
+        self.probes: Dict[str, str] = {}  # the grader's question per claim for the step of this turn
+        self.written: Optional[Dict[str, Any]] = None  # what the grader answered this turn (--live-questions)
+        self.probe: Optional[Dict[str, Any]] = None  # how the probe of this turn was worded, when the step planned one
         self.ideas = ideas_of(scenario)
         self.states = [empty_state() for _ in self.ideas]
+        self.asked: List[Dict[str, List[str]]] = [{} for _ in self.ideas]  # questions already put, by claim (ConceptState.asked)
         self.index = 0  # the idea being worked on (len(self.ideas) once every idea is closed)
         self.said = 0  # scripted student messages said on the idea being worked on
         self.turn = 0  # the scripted student message the coach is answering, counted over the whole session (0 before any)
@@ -201,6 +208,7 @@ class Session:
         self.turn = turn
         self.steps = {}
         self.spoken = None
+        self.probes, self.written, self.probe = {}, None, None
         self.heard = said
         if said and self.started and not self.closed() and not self.state["outcome"] and prompts_v2("voice") and asks_for_help(said):
             self.state["helpAsked"] = self.state.get("helpAsked", 0) + 1
@@ -250,6 +258,49 @@ class Session:
             return {"name": name, "input": {"question": question} if held else {"concept_id": concept_id, "question": question}} if question else None
         return {"name": "assess_explanation", "input": {} if held else {"concept_id": concept_id}}
 
+    async def write_questions(self) -> None:
+        """--live-questions: ask the app's grader as teach-tools.ts assessExplanation asks it under VOICE_GRADER_LED, before
+        the step of this turn runs: the first explanation of an idea alone, a later answer with everything said on the idea
+        before it, marked spoken, with the questions already put for each claim. Its questions are kept for the step; a
+        first "I don't know" is not graded, as in the app. A failed call leaves no questions (the coach model words the turn)."""
+        if not self.live_questions or self.closed() or self.said == 0:
+            return
+        state, turn = self.state, self.current_turn()
+        if state["assessments"] == 0 and (turn.get("dont_know") or self.told()):
+            return
+        from app.services.llm.schemas import AskedQuestion, RecallClaim, RecallGradeRequest
+        from app.services.recall_grader import grade_recall
+        from teach_state import idea_prompt
+
+        concept = self.concept
+        said = [t["say"] for t in self.turns()[: self.said] if t["kind"] == "explain"]
+        answer = turn["say"] if state["assessments"] == 0 else " ".join(said)
+        asked = [AskedQuestion(claim_id=claim_id, question=question) for claim_id, questions in self.asked[self.index].items() for question in questions]
+        request = RecallGradeRequest(
+            prompt=idea_prompt(concept, 1)["prompt"],
+            claims=[RecallClaim(id=c["id"], concept_id=concept["id"], concept_name=concept["name"], text=c["text"], page=c.get("page")) for c in concept["claims"]],
+            answer=answer,
+            user_id="eval",
+            project_id="eval",
+            spoken=True,
+            asked=asked,
+        )
+        started = time.perf_counter()
+        try:
+            result = await grade_recall(request)
+        except Exception as exc:  # the app answers "unavailable" and the coach words the turn
+            if type(exc).__name__ == "SpendLimitReached":
+                raise
+            self.written = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+            return
+        self.written = {
+            "status": result.status,
+            "seconds": round(time.perf_counter() - started, 2),
+            "asked": [q.model_dump() for q in asked],
+            "verdicts": {v.claim_id: {"verdict": v.verdict, "pointer": v.pointer, "probe": v.probe} for v in result.verdicts},
+        }
+        self.probes = {v.claim_id: v.probe.strip() for v in result.verdicts if v.probe and v.probe.strip()}
+
     def answer_once(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """`answer`, except that a graded step already run for this utterance returns its stored result (tools.ts StepCache)."""
         key = f"{'record_check' if name in EXAMPLE_CHECK_TOOLS else name}:{args.get('concept_id')}" if name in ("assess_explanation", *EXAMPLE_CHECK_TOOLS) else None
@@ -261,7 +312,7 @@ class Session:
         return output
 
     def answer(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-        from teach_state import EVERY_IDEA_DONE, assembled_reply, assessed_claims, assessment_result, example_result, idea_prompt
+        from teach_state import EVERY_IDEA_DONE, assembled, assessed_claims, assessment_result, example_result, idea_prompt
 
         if name == "get_concept_to_explain":
             if self.closed():
@@ -286,7 +337,10 @@ class Session:
             # The app takes the student's words from its own record of the turn, so the model passes none (voice/teach-tools.ts).
             if self.said == 0:
                 return {"error": "The student has not said anything since your last question. Ask it, stop, and call this tool only after they have answered."}
-            claims = assessed_claims(concept, self.explain_verdicts())
+            verdicts = self.explain_verdicts()
+            if self.probes:
+                verdicts = [{**verdict, "probe": self.probes.get(claim["id"])} for claim, verdict in zip(concept["claims"], verdicts)]
+            claims = assessed_claims(concept, verdicts)
             covered_something = any(claim["verdict"] in ("covered", "partial") for claim in claims)
             # What the student said was an "I don't know" when the script says so (the parity test pins that flag to the app's detector).
             told = self.told()
@@ -313,8 +367,42 @@ class Session:
         output = self.what_follows(output)
         if self.grader_led:
             # teach-tools.ts withWhatFollows: the reply is built once the next idea is known.
-            self.spoken = assembled_reply(plan, claims, turn=closed["assessments"], outcome=closed["outcome"], next_idea=output.get("next_idea"), **facts)
+            claim_id = plan["gap"]["claimId"] if plan["action"] == "probe" else None
+            asked = self.asked[index].get(claim_id, []) if claim_id else []
+            built = assembled(plan, claims, turn=closed["assessments"], outcome=closed["outcome"], next_idea=output.get("next_idea"), asked=asked, **facts)
+            self.spoken = built["text"] if built else None
+            if claim_id:
+                # The question a built probe asks is kept with the idea, so the grader's next one for that claim is another.
+                if built and built.get("asked"):
+                    self.asked[index][claim_id] = [*asked, built["asked"]][-ASKED_KEPT:]
+                self.probe = probe_wording(plan, claims, asked, built)
         return output
+
+
+ASKED_KEPT = 3  # teach-tools.ts: questions kept per claim for the grader's next one to differ from
+
+
+def probe_wording(plan: Dict[str, Any], claims: List[Dict[str, Any]], asked: List[str], built: Optional[Dict[str, str]]) -> Dict[str, Any]:
+    """Who worded a planned probe and, when the app could not, why (the reply builder's own rules, in its order)."""
+    from teach_state import gives_away, one_open_question, same_question, spoken_question
+
+    claim = next((c for c in claims if c["claimId"] == plan["gap"]["claimId"]), {})
+    base = {"finding": plan["gap"]["finding"], "number": plan["probeNumber"]}
+    question = claim.get("probe")
+    if built:
+        said = spoken_question(question, claim.get("text"), asked)
+        return {**base, "by": "app", "from": "the grader's question" if said and built.get("asked") == said else "the written pointer or fixed wording"}
+    if not question:
+        why = "the grader wrote no question for the claim"
+    elif not one_open_question(question):
+        why = "not one open question"
+    elif gives_away(question, claim.get("text")):
+        why = "the question says the claim"
+    elif any(same_question(question, earlier) for earlier in asked):
+        why = "the question was already asked"
+    else:
+        why = "the builder has no wording for this finding"
+    return {**base, "by": "coach", "why": why}
 
 
 # ---------------------------------------------------------------------------- playing
@@ -439,15 +527,18 @@ def asked_again(log: List[Dict[str, Any]]) -> bool:
     return closing is not None and any(item["name"] == "get_concept_to_explain" for item in log[closing + 1 :])
 
 
-async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop: Dict[str, str], grader_led: bool = False) -> List[Dict[str, Any]]:
+async def play(
+    scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop: Dict[str, str], grader_led: bool = False, live_questions: bool = False
+) -> List[Dict[str, Any]]:
     """One scripted conversation: the start of the session, then each student message in turn. One record per coach turn.
-    `grader_led`: a turn whose step built the reply itself is said as built, with no model call (the app's VOICE_GRADER_LED)."""
+    `grader_led`: a turn whose step built the reply itself is said as built, with no model call (the app's VOICE_GRADER_LED).
+    `live_questions`: with it, the app's grader writes the questions those replies ask (Session.write_questions)."""
     from spend import SpendLimitReached
 
     from app.prompt_revision import prompts_v2
 
     entry = prompts["topics"][scenario["topic"]]
-    session = Session(scenario, grader_led)
+    session = Session(scenario, grader_led, live_questions)
     messages: List[Dict[str, Any]] = [{"role": "user", "content": entry["start"]}]
     start: List[Dict[str, Any]] = []
     if prompts_v2("voice"):
@@ -473,6 +564,13 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
             content: Any = said
             if plan:
                 # The step runs before the model speaks; the model is given its result with the student's words (spec 19.1).
+                if plan["name"] == "assess_explanation":
+                    try:
+                        await session.write_questions()
+                    except SpendLimitReached as exc:
+                        stop["reason"] = str(exc)
+                        print(f"  STOP: {exc}", flush=True)
+                        break
                 output = session.answer_once(plan["name"], plan["input"])
                 pre_run.append({"name": plan["name"], "input": plan["input"], "output": output, "pre_run": True})
                 content = [{"type": "text", "text": said}, {"type": "text", "text": app_result_text(plan["name"], output)}]
@@ -509,6 +607,8 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
                 "tools": log,
                 "pre_run": pre_run[0]["name"] if pre_run else None,
                 "assembled": bool(built),
+                "probe": session.probe if pre_run else None,
+                "questions": session.written,
                 # No model call stands between the step and the first word of a reply the app built.
                 "first_sentence_s": 0.0 if built else first_sentence_seconds(calls),
                 "last_action": last_action(log),
@@ -530,7 +630,9 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
     return records
 
 
-async def play_all(scenarios, provider, prompts, stop, raw_dir: Path, resume: bool, concurrency: int, log, grader_led: bool = False) -> List[Dict[str, Any]]:
+async def play_all(
+    scenarios, provider, prompts, stop, raw_dir: Path, resume: bool, concurrency: int, log, grader_led: bool = False, live_questions: bool = False
+) -> List[Dict[str, Any]]:
     semaphore = asyncio.Semaphore(max(1, concurrency))
     results: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -544,7 +646,7 @@ async def play_all(scenarios, provider, prompts, stop, raw_dir: Path, resume: bo
         async with semaphore:
             if stop.get("reason"):
                 return
-            turns = await play(scenario, provider, prompts, stop, grader_led)
+            turns = await play(scenario, provider, prompts, stop, grader_led, live_questions)
         results[scenario["id"]] = turns
         if not stop.get("reason"):  # a stopped scenario is incomplete: play it again on a resume
             path.write_text(json.dumps({"scenario": scenario["id"], "turns": turns}, indent=2) + "\n")
@@ -675,6 +777,17 @@ async def grade_script(provider, items: List[Dict[str, Any]], grader_dir: Path, 
     finally:
         LLMFactory._instance = saved
     return graded
+
+
+def probe_summary(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """The probes the steps planned: how many the app worded, from what, and why the coach model worded the others."""
+    probes = [r["probe"] for r in records if r.get("probe")]
+    by_app = [p for p in probes if p["by"] == "app"]
+    counts: Dict[str, Dict[str, int]] = {"from": {}, "why": {}}
+    for probe in probes:
+        key, value = ("from", probe["from"]) if probe["by"] == "app" else ("why", f"{probe['why']} ({probe['finding']}, probe {probe['number']})")
+        counts[key][value] = counts[key].get(value, 0) + 1
+    return {"planned": len(probes), "by_app": len(by_app), **counts}
 
 
 # ---------------------------------------------------------------------------- estimate
@@ -816,7 +929,19 @@ async def run(args, host) -> int:
     log(f"Playing {len(scenarios)} teach_back scenarios")
     started = time.perf_counter()
     grader_led = bool(getattr(args, "grader_led", False))
-    records = await play_all(scenarios, provider, prompts, stop, run_dir / "raw", bool(args.resume), args.concurrency, log, grader_led)
+    live_questions = grader_led and bool(getattr(args, "live_questions", False))
+    questions_provider = None
+    if live_questions:
+        # The grader takes its provider from the factory; its calls count under --max-usd.
+        from app.services.llm.factory import LLMFactory
+
+        questions_provider = adapters.MeteredProvider(adapters.build_provider(mock=args.mock, api_key=api_key, timeout=args.timeout), None, tracker, spend_module.GENERATION)
+        saved_factory, LLMFactory._instance = LLMFactory._instance, questions_provider
+    try:
+        records = await play_all(scenarios, provider, prompts, stop, run_dir / "raw", bool(args.resume), args.concurrency, log, grader_led, live_questions)
+    finally:
+        if live_questions:
+            LLMFactory._instance = saved_factory
 
     # ------------------------------------------------------------------ judge: does an asking turn teach the idea first?
     judgments: Optional[Dict[str, Dict[str, Any]]] = None
@@ -852,6 +977,17 @@ async def run(args, host) -> int:
         built = [r for r in records if r.get("assembled")]
         graded_turns = [r for r in records if r.get("pre_run") and r.get("turn", 0) > 0 and not r.get("error")]
         summary_metrics["assembled"] = {"turns": len(built), "graded_turns": len(graded_turns), "gates": teach_metrics.summarize(by_id, built, judgments)["gates"] if built else []}
+        summary_metrics["assembled"]["probes"] = probe_summary(records)
+        if questions_provider is not None:
+            written = [r["questions"] for r in records if r.get("questions")]
+            timed = [w["seconds"] for w in written if "seconds" in w]
+            summary_metrics["assembled"]["questions"] = {
+                "model": resolve_model("recall_grading").model,
+                "calls": len(written),
+                "errors": sum(1 for w in written if w.get("error")),
+                "mean_seconds": round(sum(timed) / len(timed), 2) if timed else None,
+                "cost_usd": round(sum(c["cost_usd"] for c in questions_provider.calls), 4),
+            }
     spoken = [r for r in records if r.get("text")]
     spent = round(tracker.spent[spend_module.GENERATION], 4)
     judge_spend = round(tracker.spent[spend_module.JUDGE], 4)
@@ -873,6 +1009,7 @@ async def run(args, host) -> int:
             "mock": args.mock,
             "judge": judge_spec.label if judge_spec else None,
             "grader_led": grader_led,
+            "live_questions": live_questions,
         },
         "spend": {"generation": spent, "judge": judge_spend, "max_usd": args.max_usd, "max_judge_usd": args.max_judge_usd},
         "stopped": stop.get("reason") or judge_info.get("stopped") or previous.get("stopped"),

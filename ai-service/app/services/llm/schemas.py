@@ -2019,6 +2019,16 @@ class RecallClaim(BaseModel):
     page: Optional[int] = None
 
 
+MAX_RECALL_ASKED = 40
+
+
+class AskedQuestion(BaseModel):
+    """A question the voice coach has already asked about a claim."""
+
+    claim_id: str = Field(max_length=100)
+    question: str = Field(min_length=1, max_length=400)
+
+
 class RecallGradeRequest(BaseModel):
     """What the app sends to grade a recall answer: the prompt, the claims it should cover, the answer."""
 
@@ -2029,6 +2039,11 @@ class RecallGradeRequest(BaseModel):
     user_id: str = Field(min_length=1, max_length=100)
     project_id: str = Field(min_length=1, max_length=100)
     session_id: Optional[str] = Field(default=None, max_length=100)
+    # The voice coach's teach-back (recall_grader.py, "spoken"): the answer was said aloud and the question for each open
+    # claim is what the coach asks next, so it is written to be heard and a wrong claim gets one too.
+    spoken: bool = False
+    # Spoken only: questions the coach has already put to the student for a claim that is still open.
+    asked: List[AskedQuestion] = Field(default_factory=list, max_length=MAX_RECALL_ASKED)
 
 
 class ClaimVerdict(BaseModel):
@@ -2054,6 +2069,18 @@ class ClaimVerdict(BaseModel):
     reasoning_gap: Optional[bool] = Field(
         default=None,
         description="For covered only. true when the answer states the idea as a bare conclusion, without the support or reason the source gives for it; false when the reason is there. Leave out for other verdicts",
+    )
+    # Set by the service for a spoken answer, never written by the model: the question the coach may ask aloud for a
+    # missing, partial or incorrect claim, or null when the model's question said what the claim says.
+    probe: SkipJsonSchema[Optional[str]] = None
+
+
+class SpokenClaimVerdict(ClaimVerdict):
+    """A verdict on a spoken answer: the pointer is the question the voice coach asks next, wrong claims included."""
+
+    pointer: Optional[str] = Field(
+        default=None,
+        description="For missing, partial or incorrect: the one question the voice coach asks the student aloud next to draw this claim out of them. One thing asked, 20 words or fewer, no choice between named answers, and never what the claim says",
     )
 
 
@@ -2140,6 +2167,26 @@ class RecallGradeResult(BaseModel):
                     )
                 )
         return cls(analysis="", confidence=0.9, verdicts=verdicts)
+
+
+class RecallGradeResultSpoken(RecallGradeResult):
+    """RecallGradeResult for a spoken answer (RecallGradeRequest.spoken): the verdicts' pointer is a question to say aloud."""
+
+    verdicts: List[SpokenClaimVerdict] = Field(description="One per claim given; empty when your confidence is under 0.8")
+
+    @classmethod
+    def example(cls) -> "RecallGradeResultSpoken":
+        return cls.model_validate(RecallGradeResult.example().model_dump())
+
+    @classmethod
+    def example_for(cls, prompt: str) -> "RecallGradeResultSpoken":
+        return cls.model_validate(RecallGradeResult.example_for(prompt).model_dump())
+
+
+class RecallGradeResultSpokenV2(RecallGradeResultV2):
+    """RecallGradeResultV2 for a spoken answer."""
+
+    verdicts: List[SpokenClaimVerdict] = Field(description="One per claim given; empty when your confidence is under 0.8")
 
 
 # ---------------------------------------------------------------- gap explainer (spec 5.4)

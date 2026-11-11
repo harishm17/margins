@@ -48,9 +48,20 @@ def assembled_lines(assembled) -> List[str]:
         return []
     lines = [
         f"- The app built the reply itself, with no coach call, in {assembled['turns']} of {assembled['graded_turns']} graded turns "
-        "(a probe on a wrong claim, a second probe on a gap, the new example and a pointer that is not one question went to the coach). Over those turns alone:"
+        "(the new example, and a probe the app has no question it can say for, went to the coach model). Over those turns alone:"
     ]
     lines += [f"  - {verdict(gate)}: {gate['label']}: {gate_value(gate)}" for gate in assembled["gates"]]
+    probes = assembled.get("probes")
+    if probes and probes["planned"]:
+        lines.append(f"- Probes: the app worded {probes['by_app']} of the {probes['planned']} the steps planned.")
+        lines += [f"  - by the app, {source}: {count}" for source, count in sorted(probes["from"].items(), key=lambda kv: -kv[1])]
+        lines += [f"  - by the coach model, {why}: {count}" for why, count in sorted(probes["why"].items(), key=lambda kv: -kv[1])]
+    questions = assembled.get("questions")
+    if questions:
+        lines.append(
+            f"- The questions came from the app's grader ({questions['model']}, --live-questions): {questions['calls']} calls, "
+            f"{questions['errors']} failed, mean {_sec(questions['mean_seconds'])} s, ${questions['cost_usd']:.2f}. The verdicts are the script's."
+        )
     return lines
 
 

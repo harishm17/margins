@@ -69,11 +69,13 @@ test('the replies the app builds equal the committed fixture, never give an open
   const cases = JSON.parse(JSON.stringify(assembledReplyFixture())) as { name: string; facts: { plan: { action: string } }; reply: string | null }[]
   assert.deepEqual(cases, JSON.parse(fs.readFileSync(ASSEMBLED_REPLY_FIXTURE, 'utf8')))
   const reply = (name: string) => cases.find((entry) => entry.name === name)!.reply
-  // Left to the coach model: no usable question from the grader, a wrong claim, a second probe, nothing known to follow.
+  // Left to the coach model: no question from the grader that can be said (none, two in one, one that says the claim, one
+  // already asked), which a wrong claim and a second probe cannot do without, and a closing turn with nothing known to follow.
   const left = [
     'a pointer that only names the idea', 'a pointer holding two questions', 'a question too long to say', 'a leading question that says the claim',
     'two questions joined in one sentence', 'a question that names its answers',
     'wrong claim', 'second probe on the same gap', 'loose claim, no question, a long quote', 'a quote with a question in it',
+    'wrong claim, a spoken question joining two', 'a spoken question that says the claim', 'second probe, the question already asked',
     'a prerequisite named as a question', 'a claim too long to say', 'a claim worded as a question', 'the next idea is named as a question',
     'a closing turn with nothing known to follow',
   ]

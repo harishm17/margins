@@ -82,6 +82,8 @@ export type AssessedClaim = {
   studentQuote?: string | null
   misconception?: string | null
   pointer?: string | null
+  /** The grader's question for the voice coach to ask aloud about an open claim (a grade asked for with `spoken`). */
+  probe?: string | null
   /**
    * The grader's judgement of a covered claim: true when it was stated without the support the source gives for it, false
    * when the support was there, null or absent when it did not say (the position of the claim then stands in).
@@ -163,6 +165,8 @@ export type ConceptState = {
   outcome: 'explained' | 'taught' | null
   /** Times the student has asked to be told since the coach last explained on this idea (counted only with PROMPTS_V2 voice). */
   helpAsked?: number
+  /** Questions the app has put to the student, by claim (kept only with VOICE_GRADER_LED): the next probe on a claim must differ. */
+  asked?: Record<string, string[]>
 }
 
 export const emptyConceptState = (): ConceptState => ({ assessments: 0, said: [], gaps: {}, sayBack: null, exampleAsked: false, outcome: null })

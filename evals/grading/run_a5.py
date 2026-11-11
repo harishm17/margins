@@ -91,7 +91,7 @@ def _app() -> None:
     DATABASE_URL (finding 91)."""
     os.environ.setdefault("DATABASE_URL", UNUSED_DB)
     os.environ.setdefault("EMBEDDING_PROVIDER", "local")
-    for path in (AI_SERVICE_DIR, EVALS_DIR, EVALS_DIR / "generation"):
+    for path in (AI_SERVICE_DIR, EVALS_DIR, EVALS_DIR / "generation", EVALS_DIR / "tutoring"):
         if str(path) not in sys.path:
             sys.path.insert(0, str(path))
 
@@ -430,8 +430,9 @@ def recall_counts(dataset: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def recall_request(entry: Dict[str, Any], answer: Dict[str, Any]) -> Any:
-    """The request the app's route builds for one answer."""
+def recall_request(entry: Dict[str, Any], answer: Dict[str, Any], spoken: bool = False) -> Any:
+    """The request the app's route builds for one answer; `spoken` is the voice coach's (the grader writes the question
+    to ask aloud for each claim left open)."""
     _app()
     from app.services.llm.schemas import RecallClaim, RecallGradeRequest
 
@@ -441,6 +442,7 @@ def recall_request(entry: Dict[str, Any], answer: Dict[str, Any]) -> Any:
         answer=answer["text"],
         user_id="eval",
         project_id="eval",
+        spoken=spoken,
     )
 
 
@@ -471,19 +473,52 @@ async def grade_recall_answer(request: Any) -> Dict[str, Any]:
         "outcome": "ok",
         "status": result.status,
         "confidence": result.confidence,
-        "verdicts": {v.claim_id: {"verdict": v.verdict, "reasoning_gap": v.reasoning_gap} for v in result.verdicts},
+        "verdicts": {
+            v.claim_id: {"verdict": v.verdict, "reasoning_gap": v.reasoning_gap, "pointer": v.pointer, "probe": v.probe}
+            for v in result.verdicts
+        },
     }
+
+
+QUESTION_SAID = "the app says it as written"
+QUESTION_OUTCOMES = (
+    QUESTION_SAID,
+    "none written",
+    "says the claim (dropped by the service)",
+    "not one open question",
+    "says the claim (dropped by the app)",
+)
+
+
+def question_outcome(verdict: Dict[str, Any], claim_text: str) -> Optional[str]:
+    """What the voice coach can do with the grader's question for a claim left open, by the app's own rules
+    (teach_state.py, the mirror of assembled-reply.ts). None for a covered claim: it gets no question."""
+    _app()
+    from teach_state import gives_away, one_open_question
+
+    if verdict.get("verdict") in (None, "covered"):
+        return None
+    if not (verdict.get("pointer") or "").strip():
+        return QUESTION_OUTCOMES[1]
+    if not verdict.get("probe"):
+        return QUESTION_OUTCOMES[2]
+    question = one_open_question(verdict["probe"])
+    if not question:
+        return QUESTION_OUTCOMES[3]
+    return QUESTION_OUTCOMES[4] if gives_away(question, claim_text) else QUESTION_SAID
 
 
 def recall_row(arm: str, entry: Dict[str, Any], answer: Dict[str, Any], graded: Dict[str, Any]) -> Dict[str, Any]:
     """Labels and the grade side by side, without the answer's text."""
     verdicts = graded.get("verdicts", {})
+    texts = {claim["id"]: claim["text"] for claim in entry["claims"]}
     claims = [
         {
             "expected": label,
             "verdict": verdicts.get(claim_id, {}).get("verdict"),
             "gap_expected": (answer.get("reasoning_gap") or {}).get(claim_id),
             "gap_got": verdicts.get(claim_id, {}).get("reasoning_gap"),
+            "question": question_outcome(verdicts.get(claim_id, {}), texts.get(claim_id, "")),
         }
         for claim_id, label in answer["labels"].items()
     ]
@@ -510,6 +545,7 @@ def _recall_arm_scores(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     not_covered = [c for c in claims if c["expected"] != "covered"]
     covered = [c for c in claims if c["expected"] == "covered"]
     gaps = [c for c in claims if c["gap_expected"] is not None and c["verdict"] == "covered"]
+    left_open = [c for c in claims if c.get("question")]
     by_kind = {}
     for kind in dict.fromkeys(c["kind"] for c in claims):
         mine = [c for c in claims if c["kind"] == kind]
@@ -528,6 +564,14 @@ def _recall_arm_scores(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
             label: dict(Counter(c["verdict"] or "none" for c in claims if c["expected"] == label)) for label in VERDICTS
         },
         "by_kind": by_kind,
+        "questions": {
+            "said": _rate(sum(c["question"] == QUESTION_SAID for c in left_open), len(left_open)),
+            "by_verdict": {
+                verdict: dict(Counter(c["question"] for c in left_open if c["verdict"] == verdict))
+                for verdict in VERDICTS
+                if verdict != "covered"
+            },
+        },
     }
 
 
@@ -538,14 +582,14 @@ def aggregate_recall(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {"arms": scores, "gates": apply_gates(scores, RECALL_GATES)}
 
 
-async def capture_recall_requests(dataset: List[Dict[str, Any]]) -> "_CapturePrompt":
+async def capture_recall_requests(dataset: List[Dict[str, Any]], spoken: bool = False) -> "_CapturePrompt":
     """Every request the app's recall grader builds for the dataset (messages and the schema it picked), nothing sent.
     Answers the grader refuses to send (too short to read) build none."""
     capture = _CapturePrompt()
     with recall_provider(capture):
         for entry in dataset:
             for answer in entry["answers"]:
-                await grade_recall_answer(recall_request(entry, answer))
+                await grade_recall_answer(recall_request(entry, answer, spoken))
     return capture
 
 
@@ -574,6 +618,7 @@ def render_recall_report(summary: Dict[str, Any], meta: Dict[str, Any]) -> str:
         f"{counts['answers']} hand-labelled recall answers ({counts['gradable']} gradable, {counts['ungradable']} not) to "
         f"{counts['prompts']} recall prompts, {counts['claims']} claim labels {counts['by_label']}, graded once per arm by the "
         f"app's recall grader (`grade_recall`, prompts {prompts.get('revision', '?')}, PROMPTS_V2={prompts.get('PROMPTS_V2', '')!r})."
+        + (" The requests are the voice coach's (`spoken`): the grader also writes the question to ask aloud." if summary.get("spoken") else "")
     )
     out.append("")
     for arm in names:
@@ -605,15 +650,36 @@ def render_recall_report(summary: Dict[str, Any], meta: Dict[str, Any]) -> str:
         out.append("")
         out.append(_table(["Label \\ verdict", *columns], [[label] + [str(confusion[label].get(v, 0)) for v in columns] for label in VERDICTS]))
         out.append("")
+    if summary.get("spoken"):
+        out += [
+            "## Questions for the voice coach",
+            "",
+            "For each claim the grader left open, what the app can do with the question it wrote, by the reply builder's own "
+            "rules: one open question, short enough to hold by ear, that does not say the claim. Any other outcome goes to the "
+            "coach model. The questions themselves are in the run's raw folder.",
+            "",
+        ]
+        for arm in names:
+            questions = arms[arm]["questions"]
+            out.append(f"**{arm}**: {_count(questions['said'])} said as written.")
+            out.append("")
+            verdicts = list(questions["by_verdict"])
+            out.append(
+                _table(
+                    ["Outcome", *verdicts],
+                    [[outcome] + [str(questions["by_verdict"][v].get(outcome, 0)) for v in verdicts] for outcome in QUESTION_OUTCOMES],
+                )
+            )
+            out.append("")
     return "\n".join(out).rstrip() + "\n"
 
 
-async def _grade_recall_arm(arm: str, dataset: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+async def _grade_recall_arm(arm: str, dataset: List[Dict[str, Any]], spoken: bool = False) -> List[Dict[str, Any]]:
     import adapters
 
     async def one(entry, answer):
         with adapters.call_sink() as calls:
-            graded = await grade_recall_answer(recall_request(entry, answer))
+            graded = await grade_recall_answer(recall_request(entry, answer, spoken))
         outcome = graded["outcome"] if calls or graded["outcome"] == "ok" else "not sent (spend cap)"
         return {**recall_row(arm, entry, answer, graded), "outcome": outcome, "graded": graded, "calls": calls}
 
@@ -632,13 +698,13 @@ async def run_recall(args: argparse.Namespace) -> int:
     app_choice = resolve_model("recall_grading")
     models = {"app": {"model": app_choice.model, "effort": app_choice.effort, "app_choice": True}}
     price = 1.0 if args.mock else BATCH_PRICE
-    capture = await capture_recall_requests(dataset)
+    capture = await capture_recall_requests(dataset, args.spoken)
     estimate = await estimate_recall_usd(capture, app_choice.model)
     revision = prompt_revision("tutor")
     request = request_summary(capture.messages[0], capture.schemas[0]) if capture.messages else {}
 
     log("Plan (recall grader)")
-    log(f"  prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> tutor {revision['areas']['tutor']}; first request: {request}")
+    log(f"  prompts: PROMPTS_V2={revision['PROMPTS_V2']!r} -> tutor {revision['areas']['tutor']}; spoken={args.spoken}; first request: {request}")
     log(f"  {counts['answers']} answers ({counts['ungradable']} ungradable) to {counts['prompts']} prompts; {len(capture.messages)} reach the model; kinds {counts['by_kind']}")
     log(f"  app {app_choice.model} at {app_choice.effort} effort: about ${estimate:.3f} on the Batch API (output tokens guessed; thinking not counted)")
     log(f"  cap --max-usd {args.max_usd}")
@@ -668,7 +734,7 @@ async def run_recall(args: argparse.Namespace) -> int:
 
     log("Grading")
     with recall_provider(metered):
-        records = await _grade_recall_arm("app", dataset)
+        records = await _grade_recall_arm("app", dataset, args.spoken)
     (run_dir / "raw" / "app.json").write_text(json.dumps(records, indent=1) + "\n")
 
     rows = [{k: v for k, v in r.items() if k not in ("graded", "calls")} for r in records]
@@ -676,11 +742,13 @@ async def run_recall(args: argparse.Namespace) -> int:
     summary["dataset"] = counts
     summary["models"] = models
     summary["prompts"] = revision
+    summary["spoken"] = args.spoken
     summary["cost"] = {"app": round(sum(c["cost_usd"] for r in records for c in r["calls"]), 6)}
     meta = {"label": args.label, "date": date}
     summary["run"] = {
         **meta,
         "dataset_kind": "recall",
+        "spoken": args.spoken,
         "commit": git("rev-parse", "--short", "HEAD"),
         "dirty": bool(git("status", "--porcelain", "--", "evals", "ai-service/app")),
         "arms": models,
@@ -710,6 +778,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--label", default=None, help="default a5, or a5-recall with --recall")
     parser.add_argument("--arms", default=",".join(ARMS), help="comma-separated, from: " + ", ".join(ARMS) + " (not used with --recall)")
     parser.add_argument("--recall", action="store_true", help="grade the recall dataset with the app's recall grader (one arm: the app's own model)")
+    parser.add_argument("--spoken", action="store_true", help="with --recall: grade as the voice coach does (the grader writes the question to ask aloud)")
     parser.add_argument("--recall-dataset", type=Path, default=DEFAULT_RECALL_DATASET, help="the hand-labelled recall answers")
     parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET, help="the hand-labelled answers")
     parser.add_argument("--dry-run", action="store_true", help="build the dataset and print the estimate; nothing is sent")
