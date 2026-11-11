@@ -100,13 +100,23 @@ def render_markdown(summary: Dict[str, Any]) -> str:
     commit = (code.get("commit") or "")[:10]
     dirty = " (app code modified)" if code.get("app_dirty") else ""
     lines: List[str] = [f"# Teach-back eval: {summary['label']}", ""]
+    # The grader's calls are counted with the coach's (one cap, --max-usd): say how much of the sum is the grader's.
+    graders = [g["cost_usd"] for g in (metrics.get("grader"), (metrics.get("assembled") or {}).get("questions")) if g]
+    graders_share = sum(graders) if graders else None
     lines += [
         f"- Date: {summary['date']}. Code: `{commit}`{dirty}, branch `{code.get('branch', '')}`.",
         f"- {config['scenarios']} scenarios ({metrics.get('ideas', config['scenarios'])} ideas), {metrics['turns']} coach turns spoken.",
         f"- Coach model `{config['coach_model']}` (the app's voice purpose). The coach is told the scripted verdicts, not the recall grader's"
-        + ("; the grader was run beside the script (below)." if metrics.get("grader") else " (the grader is not part of this run; --grader runs it beside the script).")
+        + (
+            "; the grader was run beside the script (below)."
+            if metrics.get("grader")
+            else "; the app's grader wrote the questions the app says (--live-questions, below)."
+            if graders_share is not None
+            else " (the grader is not part of this run; --grader runs it beside the script)."
+        )
         + (" **Mock provider: no model was called, the turns and scores are placeholders.**" if config.get("mock") else ""),
         f"- Spend: {usd(spend['generation'], 2)} on the coach"
+        + (f" and the app's grader ({usd(graders_share, 2)} of it the grader's)" if graders_share is not None else "")
         + (f" and {usd(spend.get('judge', 0.0), 2)} on the teaches-before-probe judge `{config['judge']}`" if config.get("judge") else "; the teaches-before-probe judge was not run (no --judge)")
         + f" (caps {usd(spend['max_usd'], 2)} in all, {usd(spend.get('max_judge_usd', 0.0), 2)} for the judge).",
     ]

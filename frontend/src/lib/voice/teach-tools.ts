@@ -530,12 +530,16 @@ async function scoreSayBack(ctx: TeachToolContext, concept: RecallConcept, claim
   })
 }
 
-/** What the student has said about the idea, newest last, cut to what the grader takes. */
-function saidTogether(said: string[]): string {
-  let text = said.join(' ')
+/**
+ * What the student has said about the idea, newest last, cut to what the grader takes. `between` is a line break for the
+ * spoken grader (VOICE_GRADER_LED), whose prompt reads each line as one thing said and grades the later line when the
+ * student has put an earlier one right.
+ */
+function saidTogether(said: string[], between = ' '): string {
+  let text = said.join(between)
   while (text.length > MAX_RECALL_ANSWER_CHARS && said.length > 1) {
     said = said.slice(1)
-    text = said.join(' ')
+    text = said.join(between)
   }
   return text.slice(-MAX_RECALL_ANSWER_CHARS)
 }
@@ -614,7 +618,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
       const graded = await gradeSpoken({
         prompt: conceptTeachBackPrompt(concept.name),
         claims: claimsForGrading([concept]),
-        answer: saidTogether(said),
+        answer: saidTogether(said, led ? '\n' : ' '),
         user_id: ctx.userId,
         project_id: ctx.projectId,
         session_id: ctx.sessionId,

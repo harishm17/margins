@@ -237,7 +237,7 @@ dbTest('VOICE_GRADER_LED: a graded step carries the reply to say, without the cl
     delete process.env.VOICE_GRADER_LED
     const off = await play()
     assert.deepEqual(off.map((step) => step.spoken), [undefined, undefined, undefined, undefined])
-    assert.equal(off.requests.some((request) => request.spoken || request.asked), false, 'the grader is asked as for a typed answer')
+    assert.equal(off.requests.some((request) => request.spoken || request.asked || request.answer.includes('\n')), false, 'the grader is asked as for a typed answer')
 
     process.env.VOICE_GRADER_LED = 'true'
     // The grader's question for the ear is said, and what was asked goes back to it so that its next question is another.
@@ -250,6 +250,9 @@ dbTest('VOICE_GRADER_LED: a graded step carries the reply to say, without the cl
     assert.deepEqual(led.requests.map((request) => [request.claims.length, request.spoken ?? false]), [[2, true], [2, true], [2, true], [2, true], [1, false]])
     assert.deepEqual([led.requests[0].asked, led.requests[1].asked], [undefined, [{ claim_id: led.claimId, question: FIRST }]])
     assert.deepEqual(led.requests[2].asked?.map((entry) => entry.question), [FIRST, SMALLER])
+    // Each thing the student said reaches the spoken grader on its own line, earliest first: its prompt grades the later
+    // line when the student has put an earlier one right.
+    assert.deepEqual(led.requests[2].answer.split('\n'), ['Two keys collide in a bucket.', 'They go in one bucket and collide, that is it.', 'Maybe the table grows?'])
     // The same question again is not asked twice by the app: the coach model words that turn.
     assert.equal((await play([FIRST, FIRST]))[1].spoken, undefined)
 

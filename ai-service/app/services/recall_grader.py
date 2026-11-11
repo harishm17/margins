@@ -104,16 +104,18 @@ _POINTER_RULE_SPOKEN = """- For a missing, partial or incorrect claim, write a p
   - A claim may come with questions in <already_asked>: the coach has put those to the student and the claim is still open. Ask something different and smaller, about one concrete case or one step of the idea.
   For example (illustrative, write the question for the claim and the answer at hand): for a missing claim that colliding keys share a bucket, "What happens to a key whose bucket is already taken?"; for a student who said a plant builds its wood out of the soil, "Where do the carbon atoms in the wood come from?"
 """
-# What a student says to the coach on one idea is graded together, oldest first (the app's teach-tools.ts). Why this
-# rule: in the voice eval of 2026-11-10 a student who was wrong twice and then explained the idea correctly was still
-# graded incorrect, because the first two answers were in the text, so the coach would have explained what they had just
-# said themselves.
-_LATER_WORDS_RULE = """- The answer can be several things the student said in turn, joined in the order they said them. When they say one thing and later put it right, the later statement is what they hold now: grade that one and quote it, and do not mark a claim incorrect for an earlier statement they have since corrected.
+# What a student says to the coach on one idea is graded together, a line for each thing said, oldest first (the app's
+# teach-tools.ts). Why this rule: in the voice eval of 2026-11-10 a student who was wrong twice and then explained the
+# idea correctly was still graded incorrect, because the first two answers were in the text, so the coach would have
+# explained what they had just said themselves. Why lines: joined with spaces the grader could not see where the later
+# statement began, and one of the three such students was still graded incorrect; with lines, none in three replays.
+_LATER_WORDS_RULE = """- The answer can be several things the student said in turn, each on its own line, earliest first. When they say one thing and on a later line put it right, the later line is what they hold now: grade that one and quote it, and do not mark a claim incorrect for an earlier line they have since corrected.
 """
 # The new example the coach asks once every claim is covered (the app's teach-back.ts, ask_new_example). Why the grader
 # writes it: it has the claims, which the coach's small model never sees, and in the voice eval of 2026-11-10 that model
-# joined a second question on in 11 of its 16 new examples.
-_NEW_CASE_RULE = """- When every claim is covered, also write new_case: the coach asks it aloud next, to see whether the student can use the idea, since wording that was memorised can sound right. Describe one small concrete case that the student's answer did not use, with easy numbers or an everyday setting, and ask what happens in it or how much, so that the answer follows from the claims and has to be worked out. One or two short sentences ending in the question, around twenty-five words in all, in plain spoken words. One thing asked, as for a pointer: no second question joined on, and not a question that yes or no would answer. Leave new_case out when any claim is not covered. For example (illustrative): for claims about a hash table's chaining, "Three keys all hash to bucket five. What does bucket five hold after the third one goes in?"
+# joined a second question on in 11 of its 16 new examples. Why "required": told to "also write" it, the grader left
+# it out for two of 20 answers it found to cover every claim, both ones that got there after wrong or loose lines.
+_NEW_CASE_RULE = """- When your verdict for every claim is covered, new_case is required, however the student got there (first try, or after wrong or loose lines they have since put right): the coach asks it aloud next, to see whether the student can use the idea, since wording that was memorised can sound right. Describe one small concrete case that the student's answer did not use, with easy numbers or an everyday setting, and ask what happens in it or how much, so that the answer follows from the claims and has to be worked out. One or two short sentences ending in the question, around twenty-five words in all, in plain spoken words. One thing asked, as for a pointer: no second question joined on, and not a question that yes or no would answer. Leave new_case out when any claim is not covered. For example (illustrative): for claims about a hash table's chaining, "Three keys all hash to bucket five. What does bucket five hold after the third one goes in?"
 """
 # The rules either side of the pointer's are the written grader's own, so the two prompts cannot drift apart. Only the
 # audited prompt has a spoken form: under the v1 tutor prompts a spoken answer is graded as a written one.
@@ -278,8 +280,11 @@ def _shares_a_word(quote: str, claim: RecallClaim) -> bool:
     return bool(_stems(quote) & (_stems(claim.text) | _stems(claim.quote) | _stems(claim.concept_name)))
 
 
-def _restates(pointer: str, claim: RecallClaim, prompt: str) -> bool:
-    """The pointer says what the claim says: it holds a run of the claim's or its quote's own words."""
+def _restates(pointer: str, claim: RecallClaim, prompt: str, spoken: bool = False) -> bool:
+    """The pointer says what the claim says: it holds a run of the claim's or its quote's own words. For a question to be
+    said aloud (`spoken`) the run has to be half the claim: a question names the setting the claim is about and asks for
+    the outcome ("What happens to F as a becomes very negative?"), and in the runs of 2026-11-10 all six questions that
+    five words in a row took out were of that kind, each then written by the coach's small model instead."""
     if blocks_alone(string_leak(pointer, [claim.text], None, problem=prompt)):
         return True
     mine = _words(pointer)
@@ -292,7 +297,7 @@ def _restates(pointer: str, claim: RecallClaim, prompt: str) -> bool:
             continue
         if len(mine) >= 3 and flat in " ".join(theirs):
             return True
-        size = min(LEAK_RUN_WORDS, len(theirs))
+        size = min(len(theirs), max(LEAK_RUN_WORDS, (len(theirs) + 1) // 2) if spoken else LEAK_RUN_WORDS)
         runs = {" ".join(theirs[i : i + size]) for i in range(len(theirs) - size + 1)}
         if any(" ".join(mine[i : i + size]) in runs for i in range(len(mine) - size + 1)):
             return True
@@ -313,7 +318,7 @@ def _probe(question: Optional[str], claim: RecallClaim, prompt: str) -> Optional
     or it says what the claim says. Whether it is one open question is the reply builder's check (the app's
     assembled-reply.ts), which leaves any other to the coach model."""
     text = limit_reply(" ".join((question or "").split()), MAX_POINTER_WORDS)
-    return text if text and not _restates(text, claim, prompt) else None
+    return text if text and not _restates(text, claim, prompt, spoken=True) else None
 
 
 def _new_case(text: Optional[str]) -> Optional[str]:

@@ -265,7 +265,7 @@ class Session:
     async def write_questions(self) -> None:
         """--live-questions: ask the app's grader as teach-tools.ts assessExplanation asks it under VOICE_GRADER_LED, before
         the step of this turn runs: the first explanation of an idea alone, a later answer with everything said on the idea
-        before it, marked spoken, with the questions already put for each claim. Its questions are kept for the step; a
+        before it (a line each), marked spoken, with the questions already put for each claim. Its questions are kept for the step; a
         first "I don't know" is not graded, as in the app. A failed call leaves no questions (the coach model words the turn)."""
         if not self.live_questions or self.closed() or self.said == 0:
             return
@@ -278,7 +278,7 @@ class Session:
 
         concept = self.concept
         said = [t["say"] for t in self.turns()[: self.said] if t["kind"] == "explain"]
-        answer = turn["say"] if state["assessments"] == 0 else " ".join(said)
+        answer = turn["say"] if state["assessments"] == 0 else "\n".join(said)
         asked = [AskedQuestion(claim_id=claim_id, question=question) for claim_id, questions in self.asked[self.index].items() for question in questions]
         request = RecallGradeRequest(
             prompt=idea_prompt(concept, 1)["prompt"],
@@ -855,6 +855,7 @@ def estimate(scenarios: List[Dict[str, Any]], prompts: Dict[str, Any], tracker, 
     plan = {"scenarios": len(scenarios), "calls": calls, "model": model, "usd": usd}
     if grader:
         # Every scripted turn the app would grade, at most; an example answer is graded only when the run has its question.
+        # (--live-questions asks the grader for about as many: once for each graded explanation.)
         graded = sum(1 for s in scenarios for t in flat_turns(s) if not t.get("dont_know"))
         grader_model = resolve_model("recall_grading").model
         per_call = tracker.estimate_call(grader_model, "recall_grading", 900)
@@ -879,7 +880,7 @@ def print_plan(args, plan: Dict[str, Any], log, revision: Optional[Dict[str, Any
     if plan.get("judge_usd") is not None:
         log(f"  teaches-before-probe judge {plan['judge_model']}: about ${plan['judge_usd']:.2f} for {plan['judged']} asking turns (an ideal coach asks on most turns)")
     if plan.get("grader_usd") is not None:
-        log(f"  recall grader {plan['grader_model']} (--grader): about ${plan['grader_usd']:.2f} for up to {plan['graded']} scripted answers (counted under --max-usd)")
+        log(f"  recall grader {plan['grader_model']} (--grader or --live-questions): about ${plan['grader_usd']:.2f} for up to {plan['graded']} scripted answers (counted under --max-usd)")
     log(f"  estimated total: ${plan['usd'] + (plan.get('judge_usd') or 0) + (plan.get('grader_usd') or 0):.2f}. Caps: --max-usd {args.max_usd}, --max-judge-usd {args.max_judge_usd}")
     log("  These are rough: a coach that calls a tool twice in a turn, or speaks longer, costs more. Nothing was called.")
 
@@ -919,7 +920,7 @@ async def run(args, host) -> int:
 
     if args.dry_run:
         host.prepare_app_environment()
-        print_plan(args, estimate(scenarios, prompts, tracker, judge_spec, bool(getattr(args, "grader", False))), log, revision, prompts)
+        print_plan(args, estimate(scenarios, prompts, tracker, judge_spec, bool(getattr(args, "grader", False) or getattr(args, "live_questions", False))), log, revision, prompts)
         return 0
 
     date = datetime.date.today().isoformat()
@@ -1060,7 +1061,7 @@ async def run(args, host) -> int:
     md_path = run_dir.parent / f"{run_dir.name}.md"
     md_path.write_text(teach_report.render_markdown(summary))
     log(f"\nWrote {md_path}\nWrote {run_dir / 'summary.json'}")
-    log(f"Spent ${spent:.2f} on the coach" + (f" and ${judge_spend:.2f} on the judge" if judge_spec else "") + f" in {time.perf_counter() - started:.0f}s")
+    log(f"Spent ${spent:.2f} on the coach and any grader calls" + (f" and ${judge_spend:.2f} on the judge" if judge_spec else "") + f" in {time.perf_counter() - started:.0f}s")
     for gate in summary_metrics["gates"]:
         log(f"  {teach_report.verdict(gate):<8} {gate['label']}: {teach_report.gate_value(gate)}")
     return 0 if summary_metrics["passed"] else 1

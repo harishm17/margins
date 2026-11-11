@@ -251,6 +251,13 @@ async def test_a_spoken_answer_gets_the_question_to_ask_aloud_for_each_open_clai
     assert "probe" not in schema.model_json_schema()["$defs"]["SpokenClaimVerdict"]["properties"]  # set by the service, not the model
     # The grader is told which questions the student was already put, for the claims it is grading.
     assert "How does the table keep two keys in one bucket?" in prompt and "Not about these claims?" not in prompt
+    # Named bug (voice eval of 2026-11-10): a question that names the claim's setting and asks for the outcome was
+    # dropped as saying the claim, because it had five words in a row from a long claim ("full turn of the pedals"), and
+    # the coach's small model wrote the question instead.
+    gear = RecallClaim(id="g-1", concept_id="co-9", concept_name="Gear ratio", page=2, text="A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.")
+    asks = "In a high gear, how many times does the rear wheel spin for one full turn of the pedals?"
+    with use(Scripted([result([verdict("g-1", "incorrect", "A bigger ratio is an easier gear", pointer=asks)])])):
+        assert (await grade_recall(request(claims=[gear], answer="A bigger ratio is an easier gear, because the pedals turn easily.", spoken=True))).verdicts[0].probe == asks
     # Every claim covered: the new example the coach asks next comes with the verdicts. A case the model wrote is not
     # passed on for a written answer, or when the checks leave a claim open.
     case = "Three keys all hash to bucket five. What does bucket five hold after the third one goes in?"
