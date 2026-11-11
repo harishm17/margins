@@ -136,6 +136,8 @@ export type CoachState = {
 export const CLARIFIES_ALLOWED = 1
 /** Questions kept per claim for the grader's next one to differ from (a gap gets at most two probes). */
 const ASKED_KEPT = 3
+// The most questions the grader takes with one answer (MAX_RECALL_ASKED in the AI service's schemas.py).
+const MAX_RECALL_ASKED = 40
 
 /** Utterances kept on the session. */
 export const SAID_KEPT = 8
@@ -581,7 +583,11 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
   let newCase: string | null = null
   const gradeSpoken = async (request: RecallGradeRequest): Promise<RecallGradeAnswer> => {
     if (!led) return grade(ctx, request)
-    const asked = Object.entries(before.asked ?? {}).flatMap(([claimId, questions]) => questions.map((question) => ({ claim_id: claimId, question })))
+    // Only questions on this idea's claims go, and no more than the grader takes (its MAX_RECALL_ASKED).
+    const sent = new Set(request.claims.map((claim) => claim.id))
+    const asked = Object.entries(before.asked ?? {})
+      .flatMap(([claimId, questions]) => (sent.has(claimId) ? questions.map((question) => ({ claim_id: claimId, question })) : []))
+      .slice(-MAX_RECALL_ASKED)
     const answer = await grade(ctx, { ...request, spoken: true, ...(asked.length > 0 ? { asked } : {}) })
     for (const verdict of answer.verdicts ?? []) if (typeof verdict.probe === 'string' && verdict.probe.trim()) probes.set(verdict.claim_id, verdict.probe.trim())
     newCase = typeof answer.new_case === 'string' && answer.new_case.trim() ? answer.new_case.trim() : null

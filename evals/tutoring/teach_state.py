@@ -532,7 +532,8 @@ def _probe_reply(plan: Dict[str, Any], claims: List[Dict[str, Any]], prerequisit
     if plan["probeNumber"] != 1:
         return ask(_pick(ANOTHER_WAY, turn))
     pointer = None if spoken else pointer_question(claim.get("pointer") if claim else None)
-    written = pointer if pointer and not gives_away(pointer[0], claim_text) else None
+    again = pointer is not None and any(same_question(pointer[0], earlier) for earlier in asked)
+    written = pointer if pointer and not again and not gives_away(pointer[0], claim_text) else None
 
     def put(opening: str) -> Optional[Dict[str, str]]:
         return ask(opening) or ({"text": f"{opening} {_page_lead(written[1], written[0])}{written[0]}", "asked": written[0]} if written else None)

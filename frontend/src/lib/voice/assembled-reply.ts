@@ -219,9 +219,11 @@ function probeReply(facts: ReplyFacts, plan: Extract<Plan, { action: 'probe' }>)
   const ask = (opening: string): Built | null => (spoken ? { text: `${opening} ${spoken}`, asked: spoken } : null)
   // The second probe on a gap must be another, smaller question than the first: only the grader writes one.
   if (plan.probeNumber !== 1) return ask(pick(ANOTHER_WAY, facts.turn))
-  // Without one, the question of a written pointer ("Look again at p. 5: ..."), unless it says the claim it is asking for.
+  // Without one, the question of a written pointer ("Look again at p. 5: ..."), unless it says the claim it is asking
+  // for or the student has already been asked it.
   const pointer = spoken ? null : pointerQuestion(claim?.pointer)
-  const written = pointer && !givesAway(pointer.question, claim?.text) ? pointer : null
+  const again = !!pointer && (facts.asked ?? []).some((earlier) => sameQuestion(pointer.question, earlier))
+  const written = pointer && !again && !givesAway(pointer.question, claim?.text) ? pointer : null
   const put = (opening: string): Built | null =>
     ask(opening) ?? (written ? { text: `${opening} ${pageLead(written.page, written.question)}${written.question}`, asked: written.question } : null)
   switch (plan.gap.finding) {

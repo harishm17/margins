@@ -123,9 +123,15 @@ async def test_a_claim_answered_in_symbols_keeps_its_verdict():
     with use(Scripted([graded])):
         out = await grade_recall(request(answer=answer))
     assert [v.verdict for v in out.verdicts] == ["covered", "incorrect", "covered"]
-    # Filler is still not support.
-    with use(Scripted([result([verdict("cl-1", "covered", "and the"), verdict("cl-2", "covered", "The cdf is F(a) = P(X <= a)")])])):
-        assert by_id(await grade_recall(request(answer=answer)))["cl-1"].verdict == "missing"
+    # Filler is still not support, and a slash between two words ("and/or", "yes/no") is not a formula.
+    slashed = answer + " So it is one and/or the other, yes/no."
+    for filler in ("and the", "and/or", "yes/no"):
+        with use(Scripted([result([verdict("cl-1", "covered", filler), verdict("cl-2", "covered", "The cdf is F(a) = P(X <= a)")])])):
+            assert by_id(await grade_recall(request(answer=slashed)))["cl-1"].verdict == "missing", filler
+    # A short quote in symbols with no relation in it is still a statement.
+    for symbols in ("P(A)/P(B)", "n*log n", "1/2"):
+        with use(Scripted([result([verdict("cl-1", "covered", symbols), verdict("cl-2", "missing"), verdict("cl-3", "missing")])])):
+            assert by_id(await grade_recall(request(answer=f"The ratio is {symbols} here.")))["cl-1"].verdict == "covered", symbols
 
 
 @pytest.mark.asyncio

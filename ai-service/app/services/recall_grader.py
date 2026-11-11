@@ -254,8 +254,14 @@ def _stems(text: str) -> set:
     return {word[:STEM] for word in _words(text) if len(word) >= MIN_CONTENT_WORD and word not in _FILLER and not word.isdigit()}
 
 
-# A statement in symbols: two terms with a relation or an operator between them ("p(a|b) = p(a)", "f(a) = p(x <= a)").
-_FORMULA = re.compile(r"[\w)\]]\s*(?:[=<>≤≥≠≈+*/^∩∪]|<=|>=)\s*[\w(\[]")
+# A statement in symbols: two terms with a relation between them ("p(a|b) = p(a)", "f(a) = p(x <= a)"), or with an
+# arithmetic sign between them when one of the two is a number, a bracket or a one-letter name ("p(a)/p(b)", "n*log n").
+# Two words with a slash between them ("and/or", "yes/no") are words, in a typed answer as much as a spoken one.
+_FORMULA = re.compile(
+    r"[\w)\]]\s*(?:[=<>≤≥≠≈∩∪]|<=|>=)\s*[\w(\[]"
+    r"|(?:\b\w|[\d)\]])\s*[+*/^]\s*[\w(\[]"
+    r"|[\w)\]]\s*[+*/^]\s*(?:\w\b|[\d(\[])"
+)
 
 
 def _thin(folded: str) -> bool:
