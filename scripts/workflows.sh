@@ -39,6 +39,9 @@ export GLOBAL_DAILY_LLM_BUDGET_USD=100000
 # DAILY_LLM_BUDGET_USD (harness/allowance.ts DAILY_LIMIT_USD). The first-day rule has its own tests in ai-service.
 export FIRST_DAY_LLM_BUDGET_USD=0
 export WF_FILES_DIR WF_CASSETTE_DIR
+# The AI service's settings need ENVIRONMENT. The stack sets it for the two services; this is for what the runner and
+# the workflows start themselves (the cost summary below, WF7's one-off repair).
+export ENVIRONMENT=development
 export WF_RESULTS_DIR="${WF_RESULTS_DIR:-$ROOT/frontend/test-results/workflows}"
 
 stack() { "$ROOT/scripts/e2e-stack.sh" "$@"; }
@@ -62,6 +65,6 @@ misses="$(grep -c "No recording for" "$E2E_RUN_DIR/ai.log" || true)"
 echo "Requests with no recording: $misses (the AI service's log: $E2E_RUN_DIR/ai.log)"
 if [ "$E2E_REPLAY_MISS" = record ]; then
   echo "Recorded this run (real model calls, priced at list rates):"
-  (cd "$ROOT/ai-service" && ENVIRONMENT=development uv run python -m app.services.llm.replay_provider "$WF_CASSETTE_DIR" "$started")
+  (cd "$ROOT/ai-service" && uv run python -m app.services.llm.replay_provider "$WF_CASSETTE_DIR" "$started")
 fi
 exit "$status"
