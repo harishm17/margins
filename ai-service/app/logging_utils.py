@@ -119,8 +119,14 @@ def configure_logging() -> None:
 
     The root logger gets a stderr handler when it has none (uvicorn configures only its own loggers), so the
     application's records always pass through a handler that scrubs them.
+
+    The service's own loggers (`app.*`) write from INFO up: the root logger is left at WARNING, which dropped the
+    start-up lines and the per-call cost lines. Libraries keep the root's level.
     """
     root = logging.getLogger()
+    own = logging.getLogger("app")
+    if own.level == logging.NOTSET:
+        own.setLevel(logging.INFO)
     if not root.handlers:
         handler = logging.StreamHandler(sys.stderr)
         handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
