@@ -6,7 +6,8 @@
  * `pending_file_deletions` in the SAME transaction as the row delete, so the delete and the promise to remove the
  * file commit together; the AI service's reaper loop removes the objects, retrying with backoff, and its watchdog
  * alerts on rows that stay stuck. Deleting the file right after the commit is only a shortcut: the queue row is the
- * guarantee.
+ * guarantee. A row goes once its file is gone: its path names the account and the course, and a deleted account
+ * leaves nothing that names it.
  *
  * A path ending in `/` is a folder (everything under it).
  */
@@ -30,7 +31,7 @@ export async function queueFileDeletions(
 }
 
 /**
- * After the transaction committed: try to delete the queued files now and mark their rows done. A failure is only
+ * After the transaction committed: try to delete the queued files now and remove their rows. A failure is only
  * logged; the reaper loop retries it.
  */
 export async function deleteQueuedFilesNow(paths: readonly string[]): Promise<void> {
@@ -40,7 +41,7 @@ export async function deleteQueuedFilesNow(paths: readonly string[]): Promise<vo
     try {
       if (path.endsWith('/')) await deleteStoredFolder(path)
       else await deleteFile(path)
-      await prisma.pendingFileDeletion.updateMany({ where: { path, doneAt: null }, data: { doneAt: new Date() } })
+      await prisma.pendingFileDeletion.deleteMany({ where: { path } })
     } catch (error) {
       logServerError('Storage: could not delete a file right away; the deletion queue will retry', error)
     }
