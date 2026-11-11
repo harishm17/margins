@@ -222,6 +222,117 @@
   "reply": null
  },
  {
+  "name": "two questions joined in one sentence",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: Where does a new key land at first, and what must happen when the bucket is taken?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "a question that names its answers",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: Does a bucket hold one key or several?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "a yes-or-no question with a condition in it",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: If the table is full and a key arrives, is there still room for it?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "You have part of it. Think about page 5. If the table is full and a key arrives, is there still room for it?"
+ },
+ {
   "name": "a question too long to say",
   "facts": {
    "plan": {

@@ -62,7 +62,32 @@ export function pointerQuestion(pointer: string | null | undefined): { question:
   if (!match) return null
   const question = match[2].trim()
   if (!question.endsWith('?') || question.indexOf('?') !== question.length - 1 || wordCount(question) > MAX_QUESTION_WORDS) return null
+  if (joinedOrEitherOr(question)) return null
   return { question, page: realPage(match[1] ? Number(match[1]) : null) }
+}
+
+// The form rule of the eval's question gate (evals/tutoring/teach_metrics.py `question_form`), in the same patterns.
+const AUXILIARY = '(?:is|are|was|were|does|do|did|would|will|can|could|should|has|have)'
+const JOINED = new RegExp(`\\b(?:and|or|but)\\s+(?:then\\s+)?(?:what|why|how|who|${AUXILIARY})\\b`, 'i')
+const ASKS = new RegExp(`\\b(?:what|why|how|who|which|where)\\b|(?:^|[,;:]\\s+)(?:(?:so|and|but|then|now)\\s+)?${AUXILIARY}\\b`, 'i')
+const YES_NO = new RegExp(`(?:^|[,;:]\\s+)(?:(?:so|and|but|then|now)\\s+)?(${AUXILIARY})\\s+(\\w+)`, 'gi')
+const REQUEST = /^(?:can|could|would|will)\s+you$|^(?:do|would)\s+you$/i
+const OR = /\bor\b/i
+
+/**
+ * Two questions joined in one sentence ("where does it go, and what must happen next?"), or a question that names its
+ * answers ("does a bucket hold a list or one key?"). Nearly half of the grader's questions were of the first kind when
+ * its stored output was read (2026-11-10); a student answering aloud can hold one question.
+ */
+export function joinedOrEitherOr(question: string): boolean {
+  const joined = JOINED.exec(question)
+  if (joined && ASKS.test(question.slice(0, joined.index))) return true
+  let closed: RegExpMatchArray | null = null
+  for (const match of question.matchAll(YES_NO)) {
+    if (!REQUEST.test(`${match[1]} ${match[2]}`)) closed = match
+  }
+  if (closed) return OR.test(question.slice((closed.index ?? 0) + closed[0].length))
+  return /\bwhich\b/i.test(question) && OR.test(question)
 }
 
 /** A page that can be named: pages count from 1. */

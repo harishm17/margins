@@ -72,6 +72,7 @@ test('the replies the app builds equal the committed fixture, never give an open
   // Left to the coach model: no usable question from the grader, a wrong claim, a second probe, nothing known to follow.
   const left = [
     'a pointer that only names the idea', 'a pointer holding two questions', 'a question too long to say', 'a leading question that says the claim',
+    'two questions joined in one sentence', 'a question that names its answers',
     'wrong claim', 'second probe on the same gap', 'loose claim, no question, a long quote', 'a quote with a question in it',
     'a prerequisite named as a question', 'a claim too long to say', 'a claim worded as a question', 'the next idea is named as a question',
     'a closing turn with nothing known to follow',

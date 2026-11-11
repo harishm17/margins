@@ -333,7 +333,33 @@ def pointer_question(pointer: Optional[str]):
     question = match.group(2).strip()
     if not question.endswith("?") or question.index("?") != len(question) - 1 or len(question.split()) > MAX_QUESTION_WORDS:
         return None
+    if joined_or_either_or(question):
+        return None
     return question, _real_page(int(match.group(1)) if match.group(1) else None)
+
+
+# The mirror of assembled-reply.ts `joinedOrEitherOr`: the patterns of teach_metrics.py `question_form` (which imports this
+# module, so they are repeated here), over one question.
+_AUXILIARY = r"(?:is|are|was|were|does|do|did|would|will|can|could|should|has|have)"
+_JOINED = re.compile(rf"\b(?:and|or|but)\s+(?:then\s+)?(?:what|why|how|who|{_AUXILIARY})\b", re.I)
+_ASKS = re.compile(rf"\b(?:what|why|how|who|which|where)\b|(?:^|[,;:]\s+)(?:(?:so|and|but|then|now)\s+)?{_AUXILIARY}\b", re.I)
+_YES_NO = re.compile(rf"(?:^|[,;:]\s+)(?:(?:so|and|but|then|now)\s+)?({_AUXILIARY})\s+(\w+)", re.I)
+_REQUEST = re.compile(r"^(?:can|could|would|will)\s+you$|^(?:do|would)\s+you$", re.I)
+_OR = re.compile(r"\bor\b", re.I)
+
+
+def joined_or_either_or(question: str) -> bool:
+    """Two questions joined in one sentence, or a question that names its answers."""
+    joined = _JOINED.search(question)
+    if joined and _ASKS.search(question[: joined.start()]):
+        return True
+    closed = None
+    for match in _YES_NO.finditer(question):
+        if not _REQUEST.match(f"{match.group(1)} {match.group(2)}"):
+            closed = match
+    if closed is not None:
+        return bool(_OR.search(question[closed.end() :]))
+    return bool(re.search(r"\bwhich\b", question, re.I) and _OR.search(question))
 
 
 def _real_page(page: Optional[int]) -> Optional[int]:
