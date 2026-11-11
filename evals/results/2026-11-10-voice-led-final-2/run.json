@@ -1,0 +1,22 @@
+{
+  "label": "voice-led-final-2",
+  "date": "2026-11-10",
+  "prompts": {
+    "PROMPTS_V2": "tutor",
+    "areas": {
+      "voice": "v1"
+    },
+    "revision": "v1"
+  },
+  "surface": "teach_back",
+  "patterns": null,
+  "limit": null,
+  "scenarios": "/home/harish/code/margins-wt/voice-led/evals/tutoring/scenarios/teach-back-original.jsonl",
+  "stopped": null,
+  "spend": {
+    "generation": 0.2582,
+    "judge": 0.4799,
+    "max_usd": 1.3,
+    "max_judge_usd": 0.8
+  }
+}

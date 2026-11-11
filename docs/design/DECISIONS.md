@@ -311,16 +311,49 @@ To undo, remove the area from the list and apply the config; no stored data depe
 
 **Cost if wrong.** The bank could make sessions feel samey if it is too small; the defect eval counts distinct cases per concept before any serving goes on. Assembled voice replies could sound stiff; the eval's transcript read decides, and the coach model stays as the fallback. Nothing stored today is rewritten: the old sets stay until the bank has served a topic end to end.
 
-### Redesign step 1: voice replies built by the app (flag `VOICE_GRADER_LED`, off by default)
+### Redesign step 1: voice replies built by the app (flag `VOICE_GRADER_LED`)
 
-Set `VOICE_GRADER_LED=true` on the web service and a graded teach-back turn is answered with a reply the app builds (`frontend/src/lib/voice/assembled-reply.ts`), with no coach-model call for that turn. The grader call is unchanged, so the wait after the student stops speaking loses the coach's time to first sentence and nothing else changes in what is stored.
+Set `VOICE_GRADER_LED=true` on the web service and a graded teach-back turn is answered with a reply the app builds (`frontend/src/lib/voice/assembled-reply.ts`), with no coach-model call for that turn. The grader call was already there, so the wait after the student stops speaking loses the coach's time to first sentence. Nothing changes in what is stored. In code the flag is off by default; to undo it in production, unset the variable.
 
-- **Built by the app:** the explanation of a claim and the say-back request (both `explain` and `explain_first`); the closing turn with the next idea's prompt; a first probe on a missing prerequisite, on a claim stated without its support, on a loose claim, and on a missing claim when the grader's pointer holds one question of 30 words or fewer.
-- **Still worded by the coach model:** a probe on a wrong claim, every second probe, the new example, and any turn where the grader gave no usable question, the student's quote is over 16 words or the claim is over 60. A grader question is not usable when it repeats 60% or more of the claim's longer words (it would say the claim), and a quote, a concept name or a claim holding a question mark is not put into a sentence. So is every turn that is not an answer (a request, a question, small talk).
+**What the grader is asked (only with the flag, and only on the audited grader prompt, `PROMPTS_V2` "tutor").** The request is marked `spoken`, carries the questions the student has already been put for each claim (`asked`), and holds what the student said on the idea a line for each thing said, earliest first. The grader then also writes:
+
+- **`probe`, one question to say aloud for each open claim** (missing, partial or incorrect). It is told to ask one thing in about fifteen spoken words, not to say the claim, not to tell a student they are wrong, and to ask something different and smaller than the questions in `asked`.
+- **`new_case`, the new example,** required once every claim is covered: one small concrete case and one question about it.
+- **The later line counts.** When a student says one thing and later puts it right, the later line is graded and quoted.
+
+The service passes a probe on unless it says the claim (a run of the claim's words half the claim long, or the claim's answer outright), and a new case only when every checked verdict is covered, it holds a question and it is 45 words or fewer.
+
+- **Built by the app:** the explanation of a claim and the say-back request (`explain`, `explain_first`); the closing turn with the next idea's prompt; a first or second probe on any open claim, from the grader's question, or from the written pointer or a fixed line when there is none (a missing prerequisite, a claim stated without its support, a loose claim, a missing claim); the new example, from the grader's case.
+- **What the app checks before it says a question:** it is one open question (of two joined in one sentence it says the first), 30 words or fewer (36 for a new example), it does not repeat 60% or more of the claim's longer words, and it is not one already asked. A quote, a concept name or a claim holding a question mark is not put into a sentence.
+- **Still worded by the coach model:** every turn that is not an answer (a request such as "just tell me", a question, small talk, an answer the grader could not read), and a probe or new example for which the app has no question it can say. For the new example the coach's instruction then says to ask one thing.
 - **Rules the builder keeps:** a probe never contains the claim's text; only a passed example or every claim covered is called right; the next idea is asked in the closing turn, once.
 
-**Evidence so far (no model run).** The eval's Python mirror (`evals/tutoring/teach_state.py`, `assembled_reply`) is pinned to the TypeScript by two fixtures: `teach_state_parity*.json` (every scenario step) and `assembled_reply_parity.json` (the cases the scenarios do not reach). `run_eval.py --surface teach_back --grader-led` plays the built turns; on the 29 scenarios the app builds 59 of 99 graded turns and those pass every rule-based gate, the question-form gate included (the gate v1 fails at 59%). The other 40 turns are the coach model's and are not measured by a mock run.
+**Evidence (runs of 2026-11-10, reports in `evals/results/`).** The eval's Python mirror (`evals/tutoring/teach_state.py`) is pinned to the TypeScript by two fixtures (`teach_state_parity*.json`, `assembled_reply_parity.json`).
 
-**What the grader writes today.** The recall eval runs of 2026-11-10 kept the grader's output: 71 pointers on missing or partial claims over the two prompt revisions. 29 (41%) are one open question the app can say as it stands. 32 (45%) join two questions in one sentence ("where does a new item land, and what must happen next?"), which is the fault the question-form gate counts, so the builder leaves those to the coach model (`joinedOrEitherOr`, the gate's own patterns). 9 (13%) only name the idea. The grader writes nothing to ask for a wrong claim (17 such verdicts in those runs).
+Voice teach-back, 29 scripted students on three topics, 132 coach turns, the coach on Haiku and the questions from the app's grader on Sonnet (`run_eval.py --surface teach_back --grader-led --live-questions`):
 
-**Before it goes on.** The grader writes one spoken probe for each open claim, wrong claims included, and is told to ask one thing, so the coach model is left only the second probe and the new example; then one real run with the live grader, read as transcripts. It goes on only if it passes every gate v1 passes and the question-form gate. To undo, unset the variable.
+| Run | Question is single and open (gate 95%) | Built by the app (of 99 graded turns) | Other gates |
+|---|---|---|---|
+| `v1-teach-r2`, the coach model words every turn | 59.3% (32 of 54), fails | 0 | pass |
+| `voice-led-live`, the grader writes the probes | 80.0% (44 of 55), fails | 79 | pass, judge not run |
+| `voice-led-live-2`, and the new example | 90.7% (49 of 54), fails | 84 | pass, judge not run |
+| `voice-led-final`, scripts repaired | 94.4% (51 of 54), fails | 94 | pass, judge 0 of 70 |
+| `voice-led-final-2`, the three fixes below | 98.1% (53 of 54), passes | 97 | pass, judge 0 of 70 |
+
+In the last run every gate passes. The 97 turns the app built pass every gate at 100% (48 of 48 questions single and open). The app worded 32 of 34 probes and 16 of 16 new examples. The two other probes followed prompt-injection attempts the grader refused to grade. The one failing turn is the coach model's own reply to "just tell me", which joined two questions. The grader's mean time was 2.0 s.
+
+The grader, 43 hand-labelled answers with 152 claim labels (`run_a5.py --recall --spoken`): verdicts agree with the labels for 148 of 152 claims (143 in the day's first kept run, `a5-recall-spoken`), no uncovered claim was marked covered (0 of 39), 4 of 113 covered claims were not marked covered (9 in that run), all 43 questions for open claims are ones the app can say, and so are 14 of the 15 new examples.
+
+**What the runs changed.**
+
+- **Scripts.** A scripted line said to cover every claim now says every claim. The script and the grader had disagreed on 8 of 16 new examples, where a vague line was scripted as covered (`build_teach_scenarios.py`).
+- **A formula is not filler.** A claim answered in symbols ("P(A|B) = P(A)") was marked missing because its quote had few letters; covered claims not marked covered went from 12 to 9 of 113.
+- **A question may name the claim's setting.** The service dropped any question with five words in a row from the claim. All six it dropped in the grader runs and the fourth voice run named the setting and asked for the outcome ("What happens to F as a becomes very negative?"), and the coach model then worded those turns. For a spoken question the run must now be half the claim. The written pointer keeps the five-word rule.
+- **One line for each thing said.** Joined with spaces, a student who was wrong twice and then right was still graded incorrect in one of three topics; with lines, in none of three replays.
+- **The new example is required.** Told to "also write" it, the grader left it out for 2 of 20 answers that covered every claim.
+
+**What the runs do not show.** The voice eval's verdicts are scripted, so a verdict the live grader would give differently is not played. The topics are three made-up ones. The last three fixes were first checked on the inputs that had failed; the recall set and the full rerun are the independent checks. Nobody has listened to the built lines through the speech engine. Each run is one sample: of the 54 asking turns six are still the coach model's, so a rerun can land a turn or two either side.
+
+**Cost.** $2.62 in all for this step: four grader runs on the Batch API ($0.50), four live voice runs ($2.06, of which the judge $0.95), and about 20 single grader calls to replay failing inputs ($0.06, estimated).
+
+**Decision.** The rule was that the flag goes on only if the run passes every gate v1 passes and the question-form gate v1 fails. `voice-led-final-2` does, so the flag goes on for the web service (`VOICE_GRADER_LED=true`, set on Railway once this change is deployed).
