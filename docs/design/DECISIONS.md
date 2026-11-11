@@ -289,7 +289,7 @@ To undo, remove the area from the list and apply the config; no stored data depe
 **Basis.** The eval outputs of 2026-11-10, and two stored topics of a real course read in the order a student meets them: warm-up, the source pages with their quick checks, notes, recall, worked examples, practice, quiz. Each piece reads well alone. The faults are between the pieces:
 
 - **Separate calls land on the same cases.** Every generator gets the same pages and never sees what the others wrote. In one topic the same question (why a repeated cheap operation with a rare expensive one is cheap on average) is put to the student in seven places, one everyday scenario is used by the notes, a notes check, a worked example and the quiz, and the quiz's one numerical question is a practice problem again with the same numbers and the same answer. A full score on that quiz shows little.
-- **Coverage follows nothing.** That topic has 19 claims. Some are asked five to seven times; three are never in a question.
+- **Coverage follows nothing.** That topic has 19 claims. Some are asked five to seven times; others are never asked.
 - **The chain is serial.** A topic's six jobs run one after another: the quiz is ready about 6.5 minutes after the topic is opened, and the notes (the best-written piece, on a side tab) hold up everything behind them.
 - **The exam writes everything new:** 71 questions to keep 40, about 145 s.
 - **The voice coach authors with the smallest model.** On the audited prompts it fails five gates; its reply restates what the grader already said, and a voice quiz reads a four-option written question aloud.
