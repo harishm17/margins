@@ -126,10 +126,10 @@ test('WF6 voice: a drill, a session left open, the quick round, Quiz me after Fi
     if (await keepStudying.isVisible()) await keepStudying.click()
     await main.getByRole('region', { name: 'Voice practice' }).getByRole('link', { name: 'Start voice practice' }).click()
     await expect(other).toHaveURL(/\/review\/voice/)
-    await expect(round.lobby.getByText(/min left today$/)).toBeVisible({ timeout: 60_000 })
+    await round.settled()
     await round.chooseTyping()
-    const hereInstead = round.lobby.getByRole('button', { name: 'Start here instead' })
-    const offered = await hereInstead.isVisible()
+    // The dead tab's session still looks open (its last heartbeat is under 90 s old): the lobby offers to take over.
+    const offered = await round.lobby.getByRole('button', { name: 'Start here instead' }).isVisible()
     await checks.check('WF6.start-here-instead', 'a session left open elsewhere is offered as "Start here instead", which ends it (V4)', () =>
       expect(offered).toBe(true)
     )
@@ -148,21 +148,13 @@ test('WF6 voice: a drill, a session left open, the quick round, Quiz me after Fi
       console.log('note: the quick round cannot start (its topics have no quiz), so the student starts Quiz me on the studied topic instead')
       await other.goto(`${topicUrl}?view=voice`)
       await round.chooseTypedQuiz()
+      await round.settled()
     }
 
-    // Today the start is refused while the dead tab's session looks live, for up to 90 s after its last heartbeat; the
-    // alert stays on the start screen and says it clears by itself, so the student tries again.
-    const refused = other.getByText('Another voice practice is open', { exact: true })
-    const giveUpAt = Date.now() + 3 * 60_000
-    if (await hereInstead.isVisible()) await hereInstead.click()
-    for (;;) {
-      if (await round.start.isVisible()) await round.start.click()
-      await expect(round.question.or(refused).first()).toBeVisible({ timeout: 2 * 60_000 })
-      if (await round.question.isVisible()) break
-      expect(Date.now(), 'the new session started before the dead tab cleared').toBeLessThan(giveUpAt)
-      console.log('note: the start was refused while the dead tab looked open; trying again in 20 s')
-      await other.waitForTimeout(20_000)
-    }
+    // One click starts here: it ends the session the dead tab left open, or finds it gone quiet and closes it. The
+    // student is never sent back to the start screen to wait for the other session to clear (128).
+    await round.start.click()
+    await expect(round.question).toBeVisible({ timeout: 2 * 60_000 })
     const left = await storedSession(sessionId)
     await checks.check('WF6.unended-closed', 'the session the dead tab never ended is closed once the next one starts (V5)', () =>
       expect(left.status).not.toBe('active')

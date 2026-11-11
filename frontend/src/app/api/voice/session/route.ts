@@ -15,6 +15,7 @@ import { normalizeFocus } from '@/lib/voice/coach-prompt'
 import { cloudSpeechConfigured } from '@/lib/voice/cloud-speech'
 import { buildSprintQuestionSet, buildTopicQuestionSet, DrillGenerationError, PromptsMismatchError } from '@/lib/voice/drill-pack'
 import { voiceErrorMessage } from '@/lib/voice/errors'
+import { settleOpenSessions } from '@/lib/voice/open-sessions'
 import { isSessionLive } from '@/lib/voice/usage'
 import {
   ApiErrorCode,
@@ -44,6 +45,8 @@ const sessionSchema = z.object({
   voice: z.string().max(50).optional().default('marin'),
   // What the student wants to concentrate on; trimmed and cut to MAX_FOCUS_CHARS.
   focus: z.string().max(2000).nullish(),
+  // "Start here instead": end the voice practice that is open in another tab or on another device, and start this one.
+  takeOver: z.boolean().optional(),
 })
 
 const patchSchema = z.object({
@@ -101,6 +104,13 @@ async function handlePOST(request: NextRequest) {
           { status: 422 }
         )
       }
+    }
+
+    // One open voice practice per student. Refused here, before anything is created: a refused start leaves no empty
+    // session and uses none of the day's starts (finding 128). Sessions a browser never ended are closed on the way.
+    if ((await settleOpenSessions(session.user.id, { takeOver: payload.takeOver })) === 'busy') {
+      const info = voiceErrorMessage('ACTIVE_SESSION')
+      return apiError(ApiErrorCode.CONFLICT, info.message, { code: 'ACTIVE_SESSION', retryable: info.retryable }, info.status)
     }
 
     // Refuse before building the question set, which can call the model (generate-drill): a student over the day's

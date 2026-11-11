@@ -12,6 +12,9 @@ import {
 
 type Client = Pick<Prisma.TransactionClient, 'voiceDrillSession' | '$queryRaw'>
 
+/** What says whether a session is open and how much voice time it used. */
+export const SESSION_TIMING = { id: true, connectedAt: true, lastSeenAt: true, endedAt: true, activeMs: true, activeAt: true } as const
+
 /** Sessions that connected inside the usage window. */
 export async function loadRecentSessions(userId: string, now: Date, client: Client = prisma) {
   return client.voiceDrillSession.findMany({
@@ -19,7 +22,7 @@ export async function loadRecentSessions(userId: string, now: Date, client: Clie
       userId,
       connectedAt: { gte: new Date(now.getTime() - USAGE_WINDOW_MS) },
     },
-    select: { id: true, connectedAt: true, lastSeenAt: true, endedAt: true },
+    select: SESSION_TIMING,
   })
 }
 

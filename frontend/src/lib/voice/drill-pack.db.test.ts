@@ -45,3 +45,28 @@ dbTest('topics that tie for the sprint are taken in course order, whatever order
     ['Sorting', 'Hashing', 'Trees']
   )
 })
+
+dbTest('Quiz me keeps the questions of earlier sets when a newer set is written, newest first (finding 81)', async () => {
+  const user = await prisma.user.create({ data: { email: `pool-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com` } })
+  const project = await prisma.project.create({ data: { userId: user.id, name: 'P' } })
+  const topic = await prisma.topic.create({ data: { projectId: project.id, name: 'Sorting', orderIndex: 0, userConfirmed: true } })
+  const ask = (text: string) => ({ question_type: 'conceptual', question_text: text, sample_answer: 'Because the invariant holds.' })
+  const first = [ask('Why is merge sort stable?'), ask('What does the merge step assume?'), ask('When is insertion sort the better choice?')]
+  // The "Fix it now" set: one question that can be asked aloud, one that is working. It becomes the topic's quiz.
+  const fix = [ask('What breaks stability in quicksort?'), { question_type: 'numerical', question_text: 'Compute 7 * 8 comparisons', sample_answer: '56' }]
+  await prisma.topicQuiz.create({ data: { topicId: topic.id, questions: first, createdAt: new Date(Date.now() - 60_000) } })
+  await prisma.topicQuiz.create({ data: { topicId: topic.id, questions: fix } })
+  await prisma.topicContent.create({ data: { topicId: topic.id, contentType: 'topic_quiz', contentData: { questions: fix } } })
+
+  const questions = await pack.buildTopicQuestionSet(topic.id, user.id)
+  assert.deepEqual(
+    questions.map((q) => q.question_text),
+    ['What breaks stability in quicksort?', 'Why is merge sort stable?', 'What does the merge step assume?', 'When is insertion sort the better choice?']
+  )
+
+  // The quick round's lobby states the size the round has (finding 83).
+  const preview = await pack.sprintPreview(project.id, user.id)
+  assert.equal(preview.ready, (await pack.buildSprintQuestionSet(project.id, user.id)).length)
+  assert.equal(preview.ready, 4)
+  assert.deepEqual(preview.writes, [])
+})

@@ -22,6 +22,8 @@ export type CreateSessionInput = {
   focus: string | null
   language: string
   conceptId?: string
+  /** End the voice practice open elsewhere and start this one ("Start here instead"). */
+  takeOver?: boolean
 }
 
 export type CreatedSession = Partial<VoiceSessionTerms> & {

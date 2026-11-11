@@ -54,12 +54,7 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   // WF6.next-button (V1, finding 68) does not run on the recording of 2026-11-10: the coach's reply went on to the next question itself. V1 is not built.
   'WF6.summary-one-action': { fixedBy: 'R1', finding: '84' }, // "Practice this" filled, "Start again" and the back link outlined
   'WF6.revisit-in-full': { fixedBy: 'R1', finding: '84' }, // the question to revisit is clipped and has no answer
-  'WF6.idle-not-counted': { fixedBy: 'V4', finding: '71' }, // wall time counts while the open tab sends heartbeats
-  'WF6.start-here-instead': { fixedBy: 'V4', finding: '71' }, // "Another voice practice looks open", with no way to take over
-  'WF6.round-size-stated': { fixedBy: 'V5', finding: '83' }, // "Up to 12 questions" for a round that has none
   'WF6.round-can-start': { fixedBy: 'G1', finding: '83' }, // the round's weakest topics are never-opened ones with no quiz, so Start is disabled
-  'WF6.unended-closed': { fixedBy: 'V5', finding: '85' }, // the dead tab's session stays active
-  'WF6.drill-keeps-set': { fixedBy: 'V5', finding: '81' }, // Quiz me reads only the newest set: 4 questions before Fix it now, 2 after
   // WF7, files
   'WF7.renamed-copy-caught': { fixedBy: 'F1', finding: '73' }, // "lecture-2 (1).pdf" is taken as a new file and read, and topic finding runs again
   'WF7.citation-marked': { fixedBy: 'F5', finding: '74' }, // both citations of the deleted file still offer "Open page"

@@ -3,48 +3,55 @@
  * checked and the session is marked connected (first turn) and seen (every turn) in one serializable
  * transaction, so two requests cannot both pass. The turn route calls it on every turn: the cap counts
  * the session's own minutes as they run, so a session that began with a minute left stops when it is used.
+ * The same write counts the pause since the last turn as voice time (usage.ts, creditActivity).
  */
 import { logServerError } from '@/lib/ops/log'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db/prisma'
 import { spendKeyFor } from '@/lib/account/spend-key-store'
-import { dailyVoiceMinutes, isSessionLive, remainingSeconds } from '@/lib/voice/usage'
-import { loadKeptUsage } from '@/lib/voice/usage-query'
+import { creditActivity, dailyVoiceMinutes, isSessionLive, remainingSeconds } from '@/lib/voice/usage'
+import { SESSION_TIMING, loadKeptUsage, loadRecentSessions } from '@/lib/voice/usage-query'
 import { TURN_CLAIM_STALE_MS, TURN_KEEP_ALIVE_MS } from '@/lib/voice/turn-contract'
 
 export type VoiceClaim =
   | { ok: true; remainingSeconds: number }
   | { ok: false; reason: 'busy' | 'cap'; capMinutes: number }
 
-export async function claimVoiceSession(
-  session: { id: string; userId: string; connectedAt: Date | null },
-  now = new Date()
-): Promise<VoiceClaim> {
+export async function claimVoiceSession(session: { id: string; userId: string }, now = new Date()): Promise<VoiceClaim> {
   const capMinutes = dailyVoiceMinutes()
   const spendKey = await spendKeyFor(session.userId)
   return prisma.$transaction(
     async (tx): Promise<VoiceClaim> => {
-      const recent = await tx.voiceDrillSession.findMany({
-        where: {
-          userId: session.userId,
-          connectedAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
-        },
-        select: { id: true, connectedAt: true, lastSeenAt: true, endedAt: true },
-      })
+      const [own, recent] = await Promise.all([
+        tx.voiceDrillSession.findUniqueOrThrow({ where: { id: session.id }, select: SESSION_TIMING }),
+        loadRecentSessions(session.userId, now, tx),
+      ])
       if (recent.some((other) => other.id !== session.id && isSessionLive(other, now))) {
         return { ok: false, reason: 'busy', capMinutes }
       }
+      // This session as it stands once the turn starts: connected, and with the pause before the turn counted.
+      const claimed = { ...own, connectedAt: own.connectedAt ?? now, lastSeenAt: now, ...creditActivity(own, now) }
       const kept = await loadKeptUsage(session.userId, spendKey, now, tx)
-      const remaining = remainingSeconds(recent, capMinutes, now, kept)
+      const remaining = remainingSeconds([...recent.filter((other) => other.id !== session.id), claimed], capMinutes, now, kept)
       if (remaining <= 0) return { ok: false, reason: 'cap', capMinutes }
       await tx.voiceDrillSession.update({
         where: { id: session.id },
-        data: { connectedAt: session.connectedAt ?? now, lastSeenAt: now },
+        data: { connectedAt: claimed.connectedAt, lastSeenAt: now, activeMs: claimed.activeMs, activeAt: claimed.activeAt },
       })
       return { ok: true, remainingSeconds: remaining }
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
   )
+}
+
+/**
+ * Undoes the claim of a first turn that failed before the coach said or did anything: the session is not connected
+ * and has used nothing.
+ */
+export async function releaseVoiceSession(sessionId: string): Promise<void> {
+  await prisma.voiceDrillSession
+    .update({ where: { id: sessionId }, data: { connectedAt: null, lastSeenAt: null, activeMs: 0, activeAt: null } })
+    .catch((error) => logServerError('Voice: Could not release the session claim', error))
 }
 
 /** True when `error` is the database telling us another request won a serializable race. */
@@ -91,9 +98,23 @@ export function keepVoiceTurn(userId: string, sessionId: string, beat?: () => vo
   return () => clearInterval(timer)
 }
 
-/** Ends the claim of `claimVoiceTurn`. Never throws: the turn is over either way, and a stale claim expires by itself. */
-export async function releaseVoiceTurn(userId: string, sessionId: string): Promise<void> {
-  await prisma.voiceDrillSession
-    .updateMany({ where: { id: sessionId, userId }, data: { turnStartedAt: null } })
-    .catch((error) => logServerError('Voice: Could not release the turn claim', error))
+/**
+ * Ends the claim of `claimVoiceTurn`. With `counted` (the turn got past `claimVoiceSession`, which counted up to its
+ * start), the turn itself is added to the session's voice time. Never throws: the turn is over either way, and a stale
+ * claim expires by itself. Reading and then writing is safe here: the claim this ends is what keeps a second turn out,
+ * and nothing else writes the counted time.
+ */
+export async function releaseVoiceTurn(userId: string, sessionId: string, counted = false, now = new Date()): Promise<void> {
+  try {
+    const session = counted
+      ? await prisma.voiceDrillSession.findFirst({ where: { id: sessionId, userId }, select: { activeMs: true, activeAt: true } })
+      : null
+    await prisma.voiceDrillSession.updateMany({
+      where: { id: sessionId, userId },
+      // A first turn that failed released the session (releaseVoiceSession): it has no time to add to.
+      data: { turnStartedAt: null, ...(session?.activeAt ? creditActivity(session, now, true) : {}) },
+    })
+  } catch (error) {
+    logServerError('Voice: Could not release the turn claim', error)
+  }
 }

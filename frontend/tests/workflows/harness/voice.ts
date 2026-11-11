@@ -7,8 +7,9 @@ export function progressOf(text: string): { at: number; of: number } | null {
   return match ? { at: Number(match[1]), of: Number(match[2]) } : null
 }
 
-/** The number of questions a quick round's lobby says it has, the maximum or the real count; null when it states none. */
+/** The number of questions a quick round's lobby says it has ("No questions to ask yet." is none); null when it states no number. */
 export function statedRoundSize(line: string): number | null {
+  if (/^No questions\b/.test(line.trim())) return 0
   const match = /(\d+) questions?\b/.exec(line)
   return match ? Number(match[1]) : null
 }
@@ -45,7 +46,12 @@ export function voiceScreen(page: Page) {
     session,
     progress,
     summary: page.getByTestId('voice-summary'),
-    start: lobby.getByRole('button', { name: 'Start voice practice' }),
+    /** The lobby's one start button: it reads "Start here instead" while a voice practice is open somewhere else. */
+    start: lobby.getByRole('button', { name: /^Start (voice practice|here instead)$/ }),
+    /** Waits until the lobby knows the day's minutes (and whether a voice practice is open elsewhere), so Start is settled. */
+    async settled() {
+      await expect(lobby.getByText(/min left today$/)).toBeVisible({ timeout: 60_000 })
+    },
     question: page.getByTestId('voice-question'),
     send,
     chooseTyping,

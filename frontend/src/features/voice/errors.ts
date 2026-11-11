@@ -34,6 +34,12 @@ export type TurnFate = 'continue' | 'summary' | 'lobby'
 
 export type TurnFailureView = { alert: VoiceAlert; fate: TurnFate; limitReached?: boolean }
 
+/** Said in the lobby when a voice practice is open somewhere else, above the button that takes over. */
+export const BUSY_ELSEWHERE = {
+  title: 'Another voice practice is open',
+  text: 'It may be in another tab or on another device. Starting here ends it there.',
+}
+
 export function describeTurnFailure(failure: TurnFailure): TurnFailureView {
   switch (failure.code) {
     case 'SESSION_ENDED':
@@ -46,8 +52,8 @@ export function describeTurnFailure(failure: TurnFailure): TurnFailureView {
         fate: 'lobby',
         alert: {
           tone: 'warning',
-          title: 'Another voice practice is open',
-          text: 'End it in the other tab or window, then start again. It also clears by itself after about a minute.',
+          title: BUSY_ELSEWHERE.title,
+          text: BUSY_ELSEWHERE.text,
           action: 'none',
         },
       }
@@ -214,6 +220,8 @@ export function describeTurnFailure(failure: TurnFailure): TurnFailureView {
 
 /** What a failed session start (before any turn) shows in the lobby. */
 export type LobbyAlert =
+  /** A voice practice is open in another tab or on another device: the lobby offers "Start here instead". */
+  | { kind: 'busy' }
   | { kind: 'needs-generation' }
   | { kind: 'needs-claims'; /** The idea named in the link is the one without claims (the topic has some). */ ofIdea?: boolean }
   | { kind: 'turn'; alert: VoiceAlert }

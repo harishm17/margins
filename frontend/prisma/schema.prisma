@@ -491,10 +491,13 @@ model VoiceDrillSession {
   history     Json?
   createdAt   DateTime @default(now()) @map("created_at")
   endedAt     DateTime? @map("ended_at")
-  // Set on the first voice turn. Billable time runs from here to endedAt, or to
-  // lastSeenAt when the browser went away without ending the session.
+  // Set on the first voice turn; lastSeenAt is the last turn or heartbeat. They say whether the call is open.
   connectedAt DateTime? @map("connected_at")
   lastSeenAt  DateTime? @map("last_seen_at")
+  // The voice time counted so far, and the moment it was counted up to (src/lib/voice/usage.ts): added to at the
+  // start and the end of every turn, so a tab left open does not use minutes.
+  activeMs    Int       @default(0) @map("active_ms")
+  activeAt    DateTime? @map("active_at")
   // Question indexes the student asked a hint for (get_hint); an answer after one is assisted (spec §5.8).
   // Database default is an empty array (migrations/20261201000003_voice_hints_backfill_marker): keep it.
   hintedQuestions Int[] @map("hinted_questions")

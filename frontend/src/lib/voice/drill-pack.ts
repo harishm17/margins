@@ -12,7 +12,8 @@ import { callSignal } from '@/lib/ai-service/client-signal'
 import { promptsV2 } from '@/lib/prompt-revision'
 import type { VoiceQuizStatus } from '@/features/voice/quiz-status'
 
-import { SPRINT_MAX_QUESTIONS, SPRINT_QUESTIONS_PER_TOPIC, SPRINT_TOPICS } from './sprint-size'
+import { rankWeakestTopics } from '@/server/queries/voice-rank'
+import { SPRINT_MAX_QUESTIONS, SPRINT_QUESTIONS_PER_TOPIC, type SprintPreview } from './sprint-size'
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000'
 const MAX_NOTES_CHARS = 24000
@@ -113,24 +114,26 @@ const buildConceptQuestionsFromNotes = async (
 
 type TopicWithContent = { id: string; name: string; content: { contentType: string; contentData: unknown }[] }
 
+/** Quiz me on one topic asks at most this many questions. */
+export const QUIZ_ME_MAX_QUESTIONS = 10
+
 /**
- * The topic's quiz questions as the voice coach can use them: the quiz stored with the topic, else the newest quiz set (a topic
- * whose quiz was written as a set has no copy in its content). `total` counts them all, `usable` those the coach can ask aloud.
+ * The topic's quiz questions as the voice coach can use them: every standard set written for the topic, newest first,
+ * then the quiz stored with the topic, each question once. A "Fix it now" or "New questions" set becomes the topic's
+ * quiz, and reading only that one shrank the drill to the few of its questions that can be asked aloud (finding 81);
+ * newest first also puts the set written on the ideas the student missed at the front. `total` counts them all,
+ * `usable` those the coach can ask aloud.
  */
 async function topicQuizQuestions(topic: TopicWithContent): Promise<{ total: number; usable: VoiceQuestion[] }> {
-  const quizContent = topic.content.find((c) => c.contentType === 'topic_quiz')
-  let raw = extractQuestionsFromContent(quizContent?.contentData)
-  if (raw.length === 0) {
-    const newest = await prisma.topicQuiz.findFirst({ where: { topicId: topic.id, kind: 'standard' }, orderBy: { createdAt: 'desc' }, select: { questions: true } })
-    raw = extractQuestionsFromContent(newest?.questions)
-  }
-  const usable = dedupeQuestions(filterConceptQuestions(
-    raw
+  const sets = await prisma.topicQuiz.findMany({ where: { topicId: topic.id, kind: 'standard' }, orderBy: { createdAt: 'desc' }, select: { questions: true } })
+  const stored = extractQuestionsFromContent(topic.content.find((c) => c.contentType === 'topic_quiz')?.contentData)
+  const all = dedupeQuestions(
+    [...sets.flatMap((set) => extractQuestionsFromContent(set.questions)), ...stored]
       .map((q) => normalizeVoiceQuestion(q))
       .filter((q): q is VoiceQuestion => q !== null)
       .map((q) => ({ ...q, source: 'topic_quiz', topic_id: topic.id }))
-  ))
-  return { total: raw.length, usable }
+  )
+  return { total: all.length, usable: filterConceptQuestions(all) }
 }
 
 /**
@@ -175,7 +178,7 @@ export const buildTopicQuestionSet = async (
   const questions = (await topicQuizQuestions(topic)).usable
 
   if (questions.length > 0) {
-    return questions
+    return questions.slice(0, QUIZ_ME_MAX_QUESTIONS)
   }
 
   const notesContent = topic.content.find(c => c.contentType === 'section_notes')
@@ -188,82 +191,77 @@ export const buildTopicQuestionSet = async (
   return dedupeQuestions(generated.map(q => ({ ...q, topic_id: topic.id })))
 }
 
+/** One topic of a quick round: the questions it has ready (no model call), and its notes when it has none. */
+type SprintTopic = { id: string; name: string; ready: VoiceQuestion[]; notes: string | null }
+
+/** The topics a quick round covers (voice-rank.ts), weakest first, with what each can be asked from. */
+async function sprintTopics(projectId: string, userId: string): Promise<SprintTopic[]> {
+  await applyPendingQuizResults(userId)
+  const topics = await prisma.topic.findMany({
+    where: { projectId, project: { userId }, userConfirmed: true },
+    // In course order, so topics that tie (none opened yet) are taken the same way every time.
+    orderBy: { orderIndex: 'asc' },
+    include: {
+      content: true,
+      progress: { where: { userId }, select: { quizScore: true, quizCompleted: true, notesCompleted: true, examplesCompleted: true } },
+    },
+  })
+  const chosen = rankWeakestTopics(topics.map((topic) => ({ ...topic, progress: topic.progress[0] ?? null })))
+  return Promise.all(
+    chosen.map(async (topic) => {
+      const ready = (await topicQuizQuestions(topic)).usable.slice(0, SPRINT_QUESTIONS_PER_TOPIC)
+      const notes = ready.length > 0 ? null : extractTextFromNotes(topic.content.find((c) => c.contentType === 'section_notes')?.contentData) || null
+      return { id: topic.id, name: topic.name, ready, notes }
+    })
+  )
+}
+
+const sprintPack = (questions: VoiceQuestion[]) => dedupeQuestions(questions).slice(0, SPRINT_MAX_QUESTIONS)
+
+/**
+ * What a quick round has before it starts, worked out without a model call, so the lobby can state its real size
+ * (finding 83: it promised "up to 12 questions" for a round that had 4). `ready` is the number of questions it can ask
+ * now; `writes` names the topics that have notes and no question the coach can ask aloud: theirs are written at Start.
+ */
+export async function sprintPreview(projectId: string, userId: string): Promise<SprintPreview> {
+  const topics = await sprintTopics(projectId, userId)
+  return {
+    ready: sprintPack(topics.flatMap((topic) => topic.ready)).length,
+    writes: topics.filter((topic) => topic.notes).map((topic) => topic.name),
+  }
+}
+
 export const buildSprintQuestionSet = async (
   projectId: string,
   userId: string
 ): Promise<VoiceQuestion[]> => {
-  await applyPendingQuizResults(userId)
-  const topics = await prisma.topic.findMany({
-    where: {
-      projectId,
-      project: { userId },
-      userConfirmed: true,
-    },
-    // In course order, so topics that tie below (none opened yet) are taken the same way every time.
-    orderBy: { orderIndex: 'asc' },
-    include: {
-      content: true,
-      progress: {
-        where: { userId },
-        select: {
-          quizScore: true,
-          quizCompleted: true,
-          notesCompleted: true,
-          examplesCompleted: true,
-        },
-      },
-    },
-  })
-
-  if (topics.length === 0) return []
-
-  const ranked = topics
-    .map(topic => {
-      const progress = topic.progress[0]
-      const score = progress?.quizScore ?? 0
-      const incomplete =
-        !progress?.quizCompleted || !progress?.notesCompleted || !progress?.examplesCompleted
-      return {
-        topic,
-        score,
-        priority: incomplete ? score - 10 : score,
-      }
-    })
-    .sort((a, b) => a.priority - b.priority)
-
-  const selected = ranked.slice(0, SPRINT_TOPICS)
   const combined: VoiceQuestion[] = []
   let failed: DrillGenerationError | null = null
 
-  for (const entry of selected) {
-    const topic = entry.topic
-    let questions = (await topicQuizQuestions(topic)).usable
-
-    if (questions.length === 0) {
-      const notesContent = topic.content.find(c => c.contentType === 'section_notes')
-      const notesText = extractTextFromNotes(notesContent?.contentData)
-      if (notesText) {
-        try {
-          questions = (await buildConceptQuestionsFromNotes({ userId, projectId }, topic.name, topic.id, notesText, 6))
-            .map(q => ({ ...q, topic_id: topic.id }))
-        } catch (error) {
-          // One topic's questions could not be written: the sprint goes on with the others.
-          if (!(error instanceof DrillGenerationError)) throw error
-          failed ??= error
-          // The service is down or the allowance is spent: the next topic would fail the same way.
-          continue
-        }
+  for (const topic of await sprintTopics(projectId, userId)) {
+    let questions = topic.ready
+    if (topic.notes) {
+      try {
+        questions = (await buildConceptQuestionsFromNotes({ userId, projectId }, topic.name, topic.id, topic.notes, 6))
+          .map(q => ({ ...q, topic_id: topic.id }))
+          .slice(0, SPRINT_QUESTIONS_PER_TOPIC)
+      } catch (error) {
+        // One topic's questions could not be written: the sprint goes on with the others.
+        if (!(error instanceof DrillGenerationError)) throw error
+        failed ??= error
+        // The service is down or the allowance is spent: the next topic would fail the same way.
+        continue
       }
     }
 
-    combined.push(...questions.slice(0, SPRINT_QUESTIONS_PER_TOPIC).map(q => ({
+    combined.push(...questions.map(q => ({
       ...q,
       source: q.source || topic.name,
       topic_id: q.topic_id || topic.id,
     })))
   }
 
-  const pack = dedupeQuestions(combined).slice(0, SPRINT_MAX_QUESTIONS)
+  const pack = sprintPack(combined)
   // Nothing to ask, and writing questions failed on the way: that failure is the reason, not a course without a quiz.
   if (pack.length === 0 && failed) throw failed
   return pack

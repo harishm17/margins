@@ -17,7 +17,7 @@ import type { VoiceReviewProps } from './voice-review'
 import { useVoicePrefs } from './voice-settings'
 
 /** The real voice practice. Loaded on demand by voice-review.tsx so no other page ships it. */
-export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId, hasClaims, claimsOfIdea, quiz }: VoiceReviewProps) {
+export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId, hasClaims, claimsOfIdea, quiz, sprint }: VoiceReviewProps) {
   const { state, orb, summary, controller } = useVoiceSession({
     courseId,
     mode,
@@ -125,6 +125,7 @@ export function VoiceReviewImpl({ courseId, mode, topic, initialStyle, conceptId
         hasClaims={hasClaims}
         claimsOfIdea={claimsOfIdea}
         quiz={quiz}
+        sprint={sprint}
         onStart={(config) => {
           // A fresh start forgets whatever an interrupted practice left behind.
           clearVoiceSnapshot(courseId, mode === 'topic' ? (topic?.id ?? 'topic') : 'sprint')

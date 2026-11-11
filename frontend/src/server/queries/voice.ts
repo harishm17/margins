@@ -1,7 +1,7 @@
 import { applyPendingQuizResults } from '@/lib/learning/quiz-submissions'
 import { areRecordIds } from '@/lib/ids'
 import { prisma } from '@/lib/db/prisma'
-import { hasStudyData, rankWeakestTopics, SPRINT_TOPIC_COUNT } from './voice-rank'
+import { hasStudyData, rankWeakestTopics } from './voice-rank'
 
 export { describeSprintTopics } from './voice-rank'
 
@@ -11,16 +11,16 @@ export type SprintTopic = { id: string; name: string }
 export type Sprint = { topics: SprintTopic[]; studied: boolean }
 
 /**
- * The topics a voice sprint on this course covers, weakest first. The same selection the
- * backend makes when the session is created (see voice-rank.ts). Filtered by the user id, so a
- * course that is not theirs gives an empty list. No orderBy on purpose: the backend reads the
- * topics without one, and ties keep that order.
+ * The topics a voice sprint on this course covers, weakest first: the selection the question set
+ * builder makes when the session is created (voice-rank.ts), read in course order like it, so ties
+ * fall the same way. Filtered by the user id, so a course that is not theirs gives an empty list.
  */
 export async function getSprintTopics(userId: string, courseId: string): Promise<Sprint> {
   await applyPendingQuizResults(userId)
   if (!areRecordIds(courseId)) return { topics: [], studied: false }
   const topics = await prisma.topic.findMany({
     where: { projectId: courseId, project: { userId }, userConfirmed: true },
+    orderBy: { orderIndex: 'asc' },
     select: {
       id: true,
       name: true,
@@ -34,7 +34,7 @@ export async function getSprintTopics(userId: string, courseId: string): Promise
 
   const rankable = topics.map((topic) => ({ id: topic.id, name: topic.name, progress: topic.progress[0] ?? null }))
   return {
-    topics: rankWeakestTopics(rankable, SPRINT_TOPIC_COUNT).map(({ id, name }) => ({ id, name })),
+    topics: rankWeakestTopics(rankable).map(({ id, name }) => ({ id, name })),
     studied: hasStudyData(rankable),
   }
 }
