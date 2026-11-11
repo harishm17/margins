@@ -201,6 +201,35 @@ test('speaking over a reply that is still streaming marks that reply as interrup
   assert.equal(coach[2], 'Third reply.')
 })
 
+// Redesign decision 6: the step that follows the student's words already holds the reply, so the coach model is not called.
+test('VOICE_GRADER_LED: a teach-back turn the app can answer reaches the student with no model call and is kept in the conversation', async (t) => {
+  if (!available) return t.skip('no migrated test database')
+  const { user, project } = await student()
+  const topic = await prisma.topic.create({ data: { projectId: project.id, name: 'Hash tables', orderIndex: 0, userConfirmed: true } })
+  const material = await prisma.material.create({ data: { projectId: project.id, filename: 'notes.pdf', category: 'lecture_notes', gcsPath: 'local://x', sizeBytes: 1 } })
+  const concept = await prisma.concept.create({ data: { projectId: project.id, topicId: topic.id, name: 'Collision', summary: 'c', kind: 'concept', orderIndex: 0 } })
+  await prisma.conceptClaim.create({ data: { conceptId: concept.id, text: 'Two keys that share a bucket collide.', quote: 'q', materialId: material.id, orderIndex: 0, pageStart: 4 } })
+  const session = await prisma.voiceDrillSession.create({ data: { userId: user.id, projectId: project.id, topicId: topic.id, style: 'teach_back', questionSet: [], connectedAt: new Date() } })
+  // The coach's opening turn has asked for the idea.
+  const { executeVoiceTool } = await import('@/lib/voice/tools')
+  const { beginVoiceTurn } = await import('@/lib/voice/teach-tools')
+  await executeVoiceTool({ sessionId: session.id, userId: user.id, timeZone: 'UTC', turn: await beginVoiceTurn(session.id, '') }, 'get_concept_to_explain', {})
+
+  const before = process.env.VOICE_GRADER_LED
+  process.env.VOICE_GRADER_LED = 'true'
+  try {
+    const events = (await (await sayTo(session.id, "I don't know")).text()).trim().split('\n').map((line) => JSON.parse(line) as { type: string; delta?: string })
+    assert.equal(modelCalls.length, 0, 'the coach model was not called')
+    const said = events.filter((event) => event.type === 'text').map((event) => event.delta).join('')
+    assert.ok(said.includes('Two keys that share a bucket collide.'), said)
+    assert.equal(events.at(-1)?.type, 'done', 'the browser is told the turn is over')
+    assert.equal(textsOf((await turnOver(session.id)).history, 'assistant').at(-1), said)
+  } finally {
+    if (before === undefined) delete process.env.VOICE_GRADER_LED
+    else process.env.VOICE_GRADER_LED = before
+  }
+})
+
 test('the same words sent again after a turn that failed before the coach spoke are kept once', async (t) => {
   if (!available) return t.skip('no migrated test database')
   const { user, project } = await student()

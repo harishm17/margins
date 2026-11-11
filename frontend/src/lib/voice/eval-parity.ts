@@ -159,7 +159,7 @@ const replyClaims = (verdict: AssessedClaim['verdict'], extra: Partial<AssessedC
   { claimId: 'k1', text: REPLY_CLAIMS.held, page: 4, verdict: held, studentQuote: held === 'covered' ? 'two keys in one bucket collide' : null },
   { claimId: 'k2', text: REPLY_CLAIMS.open, page: 5, verdict, ...extra },
 ]
-const probeOn = (finding: Gap['finding'], probeNumber = 1): Plan => ({ action: 'probe', gap: { claimId: 'k2', finding, page: 5 }, probe: { probe: 'implication', label: '' } as ProbeKind, probeNumber })
+const probeOn = (finding: Gap['finding'], probeNumber = 1, page = 5): Plan => ({ action: 'probe', gap: { claimId: 'k2', finding, page }, probe: { probe: 'implication', label: '' } as ProbeKind, probeNumber })
 const THEN: ReplyFacts['next'] = { done: false, prompt: 'Explain "Load factor" in your own words, as if you were teaching it to a classmate.' }
 const QUESTION = 'What does each bucket hold?'
 const REPLY_CASES: { name: string; facts: ReplyFacts }[] = [
@@ -170,11 +170,19 @@ const REPLY_CASES: { name: string; facts: ReplyFacts }[] = [
   { name: 'a pointer that only names the idea', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: 'Look again at p. 5: Chaining' }), prerequisite: null, turn: 1 } },
   { name: 'a pointer holding two questions', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: 'Look again at p. 5: What does each bucket hold? Why a list?' }), prerequisite: null, turn: 1 } },
   { name: 'a question too long to say', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: `Look again at p. 5: ${'When a key arrives '.repeat(8)}what happens?` }), prerequisite: null, turn: 1 } },
+  { name: 'a leading question that says the claim', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: "Look again at p. 5: Isn't it that chaining keeps a list in each bucket?" }), prerequisite: null, turn: 1 } },
+  { name: 'loose claim, a leading question, a short quote', facts: { plan: probeOn('vague'), claims: replyClaims('partial', { pointer: 'Look again at p. 5: Does chaining keep a list in each bucket?', studentQuote: 'it keeps stuff' }), prerequisite: null, turn: 1 } },
   { name: 'loose claim, grader question', facts: { plan: probeOn('vague'), claims: replyClaims('partial', { pointer: `Look again at p. 5: ${QUESTION}`, studentQuote: 'it keeps stuff' }), prerequisite: null, turn: 1 } },
   { name: 'loose claim, no question, a long quote', facts: { plan: probeOn('vague'), claims: replyClaims('partial', { studentQuote: 'the bucket '.repeat(9) }), prerequisite: null, turn: 1 } },
   { name: 'wrong claim', facts: { plan: probeOn('incorrect'), claims: replyClaims('incorrect', { studentQuote: 'the table doubles', pointer: `Look again at p. 5: ${QUESTION}` }), prerequisite: null, turn: 1 } },
   { name: 'second probe on the same gap', facts: { plan: probeOn('missing', 2), claims: replyClaims('missing', { pointer: `Look again at p. 5: ${QUESTION}` }), prerequisite: null, turn: 2 } },
   { name: 'a quote with quotation marks in it', facts: { plan: probeOn('unsupported_jump'), claims: replyClaims('covered', { studentQuote: '"each bucket" keeps a "list".' }), prerequisite: null, turn: 1 } },
+  { name: 'a quote with a question in it', facts: { plan: probeOn('unsupported_jump'), claims: replyClaims('covered', { studentQuote: 'is it a list? or a tree' }), prerequisite: null, turn: 1 } },
+  { name: 'a prerequisite named with a full stop, page 0', facts: { plan: probeOn('missing_prerequisite', 1, 0), claims: replyClaims('missing', {}, 'missing'), prerequisite: ' Hash  functions. ', turn: 1 } },
+  { name: 'a prerequisite named as a question', facts: { plan: probeOn('missing_prerequisite'), claims: replyClaims('missing', {}, 'missing'), prerequisite: 'What is a hash function?', turn: 1 } },
+  { name: 'a claim on page 0', facts: { plan: { action: 'explain', gap: { claimId: 'k2', finding: 'missing', page: 0 } }, claims: replyClaims('missing', { page: 0 }), prerequisite: null, turn: 3 } },
+  { name: 'a claim worded as a question', facts: { plan: { action: 'explain', gap: { claimId: 'k2', finding: 'missing', page: 5 } }, claims: replyClaims('missing', { text: 'What does chaining keep in each bucket?' }), prerequisite: null, turn: 3 } },
+  { name: 'the next idea is named as a question', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('covered'), prerequisite: null, turn: 2, outcome: 'explained', next: { done: false, prompt: 'Explain "Why hash?" in your own words, as if you were teaching it to a classmate.' } } },
   { name: 'a claim too long to say', facts: { plan: { action: 'explain', gap: { claimId: 'k2', finding: 'missing', page: 5 } }, claims: replyClaims('missing', { text: 'Chaining keeps a list. '.repeat(16) }), prerequisite: null, turn: 3 } },
   { name: 'asked to be told', facts: { plan: { action: 'explain_first', gap: { claimId: 'k2', finding: 'missing', page: 5 } }, claims: replyClaims('missing'), prerequisite: null, turn: 2, told: true } },
   { name: 'closed after an explanation, two pages, another idea follows', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('covered'), prerequisite: null, turn: 4, outcome: 'taught', lookAgain: ['p. 5', 'pp. 4-5', 'p. 4'], next: THEN } },

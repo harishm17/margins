@@ -313,7 +313,8 @@ MAX_CLAIM_WORDS = 60
 SAY_BACK = ("Can you say that back in your own words?", "How would you put that in your own words?")
 FINE_NOT_TO_KNOW = ("That's fine, no need to have it yet.", "That's okay, this one takes a while to stick.")
 LAST_IDEA = "That was the last idea for this topic. Good work, and goodbye."
-_POINTER = re.compile(r"Look again (?:at p\. ([0-9]+)|in your reading):\s*(.+)", re.S)
+_POINTER = re.compile(r"Look again (?:at p\. ([0-9]{1,5})|in your reading):\s*(.+)", re.S)
+_WORD = re.compile(r"[^\W_]+")
 _NAMES_PAGE = re.compile(r"\bpage\b|\bp\.\s*[0-9]", re.I)
 _QUOTE_EDGES = re.compile("^[\"'“”‘’]+|[\"'“”‘’.,;:!?]+$")
 _DOUBLE_QUOTES = re.compile("[\"“”]")
@@ -332,22 +333,46 @@ def pointer_question(pointer: Optional[str]):
     question = match.group(2).strip()
     if not question.endswith("?") or question.index("?") != len(question) - 1 or len(question.split()) > MAX_QUESTION_WORDS:
         return None
-    return question, (int(match.group(1)) if match.group(1) else None)
+    return question, _real_page(int(match.group(1)) if match.group(1) else None)
+
+
+def _real_page(page: Optional[int]) -> Optional[int]:
+    """A page that can be named: pages count from 1."""
+    return page if isinstance(page, int) and page > 0 else None
+
+
+def _content_words(text: str) -> List[str]:
+    return [word for word in _WORD.findall(text.lower()) if len(word) >= 4]
+
+
+def gives_away(question: str, claim: Optional[str]) -> bool:
+    """Whether a question says the claim it is meant to draw out: most of the claim's longer words are in it."""
+    words = list(dict.fromkeys(_content_words(claim or "")))
+    if len(words) < 3:
+        return False
+    asked = set(_content_words(question))
+    return sum(1 for word in words if word in asked) / len(words) >= 0.6
 
 
 def _quoted(quote: Optional[str]) -> Optional[str]:
     """The student's words as they can be said back inside a sentence, or None when there are none or too many."""
     text = re.sub(r"\s+", " ", _DOUBLE_QUOTES.sub("", quote or "")).strip()
     text = _QUOTE_EDGES.sub("", text).strip()
-    return text if text and len(text.split()) <= MAX_QUOTE_WORDS else None
+    return text if text and "?" not in text and len(text.split()) <= MAX_QUOTE_WORDS else None
 
 
 def _statement(text: Optional[str]) -> Optional[str]:
-    """A claim as one spoken statement, or None when it is empty or too long to say in one go."""
+    """A claim as one spoken statement, or None when it is empty, too long to say in one go, or worded as a question."""
     claim = re.sub(r"\s+", " ", text or "").strip()
-    if not claim or len(claim.split()) > MAX_CLAIM_WORDS:
+    if not claim or "?" in claim or len(claim.split()) > MAX_CLAIM_WORDS:
         return None
-    return claim if claim[-1] in ".!?" else f"{claim}."
+    return claim if claim[-1] in ".!" else f"{claim}."
+
+
+def _named(name: Optional[str]) -> Optional[str]:
+    """A concept's name as it sits inside a sentence, or None when there is none or it holds a question mark."""
+    text = re.sub(r"[.,;:!]+$", "", re.sub(r"\s+", " ", name or "").strip()).strip()
+    return text if text and "?" not in text else None
 
 
 def _page_lead(page: Optional[int], question: str) -> str:
@@ -383,9 +408,9 @@ def assembled_reply(
     if action == "probe":
         if plan["probeNumber"] != 1:
             return None
-        finding, page = plan["gap"]["finding"], plan["gap"]["page"]
+        finding, page = plan["gap"]["finding"], _real_page(plan["gap"]["page"])
         if finding == "missing_prerequisite":
-            name = (prerequisite or "").strip()
+            name = _named(prerequisite)
             return f"Let's step back for a moment. How would you describe {name} in your own words?" if name else None
         if finding == "unsupported_jump":
             said = _quoted(claim.get("studentQuote") if claim else None)
@@ -393,6 +418,8 @@ def assembled_reply(
             return f'You said, "{said}". What {where} tells you that?' if said else None
         if finding in ("missing", "vague"):
             pointer = pointer_question(claim.get("pointer") if claim else None)
+            if pointer and gives_away(pointer[0], claim.get("text") if claim else None):
+                pointer = None
             if pointer:
                 has_something = any(c["verdict"] in ("covered", "partial") for c in claims)
                 opening = "You're close on one part." if finding == "vague" else ("You have part of it." if has_something else "Let's try another piece of it.")
@@ -404,8 +431,8 @@ def assembled_reply(
         said = _statement(claim.get("text") if claim else None)
         if not claim or not said:
             return None
-        page = claim.get("page")
-        source = f"Here is what your notes say{f' on page {page}' if page else ''}: {said}"
+        page = _real_page(claim.get("page"))
+        source = f"Here is what your notes say{f' on page {page}' if page is not None else ''}: {said}"
         say_back = _pick(SAY_BACK, turn)
         if action == "explain":
             return f"{source} {say_back}"
@@ -414,6 +441,9 @@ def assembled_reply(
     if action == "wrap_up":
         if not next_idea:
             return None
+        prompt = "" if next_idea.get("done") else re.sub(r"\s+", " ", str(next_idea.get("prompt") or "")).strip()
+        if not next_idea.get("done") and (not prompt or "?" in prompt):
+            return None
         all_covered = bool(claims) and all(c["verdict"] == "covered" for c in claims)
         if example_passed:
             verdict = "Yes, that works."
@@ -421,7 +451,7 @@ def assembled_reply(
             verdict = "That's it, you have it now." if outcome == "taught" else "Yes, that's right."
         else:
             verdict = "Let's leave that one there for now."
-        following = LAST_IDEA if next_idea.get("done") else f"Next idea. {str(next_idea.get('prompt', '')).strip()}"
+        following = LAST_IDEA if next_idea.get("done") else f"Next idea. {prompt}"
         return " ".join(part for part in (verdict, _pages_line(look_again) if outcome == "taught" else None, following) if part)
     return None
 

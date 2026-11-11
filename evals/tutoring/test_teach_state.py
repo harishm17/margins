@@ -153,7 +153,7 @@ def test_the_prompt_fixture_follows_the_voice_flag(monkeypatch):
 def test_the_mirror_builds_the_same_reply_as_the_app_for_cases_the_scenarios_do_not_reach():
     """fixtures/assembled_reply_parity.json is written from assembled-reply.ts (eval-parity.ts REPLY_CASES)."""
     cases = json.loads((HERE / "fixtures" / "assembled_reply_parity.json").read_text())
-    assert len(cases) >= 18
+    assert cases
     for case in cases:
         facts = case["facts"]
         reply = assembled_reply(

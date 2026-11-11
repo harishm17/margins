@@ -259,6 +259,81 @@
   "reply": null
  },
  {
+  "name": "a leading question that says the claim",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "pointer": "Look again at p. 5: Isn't it that chaining keeps a list in each bucket?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "loose claim, a leading question, a short quote",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "vague",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "partial",
+     "pointer": "Look again at p. 5: Does chaining keep a list in each bucket?",
+     "studentQuote": "it keeps stuff"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "When you say \"it keeps stuff\", what exactly do you mean?"
+ },
+ {
   "name": "loose claim, grader question",
   "facts": {
    "plan": {
@@ -444,6 +519,208 @@
    "turn": 1
   },
   "reply": "You said, \"each bucket keeps a list\". What on page 5 of your notes tells you that?"
+ },
+ {
+  "name": "a quote with a question in it",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "unsupported_jump",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered",
+     "studentQuote": "is it a list? or a tree"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "a prerequisite named with a full stop, page 0",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing_prerequisite",
+     "page": 0
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "missing",
+     "studentQuote": null
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": " Hash  functions. ",
+   "turn": 1
+  },
+  "reply": "Let's step back for a moment. How would you describe Hash functions in your own words?"
+ },
+ {
+  "name": "a prerequisite named as a question",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing_prerequisite",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "missing",
+     "studentQuote": null
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": "What is a hash function?",
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "a claim on page 0",
+  "facts": {
+   "plan": {
+    "action": "explain",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 0
+    }
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 0,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 3
+  },
+  "reply": "Here is what your notes say: Chaining keeps a list in each bucket. How would you put that in your own words?"
+ },
+ {
+  "name": "a claim worded as a question",
+  "facts": {
+   "plan": {
+    "action": "explain",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    }
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "What does chaining keep in each bucket?",
+     "page": 5,
+     "verdict": "missing"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 3
+  },
+  "reply": null
+ },
+ {
+  "name": "the next idea is named as a question",
+  "facts": {
+   "plan": {
+    "action": "wrap_up"
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 2,
+   "outcome": "explained",
+   "next": {
+    "done": false,
+    "prompt": "Explain \"Why hash?\" in your own words, as if you were teaching it to a classmate."
+   }
+  },
+  "reply": null
  },
  {
   "name": "a claim too long to say",

@@ -70,16 +70,22 @@ test('the replies the app builds equal the committed fixture, never give an open
   assert.deepEqual(cases, JSON.parse(fs.readFileSync(ASSEMBLED_REPLY_FIXTURE, 'utf8')))
   const reply = (name: string) => cases.find((entry) => entry.name === name)!.reply
   // Left to the coach model: no usable question from the grader, a wrong claim, a second probe, nothing known to follow.
-  for (const name of ['a pointer that only names the idea', 'a pointer holding two questions', 'a question too long to say', 'wrong claim', 'second probe on the same gap', 'loose claim, no question, a long quote', 'a claim too long to say', 'a closing turn with nothing known to follow']) {
-    assert.equal(reply(name), null, name)
-  }
+  const left = [
+    'a pointer that only names the idea', 'a pointer holding two questions', 'a question too long to say', 'a leading question that says the claim',
+    'wrong claim', 'second probe on the same gap', 'loose claim, no question, a long quote', 'a quote with a question in it',
+    'a prerequisite named as a question', 'a claim too long to say', 'a claim worded as a question', 'the next idea is named as a question',
+    'a closing turn with nothing known to follow',
+  ]
+  for (const name of left) assert.equal(reply(name), null, name)
+  assert.equal(cases.filter((entry) => entry.reply === null).length, left.length)
   for (const entry of cases.filter((item) => item.reply !== null)) {
     const questions = entry.reply!.split('?').length - 1
     if (entry.facts.plan.action === 'probe') {
       assert.equal(entry.reply!.includes('Chaining keeps'), false, `${entry.name}: a probe says the claim`)
       assert.equal(questions, 1, entry.name)
     }
-    if (entry.facts.plan.action === 'explain_first') assert.equal(questions, 1, entry.name)
+    if (entry.facts.plan.action === 'explain' || entry.facts.plan.action === 'explain_first') assert.equal(questions, 1, entry.name)
+    assert.equal(/page 0\b/.test(entry.reply!), false, entry.name)
     if (entry.facts.plan.action === 'wrap_up') assert.equal(questions, 0, entry.name)
   }
   assert.ok(reply('closed with a claim still open')!.startsWith("Let's leave that one there"), 'no praise for what was not shown')
