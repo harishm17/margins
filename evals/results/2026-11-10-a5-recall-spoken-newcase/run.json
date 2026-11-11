@@ -1,0 +1,46 @@
+{
+  "label": "a5-recall-spoken-newcase",
+  "date": "2026-11-10",
+  "dataset_kind": "recall",
+  "spoken": true,
+  "commit": "f0b33759",
+  "dirty": true,
+  "arms": {
+    "app": {
+      "model": "claude-sonnet-5-5",
+      "effort": "low",
+      "app_choice": true
+    }
+  },
+  "prompts": {
+    "PROMPTS_V2": "generation,support,tutor,ask",
+    "areas": {
+      "tutor": "v2"
+    },
+    "revision": "v2",
+    "request": {
+      "schema": "RecallGradeResultSpokenV2",
+      "system_chars": 5182,
+      "system_sha": "2404300c4419"
+    }
+  },
+  "estimate_usd": {
+    "app": 0.3925
+  },
+  "cost_usd": {
+    "app": 0.128825
+  },
+  "total_cost_usd": 0.128825,
+  "price_factor": 0.5,
+  "mock": false,
+  "batches": [
+    {
+      "id": "msgbatch_018rEDiZ9PuSRg5kzExvoDxE",
+      "requests": 42,
+      "seconds": 339.7
+    }
+  ],
+  "outcomes": {
+    "app: ok": 43
+  }
+}

@@ -74,7 +74,7 @@ import {
   type Verdict,
 } from '@/lib/voice/teach-back'
 import { asksForHelp } from '@/lib/voice/utterance'
-import { assembledReply, graderLedVoice, type ReplyFacts, type SpokenNext } from '@/lib/voice/assembled-reply'
+import { assembled, assembledReply, graderLedVoice, type ReplyFacts, type SpokenNext } from '@/lib/voice/assembled-reply'
 
 export type TeachToolContext = {
   sessionId: string
@@ -134,12 +134,27 @@ export type CoachState = {
  * many, the unclear answer is taken as showing nothing: the idea is explained, or the reading moves on. Nothing is scored.
  */
 export const CLARIFIES_ALLOWED = 1
+/** Questions kept per claim for the grader's next one to differ from (a gap gets at most two probes). */
+const ASKED_KEPT = 3
+// The most questions the grader takes with one answer (MAX_RECALL_ASKED in the AI service's schemas.py).
+const MAX_RECALL_ASKED = 40
 
 /** Utterances kept on the session. */
 export const SAID_KEPT = 8
 const MAX_UTTERANCE_CHARS = 5000
 
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
+
+/** The questions already asked, by claim, as stored; undefined when there are none. */
+function askedOf(value: unknown): Record<string, string[]> | undefined {
+  if (!isRecord(value)) return undefined
+  const asked: Record<string, string[]> = {}
+  for (const [claimId, questions] of Object.entries(value)) {
+    const kept = Array.isArray(questions) ? questions.filter((question): question is string => typeof question === 'string' && question.length > 0) : []
+    if (kept.length > 0) asked[claimId] = kept.slice(-ASKED_KEPT)
+  }
+  return Object.keys(asked).length > 0 ? asked : undefined
+}
 
 /** The state as stored, with anything missing or malformed back at its start. */
 export function readCoachState(value: unknown): CoachState {
@@ -164,6 +179,7 @@ export function readCoachState(value: unknown): CoachState {
         exampleAsked: entry.exampleAsked === true,
         outcome: entry.outcome === 'explained' || entry.outcome === 'taught' ? entry.outcome : null,
         ...(typeof entry.helpAsked === 'number' && entry.helpAsked > 0 ? { helpAsked: entry.helpAsked } : {}),
+        ...(askedOf(entry.asked) ? { asked: askedOf(entry.asked) } : {}),
       }
     }
   }
@@ -245,7 +261,11 @@ const NO_TOPIC = 'This session has no topic to work on.'
 // ---------------------------------------------------------------------------------------------- shared helpers
 
 /** The verdicts the grader gave, matched to the concept's claims in the claims' own order. A claim it skipped is missing. */
-function assessed(concept: RecallConcept, verdicts: Pick<StoredClaim, 'claim_id' | 'verdict' | 'student_quote' | 'misconception' | 'pointer' | 'reasoning_gap'>[]): AssessedClaim[] {
+function assessed(
+  concept: RecallConcept,
+  verdicts: Pick<StoredClaim, 'claim_id' | 'verdict' | 'student_quote' | 'misconception' | 'pointer' | 'reasoning_gap'>[],
+  probes: ReadonlyMap<string, string> = new Map()
+): AssessedClaim[] {
   const byId = new Map(verdicts.map((verdict) => [verdict.claim_id, verdict]))
   return concept.claims.map((claim) => {
     const verdict = byId.get(claim.id)
@@ -257,6 +277,8 @@ function assessed(concept: RecallConcept, verdicts: Pick<StoredClaim, 'claim_id'
       studentQuote: verdict?.student_quote ?? null,
       misconception: verdict?.misconception ?? null,
       pointer: verdict?.pointer ?? null,
+      // The question is for the verdict it came with: a claim the checks left with no verdict has none.
+      probe: verdict ? (probes.get(claim.id) ?? null) : null,
       reasoningGap: verdict?.reasoning_gap ?? null,
     }
   })
@@ -352,14 +374,18 @@ export function planOutput(plan: Plan, claims: AssessedClaim[], prerequisite: st
       }
     }
     case 'ask_new_example':
+      // VOICE_GRADER_LED: the coach model words this turn only when the grader wrote no case the app can say, and is then
+      // held to the app's own rule of one question (it joined a second one on in 11 of 16 new examples, voice eval 2026-11-10).
       return {
         action: 'ask_new_example',
-        instruction: `The student covered every claim. Ask one small new example or prediction, then call ${exampleCheckTool()} with their answer.`,
+        instruction: `The student covered every claim. Ask one small new example or prediction, then call ${exampleCheckTool()} with their answer.${graderLedVoice() ? ONE_THING_ASKED : ''}`,
       }
     case 'wrap_up':
       return { action: 'wrap_up' }
   }
 }
+
+const ONE_THING_ASKED = ' Ask one thing about it: the student hears the question once, so do not join a second one on with "and" (no ", and why?").'
 
 /**
  * What the student said, claim by claim. The text of a claim is never in it: not the one they got wrong, nor one they
@@ -506,12 +532,16 @@ async function scoreSayBack(ctx: TeachToolContext, concept: RecallConcept, claim
   })
 }
 
-/** What the student has said about the idea, newest last, cut to what the grader takes. */
-function saidTogether(said: string[]): string {
-  let text = said.join(' ')
+/**
+ * What the student has said about the idea, newest last, cut to what the grader takes. `between` is a line break for the
+ * spoken grader (VOICE_GRADER_LED), whose prompt reads each line as one thing said and grades the later line when the
+ * student has put an earlier one right.
+ */
+function saidTogether(said: string[], between = ' '): string {
+  let text = said.join(between)
   while (text.length > MAX_RECALL_ANSWER_CHARS && said.length > 1) {
     said = said.slice(1)
-    text = said.join(' ')
+    text = said.join(between)
   }
   return text.slice(-MAX_RECALL_ANSWER_CHARS)
 }
@@ -545,6 +575,24 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
   if (!skipGrader && !(await ctx.allowGrading())) return error(TOO_FAST)
 
   const said = [...before.said, explanation]
+  // VOICE_GRADER_LED: the grader is told the answer was spoken, and which questions the student has already been put, so
+  // the question it writes for each open claim can be said as it stands (assembled-reply.ts). Its questions are read
+  // off the answer here: the stored attempt keeps the written pointer, as it does for a typed answer.
+  const led = graderLedVoice()
+  const probes = new Map<string, string>()
+  let newCase: string | null = null
+  const gradeSpoken = async (request: RecallGradeRequest): Promise<RecallGradeAnswer> => {
+    if (!led) return grade(ctx, request)
+    // Only questions on this idea's claims go, and no more than the grader takes (its MAX_RECALL_ASKED).
+    const sent = new Set(request.claims.map((claim) => claim.id))
+    const asked = Object.entries(before.asked ?? {})
+      .flatMap(([claimId, questions]) => (sent.has(claimId) ? questions.map((question) => ({ claim_id: claimId, question })) : []))
+      .slice(-MAX_RECALL_ASKED)
+    const answer = await grade(ctx, { ...request, spoken: true, ...(asked.length > 0 ? { asked } : {}) })
+    for (const verdict of answer.verdicts ?? []) if (typeof verdict.probe === 'string' && verdict.probe.trim()) probes.set(verdict.claim_id, verdict.probe.trim())
+    newCase = typeof answer.new_case === 'string' && answer.new_case.trim() ? answer.new_case.trim() : null
+    return answer
+  }
   let verdicts: Pick<StoredClaim, 'claim_id' | 'verdict' | 'student_quote' | 'misconception' | 'pointer' | 'reasoning_gap'>[]
   try {
     if (skipGrader) {
@@ -563,7 +611,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
           inputMode: 'voice',
           timeZone: ctx.timeZone,
         },
-        ctx.grade ?? requestRecallGrade
+        gradeSpoken
       )
       if (result.status === 'not_found' || result.status === 'not_ready') return error('Concept not found. Call get_concept_to_explain.')
       if (result.status === 'invalid') return error('There was no explanation to assess. Ask the student again.')
@@ -573,10 +621,10 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
         verdicts = nothingShown(concept)
       } else verdicts = result.claims
     } else {
-      const graded = await grade(ctx, {
+      const graded = await gradeSpoken({
         prompt: conceptTeachBackPrompt(concept.name),
         claims: claimsForGrading([concept]),
-        answer: saidTogether(said),
+        answer: saidTogether(said, led ? '\n' : ' '),
         user_id: ctx.userId,
         project_id: ctx.projectId,
         session_id: ctx.sessionId,
@@ -593,12 +641,30 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
     throw failure
   }
 
-  const claims = assessed(concept, verdicts)
+  const claims = assessed(concept, verdicts, probes)
   const coveredSomething = claims.some((claim) => claim.verdict === 'covered' || claim.verdict === 'partial')
   const prerequisite = coveredSomething ? null : await weakPrerequisite(ctx.userId, concept.id)
   // The band is read after this explanation's own evidence is written, so a student who has just shown they do not know it gets support.
   const band = await lowestBand(ctx.userId, [concept.id])
   const next = assessmentResult(concept.name, claims, { ...before, said: said.slice(-12) }, prerequisite, { dontKnow, band, told })
+  const reply: Omit<ReplyFacts, 'next'> = {
+    plan: next.plan,
+    claims,
+    prerequisite,
+    turn: next.state.assessments,
+    dontKnow: isDontKnow(explanation),
+    told,
+    outcome: next.state.outcome,
+    lookAgain: next.lookAgain,
+    ...(next.plan.action === 'probe' ? { asked: before.asked?.[next.plan.gap.claimId] ?? [] } : {}),
+    ...(next.plan.action === 'ask_new_example' ? { newCase } : {}),
+  }
+  // The question a built probe asks is kept with the idea, so the grader's next question for that claim is another one.
+  const question = led && next.plan.action === 'probe' ? assembled({ ...reply, next: null })?.asked : undefined
+  if (question && next.plan.action === 'probe') {
+    const claimId = next.plan.gap.claimId
+    next.state.asked = { ...next.state.asked, [claimId]: [...(next.state.asked?.[claimId] ?? []), question].slice(-ASKED_KEPT) }
+  }
   state.teach.current = concept.id
   state.teach.concepts[concept.id] = next.state
   state.teach.askedTurn = ctx.turn
@@ -621,16 +687,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
     }).catch((failure) => logServerError('Recording the voice explanation failed', failure))
   }
 
-  return withWhatFollows(ctx, state, concepts, concept, next.output, next.state, {
-    plan: next.plan,
-    claims,
-    prerequisite,
-    turn: next.state.assessments,
-    dontKnow: isDontKnow(explanation),
-    told,
-    outcome: next.state.outcome,
-    lookAgain: next.lookAgain,
-  })
+  return withWhatFollows(ctx, state, concepts, concept, next.output, next.state, reply)
 }
 
 /**

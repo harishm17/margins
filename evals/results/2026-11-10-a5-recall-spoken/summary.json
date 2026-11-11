@@ -1,0 +1,219 @@
+{
+ "arms": {
+  "app": {
+   "scored": 43,
+   "errors": 0,
+   "verdict_accuracy": {
+    "count": 143,
+    "of": 152,
+    "rate": 0.9407894736842105
+   },
+   "answers_all_right": {
+    "count": 30,
+    "of": 38,
+    "rate": 0.7894736842105263
+   },
+   "false_credit": {
+    "count": 0,
+    "of": 39,
+    "rate": 0.0
+   },
+   "credit_withheld": {
+    "count": 9,
+    "of": 113,
+    "rate": 0.07964601769911504
+   },
+   "ungradable_flagged": {
+    "count": 5,
+    "of": 5,
+    "rate": 1.0
+   },
+   "gradable_held_back": {
+    "count": 0,
+    "of": 38,
+    "rate": 0.0
+   },
+   "reasoning_gap_agreement": {
+    "count": 6,
+    "of": 6,
+    "rate": 1.0
+   },
+   "confusion": {
+    "covered": {
+     "covered": 104,
+     "partial": 9
+    },
+    "partial": {
+     "partial": 8
+    },
+    "missing": {
+     "missing": 22
+    },
+    "incorrect": {
+     "incorrect": 9
+    }
+   },
+   "by_kind": {
+    "full": {
+     "count": 36,
+     "of": 36,
+     "rate": 1.0
+    },
+    "other_words": {
+     "count": 19,
+     "of": 19,
+     "rate": 1.0
+    },
+    "partial": {
+     "count": 23,
+     "of": 25,
+     "rate": 0.92
+    },
+    "contradicted": {
+     "count": 34,
+     "of": 36,
+     "rate": 0.9444444444444444
+    },
+    "one_or_more_missing": {
+     "count": 22,
+     "of": 24,
+     "rate": 0.9166666666666666
+    },
+    "reasoning_gap": {
+     "count": 9,
+     "of": 12,
+     "rate": 0.75
+    }
+   },
+   "questions": {
+    "said": {
+     "count": 46,
+     "of": 48,
+     "rate": 0.9583333333333334
+    },
+    "by_verdict": {
+     "partial": {
+      "the app says it (as written, or the first of two joined questions)": 16,
+      "none from the service (none written, or it said the claim)": 1
+     },
+     "missing": {
+      "the app says it (as written, or the first of two joined questions)": 21,
+      "none from the service (none written, or it said the claim)": 1
+     },
+     "incorrect": {
+      "the app says it (as written, or the first of two joined questions)": 9
+     }
+    }
+   }
+  }
+ },
+ "gates": {
+  "app": [
+   {
+    "key": "false_credit",
+    "label": "Claims not covered that were marked covered",
+    "at_most": 0.06,
+    "count": 0,
+    "of": 39,
+    "rate": 0.0,
+    "passed": true
+   },
+   {
+    "key": "credit_withheld",
+    "label": "Covered claims not marked covered",
+    "at_most": 0.12,
+    "count": 9,
+    "of": 113,
+    "rate": 0.07964601769911504,
+    "passed": true
+   }
+  ]
+ },
+ "dataset": {
+  "prompts": 9,
+  "answers": 43,
+  "gradable": 38,
+  "ungradable": 5,
+  "claims": 152,
+  "by_kind": {
+   "full": 9,
+   "other_words": 5,
+   "partial": 6,
+   "contradicted": 9,
+   "noise": 5,
+   "one_or_more_missing": 6,
+   "reasoning_gap": 3
+  },
+  "by_label": {
+   "covered": 113,
+   "partial": 8,
+   "incorrect": 9,
+   "missing": 22
+  },
+  "reasoning_gap_labels": 8
+ },
+ "models": {
+  "app": {
+   "model": "claude-sonnet-5-5",
+   "effort": "low",
+   "app_choice": true
+  }
+ },
+ "prompts": {
+  "PROMPTS_V2": "generation,support,tutor,ask",
+  "areas": {
+   "tutor": "v2"
+  },
+  "revision": "v2"
+ },
+ "spoken": true,
+ "cost": {
+  "app": 0.122723
+ },
+ "run": {
+  "label": "a5-recall-spoken",
+  "date": "2026-11-10",
+  "dataset_kind": "recall",
+  "spoken": true,
+  "commit": "3a73cf6d",
+  "dirty": true,
+  "arms": {
+   "app": {
+    "model": "claude-sonnet-5-5",
+    "effort": "low",
+    "app_choice": true
+   }
+  },
+  "prompts": {
+   "PROMPTS_V2": "generation,support,tutor,ask",
+   "areas": {
+    "tutor": "v2"
+   },
+   "revision": "v2",
+   "request": {
+    "schema": "RecallGradeResultSpokenV2",
+    "system_chars": 4045,
+    "system_sha": "20dcf803677f"
+   }
+  },
+  "estimate_usd": {
+   "app": 0.3743
+  },
+  "cost_usd": {
+   "app": 0.122723
+  },
+  "total_cost_usd": 0.122723,
+  "price_factor": 0.5,
+  "mock": false,
+  "batches": [
+   {
+    "id": "msgbatch_01H7zGAK8JJbLNCNNejop7Cw",
+    "requests": 42,
+    "seconds": 338.7
+   }
+  ],
+  "outcomes": {
+   "app: ok": 43
+  }
+ }
+}

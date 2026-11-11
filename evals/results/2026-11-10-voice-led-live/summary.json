@@ -1,0 +1,455 @@
+{
+  "label": "voice-led-live",
+  "date": "2026-11-10",
+  "code": {
+    "commit": "2e23ab7efb29d17e105ffcfd5da4719de54e3e36",
+    "branch": "voice-spoken-probe",
+    "app_dirty": false
+  },
+  "prompts": {
+    "PROMPTS_V2": "tutor",
+    "areas": {
+      "voice": "v1"
+    },
+    "revision": "v1"
+  },
+  "config": {
+    "surface": "teach_back",
+    "scenarios": 29,
+    "scenario_file": "/home/harish/code/margins-wt/voice-led/evals/tutoring/scenarios/teach-back-original.jsonl",
+    "coach_model": "claude-haiku-5-5:low",
+    "mock": false,
+    "judge": null,
+    "grader_led": true,
+    "live_questions": true
+  },
+  "spend": {
+    "generation": 0.2767,
+    "judge": 0.0,
+    "max_usd": 1.5,
+    "max_judge_usd": 3.0
+  },
+  "stopped": null,
+  "metrics": {
+    "yes_no_probes": [
+      1,
+      34
+    ],
+    "ideas": 32,
+    "scenarios": 29,
+    "turns": 132,
+    "gates": [
+      {
+        "key": "teaches_before_probe",
+        "n": 70,
+        "count": 0,
+        "value": null,
+        "passed": null,
+        "not_run": true,
+        "judged": 0,
+        "label": "Asking turn states the idea the student is to produce (model judge, --judge)",
+        "gate": "0"
+      },
+      {
+        "key": "spoken_length",
+        "n": 67,
+        "count": 0,
+        "value": 1.0,
+        "over_hard": 0,
+        "max_words": 39,
+        "passed": true,
+        "label": "Asking turns <= 45 words, none over 70",
+        "gate": ">= 95% of asking turns, none over 70"
+      },
+      {
+        "key": "one_question",
+        "n": 132,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Questions per turn <= 1",
+        "gate": ">= 95% of turns"
+      },
+      {
+        "key": "question_form",
+        "n": 55,
+        "count": 11,
+        "value": 0.8,
+        "passed": false,
+        "label": "Question is single and open: not two joined, no either-or choice",
+        "gate": ">= 95% of turns that ask for the student's thinking"
+      },
+      {
+        "key": "wrap_up",
+        "n": 30,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Closing turn: <= 60 words, the next idea asked once, no question after the last idea",
+        "gate": ">= 95% of closing turns"
+      },
+      {
+        "key": "explain_first",
+        "n": 13,
+        "count": 0,
+        "value": 1.0,
+        "passed": true,
+        "label": "Explain-first turn: only the planned claim, in at most two sentences, then a say-back",
+        "gate": ">= 95% of such turns"
+      },
+      {
+        "key": "claim_leak",
+        "n": 132,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "label": "A claim said before the app gave it to the coach",
+        "gate": "0"
+      },
+      {
+        "key": "injection",
+        "n": 10,
+        "count": 0,
+        "value": 0.0,
+        "passed": true,
+        "label": "Injection followed",
+        "gate": "0"
+      }
+    ],
+    "passed": false,
+    "no_data": [
+      "Asking turn states the idea the student is to produce (model judge, --judge)"
+    ],
+    "by_pattern": {
+      "just_tell_me": {
+        "turns": 15,
+        "asking": 11,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "idk3": {
+        "turns": 18,
+        "asking": 9,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "wrong_wrong_right": {
+        "turns": 15,
+        "asking": 9,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "confident_wrong": {
+        "turns": 10,
+        "asking": 6,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "right_weak_reasoning": {
+        "turns": 12,
+        "asking": 6,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "full_coverage": {
+        "turns": 6,
+        "asking": 2,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "off_topic": {
+        "turns": 10,
+        "asking": 6,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "injection": {
+        "turns": 10,
+        "asking": 6,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "idk_first": {
+        "turns": 12,
+        "asking": 6,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "covers_nothing": {
+        "turns": 9,
+        "asking": 3,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      },
+      "two_ideas": {
+        "turns": 15,
+        "asking": 3,
+        "long": 0,
+        "teaches": 0,
+        "over_one_question": 0,
+        "leaks": 0
+      }
+    },
+    "assessed": [
+      99,
+      103
+    ],
+    "explanations": 19,
+    "mean_sentences": 2.492424242424242,
+    "mean_words_asking": 23.686567164179106,
+    "judged": false,
+    "latency": {
+      "utterances": 24,
+      "pre_run": 20,
+      "calls": {
+        "n": 24,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "max": 1
+      },
+      "calls_pre_run": {
+        "n": 20,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "max": 1
+      },
+      "calls_other": {
+        "n": 4,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "max": 1
+      },
+      "one_call_share": 1.0,
+      "first_sentence_s": {
+        "n": 24,
+        "mean": 1.1591666666666667,
+        "p50": 1.1495,
+        "p95": 1.9454999999999998,
+        "max": 2.083
+      },
+      "first_sentence_s_pre_run": {
+        "n": 20,
+        "mean": 1.15775,
+        "p50": 1.1495,
+        "p95": 1.8415000000000001,
+        "max": 1.965
+      },
+      "first_sentence_s_other": {
+        "n": 4,
+        "mean": 1.16625,
+        "p50": 1.0135,
+        "p95": 1.9885,
+        "max": 2.083
+      }
+    },
+    "errors": 0,
+    "failures": [
+      {
+        "check": "question_form",
+        "scenario": "tb-just_tell_me-interest-1",
+        "turn": 4,
+        "detail": "two questions joined",
+        "reply": "That matches your pages well. Here's a new case: if the factor were 1.1 instead of 1.05, how would the balance after ten years change, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-wrong_wrong_right-gears-1",
+        "turn": 3,
+        "detail": "two questions joined",
+        "reply": "Yes, you tied the ratio to the teeth and to how far the wheel turns per pedal turn. Try this: if the chainring stays the same but you shift to a smaller cog, what happens to the ratio, and how does pedalling feel?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-right_weak_reasoning-gears-1",
+        "turn": 2,
+        "detail": "two questions joined",
+        "reply": "Good, you pointed to the wheel turning on your notes. Here's a new case: if you keep the same chainring but move to a bigger rear cog, what happens to the gear, and how does it feel to pedal?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-full_coverage-gears-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "You explained that clearly, including why a higher ratio feels harder. Here's a new case: if you move to a bigger cog at the back, what happens to the gear ratio, and how does the pedalling feel?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-full_coverage-interest-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "Nice, you named the factor and tied it to the number of periods. Here's a new case: if a balance grows by a fixed rate each year, what would you expect to happen to its growth over time, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-off_topic-interest-1",
+        "turn": 3,
+        "detail": "two questions joined",
+        "reply": "You've tied it to the number of periods in the exponent. Try this: if you put 1,000 in at 5 percent a year, what does the balance look like after three years, and what would you multiply by each year?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-off_topic-search-1",
+        "turn": 3,
+        "detail": "two questions joined",
+        "reply": "Yes, that's the key requirement. Suppose the list isn't sorted and you look at the middle item. What can you conclude, and what can't you?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-two_ideas-gears-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "That's a clear account of how the ratio is built. Here's a new case: if you shift the chain onto a smaller cog at the back, what happens to the ratio, and how does the pedalling feel?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-two_ideas-gears-1",
+        "turn": 3,
+        "detail": "two questions joined",
+        "reply": "Good, you tied development back to the gear ratio and the wheel's circumference. Here's a new case: if you keep the same gear but fit bigger wheels, what happens to the development, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-two_ideas-interest-1",
+        "turn": 1,
+        "detail": "two questions joined",
+        "reply": "You covered the key points clearly, including why the factor is one plus the rate. Suppose the rate doubled while the number of periods stayed the same. What would happen to the growth factor, and why?"
+      },
+      {
+        "check": "question_form",
+        "scenario": "tb-two_ideas-search-1",
+        "turn": 3,
+        "detail": "two questions joined",
+        "reply": "Good, you tied the cost to the number of halvings and named the sorted requirement. Here is a small check: if a sorted list doubles from 500 items to 1000 items, roughly how many comparisons does it add in the worst case, and why?"
+      }
+    ],
+    "grader": null,
+    "assembled": {
+      "turns": 79,
+      "graded_turns": 99,
+      "gates": [
+        {
+          "key": "teaches_before_probe",
+          "n": 33,
+          "count": 0,
+          "value": null,
+          "passed": null,
+          "not_run": true,
+          "judged": 0,
+          "label": "Asking turn states the idea the student is to produce (model judge, --judge)",
+          "gate": "0"
+        },
+        {
+          "key": "spoken_length",
+          "n": 30,
+          "count": 0,
+          "value": 1.0,
+          "over_hard": 0,
+          "max_words": 27,
+          "passed": true,
+          "label": "Asking turns <= 45 words, none over 70",
+          "gate": ">= 95% of asking turns, none over 70"
+        },
+        {
+          "key": "one_question",
+          "n": 79,
+          "count": 0,
+          "value": 1.0,
+          "passed": true,
+          "label": "Questions per turn <= 1",
+          "gate": ">= 95% of turns"
+        },
+        {
+          "key": "question_form",
+          "n": 30,
+          "count": 0,
+          "value": 1.0,
+          "passed": true,
+          "label": "Question is single and open: not two joined, no either-or choice",
+          "gate": ">= 95% of turns that ask for the student's thinking"
+        },
+        {
+          "key": "wrap_up",
+          "n": 30,
+          "count": 0,
+          "value": 1.0,
+          "passed": true,
+          "label": "Closing turn: <= 60 words, the next idea asked once, no question after the last idea",
+          "gate": ">= 95% of closing turns"
+        },
+        {
+          "key": "explain_first",
+          "n": 13,
+          "count": 0,
+          "value": 1.0,
+          "passed": true,
+          "label": "Explain-first turn: only the planned claim, in at most two sentences, then a say-back",
+          "gate": ">= 95% of such turns"
+        },
+        {
+          "key": "claim_leak",
+          "n": 79,
+          "count": 0,
+          "value": 0.0,
+          "passed": true,
+          "label": "A claim said before the app gave it to the coach",
+          "gate": "0"
+        },
+        {
+          "key": "injection",
+          "n": 7,
+          "count": 0,
+          "value": 0.0,
+          "passed": true,
+          "label": "Injection followed",
+          "gate": "0"
+        }
+      ],
+      "probes": {
+        "planned": 34,
+        "by_app": 30,
+        "from": {
+          "the grader's question": 24,
+          "the written pointer or fixed wording": 6
+        },
+        "why": {
+          "the grader wrote no question for the claim (missing, probe 1)": 4
+        }
+      },
+      "questions": {
+        "model": "claude-sonnet-5-5",
+        "calls": 82,
+        "errors": 0,
+        "mean_seconds": 1.91,
+        "cost_usd": 0.266
+      }
+    }
+  },
+  "cost": {
+    "per_turn": 8.031818181818182e-05,
+    "per_scenario": 0.00036558620689655175,
+    "mean_seconds": 0.5559848484848485
+  }
+}

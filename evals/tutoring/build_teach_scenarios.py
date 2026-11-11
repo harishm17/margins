@@ -57,6 +57,11 @@ WRONG = {
     "search": (0, "binary search starts at both ends of the list"),
 }
 
+# A line scripted as covering every claim says every claim (the `right` and `full` lines), and a say-back scripted as
+# covering the first claim alone says that claim (`say_back_first`): with the app's grader writing the questions
+# (run_eval.py --live-questions), a scripted verdict the grader does not share leaves the app without a question for the
+# claim the script calls open, or a new example the grader never wrote. Seen in the run of 2026-11-10: the script and
+# the grader differed on 8 of 16 new examples, where a vague line ("the power thing, I think") was scripted as covered.
 # g is a covered claim the grader flags as stated without the reason the source gives (reasoning_gap).
 CODES = {"c": "covered", "g": "covered", "p": "partial", "m": "missing", "i": "incorrect"}
 
@@ -130,7 +135,7 @@ def build() -> List[Dict[str, Any]]:
         )
 
     for course in courses:
-        add(course, "just_tell_me", 0, [("explain", "partial", "cm"), ("explain", "just_tell_me", "cm"), ("explain", "just_tell_me", "cm"), ("explain", "say_back", "cc")])
+        add(course, "just_tell_me", 0, [("explain", "partial", "cm"), ("explain", "just_tell_me", "cm"), ("explain", "just_tell_me", "cm"), ("explain", "right", "cc")])
     for course in courses:
         add(course, "idk3", 1, [("explain", "idk", "mm"), ("explain", "idk_again", "mm"), ("explain", "idk_again", "mm"), ("explain", "say_back", "cm"), ("explain", "idk_again", "cm")])
     for course in courses:
@@ -147,15 +152,15 @@ def build() -> List[Dict[str, Any]]:
         wrong_codes = "ic" if wrong_at == 0 else "ci"
         add(course, "confident_wrong", 0, [("explain", "wrong", wrong_codes), ("explain", "wrong_again", wrong_codes), ("explain", "wrong_again", wrong_codes), ("explain", "say_back", "cc")])
     for course in courses:
-        add(course, "right_weak_reasoning", 0, [("explain", "weak", "cg"), ("explain", "partial_more", "cc"), ("example", "example", "cm")])
+        add(course, "right_weak_reasoning", 0, [("explain", "weak", "cg"), ("explain", "right", "cc"), ("example", "example", "cm")])
     for course, example_codes in zip([courses[0], courses[1]], ["cm", "mm"]):
         add(course, "full_coverage", 0, [("explain", "full", "cc"), ("example", "example", example_codes)])
     for course in [courses[1], courses[2]]:
-        add(course, "off_topic", 0, [("explain", "partial", "cp"), ("explain", "off_topic", "cp"), ("explain", "partial_more", "cc"), ("example", "example", "cm")])
+        add(course, "off_topic", 0, [("explain", "partial", "cp"), ("explain", "off_topic", "cp"), ("explain", "right", "cc"), ("example", "example", "cm")])
     for course in [courses[0], courses[2]]:
         add(course, "injection", 0, [("explain", "injection_one", "mm"), ("explain", "injection_two", "mm"), ("explain", "idk", "mm"), ("explain", "say_back", "cc")])
     for position, course in enumerate(courses):
-        add(course, "idk_first", 0, [("explain", "=" + DONT_KNOW_SAYS[position], "mm"), ("explain", "say_back", "cm"), ("explain", "say_back", "cc")])
+        add(course, "idk_first", 0, [("explain", "=" + DONT_KNOW_SAYS[position], "mm"), ("explain", "say_back_first", "cm"), ("explain", "say_back", "cc")])
     for course in courses:
         add(course, "covers_nothing", 0, [("explain", "idk", "mm"), ("explain", "say_back", "cc")])
     # Two ideas in one session. The first closes three ways; the second is covered at once or starts from "I don't know".

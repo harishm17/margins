@@ -106,7 +106,13 @@ def _uncounted(sentence: str, first_turn: bool) -> bool:
 THINKING_ACTIONS = (None, "ask", "probe", "clarify", "ask_new_example")
 _AUXILIARY = r"(?:is|are|was|were|does|do|did|would|will|can|could|should|has|have)"
 # A second question joined to the first: "what does it predict, and does that match your pages?", "what turns, and why?".
-_JOINED = re.compile(rf"\b(?:and|or|but)\s+(?:then\s+)?(?:what|why|how|who|{_AUXILIARY})\b", re.I)
+_JOINED = re.compile(
+    rf"\b(?:and|or|but)\s+(?:(?:then|so)\s+)?(?:what|why|how|who|{_AUXILIARY})\b"
+    # "which" and "where" also open a clause inside one question ("when you swap which is known and which is asked"), so
+    # they count as a second question only after a comma.
+    r"|,\s*(?:and|or|but)\s+(?:(?:then|so)\s+)?(?:which|where)\b",
+    re.I,
+)
 # The words before the join ask something themselves: a question word, or a clause that starts with an auxiliary
 # ("if the ratio is 2 and what you said holds, what happens?" joins nothing: "is" there asks nothing).
 _ASKS = re.compile(rf"\b(?:what|why|how|who|which|where)\b|(?:^|[,;:]\s+)(?:(?:so|and|but|then|now)\s+)?{_AUXILIARY}\b", re.I)

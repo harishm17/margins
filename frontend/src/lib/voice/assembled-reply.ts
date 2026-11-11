@@ -8,10 +8,15 @@
  * the reply is built from those parts, so the turn makes no model call.
  *
  * It returns null wherever fixed wording would be worse than the model's, and the coach model then speaks as before:
- *   - a probe on a wrong claim (the question has to be made for what this student got wrong);
- *   - the second probe on a gap (the first wording has been used; a smaller question has to be written);
- *   - the new example (written by the model until the topic's bank holds one);
- *   - a missing or loose claim with no usable question from the grader, a long quote, a long claim.
+ *   - a probe with no usable question from the grader: none written, two joined in one, a choice between named answers,
+ *     one that says the claim, or (on the second probe of a gap) one the student has already been asked;
+ *   - a new example the grader wrote no usable case for;
+ *   - a long quote, a long claim.
+ *
+ * The grader writes its question for the ear when the app asks it to (`spoken` on the grade request, ai-service
+ * recall_grader.py): one thing asked, a wrong claim included, and a smaller question for a claim already asked about.
+ * When it finds every claim covered it also writes the new example to ask (`new_case`): it has the claims, which the
+ * coach model never sees.
  *
  * Maths is left as written: the browser turns notation into spoken words (speakable.ts).
  *
@@ -40,10 +45,19 @@ export type ReplyFacts = {
   lookAgain?: string[]
   examplePassed?: boolean
   next?: SpokenNext | null
+  /** Questions the app has already put to the student for the claim of the gap being probed. */
+  asked?: readonly string[]
+  /** The new example the grader wrote for an answer that covers every claim: a small case and one question about it. */
+  newCase?: string | null
 }
+
+/** A reply the app says, and the question in it when it is a probe built from the grader's question (kept, so the next one differs). */
+export type Built = { text: string; asked?: string }
 
 const MAX_QUOTE_WORDS = 16
 const MAX_QUESTION_WORDS = 30
+// A new example sets up its case before it asks, so it runs longer than a probe.
+const MAX_NEW_CASE_WORDS = 36
 const MAX_CLAIM_WORDS = 60
 
 const wordCount = (text: string): number => text.trim().split(/\s+/).filter(Boolean).length
@@ -52,6 +66,8 @@ const pick = (options: readonly string[], turn: number): string => options[Math.
 const SAY_BACK = ['Can you say that back in your own words?', 'How would you put that in your own words?'] as const
 const FINE_NOT_TO_KNOW = ["That's fine, no need to have it yet.", "That's okay, this one takes a while to stick."] as const
 const LAST_IDEA = 'That was the last idea for this topic. Good work, and goodbye.'
+const ANOTHER_WAY = ['Let me ask it another way.', 'Try it from a different side.'] as const
+const COVERED_IT = ['Yes, that covers it.', "That's a clear account of it."] as const
 
 /**
  * The question inside a grader pointer ("Look again at p. 14: What does the ratio compare?") and its page. Null when the
@@ -60,15 +76,53 @@ const LAST_IDEA = 'That was the last idea for this topic. Good work, and goodbye
 export function pointerQuestion(pointer: string | null | undefined): { question: string; page: number | null } | null {
   const match = /^Look again (?:at p\. ([0-9]{1,5})|in your reading):\s*([\s\S]+)$/.exec((pointer ?? '').trim())
   if (!match) return null
-  const question = match[2].trim()
-  if (!question.endsWith('?') || question.indexOf('?') !== question.length - 1 || wordCount(question) > MAX_QUESTION_WORDS) return null
-  if (joinedOrEitherOr(question)) return null
-  return { question, page: realPage(match[1] ? Number(match[1]) : null) }
+  const question = oneOpenQuestion(match[2])
+  return question ? { question, page: realPage(match[1] ? Number(match[1]) : null) } : null
+}
+
+/**
+ * The text as one question a student can hold by ear, or null: it must end in its only question mark, be short, and ask
+ * one open thing. Of two questions joined in one sentence, the first is the one asked.
+ */
+function oneOpenQuestion(text: string | null | undefined, maxWords = MAX_QUESTION_WORDS): string | null {
+  const written = (text ?? '').replace(/\s+/g, ' ').trim()
+  if (!written.endsWith('?') || written.indexOf('?') !== written.length - 1) return null
+  const question = joinedOrEitherOr(written) ? firstOfJoined(written) : written
+  return question && wordCount(question) <= maxWords ? question : null
+}
+
+/**
+ * The first of two questions joined in one sentence ("Where does it land, and what happens next?" gives "Where does it
+ * land?"), when it is an open question of its own; null for any other. One in twelve of the grader's spoken questions
+ * still joined two when its output was read (recall eval, 2026-11-10); the first half is a question the student can hold.
+ */
+function firstOfJoined(question: string): string | null {
+  const joined = JOINED.exec(question)
+  if (!joined) return null
+  const first = question.slice(0, joined.index).replace(/[\s,;:]+$/, '')
+  if (!/\b(?:what|why|how|who|which|where)\b/i.test(first) || wordCount(first) < 4) return null
+  const single = `${first}?`
+  return joinedOrEitherOr(single) ? null : single
+}
+
+/**
+ * The question the grader wrote to be said aloud for an open claim (`probe`), when the app can say it: one open question
+ * that does not say the claim and that the student has not already been asked.
+ */
+export function spokenQuestion(probe: string | null | undefined, claim: string | null | undefined, asked: readonly string[] = []): string | null {
+  const question = oneOpenQuestion(probe)
+  if (!question || givesAway(question, claim)) return null
+  return asked.some((earlier) => sameQuestion(question, earlier)) ? null : question
 }
 
 // The form rule of the eval's question gate (evals/tutoring/teach_metrics.py `question_form`), in the same patterns.
 const AUXILIARY = '(?:is|are|was|were|does|do|did|would|will|can|could|should|has|have)'
-const JOINED = new RegExp(`\\b(?:and|or|but)\\s+(?:then\\s+)?(?:what|why|how|who|${AUXILIARY})\\b`, 'i')
+// "which" and "where" also open a clause inside one question ("when you swap which is known and which is asked"), so
+// they count as a second question only after a comma.
+const JOINED = new RegExp(
+  `\\b(?:and|or|but)\\s+(?:(?:then|so)\\s+)?(?:what|why|how|who|${AUXILIARY})\\b|,\\s*(?:and|or|but)\\s+(?:(?:then|so)\\s+)?(?:which|where)\\b`,
+  'i'
+)
 const ASKS = new RegExp(`\\b(?:what|why|how|who|which|where)\\b|(?:^|[,;:]\\s+)(?:(?:so|and|but|then|now)\\s+)?${AUXILIARY}\\b`, 'i')
 const YES_NO = new RegExp(`(?:^|[,;:]\\s+)(?:(?:so|and|but|then|now)\\s+)?(${AUXILIARY})\\s+(\\w+)`, 'gi')
 const REQUEST = /^(?:can|could|would|will)\s+you$|^(?:do|would)\s+you$/i
@@ -104,6 +158,15 @@ export function givesAway(question: string, claim: string | null | undefined): b
   if (words.length < 3) return false
   const asked = new Set(contentWords(question))
   return words.filter((word) => asked.has(word)).length / words.length >= 0.6
+}
+
+/** Two questions that ask the same thing in nearly the same words: four fifths of the longer one's content words are shared. */
+function sameQuestion(a: string, b: string): boolean {
+  const first = new Set(contentWords(a))
+  const second = new Set(contentWords(b))
+  const larger = Math.max(first.size, second.size)
+  if (larger === 0) return a.trim().toLowerCase() === b.trim().toLowerCase()
+  return [...first].filter((word) => second.has(word)).length / larger >= 0.8
 }
 
 /**
@@ -148,38 +211,42 @@ function pagesLine(lookAgain: readonly string[] | undefined): string | null {
   return `Pages ${pages.slice(0, -1).join(', ')} and ${pages[pages.length - 1]} are worth another look.`
 }
 
-function probeReply(facts: ReplyFacts, plan: Extract<Plan, { action: 'probe' }>): string | null {
-  // The second probe on a gap must be a smaller question than the first: that is written, not looked up.
-  if (plan.probeNumber !== 1) return null
+function probeReply(facts: ReplyFacts, plan: Extract<Plan, { action: 'probe' }>): Built | null {
   const claim = facts.claims.find((entry) => entry.claimId === plan.gap.claimId)
   const page = realPage(plan.gap.page)
-  // The grader's question, unless it says the claim it is asking for.
-  const asked = () => {
-    const pointer = pointerQuestion(claim?.pointer)
-    return pointer && !givesAway(pointer.question, claim?.text) ? pointer : null
-  }
+  // The grader's question written for the ear, when there is one the app can say.
+  const spoken = spokenQuestion(claim?.probe, claim?.text, facts.asked)
+  const ask = (opening: string): Built | null => (spoken ? { text: `${opening} ${spoken}`, asked: spoken } : null)
+  // The second probe on a gap must be another, smaller question than the first: only the grader writes one.
+  if (plan.probeNumber !== 1) return ask(pick(ANOTHER_WAY, facts.turn))
+  // Without one, the question of a written pointer ("Look again at p. 5: ..."), unless it says the claim it is asking
+  // for or the student has already been asked it.
+  const pointer = spoken ? null : pointerQuestion(claim?.pointer)
+  const again = !!pointer && (facts.asked ?? []).some((earlier) => sameQuestion(pointer.question, earlier))
+  const written = pointer && !again && !givesAway(pointer.question, claim?.text) ? pointer : null
+  const put = (opening: string): Built | null =>
+    ask(opening) ?? (written ? { text: `${opening} ${pageLead(written.page, written.question)}${written.question}`, asked: written.question } : null)
   switch (plan.gap.finding) {
-    case 'incorrect':
-      return null
+    case 'incorrect': {
+      // Their own words first, so the question is heard as being about what they said. Nothing says it was wrong.
+      const said = quoted(claim?.studentQuote)
+      return ask(said ? `You said, "${said}".` : "Let's look closer at one part of that.")
+    }
     case 'missing_prerequisite': {
       const name = named(facts.prerequisite)
-      return name ? `Let's step back for a moment. How would you describe ${name} in your own words?` : null
+      return name ? { text: `Let's step back for a moment. How would you describe ${name} in your own words?` } : null
     }
     case 'unsupported_jump': {
       const said = quoted(claim?.studentQuote)
-      return said ? `You said, "${said}". What ${page !== null ? `on page ${page} of your notes` : 'in your notes'} tells you that?` : null
+      return said ? { text: `You said, "${said}". What ${page !== null ? `on page ${page} of your notes` : 'in your notes'} tells you that?` } : null
     }
     case 'missing': {
-      const pointer = asked()
-      if (!pointer) return null
       const hasSomething = facts.claims.some((entry) => entry.verdict === 'covered' || entry.verdict === 'partial')
-      return `${hasSomething ? 'You have part of it.' : "Let's try another piece of it."} ${pageLead(pointer.page, pointer.question)}${pointer.question}`
+      return put(hasSomething ? 'You have part of it.' : "Let's try another piece of it.")
     }
     case 'vague': {
-      const pointer = asked()
-      if (pointer) return `You're close on one part. ${pageLead(pointer.page, pointer.question)}${pointer.question}`
       const said = quoted(claim?.studentQuote)
-      return said ? `When you say "${said}", what exactly do you mean?` : null
+      return put("You're close on one part.") ?? (said ? { text: `When you say "${said}", what exactly do you mean?` } : null)
     }
   }
 }
@@ -209,18 +276,31 @@ function closingReply(facts: ReplyFacts): string | null {
   return parts.filter(Boolean).join(' ')
 }
 
-/** The reply to say for this step, or null when the coach model should word it. */
-export function assembledReply(facts: ReplyFacts): string | null {
+/**
+ * The new example after an explanation that covers every claim: the grader's case, when it ends in one open question.
+ * The student's answer to it is graded against the idea's claims with this turn as the question (pre-run.ts).
+ */
+function newExampleReply(facts: ReplyFacts): string | null {
+  const question = oneOpenQuestion(facts.newCase, MAX_NEW_CASE_WORDS)
+  return question ? `${pick(COVERED_IT, facts.turn)} Here's a new case. ${question}` : null
+}
+
+/** The reply to say for this step and the question it asks, or null when the coach model should word it. */
+export function assembled(facts: ReplyFacts): Built | null {
   const plan = facts.plan
+  const said = (text: string | null): Built | null => (text === null ? null : { text })
   switch (plan.action) {
     case 'probe':
       return probeReply(facts, plan)
     case 'explain':
     case 'explain_first':
-      return explainReply(facts, plan)
+      return said(explainReply(facts, plan))
     case 'wrap_up':
-      return closingReply(facts)
+      return said(closingReply(facts))
     case 'ask_new_example':
-      return null
+      return said(newExampleReply(facts))
   }
 }
+
+/** The reply to say for this step, or null when the coach model should word it. */
+export const assembledReply = (facts: ReplyFacts): string | null => assembled(facts)?.text ?? null

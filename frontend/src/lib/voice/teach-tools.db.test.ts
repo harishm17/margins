@@ -214,28 +214,51 @@ dbTest('explanation after two probes is level 2', async () => {
 })
 
 // Redesign decision 6: after a graded step the app holds everything the reply needs, so it builds the reply and the turn
-// makes no model call. Where fixed wording would be worse (the second probe), there is none and the coach model speaks.
+// makes no model call. A second probe must be another, smaller question: the app says one only when the grader, told
+// what was already asked, wrote it (`probe`, the question to say aloud); otherwise the coach model speaks.
 dbTest('VOICE_GRADER_LED: a graded step carries the reply to say, without the claim before it is explained; off, it carries none', async () => {
-  const play = async () => {
+  /** `questions`: what the grader writes to be said aloud for the open claim, on the first answer and on the ones after it. */
+  const play = async (questions: [string, string] | null = null) => {
     const w = await world()
-    const rules: Record<string, Rule> = { 'Two keys': COVERED, 'Chaining': { verdict: 'missing', pointer: 'Look again at p. 5: What does each bucket hold?' } }
+    const open = (probe?: string): Rule => ({ verdict: 'missing', pointer: 'Look again at p. 5: What does each bucket hold?', ...(probe ? { probe } : {}) })
+    const rules: Record<string, Rule> = { 'Two keys': COVERED, 'Chaining': open(questions?.[0]) }
     const g = grader(rules)
     await run(w, undefined, 'get_concept_to_explain')
     const say = (text: string) => run(w, g.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: text })
-    const steps = [await say('Two keys collide in a bucket.'), await say('They go in one bucket and collide, that is it.'), await say('Maybe the table grows?')]
+    const steps = [await say('Two keys collide in a bucket.')]
+    rules['Chaining'] = open(questions?.[1])
+    steps.push(await say('They go in one bucket and collide, that is it.'), await say('Maybe the table grows?'))
     Object.assign(rules, { 'Chaining': { verdict: 'covered', student_quote: 'each bucket holds a list' } })
     steps.push(await say('Each bucket holds a list of the keys that landed in it.'))
-    return steps.map((step) => ({ action: out(step).action, spoken: step.spoken }))
+    return Object.assign(steps.map((step) => ({ action: out(step).action, spoken: step.spoken })), { requests: g.asked, claimId: w.claims['Chaining keeps a list in each bucket.'].id })
   }
   const before = process.env.VOICE_GRADER_LED
   try {
     delete process.env.VOICE_GRADER_LED
-    assert.deepEqual((await play()).map((step) => step.spoken), [undefined, undefined, undefined, undefined])
+    const off = await play()
+    assert.deepEqual(off.map((step) => step.spoken), [undefined, undefined, undefined, undefined])
+    assert.equal(off.requests.some((request) => request.spoken || request.asked || request.answer.includes('\n')), false, 'the grader is asked as for a typed answer')
 
     process.env.VOICE_GRADER_LED = 'true'
+    // The grader's question for the ear is said, and what was asked goes back to it so that its next question is another.
+    const FIRST = 'What does a bucket do with a second key?'
+    const SMALLER = 'Two keys land on index three: where is the second one kept?'
+    const led = await play([FIRST, SMALLER])
+    assert.ok(led[0].spoken?.endsWith(FIRST), led[0].spoken)
+    assert.ok(led[1].spoken?.endsWith(SMALLER), led[1].spoken)
+    // (The say-back is judged on its own against the one claim explained: no question follows it, so that request is a plain one.)
+    assert.deepEqual(led.requests.map((request) => [request.claims.length, request.spoken ?? false]), [[2, true], [2, true], [2, true], [2, true], [1, false]])
+    assert.deepEqual([led.requests[0].asked, led.requests[1].asked], [undefined, [{ claim_id: led.claimId, question: FIRST }]])
+    assert.deepEqual(led.requests[2].asked?.map((entry) => entry.question), [FIRST, SMALLER])
+    // Each thing the student said reaches the spoken grader on its own line, earliest first: its prompt grades the later
+    // line when the student has put an earlier one right.
+    assert.deepEqual(led.requests[2].answer.split('\n'), ['Two keys collide in a bucket.', 'They go in one bucket and collide, that is it.', 'Maybe the table grows?'])
+    // The same question again is not asked twice by the app: the coach model words that turn.
+    assert.equal((await play([FIRST, FIRST]))[1].spoken, undefined)
+
     const [probe, second, explain, close] = await play()
     assert.deepEqual([probe.action, second.action, explain.action, close.action], ['probe', 'probe', 'explain', 'wrap_up'])
-    // The first probe asks the grader's question and does not give the claim away.
+    // With no question written for the ear, the first probe asks the written pointer's and does not give the claim away.
     assert.ok(probe.spoken?.endsWith('What does each bucket hold?'), probe.spoken)
     assert.equal(probe.spoken?.includes('Chaining keeps'), false)
     assert.equal(second.spoken, undefined, 'the second probe is a smaller question, written by the coach model')
@@ -244,6 +267,14 @@ dbTest('VOICE_GRADER_LED: a graded step carries the reply to say, without the cl
     assert.equal(explain.spoken?.split('?').length, 2)
     // The closing turn asks the next idea, so no second turn is needed to move on.
     assert.ok(close.spoken?.endsWith('Explain "Load factor" in your own words, as if you were teaching it to a classmate.'), close.spoken)
+
+    // Every claim covered: the app asks the new case the grader wrote, and of two questions joined in it only the first.
+    const w = await world()
+    await run(w, undefined, 'get_concept_to_explain')
+    const full = grader({ 'Two keys': COVERED, 'Chaining': COVERED }, { new_case: 'Three keys all hash to bucket five. What does bucket five hold, and why?' })
+    const example = await run(w, full.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'Two keys collide and each bucket keeps a list.' })
+    assert.equal(out(example).action, 'ask_new_example')
+    assert.ok(example.spoken?.endsWith('Three keys all hash to bucket five. What does bucket five hold?'), example.spoken)
   } finally {
     if (before === undefined) delete process.env.VOICE_GRADER_LED
     else process.env.VOICE_GRADER_LED = before

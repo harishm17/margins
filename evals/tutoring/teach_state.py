@@ -9,9 +9,10 @@ is told after each explanation (the action, the probe, the claim it may say once
 No database and no grader are involved.
 """
 import json
+import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from utterance import app_result_text
 
@@ -69,6 +70,7 @@ def assessed_claims(concept: Dict[str, Any], verdicts: List[Dict[str, Any]]) -> 
             "studentQuote": verdicts[index].get("student_quote"),
             "misconception": verdicts[index].get("misconception"),
             "pointer": verdicts[index].get("pointer"),
+            "probe": verdicts[index].get("probe"),
             "reasoningGap": verdicts[index].get("reasoning_gap"),
         }
         for index, claim in enumerate(concept["claims"])
@@ -225,6 +227,10 @@ def example_check_tool() -> str:
     return "record_example_check" if prompts_v2("voice") else "record_check"
 
 
+# teach-tools.ts ONE_THING_ASKED: added to the new example's instruction under the app's VOICE_GRADER_LED (the eval sets it for --grader-led).
+ONE_THING_ASKED = ' Ask one thing about it: the student hears the question once, so do not join a second one on with "and" (no ", and why?").'
+
+
 def plan_output(plan: Dict[str, Any], claims: List[Dict[str, Any]], prerequisite: Optional[str]) -> Dict[str, Any]:
     action = plan["action"]
     if action == "probe":
@@ -260,7 +266,8 @@ def plan_output(plan: Dict[str, Any], claims: List[Dict[str, Any]], prerequisite
     if action == "ask_new_example":
         return {
             "action": "ask_new_example",
-            "instruction": f"The student covered every claim. Ask one small new example or prediction, then call {example_check_tool()} with their answer.",
+            "instruction": f"The student covered every claim. Ask one small new example or prediction, then call {example_check_tool()} with their answer."
+            + (ONE_THING_ASKED if os.environ.get("VOICE_GRADER_LED") == "true" else ""),
         }
     return {"action": "wrap_up"}
 
@@ -309,10 +316,13 @@ def example_result(concept_name: str, claims: List[Dict[str, Any]], before: Dict
 
 MAX_QUOTE_WORDS = 16
 MAX_QUESTION_WORDS = 30
+MAX_NEW_CASE_WORDS = 36
 MAX_CLAIM_WORDS = 60
 SAY_BACK = ("Can you say that back in your own words?", "How would you put that in your own words?")
 FINE_NOT_TO_KNOW = ("That's fine, no need to have it yet.", "That's okay, this one takes a while to stick.")
 LAST_IDEA = "That was the last idea for this topic. Good work, and goodbye."
+ANOTHER_WAY = ("Let me ask it another way.", "Try it from a different side.")
+COVERED_IT = ("Yes, that covers it.", "That's a clear account of it.")
 _POINTER = re.compile(r"Look again (?:at p\. ([0-9]{1,5})|in your reading):\s*(.+)", re.S)
 _WORD = re.compile(r"[^\W_]+")
 _NAMES_PAGE = re.compile(r"\bpage\b|\bp\.\s*[0-9]", re.I)
@@ -330,18 +340,65 @@ def pointer_question(pointer: Optional[str]):
     match = _POINTER.fullmatch((pointer or "").strip())
     if not match:
         return None
-    question = match.group(2).strip()
-    if not question.endswith("?") or question.index("?") != len(question) - 1 or len(question.split()) > MAX_QUESTION_WORDS:
+    question = one_open_question(match.group(2))
+    return (question, _real_page(int(match.group(1)) if match.group(1) else None)) if question else None
+
+
+def one_open_question(text: Optional[str], max_words: int = MAX_QUESTION_WORDS) -> Optional[str]:
+    """The text as one question a student can hold by ear, or None: it ends in its only question mark, is short, and asks
+    one open thing. Of two questions joined in one sentence, the first is the one asked."""
+    question = re.sub(r"\s+", " ", text or "").strip()
+    if not question.endswith("?") or question.index("?") != len(question) - 1:
         return None
     if joined_or_either_or(question):
+        question = first_of_joined(question)
+    return question if question and len(question.split()) <= max_words else None
+
+
+_OPEN_WORD = re.compile(r"\b(?:what|why|how|who|which|where)\b", re.I)
+
+
+def first_of_joined(question: str) -> Optional[str]:
+    """The first of two questions joined in one sentence ("Where does it land, and what happens next?" gives "Where does
+    it land?"), when it is an open question of its own; None for any other."""
+    joined = _JOINED.search(question)
+    if not joined:
         return None
-    return question, _real_page(int(match.group(1)) if match.group(1) else None)
+    first = re.sub(r"[\s,;:]+$", "", question[: joined.start()])
+    if not _OPEN_WORD.search(first) or len(first.split()) < 4:
+        return None
+    single = f"{first}?"
+    return None if joined_or_either_or(single) else single
+
+
+def same_question(a: str, b: str) -> bool:
+    """Two questions that ask the same thing in nearly the same words: four fifths of the longer one's content words are shared."""
+    first, second = set(_content_words(a)), set(_content_words(b))
+    larger = max(len(first), len(second))
+    if larger == 0:
+        return a.strip().lower() == b.strip().lower()
+    return len(first & second) / larger >= 0.8
+
+
+def spoken_question(probe: Optional[str], claim: Optional[str], asked: Sequence[str] = ()) -> Optional[str]:
+    """The grader's question written to be said aloud (`probe`), when the app can say it: one open question that does not
+    say the claim and that the student has not already been asked."""
+    question = one_open_question(probe)
+    if not question or gives_away(question, claim):
+        return None
+    return None if any(same_question(question, earlier) for earlier in asked) else question
 
 
 # The mirror of assembled-reply.ts `joinedOrEitherOr`: the patterns of teach_metrics.py `question_form` (which imports this
 # module, so they are repeated here), over one question.
 _AUXILIARY = r"(?:is|are|was|were|does|do|did|would|will|can|could|should|has|have)"
-_JOINED = re.compile(rf"\b(?:and|or|but)\s+(?:then\s+)?(?:what|why|how|who|{_AUXILIARY})\b", re.I)
+_JOINED = re.compile(
+    rf"\b(?:and|or|but)\s+(?:(?:then|so)\s+)?(?:what|why|how|who|{_AUXILIARY})\b"
+    # "which" and "where" also open a clause inside one question ("when you swap which is known and which is asked"), so
+    # they count as a second question only after a comma.
+    r"|,\s*(?:and|or|but)\s+(?:(?:then|so)\s+)?(?:which|where)\b",
+    re.I,
+)
 _ASKS = re.compile(rf"\b(?:what|why|how|who|which|where)\b|(?:^|[,;:]\s+)(?:(?:so|and|but|then|now)\s+)?{_AUXILIARY}\b", re.I)
 _YES_NO = re.compile(rf"(?:^|[,;:]\s+)(?:(?:so|and|but|then|now)\s+)?({_AUXILIARY})\s+(\w+)", re.I)
 _REQUEST = re.compile(r"^(?:can|could|would|will)\s+you$|^(?:do|would)\s+you$", re.I)
@@ -426,33 +483,82 @@ def assembled_reply(
     look_again: Optional[List[str]] = None,
     example_passed: bool = False,
     next_idea: Optional[Dict[str, Any]] = None,
+    asked: Sequence[str] = (),
+    new_case: Optional[str] = None,
 ) -> Optional[str]:
-    """The reply to say for this step, or None when the coach model should word it. `next_idea` is what follows a closing
-    turn, as the tools give it: {"done": True, ...} or {"done": False, "prompt": ...}."""
+    """The reply to say for this step, or None when the coach model should word it (the text of `assembled`)."""
+    built = assembled(plan, claims, prerequisite, turn, dont_know, told, outcome, look_again, example_passed, next_idea, asked, new_case)
+    return built["text"] if built else None
+
+
+def assembled(
+    plan: Dict[str, Any],
+    claims: List[Dict[str, Any]],
+    prerequisite: Optional[str],
+    turn: int,
+    dont_know: bool = False,
+    told: bool = False,
+    outcome: Optional[str] = None,
+    look_again: Optional[List[str]] = None,
+    example_passed: bool = False,
+    next_idea: Optional[Dict[str, Any]] = None,
+    asked: Sequence[str] = (),
+    new_case: Optional[str] = None,
+) -> Optional[Dict[str, str]]:
+    """The reply to say for this step as {"text": ...}, with "asked" when it is a probe built from the grader's question, or
+    None when the coach model should word it. `next_idea` is what follows a closing turn, as the tools give it:
+    {"done": True, ...} or {"done": False, "prompt": ...}. `asked`: the questions already put for the claim being probed.
+    `new_case`: the new example the grader wrote for an answer that covers every claim."""
+    if plan["action"] == "probe":
+        return _probe_reply(plan, claims, prerequisite, turn, asked)
+    if plan["action"] == "ask_new_example":
+        question = one_open_question(new_case, MAX_NEW_CASE_WORDS)
+        return {"text": f"{_pick(COVERED_IT, turn)} Here's a new case. {question}"} if question else None
+    text = _said_reply(plan, claims, turn, dont_know, told, outcome, look_again, example_passed, next_idea)
+    return {"text": text} if text is not None else None
+
+
+def _probe_reply(plan: Dict[str, Any], claims: List[Dict[str, Any]], prerequisite: Optional[str], turn: int, asked: Sequence[str]) -> Optional[Dict[str, str]]:
+    claim = next((c for c in claims if c["claimId"] == plan["gap"]["claimId"]), None)
+    finding, page = plan["gap"]["finding"], _real_page(plan["gap"]["page"])
+    claim_text = claim.get("text") if claim else None
+    # The grader's question written for the ear, when there is one the app can say.
+    spoken = spoken_question(claim.get("probe") if claim else None, claim_text, asked)
+
+    def ask(opening: str) -> Optional[Dict[str, str]]:
+        return {"text": f"{opening} {spoken}", "asked": spoken} if spoken else None
+
+    # The second probe on a gap must be another, smaller question than the first: only the grader writes one.
+    if plan["probeNumber"] != 1:
+        return ask(_pick(ANOTHER_WAY, turn))
+    pointer = None if spoken else pointer_question(claim.get("pointer") if claim else None)
+    again = pointer is not None and any(same_question(pointer[0], earlier) for earlier in asked)
+    written = pointer if pointer and not again and not gives_away(pointer[0], claim_text) else None
+
+    def put(opening: str) -> Optional[Dict[str, str]]:
+        return ask(opening) or ({"text": f"{opening} {_page_lead(written[1], written[0])}{written[0]}", "asked": written[0]} if written else None)
+
+    said = _quoted(claim.get("studentQuote") if claim else None)
+    if finding == "incorrect":
+        return ask(f'You said, "{said}".' if said else "Let's look closer at one part of that.")
+    if finding == "missing_prerequisite":
+        name = _named(prerequisite)
+        return {"text": f"Let's step back for a moment. How would you describe {name} in your own words?"} if name else None
+    if finding == "unsupported_jump":
+        where = f"on page {page} of your notes" if page is not None else "in your notes"
+        return {"text": f'You said, "{said}". What {where} tells you that?'} if said else None
+    if finding == "missing":
+        has_something = any(c["verdict"] in ("covered", "partial") for c in claims)
+        return put("You have part of it." if has_something else "Let's try another piece of it.")
+    if finding == "vague":
+        return put("You're close on one part.") or ({"text": f'When you say "{said}", what exactly do you mean?'} if said else None)
+    return None
+
+
+def _said_reply(plan, claims, turn, dont_know, told, outcome, look_again, example_passed, next_idea) -> Optional[str]:
+    """An explanation with its say-back request, or a closing turn."""
     action = plan["action"]
     claim = next((c for c in claims if "gap" in plan and c["claimId"] == plan["gap"]["claimId"]), None)
-    if action == "probe":
-        if plan["probeNumber"] != 1:
-            return None
-        finding, page = plan["gap"]["finding"], _real_page(plan["gap"]["page"])
-        if finding == "missing_prerequisite":
-            name = _named(prerequisite)
-            return f"Let's step back for a moment. How would you describe {name} in your own words?" if name else None
-        if finding == "unsupported_jump":
-            said = _quoted(claim.get("studentQuote") if claim else None)
-            where = f"on page {page} of your notes" if page is not None else "in your notes"
-            return f'You said, "{said}". What {where} tells you that?' if said else None
-        if finding in ("missing", "vague"):
-            pointer = pointer_question(claim.get("pointer") if claim else None)
-            if pointer and gives_away(pointer[0], claim.get("text") if claim else None):
-                pointer = None
-            if pointer:
-                has_something = any(c["verdict"] in ("covered", "partial") for c in claims)
-                opening = "You're close on one part." if finding == "vague" else ("You have part of it." if has_something else "Let's try another piece of it.")
-                return f"{opening} {_page_lead(pointer[1], pointer[0])}{pointer[0]}"
-            said = _quoted(claim.get("studentQuote") if claim else None) if finding == "vague" else None
-            return f'When you say "{said}", what exactly do you mean?' if said else None
-        return None
     if action in ("explain", "explain_first"):
         said = _statement(claim.get("text") if claim else None)
         if not claim or not said:

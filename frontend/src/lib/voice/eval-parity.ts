@@ -179,6 +179,17 @@ const REPLY_CASES: { name: string; facts: ReplyFacts }[] = [
   { name: 'loose claim, no question, a long quote', facts: { plan: probeOn('vague'), claims: replyClaims('partial', { studentQuote: 'the bucket '.repeat(9) }), prerequisite: null, turn: 1 } },
   { name: 'wrong claim', facts: { plan: probeOn('incorrect'), claims: replyClaims('incorrect', { studentQuote: 'the table doubles', pointer: `Look again at p. 5: ${QUESTION}` }), prerequisite: null, turn: 1 } },
   { name: 'second probe on the same gap', facts: { plan: probeOn('missing', 2), claims: replyClaims('missing', { pointer: `Look again at p. 5: ${QUESTION}` }), prerequisite: null, turn: 2 } },
+  // The grader's question written for the ear (`probe`, a grade asked for with `spoken`).
+  { name: 'missing claim, a spoken question', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { probe: QUESTION, pointer: `Look again at p. 5: ${QUESTION}` }), prerequisite: null, turn: 1 } },
+  { name: 'wrong claim, a spoken question, their words', facts: { plan: probeOn('incorrect'), claims: replyClaims('incorrect', { studentQuote: 'the table doubles', probe: 'Where does a second key with the same index go?' }), prerequisite: null, turn: 1 } },
+  { name: 'wrong claim, a spoken question, a long quote', facts: { plan: probeOn('incorrect'), claims: replyClaims('incorrect', { studentQuote: 'the bucket '.repeat(9), probe: 'Where does a second key with the same index go?' }), prerequisite: null, turn: 1 } },
+  { name: 'wrong claim, a spoken question joining two', facts: { plan: probeOn('incorrect'), claims: replyClaims('incorrect', { studentQuote: 'the table doubles', probe: 'Where does the second key go, and why does that work?' }), prerequisite: null, turn: 1 } },
+  { name: 'two questions joined, the first a yes or no', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { probe: 'Is the bucket empty, and what happens if it is not?' }), prerequisite: null, turn: 1 } },
+  { name: 'one question with a which clause inside', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { probe: 'What goes wrong when you swap which key is stored and which is looked up?' }), prerequisite: null, turn: 1 } },
+  { name: 'a spoken question that says the claim', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { probe: 'Does chaining keep a list in each bucket?' }), prerequisite: null, turn: 1 } },
+  { name: 'second probe, a new spoken question', facts: { plan: probeOn('missing', 2), claims: replyClaims('missing', { probe: 'Two keys land on index 3: where is the second one stored?' }), prerequisite: null, turn: 2, asked: [QUESTION] } },
+  { name: 'second probe, the question already asked', facts: { plan: probeOn('missing', 2), claims: replyClaims('missing', { probe: 'What does each bucket hold then?' }), prerequisite: null, turn: 2, asked: [QUESTION] } },
+  { name: 'second probe on a wrong claim, a new spoken question', facts: { plan: probeOn('incorrect', 2), claims: replyClaims('incorrect', { studentQuote: 'the table doubles', probe: 'Two keys land on index 3: where is the second one stored?' }), prerequisite: null, turn: 3, asked: ['Where does a second key with the same index go?'] } },
   { name: 'a quote with quotation marks in it', facts: { plan: probeOn('unsupported_jump'), claims: replyClaims('covered', { studentQuote: '"each bucket" keeps a "list".' }), prerequisite: null, turn: 1 } },
   { name: 'a quote with a question in it', facts: { plan: probeOn('unsupported_jump'), claims: replyClaims('covered', { studentQuote: 'is it a list? or a tree' }), prerequisite: null, turn: 1 } },
   { name: 'a prerequisite named with a full stop, page 0', facts: { plan: probeOn('missing_prerequisite', 1, 0), claims: replyClaims('missing', {}, 'missing'), prerequisite: ' Hash  functions. ', turn: 1 } },
@@ -191,6 +202,10 @@ const REPLY_CASES: { name: string; facts: ReplyFacts }[] = [
   { name: 'closed after an explanation, two pages, another idea follows', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('covered'), prerequisite: null, turn: 4, outcome: 'taught', lookAgain: ['p. 5', 'pp. 4-5', 'p. 4'], next: THEN } },
   { name: 'closed with a claim still open', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('missing'), prerequisite: null, turn: 4, outcome: 'taught', lookAgain: ['p. 5'], next: THEN } },
   { name: 'the new example was passed on the last idea', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('missing'), prerequisite: null, turn: 2, outcome: 'explained', examplePassed: true, next: { done: true } } },
+  { name: 'new example, the case the grader wrote', facts: { plan: { action: 'ask_new_example' }, claims: replyClaims('covered'), prerequisite: null, turn: 1, newCase: 'Three keys all hash to bucket five. What does bucket five hold after the third one goes in?' } },
+  { name: 'new example, a case joining two questions', facts: { plan: { action: 'ask_new_example' }, claims: replyClaims('covered'), prerequisite: null, turn: 2, newCase: 'A table has ten buckets and twenty keys. How long is a typical chain, and why does that matter?' } },
+  { name: 'new example, no case from the grader', facts: { plan: { action: 'ask_new_example' }, claims: replyClaims('covered'), prerequisite: null, turn: 1 } },
+  { name: 'new example, a case with no question in it', facts: { plan: { action: 'ask_new_example' }, claims: replyClaims('covered'), prerequisite: null, turn: 1, newCase: 'Think about three keys in one bucket.' } },
   { name: 'a closing turn with nothing known to follow', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('covered'), prerequisite: null, turn: 2, outcome: 'explained' } },
 ]
 

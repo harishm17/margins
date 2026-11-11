@@ -91,6 +91,10 @@ export default defineRailway(() => {
       SPEND_KEY_SECRET: preserve(),
       NEXTAUTH_URL: SITE_URL,
       PROMPTS_V2,
+      // Voice teach-back: the app says the reply it builds from the grader's result, the grader's own questions
+      // included, with no coach-model call for that turn (docs/design/DECISIONS.md, "Redesign step 1"). Needs "tutor"
+      // in PROMPTS_V2 for the questions. Remove the line to go back to the coach model wording every turn.
+      VOICE_GRADER_LED: "true",
       // Google sign-in (OAuth client "Margins web" in the Google Cloud project "studybuddy").
       GOOGLE_OAUTH_CLIENT_ID: preserve(),
       GOOGLE_OAUTH_CLIENT_SECRET: preserve(),

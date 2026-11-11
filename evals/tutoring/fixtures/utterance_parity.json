@@ -138,7 +138,7 @@
    "help": false
   },
   {
-   "text": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+   "text": "The ratio is chainring teeth over cog teeth, and the higher it is the more the wheel turns per pedal turn, which makes it harder to pedal.",
    "kind": "answer",
    "substance": true,
    "help": false
@@ -156,7 +156,7 @@
    "help": true
   },
   {
-   "text": "So the balance is the start times the factor to the power n, because each period multiplies by the factor again.",
+   "text": "The factor for one period is one plus the rate, and after n periods you multiply the start by that factor n times, so it is the factor to the power n.",
    "kind": "answer",
    "substance": true,
    "help": false
@@ -174,7 +174,7 @@
    "help": true
   },
   {
-   "text": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+   "text": "You compare with the middle item and throw away the half that cannot contain the target, so each comparison halves what is left.",
    "kind": "answer",
    "substance": true,
    "help": false
@@ -192,6 +192,12 @@
    "help": false
   },
   {
+   "text": "So a higher ratio means more wheel turns for each pedal turn, which is why it feels harder.",
+   "kind": "answer",
+   "substance": true,
+   "help": false
+  },
+  {
    "text": "I have no memory of this topic at all.",
    "kind": "answer",
    "substance": true,
@@ -199,6 +205,12 @@
   },
   {
    "text": "Still nothing, I would be guessing.",
+   "kind": "answer",
+   "substance": true,
+   "help": false
+  },
+  {
+   "text": "So the balance is the start times the factor to the power n, because each period multiplies by the factor again.",
    "kind": "answer",
    "substance": true,
    "help": false
@@ -216,6 +228,12 @@
    "help": false
   },
   {
+   "text": "So every comparison cuts the remaining items in half, because one half is ruled out each time.",
+   "kind": "answer",
+   "substance": true,
+   "help": false
+  },
+  {
    "text": "A bigger ratio is an easier gear, because the pedals turn easily when the wheel is large.",
    "kind": "answer",
    "substance": true,
@@ -223,12 +241,6 @@
   },
   {
    "text": "No, I am fairly sure it is easier, since more teeth means more help from the chain.",
-   "kind": "answer",
-   "substance": true,
-   "help": false
-  },
-  {
-   "text": "The ratio is chainring teeth over cog teeth, and the higher it is the more the wheel turns per pedal turn, which makes it harder to pedal.",
    "kind": "answer",
    "substance": true,
    "help": false
@@ -252,12 +264,6 @@
    "help": false
   },
   {
-   "text": "The factor for one period is one plus the rate, and after n periods you multiply the start by that factor n times, so it is the factor to the power n.",
-   "kind": "answer",
-   "substance": true,
-   "help": false
-  },
-  {
    "text": "At 10 percent a period the factor is 1.1, so after 2 periods 100 becomes 100 times 1.1 squared, which is 121.",
    "kind": "answer",
    "substance": true,
@@ -276,12 +282,6 @@
    "help": false
   },
   {
-   "text": "You compare with the middle item and throw away the half that cannot contain the target, so each comparison halves what is left.",
-   "kind": "answer",
-   "substance": true,
-   "help": false
-  },
-  {
    "text": "With 16 items, one comparison leaves 8, then 4, then 2, then 1, so four comparisons at most.",
    "kind": "answer",
    "substance": true,
@@ -294,31 +294,13 @@
    "help": false
   },
   {
-   "text": "The second part says something about the wheel turning, I think when the gear is bigger.",
-   "kind": "answer",
-   "substance": true,
-   "help": false
-  },
-  {
    "text": "The balance goes up by the rate each period, so it ends up much bigger after many periods.",
    "kind": "answer",
    "substance": true,
    "help": false
   },
   {
-   "text": "The power thing, I think the number of periods goes up in the exponent.",
-   "kind": "answer",
-   "substance": true,
-   "help": false
-  },
-  {
    "text": "It is fast because it skips most of the list, so it must be a lot quicker.",
-   "kind": "answer",
-   "substance": true,
-   "help": false
-  },
-  {
-   "text": "Something about the list needing to be in order for it to work.",
    "kind": "answer",
    "substance": true,
    "help": false
@@ -378,14 +360,32 @@
    "help": false
   },
   {
+   "text": "So the gear ratio is the chainring's teeth divided by the rear cog's teeth.",
+   "kind": "answer",
+   "substance": true,
+   "help": false
+  },
+  {
    "text": "No idea.",
    "kind": "idk",
    "substance": true,
    "help": false
   },
   {
+   "text": "So the growth factor for one period is one plus the interest rate for that period.",
+   "kind": "answer",
+   "substance": true,
+   "help": false
+  },
+  {
    "text": "idk",
    "kind": "idk",
+   "substance": true,
+   "help": false
+  },
+  {
+   "text": "So you compare the target with the middle item of the sorted list and drop the half that cannot hold it.",
+   "kind": "answer",
    "substance": true,
    "help": false
   },

@@ -109,6 +109,32 @@ async def test_a_covered_verdict_without_a_quote_is_missing():
 
 
 @pytest.mark.asyncio
+async def test_a_claim_answered_in_symbols_keeps_its_verdict():
+    """Bug of 2026-11-10 (recall eval): a quote that is a formula has few letters and no long word, so it read as filler,
+    and a claim the student stated in symbols was marked missing; a wrong formula lost its incorrect verdict the same way."""
+    answer = "Independent means P(A|B) = P(A), and the formal definition is P(A and B) = P(A) + P(B). The cdf is F(a) = P(X <= a)."
+    graded = result(
+        [
+            verdict("cl-1", "covered", "P(A|B) = P(A)"),
+            verdict("cl-2", "incorrect", "P(A and B) = P(A) + P(B)", misconception="Adds the probabilities."),
+            verdict("cl-3", "covered", "F(a) = P(X <= a)"),
+        ]
+    )
+    with use(Scripted([graded])):
+        out = await grade_recall(request(answer=answer))
+    assert [v.verdict for v in out.verdicts] == ["covered", "incorrect", "covered"]
+    # Filler is still not support, and a slash between two words ("and/or", "yes/no") is not a formula.
+    slashed = answer + " So it is one and/or the other, yes/no."
+    for filler in ("and the", "and/or", "yes/no"):
+        with use(Scripted([result([verdict("cl-1", "covered", filler), verdict("cl-2", "covered", "The cdf is F(a) = P(X <= a)")])])):
+            assert by_id(await grade_recall(request(answer=slashed)))["cl-1"].verdict == "missing", filler
+    # A short quote in symbols with no relation in it is still a statement.
+    for symbols in ("P(A)/P(B)", "n*log n", "1/2"):
+        with use(Scripted([result([verdict("cl-1", "covered", symbols), verdict("cl-2", "missing"), verdict("cl-3", "missing")])])):
+            assert by_id(await grade_recall(request(answer=f"The ratio is {symbols} here.")))["cl-1"].verdict == "covered", symbols
+
+
+@pytest.mark.asyncio
 async def test_recall_grader_abstains_on_unclear_answer():
     # The model is not sure what the answer says: no verdicts, one question back.
     provider = Scripted([result([verdict("cl-1", "missing"), verdict("cl-2", "missing"), verdict("cl-3", "missing")], confidence=0.5, clarifying_question="Which part of how a table handles shared buckets do you mean?")])
@@ -199,6 +225,54 @@ async def test_pointers_name_the_page_and_never_state_the_claim():
     assert verdicts["cl-2"].pointer == "Look again at p. 4: What goes in each bucket when two keys share it?"
     assert verdicts["cl-3"].pointer == "Look again at p. 7: Load factor"
     assert verdicts["cl-1"].pointer is None
+    assert all(v.probe is None for v in out.verdicts)  # a typed answer gets no question to say aloud
+
+
+@pytest.mark.asyncio
+async def test_a_spoken_answer_gets_the_question_to_ask_aloud_for_each_open_claim_and_none_that_says_the_claim(monkeypatch):
+    """The voice coach (VOICE_GRADER_LED) says `probe` as it stands, so it carries a question only where one can be said."""
+    # Under the v1 tutor prompts a spoken answer is graded as a written one: no question for the ear.
+    monkeypatch.setattr(settings, "PROMPTS_V2", "")
+    with use(Scripted([result([verdict("cl-2", "missing", pointer="What goes in each bucket when two keys share it?")])])):
+        assert all(v.probe is None for v in (await grade_recall(request(spoken=True))).verdicts)
+    monkeypatch.setattr(settings, "PROMPTS_V2", "tutor")
+    graded = result(
+        [
+            verdict("cl-1", "incorrect", "they collide", misconception="Thinks a collision loses the key.", pointer="Where does the second key go?"),
+            verdict("cl-2", "missing", pointer="What goes in each bucket when two keys share it?"),
+            verdict("cl-3", "missing", pointer="The load factor is entries divided by buckets, so what is it?"),
+        ]
+    )
+    asked = [{"claim_id": "cl-2", "question": "How does the table keep two keys in one bucket?"}, {"claim_id": "other", "question": "Not about these claims?"}]
+    provider = Scripted([graded])
+    with use(provider):
+        out = await grade_recall(request(spoken=True, asked=asked))
+    verdicts = by_id(out)
+    assert verdicts["cl-1"].probe == "Where does the second key go?"
+    assert verdicts["cl-2"].probe == "What goes in each bucket when two keys share it?"
+    assert verdicts["cl-3"].probe is None
+    # The written pointer is unchanged: the stored attempt and the page show it as before.
+    assert verdicts["cl-2"].pointer == "Look again at p. 4: What goes in each bucket when two keys share it?"
+    schema, _, prompt = provider.calls[0]
+    assert "probe" not in schema.model_json_schema()["$defs"]["SpokenClaimVerdict"]["properties"]  # set by the service, not the model
+    # The grader is told which questions the student was already put, for the claims it is grading.
+    assert "How does the table keep two keys in one bucket?" in prompt and "Not about these claims?" not in prompt
+    # Named bug (voice eval of 2026-11-10): a question that names the claim's setting and asks for the outcome was
+    # dropped as saying the claim, because it had five words in a row from a long claim ("full turn of the pedals"), and
+    # the coach's small model wrote the question instead.
+    gear = RecallClaim(id="g-1", concept_id="co-9", concept_name="Gear ratio", page=2, text="A higher gear ratio means the rear wheel turns more times for each full turn of the pedals, so it is a harder gear.")
+    asks = "In a high gear, how many times does the rear wheel spin for one full turn of the pedals?"
+    with use(Scripted([result([verdict("g-1", "incorrect", "A bigger ratio is an easier gear", pointer=asks)])])):
+        assert (await grade_recall(request(claims=[gear], answer="A bigger ratio is an easier gear, because the pedals turn easily.", spoken=True))).verdicts[0].probe == asks
+    # Every claim covered: the new example the coach asks next comes with the verdicts. A case the model wrote is not
+    # passed on for a written answer, or when the checks leave a claim open.
+    case = "Three keys all hash to bucket five. What does bucket five hold after the third one goes in?"
+    covered = [verdict("cl-1", "covered", "they collide"), verdict("cl-2", "covered", "keeps a list in each bucket"), verdict("cl-3", "covered", "has a lower load factor")]
+    unquoted = [*covered[:2], verdict("cl-3", "covered", "entries over buckets")]
+    with use(Scripted([result(covered, new_case=case), result(covered, new_case=case), result(unquoted, new_case=case)])):
+        assert (await grade_recall(request(spoken=True))).new_case == case
+        assert (await grade_recall(request())).new_case is None
+        assert (await grade_recall(request(spoken=True))).new_case is None
 
 
 @pytest.mark.asyncio

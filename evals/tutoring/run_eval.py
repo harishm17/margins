@@ -122,6 +122,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="teach_back: a graded turn is answered with the reply the app builds from the grader's result, with no coach call, wherever it can build one (the app's VOICE_GRADER_LED)",
     )
+    parser.add_argument(
+        "--live-questions",
+        action="store_true",
+        help="teach_back, with --grader-led: the app's recall grader writes the question each built probe asks, as in the app (the verdicts stay the script's; counted under --max-usd)",
+    )
     parser.add_argument("--labels", type=Path, default=None, help="the JSON label.html downloaded: report the judge's agreement with it")
     parser.add_argument("--label", default="run", help="name for the results folder and report")
     parser.add_argument("--out-dir", type=Path, default=RESULTS_DIR)

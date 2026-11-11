@@ -167,5 +167,7 @@ def test_the_mirror_builds_the_same_reply_as_the_app_for_cases_the_scenarios_do_
             look_again=facts.get("lookAgain"),
             example_passed=facts.get("examplePassed", False),
             next_idea=facts.get("next"),
+            asked=facts.get("asked", ()),
+            new_case=facts.get("newCase"),
         )
         assert reply == case["reply"], case["name"]
