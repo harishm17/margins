@@ -477,6 +477,7 @@ async def grade_recall_answer(request: Any) -> Dict[str, Any]:
             v.claim_id: {"verdict": v.verdict, "reasoning_gap": v.reasoning_gap, "pointer": v.pointer, "probe": v.probe}
             for v in result.verdicts
         },
+        "new_case": result.new_case,
     }
 
 
@@ -505,6 +506,23 @@ def question_outcome(verdict: Dict[str, Any], claim_text: str) -> Optional[str]:
     return QUESTION_OUTCOMES[3] if gives_away(question, claim_text) else QUESTION_SAID
 
 
+NEW_CASE_OUTCOMES = ("the app says it", "none written", "not one open question, or too long")
+
+
+def new_case_outcome(graded: Dict[str, Any]) -> Optional[str]:
+    """What the app can do with the new example the grader wrote for a spoken answer it found to cover every claim (the
+    reply builder's rule, teach_state.assembled); None for any other answer."""
+    verdicts = list(graded.get("verdicts", {}).values())
+    if "new_case" not in graded or graded.get("status") != "graded" or not verdicts or any(v["verdict"] != "covered" for v in verdicts):
+        return None
+    _app()
+    from teach_state import MAX_NEW_CASE_WORDS, one_open_question
+
+    if not (graded["new_case"] or "").strip():
+        return NEW_CASE_OUTCOMES[1]
+    return NEW_CASE_OUTCOMES[0] if one_open_question(graded["new_case"], MAX_NEW_CASE_WORDS) else NEW_CASE_OUTCOMES[2]
+
+
 def recall_row(arm: str, entry: Dict[str, Any], answer: Dict[str, Any], graded: Dict[str, Any]) -> Dict[str, Any]:
     """Labels and the grade side by side, without the answer's text."""
     verdicts = graded.get("verdicts", {})
@@ -529,6 +547,7 @@ def recall_row(arm: str, entry: Dict[str, Any], answer: Dict[str, Any], graded: 
         "status": graded.get("status"),
         "confidence": graded.get("confidence"),
         "claims": claims,
+        "new_case": new_case_outcome(graded),
     }
 
 
@@ -568,6 +587,8 @@ def _recall_arm_scores(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
                 for verdict in VERDICTS
                 if verdict != "covered"
             },
+            # Answers the grader found to cover every claim: the new example it wrote for the coach to ask next.
+            "new_cases": dict(Counter(r["new_case"] for r in graded if r.get("new_case"))),
         },
     }
 
@@ -669,6 +690,11 @@ def render_recall_report(summary: Dict[str, Any], meta: Dict[str, Any]) -> str:
                 )
             )
             out.append("")
+            cases = questions.get("new_cases") or {}
+            if cases:
+                detail = "; ".join(f"{outcome}: {cases[outcome]}" for outcome in NEW_CASE_OUTCOMES if cases.get(outcome))
+                out.append(f"New example, for the {sum(cases.values())} answers the grader found to cover every claim: {detail}.")
+                out.append("")
     return "\n".join(out).rstrip() + "\n"
 
 

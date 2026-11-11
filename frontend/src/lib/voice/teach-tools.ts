@@ -372,14 +372,18 @@ export function planOutput(plan: Plan, claims: AssessedClaim[], prerequisite: st
       }
     }
     case 'ask_new_example':
+      // VOICE_GRADER_LED: the coach model words this turn only when the grader wrote no case the app can say, and is then
+      // held to the app's own rule of one question (it joined a second one on in 11 of 16 new examples, voice eval 2026-11-10).
       return {
         action: 'ask_new_example',
-        instruction: `The student covered every claim. Ask one small new example or prediction, then call ${exampleCheckTool()} with their answer.`,
+        instruction: `The student covered every claim. Ask one small new example or prediction, then call ${exampleCheckTool()} with their answer.${graderLedVoice() ? ONE_THING_ASKED : ''}`,
       }
     case 'wrap_up':
       return { action: 'wrap_up' }
   }
 }
+
+const ONE_THING_ASKED = ' Ask one thing about it: the student hears the question once, so do not join a second one on with "and" (no ", and why?").'
 
 /**
  * What the student said, claim by claim. The text of a claim is never in it: not the one they got wrong, nor one they
@@ -570,11 +574,13 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
   // off the answer here: the stored attempt keeps the written pointer, as it does for a typed answer.
   const led = graderLedVoice()
   const probes = new Map<string, string>()
+  let newCase: string | null = null
   const gradeSpoken = async (request: RecallGradeRequest): Promise<RecallGradeAnswer> => {
     if (!led) return grade(ctx, request)
     const asked = Object.entries(before.asked ?? {}).flatMap(([claimId, questions]) => questions.map((question) => ({ claim_id: claimId, question })))
     const answer = await grade(ctx, { ...request, spoken: true, ...(asked.length > 0 ? { asked } : {}) })
     for (const verdict of answer.verdicts ?? []) if (typeof verdict.probe === 'string' && verdict.probe.trim()) probes.set(verdict.claim_id, verdict.probe.trim())
+    newCase = typeof answer.new_case === 'string' && answer.new_case.trim() ? answer.new_case.trim() : null
     return answer
   }
   let verdicts: Pick<StoredClaim, 'claim_id' | 'verdict' | 'student_quote' | 'misconception' | 'pointer' | 'reasoning_gap'>[]
@@ -641,6 +647,7 @@ export async function assessExplanation(ctx: TeachToolContext, state: CoachState
     outcome: next.state.outcome,
     lookAgain: next.lookAgain,
     ...(next.plan.action === 'probe' ? { asked: before.asked?.[next.plan.gap.claimId] ?? [] } : {}),
+    ...(next.plan.action === 'ask_new_example' ? { newCase } : {}),
   }
   // The question a built probe asks is kept with the idea, so the grader's next question for that claim is another one.
   const question = led && next.plan.action === 'probe' ? assembled({ ...reply, next: null })?.asked : undefined

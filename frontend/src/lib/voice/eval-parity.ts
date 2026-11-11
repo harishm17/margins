@@ -202,6 +202,10 @@ const REPLY_CASES: { name: string; facts: ReplyFacts }[] = [
   { name: 'closed after an explanation, two pages, another idea follows', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('covered'), prerequisite: null, turn: 4, outcome: 'taught', lookAgain: ['p. 5', 'pp. 4-5', 'p. 4'], next: THEN } },
   { name: 'closed with a claim still open', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('missing'), prerequisite: null, turn: 4, outcome: 'taught', lookAgain: ['p. 5'], next: THEN } },
   { name: 'the new example was passed on the last idea', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('missing'), prerequisite: null, turn: 2, outcome: 'explained', examplePassed: true, next: { done: true } } },
+  { name: 'new example, the case the grader wrote', facts: { plan: { action: 'ask_new_example' }, claims: replyClaims('covered'), prerequisite: null, turn: 1, newCase: 'Three keys all hash to bucket five. What does bucket five hold after the third one goes in?' } },
+  { name: 'new example, a case joining two questions', facts: { plan: { action: 'ask_new_example' }, claims: replyClaims('covered'), prerequisite: null, turn: 2, newCase: 'A table has ten buckets and twenty keys. How long is a typical chain, and why does that matter?' } },
+  { name: 'new example, no case from the grader', facts: { plan: { action: 'ask_new_example' }, claims: replyClaims('covered'), prerequisite: null, turn: 1 } },
+  { name: 'new example, a case with no question in it', facts: { plan: { action: 'ask_new_example' }, claims: replyClaims('covered'), prerequisite: null, turn: 1, newCase: 'Think about three keys in one bucket.' } },
   { name: 'a closing turn with nothing known to follow', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('covered'), prerequisite: null, turn: 2, outcome: 'explained' } },
 ]
 

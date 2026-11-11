@@ -1382,6 +1382,113 @@
   "reply": "Yes, that works. That was the last idea for this topic. Good work, and goodbye."
  },
  {
+  "name": "new example, the case the grader wrote",
+  "facts": {
+   "plan": {
+    "action": "ask_new_example"
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1,
+   "newCase": "Three keys all hash to bucket five. What does bucket five hold after the third one goes in?"
+  },
+  "reply": "That's a clear account of it. Here's a new case. Three keys all hash to bucket five. What does bucket five hold after the third one goes in?"
+ },
+ {
+  "name": "new example, a case joining two questions",
+  "facts": {
+   "plan": {
+    "action": "ask_new_example"
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 2,
+   "newCase": "A table has ten buckets and twenty keys. How long is a typical chain, and why does that matter?"
+  },
+  "reply": "Yes, that covers it. Here's a new case. A table has ten buckets and twenty keys. How long is a typical chain?"
+ },
+ {
+  "name": "new example, no case from the grader",
+  "facts": {
+   "plan": {
+    "action": "ask_new_example"
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": null
+ },
+ {
+  "name": "new example, a case with no question in it",
+  "facts": {
+   "plan": {
+    "action": "ask_new_example"
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "covered"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1,
+   "newCase": "Think about three keys in one bucket."
+  },
+  "reply": null
+ },
+ {
   "name": "a closing turn with nothing known to follow",
   "facts": {
    "plan": {

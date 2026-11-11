@@ -36,6 +36,7 @@ nothing. --mock uses the app's mock provider (whose scripted coach follows the s
 import asyncio
 import datetime
 import json
+import os
 import re
 import sys
 import time
@@ -144,6 +145,8 @@ class Session:
         self.probes: Dict[str, str] = {}  # the grader's question per claim for the step of this turn
         self.written: Optional[Dict[str, Any]] = None  # what the grader answered this turn (--live-questions)
         self.probe: Optional[Dict[str, Any]] = None  # how the probe of this turn was worded, when the step planned one
+        self.new_case: Optional[str] = None  # the grader's new example for the step of this turn (every claim covered)
+        self.example: Optional[Dict[str, Any]] = None  # how the new example of this turn was worded, when the step planned one
         self.ideas = ideas_of(scenario)
         self.states = [empty_state() for _ in self.ideas]
         self.asked: List[Dict[str, List[str]]] = [{} for _ in self.ideas]  # questions already put, by claim (ConceptState.asked)
@@ -209,6 +212,7 @@ class Session:
         self.steps = {}
         self.spoken = None
         self.probes, self.written, self.probe = {}, None, None
+        self.new_case, self.example = None, None
         self.heard = said
         if said and self.started and not self.closed() and not self.state["outcome"] and prompts_v2("voice") and asks_for_help(said):
             self.state["helpAsked"] = self.state.get("helpAsked", 0) + 1
@@ -298,7 +302,9 @@ class Session:
             "seconds": round(time.perf_counter() - started, 2),
             "asked": [q.model_dump() for q in asked],
             "verdicts": {v.claim_id: {"verdict": v.verdict, "pointer": v.pointer, "probe": v.probe} for v in result.verdicts},
+            "new_case": result.new_case,
         }
+        self.new_case = (result.new_case or "").strip() or None
         self.probes = {v.claim_id: v.probe.strip() for v in result.verdicts if v.probe and v.probe.strip()}
 
     def answer_once(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
@@ -369,8 +375,13 @@ class Session:
             # teach-tools.ts withWhatFollows: the reply is built once the next idea is known.
             claim_id = plan["gap"]["claimId"] if plan["action"] == "probe" else None
             asked = self.asked[index].get(claim_id, []) if claim_id else []
-            built = assembled(plan, claims, turn=closed["assessments"], outcome=closed["outcome"], next_idea=output.get("next_idea"), asked=asked, **facts)
+            new_case = self.new_case if plan["action"] == "ask_new_example" else None
+            built = assembled(
+                plan, claims, turn=closed["assessments"], outcome=closed["outcome"], next_idea=output.get("next_idea"), asked=asked, new_case=new_case, **facts
+            )
             self.spoken = built["text"] if built else None
+            if plan["action"] == "ask_new_example":
+                self.example = example_wording(self.written, new_case, built)
             if claim_id:
                 # The question a built probe asks is kept with the idea, so the grader's next one for that claim is another.
                 if built and built.get("asked"):
@@ -380,6 +391,19 @@ class Session:
 
 
 ASKED_KEPT = 3  # teach-tools.ts: questions kept per claim for the grader's next one to differ from
+
+
+def example_wording(written: Optional[Dict[str, Any]], new_case: Optional[str], built: Optional[Dict[str, str]]) -> Dict[str, Any]:
+    """Who worded a planned new example and, when the app could not, why. The script decides that every claim is covered;
+    the grader writes a case only when it finds the same, so a difference between the two leaves the turn to the coach here."""
+    if built:
+        return {"by": "app"}
+    if new_case:
+        return {"by": "coach", "why": "the grader's case is not one open question, or too long"}
+    verdicts = [v["verdict"] for v in ((written or {}).get("verdicts") or {}).values()]
+    if verdicts and any(verdict != "covered" for verdict in verdicts):
+        return {"by": "coach", "why": "the grader did not find every claim covered (the script did)"}
+    return {"by": "coach", "why": "the grader wrote no case"}
 
 
 def probe_wording(plan: Dict[str, Any], claims: List[Dict[str, Any]], asked: List[str], built: Optional[Dict[str, str]]) -> Dict[str, Any]:
@@ -608,6 +632,7 @@ async def play(
                 "pre_run": pre_run[0]["name"] if pre_run else None,
                 "assembled": bool(built),
                 "probe": session.probe if pre_run else None,
+                "example": session.example if pre_run else None,
                 "questions": session.written,
                 # No model call stands between the step and the first word of a reply the app built.
                 "first_sentence_s": 0.0 if built else first_sentence_seconds(calls),
@@ -787,7 +812,13 @@ def probe_summary(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     for probe in probes:
         key, value = ("from", probe["from"]) if probe["by"] == "app" else ("why", f"{probe['why']} ({probe['finding']}, probe {probe['number']})")
         counts[key][value] = counts[key].get(value, 0) + 1
-    return {"planned": len(probes), "by_app": len(by_app), **counts}
+    examples = [r["example"] for r in records if r.get("example")]
+    why: Dict[str, int] = {}
+    for example in examples:
+        if example["by"] != "app":
+            why[example["why"]] = why.get(example["why"], 0) + 1
+    new_examples = {"planned": len(examples), "by_app": sum(1 for e in examples if e["by"] == "app"), "why": why}
+    return {"planned": len(probes), "by_app": len(by_app), **counts, "examples": new_examples}
 
 
 # ---------------------------------------------------------------------------- estimate
@@ -929,6 +960,9 @@ async def run(args, host) -> int:
     log(f"Playing {len(scenarios)} teach_back scenarios")
     started = time.perf_counter()
     grader_led = bool(getattr(args, "grader_led", False))
+    if grader_led:
+        # The tool results read the app's flag themselves (teach_state.plan_output), as they do in the app.
+        os.environ["VOICE_GRADER_LED"] = "true"
     live_questions = grader_led and bool(getattr(args, "live_questions", False))
     questions_provider = None
     if live_questions:

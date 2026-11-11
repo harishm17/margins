@@ -36,6 +36,8 @@ export type RecallGradeAnswer = {
   verdicts: RecallClaimVerdict[]
   clarifying_question?: string | null
   confidence: number
+  /** For a spoken answer with every claim covered: the new example the coach may ask aloud next. */
+  new_case?: string | null
 }
 
 /** Throws TutorUnavailableError when the AI service cannot answer; nothing is graded then. */

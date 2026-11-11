@@ -264,6 +264,14 @@ dbTest('VOICE_GRADER_LED: a graded step carries the reply to say, without the cl
     assert.equal(explain.spoken?.split('?').length, 2)
     // The closing turn asks the next idea, so no second turn is needed to move on.
     assert.ok(close.spoken?.endsWith('Explain "Load factor" in your own words, as if you were teaching it to a classmate.'), close.spoken)
+
+    // Every claim covered: the app asks the new case the grader wrote, and of two questions joined in it only the first.
+    const w = await world()
+    await run(w, undefined, 'get_concept_to_explain')
+    const full = grader({ 'Two keys': COVERED, 'Chaining': COVERED }, { new_case: 'Three keys all hash to bucket five. What does bucket five hold, and why?' })
+    const example = await run(w, full.grade, 'assess_explanation', { concept_id: w.collision.id, explanation: 'Two keys collide and each bucket keeps a list.' })
+    assert.equal(out(example).action, 'ask_new_example')
+    assert.ok(example.spoken?.endsWith('Three keys all hash to bucket five. What does bucket five hold?'), example.spoken)
   } finally {
     if (before === undefined) delete process.env.VOICE_GRADER_LED
     else process.env.VOICE_GRADER_LED = before

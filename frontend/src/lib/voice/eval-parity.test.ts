@@ -77,7 +77,7 @@ test('the replies the app builds equal the committed fixture, never give an open
     'wrong claim', 'second probe on the same gap', 'loose claim, no question, a long quote', 'a quote with a question in it',
     'a spoken question that says the claim', 'second probe, the question already asked',
     'a prerequisite named as a question', 'a claim too long to say', 'a claim worded as a question', 'the next idea is named as a question',
-    'a closing turn with nothing known to follow',
+    'a closing turn with nothing known to follow', 'new example, no case from the grader', 'new example, a case with no question in it',
   ]
   for (const name of left) assert.equal(reply(name), null, name)
   assert.equal(cases.filter((entry) => entry.reply === null).length, left.length)
@@ -90,9 +90,11 @@ test('the replies the app builds equal the committed fixture, never give an open
     if (entry.facts.plan.action === 'explain' || entry.facts.plan.action === 'explain_first') assert.equal(questions, 1, entry.name)
     assert.equal(/page 0\b/.test(entry.reply!), false, entry.name)
     if (entry.facts.plan.action === 'wrap_up') assert.equal(questions, 0, entry.name)
+    if (entry.facts.plan.action === 'ask_new_example') assert.equal(questions, 1, entry.name)
   }
   // Of two questions joined in one sentence the app asks the first, so the student has one thing to hold.
   assert.ok(reply('two questions joined in one sentence')!.endsWith('Where does a new key land at first?'))
   assert.ok(reply('wrong claim, a spoken question joining two')!.endsWith('Where does the second key go?'))
+  assert.ok(reply('new example, a case joining two questions')!.endsWith('How long is a typical chain?'))
   assert.ok(reply('closed with a claim still open')!.startsWith("Let's leave that one there"), 'no praise for what was not shown')
 })

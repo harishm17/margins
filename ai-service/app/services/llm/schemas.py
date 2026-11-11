@@ -2123,6 +2123,9 @@ class RecallGradeResult(BaseModel):
     )
     verdicts: List[ClaimVerdict] = Field(description="One per claim given; empty when your confidence is under 0.8")
     status: Literal["graded", "ungraded"] = "graded"
+    # Set by the service for a spoken answer whose claims are all covered, never written by this model schema: the new
+    # example the voice coach may ask aloud next (RecallGradeResultSpokenV2.new_case, checked).
+    new_case: SkipJsonSchema[Optional[str]] = None
 
     model_config = ConfigDict(json_schema_extra=_without_recall_service_fields)
 
@@ -2174,6 +2177,10 @@ class RecallGradeResultSpokenV2(RecallGradeResultV2):
     aloud. There is no v1 twin: under the v1 tutor prompts a spoken answer is graded as a written one."""
 
     verdicts: List[SpokenClaimVerdict] = Field(description="One per claim given; empty when your confidence is under 0.8")
+    new_case: Optional[str] = Field(
+        default=None,
+        description="Only when every claim is covered: one small new case and one question about it, for the voice coach to ask aloud. Leave out otherwise",
+    )
 
 
 # ---------------------------------------------------------------- gap explainer (spec 5.4)

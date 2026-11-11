@@ -9,6 +9,7 @@ is told after each explanation (the action, the probe, the claim it may say once
 No database and no grader are involved.
 """
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -226,6 +227,10 @@ def example_check_tool() -> str:
     return "record_example_check" if prompts_v2("voice") else "record_check"
 
 
+# teach-tools.ts ONE_THING_ASKED: added to the new example's instruction under the app's VOICE_GRADER_LED (the eval sets it for --grader-led).
+ONE_THING_ASKED = ' Ask one thing about it: the student hears the question once, so do not join a second one on with "and" (no ", and why?").'
+
+
 def plan_output(plan: Dict[str, Any], claims: List[Dict[str, Any]], prerequisite: Optional[str]) -> Dict[str, Any]:
     action = plan["action"]
     if action == "probe":
@@ -261,7 +266,8 @@ def plan_output(plan: Dict[str, Any], claims: List[Dict[str, Any]], prerequisite
     if action == "ask_new_example":
         return {
             "action": "ask_new_example",
-            "instruction": f"The student covered every claim. Ask one small new example or prediction, then call {example_check_tool()} with their answer.",
+            "instruction": f"The student covered every claim. Ask one small new example or prediction, then call {example_check_tool()} with their answer."
+            + (ONE_THING_ASKED if os.environ.get("VOICE_GRADER_LED") == "true" else ""),
         }
     return {"action": "wrap_up"}
 
@@ -310,11 +316,13 @@ def example_result(concept_name: str, claims: List[Dict[str, Any]], before: Dict
 
 MAX_QUOTE_WORDS = 16
 MAX_QUESTION_WORDS = 30
+MAX_NEW_CASE_WORDS = 36
 MAX_CLAIM_WORDS = 60
 SAY_BACK = ("Can you say that back in your own words?", "How would you put that in your own words?")
 FINE_NOT_TO_KNOW = ("That's fine, no need to have it yet.", "That's okay, this one takes a while to stick.")
 LAST_IDEA = "That was the last idea for this topic. Good work, and goodbye."
 ANOTHER_WAY = ("Let me ask it another way.", "Try it from a different side.")
+COVERED_IT = ("Yes, that covers it.", "That's a clear account of it.")
 _POINTER = re.compile(r"Look again (?:at p\. ([0-9]{1,5})|in your reading):\s*(.+)", re.S)
 _WORD = re.compile(r"[^\W_]+")
 _NAMES_PAGE = re.compile(r"\bpage\b|\bp\.\s*[0-9]", re.I)
@@ -336,7 +344,7 @@ def pointer_question(pointer: Optional[str]):
     return (question, _real_page(int(match.group(1)) if match.group(1) else None)) if question else None
 
 
-def one_open_question(text: Optional[str]) -> Optional[str]:
+def one_open_question(text: Optional[str], max_words: int = MAX_QUESTION_WORDS) -> Optional[str]:
     """The text as one question a student can hold by ear, or None: it ends in its only question mark, is short, and asks
     one open thing. Of two questions joined in one sentence, the first is the one asked."""
     question = re.sub(r"\s+", " ", text or "").strip()
@@ -344,7 +352,7 @@ def one_open_question(text: Optional[str]) -> Optional[str]:
         return None
     if joined_or_either_or(question):
         question = first_of_joined(question)
-    return question if question and len(question.split()) <= MAX_QUESTION_WORDS else None
+    return question if question and len(question.split()) <= max_words else None
 
 
 _OPEN_WORD = re.compile(r"\b(?:what|why|how|who|which|where)\b", re.I)
@@ -476,9 +484,10 @@ def assembled_reply(
     example_passed: bool = False,
     next_idea: Optional[Dict[str, Any]] = None,
     asked: Sequence[str] = (),
+    new_case: Optional[str] = None,
 ) -> Optional[str]:
     """The reply to say for this step, or None when the coach model should word it (the text of `assembled`)."""
-    built = assembled(plan, claims, prerequisite, turn, dont_know, told, outcome, look_again, example_passed, next_idea, asked)
+    built = assembled(plan, claims, prerequisite, turn, dont_know, told, outcome, look_again, example_passed, next_idea, asked, new_case)
     return built["text"] if built else None
 
 
@@ -494,12 +503,17 @@ def assembled(
     example_passed: bool = False,
     next_idea: Optional[Dict[str, Any]] = None,
     asked: Sequence[str] = (),
+    new_case: Optional[str] = None,
 ) -> Optional[Dict[str, str]]:
     """The reply to say for this step as {"text": ...}, with "asked" when it is a probe built from the grader's question, or
     None when the coach model should word it. `next_idea` is what follows a closing turn, as the tools give it:
-    {"done": True, ...} or {"done": False, "prompt": ...}. `asked`: the questions already put for the claim being probed."""
+    {"done": True, ...} or {"done": False, "prompt": ...}. `asked`: the questions already put for the claim being probed.
+    `new_case`: the new example the grader wrote for an answer that covers every claim."""
     if plan["action"] == "probe":
         return _probe_reply(plan, claims, prerequisite, turn, asked)
+    if plan["action"] == "ask_new_example":
+        question = one_open_question(new_case, MAX_NEW_CASE_WORDS)
+        return {"text": f"{_pick(COVERED_IT, turn)} Here's a new case. {question}"} if question else None
     text = _said_reply(plan, claims, turn, dont_know, told, outcome, look_again, example_passed, next_idea)
     return {"text": text} if text is not None else None
 

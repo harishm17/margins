@@ -10,11 +10,13 @@
  * It returns null wherever fixed wording would be worse than the model's, and the coach model then speaks as before:
  *   - a probe with no usable question from the grader: none written, two joined in one, a choice between named answers,
  *     one that says the claim, or (on the second probe of a gap) one the student has already been asked;
- *   - the new example (written by the model until the topic's bank holds one);
+ *   - a new example the grader wrote no usable case for;
  *   - a long quote, a long claim.
  *
  * The grader writes its question for the ear when the app asks it to (`spoken` on the grade request, ai-service
  * recall_grader.py): one thing asked, a wrong claim included, and a smaller question for a claim already asked about.
+ * When it finds every claim covered it also writes the new example to ask (`new_case`): it has the claims, which the
+ * coach model never sees.
  *
  * Maths is left as written: the browser turns notation into spoken words (speakable.ts).
  *
@@ -45,6 +47,8 @@ export type ReplyFacts = {
   next?: SpokenNext | null
   /** Questions the app has already put to the student for the claim of the gap being probed. */
   asked?: readonly string[]
+  /** The new example the grader wrote for an answer that covers every claim: a small case and one question about it. */
+  newCase?: string | null
 }
 
 /** A reply the app says, and the question in it when it is a probe built from the grader's question (kept, so the next one differs). */
@@ -52,6 +56,8 @@ export type Built = { text: string; asked?: string }
 
 const MAX_QUOTE_WORDS = 16
 const MAX_QUESTION_WORDS = 30
+// A new example sets up its case before it asks, so it runs longer than a probe.
+const MAX_NEW_CASE_WORDS = 36
 const MAX_CLAIM_WORDS = 60
 
 const wordCount = (text: string): number => text.trim().split(/\s+/).filter(Boolean).length
@@ -61,6 +67,7 @@ const SAY_BACK = ['Can you say that back in your own words?', 'How would you put
 const FINE_NOT_TO_KNOW = ["That's fine, no need to have it yet.", "That's okay, this one takes a while to stick."] as const
 const LAST_IDEA = 'That was the last idea for this topic. Good work, and goodbye.'
 const ANOTHER_WAY = ['Let me ask it another way.', 'Try it from a different side.'] as const
+const COVERED_IT = ['Yes, that covers it.', "That's a clear account of it."] as const
 
 /**
  * The question inside a grader pointer ("Look again at p. 14: What does the ratio compare?") and its page. Null when the
@@ -77,11 +84,11 @@ export function pointerQuestion(pointer: string | null | undefined): { question:
  * The text as one question a student can hold by ear, or null: it must end in its only question mark, be short, and ask
  * one open thing. Of two questions joined in one sentence, the first is the one asked.
  */
-function oneOpenQuestion(text: string | null | undefined): string | null {
+function oneOpenQuestion(text: string | null | undefined, maxWords = MAX_QUESTION_WORDS): string | null {
   const written = (text ?? '').replace(/\s+/g, ' ').trim()
   if (!written.endsWith('?') || written.indexOf('?') !== written.length - 1) return null
   const question = joinedOrEitherOr(written) ? firstOfJoined(written) : written
-  return question && wordCount(question) <= MAX_QUESTION_WORDS ? question : null
+  return question && wordCount(question) <= maxWords ? question : null
 }
 
 /**
@@ -267,6 +274,15 @@ function closingReply(facts: ReplyFacts): string | null {
   return parts.filter(Boolean).join(' ')
 }
 
+/**
+ * The new example after an explanation that covers every claim: the grader's case, when it ends in one open question.
+ * The student's answer to it is graded against the idea's claims with this turn as the question (pre-run.ts).
+ */
+function newExampleReply(facts: ReplyFacts): string | null {
+  const question = oneOpenQuestion(facts.newCase, MAX_NEW_CASE_WORDS)
+  return question ? `${pick(COVERED_IT, facts.turn)} Here's a new case. ${question}` : null
+}
+
 /** The reply to say for this step and the question it asks, or null when the coach model should word it. */
 export function assembled(facts: ReplyFacts): Built | null {
   const plan = facts.plan
@@ -280,7 +296,7 @@ export function assembled(facts: ReplyFacts): Built | null {
     case 'wrap_up':
       return said(closingReply(facts))
     case 'ask_new_example':
-      return null
+      return said(newExampleReply(facts))
   }
 }
 

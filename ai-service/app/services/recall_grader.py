@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 MIN_CONFIDENCE = 0.8
 MAX_POINTER_WORDS = 25
 MAX_QUESTION_WORDS = 30
+MAX_NEW_CASE_WORDS = 45
 # Room for the private analysis and a verdict per claim.
 RECALL_MAX_TOKENS = 4000
 # A run of this many words shared with a claim's text or quote is the claim, restated.
@@ -103,11 +104,22 @@ _POINTER_RULE_SPOKEN = """- For a missing, partial or incorrect claim, write a p
   - A claim may come with questions in <already_asked>: the coach has put those to the student and the claim is still open. Ask something different and smaller, about one concrete case or one step of the idea.
   For example (illustrative, write the question for the claim and the answer at hand): for a missing claim that colliding keys share a bucket, "What happens to a key whose bucket is already taken?"; for a student who said a plant builds its wood out of the soil, "Where do the carbon atoms in the wood come from?"
 """
+# What a student says to the coach on one idea is graded together, oldest first (the app's teach-tools.ts). Why this
+# rule: in the voice eval of 2026-11-10 a student who was wrong twice and then explained the idea correctly was still
+# graded incorrect, because the first two answers were in the text, so the coach would have explained what they had just
+# said themselves.
+_LATER_WORDS_RULE = """- The answer can be several things the student said in turn, joined in the order they said them. When they say one thing and later put it right, the later statement is what they hold now: grade that one and quote it, and do not mark a claim incorrect for an earlier statement they have since corrected.
+"""
+# The new example the coach asks once every claim is covered (the app's teach-back.ts, ask_new_example). Why the grader
+# writes it: it has the claims, which the coach's small model never sees, and in the voice eval of 2026-11-10 that model
+# joined a second question on in 11 of its 16 new examples.
+_NEW_CASE_RULE = """- When every claim is covered, also write new_case: the coach asks it aloud next, to see whether the student can use the idea, since wording that was memorised can sound right. Describe one small concrete case that the student's answer did not use, with easy numbers or an everyday setting, and ask what happens in it or how much, so that the answer follows from the claims and has to be worked out. One or two short sentences ending in the question, around twenty-five words in all, in plain spoken words. One thing asked, as for a pointer: no second question joined on, and not a question that yes or no would answer. Leave new_case out when any claim is not covered. For example (illustrative): for claims about a hash table's chaining, "Three keys all hash to bucket five. What does bucket five hold after the third one goes in?"
+"""
 # The rules either side of the pointer's are the written grader's own, so the two prompts cannot drift apart. Only the
 # audited prompt has a spoken form: under the v1 tutor prompts a spoken answer is graded as a written one.
 _RULES_BEFORE_POINTER_V2, _written_pointer, _RULES_AFTER_POINTER_V2 = SYSTEM_PROMPT_V2.partition(_POINTER_RULE + _POINTER_EXAMPLE_V2 + "\n")
 assert _written_pointer and _RULES_AFTER_POINTER_V2
-SYSTEM_PROMPT_SPOKEN_V2 = _RULES_BEFORE_POINTER_V2 + _POINTER_RULE_SPOKEN + _RULES_AFTER_POINTER_V2
+SYSTEM_PROMPT_SPOKEN_V2 = _RULES_BEFORE_POINTER_V2 + _LATER_WORDS_RULE + _POINTER_RULE_SPOKEN + _NEW_CASE_RULE + _RULES_AFTER_POINTER_V2
 ASKED_NOTE = "The questions above are ones the coach has already asked the student, each for the claim it names."
 
 # A quote aimed at the grader rather than at the topic: it says nothing about the claim it is offered for.
@@ -304,6 +316,13 @@ def _probe(question: Optional[str], claim: RecallClaim, prompt: str) -> Optional
     return text if text and not _restates(text, claim, prompt) else None
 
 
+def _new_case(text: Optional[str]) -> Optional[str]:
+    """The model's new case for a spoken answer, as the coach may say it; None when there is no question in it or it is
+    too long to say. Whether it asks one open thing is the reply builder's check, as for a probe."""
+    case = " ".join((text or "").split())
+    return case if "?" in case and len(case.split()) <= MAX_NEW_CASE_WORDS else None
+
+
 def _checked(raw: ClaimVerdict, claim: RecallClaim, answer_folded: str, prompt: str, spoken: bool = False) -> ClaimVerdict:
     """One verdict after the code's checks: quotes verified, misconception and kind only where they belong."""
     verdict = raw.verdict
@@ -363,4 +382,6 @@ async def grade_recall(req: RecallGradeRequest) -> RecallGradeResult:
     if any(v.verdict != "missing" for v in given.values()) and all(v.verdict == "missing" for v in verdicts):
         logger.info("event=recall_abstained session=%s reason=unsupported_verdicts", req.session_id)
         return _abstain(out.clarifying_question, confidence)
-    return RecallGradeResult(analysis="", status="graded", verdicts=verdicts, clarifying_question=None, confidence=confidence)
+    # Only when the checked verdicts all stand as covered: a case written for an answer the checks did not accept is dropped.
+    new_case = _new_case(getattr(out, "new_case", None)) if spoken and verdicts and all(v.verdict == "covered" for v in verdicts) else None
+    return RecallGradeResult(analysis="", status="graded", verdicts=verdicts, clarifying_question=None, confidence=confidence, new_case=new_case)

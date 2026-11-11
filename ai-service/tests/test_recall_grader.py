@@ -251,6 +251,15 @@ async def test_a_spoken_answer_gets_the_question_to_ask_aloud_for_each_open_clai
     assert "probe" not in schema.model_json_schema()["$defs"]["SpokenClaimVerdict"]["properties"]  # set by the service, not the model
     # The grader is told which questions the student was already put, for the claims it is grading.
     assert "How does the table keep two keys in one bucket?" in prompt and "Not about these claims?" not in prompt
+    # Every claim covered: the new example the coach asks next comes with the verdicts. A case the model wrote is not
+    # passed on for a written answer, or when the checks leave a claim open.
+    case = "Three keys all hash to bucket five. What does bucket five hold after the third one goes in?"
+    covered = [verdict("cl-1", "covered", "they collide"), verdict("cl-2", "covered", "keeps a list in each bucket"), verdict("cl-3", "covered", "has a lower load factor")]
+    unquoted = [*covered[:2], verdict("cl-3", "covered", "entries over buckets")]
+    with use(Scripted([result(covered, new_case=case), result(covered, new_case=case), result(unquoted, new_case=case)])):
+        assert (await grade_recall(request(spoken=True))).new_case == case
+        assert (await grade_recall(request())).new_case is None
+        assert (await grade_recall(request(spoken=True))).new_case is None
 
 
 @pytest.mark.asyncio
