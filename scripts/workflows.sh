@@ -62,6 +62,6 @@ misses="$(grep -c "No recording for" "$E2E_RUN_DIR/ai.log" || true)"
 echo "Requests with no recording: $misses (the AI service's log: $E2E_RUN_DIR/ai.log)"
 if [ "$E2E_REPLAY_MISS" = record ]; then
   echo "Recorded this run (real model calls, priced at list rates):"
-  (cd "$ROOT/ai-service" && uv run python -m app.services.llm.replay_provider "$WF_CASSETTE_DIR" "$started")
+  (cd "$ROOT/ai-service" && ENVIRONMENT=development uv run python -m app.services.llm.replay_provider "$WF_CASSETTE_DIR" "$started")
 fi
 exit "$status"
