@@ -18,7 +18,7 @@ import {
 
 // WF7: a file's life. A topic read from both lectures, a margin note on each, an Ask answer with its sources; a renamed
 // copy of a file already there; one lecture deleted, the other replaced through the duplicate dialog and through its
-// menu; and a topic whose claims an earlier Replace took, before the fix, repaired.
+// menu; and, before the files change, the topic's claims taken as an earlier Delete or Replace took them, and repaired.
 
 /** The student's margin notes, the same every run: one on a passage of each lecture. */
 const NOTES = {
@@ -48,7 +48,7 @@ async function noticeText(page: Page): Promise<string> {
   return (await notice.isVisible()) ? (await notice.innerText()).replace(/\s+/g, ' ').trim() : ''
 }
 
-test('WF7 files: notes and sources on two lectures, a renamed copy, delete one, replace the other, a repair', async ({ page, checks }) => {
+test('WF7 files: notes and sources on two lectures, a repair, a renamed copy, delete one, replace the other', async ({ page, checks }) => {
   test.setTimeout(20 * 60_000)
   await newStudent(page, 'WF7')
   const { courseUrl, courseId } = await createCourse(page)
@@ -95,6 +95,17 @@ test('WF7 files: notes and sources on two lectures, a renamed copy, delete one, 
     await expect(page).toHaveURL(/[?&]thread=/)
     threadUrl = page.url()
     console.log(`note: the answer cites ${(await sourceRows(reply)).map((row) => row.label).join('; ') || 'nothing'}`)
+  })
+
+  // Before any file changes: the repair quotes from the topic's sources, and until F2 a Replace leaves a topic none.
+  await test.step('a topic that lost its claims before the fix, repaired from its two lectures', async () => {
+    const lost = await loseClaims(topicId)
+    const output = await repairLostClaims(courseId)
+    const left = await ideasWithoutClaims(topicId)
+    await checks.check('WF7.lost-claims-repaired', `the one-off repair re-reads ideas that lost every claim before the fix (F0, 89; ${lost} claims taken)`, () => {
+      expect(lost, output).toBeGreaterThan(0)
+      expectNone(left, 'ideas still with no claim')
+    })
   })
 
   await test.step('a renamed copy of a lecture that is already here', async () => {
@@ -214,13 +225,4 @@ test('WF7 files: notes and sources on two lectures, a renamed copy, delete one, 
     )
   })
 
-  await test.step('a topic whose claims an earlier Replace took, repaired', async () => {
-    const lost = await loseClaims(topicId)
-    const repair = await repairLostClaims(courseId)
-    const left = await ideasWithoutClaims(topicId)
-    await checks.check('WF7.lost-claims-repaired', `the one-off repair re-reads ideas that lost every claim before the fix (F0, 89; ${lost} claims taken)`, () => {
-      expect(repair.ran, repair.output).toBe(true)
-      expectNone(left, 'ideas still with no claim')
-    })
-  })
 })

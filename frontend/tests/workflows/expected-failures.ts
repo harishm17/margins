@@ -24,7 +24,8 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF2.no-blank-busy-button': { fixedBy: 'SW1', finding: '6' }, // sign-in, create course, confirm topics, start, warm-up next, show the source, save note
   // WF3, review and drill
   'WF3.weakest-are-studied': { fixedBy: 'G1', finding: '83' }, // voice practice's three weakest topics are all topics the student never opened
-  'WF3.focus-mix-ups-once': { fixedBy: 'G7', finding: '82' }, // one answer's mix-up is shown under several ideas of the focus
+  // WF3.focus-mix-ups-once (G7, finding 82) passes on the recording of 2026-11-10: no answer's mix-up falls under several ideas of the focus. G7 is not built.
+  'WF3.drill-size-known': { fixedBy: 'S4', finding: '54' }, // the drill said 3 questions and grew to 4
   'WF3.fix-it-now-wait-estimate': { fixedBy: 'SW7', finding: '80' }, // "Preparing your questions" and a bar, no time
   'WF3.position-second-browser': { fixedBy: 'SW10', finding: '30, 31' }, // a second browser opens the review on the next question, not the feedback
   'WF3.follow-up-wait-estimate': { fixedBy: 'SW7', finding: '53' }, // "This takes a moment" while a fresh question is written
@@ -42,14 +43,15 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF4.position-second-browser': { fixedBy: 'SW10', finding: '31' }, // a second browser opens the exam on question 1
   'WF4.unstudied-folded': { fixedBy: 'SW16', finding: '36' }, // one "Not answered" row per never-opened topic
   'WF4.jump-to-missed': { fixedBy: 'U9', finding: '37' }, // no "Next missed" or "Next not answered"
-  'WF4.results-rendered': { fixedBy: 'SW2', finding: '32' }, // a question row's preview strips "$" and shows the LaTeX ("\log")
+  // WF4.results-rendered (SW2, finding 32) passes on the recording of 2026-11-10: no question preview of this exam has maths in it. SW2 is not built.
+  'WF4.one-score-format': { fixedBy: 'SW4', finding: '18, 21' }, // 7.1% on the results and the lobby, 7% on the exam list and the overview
   'WF4.one-exam-name': { fixedBy: 'U7', finding: '22, 39' }, // the tab titles say "Mock exam", "Taking a mock exam", "Mock exam results"
   // WF5, Ask
   'WF5.tagline-guides': { fixedBy: 'E5', finding: '9' }, // "Answers come only from your files, with sources."
   'WF5.concept-sentences': { fixedBy: 'SW3', finding: '2, 48' }, // "about <idea>" in the intro, "explain <idea>" and "about <idea>" in the suggestions
   // WF6, voice
   'WF6.one-verdict': { fixedBy: 'V2', finding: '69' }, // the evaluation row repeats the coach's words under the chip
-  'WF6.next-button': { fixedBy: 'V1', finding: '68' }, // the coach asks whether the student is ready; only a typed "yes" moves on
+  // WF6.next-button (V1, finding 68) does not run on the recording of 2026-11-10: the coach's reply went on to the next question itself. V1 is not built.
   'WF6.summary-one-action': { fixedBy: 'R1', finding: '84' }, // "Practice this" filled, "Start again" and the back link outlined
   'WF6.revisit-in-full': { fixedBy: 'R1', finding: '84' }, // the question to revisit is clipped and has no answer
   'WF6.idle-not-counted': { fixedBy: 'V4', finding: '71' }, // wall time counts while the open tab sends heartbeats
@@ -66,7 +68,6 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF7.replace-keeps-source': { fixedBy: 'F2', finding: '72' }, // the topic no longer reads from the replaced lecture
   'WF7.replace-keeps-note': { fixedBy: 'F2', finding: '78' }, // the margin note is deleted with the old copy
   'WF7.replace-in-menu': { fixedBy: 'F4', finding: '75' }, // only a refused or unread file's menu offers Replace
-  'WF7.lost-claims-repaired': { fixedBy: 'F0', finding: '89' }, // there is no repair yet
   // WF8, regenerate
   'WF8.dialogs-say-kept': { fixedBy: 'SW8', finding: '66' }, // notes, examples and practice say only what is replaced; the quiz's "earlier sets and attempts stay" passes
   'WF8.dialogs-say-time-and-share': { fixedBy: 'X4', finding: '65' }, // no dialog says how long it takes or its share of today's allowance
@@ -76,13 +77,11 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   // WF9, the allowance
   'WF9.settings-plain-terms': { fixedBy: 'D2', finding: '77' }, // "Available · 10% used · resets at 4:00 PM"
   'WF9.prepare-all-says-share': { fixedBy: 'X4', finding: '77' }, // the dialog says neither how long nor its share of today
-  'WF9.one-job-past-limit': { fixedBy: 'S2', finding: 'K4' }, // three topics opened together on the last cent: 3 jobs ran, $0.26 past the limit
   'WF9.same-allowance-state': { fixedBy: 'D2, X4', finding: '77' }, // the regenerate dialog only disables its button; Settings says "Today's allowance used"; topic finding gives no reset time
   // WF10, devices
   'WF10.touch-targets-ipad': { fixedBy: 'SW5', finding: '41' }, // the menu button 34x34, the course's action links 34 px tall, radio chips 30 px: touch sizes are keyed to phone width
   'WF10.cut-off-text-ipad': { fixedBy: 'SW6', finding: '20, 43, 87' }, // topic names clamped on the course page, plan items cut with an ellipsis
   'WF10.cut-off-text-phone': { fixedBy: 'SW6', finding: '20, 43' }, // the same, and "and 1 more task" plan rows
-  'WF10.focus-returns': { fixedBy: 'X5', finding: '100' }, // the menu gives focus back to its button, but the Regenerate notes dialog opened from it gives it to the page
   'WF10.palette-focus-returns': { fixedBy: 'X5', finding: '100' }, // closing the command palette leaves the focus on the page
   'WF10.phone-voice-turn-whole': { fixedBy: 'V6', finding: '86' }, // the coach's turn is partly hidden inside the sheet's scrolling strip on a phone
 

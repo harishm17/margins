@@ -121,7 +121,7 @@ const run = promisify(execFile)
  * re-read, then the run that asks the model for their quotes and stores them. It runs on the workflow's database with
  * the stack's model settings, so its model calls are replayed or recorded like the app's.
  */
-export async function repairLostClaims(courseId: string): Promise<{ ran: boolean; output: string }> {
+export async function repairLostClaims(courseId: string): Promise<string> {
   const service = path.join(process.cwd(), '..', 'ai-service')
   const script = 'scripts/requote_lost_claims.py'
   const env = {
@@ -133,5 +133,5 @@ export async function repairLostClaims(courseId: string): Promise<{ ran: boolean
   const options = { cwd: service, env, timeout: 5 * 60_000 }
   const dry = await run('uv', ['run', 'python', script, '--project', courseId], options)
   const applied = await run('uv', ['run', 'python', script, '--project', courseId, '--yes', '--write'], options)
-  return { ran: true, output: `${dry.stdout}\n${applied.stdout}` }
+  return `${dry.stdout}\n${applied.stdout}`
 }

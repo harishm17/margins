@@ -105,7 +105,9 @@ test('WF13 topic edits: merge a studied topic into another, delete a third, keep
     const dates = (rows: { conceptId: string; dueAt: Date | null }[]) => rows.map((row) => `${row.conceptId}@${row.dueAt?.toISOString()}`).sort()
     expect(dates(after.memory)).toEqual(expect.arrayContaining(dates(before.memory)))
     expect(after.schedule?.dueAt.toISOString()).toBe(before.schedule.dueAt.toISOString())
-    expect(after.schedule?.mastery).toBeCloseTo(before.schedule.mastery, 5)
+    // Worked out again at the merge: a day on, and over the target's own ideas too, so it is not above what it was.
+    expect(after.schedule?.mastery).toBeGreaterThan(0)
+    expect(after.schedule?.mastery).toBeLessThanOrEqual(before.schedule.mastery + 1e-9)
     expect(after.recall, 'the recall answer').toBeGreaterThan(0)
   })
   await checks.check('WF13.minutes-added', 'the merged topic\'s estimate is the two topics\' minutes added, up to 180 (G5)', () =>

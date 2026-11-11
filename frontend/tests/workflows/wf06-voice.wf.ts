@@ -151,13 +151,12 @@ test('WF6 voice: a drill, a session left open, the quick round, Quiz me after Fi
     }
 
     // Today the start is refused while the dead tab's session looks live, for up to 90 s after its last heartbeat; the
-    // alert says it clears by itself, so the student tries again.
+    // alert stays on the start screen and says it clears by itself, so the student tries again.
     const refused = other.getByText('Another voice practice is open', { exact: true })
     const giveUpAt = Date.now() + 3 * 60_000
     if (await hereInstead.isVisible()) await hereInstead.click()
     for (;;) {
       if (await round.start.isVisible()) await round.start.click()
-      await expect(round.session).toBeVisible({ timeout: 60_000 })
       await expect(round.question.or(refused).first()).toBeVisible({ timeout: 2 * 60_000 })
       if (await round.question.isVisible()) break
       expect(Date.now(), 'the new session started before the dead tab cleared').toBeLessThan(giveUpAt)

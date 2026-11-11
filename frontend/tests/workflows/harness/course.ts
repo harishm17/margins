@@ -207,7 +207,10 @@ export async function takeWarmup(page: Page, onQuestion: (question: number) => P
  */
 export async function takeQuiz(page: Page, topicUrl: string, onQuestion: (question: number) => Promise<void> = async () => {}) {
   await page.goto(`${topicUrl}?view=quiz`)
-  await page.getByRole('button', { name: 'Start quiz' }).click()
+  // On a recording run the quiz is still being written by the real model ("Writing your questions"); replayed, it is there at once.
+  const start = page.getByRole('button', { name: 'Start quiz' })
+  await expect(start).toBeVisible({ timeout: 8 * 60_000 })
+  await start.click()
   const heading = page.getByRole('heading', { level: 2, name: /^Question \d+ of \d+$/ })
   await expect(heading).toBeVisible()
   const total = Number((await heading.innerText()).match(/of (\d+)/)![1])
