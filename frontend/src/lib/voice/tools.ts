@@ -270,6 +270,8 @@ export type VoiceToolResult = {
   sessionComplete: boolean
   /** The tool failed in a way the model should know about (an unknown tool, bad arguments, an error). */
   isError: boolean
+  /** The reply the app built for this step (assembled-reply.ts): the turn says it and makes no model call. */
+  spoken?: string
 }
 
 function result(output: ToolOutput, events: VoiceEvent[] = [], extra: Partial<VoiceToolResult> = {}): VoiceToolResult {
@@ -404,7 +406,7 @@ async function runVoiceTool(
       if (v2) {
         if (!state.teach.current) return result({ error: NO_CURRENT.concept } satisfies ErrorResult)
         done = await assessExplanation(teachCtx, state, { concept_id: state.teach.current })
-        return result(done.output, done.events, { sessionComplete: done.sessionComplete === true })
+        return result(done.output, done.events, { sessionComplete: done.sessionComplete === true, ...(done.spoken ? { spoken: done.spoken } : {}) })
       }
       const parsed = assessArgs.safeParse(args)
       if (!parsed.success) return result({ error: 'Invalid arguments for assess_explanation' })
@@ -427,7 +429,7 @@ async function runVoiceTool(
       }
       done = await recordCheck(teachCtx, state, style === 'guided_reading' ? 'guided_reading' : 'teach_back', input)
     }
-    return result(done.output, done.events, { sessionComplete: done.sessionComplete === true })
+    return result(done.output, done.events, { sessionComplete: done.sessionComplete === true, ...(done.spoken ? { spoken: done.spoken } : {}) })
   }
 
   if (name === 'get_next_question') {

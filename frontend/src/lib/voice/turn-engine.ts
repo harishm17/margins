@@ -59,6 +59,25 @@ export type TurnOutcome = {
   toolMs: number
 }
 
+/**
+ * A turn the app answered itself: the step that ran before the model built the reply (assembled-reply.ts), so it is said
+ * as it stands and no model is called. The conversation keeps it as the coach's words, like any other reply.
+ */
+export function appSaid(messages: VoiceMessage[], text: string, sessionComplete: boolean, emit: (event: VoiceEvent) => void): TurnOutcome {
+  emit({ type: 'text', delta: text })
+  return {
+    messages: [...messages, { role: 'assistant', content: [{ type: 'text', text }] }],
+    text,
+    cutOff: '',
+    ok: true,
+    error: null,
+    toolsRan: false,
+    sessionComplete,
+    calls: [],
+    toolMs: 0,
+  }
+}
+
 function textOf(content: VoiceBlock[]): string {
   return content
     .filter((block) => block.type === 'text' && typeof block.text === 'string')

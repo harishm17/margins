@@ -9,6 +9,7 @@ is told after each explanation (the action, the probe, the claim it may say once
 No database and no grader are involved.
 """
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -298,7 +299,131 @@ def example_result(concept_name: str, claims: List[Dict[str, Any]], before: Dict
     output: Dict[str, Any] = {"concept": concept_name, "passed": passed, **findings, **plan_output(plan, claims, None)}
     if plan["action"] == "wrap_up":
         output["outcome"] = state["outcome"]
-    return output, state, passed
+    return output, state, passed, plan
+
+
+# ---------------------------------------------------------------------------- the reply the app builds itself
+# The mirror of frontend/src/lib/voice/assembled-reply.ts (DECISIONS.md, "Pipeline redesign", decision 6): after a graded
+# turn the app words the reply from the plan, the claim, the page, the student's words and the grader's question, and
+# the coach model is not called. None wherever the model's wording is still better (see the TypeScript file's comment).
+
+MAX_QUOTE_WORDS = 16
+MAX_QUESTION_WORDS = 30
+MAX_CLAIM_WORDS = 60
+SAY_BACK = ("Can you say that back in your own words?", "How would you put that in your own words?")
+FINE_NOT_TO_KNOW = ("That's fine, no need to have it yet.", "That's okay, this one takes a while to stick.")
+LAST_IDEA = "That was the last idea for this topic. Good work, and goodbye."
+_POINTER = re.compile(r"Look again (?:at p\. ([0-9]+)|in your reading):\s*(.+)", re.S)
+_NAMES_PAGE = re.compile(r"\bpage\b|\bp\.\s*[0-9]", re.I)
+_QUOTE_EDGES = re.compile("^[\"'“”‘’]+|[\"'“”‘’.,;:!?]+$")
+_DOUBLE_QUOTES = re.compile("[\"“”]")
+
+
+def _pick(options, turn: int) -> str:
+    return options[abs(int(turn)) % len(options)]
+
+
+def pointer_question(pointer: Optional[str]):
+    """(question, page) from a grader pointer ("Look again at p. 14: What does the ratio compare?"), or None when it only
+    names the idea, holds more than one question, or is too long to say."""
+    match = _POINTER.fullmatch((pointer or "").strip())
+    if not match:
+        return None
+    question = match.group(2).strip()
+    if not question.endswith("?") or question.index("?") != len(question) - 1 or len(question.split()) > MAX_QUESTION_WORDS:
+        return None
+    return question, (int(match.group(1)) if match.group(1) else None)
+
+
+def _quoted(quote: Optional[str]) -> Optional[str]:
+    """The student's words as they can be said back inside a sentence, or None when there are none or too many."""
+    text = re.sub(r"\s+", " ", _DOUBLE_QUOTES.sub("", quote or "")).strip()
+    text = _QUOTE_EDGES.sub("", text).strip()
+    return text if text and len(text.split()) <= MAX_QUOTE_WORDS else None
+
+
+def _statement(text: Optional[str]) -> Optional[str]:
+    """A claim as one spoken statement, or None when it is empty or too long to say in one go."""
+    claim = re.sub(r"\s+", " ", text or "").strip()
+    if not claim or len(claim.split()) > MAX_CLAIM_WORDS:
+        return None
+    return claim if claim[-1] in ".!?" else f"{claim}."
+
+
+def _page_lead(page: Optional[int], question: str) -> str:
+    return f"Think about page {page}. " if page is not None and not _NAMES_PAGE.search(question) else ""
+
+
+def _pages_line(look_again: Optional[List[str]]) -> Optional[str]:
+    found = (re.search(r"[0-9]+", entry) for entry in look_again or [])
+    pages = sorted({int(match.group(0)) for match in found if match and int(match.group(0)) > 0})
+    if not pages:
+        return None
+    if len(pages) == 1:
+        return f"Page {pages[0]} is worth another look."
+    return f"Pages {', '.join(str(page) for page in pages[:-1])} and {pages[-1]} are worth another look."
+
+
+def assembled_reply(
+    plan: Dict[str, Any],
+    claims: List[Dict[str, Any]],
+    prerequisite: Optional[str],
+    turn: int,
+    dont_know: bool = False,
+    told: bool = False,
+    outcome: Optional[str] = None,
+    look_again: Optional[List[str]] = None,
+    example_passed: bool = False,
+    next_idea: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """The reply to say for this step, or None when the coach model should word it. `next_idea` is what follows a closing
+    turn, as the tools give it: {"done": True, ...} or {"done": False, "prompt": ...}."""
+    action = plan["action"]
+    claim = next((c for c in claims if "gap" in plan and c["claimId"] == plan["gap"]["claimId"]), None)
+    if action == "probe":
+        if plan["probeNumber"] != 1:
+            return None
+        finding, page = plan["gap"]["finding"], plan["gap"]["page"]
+        if finding == "missing_prerequisite":
+            name = (prerequisite or "").strip()
+            return f"Let's step back for a moment. How would you describe {name} in your own words?" if name else None
+        if finding == "unsupported_jump":
+            said = _quoted(claim.get("studentQuote") if claim else None)
+            where = f"on page {page} of your notes" if page is not None else "in your notes"
+            return f'You said, "{said}". What {where} tells you that?' if said else None
+        if finding in ("missing", "vague"):
+            pointer = pointer_question(claim.get("pointer") if claim else None)
+            if pointer:
+                has_something = any(c["verdict"] in ("covered", "partial") for c in claims)
+                opening = "You're close on one part." if finding == "vague" else ("You have part of it." if has_something else "Let's try another piece of it.")
+                return f"{opening} {_page_lead(pointer[1], pointer[0])}{pointer[0]}"
+            said = _quoted(claim.get("studentQuote") if claim else None) if finding == "vague" else None
+            return f'When you say "{said}", what exactly do you mean?' if said else None
+        return None
+    if action in ("explain", "explain_first"):
+        said = _statement(claim.get("text") if claim else None)
+        if not claim or not said:
+            return None
+        page = claim.get("page")
+        source = f"Here is what your notes say{f' on page {page}' if page else ''}: {said}"
+        say_back = _pick(SAY_BACK, turn)
+        if action == "explain":
+            return f"{source} {say_back}"
+        opening = "No problem." if told else (_pick(FINE_NOT_TO_KNOW, turn) if dont_know else "That's okay, let's start from your notes.")
+        return f"{opening} {source} {say_back}"
+    if action == "wrap_up":
+        if not next_idea:
+            return None
+        all_covered = bool(claims) and all(c["verdict"] == "covered" for c in claims)
+        if example_passed:
+            verdict = "Yes, that works."
+        elif all_covered:
+            verdict = "That's it, you have it now." if outcome == "taught" else "Yes, that's right."
+        else:
+            verdict = "Let's leave that one there for now."
+        following = LAST_IDEA if next_idea.get("done") else f"Next idea. {str(next_idea.get('prompt', '')).strip()}"
+        return " ".join(part for part in (verdict, _pages_line(look_again) if outcome == "taught" else None, following) if part)
+    return None
 
 
 def ideas_of(scenario: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -324,6 +449,8 @@ def idea_prompt(concept: Dict[str, Any], ideas_left: int) -> Dict[str, Any]:
 
 
 EVERY_IDEA_DONE = {"done": True, "message": "Every idea has been worked through. Sum up and say goodbye."}
+# The idea that follows in the parity fixture's closing turns (eval-parity.ts PARITY_NEXT_IDEA).
+PARITY_NEXT_IDEA = {"done": False, "prompt": 'Explain "the next idea" in your own words, as if you were teaching it to a classmate.'}
 
 
 def trace_idea(concept: Dict[str, Any], turns: List[Dict[str, Any]], band: int = DEFAULT_BAND) -> List[Dict[str, Any]]:
@@ -336,18 +463,20 @@ def trace_idea(concept: Dict[str, Any], turns: List[Dict[str, Any]], band: int =
         claims = assessed_claims(concept, turn["verdicts"])
         if turn["kind"] == "explain":
             covered_something = any(claim["verdict"] in ("covered", "partial") for claim in claims)
-            output, state, _ = assessment_result(
-                concept["name"],
-                claims,
-                state,
-                None if covered_something else concept["prerequisite"],
-                bool(turn.get("dont_know")),
-                band,
-            )
+            prerequisite = None if covered_something else concept["prerequisite"]
+            output, state, plan = assessment_result(concept["name"], claims, state, prerequisite, bool(turn.get("dont_know")), band)
+            facts = {"prerequisite": prerequisite, "dont_know": bool(turn.get("dont_know")), "look_again": output.get("look_again")}
         else:
-            output, state, _ = example_result(concept["name"], claims, state)
+            output, state, passed, plan = example_result(concept["name"], claims, state)
+            facts = {"prerequisite": None, "example_passed": passed}
+        facts = {**facts, "plan": plan, "claims": claims, "turn": state["assessments"], "outcome": state["outcome"]}
         tool = "assess_explanation" if turn["kind"] == "explain" else example_check_tool()
-        steps.append({"kind": turn["kind"], "output": output, "state": state, "app_result": app_result_text(tool, output)})
+        step = {"kind": turn["kind"], "output": output, "state": state, "app_result": app_result_text(tool, output)}
+        # The reply the app would say itself (None where the coach model words it). A closing turn is said two ways: after the last idea, and with another to open.
+        step["spoken"] = assembled_reply(**facts, next_idea={"done": True})
+        if plan["action"] == "wrap_up":
+            step["spoken_then"] = assembled_reply(**facts, next_idea=PARITY_NEXT_IDEA)
+        steps.append(step)
     return steps
 
 

@@ -8,7 +8,8 @@
 import { buildCoachSystemPrompt, startMessage } from '@/lib/voice/coach-prompt'
 import { selectCourseTerms } from '@/lib/voice/course-terms'
 import { assessmentResult, exampleResult } from '@/lib/voice/teach-tools'
-import { emptyConceptState, type AssessedClaim, type ConceptState } from '@/lib/voice/teach-back'
+import { assembledReply, type ReplyFacts } from '@/lib/voice/assembled-reply'
+import { emptyConceptState, type AssessedClaim, type ConceptState, type Gap, type Plan, type ProbeKind } from '@/lib/voice/teach-back'
 import { toolsForStyle } from '@/lib/voice/tools'
 import { appResultBlock, exampleCheckStep } from '@/lib/voice/pre-run'
 import { promptsV2 } from '@/lib/prompt-revision'
@@ -39,6 +40,9 @@ export type TeachScenario = {
   then?: { concept: TeachConcept; turns: TeachTurn[] }[]
 }
 
+/** The idea that follows in the fixture's closing turns (teach_state.py PARITY_NEXT_IDEA). */
+const PARITY_NEXT_IDEA = { done: false, prompt: 'Explain "the next idea" in your own words, as if you were teaching it to a classmate.' } as const
+
 /** The ideas of a scenario in order: its own concept and turns, then each entry of `then`. */
 export const ideasOf = (scenario: TeachScenario): { concept: TeachConcept; turns: TeachTurn[] }[] => [
   { concept: scenario.concept, turns: scenario.turns },
@@ -65,7 +69,13 @@ const claimsOf = (concept: TeachConcept, verdicts: Verdict[]): AssessedClaim[] =
 export function teachParityFixture(scenarios: TeachScenario[]) {
   const v2 = promptsV2('voice')
   return scenarios.map((scenario) => {
-    const steps: { kind: string; output: Record<string, unknown>; state: ConceptState; app_result: unknown }[] = []
+    const steps: { kind: string; output: Record<string, unknown>; state: ConceptState; app_result: unknown; spoken: string | null; spoken_then?: string | null }[] = []
+    // The reply the app would say itself (null where the coach model words it). A closing turn is said two ways: after the
+    // last idea, and with another to open.
+    const said = (facts: Omit<ReplyFacts, 'next'>) => ({
+      spoken: assembledReply({ ...facts, next: { done: true } }),
+      ...(facts.plan.action === 'wrap_up' ? { spoken_then: assembledReply({ ...facts, next: PARITY_NEXT_IDEA }) } : {}),
+    })
     for (const idea of ideasOf(scenario)) {
       let state: ConceptState = emptyConceptState()
       for (const turn of idea.turns) {
@@ -73,16 +83,29 @@ export function teachParityFixture(scenarios: TeachScenario[]) {
         const claims = claimsOf(idea.concept, turn.verdicts)
         if (turn.kind === 'explain') {
           const coveredSomething = claims.some((claim) => claim.verdict === 'covered' || claim.verdict === 'partial')
-          const next = assessmentResult(idea.concept.name, claims, state, coveredSomething ? null : idea.concept.prerequisite, {
+          const prerequisite = coveredSomething ? null : idea.concept.prerequisite
+          const next = assessmentResult(idea.concept.name, claims, state, prerequisite, {
             dontKnow: turn.dont_know === true,
             band: scenario.band ?? 1,
           })
           state = next.state
-          steps.push({ kind: 'explain', output: next.output, state, app_result: appResultBlock('assess_explanation', next.output).text })
+          steps.push({
+            kind: 'explain',
+            output: next.output,
+            state,
+            app_result: appResultBlock('assess_explanation', next.output).text,
+            ...said({ plan: next.plan, claims, prerequisite, turn: state.assessments, dontKnow: turn.dont_know === true, outcome: state.outcome, lookAgain: next.lookAgain }),
+          })
         } else {
           const next = exampleResult(idea.concept.name, claims, state)
           state = next.state
-          steps.push({ kind: 'example', output: next.output, state, app_result: appResultBlock('record_check', next.output, exampleCheckStep(v2)).text })
+          steps.push({
+            kind: 'example',
+            output: next.output,
+            state,
+            app_result: appResultBlock('record_check', next.output, exampleCheckStep(v2)).text,
+            ...said({ plan: next.plan, claims, prerequisite: null, turn: state.assessments, outcome: state.outcome, examplePassed: next.passed }),
+          })
         }
       }
     }
@@ -125,6 +148,44 @@ export function teachPromptFixture(scenarios: TeachScenario[], v2 = false) {
     // v2: what the turn loop says to the model after a reply that stopped at its token limit (turn-engine.ts).
     ...(v2 ? { finish_cut_off_note: FINISH_CUT_OFF_NOTE } : {}),
   }
+}
+
+/**
+ * Replies the scenarios do not reach, for both builders (assembled-reply.ts and teach_state.py `assembled_reply`): a real
+ * grader question, the pointers that are not one question, the turns left to the coach model, and each closing line.
+ */
+const REPLY_CLAIMS = { open: 'Chaining keeps a list in each bucket.', held: 'Two keys that share a bucket collide.' } as const
+const replyClaims = (verdict: AssessedClaim['verdict'], extra: Partial<AssessedClaim> = {}, held: AssessedClaim['verdict'] = 'covered'): AssessedClaim[] => [
+  { claimId: 'k1', text: REPLY_CLAIMS.held, page: 4, verdict: held, studentQuote: held === 'covered' ? 'two keys in one bucket collide' : null },
+  { claimId: 'k2', text: REPLY_CLAIMS.open, page: 5, verdict, ...extra },
+]
+const probeOn = (finding: Gap['finding'], probeNumber = 1): Plan => ({ action: 'probe', gap: { claimId: 'k2', finding, page: 5 }, probe: { probe: 'implication', label: '' } as ProbeKind, probeNumber })
+const THEN: ReplyFacts['next'] = { done: false, prompt: 'Explain "Load factor" in your own words, as if you were teaching it to a classmate.' }
+const QUESTION = 'What does each bucket hold?'
+const REPLY_CASES: { name: string; facts: ReplyFacts }[] = [
+  { name: 'missing claim, grader question, part already covered', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: `Look again at p. 5: ${QUESTION}` }), prerequisite: null, turn: 1 } },
+  { name: 'missing claim, grader question, nothing covered yet', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: `Look again at p. 5: ${QUESTION}` }, 'missing'), prerequisite: null, turn: 1 } },
+  { name: 'the question names its page itself', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: 'Look again at p. 5: What does page 5 say each bucket holds?' }), prerequisite: null, turn: 1 } },
+  { name: 'a pointer with no page', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: `Look again in your reading: ${QUESTION}` }), prerequisite: null, turn: 1 } },
+  { name: 'a pointer that only names the idea', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: 'Look again at p. 5: Chaining' }), prerequisite: null, turn: 1 } },
+  { name: 'a pointer holding two questions', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: 'Look again at p. 5: What does each bucket hold? Why a list?' }), prerequisite: null, turn: 1 } },
+  { name: 'a question too long to say', facts: { plan: probeOn('missing'), claims: replyClaims('missing', { pointer: `Look again at p. 5: ${'When a key arrives '.repeat(8)}what happens?` }), prerequisite: null, turn: 1 } },
+  { name: 'loose claim, grader question', facts: { plan: probeOn('vague'), claims: replyClaims('partial', { pointer: `Look again at p. 5: ${QUESTION}`, studentQuote: 'it keeps stuff' }), prerequisite: null, turn: 1 } },
+  { name: 'loose claim, no question, a long quote', facts: { plan: probeOn('vague'), claims: replyClaims('partial', { studentQuote: 'the bucket '.repeat(9) }), prerequisite: null, turn: 1 } },
+  { name: 'wrong claim', facts: { plan: probeOn('incorrect'), claims: replyClaims('incorrect', { studentQuote: 'the table doubles', pointer: `Look again at p. 5: ${QUESTION}` }), prerequisite: null, turn: 1 } },
+  { name: 'second probe on the same gap', facts: { plan: probeOn('missing', 2), claims: replyClaims('missing', { pointer: `Look again at p. 5: ${QUESTION}` }), prerequisite: null, turn: 2 } },
+  { name: 'a quote with quotation marks in it', facts: { plan: probeOn('unsupported_jump'), claims: replyClaims('covered', { studentQuote: '"each bucket" keeps a "list".' }), prerequisite: null, turn: 1 } },
+  { name: 'a claim too long to say', facts: { plan: { action: 'explain', gap: { claimId: 'k2', finding: 'missing', page: 5 } }, claims: replyClaims('missing', { text: 'Chaining keeps a list. '.repeat(16) }), prerequisite: null, turn: 3 } },
+  { name: 'asked to be told', facts: { plan: { action: 'explain_first', gap: { claimId: 'k2', finding: 'missing', page: 5 } }, claims: replyClaims('missing'), prerequisite: null, turn: 2, told: true } },
+  { name: 'closed after an explanation, two pages, another idea follows', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('covered'), prerequisite: null, turn: 4, outcome: 'taught', lookAgain: ['p. 5', 'pp. 4-5', 'p. 4'], next: THEN } },
+  { name: 'closed with a claim still open', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('missing'), prerequisite: null, turn: 4, outcome: 'taught', lookAgain: ['p. 5'], next: THEN } },
+  { name: 'the new example was passed on the last idea', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('missing'), prerequisite: null, turn: 2, outcome: 'explained', examplePassed: true, next: { done: true } } },
+  { name: 'a closing turn with nothing known to follow', facts: { plan: { action: 'wrap_up' }, claims: replyClaims('covered'), prerequisite: null, turn: 2, outcome: 'explained' } },
+]
+
+/** Each case's facts and the reply the app builds for them (null: the coach model words the turn). */
+export function assembledReplyFixture() {
+  return REPLY_CASES.map((entry) => ({ ...entry, reply: assembledReply(entry.facts) }))
 }
 
 /** Extra utterances for the classifier fixture: each kind of non-answer, and the near misses. */

@@ -6,6 +6,7 @@ import pytest
 
 from teach_state import (
     PROBE_FOR_FINDING,
+    assembled_reply,
     empty_state,
     find_gaps,
     load_prompts,
@@ -147,3 +148,24 @@ def test_the_prompt_fixture_follows_the_voice_flag(monkeypatch):
     assert {s["topic"] for s in scenarios()} <= set(v2["topics"])
     # The audited tools: the same list, with the new-example check renamed (record_check -> record_example_check).
     assert [tool["name"] for tool in v2["tools"]] == [tool["name"].replace("record_check", "record_example_check") for tool in v1["tools"]]
+
+
+def test_the_mirror_builds_the_same_reply_as_the_app_for_cases_the_scenarios_do_not_reach():
+    """fixtures/assembled_reply_parity.json is written from assembled-reply.ts (eval-parity.ts REPLY_CASES)."""
+    cases = json.loads((HERE / "fixtures" / "assembled_reply_parity.json").read_text())
+    assert len(cases) >= 18
+    for case in cases:
+        facts = case["facts"]
+        reply = assembled_reply(
+            facts["plan"],
+            facts["claims"],
+            facts.get("prerequisite"),
+            facts["turn"],
+            dont_know=facts.get("dontKnow", False),
+            told=facts.get("told", False),
+            outcome=facts.get("outcome"),
+            look_again=facts.get("lookAgain"),
+            example_passed=facts.get("examplePassed", False),
+            next_idea=facts.get("next"),
+        )
+        assert reply == case["reply"], case["name"]

@@ -131,10 +131,13 @@ class Session:
     A scenario is one idea, or several in order (`then`): when an idea closes, the closing result carries what
     get_concept_to_explain would answer next (`next_idea`), as the app's does."""
 
-    def __init__(self, scenario: Dict[str, Any]):
+    def __init__(self, scenario: Dict[str, Any], grader_led: bool = False):
         from teach_state import empty_state, ideas_of
 
         self.scenario = scenario
+        # --grader-led (the app's VOICE_GRADER_LED): a graded step also builds the reply where it can (teach_state.assembled_reply).
+        self.grader_led = grader_led
+        self.spoken: Optional[str] = None  # the reply the step of this turn built, if it built one
         self.ideas = ideas_of(scenario)
         self.states = [empty_state() for _ in self.ideas]
         self.index = 0  # the idea being worked on (len(self.ideas) once every idea is closed)
@@ -197,6 +200,7 @@ class Session:
 
         self.turn = turn
         self.steps = {}
+        self.spoken = None
         self.heard = said
         if said and self.started and not self.closed() and not self.state["outcome"] and prompts_v2("voice") and asks_for_help(said):
             self.state["helpAsked"] = self.state.get("helpAsked", 0) + 1
@@ -257,7 +261,7 @@ class Session:
         return output
 
     def answer(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-        from teach_state import EVERY_IDEA_DONE, assessed_claims, assessment_result, example_result, idea_prompt
+        from teach_state import EVERY_IDEA_DONE, assembled_reply, assessed_claims, assessment_result, example_result, idea_prompt
 
         if name == "get_concept_to_explain":
             if self.closed():
@@ -286,22 +290,31 @@ class Session:
             covered_something = any(claim["verdict"] in ("covered", "partial") for claim in claims)
             # What the student said was an "I don't know" when the script says so (the parity test pins that flag to the app's detector).
             told = self.told()
-            output, self.states[index], _ = assessment_result(
+            said_dont_know = bool(self.current_turn().get("dont_know"))
+            prerequisite = None if covered_something else concept["prerequisite"]
+            output, self.states[index], plan = assessment_result(
                 concept["name"],
                 claims,
                 self.state,
-                None if covered_something else concept["prerequisite"],
-                bool(self.current_turn().get("dont_know")) or told,
+                prerequisite,
+                said_dont_know or told,
                 int(self.scenario.get("band", 1)),
                 told,
             )
+            facts = {"prerequisite": prerequisite, "dont_know": said_dont_know, "told": told, "look_again": output.get("look_again")}
         else:
             if not self.state["exampleAsked"]:
                 return {"error": "The new example is asked after assess_explanation says ask_new_example."}
             claims = assessed_claims(concept, self.current_verdicts())
-            output, self.states[index], _ = example_result(concept["name"], claims, self.state)
+            output, self.states[index], passed, plan = example_result(concept["name"], claims, self.state)
+            facts = {"prerequisite": None, "example_passed": passed}
         self.note_given(output)
-        return self.what_follows(output)
+        closed = self.states[index]
+        output = self.what_follows(output)
+        if self.grader_led:
+            # teach-tools.ts withWhatFollows: the reply is built once the next idea is known.
+            self.spoken = assembled_reply(plan, claims, turn=closed["assessments"], outcome=closed["outcome"], next_idea=output.get("next_idea"), **facts)
+        return output
 
 
 # ---------------------------------------------------------------------------- playing
@@ -426,14 +439,15 @@ def asked_again(log: List[Dict[str, Any]]) -> bool:
     return closing is not None and any(item["name"] == "get_concept_to_explain" for item in log[closing + 1 :])
 
 
-async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop: Dict[str, str]) -> List[Dict[str, Any]]:
-    """One scripted conversation: the start of the session, then each student message in turn. One record per coach turn."""
+async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop: Dict[str, str], grader_led: bool = False) -> List[Dict[str, Any]]:
+    """One scripted conversation: the start of the session, then each student message in turn. One record per coach turn.
+    `grader_led`: a turn whose step built the reply itself is said as built, with no model call (the app's VOICE_GRADER_LED)."""
     from spend import SpendLimitReached
 
     from app.prompt_revision import prompts_v2
 
     entry = prompts["topics"][scenario["topic"]]
-    session = Session(scenario)
+    session = Session(scenario, grader_led)
     messages: List[Dict[str, Any]] = [{"role": "user", "content": entry["start"]}]
     start: List[Dict[str, Any]] = []
     if prompts_v2("voice"):
@@ -467,8 +481,14 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
         token = _TURN_CALLS.set(calls)
         started = time.perf_counter()
         base = {"scenario": scenario["id"], "pattern": scenario["pattern"], "turn": turn, "idea": idea, "student": said}
+        # The step that ran before the model built the reply: it is said as it stands (turn-engine.ts appSaid).
+        built = session.spoken if turn > 0 and pre_run else None
         try:
-            text, log = await coach_turn(provider, entry["system"], prompts["tools"], messages, session, list(pre_run), prompts.get("finish_cut_off_note"))
+            if built:
+                messages.append({"role": "assistant", "content": [{"type": "text", "text": built}]})
+                text, log = built, list(pre_run)
+            else:
+                text, log = await coach_turn(provider, entry["system"], prompts["tools"], messages, session, list(pre_run), prompts.get("finish_cut_off_note"))
         except SpendLimitReached as exc:
             stop["reason"] = str(exc)
             print(f"  STOP: {exc}", flush=True)
@@ -488,7 +508,9 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
                 "text": text,
                 "tools": log,
                 "pre_run": pre_run[0]["name"] if pre_run else None,
-                "first_sentence_s": first_sentence_seconds(calls),
+                "assembled": bool(built),
+                # No model call stands between the step and the first word of a reply the app built.
+                "first_sentence_s": 0.0 if built else first_sentence_seconds(calls),
                 "last_action": last_action(log),
                 "asked_again": asked_again(log),
                 # The idea the coach is asking about when the turn ends: the next one after a closing result; None when none is open.
@@ -508,7 +530,7 @@ async def play(scenario: Dict[str, Any], provider, prompts: Dict[str, Any], stop
     return records
 
 
-async def play_all(scenarios, provider, prompts, stop, raw_dir: Path, resume: bool, concurrency: int, log) -> List[Dict[str, Any]]:
+async def play_all(scenarios, provider, prompts, stop, raw_dir: Path, resume: bool, concurrency: int, log, grader_led: bool = False) -> List[Dict[str, Any]]:
     semaphore = asyncio.Semaphore(max(1, concurrency))
     results: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -522,7 +544,7 @@ async def play_all(scenarios, provider, prompts, stop, raw_dir: Path, resume: bo
         async with semaphore:
             if stop.get("reason"):
                 return
-            turns = await play(scenario, provider, prompts, stop)
+            turns = await play(scenario, provider, prompts, stop, grader_led)
         results[scenario["id"]] = turns
         if not stop.get("reason"):  # a stopped scenario is incomplete: play it again on a resume
             path.write_text(json.dumps({"scenario": scenario["id"], "turns": turns}, indent=2) + "\n")
@@ -793,7 +815,8 @@ async def run(args, host) -> int:
 
     log(f"Playing {len(scenarios)} teach_back scenarios")
     started = time.perf_counter()
-    records = await play_all(scenarios, provider, prompts, stop, run_dir / "raw", bool(args.resume), args.concurrency, log)
+    grader_led = bool(getattr(args, "grader_led", False))
+    records = await play_all(scenarios, provider, prompts, stop, run_dir / "raw", bool(args.resume), args.concurrency, log, grader_led)
 
     # ------------------------------------------------------------------ judge: does an asking turn teach the idea first?
     judgments: Optional[Dict[str, Dict[str, Any]]] = None
@@ -824,6 +847,11 @@ async def run(args, host) -> int:
 
     summary_metrics = teach_metrics.summarize(by_id, records, judgments)
     summary_metrics["grader"] = grader_summary
+    if grader_led:
+        # The replies the app built, on their own: the same gates over those turns alone (the judge's verdicts included when it ran).
+        built = [r for r in records if r.get("assembled")]
+        graded_turns = [r for r in records if r.get("pre_run") and r.get("turn", 0) > 0 and not r.get("error")]
+        summary_metrics["assembled"] = {"turns": len(built), "graded_turns": len(graded_turns), "gates": teach_metrics.summarize(by_id, built, judgments)["gates"] if built else []}
     spoken = [r for r in records if r.get("text")]
     spent = round(tracker.spent[spend_module.GENERATION], 4)
     judge_spend = round(tracker.spent[spend_module.JUDGE], 4)
@@ -844,6 +872,7 @@ async def run(args, host) -> int:
             "coach_model": f"{voice.model}:{voice.effort}",
             "mock": args.mock,
             "judge": judge_spec.label if judge_spec else None,
+            "grader_led": grader_led,
         },
         "spend": {"generation": spent, "judge": judge_spend, "max_usd": args.max_usd, "max_judge_usd": args.max_judge_usd},
         "stopped": stop.get("reason") or judge_info.get("stopped") or previous.get("stopped"),
