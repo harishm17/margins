@@ -109,6 +109,26 @@ async def test_a_covered_verdict_without_a_quote_is_missing():
 
 
 @pytest.mark.asyncio
+async def test_a_claim_answered_in_symbols_keeps_its_verdict():
+    """Bug of 2026-11-10 (recall eval): a quote that is a formula has few letters and no long word, so it read as filler,
+    and a claim the student stated in symbols was marked missing; a wrong formula lost its incorrect verdict the same way."""
+    answer = "Independent means P(A|B) = P(A), and the formal definition is P(A and B) = P(A) + P(B). The cdf is F(a) = P(X <= a)."
+    graded = result(
+        [
+            verdict("cl-1", "covered", "P(A|B) = P(A)"),
+            verdict("cl-2", "incorrect", "P(A and B) = P(A) + P(B)", misconception="Adds the probabilities."),
+            verdict("cl-3", "covered", "F(a) = P(X <= a)"),
+        ]
+    )
+    with use(Scripted([graded])):
+        out = await grade_recall(request(answer=answer))
+    assert [v.verdict for v in out.verdicts] == ["covered", "incorrect", "covered"]
+    # Filler is still not support.
+    with use(Scripted([result([verdict("cl-1", "covered", "and the"), verdict("cl-2", "covered", "The cdf is F(a) = P(X <= a)")])])):
+        assert by_id(await grade_recall(request(answer=answer)))["cl-1"].verdict == "missing"
+
+
+@pytest.mark.asyncio
 async def test_recall_grader_abstains_on_unclear_answer():
     # The model is not sure what the answer says: no verdicts, one question back.
     provider = Scripted([result([verdict("cl-1", "missing"), verdict("cl-2", "missing"), verdict("cl-3", "missing")], confidence=0.5, clarifying_question="Which part of how a table handles shared buckets do you mean?")])

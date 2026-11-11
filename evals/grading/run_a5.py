@@ -480,11 +480,10 @@ async def grade_recall_answer(request: Any) -> Dict[str, Any]:
     }
 
 
-QUESTION_SAID = "the app says it as written"
+QUESTION_SAID = "the app says it (as written, or the first of two joined questions)"
 QUESTION_OUTCOMES = (
     QUESTION_SAID,
-    "none written",
-    "says the claim (dropped by the service)",
+    "none from the service (none written, or it said the claim)",
     "not one open question",
     "says the claim (dropped by the app)",
 )
@@ -498,14 +497,12 @@ def question_outcome(verdict: Dict[str, Any], claim_text: str) -> Optional[str]:
 
     if verdict.get("verdict") in (None, "covered"):
         return None
-    if not (verdict.get("pointer") or "").strip():
-        return QUESTION_OUTCOMES[1]
     if not verdict.get("probe"):
-        return QUESTION_OUTCOMES[2]
+        return QUESTION_OUTCOMES[1]
     question = one_open_question(verdict["probe"])
     if not question:
-        return QUESTION_OUTCOMES[3]
-    return QUESTION_OUTCOMES[4] if gives_away(question, claim_text) else QUESTION_SAID
+        return QUESTION_OUTCOMES[2]
+    return QUESTION_OUTCOMES[3] if gives_away(question, claim_text) else QUESTION_SAID
 
 
 def recall_row(arm: str, entry: Dict[str, Any], answer: Dict[str, Any], graded: Dict[str, Any]) -> Dict[str, Any]:
@@ -655,13 +652,14 @@ def render_recall_report(summary: Dict[str, Any], meta: Dict[str, Any]) -> str:
             "## Questions for the voice coach",
             "",
             "For each claim the grader left open, what the app can do with the question it wrote, by the reply builder's own "
-            "rules: one open question, short enough to hold by ear, that does not say the claim. Any other outcome goes to the "
-            "coach model. The questions themselves are in the run's raw folder.",
+            "rules: one open question, short enough to hold by ear, that does not say the claim (of two questions joined in one "
+            "sentence it asks the first). Any other outcome goes to the coach model. The questions themselves are in the run's "
+            "raw folder.",
             "",
         ]
         for arm in names:
             questions = arms[arm]["questions"]
-            out.append(f"**{arm}**: {_count(questions['said'])} said as written.")
+            out.append(f"**{arm}**: {_count(questions['said'])} said by the app.")
             out.append("")
             verdicts = list(questions["by_verdict"])
             out.append(

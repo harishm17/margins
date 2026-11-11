@@ -73,11 +73,29 @@ export function pointerQuestion(pointer: string | null | undefined): { question:
   return question ? { question, page: realPage(match[1] ? Number(match[1]) : null) } : null
 }
 
-/** The text as one question a student can hold by ear, or null: it must end in its only question mark, be short, and ask one open thing. */
+/**
+ * The text as one question a student can hold by ear, or null: it must end in its only question mark, be short, and ask
+ * one open thing. Of two questions joined in one sentence, the first is the one asked.
+ */
 function oneOpenQuestion(text: string | null | undefined): string | null {
-  const question = (text ?? '').replace(/\s+/g, ' ').trim()
-  if (!question.endsWith('?') || question.indexOf('?') !== question.length - 1 || wordCount(question) > MAX_QUESTION_WORDS) return null
-  return joinedOrEitherOr(question) ? null : question
+  const written = (text ?? '').replace(/\s+/g, ' ').trim()
+  if (!written.endsWith('?') || written.indexOf('?') !== written.length - 1) return null
+  const question = joinedOrEitherOr(written) ? firstOfJoined(written) : written
+  return question && wordCount(question) <= MAX_QUESTION_WORDS ? question : null
+}
+
+/**
+ * The first of two questions joined in one sentence ("Where does it land, and what happens next?" gives "Where does it
+ * land?"), when it is an open question of its own; null for any other. One in twelve of the grader's spoken questions
+ * still joined two when its output was read (recall eval, 2026-11-10); the first half is a question the student can hold.
+ */
+function firstOfJoined(question: string): string | null {
+  const joined = JOINED.exec(question)
+  if (!joined) return null
+  const first = question.slice(0, joined.index).replace(/[\s,;:]+$/, '')
+  if (!/\b(?:what|why|how|who|which|where)\b/i.test(first) || wordCount(first) < 4) return null
+  const single = `${first}?`
+  return joinedOrEitherOr(single) ? null : single
 }
 
 /**
@@ -92,7 +110,12 @@ export function spokenQuestion(probe: string | null | undefined, claim: string |
 
 // The form rule of the eval's question gate (evals/tutoring/teach_metrics.py `question_form`), in the same patterns.
 const AUXILIARY = '(?:is|are|was|were|does|do|did|would|will|can|could|should|has|have)'
-const JOINED = new RegExp(`\\b(?:and|or|but)\\s+(?:then\\s+)?(?:what|why|how|who|${AUXILIARY})\\b`, 'i')
+// "which" and "where" also open a clause inside one question ("when you swap which is known and which is asked"), so
+// they count as a second question only after a comma.
+const JOINED = new RegExp(
+  `\\b(?:and|or|but)\\s+(?:(?:then|so)\\s+)?(?:what|why|how|who|${AUXILIARY})\\b|,\\s*(?:and|or|but)\\s+(?:(?:then|so)\\s+)?(?:which|where)\\b`,
+  'i'
+)
 const ASKS = new RegExp(`\\b(?:what|why|how|who|which|where)\\b|(?:^|[,;:]\\s+)(?:(?:so|and|but|then|now)\\s+)?${AUXILIARY}\\b`, 'i')
 const YES_NO = new RegExp(`(?:^|[,;:]\\s+)(?:(?:so|and|but|then|now)\\s+)?(${AUXILIARY})\\s+(\\w+)`, 'gi')
 const REQUEST = /^(?:can|could|would|will)\s+you$|^(?:do|would)\s+you$/i

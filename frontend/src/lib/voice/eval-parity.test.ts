@@ -73,9 +73,9 @@ test('the replies the app builds equal the committed fixture, never give an open
   // already asked), which a wrong claim and a second probe cannot do without, and a closing turn with nothing known to follow.
   const left = [
     'a pointer that only names the idea', 'a pointer holding two questions', 'a question too long to say', 'a leading question that says the claim',
-    'two questions joined in one sentence', 'a question that names its answers',
+    'a question that names its answers', 'two questions joined, the first a yes or no',
     'wrong claim', 'second probe on the same gap', 'loose claim, no question, a long quote', 'a quote with a question in it',
-    'wrong claim, a spoken question joining two', 'a spoken question that says the claim', 'second probe, the question already asked',
+    'a spoken question that says the claim', 'second probe, the question already asked',
     'a prerequisite named as a question', 'a claim too long to say', 'a claim worded as a question', 'the next idea is named as a question',
     'a closing turn with nothing known to follow',
   ]
@@ -91,5 +91,8 @@ test('the replies the app builds equal the committed fixture, never give an open
     assert.equal(/page 0\b/.test(entry.reply!), false, entry.name)
     if (entry.facts.plan.action === 'wrap_up') assert.equal(questions, 0, entry.name)
   }
+  // Of two questions joined in one sentence the app asks the first, so the student has one thing to hold.
+  assert.ok(reply('two questions joined in one sentence')!.endsWith('Where does a new key land at first?'))
+  assert.ok(reply('wrong claim, a spoken question joining two')!.endsWith('Where does the second key go?'))
   assert.ok(reply('closed with a claim still open')!.startsWith("Let's leave that one there"), 'no praise for what was not shown')
 })

@@ -338,11 +338,29 @@ def pointer_question(pointer: Optional[str]):
 
 def one_open_question(text: Optional[str]) -> Optional[str]:
     """The text as one question a student can hold by ear, or None: it ends in its only question mark, is short, and asks
-    one open thing."""
+    one open thing. Of two questions joined in one sentence, the first is the one asked."""
     question = re.sub(r"\s+", " ", text or "").strip()
-    if not question.endswith("?") or question.index("?") != len(question) - 1 or len(question.split()) > MAX_QUESTION_WORDS:
+    if not question.endswith("?") or question.index("?") != len(question) - 1:
         return None
-    return None if joined_or_either_or(question) else question
+    if joined_or_either_or(question):
+        question = first_of_joined(question)
+    return question if question and len(question.split()) <= MAX_QUESTION_WORDS else None
+
+
+_OPEN_WORD = re.compile(r"\b(?:what|why|how|who|which|where)\b", re.I)
+
+
+def first_of_joined(question: str) -> Optional[str]:
+    """The first of two questions joined in one sentence ("Where does it land, and what happens next?" gives "Where does
+    it land?"), when it is an open question of its own; None for any other."""
+    joined = _JOINED.search(question)
+    if not joined:
+        return None
+    first = re.sub(r"[\s,;:]+$", "", question[: joined.start()])
+    if not _OPEN_WORD.search(first) or len(first.split()) < 4:
+        return None
+    single = f"{first}?"
+    return None if joined_or_either_or(single) else single
 
 
 def same_question(a: str, b: str) -> bool:
@@ -366,7 +384,13 @@ def spoken_question(probe: Optional[str], claim: Optional[str], asked: Sequence[
 # The mirror of assembled-reply.ts `joinedOrEitherOr`: the patterns of teach_metrics.py `question_form` (which imports this
 # module, so they are repeated here), over one question.
 _AUXILIARY = r"(?:is|are|was|were|does|do|did|would|will|can|could|should|has|have)"
-_JOINED = re.compile(rf"\b(?:and|or|but)\s+(?:then\s+)?(?:what|why|how|who|{_AUXILIARY})\b", re.I)
+_JOINED = re.compile(
+    rf"\b(?:and|or|but)\s+(?:(?:then|so)\s+)?(?:what|why|how|who|{_AUXILIARY})\b"
+    # "which" and "where" also open a clause inside one question ("when you swap which is known and which is asked"), so
+    # they count as a second question only after a comma.
+    r"|,\s*(?:and|or|but)\s+(?:(?:then|so)\s+)?(?:which|where)\b",
+    re.I,
+)
 _ASKS = re.compile(rf"\b(?:what|why|how|who|which|where)\b|(?:^|[,;:]\s+)(?:(?:so|and|but|then|now)\s+)?{_AUXILIARY}\b", re.I)
 _YES_NO = re.compile(rf"(?:^|[,;:]\s+)(?:(?:so|and|but|then|now)\s+)?({_AUXILIARY})\s+(\w+)", re.I)
 _REQUEST = re.compile(r"^(?:can|could|would|will)\s+you$|^(?:do|would)\s+you$", re.I)

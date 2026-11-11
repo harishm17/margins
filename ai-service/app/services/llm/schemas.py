@@ -2080,7 +2080,7 @@ class SpokenClaimVerdict(ClaimVerdict):
 
     pointer: Optional[str] = Field(
         default=None,
-        description="For missing, partial or incorrect: the one question the voice coach asks the student aloud next to draw this claim out of them. One thing asked, 20 words or fewer, no choice between named answers, and never what the claim says",
+        description="For missing, partial or incorrect: the one question the voice coach asks the student aloud next to draw this claim out of them. One thing asked in one short sentence, no second question joined on, no choice between named answers, and never what the claim says",
     )
 
 

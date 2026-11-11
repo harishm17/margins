@@ -256,7 +256,7 @@
    "prerequisite": null,
    "turn": 1
   },
-  "reply": null
+  "reply": "You have part of it. Think about page 5. Where does a new key land at first?"
  },
  {
   "name": "a question that names its answers",
@@ -744,7 +744,81 @@
    "prerequisite": null,
    "turn": 1
   },
+  "reply": "You said, \"the table doubles\". Where does the second key go?"
+ },
+ {
+  "name": "two questions joined, the first a yes or no",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "probe": "Is the bucket empty, and what happens if it is not?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
   "reply": null
+ },
+ {
+  "name": "one question with a which clause inside",
+  "facts": {
+   "plan": {
+    "action": "probe",
+    "gap": {
+     "claimId": "k2",
+     "finding": "missing",
+     "page": 5
+    },
+    "probe": {
+     "probe": "implication",
+     "label": ""
+    },
+    "probeNumber": 1
+   },
+   "claims": [
+    {
+     "claimId": "k1",
+     "text": "Two keys that share a bucket collide.",
+     "page": 4,
+     "verdict": "covered",
+     "studentQuote": "two keys in one bucket collide"
+    },
+    {
+     "claimId": "k2",
+     "text": "Chaining keeps a list in each bucket.",
+     "page": 5,
+     "verdict": "missing",
+     "probe": "What goes wrong when you swap which key is stored and which is looked up?"
+    }
+   ],
+   "prerequisite": null,
+   "turn": 1
+  },
+  "reply": "You have part of it. What goes wrong when you swap which key is stored and which is looked up?"
  },
  {
   "name": "a spoken question that says the claim",

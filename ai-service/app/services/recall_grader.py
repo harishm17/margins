@@ -96,8 +96,8 @@ _POINTER_RULE = (
     "in their pages without saying what the claim says. "
 )
 _POINTER_RULE_SPOKEN = """- For a missing, partial or incorrect claim, write a pointer. The student is talking with a voice coach, and the pointer is the one question the coach asks them aloud next to draw that claim out. They hear it once and answer from memory, so:
-  - Ask one thing. A second question joined on ("..., and why is that?") or a choice between named answers ("is it A or B?") is too much to hold by ear, and a choice hands over the answer.
-  - Keep it to 20 words or fewer, in plain spoken words, with no symbols, formulas or page numbers.
+  - Ask one thing. A second question joined on ("..., and why is that?", "how many are there, and how much work is each?") is too much to hold by ear, and a choice between named answers ("is it A or B?") hands over the answer. When you want both a fact and its reason, ask for the reason alone: a student who can give it has to state the fact on the way.
+  - Keep it to one short sentence, around fifteen words, in plain spoken words, with no symbols, formulas or page numbers.
   - Do not say what the claim says. Ask about the situation the claim explains, so that the answer is the claim in the student's own words.
   - For a partial claim, ask for the part that is loose or left out. For an incorrect claim, do not say that it is wrong and do not give the right idea: ask about the case or the assumption their statement gets wrong, so that they test it themselves.
   - A claim may come with questions in <already_asked>: the coach has put those to the student and the claim is still open. Ask something different and smaller, about one concrete case or one step of the idea.
@@ -240,8 +240,16 @@ def _stems(text: str) -> set:
     return {word[:STEM] for word in _words(text) if len(word) >= MIN_CONTENT_WORD and word not in _FILLER and not word.isdigit()}
 
 
+# A statement in symbols: two terms with a relation or an operator between them ("p(a|b) = p(a)", "f(a) = p(x <= a)").
+_FORMULA = re.compile(r"[\w)\]]\s*(?:[=<>≤≥≠≈+*/^∩∪]|<=|>=)\s*[\w(\[]")
+
+
 def _thin(folded: str) -> bool:
-    """Too little in the quote to show a claim: a few letters, or only words that carry no content."""
+    """Too little in the quote to show a claim: a few letters, or only words that carry no content. A formula is neither:
+    it has few letters and no long word, and it is exactly what the student stated. (Recall eval of 2026-11-10: seven
+    claims answered in symbols, such as "P(A|B) = P(A)", were marked missing because their quote read as filler.)"""
+    if _FORMULA.search(folded):
+        return False
     return sum(1 for char in folded if char.isalpha()) < MIN_QUOTE_LETTERS or not _stems(folded)
 
 
@@ -312,8 +320,8 @@ def _checked(raw: ClaimVerdict, claim: RecallClaim, answer_folded: str, prompt: 
         out.kind = raw.kind or "misconception"
     if verdict in ("missing", "partial"):
         out.pointer = _pointer(raw.pointer, claim, prompt)
-    # A verdict the checks above turned to missing keeps no question: the model wrote it for another finding.
-    if spoken and verdict != "covered" and verdict == raw.verdict:
+    # Kept when the checks above turned the verdict to missing: the question draws the claim out whatever the finding was.
+    if spoken and verdict != "covered":
         out.probe = _probe(raw.pointer, claim, prompt)
     if verdict == "covered":
         # Only on a verdict whose quote was checked: a gap in the reasoning of a claim that did not stand has no meaning.
