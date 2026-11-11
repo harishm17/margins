@@ -62,6 +62,27 @@ def test_every_job_default_code_has_a_public_message():
     assert codes and sorted(codes - set(PUBLIC_MESSAGES)) == []
 
 
+def test_the_services_own_info_lines_are_written_when_the_root_logger_is_left_at_its_default():
+    """Bug: the root logger stays at WARNING in production, so the start-up lines (provider, prompt areas) and the
+    per-call cost lines, all logged at INFO, never reached the log. Other libraries' INFO lines stay out."""
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    root, app_logger = logging.getLogger(), logging.getLogger("app")
+    previous = (root.level, app_logger.level)
+    root.addHandler(handler)
+    root.setLevel(logging.WARNING)
+    app_logger.setLevel(logging.NOTSET)
+    try:
+        configure_logging()
+        logging.getLogger("app.main").info("Prompts v2 areas: tutor")
+        logging.getLogger("httpx").info("HTTP Request: POST")
+        assert stream.getvalue() == "Prompts v2 areas: tutor\n"
+    finally:
+        root.removeHandler(handler)
+        root.setLevel(previous[0])
+        app_logger.setLevel(previous[1])
+
+
 class TestLogFilter:
     def test_an_exception_argument_is_written_as_class_and_code(self, log):
         logging.getLogger("app.test").warning("failed: %s", LLMRequestError(detail=SENTINEL))
