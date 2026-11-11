@@ -39,6 +39,14 @@ export GLOBAL_DAILY_LLM_BUDGET_USD=100000
 # DAILY_LLM_BUDGET_USD (harness/allowance.ts DAILY_LIMIT_USD). The first-day rule has its own tests in ai-service.
 export FIRST_DAY_LLM_BUDGET_USD=0
 export WF_FILES_DIR WF_CASSETTE_DIR
+# The AI settings production runs with (.railway/railway.ts; keep the two the same). A recording is matched by its
+# prompt, so a run with other settings finds no recording for the calls they change.
+export PROMPTS_V2="${PROMPTS_V2-generation,support,tutor,ask}"
+export VOICE_GRADER_LED="${VOICE_GRADER_LED-true}"
+export CLAIM_REQUOTE="${CLAIM_REQUOTE-true}" SUPPORT_REFILL="${SUPPORT_REFILL-true}" LEAK_WORD_FORMS_TO_JUDGE="${LEAK_WORD_FORMS_TO_JUDGE-true}"
+# The AI service's settings need ENVIRONMENT. The stack sets it for the two services; this is for what the runner and
+# the workflows start themselves (the cost summary below, WF7's one-off repair).
+export ENVIRONMENT=development
 export WF_RESULTS_DIR="${WF_RESULTS_DIR:-$ROOT/frontend/test-results/workflows}"
 
 stack() { "$ROOT/scripts/e2e-stack.sh" "$@"; }

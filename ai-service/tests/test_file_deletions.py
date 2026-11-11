@@ -24,7 +24,9 @@ async def test_a_failed_delete_is_retried_after_its_wait_and_then_done(db, monke
 
     failing["on"] = False
     await db.execute(f"UPDATE pending_file_deletions SET last_attempt_at = {UTC_NOW} - interval '2 minutes'")
+    # A row an older version marked done (they were kept for good, with the deleted account's folder in the path).
+    await db.execute(f"INSERT INTO pending_file_deletions (path, reason, done_at) VALUES ('s3://uploads/u/old/', 'test', {UTC_NOW})")
     assert await file_deletions.drain_pending_deletions() == {"done": 1, "failed": 0}
-    assert (await db.fetchrow("SELECT done_at FROM pending_file_deletions"))["done_at"] is not None
+    assert await db.fetchval("SELECT count(*) FROM pending_file_deletions") == 0
     assert len(calls) == 2
     assert await file_deletions.drain_pending_deletions() == {"done": 0, "failed": 0}

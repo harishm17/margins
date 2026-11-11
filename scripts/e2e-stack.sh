@@ -5,9 +5,11 @@
 #
 #   scripts/e2e-stack.sh start    start both in the background and wait until they answer
 #   scripts/e2e-stack.sh stop     stop them
+#   scripts/e2e-stack.sh build    build the web app when a source of it changed since the last build
 #
 # Before `start`: the database is migrated (cd frontend && npx prisma migrate deploy), the web app is
 # built (cd frontend && npm run build) and the AI service has its dependencies (cd ai-service && uv sync).
+# `start` refuses a build older than the web app's sources: specs run on it would test code that is not there.
 # The web app runs with ENABLE_TEST_LOGIN=true, the local-only test sign-in the specs use (students sign in
 # with Google only, which a test cannot do; frontend/src/lib/auth/test-login.ts), and with a made-up Google
 # client so the sign-in page shows its Google button. NEXTAUTH_URL is on localhost, which the test sign-in needs.
@@ -25,6 +27,14 @@
 # The web app allows 1000 voice turns a minute (VOICE_TURNS_PER_MINUTE; 30 in production): the voice specs all sign in as one account
 # and together send more than 30 turns in a minute, which the turn limiter answers with "You're going a little fast".
 # Then run the specs with PLAYWRIGHT_BASE_URL=http://localhost:$E2E_WEB_PORT and the same DATABASE_URL.
+# The model behind the AI service, E2E_LLM_PROVIDER:
+#   mock (the default)  canned answers, no API key, no cost: CI and the Playwright specs
+#   replay              recorded answers from E2E_CASSETTE_DIR (the workflow suite, frontend/tests/workflows);
+#                       E2E_REPLAY_MISS=record calls the real model for a request with no recording and stores it
+#                       (it needs ANTHROPIC_API_KEY, from the shell or ai-service/.env, and costs money);
+#                       a provider error code written to $RUN/llm-fault fails every model call with that error until
+#                       the file is emptied (a staged outage, WF11); start empties it
+#   anthropic           the real model on every call (costs money)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,6 +42,23 @@ WEB_PORT="${E2E_WEB_PORT:-3000}"
 AI_PORT="${E2E_AI_PORT:-8000}"
 RUN="${E2E_RUN_DIR:-$ROOT/.e2e}"
 TOKEN="e2e-internal-token"
+PROVIDER="${E2E_LLM_PROVIDER:-mock}"
+
+# The AI service's model settings, as `env` arguments (no spaces inside a value).
+llm_env() {
+  case "$PROVIDER" in
+    mock) echo "-u ANTHROPIC_API_KEY LLM_PROVIDER=mock" ;;
+    replay)
+      : "${E2E_CASSETTE_DIR:?E2E_LLM_PROVIDER=replay needs E2E_CASSETTE_DIR, the folder of recordings}"
+      case "${E2E_REPLAY_MISS:-error}" in
+        error) echo "-u ANTHROPIC_API_KEY LLM_PROVIDER=replay LLM_CASSETTE_DIR=$E2E_CASSETTE_DIR LLM_REPLAY_MISS=error LLM_REPLAY_FAULT_FILE=$RUN/llm-fault" ;;
+        record) echo "LLM_PROVIDER=replay LLM_CASSETTE_DIR=$E2E_CASSETTE_DIR LLM_REPLAY_MISS=record LLM_REPLAY_FAULT_FILE=$RUN/llm-fault" ;;
+        *) echo "E2E_REPLAY_MISS must be error or record, not $E2E_REPLAY_MISS" >&2; return 2 ;;
+      esac ;;
+    anthropic) echo "LLM_PROVIDER=anthropic" ;;
+    *) echo "E2E_LLM_PROVIDER must be mock, replay or anthropic, not $PROVIDER" >&2; return 2 ;;
+  esac
+}
 
 alive() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
 
@@ -49,17 +76,46 @@ wait_http() {
   return 1
 }
 
+# The first web app source newer than its production build (or a note that there is no build); empty when the build is current.
+newer_source() {
+  [ -f "$ROOT/frontend/.next/BUILD_ID" ] || { echo "frontend/.next (there is no build)"; return 0; }
+  (cd "$ROOT/frontend" && find src public prisma/schema.prisma next.config.js postcss.config.mjs package.json package-lock.json tsconfig.json \
+    -type f -newer .next/BUILD_ID -print -quit 2>/dev/null) || true
+}
+
+build() {
+  local newer
+  newer="$(newer_source)"
+  if [ -z "$newer" ]; then
+    echo "the web app's build is current"
+    return 0
+  fi
+  echo "building the web app: $newer changed since the last build"
+  (cd "$ROOT/frontend" && npm run build)
+}
+
 start() {
   : "${DATABASE_URL:?set DATABASE_URL to the migrated e2e database}"
+  local newer
+  newer="$(newer_source)"
+  if [ -n "$newer" ] && ! alive "$RUN/web.pid"; then
+    echo "The web app's build is older than $newer: run scripts/e2e-stack.sh build first." >&2
+    return 1
+  fi
   mkdir -p "$RUN/uploads" "$RUN/hold"
+  # No staged outage left over from an earlier run.
+  : >"$RUN/llm-fault"
+  local model_env
+  model_env="$(llm_env)"
 
   if alive "$RUN/ai.pid"; then
     echo "AI service already running"
   else
     (
       cd "$ROOT/ai-service"
-      exec setsid env -u ANTHROPIC_API_KEY \
-        LLM_PROVIDER=mock \
+      # Word splitting is wanted: the model settings are several env arguments.
+      # shellcheck disable=SC2086
+      exec setsid env $model_env \
         AI_INTERNAL_TOKEN="$TOKEN" \
         ENVIRONMENT=development \
         JOB_REAPER_INTERVAL_SECONDS=5 \
@@ -122,5 +178,6 @@ stop_one() {
 case "${1:-}" in
   start) start ;;
   stop) stop_one web; stop_one ai ;;
-  *) echo "usage: $0 start|stop" >&2; exit 2 ;;
+  build) build ;;
+  *) echo "usage: $0 start|stop|build" >&2; exit 2 ;;
 esac

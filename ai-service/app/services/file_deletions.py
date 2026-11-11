@@ -4,7 +4,8 @@ The web app deletes a material or a project and, in the same transaction, insert
 pointed to into `pending_file_deletions` (frontend/src/lib/storage/pending-deletions.ts). Deleting the row and
 promising the file's removal therefore commit together, and a storage error or a crash afterwards loses nothing.
 `drain_pending_deletions` runs from the reaper loop: it takes a batch of rows that are due, deletes the objects, and
-marks them done. A failure is retried with a growing wait (a minute, then two, four, ... up to six hours), and the
+removes their rows. A row's path names the account and the course the file belonged to, so a finished row is not kept:
+deleting an account leaves nothing that names it. A failure is retried with a growing wait (a minute, then two, four, ... up to six hours), and the
 watchdog alerts on rows that failed FILE_DELETION_ALERT_ATTEMPTS times (kind `file_deletions`).
 
 A path ending in `/` is a folder: everything under it goes.
@@ -24,6 +25,7 @@ BACKOFF_MAX_SECONDS = 6 * 3600.0
 
 async def drain_pending_deletions() -> dict[str, int]:
     """Delete the queued files that are due. Returns {"done": n, "failed": n}."""
+    await forget_finished()
     # Claiming a row counts the attempt and starts its wait, so two reapers never take the same row, and a crash
     # mid-delete costs one backoff, not a hot loop.
     due = await execute_query(
@@ -54,9 +56,7 @@ async def drain_pending_deletions() -> dict[str, int]:
             counts["failed"] += 1
             logger.warning("Could not delete queued file (will retry): %s", exc)
             continue
-        await execute_update(
-            f"UPDATE pending_file_deletions SET done_at = {UTC_NOW} WHERE id = $1", row["id"]
-        )
+        await execute_update("DELETE FROM pending_file_deletions WHERE id = $1", row["id"])
         counts["done"] += 1
     if due:
         logger.info("File deletion queue: %s", counts)
@@ -72,9 +72,7 @@ async def count_stuck() -> int:
     return int(row["n"]) if row else 0
 
 
-async def purge_done(older_than_days: int = 30) -> None:
-    """Forget finished rows after a month; the queue stays small."""
-    await execute_update(
-        f"DELETE FROM pending_file_deletions WHERE done_at IS NOT NULL AND done_at < {UTC_NOW} - make_interval(days => $1)",
-        older_than_days,
-    )
+async def forget_finished() -> None:
+    """Remove rows marked done instead of deleted: every finished row from before 2026-11-11, and any a web instance
+    still on the older code marks during a deploy. Nothing removed them before, so they kept deleted accounts' paths."""
+    await execute_update("DELETE FROM pending_file_deletions WHERE done_at IS NOT NULL")

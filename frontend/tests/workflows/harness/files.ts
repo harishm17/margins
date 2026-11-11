@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process'
 import { copyFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { expect, type Locator } from '@playwright/test'
@@ -118,14 +117,13 @@ export async function loseClaims(topicId: string): Promise<number> {
 const run = promisify(execFile)
 
 /**
- * F0's one-off repair, as an operator runs it: a dry run that lists the ideas it would re-read, then the run that
- * re-reads them. It runs on the workflow's database with the stack's model settings, so its model calls are replayed
- * or recorded like the app's. Until F0 adds the script, it reports that there is none.
+ * F0's one-off repair, as an operator runs it (ai-service/scripts/requote_lost_claims.py): the list of ideas it would
+ * re-read, then the run that asks the model for their quotes and stores them. It runs on the workflow's database with
+ * the stack's model settings, so its model calls are replayed or recorded like the app's.
  */
-export async function repairLostClaims(courseId: string): Promise<{ ran: boolean; output: string }> {
+export async function repairLostClaims(courseId: string): Promise<string> {
   const service = path.join(process.cwd(), '..', 'ai-service')
-  const script = 'scripts/repair_lost_claims.py'
-  if (!existsSync(path.join(service, script))) return { ran: false, output: `no ${script} yet (F0)` }
+  const script = 'scripts/requote_lost_claims.py'
   const env = {
     ...process.env,
     LLM_PROVIDER: 'replay',
@@ -133,7 +131,7 @@ export async function repairLostClaims(courseId: string): Promise<{ ran: boolean
     LLM_REPLAY_MISS: process.env.E2E_REPLAY_MISS ?? 'error',
   }
   const options = { cwd: service, env, timeout: 5 * 60_000 }
-  const dry = await run('uv', ['run', 'python', script, '--project', courseId, '--dry-run'], options)
-  const applied = await run('uv', ['run', 'python', script, '--project', courseId], options)
-  return { ran: true, output: `${dry.stdout}\n${applied.stdout}` }
+  const dry = await run('uv', ['run', 'python', script, '--project', courseId], options)
+  const applied = await run('uv', ['run', 'python', script, '--project', courseId, '--yes', '--write'], options)
+  return `${dry.stdout}\n${applied.stdout}`
 }

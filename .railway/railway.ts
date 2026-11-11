@@ -54,6 +54,11 @@ export default defineRailway(() => {
       ENVIRONMENT: "production",
       LLM_PROVIDER: "anthropic",
       PROMPTS_V2,
+      // On since the workflow suite's real-model run of 2026-11-10 (docs/design/DECISIONS.md, "Checkpoint 1").
+      // scripts/workflows.sh runs the suite with the same values. Remove a line to switch that behaviour off.
+      CLAIM_REQUOTE: "true",
+      SUPPORT_REFILL: "true",
+      LEAK_WORD_FORMS_TO_JUDGE: "true",
       ANTHROPIC_API_KEY: preserve(),
       AI_INTERNAL_TOKEN: preserve(),
       // Watchdog alerts (app/services/watchdog.py) go to the ntfy topic on Harish's phone; docs/deployment/RAILWAY.md
