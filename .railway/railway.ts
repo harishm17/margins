@@ -25,6 +25,10 @@ export default defineRailway(() => {
   // Deploy each service from GitHub on every push to main, after CI passes and only when its
   // own folder changed. Needs the Railway GitHub app installed for this repository; until
   // then deploy with `railway up` (see docs/deployment/RAILWAY.md).
+  // The prompt areas on the audited (v2) prompts: the ones whose eval re-run was no worse than the v1 baseline
+  // (docs/design/DECISIONS.md, "Prompt areas switched on"). Voice and grading stay on v1 until theirs pass, and ingest
+  // waits for its extraction check. Both services get the same list so their `prompts_v2 areas=` start lines match.
+  const PROMPTS_V2 = "generation,support,tutor,ask";
   const AUTO_DEPLOY_FROM_GITHUB = true;
   const fromGithub = (rootDirectory: string) =>
     AUTO_DEPLOY_FROM_GITHUB
@@ -49,6 +53,7 @@ export default defineRailway(() => {
     env: {
       ENVIRONMENT: "production",
       LLM_PROVIDER: "anthropic",
+      PROMPTS_V2,
       ANTHROPIC_API_KEY: preserve(),
       AI_INTERNAL_TOKEN: preserve(),
       // Watchdog alerts (app/services/watchdog.py) go to the ntfy topic on Harish's phone; docs/deployment/RAILWAY.md
@@ -85,6 +90,7 @@ export default defineRailway(() => {
       // Set it once and never rotate it: a new value makes every returning student look like a new one.
       SPEND_KEY_SECRET: preserve(),
       NEXTAUTH_URL: SITE_URL,
+      PROMPTS_V2,
       // Google sign-in (OAuth client "Margins web" in the Google Cloud project "studybuddy").
       GOOGLE_OAUTH_CLIENT_ID: preserve(),
       GOOGLE_OAUTH_CLIENT_SECRET: preserve(),
