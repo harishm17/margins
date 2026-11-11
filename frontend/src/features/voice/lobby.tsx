@@ -4,7 +4,7 @@ import { sprintSizeLine, type SprintPreview } from '@/lib/voice/sprint-size'
 import * as React from 'react'
 import Link from 'next/link'
 import * as RadioGroup from '@radix-ui/react-radio-group'
-import { BookOpenText, ChalkboardTeacher, CheckCircle, Keyboard, Microphone, Question } from '@phosphor-icons/react/dist/ssr'
+import { BookOpenText, CaretDown, ChalkboardTeacher, CheckCircle, Keyboard, Microphone, Question } from '@phosphor-icons/react/dist/ssr'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -317,41 +317,8 @@ export function Lobby({
           </div>
         ) : null}
 
-        <Field label="Language">
-          <Select options={LANGUAGE_OPTIONS} value={language} onValueChange={setLanguage} disabled={starting} />
-        </Field>
-
-        <Field label="Focus" optional>
-          <Input
-            value={focus}
-            onChange={(event) => setFocus(event.target.value)}
-            placeholder={focusPlaceholder(mode === 'topic' ? topic?.keywords : undefined)}
-            maxLength={280}
-            disabled={starting}
-          />
-        </Field>
-
-        <div className="flex flex-col gap-3">
-          {hasSpeechSynthesis() ? <SpeakRepliesToggle disabled={starting} compact /> : null}
-          {cloudOffered ? (
-            <Checkbox
-              checked={cloudChosen}
-              onCheckedChange={(checked) => setVoicePrefs({ recognition: checked === true ? 'cloud' : 'browser' })}
-              disabled={starting}
-              label={CLOUD_TOGGLE_LABEL}
-              description={CLOUD_TOGGLE_DESCRIPTION}
-              data-testid="voice-cloud-toggle"
-            />
-          ) : null}
-          {recognitionSupported ? (
-            <p className="flex flex-wrap items-baseline gap-x-1 text-small text-fg-2" data-testid="voice-privacy">
-              <span>
-                {privacyLine} {PRIVACY_TYPING}
-              </span>
-            </p>
-          ) : null}
-        </div>
-
+        {/* The two choices a practice needs, then Start: on a laptop Start used to sit below five settings, off the first
+            screen (finding 128). Where the voice goes stays in view under it; the rest opens from "More options". */}
         {recognitionSupported ? (
           <div className="flex flex-col gap-1.5">
             <span id="voice-answer-by-label" className="text-small font-medium text-fg">
@@ -385,6 +352,48 @@ export function Lobby({
           </Button>
           {note ? <p className="max-w-[34ch] text-small text-fg-2">{note}</p> : null}
         </div>
+
+        {recognitionSupported ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-small text-fg-2" data-testid="voice-privacy">
+              {privacyLine} {PRIVACY_TYPING}
+            </p>
+            {cloudOffered ? (
+              <Checkbox
+                checked={cloudChosen}
+                onCheckedChange={(checked) => setVoicePrefs({ recognition: checked === true ? 'cloud' : 'browser' })}
+                disabled={starting}
+                label={CLOUD_TOGGLE_LABEL}
+                description={CLOUD_TOGGLE_DESCRIPTION}
+                data-testid="voice-cloud-toggle"
+              />
+            ) : null}
+          </div>
+        ) : null}
+
+        <details className="group border-t border-border pt-3" data-testid="voice-more-options">
+          <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1.5 rounded-chip text-small font-medium text-fg hover:text-accent max-sm:min-h-11 [&::-webkit-details-marker]:hidden">
+            More options
+            <CaretDown aria-hidden="true" className="size-3.5 transition-transform duration-180 group-open:rotate-180" />
+          </summary>
+          <div className="mt-3 flex flex-col gap-5">
+            <Field label="Language">
+              <Select options={LANGUAGE_OPTIONS} value={language} onValueChange={setLanguage} disabled={starting} />
+            </Field>
+
+            <Field label="Focus" optional>
+              <Input
+                value={focus}
+                onChange={(event) => setFocus(event.target.value)}
+                placeholder={focusPlaceholder(mode === 'topic' ? topic?.keywords : undefined)}
+                maxLength={280}
+                disabled={starting}
+              />
+            </Field>
+
+            {hasSpeechSynthesis() ? <SpeakRepliesToggle disabled={starting} compact /> : null}
+          </div>
+        </details>
       </form>
     </div>
   )

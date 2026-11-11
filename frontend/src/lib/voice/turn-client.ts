@@ -50,6 +50,8 @@ export type VoiceEvent =
       ungraded?: boolean
       /** A wrong answer: where the question's concepts are in the student's own file. */
       lookLinks?: BoardSource[]
+      /** A wrong answer: the answer it was graded against, for the summary. The coach does not say it. */
+      answer?: string
     }
   | { type: 'hint'; text: string }
   | { type: 'session_complete' }
@@ -129,6 +131,7 @@ export function parseVoiceEvent(line: string): VoiceEvent | null {
         explanation: typeof raw.explanation === 'string' ? raw.explanation : '',
         ...(raw.ungraded === true ? { ungraded: true } : {}),
         ...(readLinks(raw.lookLinks).length > 0 ? { lookLinks: readLinks(raw.lookLinks) } : {}),
+        ...(typeof raw.answer === 'string' && raw.answer.trim() ? { answer: raw.answer.trim() } : {}),
       }
     case 'hint':
       return typeof raw.text === 'string' ? { type: 'hint', text: raw.text } : null

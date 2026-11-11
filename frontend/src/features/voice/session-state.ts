@@ -3,6 +3,7 @@
  * imperative work (fetch, recognition, speech) and reports what happened here.
  */
 import type { BoardSource, VoiceOption } from '@/lib/voice/turn-client'
+import type { AskedQuestion } from './reading'
 import type { LobbyAlert, VoiceAlert } from './errors'
 import type { VoiceStyle } from './voice-api'
 
@@ -23,6 +24,8 @@ export type Evaluation = {
   explanation: string
   ungraded: boolean
   lookLinks?: BoardSource[]
+  /** A wrong answer: the answer it was graded against. Shown on the summary, never during the session. */
+  answer?: string
 }
 
 export type EvaluationTone = 'accent' | 'warning' | 'danger' | 'neutral'
@@ -50,6 +53,8 @@ export type CoachEntry = {
   note?: boolean
   evaluation?: Evaluation
   hint?: string
+  /** The question this turn put on the board: the screen shows the stretch that reads it out as one line (finding 86). */
+  asked?: AskedQuestion
 }
 export type TranscriptEntry = StudentEntry | CoachEntry
 
@@ -77,6 +82,8 @@ export type AnsweredQuestion = {
   ungraded: boolean
   /** Where the question's concepts are in the student's own file, when the server knew. */
   lookLinks?: BoardSource[]
+  /** The answer a wrong answer was graded against. */
+  answer?: string
 }
 
 /** A teach-back idea that closed: explained, or taught after probes (with the pages to look at again). */
@@ -276,12 +283,16 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
     case 'coach-text':
       return patchOpenCoach(state, (entry) => ({ ...entry, text: entry.text + action.delta }))
 
-    case 'question':
+    case 'question': {
+      // The turn that asked it keeps it. A question that arrives outside a turn (it should not) starts no empty turn.
+      const open = openCoachIndex(state.entries)
+      const asked: AskedQuestion = { text: action.question.text, ...(action.question.options ? { options: action.question.options } : {}) }
       return {
-        ...state,
+        ...(open >= 0 ? patchOpenCoach(state, (entry) => ({ ...entry, asked })) : state),
         question: action.question,
         board: { kind: 'question', text: action.question.text, ...(action.question.options ? { options: action.question.options } : {}) },
       }
+    }
 
     case 'board':
       return { ...state, board: action.board }
@@ -301,6 +312,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
             score: action.evaluation.score,
             ungraded: action.evaluation.ungraded,
             ...(action.evaluation.lookLinks && action.evaluation.lookLinks.length > 0 ? { lookLinks: action.evaluation.lookLinks } : {}),
+            ...(action.evaluation.answer ? { answer: action.evaluation.answer } : {}),
           },
         ],
       }
@@ -406,8 +418,8 @@ export type SessionSummary = {
   partly: number
   /** 0..1 of graded answers that were correct, null when nothing was graded. */
   score: number | null
-  /** The questions answered wrongly, each once, with the pages of their concepts when known. */
-  revisit: { text: string; lookLinks: BoardSource[] }[]
+  /** The questions answered wrongly, each once, with the pages of their concepts and the answer when known. */
+  revisit: { text: string; lookLinks: BoardSource[]; answer?: string }[]
   /** Teach-back: the ideas explained in the student's own words, and the ones the coach had to explain after two probes. */
   explained: string[]
   taught: { name: string; conceptId: string | null; lookAgain: string[]; lookLinks: BoardSource[] }[]
@@ -429,8 +441,11 @@ export function summarize(state: Pick<SessionState, 'answered' | 'entries' | 'st
   const revisit: SessionSummary['revisit'] = []
   for (const item of graded.filter((answer) => !answer.isCorrect)) {
     const seen = revisit.find((entry) => entry.text === item.text)
-    if (!seen) revisit.push({ text: item.text, lookLinks: item.lookLinks ?? [] })
-    else if (seen.lookLinks.length === 0 && item.lookLinks) seen.lookLinks = item.lookLinks
+    if (!seen) revisit.push({ text: item.text, lookLinks: item.lookLinks ?? [], ...(item.answer ? { answer: item.answer } : {}) })
+    else {
+      if (seen.lookLinks.length === 0 && item.lookLinks) seen.lookLinks = item.lookLinks
+      if (!seen.answer && item.answer) seen.answer = item.answer
+    }
   }
   const openIdea = state.board?.kind === 'concept' ? (state.board.idea ?? null) : null
   const seconds = state.startedAt !== null && state.endedAt !== null ? Math.max(0, (state.endedAt - state.startedAt) / 1000) : 0
@@ -448,6 +463,15 @@ export function summarize(state: Pick<SessionState, 'answered' | 'entries' | 'st
     exchanges: state.entries.filter((entry) => entry.role === 'student').length,
     typed: state.entries.filter((entry) => entry.role === 'student' && entry.via === 'text').length,
   }
+}
+
+/**
+ * The question on the board has had its answer graded and the coach has not asked the next one: the screen offers
+ * "Next question", so the student does not have to say or type "yes" (finding 68).
+ */
+export function questionAnswered(state: Pick<SessionState, 'question' | 'answered'>): boolean {
+  const last = state.answered[state.answered.length - 1]
+  return !!state.question && !!last && last.text === state.question.text
 }
 
 /** The one idea a drill after the session is about: the only idea taught, else the one left unfinished; with both or neither, none (the topic). */

@@ -280,7 +280,13 @@ def _mock_turn(messages: List[Dict[str, Any]], tools: List[Dict[str, Any]]) -> t
     utterance = " ".join(block.get("text", "") for block in last if block.get("type") == "text").strip()
     if "get_next_question" in available:
         asked = [call for call in calls if call.get("name") == "get_next_question"]
-        recorded = [call for call in calls if call.get("name") == "record_answer"]
+        # An answer the app recorded before the model spoke counts like one the model recorded.
+        app_recorded = sum(
+            1
+            for message in messages
+            if message.get("role") == "user" and (_app_result(_blocks(message)) or ("",))[0] == "record_answer"
+        )
+        recorded = [call for call in calls if call.get("name") == "record_answer"] + [{}] * app_recorded
         if asked and len(recorded) < len(asked):
             return "", {
                 "name": "record_answer",

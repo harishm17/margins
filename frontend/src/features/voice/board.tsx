@@ -2,6 +2,7 @@ import * as React from 'react'
 import { ArrowSquareOut } from '@phosphor-icons/react/dist/ssr'
 import { Badge } from '@/components/ui/badge'
 import { MathText } from '@/components/ui/math-text'
+import { cn } from '@/lib/utils'
 import type { BoardItem } from './session-state'
 
 const LABEL: Record<BoardItem['kind'], string> = {
@@ -16,11 +17,11 @@ const LABEL: Record<BoardItem['kind'], string> = {
  * rest of the app uses and a link to the page it comes from. The coach never has to read a formula aloud, and the student
  * can look back at what was asked: nothing is only audio.
  */
-export function Board({ board }: { board: BoardItem | null }) {
+export function Board({ board, className }: { board: BoardItem | null; className?: string }) {
   if (!board) return null
   const page = board.source
   return (
-    <section aria-label="On the board" data-testid="voice-board" data-kind={board.kind} className="rounded-card border border-border bg-surface p-4 md:p-5">
+    <section aria-label="On the board" data-testid="voice-board" data-kind={board.kind} className={cn('rounded-card border border-border bg-surface p-4 md:p-5', className)}>
       <div className="flex items-center justify-between gap-3">
         <p className="text-caption font-medium uppercase tracking-wide text-fg-3">{LABEL[board.kind]}</p>
         {page ? (

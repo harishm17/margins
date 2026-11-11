@@ -20,8 +20,9 @@ export function voiceScreen(page: Page) {
   const session = page.getByTestId('voice-session')
   const progress = page.getByTestId('voice-progress')
   const box = page.getByLabel('Type your answer')
-  // Disabled while the coach's turn runs, so enabled again once the reply is whole.
-  const hint = session.getByRole('button', { name: 'Hint', exact: true })
+  // Disabled while the coach's turn runs, so enabled again once the reply is whole: Hint while a question waits for its
+  // answer, Next question (Finish on the last) once it has one.
+  const idle = session.getByRole('button', { name: /^(Hint|Next question|Finish)$/ })
   const transcript = page.getByTestId('voice-transcript').last()
 
   /** Answers by typing: a browser that cannot listen offers typing only, with no choice to make. */
@@ -37,7 +38,7 @@ export function voiceScreen(page: Page) {
     const mine = transcript.locator('li').filter({ has: page.getByText(text, { exact: true }) }).last()
     const reply = mine.locator('xpath=following-sibling::li[@data-testid="voice-coach-turn"][1]')
     await expect(reply).toBeVisible({ timeout: 2 * 60_000 })
-    await expect(hint).toBeEnabled({ timeout: 2 * 60_000 })
+    await expect(idle).toBeEnabled({ timeout: 2 * 60_000 })
     return reply
   }
 
@@ -70,7 +71,7 @@ export function voiceScreen(page: Page) {
     /** Waits until the coach's opening turn is whole, so the session takes an answer. */
     async ready() {
       await expect(box).toBeVisible({ timeout: 2 * 60_000 })
-      await expect(hint).toBeEnabled({ timeout: 2 * 60_000 })
+      await expect(idle).toBeEnabled({ timeout: 2 * 60_000 })
     },
     async end() {
       await session.getByRole('button', { name: 'End', exact: true }).click()

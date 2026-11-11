@@ -635,7 +635,12 @@ async function runVoiceTool(
     const recorded = { is_correct: grading.isCorrect, score: grading.score, feedback }
     // A wrong answer comes back with the pages of the question's concepts, for the summary's list of what to revisit.
     const lookLinks = !grading.isCorrect && !grading.ungraded ? await conceptPageLinks(session.projectId, question.concept_ids ?? []) : []
-    const events = eventsForToolOutput(name, recorded, total).map((event) => (event.type === 'evaluation' && lookLinks.length > 0 ? { ...event, lookLinks } : event))
+    // The answer the question was graded against goes to the browser too, for the same list: the coach is not given it
+    // to say (the oral quiz never reveals the answer), and the summary shows it only when the student opens it.
+    const answerKey = !grading.isCorrect && !grading.ungraded && gradable ? String(gradable.sample_answer || '') || ((gradable.key_points as string[] | undefined) ?? []).join(' ') : ''
+    const events = eventsForToolOutput(name, recorded, total).map((event) =>
+      event.type === 'evaluation' ? { ...event, ...(lookLinks.length > 0 ? { lookLinks } : {}), ...(answerKey ? { answer: answerKey } : {}) } : event
+    )
     // The coach names where the idea is in the student's pages (the oral quiz never reveals the answer); the links go to the browser.
     return result((lookLinks.length > 0 ? { ...recorded, where_to_look: lookLinks.map((link) => link.label) } : recorded) satisfies RecordAnswerResult, events)
   }

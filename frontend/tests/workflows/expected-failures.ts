@@ -50,10 +50,7 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF5.tagline-guides': { fixedBy: 'E5', finding: '9' }, // "Answers come only from your files, with sources."
   'WF5.concept-sentences': { fixedBy: 'SW3', finding: '2, 48' }, // "about <idea>" in the intro, "explain <idea>" and "about <idea>" in the suggestions
   // WF6, voice
-  'WF6.one-verdict': { fixedBy: 'V2', finding: '69' }, // the evaluation row repeats the coach's words under the chip
-  // WF6.next-button (V1, finding 68) does not run on the recording of 2026-11-10: the coach's reply went on to the next question itself. V1 is not built.
-  'WF6.summary-one-action': { fixedBy: 'R1', finding: '84' }, // "Practice this" filled, "Start again" and the back link outlined
-  'WF6.revisit-in-full': { fixedBy: 'R1', finding: '84' }, // the question to revisit is clipped and has no answer
+  // WF6.next-button (V1, finding 68) does not run on the recording of 2026-11-10: the coach's reply went on to the next question itself.
   'WF6.round-can-start': { fixedBy: 'G1', finding: '83' }, // the round's weakest topics are never-opened ones with no quiz, so Start is disabled
   // WF7, files
   'WF7.renamed-copy-caught': { fixedBy: 'F1', finding: '73' }, // "lecture-2 (1).pdf" is taken as a new file and read, and topic finding runs again
@@ -78,7 +75,6 @@ export const EXPECTED_FAILURES: Readonly<Record<string, Expected>> = {
   'WF10.cut-off-text-ipad': { fixedBy: 'SW6', finding: '20, 43, 87' }, // topic names clamped on the course page, plan items cut with an ellipsis
   'WF10.cut-off-text-phone': { fixedBy: 'SW6', finding: '20, 43' }, // the same, and "and 1 more task" plan rows
   'WF10.palette-focus-returns': { fixedBy: 'X5', finding: '100' }, // closing the command palette leaves the focus on the page
-  'WF10.phone-voice-turn-whole': { fixedBy: 'V6', finding: '86' }, // the coach's turn is partly hidden inside the sheet's scrolling strip on a phone
 
   // WF12, deletion
   'WF12.course-references-cleared': { fixedBy: 'SW13', finding: '101' }, // the course's Ask and practice tutor states stay: TutorState has no course key
